@@ -106,6 +106,7 @@ MAX_CROP_COORDINATE = 1_000_000.0
 MAX_CROP_SIZE = 1_000_000.0
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _CONFIG_KEYS = frozenset({"audio_policy", "edits", "min_component_version", "preset"})
 _PRESET_KEYS = frozenset({"width", "height", "fps"})
 _EDIT_KEYS = {
@@ -156,6 +157,11 @@ _RECEIPT_SOURCE_KEYS = frozenset(
         "artifact_id",
         "uri",
         "format",
+        "schema",
+        "source_commit",
+        "config_identity",
+        "units",
+        "coordinate_frame",
         "sha256",
         "declared_sha256",
         "source_frames",
@@ -164,6 +170,9 @@ _RECEIPT_SOURCE_KEYS = frozenset(
         "frame_sha256",
         "integrity",
     }
+)
+_RECEIPT_SOURCE_REQUIRED_KEYS = _RECEIPT_SOURCE_KEYS - frozenset(
+    {"schema", "source_commit", "config_identity", "units", "coordinate_frame"}
 )
 _RECEIPT_OUTPUT_KEYS = frozenset(
     {
@@ -471,6 +480,23 @@ def _safe_artifact_id(value: Any) -> bool:
     )
 
 
+def _source_reference_identity(ref: SourceRef) -> dict[str, str]:
+    """Return the validated source-reference identity for provenance outputs."""
+
+    identity = {
+        "artifact_id": ref.artifact_id,
+        "uri": ref.uri,
+        "format": ref.format,
+    }
+    if ref.sha256:
+        identity["sha256"] = ref.sha256.lower()
+    for field in ("schema", "source_commit", "config_identity", "units", "coordinate_frame"):
+        value = getattr(ref, field)
+        if value:
+            identity[field] = value
+    return identity
+
+
 def _request_field_errors(request: ComponentRequest) -> list[str]:
     """Validate scalar request fields.
 
@@ -508,13 +534,37 @@ def _source_ref_errors(index: int, ref: Any, seen: set[str]) -> list[str]:
         errors.append(f"request_invalid: sources[{index}].artifact_id is unsafe")
     elif ref.artifact_id in seen:
         errors.append(f"request_invalid: duplicate source artifact_id: {ref.artifact_id}")
-    seen.add(ref.artifact_id)
+    else:
+        seen.add(ref.artifact_id)
     if not isinstance(ref.uri, str) or not _safe_relative(ref.uri):
         errors.append(f"request_invalid: sources[{index}].uri is unsafe")
     if not isinstance(ref.format, str) or not ref.format:
         errors.append(f"request_invalid: sources[{index}].format is required")
-    if ref.sha256 and (not isinstance(ref.sha256, str) or _SHA256_RE.fullmatch(ref.sha256) is None):
+    errors.extend(_source_ref_identity_errors(index, ref))
+    return errors
+
+
+def _source_ref_identity_errors(index: int, ref: SourceRef) -> list[str]:
+    """Validate optional direct source identity fields without coercion.
+
+    Returns:
+        Stable validation errors, or an empty list.
+    """
+
+    errors: list[str] = []
+    if not isinstance(ref.schema, str):
+        errors.append(f"request_invalid: sources[{index}].schema must be a string")
+    if not isinstance(ref.sha256, str):
+        errors.append(f"request_invalid: sources[{index}].sha256 must be a string")
+    elif ref.sha256 and _SHA256_RE.fullmatch(ref.sha256) is None:
         errors.append(f"request_invalid: sources[{index}].sha256 is not SHA-256")
+    if not isinstance(ref.source_commit, str):
+        errors.append(f"request_invalid: sources[{index}].source_commit must be a string")
+    elif ref.source_commit and _SHA40_RE.fullmatch(ref.source_commit) is None:
+        errors.append(f"request_invalid: sources[{index}].source_commit is not a commit SHA")
+    for field in ("config_identity", "units", "coordinate_frame"):
+        if not isinstance(getattr(ref, field), str):
+            errors.append(f"request_invalid: sources[{index}].{field} must be a string")
     return errors
 
 
@@ -1003,8 +1053,79 @@ def _normalise_frame_array(frame: Any) -> Any:
     return np.asarray(rgb, dtype=np.uint8).copy()
 
 
-def _decode_image(path: Path) -> Any:
-    """Decode one source frame with a pixel ceiling and stability check.
+@contextmanager
+def _verified_file_snapshot(path: Path, *, max_bytes: int) -> Iterator[tuple[Any, str, int]]:
+    """Expose a bounded private snapshot for hash-and-decode operations.
+
+    The source path is read once into a private spooled file.  Consumers hash
+    and decode that same snapshot, so replacing the named path between those
+    operations cannot make the digest describe different bytes from the
+    decoded image.  The source signature is checked both before and after the
+    consumer uses the snapshot to reject a concurrent source mutation.
+
+    Yields:
+        Snapshot file object, its SHA-256 digest, and the encoded byte count.
+    """
+
+    try:
+        before = _file_signature(path)
+    except OSError as error:
+        raise OSError(f"source file is not readable: {path.name}") from error
+    if max_bytes < 1 or before[2] > max_bytes:
+        raise _SourceLoadError(f"resource_limit: source_bytes>{max_bytes}")
+
+    with (
+        path.open("rb") as source,
+        tempfile.SpooledTemporaryFile(
+            max_size=min(max_bytes, 8 * 1024 * 1024), mode="w+b"
+        ) as snapshot,
+    ):
+        digest, total = _copy_to_snapshot(source, snapshot, path.name, max_bytes)
+        _require_unchanged_file(path, before)
+
+        snapshot.seek(0)
+        try:
+            yield snapshot, digest.hexdigest(), total
+        finally:
+            _require_unchanged_file(path, before)
+
+
+def _copy_to_snapshot(source: Any, snapshot: Any, name: str, max_bytes: int) -> tuple[Any, int]:
+    """Copy one source into a bounded snapshot while computing its digest.
+
+    Returns:
+        SHA-256 hash object and encoded byte count.
+    """
+
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            total += len(chunk)
+            if total > max_bytes:
+                raise _SourceLoadError(f"resource_limit: source_bytes>{max_bytes}")
+            digest.update(chunk)
+            snapshot.write(chunk)
+    except _SourceLoadError:
+        raise
+    except OSError as error:
+        raise OSError(f"source file read failed: {name}") from error
+    return digest, total
+
+
+def _require_unchanged_file(path: Path, before: tuple[int, int, int, int]) -> None:
+    """Raise a stable failure if a source path changed during snapshot use."""
+
+    try:
+        after = _file_signature(path)
+    except OSError as error:
+        raise _SourceLoadError(f"source_changed_during_read: {path.name}") from error
+    if before != after:
+        raise _SourceLoadError(f"source_changed_during_read: {path.name}")
+
+
+def _decode_image_snapshot(snapshot: Any, name: str) -> Any:
+    """Decode one bounded private image snapshot into an RGB array.
 
     Returns:
         A copied HxWx3 uint8 RGB array.
@@ -1013,14 +1134,30 @@ def _decode_image(path: Path) -> Any:
     from PIL import Image  # noqa: PLC0415
 
     try:
-        before = _file_signature(path)
-        if before[2] > MAX_SOURCE_FILE_BYTES:
-            raise _SourceLoadError(f"resource_limit: source_bytes>{MAX_SOURCE_FILE_BYTES}")
-        with Image.open(path) as image:
+        with Image.open(snapshot) as image:
             if image.width * image.height > MAX_OUTPUT_PIXELS:
                 raise _SourceLoadError("resource_limit: source_frame_pixels")
             image.load()
-            result = _normalise_frame_array(image)
+            return _normalise_frame_array(image)
+    except _SourceLoadError:
+        raise
+    except (OSError, TypeError, ValueError) as error:
+        raise _SourceLoadError(f"source_frame_decode_failed: {name}") from error
+
+
+def _decode_image(path: Path) -> Any:
+    """Decode one source frame with a pixel ceiling and stability check.
+
+    Returns:
+        A copied HxWx3 uint8 RGB array.
+    """
+
+    try:
+        before = _file_signature(path)
+        if before[2] > MAX_SOURCE_FILE_BYTES:
+            raise _SourceLoadError(f"resource_limit: source_bytes>{MAX_SOURCE_FILE_BYTES}")
+        with path.open("rb") as source:
+            result = _decode_image_snapshot(source, path.name)
         after = _file_signature(path)
     except _SourceLoadError:
         raise
@@ -1046,23 +1183,29 @@ def _load_manifest_frame(
 
     if frame_path is None or not frame_path.is_file():
         raise _SourceLoadError(f"source_frame_missing: frame_paths[{index}]")
-    observed, size = _sha256_file(frame_path, max_bytes=MAX_SOURCE_FILE_BYTES)
-    total_bytes += size
-    if total_bytes > MAX_SOURCE_BUFFER_BYTES:
+    remaining_bytes = MAX_SOURCE_BUFFER_BYTES - total_bytes
+    if remaining_bytes < 1:
         raise _SourceLoadError(f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}")
-    if observed.lower() != declared_digest.lower():
-        raise _SourceLoadError(
-            f"source_frame_digest_mismatch: frame_paths[{index}]",
-            diagnostics=(
-                {
-                    "code": "source_frame_digest_mismatch",
-                    "frame_index": index,
-                    "declared_sha256": str(declared_digest).lower(),
-                    "observed_sha256": observed,
-                },
-            ),
-        )
-    decoded = _decode_image(frame_path)
+    with _verified_file_snapshot(
+        frame_path,
+        max_bytes=min(MAX_SOURCE_FILE_BYTES, remaining_bytes),
+    ) as (snapshot, observed, size):
+        total_bytes += size
+        if total_bytes > MAX_SOURCE_BUFFER_BYTES:
+            raise _SourceLoadError(f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}")
+        if observed.lower() != declared_digest.lower():
+            raise _SourceLoadError(
+                f"source_frame_digest_mismatch: frame_paths[{index}]",
+                diagnostics=(
+                    {
+                        "code": "source_frame_digest_mismatch",
+                        "frame_index": index,
+                        "declared_sha256": str(declared_digest).lower(),
+                        "observed_sha256": observed,
+                    },
+                ),
+            )
+        decoded = _decode_image_snapshot(snapshot, frame_path.name)
     decoded_bytes += int(decoded.nbytes)
     if decoded_bytes > MAX_SOURCE_BUFFER_BYTES:
         raise _SourceLoadError(
@@ -1210,22 +1353,31 @@ def _clip_metadata_preflight(metadata: Any) -> tuple[float | None, int | None, s
     return float(fps), frame_bytes, None
 
 
-def _normalise_bounded_clip_frame(frame: Any, frame_bytes: int) -> tuple[Any, int]:
-    """Reject a decoder frame outside the preflight byte contract.
+def _normalise_bounded_clip_frame(
+    frame: Any, frame_bytes: int, width: int, height: int
+) -> tuple[Any, int]:
+    """Reject and copy one raw decoder frame within the preflight contract.
 
     Returns:
         Normalized RGB frame and its retained byte count.
     """
 
-    raw_bytes = getattr(frame, "nbytes", None)
-    if (
-        isinstance(raw_bytes, bool)
-        or not isinstance(raw_bytes, int)
-        or raw_bytes < 0
-        or raw_bytes > frame_bytes
-    ):
+    import numpy as np  # noqa: PLC0415
+
+    try:
+        raw = memoryview(frame)
+    except TypeError as error:
+        raise _SourceLoadError("source_clip_invalid: decoder frame is not raw bytes") from error
+    if raw.nbytes > frame_bytes:
         raise _SourceLoadError("resource_limit: decoded_source_frame_bytes exceeds metadata bound")
-    normalised = _normalise_frame_array(frame)
+    if raw.nbytes != frame_bytes:
+        raise _SourceLoadError("source_clip_invalid: decoder frame byte count is invalid")
+    try:
+        normalised = (
+            np.frombuffer(raw, dtype=np.uint8, count=frame_bytes).reshape((height, width, 3)).copy()
+        )
+    except (TypeError, ValueError) as error:
+        raise _SourceLoadError("source_clip_invalid: decoder frame geometry is invalid") from error
     normalised_bytes = int(normalised.nbytes)
     if normalised_bytes > frame_bytes:
         raise _SourceLoadError(
@@ -1234,13 +1386,22 @@ def _normalise_bounded_clip_frame(frame: Any, frame_bytes: int) -> tuple[Any, in
     return normalised, normalised_bytes
 
 
-def _read_bounded_clip_frames(reader: Any, frame_bytes: int) -> list[Any]:
-    """Read only frames that fit the preflighted count and retained-byte bounds.
+def _read_bounded_clip_frames(reader: Any, frame_bytes: int, width: int, height: int) -> list[Any]:
+    """Read raw RGB24 frames within preflighted allocation and buffer bounds.
+
+    ``imageio_ffmpeg.read_frames`` yields raw bytes after it has received the
+    metadata header.  Its read loop requests at most the exact RGB24 frame
+    size, so no decoded-array allocation occurs before this boundary checks
+    the configured per-frame and cumulative ceilings.  A bytes-length check
+    remains defense in depth for alternate readers and malformed decoder
+    output.
 
     Returns:
         Decoded, normalized frames within the declared source limits.
     """
 
+    if frame_bytes != width * height * 3:
+        raise _SourceLoadError("source_clip_invalid: decoder frame geometry is inconsistent")
     frames: list[Any] = []
     decoded_bytes = 0
     frame_iterator = iter(reader)
@@ -1251,7 +1412,9 @@ def _read_bounded_clip_frames(reader: Any, frame_bytes: int) -> list[Any]:
             frame = next(frame_iterator)
         except StopIteration:
             return frames
-        normalised, normalised_bytes = _normalise_bounded_clip_frame(frame, frame_bytes)
+        normalised, normalised_bytes = _normalise_bounded_clip_frame(
+            frame, frame_bytes, width, height
+        )
         decoded_bytes += normalised_bytes
         frames.append(normalised)
 
@@ -1271,21 +1434,30 @@ def _decode_clip_frames(path: Path) -> tuple[list[Any], float]:
         Decoded RGB frames and the source fps.
     """
 
-    import imageio.v2 as imageio  # noqa: PLC0415
+    import imageio_ffmpeg  # noqa: PLC0415
 
+    frame_iterator = None
     try:
         with _operation_deadline(MAX_DECODER_SECONDS):
-            with imageio.get_reader(str(path)) as reader:
-                fps, frame_bytes, metadata_error = _clip_metadata_preflight(reader.get_meta_data())
-                if metadata_error is not None or fps is None or frame_bytes is None:
-                    raise _SourceLoadError(metadata_error or "source_clip_invalid")
-                frames = _read_bounded_clip_frames(reader, frame_bytes)
+            frame_iterator = imageio_ffmpeg.read_frames(str(path), pix_fmt="rgb24", bpp=3)
+            metadata = next(frame_iterator)
+            fps, frame_bytes, metadata_error = _clip_metadata_preflight(metadata)
+            if metadata_error is not None or fps is None or frame_bytes is None:
+                raise _SourceLoadError(metadata_error or "source_clip_invalid")
+            size = metadata.get("size") if isinstance(metadata, dict) else None
+            if not isinstance(size, (list, tuple)) or len(size) != 2:
+                raise _SourceLoadError("source_clip_invalid: decoder dimensions are invalid")
+            width, height = (int(value) for value in size)
+            frames = _read_bounded_clip_frames(frame_iterator, frame_bytes, width, height)
     except _SourceLoadError:
         raise
     except _OperationTimeout as error:
         raise _SourceLoadError("decoder_timeout") from error
     except Exception as error:
         raise _SourceLoadError(f"decoder_failed: {type(error).__name__}") from error
+    finally:
+        if frame_iterator is not None:
+            frame_iterator.close()
     if not frames:
         raise _SourceLoadError("source_clip_invalid: clip contains no decodable frames")
     return frames, float(fps)
@@ -2311,9 +2483,14 @@ def _validate_receipt(payload: Any) -> None:  # noqa: C901, PLR0912
         raise ValueError("receipt required fields are missing")
     if payload["component"] != COMPONENT_ID or not isinstance(payload["component_version"], str):
         raise ValueError("receipt component is invalid")
+    if (
+        not isinstance(payload["source"], dict)
+        or not _RECEIPT_SOURCE_REQUIRED_KEYS <= set(payload["source"])
+        or not set(payload["source"]) <= _RECEIPT_SOURCE_KEYS
+    ):
+        raise ValueError("receipt leaf keys are invalid")
     for value, allowed in (
         (payload["encoder"], _RECEIPT_ENCODER_KEYS),
-        (payload["source"], _RECEIPT_SOURCE_KEYS),
         (payload["output"], _RECEIPT_OUTPUT_KEYS),
     ):
         if not isinstance(value, dict) or set(value) != allowed:
@@ -2330,6 +2507,13 @@ def _validate_receipt(payload: Any) -> None:  # noqa: C901, PLR0912
             raise ValueError("receipt digest is invalid")
     if payload["source"]["sha256"].lower() != payload["source"]["declared_sha256"].lower():
         raise ValueError("receipt source digest binding is invalid")
+    source = payload["source"]
+    for field in ("schema", "source_commit", "config_identity", "units", "coordinate_frame"):
+        if field in source and not isinstance(source[field], str):
+            raise ValueError("receipt source identity is invalid")
+    if source.get("source_commit"):
+        if _SHA40_RE.fullmatch(source["source_commit"]) is None:
+            raise ValueError("receipt source identity is invalid")
     if payload["evidence_status"] != "diagnostic-only":
         raise ValueError("receipt evidence status is invalid")
     if payload["evidence_boundary"] != "diagnostic-only; not benchmark evidence":
@@ -2552,9 +2736,7 @@ def _build_receipt(
         "component_version": COMPONENT_VERSION,
         "encoder": encoder_record,
         "source": {
-            "artifact_id": source.source_ref.artifact_id,
-            "uri": source.source_ref.uri,
-            "format": source.source_ref.format,
+            **_source_reference_identity(source.source_ref),
             "sha256": source.observed_sha256,
             "declared_sha256": source.source_ref.sha256.lower(),
             "source_frames": len(source.frames),
@@ -2653,6 +2835,7 @@ def _publish_outputs(
             provenance={
                 "source_kind": prepared.source.source_kind,
                 "source_sha256": prepared.source.observed_sha256,
+                "source_identity": _source_reference_identity(prepared.source.source_ref),
                 "config_sha256": _canonical_digest(prepared.config),
                 "presentation_frames": len(plan.frames),
                 "artifact_digests": {

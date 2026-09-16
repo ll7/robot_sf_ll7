@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -390,30 +391,76 @@ def test_source_clip_metadata_rejects_oversized_frame_before_iteration(
 ) -> None:
     """Decoder geometry is bounded before a source frame can be yielded."""
 
-    import imageio.v2 as imageio
+    import imageio_ffmpeg
 
     class FakeReader:
-        iterated = False
+        metadata_read = False
 
-        def __enter__(self) -> FakeReader:
+        def __iter__(self) -> FakeReader:
             return self
 
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def get_meta_data(self) -> dict[str, object]:
+        def __next__(self) -> dict[str, object]:
+            if self.metadata_read:
+                raise AssertionError("oversized metadata must reject before a frame is read")
+            self.metadata_read = True
             return {"fps": 10.0, "size": (review_encode.MAX_OUTPUT_PIXELS + 1, 1)}
 
-        def __iter__(self):
-            self.iterated = True
-            return iter(())
+        def close(self) -> None:
+            return None
 
     reader = FakeReader()
-    monkeypatch.setattr(imageio, "get_reader", lambda *_args, **_kwargs: reader)
+    monkeypatch.setattr(imageio_ffmpeg, "read_frames", lambda *_args, **_kwargs: reader)
 
     with pytest.raises(review_encode._SourceLoadError, match="source_frame_pixels"):
         review_encode._decode_clip_frames(tmp_path / "oversized.mp4")
-    assert reader.iterated is False
+    assert reader.metadata_read is True
+
+
+def test_source_clip_raw_frame_limit_rejects_before_normalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An oversized raw decoder frame cannot reach the retained RGB buffer."""
+
+    import imageio_ffmpeg
+    import numpy as np
+
+    frame_bytes = 2 * 2 * 3
+
+    class FakeReader:
+        def __init__(self) -> None:
+            self.metadata_read = False
+            self.frame_read = False
+
+        def __iter__(self) -> FakeReader:
+            return self
+
+        def __next__(self) -> dict[str, object] | bytes:
+            if not self.metadata_read:
+                self.metadata_read = True
+                return {"fps": 10.0, "size": (2, 2), "nframes": 1}
+            self.frame_read = True
+            return b"x" * (frame_bytes + 1)
+
+        def close(self) -> None:
+            return None
+
+    reader = FakeReader()
+    monkeypatch.setattr(imageio_ffmpeg, "read_frames", lambda *_args, **_kwargs: reader)
+    original_frombuffer = np.frombuffer
+    normalization_called = False
+
+    def unexpected_normalization(*_args: object, **_kwargs: object) -> object:
+        nonlocal normalization_called
+        normalization_called = True
+        raise AssertionError("oversized raw frame was normalized")
+
+    monkeypatch.setattr(np, "frombuffer", unexpected_normalization)
+    with pytest.raises(review_encode._SourceLoadError, match="decoded_source_frame_bytes"):
+        review_encode._decode_clip_frames(tmp_path / "oversized.mp4")
+    assert reader.frame_read is True
+    assert normalization_called is False
+    assert np.frombuffer is unexpected_normalization
+    assert original_frombuffer is not unexpected_normalization
 
 
 def test_manifest_decoded_memory_limit_counts_retained_frames(
@@ -424,7 +471,7 @@ def test_manifest_decoded_memory_limit_counts_retained_frames(
     class DecodedFrame:
         nbytes = review_encode.MAX_SOURCE_BUFFER_BYTES // 2 + 1
 
-    monkeypatch.setattr(review_encode, "_decode_image", lambda _path: DecodedFrame())
+    monkeypatch.setattr(review_encode, "_decode_image_snapshot", lambda *_args: DecodedFrame())
     result = run(_request(tmp_path), base=tmp_path)
 
     assert result.status == "failed"
@@ -674,6 +721,88 @@ def test_direct_api_malformed_request_fails_closed(tmp_path: Path) -> None:
         base=tmp_path,
     )
     assert missing_digest.status == "failed"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("artifact_id", []),
+        ("uri", []),
+        ("format", []),
+        ("schema", None),
+        ("sha256", []),
+        ("source_commit", []),
+        ("config_identity", None),
+        ("units", None),
+        ("coordinate_frame", None),
+    ],
+)
+def test_direct_source_reference_fields_fail_closed(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """Every direct SourceRef field is type-checked before identity bookkeeping."""
+
+    request = _request(tmp_path)
+    source = replace(request.sources[0], **{field: value})
+    result = run(replace(request, sources=(source,)), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "request_invalid" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+def test_direct_source_identity_is_preserved_in_receipt_and_result(
+    tmp_path: Path,
+) -> None:
+    """Validated direct source identity remains auditable in every complete output."""
+
+    request = _request(
+        tmp_path,
+        config_extra={"preset": dict(review_encode.TINY_PRESET)},
+    )
+    source = replace(
+        request.sources[0],
+        schema="frame-sequence-manifest.v1",
+        source_commit="a" * 40,
+        config_identity="review-encode-fixture-config-v1",
+        units="pixels",
+        coordinate_frame="camera",
+    )
+    result = run(replace(request, sources=(source,)), base=tmp_path)
+
+    assert result.status == "complete", result.reason
+    receipt = json.loads((tmp_path / "out" / "encode-receipt.json").read_text(encoding="utf-8"))
+    identity = result.provenance["source_identity"]
+    for field in ("schema", "source_commit", "config_identity", "units", "coordinate_frame"):
+        assert receipt["source"][field] == getattr(source, field)
+        assert identity[field] == getattr(source, field)
+
+
+def test_manifest_frame_replacement_is_rejected_after_snapshot_decode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A frame replacement during decode cannot bypass snapshot digest binding."""
+
+    from PIL import Image
+
+    request = _request(tmp_path)
+    frame_path = tmp_path / "frames/frame-000.png"
+    replacement_path = tmp_path / "replacement.png"
+    Image.new("RGB", (8, 6), (0, 255, 0)).save(replacement_path, format="PNG")
+    original_decode = review_encode._decode_image_snapshot
+
+    def replace_before_decode(snapshot: object, name: str) -> object:
+        os.replace(replacement_path, frame_path)
+        return original_decode(snapshot, name)
+
+    monkeypatch.setattr(review_encode, "_decode_image_snapshot", replace_before_decode)
+    result = run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert "source_changed_during_read" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
 
 
 @pytest.mark.parametrize(

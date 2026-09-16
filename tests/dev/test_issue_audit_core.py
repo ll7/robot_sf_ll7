@@ -6,6 +6,7 @@ import json
 import shlex
 import subprocess
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -65,11 +66,13 @@ def _issue(
     labels: list[str] | None = None,
     body: str = "",
     title: str = "Implement bounded change",
+    created_at: str = "",
 ) -> dict[str, Any]:
     return {
         "number": number,
         "title": title,
         "state": "open",
+        "created_at": created_at,
         "updated_at": EXPECTED_ISSUE_UPDATED_AT,
         "url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
         "author": "ll7",
@@ -294,6 +297,245 @@ def test_stale_running_state_is_preserved_and_not_promoted_to_ready() -> None:
     assert classification.classification == "running"
     assert classification.mutations == ()
     assert any("state:running" in finding for finding in classification.findings)
+
+
+def test_stale_running_reclaim_removes_label_with_complete_old_progress() -> None:
+    """The explicit reclaim policy removes only running after the cutoff."""
+    issue = _issue(
+        103,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+    issue["comments"] = [
+        {
+            "user": "worker",
+            "created_at": "2026-08-01T01:00:00Z",
+            "body": "Started the bounded implementation.",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:running", "state:ready"},
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+        stale_running_progress_available=True,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is True
+    assert classification.stale_running_reclaim["progress_source"] == "latest_human_comment"
+    assert [
+        (mutation["operation"], mutation["value"]) for mutation in classification.mutations
+    ] == [("remove_label", "state:running")]
+    assert classification.mutations[0]["revalidate_progress"] is True
+
+
+def test_stale_running_reclaim_preserves_recent_progress() -> None:
+    """Recent attributable progress keeps the running label intact."""
+    issue = _issue(
+        104,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+    issue["comments"] = [
+        {
+            "user": "worker",
+            "created_at": "2026-08-01T23:00:00Z",
+            "body": "Still working.",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:running", "state:ready"},
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 1, 18, 0, tzinfo=UTC),
+        stale_running_progress_available=True,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is False
+    assert classification.mutations == ()
+    assert "within the reclaim window" in classification.stale_running_reclaim["reason"]
+
+
+def test_stale_running_reclaim_uses_issue_creation_without_human_comments() -> None:
+    """An old issue with no attributable progress comment is reclaimable."""
+    issue = _issue(
+        105,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:running", "state:ready"},
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+        stale_running_progress_available=True,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is True
+    assert classification.stale_running_reclaim["progress_source"] == "issue_creation"
+
+
+def test_stale_running_reclaim_ignores_automated_comments() -> None:
+    """Bot bookkeeping does not count as attributable progress."""
+    issue = _issue(
+        110,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+    issue["comments"] = [
+        {
+            "user": "github-actions[bot]",
+            "created_at": "2026-08-01T23:00:00Z",
+            "body": "Automation finished a bookkeeping step.",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:running", "state:ready"},
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+        stale_running_progress_available=True,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is True
+    assert classification.stale_running_reclaim["progress_source"] == "issue_creation"
+
+
+def test_stale_running_reclaim_preserves_active_claim() -> None:
+    """A stale comment cannot reclaim an issue with a live atomic claim."""
+    issue = _issue(
+        106,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+    issue["comments"] = [
+        {
+            "user": "worker",
+            "created_at": "2026-08-01T01:00:00Z",
+            "body": "Started.",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        claims={106: {"claimed": True}},
+        available_labels={"state:running", "state:ready"},
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+        stale_running_progress_available=True,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is False
+    assert "claims" in classification.stale_running_reclaim["reason"]
+    assert classification.mutations == ()
+
+
+def test_stale_running_reclaim_requires_complete_comment_inventory() -> None:
+    """The policy fails closed when comment evidence is unavailable."""
+    issue = _issue(
+        107,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:running", "state:ready"},
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+        stale_running_progress_available=False,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is False
+    assert "comment inventory is unavailable" in classification.stale_running_reclaim["reason"]
+    assert classification.mutations == ()
+
+
+def test_stale_running_reclaim_requires_job_inventory() -> None:
+    """The policy preserves running when active-job evidence is unavailable."""
+    issue = _issue(
+        109,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+    issue["comments"] = [
+        {
+            "user": "worker",
+            "created_at": "2026-08-01T01:00:00Z",
+            "body": "Started.",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:running", "state:ready"},
+        job_inventory_available=False,
+        reclaim_stale_running_after_hours=6,
+        stale_running_cutoff=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+        stale_running_progress_available=True,
+    )
+
+    assert classification.stale_running_reclaim["eligible"] is False
+    assert "active execution inventory" in classification.stale_running_reclaim["reason"]
+    assert classification.mutations == ()
+
+
+def test_build_plan_records_stale_running_policy_and_progress_precondition() -> None:
+    """Plans bind reclaim evidence and require a strict apply-time timestamp check."""
+    issue = _issue(
+        107,
+        labels=["state:running"],
+        created_at="2026-08-01T00:00:00Z",
+    )
+    issue["comments"] = [
+        {
+            "user": "worker",
+            "created_at": "2026-08-01T01:00:00Z",
+            "body": "Started.",
+        }
+    ]
+    inventory_metadata = _complete_issue_inventory_metadata(1)
+    inventory_metadata["comments"] = {
+        "available": True,
+        "truncated": False,
+        "errors": [],
+    }
+
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [issue],
+            "open_prs": [],
+            "merged_prs": [],
+            "labels": ["state:running"],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "inventory": inventory_metadata,
+            issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
+        },
+        reclaim_stale_running_after_hours=6,
+        policy_now=datetime(2026, 8, 2, 0, 0, tzinfo=UTC),
+    )
+
+    assert plan["stale_running_policy"] == {
+        "enabled": True,
+        "threshold_hours": 6.0,
+        "observed_at": "2026-08-02T00:00:00Z",
+        "cutoff_at": "2026-08-01T18:00:00Z",
+        "progress_source": "latest_human_issue_comment_or_issue_creation",
+        "active_record_policy": "preserve",
+        "action": "remove_state_running",
+    }
+    mutation = next(item for item in plan["mutations"] if item["value"] == "state:running")
+    assert mutation["operation"] == "remove_label"
+    assert mutation["revalidate_progress"] is True
+    assert mutation["expected_issue"]["strict_updated_at"] is True
+    assert plan["issues"][0]["stale_running_reclaim"]["eligible"] is True
 
 
 def test_terminal_review_status_replaces_stale_dispatch_state() -> None:
@@ -3763,6 +4005,8 @@ def test_plan_cli_accepts_a_separate_closed_pr_page_budget(
             "2",
             "--max-closed-pr-pages",
             "47",
+            "--reclaim-stale-running-after-hours",
+            "6",
             "--output",
             str(output),
         ]
@@ -3771,6 +4015,7 @@ def test_plan_cli_accepts_a_separate_closed_pr_page_budget(
     assert result == 0
     assert observed["max_pages"] == 2
     assert observed["max_closed_pr_pages"] == 47
+    assert observed["reclaim_stale_running_after_hours"] == 6.0
 
 
 def test_decision_queue_is_machine_readable_and_project_free() -> None:
@@ -4155,6 +4400,59 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
     assert readback["labels"] == ["state:running"]
     assert readback["verified"]["missing_additions"] == []
     assert readback["verified"]["missing_removals"] == []
+
+
+def test_apply_skips_stale_running_reclaim_when_issue_timestamp_changed() -> None:
+    """Progress-sensitive reclaim fails closed when the issue changed after planning."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        if args == ["api", "repos/ll7/robot_sf_ll7/issues/108"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps(
+                    {
+                        "state": "open",
+                        "updated_at": "2026-08-23T00:00:01Z",
+                        "labels": [{"name": "state:running"}],
+                    }
+                ),
+                "",
+            )
+        raise AssertionError(f"unexpected command: {args}")
+
+    expected = _expected_issue()
+    expected["labels"] = ["state:running"]
+    expected["strict_updated_at"] = True
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 108,
+                "value": "state:running",
+                "reason": "reclaim stale running",
+                "evidence": ["last_progress_at=2026-08-01T01:00:00Z"],
+                "revalidate_progress": True,
+                "expected_issue": expected,
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    _attach_complete_issue_inventory(plan, [108])
+    plan["issues"][0]["labels"] = ["state:running"]
+    _attach_valid_provenance(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert result["stale_states"][0]["issue"] == 108
+    assert result["stale_states"][0]["drift_kind"] == "semantic"
+    assert not any(args[:3] == ["api", "-X", "DELETE"] for args, _ in calls)
 
 
 def test_apply_treats_absent_label_delete_as_idempotent() -> None:

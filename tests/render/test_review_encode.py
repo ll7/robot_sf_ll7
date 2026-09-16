@@ -1219,7 +1219,7 @@ def test_clip_decode_rejects_buffer_overrun(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A tiny buffer ceiling fires before unbounded accumulation."""
-    imageio = pytest.importorskip("imageio.v2")
+    import imageio.v2 as imageio
     import numpy as _numpy
 
     clip = tmp_path / "clip.mp4"

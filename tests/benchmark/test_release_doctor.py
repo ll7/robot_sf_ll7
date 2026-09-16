@@ -72,6 +72,22 @@ def test_scheduler_closeout_check_rejects_stale_active_state(tmp_path: Path) -> 
     assert "active scheduler state" in check.summary
 
 
+def test_scheduler_closeout_check_rejects_failed_terminal_state(tmp_path: Path) -> None:
+    receipt = tmp_path / "closeout.json"
+    payload = _scheduler_closeout_fixture(state="FAILED")
+    payload["scheduler"]["exit_code"] = "2:0"
+    receipt.write_text(json.dumps(payload), encoding="utf-8")
+    check = release_doctor._scheduler_closeout_check(
+        receipt,
+        expected_source_sha="a" * 40,
+        expected_campaign_id="campaign-fixture",
+        expected_job_id="15180",
+        required=True,
+    )
+    assert check.status == "fail"
+    assert "release admission requires a COMPLETED scheduler state" in check.summary
+
+
 def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
     """The current 14-arm predecessor resolves to exactly 20,160 cells."""
     check, manifest, cfg = release_doctor._manifest_check(

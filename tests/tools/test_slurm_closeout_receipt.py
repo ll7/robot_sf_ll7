@@ -59,6 +59,13 @@ def test_failed_exit_is_preserved_as_valid_terminal_evidence() -> None:
     assert validate_payload(payload) == []
 
 
+def test_failed_terminal_evidence_cannot_satisfy_release_admission() -> None:
+    payload = _receipt(state="FAILED", exit_code="2:0")
+    problems = validate_payload(payload, require_successful_completion=True)
+    assert "release admission requires a COMPLETED scheduler state" in problems
+    assert "release admission requires scheduler exit code 0:0" in problems
+
+
 def test_stale_running_receipt_is_rejected() -> None:
     payload = _receipt(state="RUNNING", exit_code="0:0")
     problems = validate_payload(payload)

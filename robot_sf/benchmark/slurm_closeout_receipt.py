@@ -74,8 +74,14 @@ def validate_payload(  # noqa: C901, PLR0912, PLR0915
     expected_campaign_id: str | None = None,
     expected_source_sha: str | None = None,
     expected_job_id: str | None = None,
+    require_successful_completion: bool = False,
 ) -> list[str]:
-    """Return sanitized validation problems for one closeout payload."""
+    """Return sanitized validation problems for one closeout payload.
+
+    ``require_successful_completion`` is intentionally separate from receipt
+    validity: failed or cancelled scheduler results are truthful terminal
+    evidence, but they must not satisfy a release-publication admission gate.
+    """
     problems: list[str] = []
     if not isinstance(payload, dict):
         return ["closeout receipt is not a JSON object"]
@@ -135,6 +141,13 @@ def validate_payload(  # noqa: C901, PLR0912, PLR0915
         problems.append("COMPLETED closeout receipt has a non-zero derived exit code")
     if not str(scheduler.get("elapsed") or "").strip() and status == "terminal":
         problems.append("terminal closeout receipt elapsed time is missing")
+    if require_successful_completion and status == "terminal":
+        if state != "COMPLETED":
+            problems.append("release admission requires a COMPLETED scheduler state")
+        if str(scheduler.get("exit_code") or "") != "0:0":
+            problems.append("release admission requires scheduler exit code 0:0")
+        if str(scheduler.get("derived_exit_code") or "") not in {"", "0:0"}:
+            problems.append("release admission requires derived exit code 0:0")
 
     query = payload.get("query")
     if not isinstance(query, dict):
@@ -179,6 +192,7 @@ def validate_file(
     expected_campaign_id: str | None = None,
     expected_source_sha: str | None = None,
     expected_job_id: str | None = None,
+    require_successful_completion: bool = False,
 ) -> list[str]:
     """Read and validate a receipt without exposing its contents.
 
@@ -196,4 +210,5 @@ def validate_file(
         expected_campaign_id=expected_campaign_id,
         expected_source_sha=expected_source_sha,
         expected_job_id=expected_job_id,
+        require_successful_completion=require_successful_completion,
     )

@@ -2443,6 +2443,7 @@ def _scheduler_closeout_check(
         expected_campaign_id=expected_campaign_id,
         expected_source_sha=expected_source_sha,
         expected_job_id=expected_job_id,
+        require_successful_completion=required,
     )
     if problems:
         return ReleaseDoctorCheck("scheduler_closeout", "fail", "; ".join(problems))

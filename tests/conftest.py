@@ -963,6 +963,9 @@ _FAST_FILES = {
     # SREV-12 review-overlays tests protect deterministic telemetry overlays,
     # nonoverlapping labels, and timestamp mapping receipts (issue #9281).
     "test_review_overlays.py",
+    # SREV-14 review-report tests protect traceable captions, numerical citations,
+    # and scenario review report generation (issue #9283).
+    "test_review_report.py",
     # Static trace viewer web asset export contract tests.
     "test_trace_viewer.py",
 }

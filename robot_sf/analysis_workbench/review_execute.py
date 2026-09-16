@@ -646,6 +646,38 @@ def _episode_job_identity_error(job: dict[str, Any]) -> str | None:
     return None
 
 
+def _simple_policy_fixture_adapter(
+    robot_pos: Any,
+    goal: Any,
+    *,
+    speed: float,
+) -> Any:
+    """Canonical simple-policy adapter for the SREV-22 fixture executor.
+
+    Routes velocity command calculation through the benchmark runner's canonical
+    ``_simple_robot_policy`` to ensure strict parity with benchmark runner semantics.
+
+    Adapter deviations from the full benchmark runner (``robot_sf.benchmark.runner``):
+    1. Fixed-horizon execution: The fixture executor executes all ``horizon`` steps
+       without early goal termination (which ``runner._simulate_episode_with_policy``
+       applies upon reaching ``goal_radius``). Rationale: SREV-22 analysis workbench
+       recipes compute comparative trajectory telemetry across matched control/treatment
+       pairs, requiring equal-length trajectory arrays of shape ``(horizon + 1, 2)``.
+    2. Simulator integration: The fixture executes in an owned ``Simulator`` instance
+       configured with the SREV-22 tiny crossing map and holonomic drive, passing
+       velocity commands via ``simulator.step_once([(vx, vy)])`` rather than
+       direct kinematic position integration ``pos += vel * dt``. Rationale: The
+       fixture evaluates counterfactual pedestrian interactions via PySocialForce
+       forces in the full simulator stack rather than the lightweight wrapper.
+
+    Returns:
+        Velocity command 2D numpy array of shape ``(2,)``.
+    """
+    from robot_sf.benchmark.runner import _simple_robot_policy  # noqa: PLC0415 - lazy: child-process sim stack
+
+    return _simple_robot_policy(robot_pos, goal, speed=speed)
+
+
 def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
     """Run one control/treatment episode inside an owned child process.
 
@@ -734,12 +766,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         robot_traj = [np.asarray(simulator.robots[0].pos, dtype=float).copy()]
         for _ in range(horizon):
             robot_pos = np.asarray(simulator.robots[0].pos, dtype=float)
-            offset = goal - robot_pos
-            distance = float(np.linalg.norm(offset))
-            if distance > 0.3:
-                command = offset / distance * robot_speed
-            else:
-                command = np.zeros(2)
+            command = _simple_policy_fixture_adapter(robot_pos, goal, speed=robot_speed)
             simulator.step_once([(float(command[0]), float(command[1]))])
             ped_traj.append(simulator.pysf_sim.peds.pos().copy())
             robot_traj.append(np.asarray(simulator.robots[0].pos, dtype=float).copy())

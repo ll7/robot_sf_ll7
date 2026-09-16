@@ -20,7 +20,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_result_from_dict,
 )
 from robot_sf.render import review_encode
-from robot_sf.render.review_encode import descriptor, result_payload, run
+from robot_sf.render.review_encode import descriptor, main, result_payload, run
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/scenario_review/review_encode"
 EXPECTED_ORDER = [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 20, 22, 24, 26, 28]
@@ -992,3 +992,342 @@ def test_module_has_no_simulation_imports() -> None:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
     assert not {name for name in imported if "robot_sf.sim" in name}
+
+
+def _write_cli_input(tmp_path: Path, output: str = "cli-out") -> Path:
+    """Stage a CLI input file mirroring the subprocess contract test."""
+    from dataclasses import asdict as _asdict
+
+    request = _request(tmp_path)
+    input_payload = {
+        "schema_version": "component-request.v1",
+        "request_id": request.request_id,
+        "component_id": request.component_id,
+        "sources": [
+            {key: value for key, value in _asdict(source).items() if value}
+            for source in request.sources
+        ],
+        "output_directory": output,
+        "config": request.config,
+        "required_capabilities": list(request.required_capabilities),
+    }
+    input_path = tmp_path / "cli-input.json"
+    input_path.write_text(json.dumps(input_payload, sort_keys=True) + "\n", encoding="utf-8")
+    return input_path
+
+
+def test_cli_main_valid_run_in_process(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """The in-process valid run mirrors the subprocess complete contract."""
+    input_path = _write_cli_input(tmp_path)
+    assert main(["--input", str(input_path), "--output", "cli-out", "--base", str(tmp_path)]) == 0
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "complete"
+
+
+def test_cli_main_oversized_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An over-limit request file fails closed before parsing."""
+    input_path = tmp_path / "big-request.json"
+    input_path.write_bytes(b'{"padding": "' + b"a" * (4 * 1024 * 1024) + b'"}')
+    assert main(["--input", str(input_path), "--output", "out", "--base", str(tmp_path)]) == 2
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+    assert "exceeds" in envelope["reason"]
+
+
+def test_cli_main_oversized_config_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An over-limit config file fails closed before merging."""
+    input_path = _write_cli_input(tmp_path)
+    config_path = tmp_path / "big-config.json"
+    config_path.write_bytes(b'{"padding": "' + b"a" * (1024 * 1024) + b'"}')
+    assert (
+        main(
+            [
+                "--input",
+                str(input_path),
+                "--config",
+                str(config_path),
+                "--output",
+                "out",
+                "--base",
+                str(tmp_path),
+            ]
+        )
+        == 2
+    )
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+    assert "exceeds" in envelope["reason"]
+
+
+def test_cli_main_malformed_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Unreadable request JSON fails closed through the in-process entry."""
+    input_path = tmp_path / "request.json"
+    input_path.write_text("{not json", encoding="utf-8")
+    assert main(["--input", str(input_path), "--output", "out", "--base", str(tmp_path)]) == 2
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+    assert "cannot read request" in envelope["reason"]
+
+
+def test_select_source_ref_rejects_empty_sources(tmp_path: Path) -> None:
+    """No source refs resolves to an explicit unavailable reason."""
+    from dataclasses import replace as _replace
+
+    request = _replace(_request(tmp_path), sources=(), required_capabilities=())
+    selected, reason, marker = review_encode._select_source_ref(request)
+    assert selected is None
+    assert reason == "required_source_family_missing: frame-sequence or source-clip"
+    assert marker == "unavailable"
+
+
+def test_select_source_ref_rejects_multiple_families(tmp_path: Path) -> None:
+    """Frame plus clip refs fail closed instead of silently winning."""
+    from dataclasses import replace as _replace
+
+    request = _request(tmp_path)
+    clip_ref = _replace(request.sources[0], artifact_id="clip", format="source-clip")
+    request = _replace(request, sources=(request.sources[0], clip_ref), required_capabilities=())
+    selected, reason, marker = review_encode._select_source_ref(request)
+    assert selected is None
+    assert reason == "source_invalid: multiple source families require one required capability"
+    assert marker == "failed"
+
+
+def test_decode_image_rejects_oversized_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The source byte ceiling fires without allocating a 256MB file."""
+    from robot_sf.render.review_encode import MAX_SOURCE_FILE_BYTES, _SourceLoadError
+
+    tiny = tmp_path / "frame.ppm"
+    tiny.write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
+    monkeypatch.setattr(
+        review_encode,
+        "_file_signature",
+        lambda path: (0, 0, MAX_SOURCE_FILE_BYTES + 1, 0),
+    )
+    with pytest.raises(_SourceLoadError, match="resource_limit"):
+        review_encode._decode_image(tiny)
+
+
+def test_cli_main_non_object_config_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A JSON-array config fails closed through the in-process entry."""
+    input_path = _write_cli_input(tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text("[]", encoding="utf-8")
+    assert (
+        main(
+            [
+                "--input",
+                str(input_path),
+                "--config",
+                str(config_path),
+                "--output",
+                "out",
+                "--base",
+                str(tmp_path),
+            ]
+        )
+        == 2
+    )
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+
+
+def test_output_collision_fails_closed(tmp_path: Path) -> None:
+    """A pre-existing output directory fails with the collision reason."""
+    request = _request(tmp_path, output="out")
+    (tmp_path / "out").mkdir()
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "output_collision" in result.reason
+
+
+def test_pause_anchor_returns_none_without_candidates() -> None:
+    """A pause past every retained frame has no anchor position."""
+    frame = review_encode._PresentationFrame(
+        source_index=0,
+        operation="passthrough",
+        segment_id=0,
+        factor=1.0,
+        source_start_s=0.0,
+        source_end_s=0.1,
+    )
+    assert (
+        review_encode._pause_anchor(
+            [frame], [(0.0, 1.0)], at_s=5.0, duration_s=3.0, source_fps=10.0
+        )
+        is None
+    )
+
+
+def test_pause_anchor_none_when_no_candidate_precedes_boundary() -> None:
+    """A boundary pause with only later frames has no anchor position."""
+    frame = review_encode._PresentationFrame(
+        source_index=50,
+        operation="passthrough",
+        segment_id=0,
+        factor=1.0,
+        source_start_s=5.0,
+        source_end_s=5.1,
+    )
+    assert (
+        review_encode._pause_anchor(
+            [frame], [(0.0, 1.0)], at_s=1.0, duration_s=5.0, source_fps=10.0
+        )
+        is None
+    )
+
+
+def test_atomic_publish_rejects_existing_destination(tmp_path: Path) -> None:
+    """Publishing onto a reserved directory raises without replacing it."""
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "f").write_bytes(b"x")
+    destination = tmp_path / "dest"
+    destination.mkdir()
+    with pytest.raises(review_encode._OutputCollisionError):
+        review_encode._atomic_publish_noreplace(staging, destination)
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+
+
+def test_ensure_output_parent_rejects_symlink(tmp_path: Path) -> None:
+    """A symlinked output parent fails closed as unsafe."""
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    with pytest.raises(OSError, match="unsafe output parent"):
+        review_encode._ensure_output_parent(tmp_path, link / "out")
+
+
+def test_clip_decode_rejects_buffer_overrun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tiny buffer ceiling fires before unbounded accumulation."""
+    imageio = pytest.importorskip("imageio.v2")
+    import numpy as _numpy
+
+    clip = tmp_path / "clip.mp4"
+    with imageio.get_writer(str(clip), fps=10, macro_block_size=None) as writer:
+        writer.append_data(_numpy.zeros((16, 16, 3), dtype=_numpy.uint8))
+    monkeypatch.setattr(review_encode, "MAX_SOURCE_BUFFER_BYTES", 1)
+    with pytest.raises(review_encode._SourceLoadError, match="resource_limit"):
+        review_encode._decode_clip_frames(clip)
+
+
+def test_cli_main_directory_config_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A directory config path fails closed as unreadable config."""
+    input_path = _write_cli_input(tmp_path)
+    config_dir = tmp_path / "config-dir"
+    config_dir.mkdir()
+    assert (
+        main(
+            [
+                "--input",
+                str(input_path),
+                "--config",
+                str(config_dir),
+                "--output",
+                "out",
+                "--base",
+                str(tmp_path),
+            ]
+        )
+        == 2
+    )
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+    assert "cannot read config" in envelope["reason"]
+
+
+def test_cli_main_absolute_output_below_base_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An absolute output resolving below --base is accepted relatively."""
+    input_path = _write_cli_input(tmp_path, output="ignored")
+    absolute_out = tmp_path / "abs-out"
+    assert (
+        main(
+            [
+                "--input",
+                str(input_path),
+                "--output",
+                str(absolute_out),
+                "--base",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    envelope = json.loads(capsys.readouterr().out)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "complete"
+    assert absolute_out.is_dir()
+
+
+def test_fallback_publish_links_without_replacing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The no-replace fallback links staging files into a fresh target."""
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "a.bin").write_bytes(b"a")
+    (staging / "b.bin").write_bytes(b"b")
+    destination = tmp_path / "dest"
+    monkeypatch.setattr(review_encode, "_try_renameat2_noreplace", lambda *args: False)
+    review_encode._atomic_publish_noreplace(staging, destination)
+    assert {path.name for path in destination.iterdir()} == {"a.bin", "b.bin"}
+    assert not staging.exists()
+
+
+def test_emit_publish_race_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A publish-window collision fails with the collision reason."""
+
+    def _collide(staging: Path, destination: Path) -> None:
+        raise review_encode._OutputCollisionError
+
+    monkeypatch.setattr(review_encode, "_atomic_publish_noreplace", _collide)
+    result = run(_request(tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "output_collision" in result.reason
+
+
+def test_fallback_publish_rolls_back_non_regular_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-regular staging entry aborts publish and releases the target."""
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "a.bin").write_bytes(b"a")
+    (staging / "subdir").mkdir()
+    destination = tmp_path / "dest"
+    monkeypatch.setattr(review_encode, "_try_renameat2_noreplace", lambda *args: False)
+    with pytest.raises(OSError, match="non-regular file"):
+        review_encode._atomic_publish_noreplace(staging, destination)
+    assert not destination.exists()
+
+
+def test_nested_output_parents_are_created(tmp_path: Path) -> None:
+    """A deeply nested output path creates missing parents."""
+    request = _request(tmp_path, output="nested/deep/out")
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert (tmp_path / "nested" / "deep" / "out" / "edit.mp4").is_file()

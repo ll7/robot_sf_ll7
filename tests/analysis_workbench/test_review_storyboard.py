@@ -1293,3 +1293,103 @@ def test_unscoped_event_identity_is_partial(tmp_path: Path) -> None:
     assert result.status == "partial"
     assert "event_row_0_episode_scope_missing" in result.reason
     assert _spec(tmp_path)["annotations"][0]["event_intervals"] == []
+
+
+def test_cli_main_valid_request_with_config_in_process(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A valid request plus config file merges and completes in-process."""
+    repo = Path(__file__).resolve().parents[2]
+    fixture = repo / FIXTURE_DIR
+    output_rel = "output/scenario_review/srev-07-cli-in-process-test"
+    shutil.rmtree(repo / output_rel, ignore_errors=True)
+    try:
+        exit_code = main(
+            [
+                "--input",
+                str(fixture / "request.json"),
+                "--config",
+                str(fixture / "config.json"),
+                "--output",
+                output_rel,
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert exit_code == 0
+        assert payload["status"] == "complete"
+        component_result_from_dict(payload)
+    finally:
+        shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_main_non_object_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A JSON-array request fails closed through the in-process entry."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text("[]", encoding="utf-8")
+    exit_code = main(["--input", str(request_path), "--output", "out"])
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert payload["reason"] == "invalid_input: request must be a JSON object"
+    component_result_from_dict(payload)
+
+
+def test_canonical_document_rejects_invalid_roots_weights_episodes() -> None:
+    """Direct validator proof for malformed canonical score documents."""
+    doc = _canonical_report([_canonical_episode("ep-1", 0.5)])
+    doc["roots"] = "not-a-list"
+    doc["weights"] = {**doc["weights"], "collapse_rate": -1.0}
+    doc["episodes"] = {"not": "a-list"}
+    diagnostics: list[str] = []
+    assert storyboard._canonical_score_document_valid(doc, {"ep-1"}, diagnostics) is False
+    assert "exemplar_scores_canonical_field_invalid:roots" in diagnostics
+    assert "exemplar_scores_canonical_field_invalid:weights" in diagnostics
+    assert "exemplar_scores_canonical_field_invalid:episodes" in diagnostics
+
+
+def test_canonical_document_rejects_malformed_rows_and_pairs() -> None:
+    """Direct validator proof for malformed episode rows and pair sections."""
+    good = _canonical_episode("ep-1", 0.5)
+    duplicate = _canonical_episode("ep-1", 0.5)
+    ghost = _canonical_episode("ep-ghost", 0.5)
+    broken = _canonical_episode("ep-2", 0.5)
+    broken["episode_status"] = "cancelled"
+    broken["seed"] = "not-an-int"
+    broken["features"] = {"wrong": 1.0}
+    broken["composite_score"] = 5.0
+    doc = _canonical_report(
+        ["not-a-dict", {**good, "episode_id": ""}, good, duplicate, ghost, broken]
+    )
+    diagnostics: list[str] = []
+    assert storyboard._canonical_score_document_valid(doc, {"ep-1", "ep-2"}, diagnostics) is False
+    assert "exemplar_scores_canonical_row_malformed:0" in diagnostics
+    assert "exemplar_scores_canonical_row_malformed:1" in diagnostics
+    assert "score_duplicate_episode:ep-1" in diagnostics
+    assert "score_unknown_episode:ep-ghost" in diagnostics
+    assert "exemplar_scores_canonical_row_non_admissible:5:cancelled" in diagnostics
+    assert "exemplar_scores_canonical_row_malformed:5" in diagnostics
+    assert "exemplar_scores_canonical_features_malformed:5" in diagnostics
+    assert "score_out_of_range:ep-2" in diagnostics
+
+    pairs_doc = _canonical_report([_canonical_episode("ep-1", 0.5)])
+    pairs_doc["comparison_pairs"] = "not-a-list"
+    pair_diagnostics: list[str] = []
+    assert (
+        storyboard._canonical_score_document_valid(pairs_doc, {"ep-1"}, pair_diagnostics) is False
+    )
+    assert "exemplar_scores_canonical_field_invalid:comparison_pairs" in pair_diagnostics
+
+
+def test_missing_source_digest_is_diagnostic(tmp_path: Path) -> None:
+    """Sources without a declared digest stay observed-but-unbound."""
+    _stage(tmp_path)
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {"artifact_id": "scores", "uri": "scores.json", "format": "exemplar-scores"},
+    ]
+    result = run(_request(sources=sources, required=("exemplar-scores",)), base=tmp_path)
+    assert result.status == "failed"
+    assert "bundle: source_digest_missing" in result.reason
+    assert "required_source_integrity_unverified: review-bundle" in result.reason

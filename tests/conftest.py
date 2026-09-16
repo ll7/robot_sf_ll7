@@ -300,8 +300,17 @@ def matplotlib_rcparams_isolation():  # type: ignore[missing-return-type-doc]
         yield
         return
 
-    with matplotlib_module.rc_context():
+    # Some production modules configure style at import time (for example
+    # ``robot_sf.research.extractor_report`` sets ``savefig.bbox``). Taking a
+    # context snapshot here would preserve that already-polluted value and
+    # make the fixture order-dependent. Normalize to Matplotlib's canonical
+    # defaults at both boundaries instead.
+    defaults = matplotlib_module.rcParamsDefault.copy()
+    matplotlib_module.rcParams.update(defaults)
+    try:
         yield
+    finally:
+        matplotlib_module.rcParams.update(defaults)
 
 
 @pytest.fixture(scope="session")

@@ -9,6 +9,11 @@ order: without the fixture, the second one fails.
 
 import matplotlib as mpl
 
+# This module configures ``savefig.bbox`` at import time. Import it during
+# collection so the autouse fixture is proven against a pre-fixture mutation,
+# not only a mutation performed by a test body.
+import robot_sf.research.extractor_report  # noqa: F401
+
 
 def test_polluting_test_mutates_global_rcparams() -> None:
     """Simulate a render path that mutates global savefig behavior."""

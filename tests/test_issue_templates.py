@@ -17,6 +17,7 @@ from scripts.tools.issue_template_audit import (
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 DOCS_GUIDE_REFERENCE = ROOT / "docs" / "dev_guide_reference.md"
+SKILLS_REGISTRY = ROOT / ".agents" / "skills" / "skills.yaml"
 
 
 def _skill_path(name: str) -> Path:
@@ -351,6 +352,45 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
 
     documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
     assert "docs/README.md" in documentation_text
+
+
+def test_issue_and_pr_skills_share_relationship_contract() -> None:
+    """Keep issue/PR lifecycle skills on the same explicit relationship contract."""
+
+    registry = yaml.safe_load(SKILLS_REGISTRY.read_text(encoding="utf-8"))
+    assert isinstance(registry, dict)
+    skills = registry.get("skills")
+    assert isinstance(skills, dict)
+
+    workflow_skills = {
+        name: metadata
+        for name, metadata in skills.items()
+        if isinstance(metadata, dict) and metadata.get("category") in {"github-issue", "github-pr"}
+    }
+    workflow_skills.update(
+        {
+            name: skills[name]
+            for name in (
+                "goal-autopilot",
+                "implementation-verification",
+                "pr-ready-check",
+                "clean-up",
+            )
+            if name in skills
+        }
+    )
+
+    for name, metadata in workflow_skills.items():
+        skill_path = ROOT / ".agents" / "skills" / name / "SKILL.md"
+        assert skill_path.exists(), f"missing workflow skill {name}"
+        text = skill_path.read_text(encoding="utf-8")
+        assert "docs/context/issue_relationships.md" in text, (
+            f"{name} must reference the canonical relationship contract"
+        )
+        if metadata.get("category") == "github-pr":
+            assert "Issue Relationship Mirror" in text, (
+                f"{name} must verify the PR relationship mirror"
+            )
 
 
 def test_issue_splitter_skill_defines_parent_child_contract() -> None:

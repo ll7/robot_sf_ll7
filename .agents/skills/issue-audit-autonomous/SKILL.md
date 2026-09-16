@@ -23,7 +23,8 @@ or chooses maintainer policy.
 Read docs/context/issue_audit_contract.md before operating. The deterministic
 classifier and mutation executor are in
 scripts/dev/issue_audit_core.py. Both this skill and issue-audit consume
-issue_audit_plan.v1.
+issue_audit_plan.v1. Read `docs/context/issue_relationships.md` when the
+inventory includes relationship-shaped body content.
 
 ## Workflow
 
@@ -103,6 +104,9 @@ issue_audit_plan.v1.
   active or unresolved gate.
 - Close only with a merged issue-linked PR plus the documented completion
   condition in docs/context/issue_audit_contract.md.
+- Do not create or infer native Parent, Blocked by, Blocking, or Relates to links in the label/
+  completion audit. Relationship migration belongs to `audit_issue_relationships.py` and requires
+  an explicit canonical declaration and confirmation.
 
 ## Guardrails
 

@@ -3184,7 +3184,7 @@ collects the explicit relationship block described in
 Blocking links after creation and use the bounded audit before any existing-issue migration.
 
 The read-only migration audit is:
-`uv run python scripts/dev/audit_issue_relationships.py 123 --json`.
+`uv run python scripts/dev/audit_issue_relationships.py --issue 123 --format json`.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - YAML issue forms for common backlog lanes:

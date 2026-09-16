@@ -110,6 +110,7 @@ Do not use it for:
 - `scripts/dev/base_sensitive_selector.py`
 - `scripts/dev/check_base_sensitive_gates.py`
 - `scripts/dev/check_pr_current_base_cas.py`
+- `docs/context/issue_relationships.md`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 
 ## Preflight
@@ -133,6 +134,9 @@ Before each merge operation, verify:
    digest, and verify a trusted `pr-metadata: reconciled @ <digest>` trailer matches it. If the
    trailer is missing or stale, skip and report; the merger verifies metadata but never invents or
    mutates the final narrative.
+   Verify the PR's `## Issue Relationship Mirror` against the linked issue's current native
+   Parent/Blocked by/Blocking state. A mismatch is a stale handoff and must be refreshed before
+   merge; the merger does not create or repair relationships.
 5. CI checks are passing (use `uv run python scripts/dev/check_pr_ci_status.py <number>`).
    In non-TTY agent sessions, prefer bounded polling over `gh pr checks --watch`:
    `uv run python scripts/dev/check_pr_ci_status.py <number> --poll-attempts 20 --poll-interval 30`.
@@ -331,6 +335,8 @@ Do not merge multiple PRs in parallel. Process sequentially.
 - Multiple machines may prepare or review isolated PRs in parallel, but this merger must process
   merges sequentially and re-read labels, base, checks, threads, and head SHA immediately before
   each merge.
+- Relationship writes are owned by the writable implementation/publication worktree, never by a
+  merge or review-only worktree. Treat missing or stale relationship evidence as a handoff blocker.
 
 ## Confidence
 

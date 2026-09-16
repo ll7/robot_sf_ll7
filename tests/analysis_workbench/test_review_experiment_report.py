@@ -16,6 +16,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
     COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentRequest,
+    ReviewContractsValidationError,
     SourceRef,
     component_descriptor_from_dict,
     component_request_from_dict,
@@ -743,10 +744,7 @@ def test_control_text_in_report_title_fails_before_html_publish(
 
 @pytest.mark.parametrize(
     ("source_uri", "expected_reason"),
-    [
-        ("bad\x00name", "invalid_input: /sources/0/uri contains an embedded NUL byte"),
-        ("bad\ud800", "invalid_input: /sources/0/uri contains invalid Unicode text"),
-    ],
+    [("bad\x00name", "invalid_input: /sources/0/uri contains an embedded NUL byte")],
 )
 def test_invalid_source_uri_returns_failed_result_without_output(
     tmp_path: Path, source_uri: str, expected_reason: str
@@ -774,6 +772,26 @@ def test_invalid_source_uri_returns_failed_result_without_output(
     assert result.reason == expected_reason
     assert result.artifacts == ()
     assert not (tmp_path / "out").exists()
+
+
+def test_surrogate_source_uri_is_rejected_at_request_boundary() -> None:
+    """Lone surrogates are rejected before a component request is constructed."""
+    with pytest.raises(ReviewContractsValidationError, match="Unicode surrogate"):
+        component_request_from_dict(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "invalid-uri-request",
+                "component_id": COMPONENT_ID,
+                "sources": [
+                    {
+                        "artifact_id": "recorded-results",
+                        "uri": "bad\ud800",
+                        "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                    }
+                ],
+                "output_directory": "out",
+            }
+        )
 
 
 def test_cli_reads_request_and_config_and_emits_result(
@@ -1033,7 +1051,10 @@ def test_cli_invalid_source_uri_emits_failed_component_result(
     assert result.component_id == COMPONENT_ID
     assert result.status == "failed"
     assert result.reason.startswith("invalid_input:")
-    assert "/sources/0/uri" in result.reason
+    if "\ud800" in source_uri:
+        assert result.reason == "invalid_input: request does not satisfy component-request.v1"
+    else:
+        assert "/sources/0/uri" in result.reason
     assert result.artifacts == ()
     assert not (tmp_path / "cli-output").exists()
 
@@ -1042,7 +1063,7 @@ def test_cli_invalid_source_uri_emits_failed_component_result(
     ("artifact_id", "expected_reason"),
     [
         ("bad\x00id", "invalid_input: request does not satisfy component-request.v1"),
-        ("bad\ud800", "invalid_input: /sources/0/artifact_id contains invalid Unicode text"),
+        ("bad\ud800", "invalid_input: request does not satisfy component-request.v1"),
     ],
 )
 def test_cli_invalid_source_identity_emits_failed_component_result(
@@ -1096,9 +1117,18 @@ def test_cli_invalid_source_identity_emits_failed_component_result(
     assert not (tmp_path / "cli-output").exists()
 
 
-@pytest.mark.parametrize("output_directory", ["bad\x00output", "bad\ud800output"])
+@pytest.mark.parametrize(
+    ("output_directory", "expected_prefix"),
+    [
+        ("bad\x00output", "invalid_input: /output_directory"),
+        ("bad\ud800output", "invalid_input: request does not satisfy component-request.v1"),
+    ],
+)
 def test_cli_invalid_output_path_emits_failed_component_result(
-    tmp_path: Path, capsys: CaptureResult[str], output_directory: str
+    tmp_path: Path,
+    capsys: CaptureResult[str],
+    output_directory: str,
+    expected_prefix: str,
 ) -> None:
     """Unsafe CLI output paths are translated into failed result envelopes."""
     request_path = tmp_path / "request.json"
@@ -1140,7 +1170,7 @@ def test_cli_invalid_output_path_emits_failed_component_result(
     assert result.request_id == "invalid-output-path-request"
     assert result.component_id == COMPONENT_ID
     assert result.status == "failed"
-    assert result.reason.startswith("invalid_input: /output_directory")
+    assert result.reason.startswith(expected_prefix)
     assert result.artifacts == ()
 
 

@@ -25,6 +25,7 @@ from robot_sf.analysis_workbench.review_context import (
     _percentile,
     _result_document,
     descriptor,
+    main,
     output_schemas,
     run,
 )
@@ -1433,3 +1434,58 @@ def test_cli_rejects_fifo_control_document_without_blocking(
     parsed = component_result_from_dict(json.loads(completed.stdout))
     assert parsed.status == "failed"
     assert "not a regular file" in parsed.reason
+
+
+def test_cli_main_fixture_request_in_process(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The in-process fixture run mirrors the subprocess CLI contract."""
+    import shutil
+
+    repo = Path(__file__).resolve().parents[2]
+    fixture = repo / FIXTURE_DIR
+    output_rel = "output/scenario_review/srev-06-cli-in-process-test"
+    shutil.rmtree(repo / output_rel, ignore_errors=True)
+    try:
+        assert (
+            main(
+                [
+                    "--input",
+                    str(fixture / "request.json"),
+                    "--config",
+                    str(fixture / "config.json"),
+                    "--output",
+                    output_rel,
+                ]
+            )
+            == 0
+        )
+        envelope = json.loads(capsys.readouterr().out)
+        assert component_result_from_dict(envelope).status == "complete"
+        assert (
+            json.loads((repo / output_rel / OUTPUT_REPORT_FILENAME).read_text())["denominator"] == 4
+        )
+    finally:
+        shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_main_malformed_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Malformed request JSON fails closed through the in-process entry."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{not json", encoding="utf-8")
+    assert main(["--input", str(request_path), "--output", "out"]) == 1
+    parsed = component_result_from_dict(json.loads(capsys.readouterr().out))
+    assert parsed.status == "failed"
+    assert "invalid_request" in parsed.reason
+
+
+def test_cli_main_invalid_arguments_in_process(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Parser errors fail closed with a stable invalid-arguments envelope."""
+    assert main(["--input"]) == 1
+    parsed = component_result_from_dict(json.loads(capsys.readouterr().out))
+    assert parsed.status == "failed"
+    assert parsed.reason == "invalid_cli_arguments"

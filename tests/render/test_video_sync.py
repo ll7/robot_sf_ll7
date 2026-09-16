@@ -23,6 +23,7 @@ from robot_sf.render.video_sync import (
     COMPONENT_ID,
     _result_document,
     descriptor,
+    main,
     run,
 )
 
@@ -929,3 +930,65 @@ def test_run_malformed_request_returns_failed_result() -> None:
 
     assert result.status == "failed"
     assert result.reason == "invalid_request: expected ComponentRequest"
+
+
+def test_cli_main_descriptor_in_process(capsys: pytest.CaptureFixture[str]) -> None:
+    """The in-process descriptor path prints a contract-valid document."""
+    assert main(["--descriptor"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    assert component_descriptor_from_dict(document).component_id == COMPONENT_ID
+
+
+def test_cli_main_missing_output_in_process(capsys: pytest.CaptureFixture[str]) -> None:
+    """Missing --output fails closed with a contract-valid failed result."""
+    assert main(["--input", "request.json"]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert component_result_from_dict(result).status == "failed"
+    assert result["reason"] == "invalid_input: --input and --output are required"
+
+
+def test_cli_main_fixture_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The in-process fixture run mirrors the subprocess CLI contract."""
+    import shutil
+
+    repo = Path(__file__).resolve().parents[2]
+    fixture = repo / FIXTURE_DIR
+    output_rel = "output/scenario_review/srev-03-cli-in-process-test"
+    shutil.rmtree(repo / output_rel, ignore_errors=True)
+    try:
+        assert (
+            main(
+                [
+                    "--input",
+                    str(fixture / "request.json"),
+                    "--config",
+                    str(fixture / "config.json"),
+                    "--output",
+                    output_rel,
+                    "--base",
+                    str(repo),
+                ]
+            )
+            == 1
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert component_result_from_dict(payload).status == "partial"
+        assert "skipped_frames:3" in payload["reason"]
+    finally:
+        shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_main_malformed_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Malformed request JSON fails closed through the in-process entry."""
+    input_path = tmp_path / "request.json"
+    input_path.write_text(
+        '{"request_id":"bad", "component_id":"srev03-video-sync", NaN}', encoding="utf-8"
+    )
+    assert main(["--input", str(input_path), "--output", "out", "--base", str(tmp_path)]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert component_result_from_dict(result).status == "failed"
+    assert result["reason"] == "invalid_input: request JSON cannot be parsed safely"

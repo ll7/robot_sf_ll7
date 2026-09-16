@@ -375,6 +375,15 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=("#9394",),
     ),
+    (
+        "robot_sf/analysis_workbench/review_context.py",
+        "run",
+        "output_dir is not None",
+    ): _review(
+        "The output directory is assigned exactly once by the reservation helper, which returns a reserved directory or raises; every earlier exit releases the possibly-None reservation first, so reaching the write site proves a reserved directory exists.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9443",),
+    ),
 }
 
 

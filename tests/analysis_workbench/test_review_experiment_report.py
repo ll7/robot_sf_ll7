@@ -750,21 +750,7 @@ def test_invalid_source_uri_returns_failed_result_without_output(
     tmp_path: Path, source_uri: str, expected_reason: str
 ) -> None:
     """Direct callers receive a bounded result for unsafe source path text."""
-    request = component_request_from_dict(
-        {
-            "schema_version": "component-request.v1",
-            "request_id": "invalid-uri-request",
-            "component_id": COMPONENT_ID,
-            "sources": [
-                {
-                    "artifact_id": "recorded-results",
-                    "uri": source_uri,
-                    "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
-                }
-            ],
-            "output_directory": "out",
-        }
-    )
+    request = _request(source_uri=source_uri)
 
     result = run(request, base=tmp_path)
 
@@ -1051,10 +1037,10 @@ def test_cli_invalid_source_uri_emits_failed_component_result(
     assert result.component_id == COMPONENT_ID
     assert result.status == "failed"
     assert result.reason.startswith("invalid_input:")
-    if "\ud800" in source_uri:
-        assert result.reason == "invalid_input: request does not satisfy component-request.v1"
-    else:
+    if source_uri == "bad\x00name":
         assert "/sources/0/uri" in result.reason
+    else:
+        assert result.reason == "invalid_input: request does not satisfy component-request.v1"
     assert result.artifacts == ()
     assert not (tmp_path / "cli-output").exists()
 
@@ -1117,18 +1103,9 @@ def test_cli_invalid_source_identity_emits_failed_component_result(
     assert not (tmp_path / "cli-output").exists()
 
 
-@pytest.mark.parametrize(
-    ("output_directory", "expected_prefix"),
-    [
-        ("bad\x00output", "invalid_input: /output_directory"),
-        ("bad\ud800output", "invalid_input: request does not satisfy component-request.v1"),
-    ],
-)
+@pytest.mark.parametrize("output_directory", ["bad\x00output", "bad\ud800output"])
 def test_cli_invalid_output_path_emits_failed_component_result(
-    tmp_path: Path,
-    capsys: CaptureResult[str],
-    output_directory: str,
-    expected_prefix: str,
+    tmp_path: Path, capsys: CaptureResult[str], output_directory: str
 ) -> None:
     """Unsafe CLI output paths are translated into failed result envelopes."""
     request_path = tmp_path / "request.json"
@@ -1170,7 +1147,10 @@ def test_cli_invalid_output_path_emits_failed_component_result(
     assert result.request_id == "invalid-output-path-request"
     assert result.component_id == COMPONENT_ID
     assert result.status == "failed"
-    assert result.reason.startswith(expected_prefix)
+    if output_directory == "bad\x00output":
+        assert result.reason.startswith("invalid_input: /output_directory")
+    else:
+        assert result.reason == "invalid_input: request does not satisfy component-request.v1"
     assert result.artifacts == ()
 
 

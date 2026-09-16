@@ -5,10 +5,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from robot_sf.analysis_workbench.review_contracts import (
@@ -986,3 +988,364 @@ def test_cli_stdout_is_a_component_result_v1_envelope(
     assert parsed.status == "complete"
     assert parsed.request_id == "srev22-smoke"
     assert parsed.diagnostics == ({"status": "complete", "source": "test"},)
+
+
+class _StubbornProcess:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
+
+    def join(self, _timeout: float | None = None) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return True
+
+    def terminate(self) -> None:
+        pass
+
+    def kill(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+class _TimeoutConn:
+    def poll(self, _timeout: float) -> bool:
+        return False
+
+    def close(self) -> None:
+        pass
+
+
+def test_terminate_owned_process_detects_stubborn_child() -> None:
+    from robot_sf.analysis_workbench.review_execute import _terminate_owned_process
+
+    stubborn = _StubbornProcess()
+    terminated = _terminate_owned_process(stubborn, join_timeout_s=0.01)
+    assert terminated is False
+
+
+def test_delayed_process_start_exceeding_deadline_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import multiprocessing.process as mp_process
+
+    real_start = mp_process.BaseProcess.start
+    started_processes: list[Any] = []
+
+    def _delayed_start(self: Any) -> None:
+        started_processes.append(self)
+        time.sleep(0.08)
+        real_start(self)
+
+    monkeypatch.setattr(mp_process.BaseProcess, "start", _delayed_start)
+    outcome = _run_owned_child({"sleep_s": 5.0}, 0.03, target="sleep")
+    assert outcome["outcome"] == "timeout"
+    assert "child startup exceeded" in str(outcome.get("error"))
+    assert len(started_processes) == 1
+    proc = started_processes[0]
+    assert getattr(proc, "_closed", False) or not proc.is_alive()
+
+
+def test_delayed_process_start_in_run_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import multiprocessing.process as mp_process
+
+    real_start = mp_process.BaseProcess.start
+
+    def _delayed_start(self: Any) -> None:
+        time.sleep(0.08)
+        real_start(self)
+
+    monkeypatch.setattr(mp_process.BaseProcess, "start", _delayed_start)
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        per_execution_timeout_s=0.03,
+        wall_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status in {"partial", "failed"}
+    assert "timeout" in result.reason
+    assert result.artifacts == ()
+
+
+def test_owned_child_stubborn_child_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import multiprocessing as multiprocessing_module
+
+    real_context = multiprocessing_module.get_context("spawn")
+    real_pipe = real_context.Pipe
+
+    def _fake_pipe(*args: Any, **kwargs: Any) -> Any:
+        parent, child = real_pipe(*args, **kwargs)
+        child.close()
+        return _TimeoutConn(), parent
+
+    monkeypatch.setattr(real_context, "Pipe", _fake_pipe)
+    monkeypatch.setattr(real_context, "Process", _StubbornProcess)
+    monkeypatch.setattr(multiprocessing_module, "get_context", lambda _method=None: real_context)
+
+    outcome = _run_owned_child({"sleep_s": 0.0}, 0.1, target="sleep")
+    assert outcome["outcome"] == "error"
+    assert "stubborn_child" in str(outcome.get("error"))
+
+
+def test_run_fails_closed_on_stubborn_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    def _stubborn_child_outcome(_job: Any, _timeout_s: float, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "outcome": "error",
+            "error": "stubborn_child: child process resisted termination after timeout",
+        }
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", _stubborn_child_outcome)
+    request = _fixture_request(max_candidates=1, max_executions=2)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "stubborn_child" in result.reason
+    assert result.artifacts == ()
+
+
+def test_monotonic_deadline_immune_to_wall_clock_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Demonstrate that shifts in wall-clock time (time.time()) have zero effect on execution deadlines."""
+    calls = _patch_fake_execution(monkeypatch)
+
+    monkeypatch.setattr("time.time", lambda: 0.0)
+
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=60.0,
+        per_execution_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert len(calls) == 2
+
+
+def test_monotonic_deadline_bounds_admission_and_initialization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prove that monotonic time elapsed during admission/initialization exhausts wall budget."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    real_admit = review_execute_module._admit_request
+    monotonic_clock = [100.0]
+
+    def _fake_monotonic() -> float:
+        val = monotonic_clock[0]
+        monotonic_clock[0] += 0.01
+        return val
+
+    def _slow_admit(req: Any) -> Any:
+        res = real_admit(req)
+        monotonic_clock[0] += 20.0
+        return res
+
+    monkeypatch.setattr(time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module, "_admit_request", _slow_admit)
+
+    request = _fixture_request(wall_timeout_s=5.0)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "wall budget exhausted during admission or initialization" in result.reason
+    assert result.artifacts == ()
+
+
+def test_monotonic_deadline_bounds_finalization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prove that if monotonic time exhausts wall budget during finalization, complete outputs are denied."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    _patch_fake_execution(monkeypatch)
+    real_write_complete = review_execute_module._write_complete_outputs
+
+    monotonic_clock = [100.0]
+
+    def _fake_monotonic() -> float:
+        val = monotonic_clock[0]
+        monotonic_clock[0] += 0.01
+        return val
+
+    def _slow_write_complete(executor: Any, provenance: Any) -> list[dict[str, Any]]:
+        artifacts = real_write_complete(executor, provenance)
+        monotonic_clock[0] += 500.0
+        return artifacts
+
+    monkeypatch.setattr(time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module, "_write_complete_outputs", _slow_write_complete)
+
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=300.0,
+        per_execution_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "partial"
+    assert "wall budget exhausted during finalization" in result.reason
+    assert result.artifacts == ()
+    output_dir = tmp_path / "srev-22-smoke"
+    assert not (output_dir / "execute-report.json").exists()
+    assert not (output_dir / "activation-traces.json").exists()
+    assert not (output_dir / "preservation-manifest.json").exists()
+    assert (output_dir / "attempt-ledger.json").exists()
+
+
+def test_simple_policy_fixture_adapter_near_goal_probe_reproduction() -> None:
+    """Reproduce parent #9380 probe: near-goal [1.0, 0.0] vs canonical [0.4, 0.0]."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([16.8, 16.8], dtype=float)
+    # Distance is exactly 0.4m along x-axis
+    near_robot_pos = goal - np.array([0.4, 0.0], dtype=float)
+    speed = 1.0
+
+    # 1. Unhardened / legacy executor behavior:
+    # offset = goal - robot_pos => [0.4, 0.0], distance = 0.4
+    # if distance > 0.3: command = offset / distance * speed => [1.0, 0.0]
+    legacy_offset = goal - near_robot_pos
+    legacy_dist = float(np.linalg.norm(legacy_offset))
+    legacy_cmd = legacy_offset / legacy_dist * speed if legacy_dist > 0.3 else np.zeros(2)
+    assert np.allclose(legacy_cmd, np.array([1.0, 0.0])), "legacy formula must reproduce [1.0, 0.0]"
+
+    # 2. Canonical benchmark runner behavior:
+    canonical_cmd = _simple_robot_policy(near_robot_pos, goal, speed=speed)
+    assert np.allclose(canonical_cmd, np.array([0.4, 0.0])), (
+        "canonical runner must produce [0.4, 0.0]"
+    )
+
+    # 3. Fixture adapter parity:
+    adapter_cmd = _simple_policy_fixture_adapter(near_robot_pos, goal, speed=speed)
+    assert np.allclose(adapter_cmd, canonical_cmd), "fixture adapter must match canonical runner"
+    assert np.allclose(adapter_cmd, np.array([0.4, 0.0]))
+    assert not np.allclose(adapter_cmd, legacy_cmd), (
+        "fixture adapter must not exhibit legacy [1.0, 0.0]"
+    )
+
+
+def test_simple_policy_fixture_adapter_normal_goal_probe() -> None:
+    """Verify normal-goal (distance > speed) parity with canonical runner."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([16.8, 16.8], dtype=float)
+    normal_robot_pos = goal - np.array([5.0, 0.0], dtype=float)
+    speed = 1.0
+
+    canonical_cmd = _simple_robot_policy(normal_robot_pos, goal, speed=speed)
+    adapter_cmd = _simple_policy_fixture_adapter(normal_robot_pos, goal, speed=speed)
+
+    assert np.allclose(canonical_cmd, np.array([1.0, 0.0]))
+    assert np.allclose(adapter_cmd, canonical_cmd)
+
+
+def test_simple_policy_fixture_adapter_sub_deadzone_and_coincident() -> None:
+    """Verify smooth velocity scaling below previous 0.3m deadzone and zero at goal."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([16.8, 16.8], dtype=float)
+
+    # Within previous 0.3m deadzone (dist = 0.2m):
+    sub_pos = goal - np.array([0.2, 0.0], dtype=float)
+    canonical_sub = _simple_robot_policy(sub_pos, goal, speed=1.0)
+    adapter_sub = _simple_policy_fixture_adapter(sub_pos, goal, speed=1.0)
+
+    # Legacy formula produced [0.0, 0.0]
+    legacy_offset = goal - sub_pos
+    legacy_dist = float(np.linalg.norm(legacy_offset))
+    legacy_sub = legacy_offset / legacy_dist * 1.0 if legacy_dist > 0.3 else np.zeros(2)
+    assert np.allclose(legacy_sub, np.zeros(2))
+
+    # Canonical and adapter produce [0.2, 0.0]
+    assert np.allclose(canonical_sub, np.array([0.2, 0.0]))
+    assert np.allclose(adapter_sub, canonical_sub)
+
+    # Coincident at goal:
+    coincident_cmd = _simple_policy_fixture_adapter(goal, goal, speed=1.0)
+    assert np.allclose(coincident_cmd, np.zeros(2))
+
+
+def test_simple_policy_fixture_adapter_speed_scaling() -> None:
+    """Verify custom robot speeds scale properly through the adapter."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([10.0, 10.0], dtype=float)
+    pos = goal - np.array([1.5, 0.0], dtype=float)
+
+    # speed = 2.0: dist (1.5) < speed (2.0) => speed capped at 1.5
+    cmd_fast = _simple_policy_fixture_adapter(pos, goal, speed=2.0)
+    assert np.allclose(cmd_fast, _simple_robot_policy(pos, goal, speed=2.0))
+    assert np.allclose(cmd_fast, np.array([1.5, 0.0]))
+
+    # speed = 0.5: dist (1.5) > speed (0.5) => speed capped at 0.5
+    cmd_slow = _simple_policy_fixture_adapter(pos, goal, speed=0.5)
+    assert np.allclose(cmd_slow, _simple_robot_policy(pos, goal, speed=0.5))
+    assert np.allclose(cmd_slow, np.array([0.5, 0.0]))
+
+
+def test_simple_policy_fixture_adapter_records_deviation_rationale() -> None:
+    """Verify adapter docstring explicitly documents deviations and rationales."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+
+    doc = _simple_policy_fixture_adapter.__doc__
+    assert doc is not None
+    assert "Fixed-horizon execution" in doc
+    assert "Simulator integration" in doc
+    assert "_simple_robot_policy" in doc
+
+
+def test_episode_job_trajectory_parity_with_canonical_policy() -> None:
+    """Verify trajectory extraction in _execute_episode_job matches canonical simple policy."""
+    from robot_sf.analysis_workbench.review_execute import (
+        _DT_S,
+        _ROBOT_GOAL,
+        _execute_episode_job,
+    )
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    horizon = 4
+    robot_speed = 1.0
+    job = {
+        **_fixture_episode_identity(),
+        "seed": 42,
+        "horizon_steps": horizon,
+        "robot_speed_m_s": robot_speed,
+        "ped_speed_m_s": 1.0,
+        "ped_start_delay_s": 0.0,
+    }
+    result = _execute_episode_job(job)
+    assert result["status"] == "ok"
+    assert result["steps_completed"] == horizon
+
+    robot_traj = np.array(result["robot_traj"], dtype=float)
+    assert robot_traj.shape == (horizon + 1, 2)
+
+    # Compute expected trajectory via canonical _simple_robot_policy integration
+    # starting from the simulator-initialized position robot_traj[0]
+    expected_traj = [robot_traj[0].copy()]
+    curr_pos = robot_traj[0].copy()
+    goal = np.array(_ROBOT_GOAL, dtype=float)
+    for _ in range(horizon):
+        cmd = _simple_robot_policy(curr_pos, goal, speed=robot_speed)
+        curr_pos = curr_pos + cmd * _DT_S
+        expected_traj.append(curr_pos.copy())
+
+    expected_traj_arr = np.array(expected_traj, dtype=float)
+    assert np.allclose(robot_traj, expected_traj_arr, atol=1e-5)

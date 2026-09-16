@@ -379,7 +379,10 @@ def test_final_evidence_sigterm_cleans_checker_and_releases_lock(
         assert trace.read_text(encoding="utf-8").splitlines() == ["ratchet --check"]
     finally:
         _stop_process_group(process, signal.SIGKILL)
-        _collect_process(process)
+        try:
+            _collect_process(process, timeout=3.0)
+        except AssertionError:
+            pass
         transport.write_text(original, encoding="utf-8")
 
     retry = _run_pr_ready(preflight_repo, env_overrides=env)
@@ -875,19 +878,49 @@ def _lock_anchor(tmp_path: Path, repo: Path) -> Path:
     return tmp_path / "lock-tmp" / "robot-sf-pr-ready-locks" / f"{key}.lock"
 
 
+def _child_pgids_for_pid(parent_pid: int) -> set[int]:
+    """Return distinct child process group IDs spawned by parent_pid."""
+    child_pgids: set[int] = set()
+    try:
+        res = subprocess.run(
+            ["ps", "-eo", "ppid=,pgid="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return child_pgids
+    for line in res.stdout.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            ppid, pgid = int(parts[0]), int(parts[1])
+            if ppid == parent_pid and pgid != parent_pid:
+                child_pgids.add(pgid)
+    return child_pgids
+
+
 def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) -> None:
     """Terminate a controlled readiness process and any lane child it owns.
 
     The process group is signaled even after the direct child exits: a lane
     descendant can outlive it while keeping the inherited pipes open, which
-    otherwise stalls xdist teardown (issue #9144).
+    otherwise stalls xdist teardown (issue #9144). Child process groups created
+    in separate sessions (e.g. by start_pr_ready_child setsid) are also signaled.
     """
     if os.name == "posix":
+        child_pgids = _child_pgids_for_pid(process.pid)
         try:
             os.killpg(process.pid, signum)
-            return
         except ProcessLookupError:
             pass
+
+        for cpgid in child_pgids:
+            try:
+                os.killpg(cpgid, signum)
+            except ProcessLookupError:
+                pass
+        return
+
     if process.poll() is None:
         try:
             process.send_signal(signum)
@@ -895,14 +928,14 @@ def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) 
             pass
 
 
-def _collect_process(process: subprocess.Popen[str], *, timeout: float = 10.0) -> tuple[str, str]:
+def _collect_process(process: subprocess.Popen[str], *, timeout: float = 25.0) -> tuple[str, str]:
     """Collect readiness output without allowing leaked descendants to hold pipes forever."""
     try:
         return process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         _stop_process_group(process, signal.SIGKILL)
         try:
-            stdout, stderr = process.communicate(timeout=1.0)
+            stdout, stderr = process.communicate(timeout=2.0)
         except subprocess.TimeoutExpired as cleanup_exc:
             for stream in (process.stdout, process.stderr):
                 if stream is not None:

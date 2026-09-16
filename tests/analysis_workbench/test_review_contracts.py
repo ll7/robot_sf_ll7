@@ -92,6 +92,53 @@ def test_review_bundle_rejects_bad_sha_and_traversal() -> None:
         review_bundle_from_dict(doc)
 
 
+def test_schema_validation_error_cap_counts_omission_marker() -> None:
+    """Schema errors retain at most cap minus one messages plus the marker."""
+    payload = _bundle_doc()
+    reference = payload["episodes"][0]["references"][0]  # type: ignore[index,union-attr]
+    payload["episodes"][0]["references"] = [  # type: ignore[index,union-attr]
+        {
+            **reference,
+            "artifact_id": f"trace-{index}",
+            "sha256": "invalid",
+            "source_commit": "invalid",
+        }
+        for index in range(review_contracts.MAX_REVIEW_CONTRACT_VALIDATION_ERRORS)
+    ]
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        review_bundle_from_dict(payload)
+
+    assert len(error.value.errors) == review_contracts.MAX_REVIEW_CONTRACT_VALIDATION_ERRORS
+    assert (
+        len(error.value.errors[:-1]) == review_contracts.MAX_REVIEW_CONTRACT_VALIDATION_ERRORS - 1
+    )
+    assert error.value.errors[-1] == "additional validation errors omitted"
+
+
+def test_semantic_validation_error_cap_counts_omission_marker() -> None:
+    """Semantic errors retain at most cap minus one messages plus the marker."""
+    payload = {
+        "schema_version": "component-request.v1",
+        "request_id": "request-0000",
+        "component_id": "component-0000",
+        "sources": [
+            {"artifact_id": f"unsafe/{index}", "uri": "source.json", "format": "fixture"}
+            for index in range(review_contracts.MAX_REVIEW_CONTRACT_VALIDATION_ERRORS + 1)
+        ],
+        "output_directory": "out",
+    }
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        component_request_from_dict(payload)
+
+    assert len(error.value.errors) == review_contracts.MAX_REVIEW_CONTRACT_VALIDATION_ERRORS
+    assert (
+        len(error.value.errors[:-1]) == review_contracts.MAX_REVIEW_CONTRACT_VALIDATION_ERRORS - 1
+    )
+    assert error.value.errors[-1] == "additional validation errors omitted"
+
+
 def test_visualization_spec_validates_intervals_and_units() -> None:
     doc = {
         "schema_version": "visualization-spec.v1",

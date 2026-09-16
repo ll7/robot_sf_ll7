@@ -100,6 +100,28 @@ def _bounded_text_detail(value: Any, *, limit: int = MAX_REVIEW_CONTRACT_DIAGNOS
     return detail[:limit]
 
 
+_VALIDATION_ERRORS_OMISSION_MARKER = "additional validation errors omitted"
+
+
+def _bounded_validation_errors(errors: list[str]) -> tuple[str, ...]:
+    """Return public validation errors within the cap, including its marker.
+
+    The omission marker occupies one entry in the public tuple.  Therefore an
+    overflowing input retains at most ``cap - 1`` concrete messages before
+    appending the marker.
+    """
+    overflowing = len(errors) > MAX_REVIEW_CONTRACT_VALIDATION_ERRORS
+    concrete_limit = (
+        MAX_REVIEW_CONTRACT_VALIDATION_ERRORS - 1
+        if overflowing
+        else MAX_REVIEW_CONTRACT_VALIDATION_ERRORS
+    )
+    bounded_errors = [_bounded_text_detail(error) for error in errors[:concrete_limit]]
+    if overflowing:
+        bounded_errors.append(_VALIDATION_ERRORS_OMISSION_MARKER)
+    return tuple(bounded_errors)
+
+
 class _AdmittedSourceInputLimitError(ValueError):
     """Identify a receipt or source that exceeds the resolver input ceiling."""
 
@@ -114,17 +136,18 @@ class _AdmittedSourceFileRejectedError(ValueError):
 
 
 class ReviewContractsValidationError(RobotSfError, ValueError):
-    """Raised when a review-contract payload fails schema or semantic validation."""
+    """Raised when a review-contract payload fails schema or semantic validation.
+
+    The public ``errors`` tuple is capped at
+    ``MAX_REVIEW_CONTRACT_VALIDATION_ERRORS`` entries.  When violations exceed
+    that cap, the final entry is the omission marker, so it replaces one
+    concrete message rather than adding a 33rd entry to the configured limit.
+    """
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):
         """Build an actionable validation error."""
 
-        bounded_errors = [
-            _bounded_text_detail(error) for error in errors[:MAX_REVIEW_CONTRACT_VALIDATION_ERRORS]
-        ]
-        if len(errors) > MAX_REVIEW_CONTRACT_VALIDATION_ERRORS:
-            bounded_errors.append("additional validation errors omitted")
-        self.errors = tuple(bounded_errors)
+        self.errors = _bounded_validation_errors(errors)
         self.source = _bounded_text_detail(source) if source is not None else None
         prefix = f"{self.source}: " if self.source else ""
         super().__init__(prefix + "; ".join(self.errors))
@@ -168,8 +191,8 @@ def _schema_errors(version: str, payload: Mapping[str, Any]) -> list[str]:
         for error in violations
     ]
     if len(violations) > MAX_REVIEW_CONTRACT_VALIDATION_ERRORS:
-        errors.append("/: additional validation errors omitted")
-    return errors
+        errors.append(f"/: {_VALIDATION_ERRORS_OMISSION_MARKER}")
+    return list(_bounded_validation_errors(errors))
 
 
 def _pointer(path: Any) -> str:

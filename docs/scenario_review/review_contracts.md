@@ -88,8 +88,11 @@ Receipt, CLI request, and CLI config files are limited to 256 KiB and are read
 through no-follow, nonblocking, regular-file descriptors before any read.
 Receipt identity fields and result request/component identities are bounded to
 256 characters; source hashing stops at 16 MiB; validation and resolver
-diagnostics are bounded to 200 characters and at most 32 retained validation
-errors. These are resource-safety limits; they do not widen source admission.
+diagnostics are bounded to 200 characters and at most 32 public validation-error
+entries. The cap counts the omission marker: when more violations exist, the
+public `errors` tuple retains at most 31 concrete messages and ends with
+`additional validation errors omitted`. These are resource-safety limits; they
+do not widen source admission.
 Source-bound request and receipt admission, plus the CLI, reject nested
 non-finite numbers before schema or result serialization. Source-less
 in-memory component requests validate envelope fields here and defer

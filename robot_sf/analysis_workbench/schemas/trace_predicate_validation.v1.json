@@ -1,0 +1,405 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_predicate_validation.v1.json",
+  "title": "Robot SF Trace Predicate Validation Set v1",
+  "description": "Versioned, provenance-bound review contract for validating the eight trace-failure predicates and comparing similarity groupings. The contract is analysis-only and does not promote fixture labels or correlations to causal evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evaluation_set_id",
+    "evaluation_set_version",
+    "evidence_status",
+    "retained_trace_status",
+    "claim_boundary",
+    "provenance",
+    "review_protocol",
+    "cases",
+    "threshold_sensitivity",
+    "grouping_stability"
+  ],
+  "properties": {
+    "schema_version": {"const": "trace_predicate_validation.v1"},
+    "evaluation_set_id": {"type": "string", "minLength": 1},
+    "evaluation_set_version": {"type": "integer", "minimum": 1},
+    "evidence_status": {"const": "diagnostic-only"},
+    "retained_trace_status": {
+      "enum": ["available", "partial", "unavailable"]
+    },
+    "claim_boundary": {
+      "const": "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim."
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "source_commit",
+        "label_origin",
+        "data_boundary",
+        "excluded_from_training",
+        "excluded_from_prompt_development",
+        "source_references"
+      ],
+      "properties": {
+        "source_kind": {
+          "enum": ["bounded_labeled_fixture", "retained_trace_corpus"]
+        },
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "label_origin": {
+          "enum": [
+            "hand_authored_fixture",
+            "human_review",
+            "retained_trace_annotation"
+          ]
+        },
+        "data_boundary": {"type": "string", "minLength": 1},
+        "excluded_from_training": {"const": true},
+        "excluded_from_prompt_development": {"const": true},
+        "source_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "review_protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_reviewers",
+        "adjudication_required_for_metrics",
+        "adjudication_path",
+        "effort_unit",
+        "reviewer_effort_required"
+      ],
+      "properties": {
+        "minimum_reviewers": {"type": "integer", "minimum": 2},
+        "adjudication_required_for_metrics": {"const": true},
+        "adjudication_path": {"type": "string", "minLength": 1},
+        "effort_unit": {"const": "minutes"},
+        "reviewer_effort_required": {"const": true}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "threshold_sensitivity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline_variant_id", "variants"],
+      "properties": {
+        "baseline_variant_id": {"type": "string", "minLength": 1},
+        "variants": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/threshold_variant"}
+        }
+      }
+    },
+    "grouping_stability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_schema_version",
+        "assignment_origin",
+        "record_ids",
+        "identity_features",
+        "baseline_variant_id",
+        "ablated_variant_id",
+        "variants"
+      ],
+      "properties": {
+        "source_schema_version": {
+          "const": "collision_scenario_similarity.v1"
+        },
+        "assignment_origin": {
+          "enum": [
+            "bounded_fixture_projection",
+            "collision_scenario_similarity_report"
+          ]
+        },
+        "record_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "identity_features": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["planner_id", "map_id"]}
+        },
+        "baseline_variant_id": {"type": "string", "minLength": 1},
+        "ablated_variant_id": {"type": "string", "minLength": 1},
+        "variants": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/grouping_variant"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "predicate_labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collision",
+        "late_evasive_reaction",
+        "oscillatory_local_control",
+        "occlusion_triggered_near_miss",
+        "bottleneck_deadlock",
+        "zero_motion_timeout_behavior",
+        "low_progress",
+        "clearance_critical_interaction"
+      ],
+      "properties": {
+        "collision": {"$ref": "#/$defs/label"},
+        "late_evasive_reaction": {"$ref": "#/$defs/label"},
+        "oscillatory_local_control": {"$ref": "#/$defs/label"},
+        "occlusion_triggered_near_miss": {"$ref": "#/$defs/label"},
+        "bottleneck_deadlock": {"$ref": "#/$defs/label"},
+        "zero_motion_timeout_behavior": {"$ref": "#/$defs/label"},
+        "low_progress": {"$ref": "#/$defs/label"},
+        "clearance_critical_interaction": {"$ref": "#/$defs/label"}
+      }
+    },
+    "label": {
+      "enum": ["positive", "negative", "ambiguous", "unavailable"]
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "scenario_id",
+        "scenario_family",
+        "planner_id",
+        "map_id",
+        "seed",
+        "planner_identity_status",
+        "map_identity_status",
+        "trace_ref",
+        "detector",
+        "review",
+        "observations"
+      ],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "scenario_id": {"type": "string", "minLength": 1},
+        "scenario_family": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "map_id": {"type": "string", "minLength": 1},
+        "seed": {"type": ["integer", "null"]},
+        "planner_identity_status": {
+          "enum": ["source_bound", "fixture_annotation", "unavailable"]
+        },
+        "map_identity_status": {
+          "enum": ["source_bound", "fixture_annotation", "unavailable"]
+        },
+        "trace_ref": {"$ref": "#/$defs/trace_ref"},
+        "detector": {"$ref": "#/$defs/detector"},
+        "review": {"$ref": "#/$defs/review"},
+        "observations": {"$ref": "#/$defs/observations"}
+      }
+    },
+    "trace_ref": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "uri",
+            "format",
+            "schema_version",
+            "sha256",
+            "source_commit",
+            "trace_id"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "uri": {"type": "string", "minLength": 1},
+            "format": {"const": "json"},
+            "schema_version": {"const": "simulation_trace_export.v1"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "source_commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "trace_id": {"type": "string", "minLength": 1}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "unavailable"}}
+        }
+      ]
+    },
+    "detector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "schema_version", "label_origin", "labels"],
+      "properties": {
+        "source": {"const": "trace_failure_predicates.rule_based.v1"},
+        "schema_version": {"const": "trace_failure_predicates.v1"},
+        "label_origin": {
+          "enum": ["computed_trace_output", "fixture_projection"]
+        },
+        "labels": {"$ref": "#/$defs/predicate_labels"},
+        "unavailable_reasons": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "collision": {"type": "string", "minLength": 1},
+            "late_evasive_reaction": {"type": "string", "minLength": 1},
+            "oscillatory_local_control": {"type": "string", "minLength": 1},
+            "occlusion_triggered_near_miss": {"type": "string", "minLength": 1},
+            "bottleneck_deadlock": {"type": "string", "minLength": 1},
+            "zero_motion_timeout_behavior": {"type": "string", "minLength": 1},
+            "low_progress": {"type": "string", "minLength": 1},
+            "clearance_critical_interaction": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewers", "adjudication"],
+      "properties": {
+        "reviewers": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/reviewer"}
+        },
+        "adjudication": {"$ref": "#/$defs/adjudication"}
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_id", "labels", "effort_minutes"],
+      "properties": {
+        "reviewer_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": ".*[^\\s\\u0000-\\u001F\\u007F].*"
+        },
+        "labels": {"$ref": "#/$defs/predicate_labels"},
+        "effort_minutes": {"type": "number", "minimum": 0}
+      }
+    },
+    "adjudication": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "note"],
+          "properties": {
+            "status": {"const": "pending"},
+            "note": {"type": "string", "minLength": 1}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reviewer_id", "labels", "effort_minutes", "note"],
+          "properties": {
+            "status": {"const": "adjudicated"},
+            "reviewer_id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*[^\\s\\u0000-\\u001F\\u007F].*"
+            },
+            "labels": {"$ref": "#/$defs/predicate_labels"},
+            "note": {"type": "string", "minLength": 1},
+            "effort_minutes": {"type": "number", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_patterns", "causal_hypotheses"],
+      "properties": {
+        "observed_patterns": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "causal_hypotheses": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "threshold_variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variant_id", "parameters", "labels_by_case"],
+      "properties": {
+        "variant_id": {"type": "string", "minLength": 1},
+        "parameters": {"type": "object"},
+        "labels_by_case": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/predicate_labels"}
+        }
+      }
+    },
+    "grouping_variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant_id",
+        "included_features",
+        "excluded_features",
+        "groups"
+      ],
+      "properties": {
+        "variant_id": {"type": "string", "minLength": 1},
+        "included_features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["observed_pattern", "planner_id", "map_id"]}
+        },
+        "excluded_features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["observed_pattern", "planner_id", "map_id"]}
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/group"}
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group_id", "record_ids"],
+      "properties": {
+        "group_id": {"type": "string", "minLength": 1},
+        "record_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

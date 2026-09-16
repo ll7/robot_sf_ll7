@@ -1,0 +1,496 @@
+{
+  "schema_version": "trace_predicate_validation.v1",
+  "evaluation_set_id": "issue_9305_bounded_predicate_validation",
+  "evaluation_set_version": 1,
+  "evidence_status": "diagnostic-only",
+  "retained_trace_status": "unavailable",
+  "claim_boundary": "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim.",
+  "provenance": {
+    "source_kind": "bounded_labeled_fixture",
+    "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
+    "label_origin": "hand_authored_fixture",
+    "data_boundary": "No retained production trace corpus is staged; available rows are tracked analysis-workbench fixtures and missing rows are explicit.",
+    "excluded_from_training": true,
+    "excluded_from_prompt_development": true,
+    "source_references": [
+      "robot_sf/analysis_workbench/trace_failure_predicates.py",
+      "robot_sf/benchmark/collision/collision_scenario_similarity.py",
+      "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/crossing_proxy_motion_rich_fixture.json",
+      "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
+      "tests/fixtures/analysis_workbench/simulation_trace_export_v1/planner_sanity_open_episode_0000.json"
+    ]
+  },
+  "review_protocol": {
+    "minimum_reviewers": 2,
+    "adjudication_required_for_metrics": true,
+    "adjudication_path": "Two independent labels are retained; an explicit adjudicator may resolve a case; pending, ambiguous, and unavailable references remain excluded without majority imputation.",
+    "effort_unit": "minutes",
+    "reviewer_effort_required": true
+  },
+  "cases": [
+    {
+      "case_id": "fixture-crossing-true-positive",
+      "scenario_id": "crossing_proxy",
+      "scenario_family": "crossing_proxy",
+      "planner_id": "orca",
+      "map_id": "fixture_atrium",
+      "seed": 111,
+      "planner_identity_status": "source_bound",
+      "map_identity_status": "fixture_annotation",
+      "trace_ref": {
+        "status": "available",
+        "uri": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/crossing_proxy_motion_rich_fixture.json",
+        "format": "json",
+        "schema_version": "simulation_trace_export.v1",
+        "sha256": "3bd3f5b635109fc8b37313c76c9cd00de7f617a7e46da3e7fa9a0bcf34e1ef4a",
+        "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
+        "trace_id": "issue_2937_crossing_proxy_motion_rich"
+      },
+      "detector": {
+        "source": "trace_failure_predicates.rule_based.v1",
+        "schema_version": "trace_failure_predicates.v1",
+        "label_origin": "fixture_projection",
+        "labels": {
+          "collision": "positive",
+          "late_evasive_reaction": "positive",
+          "oscillatory_local_control": "positive",
+          "occlusion_triggered_near_miss": "positive",
+          "bottleneck_deadlock": "positive",
+          "zero_motion_timeout_behavior": "positive",
+          "low_progress": "negative",
+          "clearance_critical_interaction": "positive"
+        }
+      },
+      "review": {
+        "reviewers": [
+          {
+            "reviewer_id": "reviewer_a",
+            "labels": {
+              "collision": "positive",
+              "late_evasive_reaction": "positive",
+              "oscillatory_local_control": "positive",
+              "occlusion_triggered_near_miss": "positive",
+              "bottleneck_deadlock": "positive",
+              "zero_motion_timeout_behavior": "positive",
+              "low_progress": "positive",
+              "clearance_critical_interaction": "positive"
+            },
+            "effort_minutes": 1.0
+          },
+          {
+            "reviewer_id": "reviewer_b",
+            "labels": {
+              "collision": "positive",
+              "late_evasive_reaction": "positive",
+              "oscillatory_local_control": "positive",
+              "occlusion_triggered_near_miss": "positive",
+              "bottleneck_deadlock": "positive",
+              "zero_motion_timeout_behavior": "positive",
+              "low_progress": "positive",
+              "clearance_critical_interaction": "positive"
+            },
+            "effort_minutes": 1.2
+          }
+        ],
+        "adjudication": {
+          "status": "adjudicated",
+          "reviewer_id": "adjudicator_1",
+          "labels": {
+            "collision": "positive",
+            "late_evasive_reaction": "positive",
+            "oscillatory_local_control": "positive",
+            "occlusion_triggered_near_miss": "positive",
+            "bottleneck_deadlock": "positive",
+            "zero_motion_timeout_behavior": "positive",
+            "low_progress": "positive",
+            "clearance_critical_interaction": "positive"
+          },
+          "effort_minutes": 0.5,
+          "note": "Bounded fixture reference labels; not a retained-corpus adjudication."
+        }
+      },
+      "observations": {
+        "observed_patterns": ["collision-like interaction"],
+        "causal_hypotheses": []
+      }
+    },
+    {
+      "case_id": "fixture-open-true-negative",
+      "scenario_id": "planner_sanity_open",
+      "scenario_family": "open_space",
+      "planner_id": "trace_fixture_gen",
+      "map_id": "fixture_open",
+      "seed": 7,
+      "planner_identity_status": "source_bound",
+      "map_identity_status": "fixture_annotation",
+      "trace_ref": {
+        "status": "available",
+        "uri": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/planner_sanity_open_episode_0000.json",
+        "format": "json",
+        "schema_version": "simulation_trace_export.v1",
+        "sha256": "6862871a88169f8b6f6c99651225f681ec902c0db91d5fc6c3950c1ea060789d",
+        "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
+        "trace_id": "planner_sanity_open-ep0-seed7-source-aae87cf6"
+      },
+      "detector": {
+        "source": "trace_failure_predicates.rule_based.v1",
+        "schema_version": "trace_failure_predicates.v1",
+        "label_origin": "fixture_projection",
+        "labels": {
+          "collision": "positive",
+          "late_evasive_reaction": "negative",
+          "oscillatory_local_control": "negative",
+          "occlusion_triggered_near_miss": "negative",
+          "bottleneck_deadlock": "negative",
+          "zero_motion_timeout_behavior": "negative",
+          "low_progress": "negative",
+          "clearance_critical_interaction": "negative"
+        }
+      },
+      "review": {
+        "reviewers": [
+          {
+            "reviewer_id": "reviewer_a",
+            "labels": {
+              "collision": "negative",
+              "late_evasive_reaction": "negative",
+              "oscillatory_local_control": "negative",
+              "occlusion_triggered_near_miss": "negative",
+              "bottleneck_deadlock": "negative",
+              "zero_motion_timeout_behavior": "negative",
+              "low_progress": "negative",
+              "clearance_critical_interaction": "negative"
+            },
+            "effort_minutes": 0.8
+          },
+          {
+            "reviewer_id": "reviewer_b",
+            "labels": {
+              "collision": "negative",
+              "late_evasive_reaction": "negative",
+              "oscillatory_local_control": "negative",
+              "occlusion_triggered_near_miss": "negative",
+              "bottleneck_deadlock": "negative",
+              "zero_motion_timeout_behavior": "negative",
+              "low_progress": "negative",
+              "clearance_critical_interaction": "negative"
+            },
+            "effort_minutes": 0.9
+          }
+        ],
+        "adjudication": {
+          "status": "adjudicated",
+          "reviewer_id": "adjudicator_1",
+          "labels": {
+            "collision": "negative",
+            "late_evasive_reaction": "negative",
+            "oscillatory_local_control": "negative",
+            "occlusion_triggered_near_miss": "negative",
+            "bottleneck_deadlock": "negative",
+            "zero_motion_timeout_behavior": "negative",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "negative"
+          },
+          "effort_minutes": 0.4,
+          "note": "Bounded fixture negative reference labels; not a retained-corpus adjudication."
+        }
+      },
+      "observations": {
+        "observed_patterns": ["no predicate signal"],
+        "causal_hypotheses": []
+      }
+    },
+    {
+      "case_id": "fixture-bottleneck-disagreement",
+      "scenario_id": "classic_bottleneck_medium",
+      "scenario_family": "bottleneck",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "map_id": "fixture_bottleneck",
+      "seed": 111,
+      "planner_identity_status": "source_bound",
+      "map_identity_status": "fixture_annotation",
+      "trace_ref": {
+        "status": "available",
+        "uri": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
+        "format": "json",
+        "schema_version": "simulation_trace_export.v1",
+        "sha256": "a8f14b1d0a54ee7da51a3c341adbae46423ac356b05f753eb01d770b3f13878a",
+        "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
+        "trace_id": "issue_2937_bottleneck_motion_rich"
+      },
+      "detector": {
+        "source": "trace_failure_predicates.rule_based.v1",
+        "schema_version": "trace_failure_predicates.v1",
+        "label_origin": "fixture_projection",
+        "labels": {
+          "collision": "negative",
+          "late_evasive_reaction": "negative",
+          "oscillatory_local_control": "negative",
+          "occlusion_triggered_near_miss": "negative",
+          "bottleneck_deadlock": "positive",
+          "zero_motion_timeout_behavior": "negative",
+          "low_progress": "negative",
+          "clearance_critical_interaction": "negative"
+        }
+      },
+      "review": {
+        "reviewers": [
+          {
+            "reviewer_id": "reviewer_a",
+            "labels": {
+              "collision": "negative",
+              "late_evasive_reaction": "negative",
+              "oscillatory_local_control": "negative",
+              "occlusion_triggered_near_miss": "negative",
+              "bottleneck_deadlock": "positive",
+              "zero_motion_timeout_behavior": "negative",
+              "low_progress": "negative",
+              "clearance_critical_interaction": "negative"
+            },
+            "effort_minutes": 1.1
+          },
+          {
+            "reviewer_id": "reviewer_b",
+            "labels": {
+              "collision": "negative",
+              "late_evasive_reaction": "negative",
+              "oscillatory_local_control": "negative",
+              "occlusion_triggered_near_miss": "negative",
+              "bottleneck_deadlock": "negative",
+              "zero_motion_timeout_behavior": "negative",
+              "low_progress": "negative",
+              "clearance_critical_interaction": "negative"
+            },
+            "effort_minutes": 1.3
+          }
+        ],
+        "adjudication": {
+          "status": "pending",
+          "note": "Reviewer disagreement is retained; no majority label or causal interpretation is supplied."
+        }
+      },
+      "observations": {
+        "observed_patterns": ["collision-like interaction"],
+        "causal_hypotheses": []
+      }
+    },
+    {
+      "case_id": "fixture-missing-inputs",
+      "scenario_id": "missing_trace",
+      "scenario_family": "missing_input",
+      "planner_id": "unavailable",
+      "map_id": "unavailable",
+      "seed": null,
+      "planner_identity_status": "unavailable",
+      "map_identity_status": "unavailable",
+      "trace_ref": {"status": "unavailable"},
+      "detector": {
+        "source": "trace_failure_predicates.rule_based.v1",
+        "schema_version": "trace_failure_predicates.v1",
+        "label_origin": "fixture_projection",
+        "labels": {
+          "collision": "unavailable",
+          "late_evasive_reaction": "unavailable",
+          "oscillatory_local_control": "unavailable",
+          "occlusion_triggered_near_miss": "unavailable",
+          "bottleneck_deadlock": "unavailable",
+          "zero_motion_timeout_behavior": "unavailable",
+          "low_progress": "unavailable",
+          "clearance_critical_interaction": "unavailable"
+        },
+        "unavailable_reasons": {
+          "collision": "trace reference unavailable",
+          "late_evasive_reaction": "trace reference unavailable",
+          "oscillatory_local_control": "trace reference unavailable",
+          "occlusion_triggered_near_miss": "trace reference unavailable",
+          "bottleneck_deadlock": "trace reference unavailable",
+          "zero_motion_timeout_behavior": "trace reference unavailable",
+          "low_progress": "trace reference unavailable",
+          "clearance_critical_interaction": "trace reference unavailable"
+        }
+      },
+      "review": {
+        "reviewers": [
+          {
+            "reviewer_id": "reviewer_a",
+            "labels": {
+              "collision": "unavailable",
+              "late_evasive_reaction": "unavailable",
+              "oscillatory_local_control": "unavailable",
+              "occlusion_triggered_near_miss": "unavailable",
+              "bottleneck_deadlock": "unavailable",
+              "zero_motion_timeout_behavior": "unavailable",
+              "low_progress": "unavailable",
+              "clearance_critical_interaction": "unavailable"
+            },
+            "effort_minutes": 0.4
+          },
+          {
+            "reviewer_id": "reviewer_b",
+            "labels": {
+              "collision": "unavailable",
+              "late_evasive_reaction": "unavailable",
+              "oscillatory_local_control": "unavailable",
+              "occlusion_triggered_near_miss": "unavailable",
+              "bottleneck_deadlock": "unavailable",
+              "zero_motion_timeout_behavior": "unavailable",
+              "low_progress": "unavailable",
+              "clearance_critical_interaction": "unavailable"
+            },
+            "effort_minutes": 0.4
+          }
+        ],
+        "adjudication": {
+          "status": "pending",
+          "note": "Trace and required inputs are unavailable; no label is imputed."
+        }
+      },
+      "observations": {
+        "observed_patterns": ["missing required trace"],
+        "causal_hypotheses": []
+      }
+    }
+  ],
+  "threshold_sensitivity": {
+    "baseline_variant_id": "default",
+    "variants": [
+      {
+        "variant_id": "default",
+        "parameters": {
+          "near_miss_threshold_m": 0.5,
+          "clearance_threshold_m": 0.4
+        },
+        "labels_by_case": {
+          "fixture-crossing-true-positive": {
+            "collision": "positive",
+            "late_evasive_reaction": "positive",
+            "oscillatory_local_control": "positive",
+            "occlusion_triggered_near_miss": "positive",
+            "bottleneck_deadlock": "positive",
+            "zero_motion_timeout_behavior": "positive",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "positive"
+          },
+          "fixture-open-true-negative": {
+            "collision": "positive",
+            "late_evasive_reaction": "negative",
+            "oscillatory_local_control": "negative",
+            "occlusion_triggered_near_miss": "negative",
+            "bottleneck_deadlock": "negative",
+            "zero_motion_timeout_behavior": "negative",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "negative"
+          },
+          "fixture-bottleneck-disagreement": {
+            "collision": "negative",
+            "late_evasive_reaction": "negative",
+            "oscillatory_local_control": "negative",
+            "occlusion_triggered_near_miss": "negative",
+            "bottleneck_deadlock": "positive",
+            "zero_motion_timeout_behavior": "negative",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "negative"
+          },
+          "fixture-missing-inputs": {
+            "collision": "unavailable",
+            "late_evasive_reaction": "unavailable",
+            "oscillatory_local_control": "unavailable",
+            "occlusion_triggered_near_miss": "unavailable",
+            "bottleneck_deadlock": "unavailable",
+            "zero_motion_timeout_behavior": "unavailable",
+            "low_progress": "unavailable",
+            "clearance_critical_interaction": "unavailable"
+          }
+        }
+      },
+      {
+        "variant_id": "looser",
+        "parameters": {
+          "near_miss_threshold_m": 0.75,
+          "clearance_threshold_m": 0.6
+        },
+        "labels_by_case": {
+          "fixture-crossing-true-positive": {
+            "collision": "positive",
+            "late_evasive_reaction": "positive",
+            "oscillatory_local_control": "positive",
+            "occlusion_triggered_near_miss": "ambiguous",
+            "bottleneck_deadlock": "positive",
+            "zero_motion_timeout_behavior": "positive",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "positive"
+          },
+          "fixture-open-true-negative": {
+            "collision": "positive",
+            "late_evasive_reaction": "negative",
+            "oscillatory_local_control": "negative",
+            "occlusion_triggered_near_miss": "negative",
+            "bottleneck_deadlock": "negative",
+            "zero_motion_timeout_behavior": "negative",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "negative"
+          },
+          "fixture-bottleneck-disagreement": {
+            "collision": "negative",
+            "late_evasive_reaction": "negative",
+            "oscillatory_local_control": "negative",
+            "occlusion_triggered_near_miss": "negative",
+            "bottleneck_deadlock": "negative",
+            "zero_motion_timeout_behavior": "negative",
+            "low_progress": "negative",
+            "clearance_critical_interaction": "negative"
+          },
+          "fixture-missing-inputs": {
+            "collision": "unavailable",
+            "late_evasive_reaction": "unavailable",
+            "oscillatory_local_control": "unavailable",
+            "occlusion_triggered_near_miss": "unavailable",
+            "bottleneck_deadlock": "unavailable",
+            "zero_motion_timeout_behavior": "unavailable",
+            "low_progress": "unavailable",
+            "clearance_critical_interaction": "unavailable"
+          }
+        }
+      }
+    ]
+  },
+  "grouping_stability": {
+    "source_schema_version": "collision_scenario_similarity.v1",
+    "assignment_origin": "bounded_fixture_projection",
+    "record_ids": [
+      "fixture-crossing-true-positive",
+      "fixture-open-true-negative",
+      "fixture-bottleneck-disagreement",
+      "fixture-missing-inputs"
+    ],
+    "identity_features": ["planner_id", "map_id"],
+    "baseline_variant_id": "full_identity",
+    "ablated_variant_id": "identity_ablated",
+    "variants": [
+      {
+        "variant_id": "full_identity",
+        "included_features": ["observed_pattern", "planner_id", "map_id"],
+        "excluded_features": [],
+        "groups": [
+          {"group_id": "full-1", "record_ids": ["fixture-crossing-true-positive"]},
+          {"group_id": "full-2", "record_ids": ["fixture-open-true-negative"]},
+          {"group_id": "full-3", "record_ids": ["fixture-bottleneck-disagreement"]},
+          {"group_id": "full-4", "record_ids": ["fixture-missing-inputs"]}
+        ]
+      },
+      {
+        "variant_id": "identity_ablated",
+        "included_features": ["observed_pattern"],
+        "excluded_features": ["planner_id", "map_id"],
+        "groups": [
+          {
+            "group_id": "ablated-1",
+            "record_ids": ["fixture-crossing-true-positive", "fixture-bottleneck-disagreement"]
+          },
+          {"group_id": "ablated-2", "record_ids": ["fixture-open-true-negative"]},
+          {"group_id": "ablated-3", "record_ids": ["fixture-missing-inputs"]}
+        ]
+      }
+    ]
+  }
+}

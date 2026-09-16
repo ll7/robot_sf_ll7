@@ -167,7 +167,11 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     assert manifest["dependent_family_status"] == "standalone_fixture_only"
 
 
-def test_repeated_runs_agree_on_logical_artifacts(tmp_path: Path) -> None:
+def test_repeated_runs_agree_on_logical_artifacts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Repeatability, not simulator fidelity: run on the deterministic fake seam (issue #9397).
+    calls = _patch_fake_execution(monkeypatch)
     request = _fixture_request(horizon_steps=20, max_candidates=1)
     first = run(request, base=tmp_path)
     assert first.status == "complete"
@@ -188,6 +192,8 @@ def test_repeated_runs_agree_on_logical_artifacts(tmp_path: Path) -> None:
     assert second_report["candidates"] == first_report["candidates"]
     assert (second_dir / "activation-traces.json").read_bytes() == first_traces
     assert _logical_ledger(second_dir) == first_ledger
+    # One candidate (ped-speed-up) per run: control then treatment speeds, twice.
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 1.5]
 
 
 def test_corrupt_recipe_fails_without_artifacts(tmp_path: Path) -> None:
@@ -261,7 +267,11 @@ def test_output_symlink_and_preservation_escape_are_rejected(tmp_path: Path) -> 
     assert "invalid_preservation_destination" in unsafe_result.reason
 
 
-def test_exhausted_execution_budget_reports_partial(tmp_path: Path) -> None:
+def test_exhausted_execution_budget_reports_partial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Budget accounting, not simulator fidelity: run on the fake seam (issue #9397).
+    calls = _patch_fake_execution(monkeypatch)
     request = _fixture_request(max_executions=2)
     result = run(request, base=tmp_path)
     assert result.status == "partial"
@@ -269,6 +279,7 @@ def test_exhausted_execution_budget_reports_partial(tmp_path: Path) -> None:
     assert result.artifacts == ()
     assert len(result.diagnostics) == 1
     assert result.diagnostics[0]["status"] == "complete"
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5]
 
 
 def test_owned_child_timeout_terminates() -> None:
@@ -1109,7 +1120,9 @@ def test_resume_parser_limit_fails_closed(tmp_path: Path) -> None:
     assert "unreadable attempt ledger" in result.reason
 
 
-def test_resume_continues_after_partial(tmp_path: Path) -> None:
+def test_resume_continues_after_partial(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Resume accounting, not simulator fidelity: run on the fake seam (issue #9397).
+    calls = _patch_fake_execution(monkeypatch)
     first = _fixture_request(max_executions=2)
     partial = run(first, base=tmp_path)
     assert partial.status == "partial"
@@ -1120,6 +1133,7 @@ def test_resume_continues_after_partial(tmp_path: Path) -> None:
         (tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text(encoding="utf-8")
     )
     assert ledger["executions_consumed"] == 4
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5]
 
 
 def test_control_fidelity_predicate() -> None:

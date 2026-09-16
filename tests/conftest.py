@@ -948,6 +948,9 @@ _FAST_FILES = {
     # for the component registry leaf; keep changed coverage in fast shards
     # (issue #9290).
     "test_review_registry.py",
+    # SREV-11 review-camera tests protect deterministic camera tracks and
+    # pixel-metric freedom contracts for the new render component (issue #9280).
+    "test_review_camera.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

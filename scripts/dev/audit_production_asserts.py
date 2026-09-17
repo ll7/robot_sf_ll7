@@ -402,6 +402,15 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=("#9458",),
     ),
+    (
+        "robot_sf/benchmark/operational_quantities.py",
+        "compute_cost_breakdown",
+        "productive_m is not None and capital_per_period is not None",
+    ): _review(
+        "The missing-input guard follows both positive-value resolution paths; reaching the cost calculation narrows the optional values for arithmetic.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9350",),
+    ),
 }
 
 

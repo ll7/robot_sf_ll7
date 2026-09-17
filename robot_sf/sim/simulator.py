@@ -25,7 +25,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from math import atan2, ceil, cos, isfinite, pi, sin
+from math import atan2, cos, isfinite, pi, sin
 from random import sample, uniform
 from typing import TYPE_CHECKING, Any
 
@@ -1698,6 +1698,32 @@ class Simulator:
         ]
 
 
+def split_robot_counts(num_robots: int, num_start_pos: int) -> list[int]:
+    """Split ``num_robots`` across simulators of capacity ``num_start_pos``.
+
+    Every simulator except possibly the last receives a full
+    ``num_start_pos`` complement; the last receives the exact remainder so the
+    counts always sum to ``num_robots`` (issue #9344: the previous inline
+    ``max(1, num_robots % num_start_pos)`` remainder dropped robots whenever
+    ``num_robots`` was an exact multiple of ``num_start_pos``).
+
+    Returns:
+        Per-simulator robot counts whose sum equals ``num_robots``.
+
+    Raises:
+        ValueError: If either count is not a positive integer.
+    """
+    if not isinstance(num_robots, int) or isinstance(num_robots, bool) or num_robots < 1:
+        raise ValueError(f"num_robots must be a positive integer, got {num_robots!r}")
+    if not isinstance(num_start_pos, int) or isinstance(num_start_pos, bool) or num_start_pos < 1:
+        raise ValueError(f"num_start_pos must be a positive integer, got {num_start_pos!r}")
+    full, rest = divmod(num_robots, num_start_pos)
+    counts = [num_start_pos] * full
+    if rest:
+        counts.append(rest)
+    return counts
+
+
 def init_simulators(
     env_config: EnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
@@ -1729,7 +1755,8 @@ def init_simulators(
             "and that spawn/goal zones plus routes are present.",
         )
 
-    num_sims = ceil(num_robots / map_def.num_start_pos)
+    robot_counts = split_robot_counts(num_robots, map_def.num_start_pos)
+    num_sims = len(robot_counts)
 
     # Calculate the proximity to the goal based on the robot radius and goal radius
     goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
@@ -1740,11 +1767,7 @@ def init_simulators(
     # Create the required number of simulators
     for i in range(num_sims):
         # Determine the number of robots for this simulator
-        n = (
-            map_def.num_start_pos
-            if i < num_sims - 1
-            else max(1, num_robots % map_def.num_start_pos)
-        )
+        n = robot_counts[i]
 
         # Create the robots for this simulator
         sim_robots = [env_config.robot_factory() for _ in range(n)]

@@ -84,6 +84,7 @@ LOOP_REPORT_SCHEMA_VERSION = "experiment-loop-report.v1"
 SESSION_JOURNAL_FILENAME = "experiment-loop-journal.json"
 LEGACY_SESSION_JOURNAL_FILENAME = "session-journal.json"
 LOOP_REPORT_FILENAME = "experiment-loop-report.json"
+SESSION_LOCK_FILENAME = ".experiment-loop.lock"
 # Short aliases are kept for callers that consume the versioned component
 # without depending on artifact filename spelling.
 JOURNAL_SCHEMA_VERSION = SESSION_JOURNAL_SCHEMA_VERSION
@@ -357,6 +358,104 @@ def _request_identity(request: ComponentRequest) -> dict[str, Any]:
         ],
         "required_capabilities": list(request.required_capabilities),
     }
+
+
+def _validate_injected_source_proof(
+    request: ComponentRequest,
+    recipe: Mapping[str, Any],
+    proof: Mapping[str, Any] | None,
+    *,
+    base: Path,
+) -> dict[str, Any] | None:
+    """Validate the narrow offline-injection admission boundary.
+
+    The injected executor is a test/offline seam, not an admission authority.
+    A caller-provided ``{"status": "admitted"}`` marker is therefore never
+    sufficient.  The proof must bind the exact request and recipe, identify a
+    regular source file below the invocation base, and carry a digest measured
+    from that file.  Keeping the root below ``base`` prevents an offline caller
+    from turning this seam into an arbitrary host-file reader (for example
+    ``/etc/passwd``).
+
+    Returns:
+        A copied proof mapping when it satisfies the boundary, otherwise
+        ``None``.
+    """
+
+    if not isinstance(proof, Mapping):
+        return None
+    if proof.get("status") != "admitted":
+        return None
+    if proof.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY:
+        return None
+    if proof.get("scientific_claim_allowed") is not False:
+        return None
+    if proof.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
+        return None
+    if proof.get("request_digest") != _canonical_digest(_request_identity(request)):
+        return None
+    if proof.get("recipe_digest") != experiment_recipe_canonical_digest(recipe):
+        return None
+    source = proof.get("source")
+    if not isinstance(source, Mapping):
+        return None
+    source_root_value = proof.get("source_root")
+    if not isinstance(source_root_value, str) or not source_root_value:
+        return None
+    source_uri = source.get("uri")
+    if not isinstance(source_uri, str) or not source_uri:
+        return None
+    source_relative = Path(source_uri)
+    if (
+        source_relative.is_absolute()
+        or not source_relative.parts
+        or source_relative == Path(".")
+        or ".." in source_relative.parts
+        or "\\" in source_uri
+    ):
+        return None
+    if not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64:
+        return None
+    if any(not isinstance(source.get(key), str) for key in ("artifact_id", "format")):
+        return None
+    request_source = next(
+        (
+            item
+            for item in request.sources
+            if item.artifact_id == source.get("artifact_id")
+            and item.uri == source_uri
+            and item.format == source.get("format")
+        ),
+        None,
+    )
+    if request_source is None:
+        return None
+    if request_source.sha256 and request_source.sha256 != source.get("sha256"):
+        return None
+    source_identity = recipe.get("source_identity")
+    if isinstance(source_identity, Mapping):
+        recipe_source = source_identity.get("source_ref")
+        if isinstance(recipe_source, Mapping) and (
+            recipe_source.get("artifact_id") != source.get("artifact_id")
+            or recipe_source.get("uri") != source_uri
+            or recipe_source.get("format") != source.get("format")
+        ):
+            return None
+    try:
+        base_root = base.resolve(strict=True)
+        source_root = Path(source_root_value).resolve(strict=True)
+        source_root.relative_to(base_root)
+        source_path = source_root.joinpath(*source_relative.parts)
+        resolved_source = source_path.resolve(strict=True)
+        resolved_source.relative_to(source_root)
+        if source_path.is_symlink() or not resolved_source.is_file():
+            return None
+        actual_digest = hashlib.sha256(resolved_source.read_bytes()).hexdigest()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if actual_digest != source.get("sha256"):
+        return None
+    return dict(proof)
 
 
 def _candidate_order(recipe: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -711,8 +810,9 @@ class ExperimentLoop:
 
     The constructor intentionally receives an already admitted source
     provenance document.  The public :func:`run` performs the canonical
-    SREV-22 admission preflight before constructing this class; direct callers
-    should pass the corresponding proof from their own trusted boundary.
+    SREV-22 admission preflight before constructing this class; direct injected
+    callers must pass the same measured request/recipe-bound proof used by the
+    offline seam.
     """
 
     def __init__(
@@ -725,6 +825,7 @@ class ExperimentLoop:
         journal_path: Path,
         executor: Any,
         source_admission: Mapping[str, Any],
+        proof_base: Path | None = None,
         provenance: Mapping[str, Any] | None = None,
         session_id: str | None = None,
         resume: bool = False,
@@ -739,7 +840,21 @@ class ExperimentLoop:
         self.policy = policy
         self.journal_path = journal_path
         self.executor = executor
-        self.source_admission = dict(source_admission)
+        if not isinstance(executor, _NativeExecutorAdapter):
+            validated_source_admission = _validate_injected_source_proof(
+                request,
+                self.recipe,
+                source_admission,
+                base=proof_base or journal_path.parent,
+            )
+            if validated_source_admission is None:
+                raise ExperimentLoopError(
+                    "source_admission: injected executor requires a validated "
+                    "request/recipe-bound source proof"
+                )
+            self.source_admission = validated_source_admission
+        else:
+            self.source_admission = dict(source_admission)
         self.provenance = dict(provenance or {})
         _validate_loop_budget(self.recipe, budget)
         self.session_id = (
@@ -752,15 +867,79 @@ class ExperimentLoop:
         self.measurement = self._measurement()
         self._elapsed_base = 0.0
         self._started_at = time.monotonic()
-        self._journal = self._new_journal()
-        if resume:
-            self._load_journal()
-        else:
-            if journal_path.exists():
-                raise ExperimentLoopError(
-                    f"output_collision: journal already exists: {journal_path}"
-                )
-            self._persist()
+        self._session_lock_path = journal_path.with_name(SESSION_LOCK_FILENAME)
+        self._session_lock_fd = -1
+        # A fresh invocation reports an ordinary output collision before it
+        # claims a lock.  Resume claims the lock first, so two controllers can
+        # never read/repair/dispatch the same journal concurrently.
+        if not resume and journal_path.exists():
+            raise ExperimentLoopError(f"output_collision: journal already exists: {journal_path}")
+        try:
+            self._acquire_session_lock()
+            self._journal = self._new_journal()
+            if resume:
+                self._load_journal()
+            else:
+                self._persist()
+            self._bind_executor_operation_map()
+        except BaseException:
+            self._release_session_lock()
+            raise
+
+    def _acquire_session_lock(self) -> None:
+        """Claim exclusive controller ownership for this session directory."""
+
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(self._session_lock_path, flags, 0o600)
+        except FileExistsError as error:
+            raise ExperimentLoopError(
+                f"session_lock_owned: another controller owns {self._session_lock_path}"
+            ) from error
+        except OSError as error:
+            raise ExperimentLoopError(f"session_lock_unavailable: {error}") from error
+        owner = {
+            "pid": os.getpid(),
+            "host": platform.node(),
+            "session_id": self.session_id,
+            "created_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        try:
+            content = _json_bytes(owner)
+            offset = 0
+            while offset < len(content):
+                offset += os.write(descriptor, content[offset:])
+            os.fsync(descriptor)
+            self._session_lock_fd = descriptor
+        except BaseException:
+            os.close(descriptor)
+            self._session_lock_path.unlink(missing_ok=True)
+            raise
+
+    def _release_session_lock(self) -> None:
+        """Release only the lock inode owned by this controller."""
+
+        descriptor = self._session_lock_fd
+        if descriptor < 0:
+            return
+        self._session_lock_fd = -1
+        try:
+            own_inode = os.fstat(descriptor).st_ino
+            try:
+                same_inode = os.stat(self._session_lock_path).st_ino == own_inode
+            except OSError:
+                same_inode = False
+            if same_inode:
+                self._session_lock_path.unlink(missing_ok=True)
+        finally:
+            os.close(descriptor)
+
+    def _bind_executor_operation_map(self) -> None:
+        method = getattr(self.executor, "bind_operation_map", None)
+        if callable(method):
+            method(self._journal.get("operations", []))
 
     def _measurement(self) -> dict[str, Any]:
         measurements = self.recipe.get("measurements")
@@ -953,6 +1132,18 @@ class ExperimentLoop:
             payload.get("candidates"), dict
         ):
             raise ExperimentLoopError("cannot resume: journal state is malformed")
+        journal_status = payload.get("status")
+        if journal_status not in {
+            "running",
+            "complete",
+            "partial",
+            "failed",
+            "unavailable",
+            "cancelled",
+        }:
+            raise ExperimentLoopError("cannot resume: invalid journal status")
+        if not isinstance(payload.get("stop_reason"), str):
+            raise ExperimentLoopError("cannot resume: journal stop reason is malformed")
         prior_candidate_ids = {
             str(item.get("intervention_id"))
             for item in prior_order
@@ -1006,6 +1197,14 @@ class ExperimentLoop:
             raise ExperimentLoopError("cannot resume: operation accounting is invalid")
         operation_ids: set[str] = set()
         dispatch_total = 0
+        operation_by_id: dict[str, Mapping[str, Any]] = {}
+        operation_ids_by_candidate: dict[str, list[str]] = {
+            candidate_id: [] for candidate_id in prior_candidate_ids
+        }
+        dispatched_by_kind = {"control": 0, "treatment": 0}
+        failed_operations = 0
+        retry_operations = 0
+        active_reservations: set[str] = set()
         for operation in payload["operations"]:
             if not isinstance(operation, dict) or not isinstance(
                 operation.get("operation_id"), str
@@ -1015,6 +1214,7 @@ class ExperimentLoop:
             if operation_id in operation_ids:
                 raise ExperimentLoopError("cannot resume: duplicate operation ID")
             operation_ids.add(operation_id)
+            operation_by_id[operation_id] = operation
             candidate_id = operation.get("candidate_id")
             kind = operation.get("kind")
             attempt = operation.get("attempt")
@@ -1048,6 +1248,45 @@ class ExperimentLoop:
             ):
                 raise ExperimentLoopError("cannot resume: invalid operation dispatch count")
             dispatch_total += dispatch_count
+            operation_ids_by_candidate[candidate_id].append(operation_id)
+            if dispatch_count:
+                dispatched_by_kind[kind] += dispatch_count
+            state = operation.get("state")
+            result = operation.get("result")
+            if dispatch_count == 0:
+                if state != "reserved" or result is not None:
+                    raise ExperimentLoopError("cannot resume: reserved operation is inconsistent")
+            elif state == "reserved":
+                raise ExperimentLoopError("cannot resume: dispatched operation is still reserved")
+            elif state == "dispatching":
+                if result is not None:
+                    result_status, result_document = _status_from_result(result)
+                    if result_status != "failed" or not str(
+                        result_document.get("reason", "")
+                    ).startswith("dispatch_interrupted:"):
+                        raise ExperimentLoopError(
+                            "cannot resume: dispatching operation result is inconsistent"
+                        )
+            else:
+                result_status, _ = _status_from_result(result)
+                expected_state = {
+                    "ok": "completed",
+                    "failed": "failed",
+                    "cancelled": "cancelled",
+                    "unavailable": "unavailable",
+                }.get(result_status)
+                if expected_state != state:
+                    raise ExperimentLoopError("cannot resume: operation result/state mismatch")
+            if state == "failed":
+                if operation.get("failure_accounted") is not True:
+                    raise ExperimentLoopError("cannot resume: failed operation is unaccounted")
+                failed_operations += 1
+            elif operation.get("failure_accounted") is True:
+                raise ExperimentLoopError(
+                    "cannot resume: non-failed operation is failure-accounted"
+                )
+            if dispatch_count and attempt > 1:
+                retry_operations += 1
         if dispatch_total != consumed:
             raise ExperimentLoopError(
                 "cannot resume: operation accounting does not match dispatches"
@@ -1056,6 +1295,7 @@ class ExperimentLoop:
         if not isinstance(outcomes, list):
             raise ExperimentLoopError("cannot resume: journal outcomes are malformed")
         outcome_ids: set[str] = set()
+        outcome_by_id: dict[str, Mapping[str, Any]] = {}
         for outcome in outcomes:
             if not isinstance(outcome, Mapping) or not isinstance(
                 outcome.get("intervention_id"), str
@@ -1064,7 +1304,239 @@ class ExperimentLoop:
             outcome_id = str(outcome["intervention_id"])
             if outcome_id not in prior_candidate_ids or outcome_id in outcome_ids:
                 raise ExperimentLoopError("cannot resume: duplicate or unknown outcome record")
+            if outcome.get("status") not in TERMINAL_CANDIDATE_STATES:
+                raise ExperimentLoopError("cannot resume: invalid outcome status")
+            outcome_operation_ids = outcome.get("operation_ids", [])
+            if not isinstance(outcome_operation_ids, list) or not all(
+                isinstance(item, str) for item in outcome_operation_ids
+            ):
+                raise ExperimentLoopError("cannot resume: malformed outcome operation IDs")
             outcome_ids.add(outcome_id)
+            outcome_by_id[outcome_id] = outcome
+
+        reservation_records = payload.get("reservations")
+        if not isinstance(reservation_records, list):
+            raise ExperimentLoopError("cannot resume: journal reservations are malformed")
+        reservation_by_candidate: dict[str, Mapping[str, Any]] = {}
+        for reservation in reservation_records:
+            if not isinstance(reservation, Mapping):
+                raise ExperimentLoopError("cannot resume: malformed reservation record")
+            reservation_id = reservation.get("candidate_id")
+            if (
+                not isinstance(reservation_id, str)
+                or reservation_id not in prior_candidate_ids
+                or reservation_id in reservation_by_candidate
+                or reservation.get("required_executions") != RESERVED_CONTROL_TREATMENT_PAIR
+                or reservation.get("state") not in {"reserved", "released"}
+            ):
+                raise ExperimentLoopError("cannot resume: invalid reservation record")
+            reservation_by_candidate[reservation_id] = reservation
+
+        for candidate_id, candidate_state in payload["candidates"].items():
+            candidate_operations = operation_ids_by_candidate[candidate_id]
+            candidate_operation_ids = candidate_state.get("operation_ids", [])
+            if candidate_operation_ids != candidate_operations or len(
+                set(candidate_operation_ids)
+            ) != len(candidate_operation_ids):
+                raise ExperimentLoopError("cannot resume: candidate operation index mismatch")
+            attempts = candidate_state.get("attempts")
+            if (
+                not isinstance(attempts, int)
+                or isinstance(attempts, bool)
+                or attempts
+                != sum(
+                    int(operation_by_id[item].get("dispatch_count", 0))
+                    for item in candidate_operations
+                )
+            ):
+                raise ExperimentLoopError("cannot resume: candidate attempt accounting mismatch")
+            candidate_outcome = outcome_by_id.get(candidate_id)
+            candidate_state_name = candidate_state.get("state")
+            if candidate_outcome is None:
+                if candidate_state_name in TERMINAL_CANDIDATE_STATES:
+                    raise ExperimentLoopError("cannot resume: terminal candidate lacks outcome")
+                if candidate_state_name == "pending" and candidate_operations:
+                    raise ExperimentLoopError("cannot resume: pending candidate has operations")
+            elif candidate_state_name != candidate_outcome.get("status"):
+                raise ExperimentLoopError("cannot resume: candidate state/outcome mismatch")
+            if (
+                candidate_outcome is not None
+                and candidate_outcome.get("operation_ids") != candidate_operations
+            ):
+                raise ExperimentLoopError("cannot resume: outcome operation index mismatch")
+            reservation = reservation_by_candidate.get(candidate_id)
+            is_reserved = candidate_state_name in {"reserved", "dispatching"}
+            if is_reserved:
+                active_reservations.add(candidate_id)
+                if candidate_state.get("reservation") != RESERVED_CONTROL_TREATMENT_PAIR:
+                    raise ExperimentLoopError(
+                        "cannot resume: candidate reservation amount is invalid"
+                    )
+            elif "reservation" in candidate_state:
+                raise ExperimentLoopError("cannot resume: inactive candidate retains reservation")
+            if is_reserved != (reservation is not None and reservation.get("state") == "reserved"):
+                raise ExperimentLoopError("cannot resume: reservation/candidate state mismatch")
+            if candidate_state_name in TERMINAL_CANDIDATE_STATES and reservation is not None:
+                if reservation.get("state") != "released":
+                    raise ExperimentLoopError(
+                        "cannot resume: terminal candidate retains reservation"
+                    )
+            if candidate_outcome is None and not is_reserved and reservation is not None:
+                raise ExperimentLoopError(
+                    "cannot resume: pending candidate has released reservation"
+                )
+            if candidate_state_name == "dispatching" and not any(
+                operation_by_id[item].get("state") == "dispatching" for item in candidate_operations
+            ):
+                raise ExperimentLoopError("cannot resume: dispatching candidate lacks dispatch")
+
+        if int(payload.get("reserved_executions", 0)) != RESERVED_CONTROL_TREATMENT_PAIR * len(
+            active_reservations
+        ):
+            raise ExperimentLoopError("cannot resume: reservation accounting is inconsistent")
+        if int(accounting["controls"]) != dispatched_by_kind["control"]:
+            raise ExperimentLoopError("cannot resume: control accounting is inconsistent")
+        if int(accounting["treatments"]) != dispatched_by_kind["treatment"]:
+            raise ExperimentLoopError("cannot resume: treatment accounting is inconsistent")
+        if int(accounting["failures"]) != failed_operations:
+            raise ExperimentLoopError("cannot resume: failure accounting is inconsistent")
+        if int(accounting["retries"]) != retry_operations:
+            raise ExperimentLoopError("cannot resume: retry accounting is inconsistent")
+        if int(accounting["fidelity_attempts"]) > int(accounting["controls"]):
+            raise ExperimentLoopError("cannot resume: fidelity accounting is inconsistent")
+        observed_fidelity_attempts = sum(
+            1
+            for operation in operation_by_id.values()
+            if operation.get("kind") == "control"
+            and operation.get("state") == "completed"
+            and _status_from_result(operation.get("result"))[0] == "ok"
+        )
+
+        terminal_candidate_ids = {
+            candidate_id
+            for candidate_id, candidate_state in payload["candidates"].items()
+            if candidate_state.get("state") in TERMINAL_CANDIDATE_STATES
+        }
+        if journal_status != "running" and active_reservations:
+            raise ExperimentLoopError("cannot resume: terminal journal retains reservation")
+        if journal_status != "running" and any(
+            operation.get("state") in {"reserved", "dispatching"}
+            for operation in operation_by_id.values()
+        ):
+            raise ExperimentLoopError("cannot resume: terminal journal retains active operation")
+        if (
+            journal_status != "running"
+            and int(accounting["fidelity_attempts"]) != observed_fidelity_attempts
+        ):
+            raise ExperimentLoopError("cannot resume: fidelity accounting does not match controls")
+        for candidate_id, outcome in outcome_by_id.items():
+            candidate_operation_states = {
+                operation_by_id[item].get("state")
+                for item in operation_ids_by_candidate[candidate_id]
+            }
+            if outcome.get("status") == "complete" and (
+                not candidate_operation_states or candidate_operation_states != {"completed"}
+            ):
+                raise ExperimentLoopError(
+                    "cannot resume: complete outcome has non-complete operation"
+                )
+        if journal_status == "complete":
+            stop_reason = payload["stop_reason"]
+            complete_outcomes = all(
+                outcome.get("status") == "complete" for outcome in outcome_by_id.values()
+            )
+            if not complete_outcomes or not outcome_by_id:
+                raise ExperimentLoopError(
+                    "cannot resume: complete journal has non-complete outcomes"
+                )
+            if stop_reason == "exhausted_candidates":
+                if terminal_candidate_ids != prior_candidate_ids:
+                    raise ExperimentLoopError(
+                        "cannot resume: exhausted journal has pending candidates"
+                    )
+            elif stop_reason == "recipe_terminal_condition":
+                if not any(outcome.get("terminal") is True for outcome in outcome_by_id.values()):
+                    raise ExperimentLoopError(
+                        "cannot resume: terminal journal lacks terminal outcome"
+                    )
+            else:
+                raise ExperimentLoopError(
+                    "cannot resume: complete journal stop reason is inconsistent"
+                )
+        elif journal_status == "unavailable":
+            if (
+                not outcome_by_id
+                or any(outcome.get("status") != "unavailable" for outcome in outcome_by_id.values())
+                or terminal_candidate_ids != prior_candidate_ids
+            ):
+                raise ExperimentLoopError(
+                    "cannot resume: unavailable journal outcomes are inconsistent"
+                )
+        elif journal_status == "failed":
+            if not any(outcome.get("status") == "failed" for outcome in outcome_by_id.values()):
+                raise ExperimentLoopError("cannot resume: failed journal lacks failed outcome")
+            if any(outcome.get("status") == "complete" for outcome in outcome_by_id.values()):
+                raise ExperimentLoopError("cannot resume: failed journal retains complete outcome")
+            if payload["stop_reason"] not in {
+                "candidate_execution_failed",
+                "control_fidelity_failure_blocks_treatment",
+            }:
+                raise ExperimentLoopError(
+                    "cannot resume: failed journal stop reason is inconsistent"
+                )
+        elif journal_status == "partial":
+            stop_reason = payload["stop_reason"]
+            if stop_reason not in {
+                "execution_budget_exhausted",
+                "wall_timeout",
+                "candidate_execution_failed",
+                "candidate_unavailable",
+                "control_fidelity_failure_blocks_treatment",
+                "recipe_terminal_condition",
+            }:
+                raise ExperimentLoopError(
+                    "cannot resume: partial journal stop reason is inconsistent"
+                )
+            if (
+                stop_reason == "execution_budget_exhausted"
+                and terminal_candidate_ids == prior_candidate_ids
+            ):
+                raise ExperimentLoopError(
+                    "cannot resume: exhausted pair budget has no pending candidate"
+                )
+            if stop_reason == "candidate_execution_failed" and not any(
+                outcome.get("status") == "failed" for outcome in outcome_by_id.values()
+            ):
+                raise ExperimentLoopError("cannot resume: partial journal lacks failed outcome")
+            if stop_reason == "candidate_unavailable" and not any(
+                outcome.get("status") == "unavailable" for outcome in outcome_by_id.values()
+            ):
+                raise ExperimentLoopError(
+                    "cannot resume: partial journal lacks unavailable outcome"
+                )
+            if stop_reason == "control_fidelity_failure_blocks_treatment" and not any(
+                outcome.get("status") == "failed"
+                and "control_fidelity_failure" in str(outcome.get("reason", ""))
+                for outcome in outcome_by_id.values()
+            ):
+                raise ExperimentLoopError("cannot resume: partial journal lacks fidelity failure")
+            if stop_reason == "recipe_terminal_condition" and not any(
+                outcome.get("terminal") is True for outcome in outcome_by_id.values()
+            ):
+                raise ExperimentLoopError("cannot resume: partial journal lacks terminal outcome")
+        elif journal_status == "cancelled":
+            if (
+                outcome_by_id
+                and not any(
+                    outcome.get("status") == "cancelled" for outcome in outcome_by_id.values()
+                )
+                and not self.policy.cancel_requested
+            ):
+                raise ExperimentLoopError("cannot resume: cancelled journal lacks cancellation")
+            if payload["stop_reason"] and "cancel" not in payload["stop_reason"].lower():
+                raise ExperimentLoopError(
+                    "cannot resume: cancelled journal stop reason is inconsistent"
+                )
         existing_candidate_ids = set(payload["candidates"])
         for candidate in current_order:
             candidate_id = str(candidate["intervention_id"])
@@ -1179,6 +1651,17 @@ class ExperimentLoop:
             return _status_from_result(value)
         return None
 
+    def _pair_settled(self, candidate_id: str) -> bool:
+        """Return whether a native adapter already settled this whole pair."""
+
+        method = getattr(self.executor, "pair_settled", None)
+        if not callable(method):
+            return False
+        try:
+            return bool(method(candidate_id))
+        except (KeyError, LookupError, TypeError, ValueError):
+            return False
+
     def _invoke_executor(
         self,
         operation_id: str,
@@ -1245,6 +1728,24 @@ class ExperimentLoop:
                     # The failed attempt is already durable.  Continue with a
                     # distinct retry operation ID; never dispatch a terminal
                     # record under its original ID a second time.
+                    if self._cancelled():
+                        return (
+                            "cancelled",
+                            {
+                                "status": "cancelled",
+                                "reason": "cancellation_requested",
+                            },
+                            "",
+                        )
+                    if self._elapsed() >= self.budget.wall_timeout_s:
+                        return (
+                            "failed",
+                            {
+                                "status": "failed",
+                                "reason": "wall_timeout: retry dispatch prevented",
+                            },
+                            "",
+                        )
                     continue
                 return state, result, operation_id
             if operation is not None and operation.get("state") == "dispatching":
@@ -1271,9 +1772,46 @@ class ExperimentLoop:
                     and bool(result.get("retryable", result.get("retry", False)))
                     and attempts <= self.budget.max_retries
                 ):
+                    if self._cancelled():
+                        return (
+                            "cancelled",
+                            {
+                                "status": "cancelled",
+                                "reason": "cancellation_requested",
+                            },
+                            "",
+                        )
+                    if self._elapsed() >= self.budget.wall_timeout_s:
+                        return (
+                            "failed",
+                            {
+                                "status": "failed",
+                                "reason": "wall_timeout: retry dispatch prevented",
+                            },
+                            "",
+                        )
                     continue
                 return state, result, operation_id
             if operation is None:
+                pair_settled = kind == "treatment" and self._pair_settled(candidate_id)
+                if self._cancelled() and not pair_settled:
+                    return (
+                        "cancelled",
+                        {
+                            "status": "cancelled",
+                            "reason": "cancellation_requested",
+                        },
+                        "",
+                    )
+                if self._elapsed() >= self.budget.wall_timeout_s and not pair_settled:
+                    return (
+                        "failed",
+                        {
+                            "status": "failed",
+                            "reason": "wall_timeout: dispatch prevented",
+                        },
+                        "",
+                    )
                 if int(self._journal["executions_consumed"]) >= self.budget.max_executions:
                     return (
                         "failed",
@@ -1407,7 +1945,7 @@ class ExperimentLoop:
         control_state, control, control_operation = self._run_operation(
             candidate, "control", self._pair_spec(candidate, "control")
         )
-        operation_ids = [control_operation]
+        operation_ids = [control_operation] if control_operation else []
         if control_state in {"cancelled", "unavailable", "failed"}:
             outcome = {
                 "intervention_id": candidate_id,
@@ -1446,7 +1984,22 @@ class ExperimentLoop:
             }
             self._record_outcome(candidate_id, outcome)
             return outcome
-        if self._cancelled():
+        if self._elapsed() >= self.budget.wall_timeout_s and not self._pair_settled(candidate_id):
+            outcome = {
+                "intervention_id": candidate_id,
+                "priority": int(candidate["priority"]),
+                "factor": factor,
+                "status": "failed",
+                "outcome": "inconclusive",
+                "reason": "wall_timeout_before_treatment",
+                "control": control,
+                "control_fidelity": {"status": "ok"},
+                "negative": True,
+                "operation_ids": operation_ids,
+            }
+            self._record_outcome(candidate_id, outcome)
+            return outcome
+        if self._cancelled() and not bool(control.get("native_pair_complete", False)):
             outcome = {
                 "intervention_id": candidate_id,
                 "priority": int(candidate["priority"]),
@@ -1463,7 +2016,8 @@ class ExperimentLoop:
         treatment_state, treatment, treatment_operation = self._run_operation(
             candidate, "treatment", self._pair_spec(candidate, "treatment")
         )
-        operation_ids.append(treatment_operation)
+        if treatment_operation:
+            operation_ids.append(treatment_operation)
         if treatment_state in {"cancelled", "unavailable", "failed"}:
             outcome = {
                 "intervention_id": candidate_id,
@@ -1596,6 +2150,20 @@ class ExperimentLoop:
         return "complete", "exhausted_candidates"
 
     def run(self) -> ComponentResult:
+        """Drive the loop while holding exclusive session ownership.
+
+        Returns:
+            The settled component result.
+        """
+
+        if self._session_lock_fd < 0:
+            self._acquire_session_lock()
+        try:
+            return self._run_locked()
+        finally:
+            self._release_session_lock()
+
+    def _run_locked(self) -> ComponentResult:
         """Drive the finite loop and settle a truthful report/journal pair.
 
         Returns:
@@ -1787,9 +2355,10 @@ class _NativeExecutorAdapter:
     """Adapt one SREV-22 session to operation-level loop reads.
 
     SREV-22 already performs the real paired execution and persists its own
-    attempt ledger.  The adapter invokes it once; subsequent operation reads
-    come from its report, so the outer journal can expose stable control and
-    treatment operation IDs without introducing a second simulator runner.
+    attempt ledger.  The adapter resumes that ledger once per outer candidate
+    prefix.  This keeps a child invocation to one newly eligible pair and
+    prevents a child from dispatching later candidates after cancellation or a
+    wall/budget stop in the outer controller.
     """
 
     def __init__(
@@ -1801,6 +2370,7 @@ class _NativeExecutorAdapter:
         recipe: Mapping[str, Any],
         admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig,
         resume: bool,
+        cancel: Callable[[], bool] | Any | None = None,
     ) -> None:
         self.request = request
         self.base = base
@@ -1808,15 +2378,80 @@ class _NativeExecutorAdapter:
         self.recipe = dict(recipe)
         self.admission_config = admission_config
         self.resume = resume
+        self.cancel = cancel
         self.child_result: ComponentResult | None = None
         self.reports: dict[str, dict[str, Any]] = {}
+        self._child_started = False
+        self._operation_context: dict[str, tuple[str, str]] = {}
 
-    def _invoke(self) -> None:
+    def bind_operation_map(self, operations: Any) -> None:
+        """Bind exact journal operation identities for crash recovery.
+
+        Operation IDs are opaque.  In particular, candidate IDs may contain
+        ``:retry:`` and must never be recovered by delimiter stripping.
+        """
+
+        if not isinstance(operations, list):
+            return
+        for operation in operations:
+            if not isinstance(operation, Mapping):
+                continue
+            operation_id = operation.get("operation_id")
+            candidate_id = operation.get("candidate_id")
+            kind = operation.get("kind")
+            if (
+                isinstance(operation_id, str)
+                and isinstance(candidate_id, str)
+                and kind in {"control", "treatment"}
+            ):
+                self._operation_context[operation_id] = (candidate_id, str(kind))
+
+    def _cancelled(self) -> bool:
+        if self.cancel is None:
+            return False
+        if callable(self.cancel):
+            try:
+                return bool(self.cancel())
+            except (TypeError, RuntimeError):
+                return False
+        is_set = getattr(self.cancel, "is_set", None)
+        return bool(is_set()) if callable(is_set) else bool(self.cancel)
+
+    def _child_blocks_followup(self) -> bool:
+        """Return whether the child boundary forbids a later candidate call."""
+
+        if self.child_result is None:
+            return False
+        if self.child_result.status in {"failed", "cancelled"}:
+            return True
+        if self.child_result.status != "unavailable":
+            return False
+        reason = self.child_result.reason.lower()
+        admission_markers = (
+            "source_admission",
+            "receipt",
+            "preservation",
+            "allowed_root",
+            "source_missing",
+            "source_escaped_root",
+        )
+        return not self.reports or any(marker in reason for marker in admission_markers)
+
+    def _invoke(self, candidate_id: str) -> None:
+        ordered_candidates = _candidate_order(self.recipe)
+        try:
+            candidate_index = next(
+                index
+                for index, item in enumerate(ordered_candidates, start=1)
+                if str(item["intervention_id"]) == candidate_id
+            )
+        except StopIteration as error:
+            raise ExperimentLoopError(
+                f"native executor candidate is unknown: {candidate_id}"
+            ) from error
         config = dict(self.executor_config)
         config["recipe"] = self.recipe
-        config["max_candidates"] = min(
-            int(config.get("max_candidates", DEFAULT_MAX_CANDIDATES)), DEFAULT_MAX_CANDIDATES
-        )
+        config["max_candidates"] = min(candidate_index, DEFAULT_MAX_CANDIDATES)
         config["max_executions"] = min(
             int(config.get("max_executions", DEFAULT_MAX_EXECUTIONS)), DEFAULT_MAX_EXECUTIONS
         )
@@ -1831,9 +2466,10 @@ class _NativeExecutorAdapter:
         self.child_result = review_execute.run(
             child_request,
             base=self.base,
-            resume=self.resume,
+            resume=self.resume or self._child_started,
             admission_config=self.admission_config,
         )
+        self._child_started = True
         report_path = self.base / "executor" / "execute-report.json"
         ledger_path = self.base / "executor" / "attempt-ledger.json"
         payload: Any = None
@@ -1854,19 +2490,56 @@ class _NativeExecutorAdapter:
                 }
 
     def _candidate_report(self, candidate_id: str) -> dict[str, Any] | None:
-        if self.child_result is None:
-            self._invoke()
+        if self.reports.get(candidate_id) is None and (not self._child_blocks_followup()):
+            self._invoke(candidate_id)
         return self.reports.get(candidate_id)
 
+    def pair_settled(self, candidate_id: str) -> bool:
+        """Expose atomic child-pair completion to the outer deadline guard.
+
+        Returns:
+            ``True`` when a nested report settled the pair.
+        """
+
+        report = self.reports.get(candidate_id)
+        return report is not None and self._pair_complete(report)
+
+    def _pair_complete(self, report: Mapping[str, Any]) -> bool:
+        """Report whether the nested child already settled both operations.
+
+        Returns:
+            ``True`` when the outer controller must settle both operation
+            records even if cancellation arrived during the child call.
+        """
+
+        if report.get("status") == "complete":
+            return True
+        if report.get("status") != "failed":
+            return False
+        reason = str(report.get("reason", "")).lower()
+        return "treatment" in reason and isinstance(report.get("control_metrics"), Mapping)
+
     def _operation_result(self, candidate_id: str, kind: str) -> Mapping[str, Any]:
+        # A native child invocation is itself one atomic control/treatment
+        # pair.  Once its report exists, cancellation must settle both outer
+        # operation records from that pair so nested and outer accounting do
+        # not diverge; the next candidate is the cancellation boundary.
+        if self._cancelled() and not (kind == "treatment" and candidate_id in self.reports):
+            return {"status": "cancelled", "reason": "cancellation_requested"}
         report = self._candidate_report(candidate_id)
+        # A child admission/execution failure is authoritative even if an old
+        # report remains in the nested ledger.  Retained data must not turn a
+        # failed child boundary into an apparent successful operation.
+        if self.child_result is not None and self.child_result.status in {
+            "failed",
+            "unavailable",
+            "cancelled",
+        }:
+            return {
+                "status": self.child_result.status,
+                "reason": self.child_result.reason or f"native executor {self.child_result.status}",
+            }
         if report is None:
-            if self.child_result is not None and self.child_result.status == "failed":
-                return {
-                    "status": "failed",
-                    "reason": self.child_result.reason
-                    or "native executor failed admission or execution",
-                }
             return {
                 "status": "unavailable",
                 "reason": "native executor did not produce candidate report",
@@ -1883,6 +2556,7 @@ class _NativeExecutorAdapter:
                     "metrics": dict(report["control_metrics"]),
                     "fidelity": False,
                     "reason": report.get("reason", "control failed"),
+                    "native_pair_complete": self._pair_complete(report),
                 }
             return {"status": "failed", "reason": report.get("reason", "candidate failed")}
         metrics_key = "control_metrics" if kind == "control" else "treatment_metrics"
@@ -1895,29 +2569,26 @@ class _NativeExecutorAdapter:
             "metrics": dict(metrics),
             "mechanism_activated": bool(report.get(activated_key, False)),
             "fidelity": True,
+            "native_pair_complete": self._pair_complete(report),
         }
 
     def execute(self, **kwargs: Any) -> Mapping[str, Any]:
         candidate = kwargs.get("candidate", {})
         candidate_id = str(candidate.get("intervention_id", ""))
         kind = str(kwargs.get("kind", ""))
+        operation_id = kwargs.get("operation_id")
+        if isinstance(operation_id, str) and candidate_id and kind in {"control", "treatment"}:
+            self._operation_context[operation_id] = (candidate_id, kind)
         return self._operation_result(candidate_id, kind)
 
     def result_for(self, operation_id: str) -> Mapping[str, Any] | None:
         # The child attempt ledger is the idempotent recovery authority.  A
         # dispatching outer operation is recovered by resuming that ledger,
         # never by blindly issuing a second simulator operation.
-        marker = ":candidate:"
-        if marker not in operation_id:
+        context = self._operation_context.get(operation_id)
+        if context is None:
             return None
-        candidate_and_kind = operation_id.split(marker, maxsplit=1)[1]
-        if ":retry:" in candidate_and_kind:
-            candidate_and_kind = candidate_and_kind.split(":retry:", maxsplit=1)[0]
-        if ":" not in candidate_and_kind:
-            return None
-        candidate_id, kind = candidate_and_kind.rsplit(":", maxsplit=1)
-        if not candidate_id or kind not in {"control", "treatment"}:
-            return None
+        candidate_id, kind = context
         return self._operation_result(candidate_id, kind)
 
 
@@ -2169,17 +2840,21 @@ def run(
                 reason=admission_error or "source_admission: no admitted proof",
             )
     else:
-        source_document = dict(source_admission or {})
-        if (
-            not source_document
-            or source_document.get("status") not in {"admitted", "provided"}
-            or source_document.get("scientific_claim_allowed") is True
-        ):
+        source_document = _validate_injected_source_proof(
+            request,
+            validated.recipe,
+            source_admission,
+            base=root,
+        )
+        if source_document is None:
             return ComponentResult(
                 request_id=request.request_id,
                 component_id=COMPONENT_ID,
                 status="unavailable",
-                reason="source_admission: injected executor requires an admitted source proof",
+                reason=(
+                    "source_admission: injected executor requires a validated request/recipe-"
+                    "bound source proof below the invocation base"
+                ),
             )
     output_dir, output_error = _prepare_output_directory(request, root, resume=resume)
     if output_error is not None or output_dir is None:
@@ -2198,7 +2873,9 @@ def run(
             recipe=validated.recipe,
             admission_config=normalized_admission,
             resume=resume,
+            cancel=cancel,
         )
+    loop: ExperimentLoop | None = None
     try:
         loop = ExperimentLoop(
             request,
@@ -2208,6 +2885,7 @@ def run(
             journal_path=output_dir / SESSION_JOURNAL_FILENAME,
             executor=executor,
             source_admission=source_document,
+            proof_base=root,
             provenance=provenance,
             session_id=validated.session_id,
             resume=resume,
@@ -2231,6 +2909,9 @@ def run(
             status="failed",
             reason=f"execution_failed: {type(error).__name__}: {error}",
         )
+    finally:
+        if loop is not None:
+            loop._release_session_lock()
 
 
 def _result_document(result: ComponentResult) -> dict[str, Any]:

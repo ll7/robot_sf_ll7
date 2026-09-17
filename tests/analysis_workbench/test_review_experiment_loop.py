@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from robot_sf.analysis_workbench.review_contracts import ComponentRequest, SourceRef
+from robot_sf.analysis_workbench.review_contracts import (
+    ComponentRequest,
+    ComponentResult,
+    SourceRef,
+    experiment_recipe_canonical_digest,
+)
 from robot_sf.analysis_workbench.review_experiment_loop import (
     COMPONENT_ID,
     LEGACY_SESSION_JOURNAL_FILENAME,
@@ -17,6 +25,10 @@ from robot_sf.analysis_workbench.review_experiment_loop import (
     ExperimentLoopError,
     LoopBudget,
     LoopPolicy,
+    _canonical_digest,
+    _NativeExecutorAdapter,
+    _operation_id,
+    _request_identity,
     descriptor,
     run,
 )
@@ -96,6 +108,34 @@ def _metrics(kind: str, *, value: float = 1.0) -> dict[str, Any]:
     }
 
 
+def _source_proof(base: Path, request: ComponentRequest) -> dict[str, Any]:
+    """Build a measured, base-bound proof for the injected test executor."""
+
+    recipe = request.config["recipe"]
+    source_root = base / "admission-root"
+    source_root.mkdir(parents=True, exist_ok=True)
+    source_path = source_root / "source.json"
+    source_path.write_text('{"fixture": "loop"}\n', encoding="utf-8")
+    digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    source = request.sources[0]
+    return {
+        "status": "admitted",
+        "receipt_id": "fixture",
+        "source_root": str(source_root),
+        "source": {
+            "artifact_id": source.artifact_id,
+            "uri": source.uri,
+            "format": source.format,
+            "sha256": digest,
+        },
+        "request_digest": _canonical_digest(_request_identity(request)),
+        "recipe_digest": experiment_recipe_canonical_digest(recipe),
+        "evidence_boundary": "diagnostic_only",
+        "scientific_claim_allowed": False,
+        "dependent_family_status": "standalone_fixture_only",
+    }
+
+
 class FakeExecutor:
     """Small idempotent executor with explicit call accounting."""
 
@@ -133,6 +173,26 @@ class FakeExecutor:
         return self.results.get(operation_id)
 
 
+def _run_injected(
+    request: ComponentRequest,
+    *,
+    base: Path,
+    executor: Any,
+    resume: bool = False,
+    autonomous: bool = True,
+    cancel: Any = None,
+):
+    return run(
+        request,
+        base=base,
+        autonomous=autonomous,
+        resume=resume,
+        executor=executor,
+        source_admission=_source_proof(base, request),
+        cancel=cancel,
+    )
+
+
 def test_descriptor_and_priority_then_id_ordering(tmp_path: Path) -> None:
     assert descriptor()["component_id"] == COMPONENT_ID
     assert descriptor()["output_types"] == [
@@ -148,12 +208,10 @@ def test_descriptor_and_priority_then_id_ordering(tmp_path: Path) -> None:
         max_executions=4,
     )
     fake = FakeExecutor()
-    result = run(
+    result = _run_injected(
         _request(recipe),
         base=tmp_path,
-        autonomous=True,
         executor=fake,
-        source_admission={"status": "admitted", "receipt_id": "fixture"},
     )
     assert result.status == "complete"
     assert [call["candidate"] for call in fake.calls] == ["a", "a", "z", "z"]
@@ -178,12 +236,10 @@ def test_read_only_and_unauthorised_policy_never_call_executor(tmp_path: Path) -
 def test_pair_reservation_prevents_partial_new_pair(tmp_path: Path) -> None:
     recipe = _recipe(max_candidates=2, max_executions=3)
     fake = FakeExecutor()
-    result = run(
+    result = _run_injected(
         _request(recipe),
         base=tmp_path,
-        autonomous=True,
         executor=fake,
-        source_admission={"status": "admitted"},
     )
     assert result.status == "partial"
     assert result.reason == "execution_budget_exhausted"
@@ -205,12 +261,10 @@ def test_resume_extends_pair_budget_without_resetting_consumed_attempts(tmp_path
         {"recipe": recipe, "max_candidates": 2, "max_executions": 2},
     )
     first_executor = FakeExecutor()
-    first = run(
+    first = _run_injected(
         first_request,
         base=tmp_path,
-        autonomous=True,
         executor=first_executor,
-        source_admission={"status": "admitted"},
     )
     assert first.status == "partial"
     assert first.reason == "execution_budget_exhausted"
@@ -223,13 +277,11 @@ def test_resume_extends_pair_budget_without_resetting_consumed_attempts(tmp_path
         {"recipe": recipe, "max_candidates": 2, "max_executions": 4},
     )
     resumed_executor = FakeExecutor()
-    resumed = run(
+    resumed = _run_injected(
         resumed_request,
         base=tmp_path,
-        autonomous=True,
         resume=True,
         executor=resumed_executor,
-        source_admission={"status": "admitted"},
     )
     assert resumed.status == "complete"
     assert [call["candidate"] for call in resumed_executor.calls] == ["tie-id", "tie-id"]
@@ -267,12 +319,10 @@ def test_retry_and_fidelity_attempts_are_accounted(tmp_path: Path) -> None:
         {**request.config, "max_retries": 1},
     )
     executor = RetryExecutor()
-    result = run(
+    result = _run_injected(
         request,
         base=tmp_path,
-        autonomous=True,
         executor=executor,
-        source_admission={"status": "admitted"},
     )
     assert result.status == "complete"
     journal = json.loads((tmp_path / "loop" / SESSION_JOURNAL_FILENAME).read_text())
@@ -287,12 +337,10 @@ def test_retry_and_fidelity_attempts_are_accounted(tmp_path: Path) -> None:
 
 def test_cancellation_after_control_does_not_dispatch_treatment(tmp_path: Path) -> None:
     executor = FakeExecutor()
-    result = run(
+    result = _run_injected(
         _request(_recipe(max_candidates=1, max_executions=2)),
         base=tmp_path,
-        autonomous=True,
         executor=executor,
-        source_admission={"status": "admitted"},
         cancel=lambda: bool(executor.calls),
     )
     assert result.status == "cancelled"
@@ -333,12 +381,10 @@ def test_negative_outcomes_are_retained(tmp_path: Path) -> None:
                 result["metrics"]["min_robot_ped_distance_m"] = 0.5
             return result
 
-    result = run(
+    result = _run_injected(
         _request(recipe),
         base=tmp_path,
-        autonomous=True,
         executor=Outcomes(),
-        source_admission={"status": "admitted"},
     )
     assert result.status == "complete"
     report = json.loads((tmp_path / "loop" / "experiment-loop-report.json").read_text())
@@ -353,12 +399,10 @@ def test_unsupported_recipe_and_failed_control_fidelity_are_truthful(tmp_path: P
         max_executions=2,
     )
     fake = FakeExecutor()
-    result = run(
+    result = _run_injected(
         _request(unsupported),
         base=tmp_path,
-        autonomous=True,
         executor=fake,
-        source_admission={"status": "admitted"},
     )
     assert result.status == "unavailable"
     assert fake.calls == []
@@ -378,12 +422,10 @@ def test_unsupported_recipe_and_failed_control_fidelity_are_truthful(tmp_path: P
             return result
 
     fake = BadControl()
-    result = run(
+    result = _run_injected(
         _request(_recipe(max_candidates=1, max_executions=2), output="fidelity"),
         base=tmp_path,
-        autonomous=True,
         executor=fake,
-        source_admission={"status": "admitted"},
     )
     assert result.status == "failed"
     assert "control_fidelity_failure" in result.reason
@@ -410,22 +452,18 @@ def test_crash_after_dispatch_recovers_by_operation_id_without_duplicate(tmp_pat
 
     crashing = CrashAfterDispatch()
     with pytest.raises(KeyboardInterrupt):
-        run(
+        _run_injected(
             request,
             base=tmp_path,
-            autonomous=True,
             executor=crashing,
-            source_admission={"status": "admitted"},
         )
     recovering = FakeExecutor()
     recovering.results.update(crashing.results)
-    resumed = run(
+    resumed = _run_injected(
         request,
         base=tmp_path,
-        autonomous=True,
         resume=True,
         executor=recovering,
-        source_admission={"status": "admitted"},
     )
     assert resumed.status == "complete"
     assert [call["kind"] for call in recovering.calls] == ["treatment"]
@@ -451,20 +489,16 @@ def test_crash_before_dispatch_fails_closed_without_replaying_operation(tmp_path
 
     crashing = CrashBeforeDispatch()
     with pytest.raises(KeyboardInterrupt):
-        run(
+        _run_injected(
             request,
             base=tmp_path,
-            autonomous=True,
             executor=crashing,
-            source_admission={"status": "admitted"},
         )
-    resumed = run(
+    resumed = _run_injected(
         request,
         base=tmp_path,
-        autonomous=True,
         resume=True,
         executor=FakeExecutor(),
-        source_admission={"status": "admitted"},
     )
     assert resumed.status == "failed"
     assert "crash_recovery_unknown" in resumed.reason or "failed" in resumed.reason
@@ -474,22 +508,18 @@ def test_repeated_resume_is_idempotent_and_tampered_source_fails_closed(tmp_path
     recipe = _recipe(max_candidates=1, max_executions=2)
     request = _request(recipe)
     first_executor = FakeExecutor()
-    first = run(
+    first = _run_injected(
         request,
         base=tmp_path,
-        autonomous=True,
         executor=first_executor,
-        source_admission={"status": "admitted", "receipt_id": "one"},
     )
     assert first.status == "complete"
     second_executor = FakeExecutor()
-    second = run(
+    second = _run_injected(
         request,
         base=tmp_path,
-        autonomous=True,
         resume=True,
         executor=second_executor,
-        source_admission={"status": "admitted", "receipt_id": "one"},
     )
     assert second.status == "complete"
     assert second_executor.calls == []
@@ -498,13 +528,11 @@ def test_repeated_resume_is_idempotent_and_tampered_source_fails_closed(tmp_path
     journal = json.loads(journal_path.read_text())
     journal["source_admission"]["receipt_id"] = "tampered"
     journal_path.write_text(json.dumps(journal))
-    tampered = run(
+    tampered = _run_injected(
         request,
         base=tmp_path,
-        autonomous=True,
         resume=True,
         executor=FakeExecutor(),
-        source_admission={"status": "admitted", "receipt_id": "one"},
     )
     assert tampered.status == "failed"
     assert "source_admission" in tampered.reason or "journal" in tampered.reason
@@ -521,13 +549,366 @@ def test_direct_loop_rejects_existing_journal_without_resume(tmp_path: Path) -> 
         "policy": LoopPolicy(autonomous=True),
         "journal_path": path,
         "executor": FakeExecutor(),
-        "source_admission": {"status": "admitted"},
+        "source_admission": _source_proof(tmp_path, request),
     }
     ExperimentLoop(**kwargs)
     with pytest.raises(ExperimentLoopError, match="output_collision"):
         ExperimentLoop(**kwargs)
     assert path.exists()
     assert path.with_name(LEGACY_SESSION_JOURNAL_FILENAME).exists()
+
+
+def test_injected_admission_rejects_status_only_and_host_source(tmp_path: Path) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2))
+    fake = FakeExecutor()
+    status_only = run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=fake,
+        source_admission={"status": "admitted"},
+    )
+    assert status_only.status == "unavailable"
+    assert fake.calls == []
+
+    proof = _source_proof(tmp_path, request)
+    proof["source_root"] = "/etc"
+    proof["source"] = {
+        **proof["source"],
+        "uri": "/etc/passwd",
+    }
+    host_source = run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=proof,
+    )
+    assert host_source.status == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda journal: journal.update({"status": "complete", "outcomes": []}),
+        lambda journal: journal.update({"status": "partial"}),
+        lambda journal: journal.update({"executions_consumed": 0}),
+        lambda journal: journal["candidates"]["high"].update({"state": "pending"}),
+        lambda journal: journal["operations"][0].update(
+            {"state": "completed", "result": {"status": "failed"}}
+        ),
+    ],
+    ids=["terminal-outcomes", "partial-reason", "consumed", "candidate-state", "operation-state"],
+)
+def test_resume_rejects_forged_terminal_journal(tmp_path: Path, mutation: Any) -> None:
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe)
+    first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
+    assert first.status == "complete"
+    journal_path = tmp_path / "loop" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text())
+    mutation(journal)
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "cannot resume" in resumed.reason
+
+
+def test_native_adapter_dispatches_one_pair_per_candidate_and_honors_cancel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recipe = _recipe(max_candidates=2, max_executions=4)
+    request = _request(recipe)
+    child_calls: list[tuple[int, bool]] = []
+
+    def fake_child_run(
+        child_request: ComponentRequest,
+        *,
+        base: Path,
+        resume: bool,
+        admission_config: Any,
+    ) -> ComponentResult:
+        del admission_config
+        selected = sorted(
+            child_request.config["recipe"]["interventions"],
+            key=lambda item: (item["priority"], item["intervention_id"]),
+        )[: child_request.config["max_candidates"]]
+        child_calls.append((len(selected), resume))
+        child_dir = base / "executor"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        reports = [
+            {
+                "intervention_id": item["intervention_id"],
+                "factor": item["factor"],
+                "status": "complete",
+                "control_metrics": _metrics("control"),
+                "treatment_metrics": _metrics("treatment", value=1.2),
+                "control_activated": True,
+                "treatment_activated": True,
+            }
+            for item in selected
+        ]
+        (child_dir / "execute-report.json").write_text(
+            json.dumps({"candidates": reports}), encoding="utf-8"
+        )
+        return ComponentResult(
+            request_id=child_request.request_id,
+            component_id="srev22-review-execute",
+            status="complete",
+        )
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        fake_child_run,
+    )
+    cancelled = False
+    adapter = _NativeExecutorAdapter(
+        request,
+        base=tmp_path,
+        executor_config={"max_candidates": 2, "max_executions": 4},
+        recipe=recipe,
+        admission_config={},
+        resume=False,
+        cancel=lambda: cancelled,
+    )
+    first = sorted(
+        recipe["interventions"], key=lambda item: (item["priority"], item["intervention_id"])
+    )[0]
+    second = sorted(
+        recipe["interventions"], key=lambda item: (item["priority"], item["intervention_id"])
+    )[1]
+    assert adapter.execute(operation_id="one", candidate=first, kind="control")["status"] == "ok"
+    assert adapter.execute(operation_id="two", candidate=first, kind="treatment")["status"] == "ok"
+    cancelled = True
+    assert (
+        adapter.execute(operation_id="three", candidate=second, kind="control")["status"]
+        == "cancelled"
+    )
+    assert child_calls == [(1, False)]
+
+
+def test_native_child_failure_precedes_retained_candidate_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe)
+
+    def fake_child_run(*args: Any, **kwargs: Any) -> ComponentResult:
+        base = kwargs["base"]
+        child_dir = base / "executor"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        report = {
+            "candidates": [
+                {
+                    "intervention_id": "high",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                    "control_metrics": _metrics("control"),
+                    "treatment_metrics": _metrics("treatment"),
+                }
+            ]
+        }
+        (child_dir / "execute-report.json").write_text(json.dumps(report), encoding="utf-8")
+        return ComponentResult(
+            request_id=args[0].request_id,
+            component_id="srev22-review-execute",
+            status="failed",
+            reason="source admission failed",
+        )
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        fake_child_run,
+    )
+    adapter = _NativeExecutorAdapter(
+        request,
+        base=tmp_path,
+        executor_config={"max_candidates": 1, "max_executions": 2},
+        recipe=recipe,
+        admission_config={},
+        resume=False,
+    )
+    candidate = sorted(
+        recipe["interventions"], key=lambda item: (item["priority"], item["intervention_id"])
+    )[0]
+    assert adapter.execute(operation_id="one", candidate=candidate, kind="control") == {
+        "status": "failed",
+        "reason": "source admission failed",
+    }
+
+
+def test_native_cancellation_during_pair_settles_both_outer_operations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe)
+    cancellation = {"requested": False}
+
+    def fake_child_run(
+        child_request: ComponentRequest, *, base: Path, **kwargs: Any
+    ) -> ComponentResult:
+        del kwargs
+        cancellation["requested"] = True
+        child_dir = base / "executor"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        report = {
+            "candidates": [
+                {
+                    "intervention_id": "high",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                    "control_metrics": _metrics("control"),
+                    "treatment_metrics": _metrics("treatment"),
+                    "control_activated": True,
+                    "treatment_activated": True,
+                }
+            ]
+        }
+        (child_dir / "execute-report.json").write_text(json.dumps(report), encoding="utf-8")
+        return ComponentResult(
+            request_id=child_request.request_id,
+            component_id="srev22-review-execute",
+            status="complete",
+        )
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        fake_child_run,
+    )
+    adapter = _NativeExecutorAdapter(
+        request,
+        base=tmp_path,
+        executor_config={"max_candidates": 1, "max_executions": 2},
+        recipe=recipe,
+        admission_config={},
+        resume=False,
+        cancel=lambda: cancellation["requested"],
+    )
+    candidate = sorted(
+        recipe["interventions"], key=lambda item: (item["priority"], item["intervention_id"])
+    )[0]
+    control = adapter.execute(operation_id="control", candidate=candidate, kind="control")
+    treatment = adapter.execute(operation_id="treatment", candidate=candidate, kind="treatment")
+    assert control["status"] == treatment["status"] == "ok"
+    assert control["native_pair_complete"] is True
+    assert treatment["native_pair_complete"] is True
+
+
+def test_native_operation_recovery_uses_exact_map_for_retry_in_candidate_id(
+    tmp_path: Path,
+) -> None:
+    recipe = _recipe(
+        [
+            {
+                "intervention_id": "candidate:retry:literal",
+                "factor": "single_pedestrian_speed_offset",
+                "priority": 1,
+            }
+        ],
+        max_candidates=1,
+        max_executions=2,
+    )
+    request = _request(recipe)
+    adapter = _NativeExecutorAdapter(
+        request,
+        base=tmp_path,
+        executor_config={"max_candidates": 1, "max_executions": 2},
+        recipe=recipe,
+        admission_config={},
+        resume=True,
+    )
+    candidate_id = "candidate:retry:literal"
+    operation_id = _operation_id("session", candidate_id, "control")
+    adapter.bind_operation_map(
+        [{"operation_id": operation_id, "candidate_id": candidate_id, "kind": "control"}]
+    )
+    adapter.child_result = ComponentResult(
+        request_id=request.request_id,
+        component_id="srev22-review-execute",
+        status="complete",
+    )
+    adapter.reports[candidate_id] = {
+        "intervention_id": candidate_id,
+        "status": "complete",
+        "control_metrics": _metrics("control"),
+        "treatment_metrics": _metrics("treatment"),
+    }
+    assert adapter.result_for(operation_id)["status"] == "ok"
+    assert adapter.result_for(operation_id.replace(candidate_id, "literal")) is None
+
+
+def test_wall_deadline_between_control_and_treatment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_monotonic = time.monotonic
+    clock = {"jump": 0.0}
+    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+
+    class SlowControl(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ):
+            if kind == "control":
+                clock["jump"] = 1.0
+            return super().execute(operation_id, candidate, kind, spec, attempt)
+
+    request = _request(_recipe(max_candidates=1, max_executions=2))
+    request = ComponentRequest(
+        request.request_id,
+        request.component_id,
+        request.sources,
+        request.output_directory,
+        {**request.config, "wall_timeout_s": 0.5},
+    )
+    executor = SlowControl()
+    result = _run_injected(request, base=tmp_path, executor=executor)
+    assert result.status == "partial"
+    assert result.reason == "wall_timeout"
+    assert [call["kind"] for call in executor.calls] == ["control"]
+
+
+def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class Blocking(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ):
+            started.set()
+            release.wait(timeout=5)
+            return super().execute(operation_id, candidate, kind, spec, attempt)
+
+    request = _request(_recipe(max_candidates=1, max_executions=2))
+    first_result: list[ComponentResult] = []
+
+    def first_controller() -> None:
+        first_result.append(_run_injected(request, base=tmp_path, executor=Blocking()))
+
+    thread = threading.Thread(target=first_controller)
+    thread.start()
+    assert started.wait(timeout=5)
+    second = _run_injected(request, base=tmp_path, resume=True, executor=FakeExecutor())
+    assert second.status == "failed"
+    assert "session_lock_owned" in second.reason
+    release.set()
+    thread.join(timeout=5)
+    assert first_result and first_result[0].status == "complete"
 
 
 def test_real_admitted_fixture_smoke_uses_native_control_and_treatment(tmp_path: Path) -> None:
@@ -559,6 +940,10 @@ def test_real_admitted_fixture_smoke_uses_native_control_and_treatment(tmp_path:
     )
     assert result.status == "complete"
     report = json.loads((tmp_path / "native-smoke" / "experiment-loop-report.json").read_text())
+    ledger = json.loads(
+        (tmp_path / "native-smoke" / "executor" / "attempt-ledger.json").read_text()
+    )
     assert report["source_admission"]["receipt_id"] == "srev22-review-execute-receipt"
     assert report["provenance"]["scientific_claim_allowed"] is False
     assert report["budget"]["executions_consumed"] == 2
+    assert ledger["executions_consumed"] == report["budget"]["executions_consumed"]

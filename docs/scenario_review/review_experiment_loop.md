@@ -24,8 +24,19 @@ The native path requires the launcher-owned `executor-admission.v1` companion.
 The recipe cannot nominate its own source root or receipt. SREV-24 performs the
 same merged SREV-22/#9417 source and preservation preflight, then delegates
 execution to `review_execute`; source mutation, stale receipts, unsafe roots,
-and preservation mismatches fail closed. Injected executors are intended for
-tests/offline callers and must receive an already admitted proof via the API.
+and preservation mismatches fail closed. The native adapter resumes the child
+ledger one selected candidate at a time: each child dispatch is one complete
+control/treatment pair, so cancellation or a wall/budget stop cannot let a
+later candidate run ahead of the outer journal. Cancellation is a boundary
+between pairs; an already-started native pair settles both outer operation
+records before the next candidate is considered.
+
+Injected executors are a test/offline seam, not an admission authority. They
+must receive a measured proof containing the exact request and recipe digests,
+the diagnostic boundary fields, a source reference matching the request, and a
+SHA-256 measured from a regular file below the invocation base. A status-only
+mapping, a source outside that base, an absolute/traversal URI, or an
+`/etc/passwd`-like host path is rejected before the executor is called.
 
 ## Defaults and accounting
 
@@ -36,7 +47,9 @@ treatments, failures, retries, and fidelity attempts consume execution budget.
 The loop records both `executions_consumed` and `reserved_executions`; a
 candidate is not started unless two execution slots are available. A failed
 control-fidelity check records the control and blocks treatment interpretation.
-Evaluated or inconclusive candidates are never silently retried.
+The wall deadline is checked before dispatch and again between control and
+treatment, so treatment is never newly dispatched after the control budget is
+exhausted. Evaluated or inconclusive candidates are never silently retried.
 
 ## CLI
 
@@ -82,11 +95,20 @@ settlement.
 
 Operation IDs are deterministic (`session:candidate:<id>:control|treatment`,
 with a retry suffix only when explicitly configured). A completed operation is
-never dispatched again. A journal state of `dispatching` is recovered through
-the executor's idempotent `result_for`/`recover` interface when available;
-without a result, it is retained as a failed unknown operation rather than
-blindly run a second time. Tampered source proof, recipe, candidate order,
-identity, or journal accounting returns a failed resume result.
+never dispatched again. Recovery binds the exact operation record to its
+candidate and kind; operation IDs are opaque, so valid candidate IDs containing
+`:retry:` are not parsed or stripped. A journal state of `dispatching` is
+recovered through the executor's idempotent `result_for`/`recover` interface
+when available; without a result, it is retained as a failed unknown operation
+rather than blindly run a second time. Resume validates status/state/outcome,
+operation, reservation, and consumed-execution invariants before accepting any
+terminal journal. Tampered source proof, recipe, candidate order, identity, or
+journal accounting returns a failed resume result.
+
+The session directory also has an atomic `.experiment-loop.lock`. A controller
+holds it from journal load/reservation through settlement and releases it only
+after the result is durable. A second controller attempting a concurrent resume
+fails closed with `session_lock_owned`; stale locks are not guessed or stolen.
 
 ## API and status vocabulary
 

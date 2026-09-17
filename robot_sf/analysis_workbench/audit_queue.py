@@ -32,6 +32,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 try:  # ``fcntl`` is the fail-closed POSIX lock owner for queue state files.
@@ -379,6 +380,34 @@ def _mapping(value: Any, *, name: str) -> dict[str, Any]:
     return result
 
 
+def _freeze(value: Any) -> Any:
+    """Recursively freeze JSON-shaped state while retaining mapping semantics."""
+
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    """Return ordinary JSON-shaped containers for serialization boundaries."""
+
+    if isinstance(value, Mapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw(item) for item in value]
+    return value
+
+
+def _is_sha256_text(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in value)
+    )
+
+
 @contextmanager
 def _state_lock(path: Path):
     """Hold the stable sibling lock used by every state-file CAS.
@@ -424,7 +453,7 @@ def _canonical(value: Any) -> str:
     """Return strict canonical JSON used for IDs, operation digests, and state."""
 
     try:
-        text = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        text = json.dumps(_thaw(value), sort_keys=True, separators=(",", ":"), allow_nan=False)
     except (TypeError, ValueError) as exc:
         raise QueueInputError(f"value is not strict JSON: {exc}") from exc
     return text
@@ -432,6 +461,33 @@ def _canonical(value: Any) -> str:
 
 def _sha256(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+
+
+def _packet_content_identity(packet: ReviewPacket | Mapping[str, Any]) -> str:
+    """Hash every persisted BA-03 packet field, excluding self-identifying IDs."""
+
+    payload = record_to_dict(packet) if isinstance(packet, ReviewPacket) else dict(packet)
+    payload.pop("packet_id", None)
+    payload.pop("record_id", None)
+    return _sha256(payload)
+
+
+def _review_content_identity(review: ReviewRecord) -> str:
+    """Hash caller-controlled review fields, excluding generated timestamps."""
+
+    return _sha256(
+        {
+            "review_id": review.review_id,
+            "episode_id": review.episode_id,
+            "scope": review.scope,
+            "outcome": review.outcome,
+            "author_kind": review.author_kind,
+            "author_id": review.author_id,
+            "source_revision": review.source_revision,
+            "annotation_ids": review.annotation_ids,
+            "notes": review.notes,
+        }
+    )
 
 
 def _finding_digest(findings: Sequence[Finding]) -> str:
@@ -591,8 +647,8 @@ class ScanSummary:
         )
         source_id = _text(self.source_id, name="scan_summary.source_id", allow_empty=True)
         object.__setattr__(self, "revision", revision)
-        object.__setattr__(self, "accounting", accounting)
-        object.__setattr__(self, "detector_accounting", detector_accounting)
+        object.__setattr__(self, "accounting", _freeze(accounting))
+        object.__setattr__(self, "detector_accounting", _freeze(detector_accounting))
         object.__setattr__(
             self, "missingness", _tuple_strings(self.missingness, name="scan_summary.missingness")
         )
@@ -628,8 +684,8 @@ class ScanSummary:
             "revision": self.revision,
             "campaign_digest": self.campaign_digest,
             "source_digest": self.source_digest,
-            "accounting": dict(self.accounting),
-            "detector_accounting": dict(self.detector_accounting),
+            "accounting": _thaw(self.accounting),
+            "detector_accounting": _thaw(self.detector_accounting),
             "status": self.status,
             "missingness": list(self.missingness),
             "source_revision": self.source_revision,
@@ -728,7 +784,7 @@ class QueueCandidate:
         _text(outcome, name="candidate.outcome", allow_empty=True)
         object.__setattr__(self, "episode", episode)
         object.__setattr__(self, "signals", tuple(signals))
-        object.__setattr__(self, "metadata", metadata)
+        object.__setattr__(self, "metadata", _freeze(metadata))
         object.__setattr__(self, "trace_available", trace_available)
         object.__setattr__(self, "trace_identity", trace_identity)
         object.__setattr__(self, "stratum_id", stratum_id)
@@ -873,7 +929,7 @@ class QueueCandidate:
         return {
             "episode": record_to_dict(self.episode),
             "signals": [record_to_dict(signal) for signal in self.signals],
-            "metadata": dict(self.metadata),
+            "metadata": _thaw(self.metadata),
             "trace_available": self.trace_available,
             "trace_identity": self.trace_identity,
             "stratum_id": self.stratum_id,
@@ -1116,25 +1172,40 @@ class QueueDataset:
             if status in {CONTROL_STATUS_UNAVAILABLE, CONTROL_STATUS_ERROR}:
                 unavailable_detectors.append(detector_id)
                 missingness.append(f"ba-01-detector:{detector_id}:{status}")
-        declared_unavailable = accounting.get("unavailable_detectors", ())
-        if isinstance(declared_unavailable, Sequence) and not isinstance(
-            declared_unavailable, (str, bytes)
-        ):
-            for detector_id in declared_unavailable:
-                if not isinstance(detector_id, str) or not detector_id:
-                    raise QueueInputError(
-                        "queue.accounting.unavailable_detectors must contain detector IDs"
-                    )
-                unavailable_detectors.append(detector_id)
-                missingness.append(f"ba-01-detector:{detector_id}:unavailable")
+        declared_count: int | None = None
+        if "unavailable_detectors" in accounting:
+            declared_unavailable = accounting["unavailable_detectors"]
+            if isinstance(declared_unavailable, bool):
+                raise QueueInputError(
+                    "queue.accounting.unavailable_detectors must be a non-negative count "
+                    "or a sequence of detector IDs"
+                )
+            if isinstance(declared_unavailable, int):
+                declared_count = _nonnegative_int(
+                    declared_unavailable, name="queue.accounting.unavailable_detectors"
+                )
+            elif isinstance(declared_unavailable, Sequence) and not isinstance(
+                declared_unavailable, (str, bytes, bytearray)
+            ):
+                for detector_id in declared_unavailable:
+                    if not isinstance(detector_id, str) or not detector_id:
+                        raise QueueInputError(
+                            "queue.accounting.unavailable_detectors must contain detector IDs"
+                        )
+                    unavailable_detectors.append(detector_id)
+                    missingness.append(f"ba-01-detector:{detector_id}:unavailable")
+            else:
+                raise QueueInputError(
+                    "queue.accounting.unavailable_detectors must be a non-negative count "
+                    "or a sequence of detector IDs"
+                )
         for signal in signal_by_id.values():
             if signal.status in {CONTROL_STATUS_UNAVAILABLE, CONTROL_STATUS_ERROR}:
                 unavailable_detectors.append(signal.detector_id)
                 missingness.append(f"ba-01-detector:{signal.detector_id}:{signal.status}")
         if unavailable_detectors:
             detector_ids = sorted(set(unavailable_detectors))
-            declared_count = accounting.get("unavailable_detectors")
-            if isinstance(declared_count, int) and not isinstance(declared_count, bool):
+            if declared_count is not None:
                 # Preserve BA-01's denominator/count field and expose the
                 # detector identities in a separate, unambiguous field.
                 accounting["unavailable_detector_ids"] = detector_ids
@@ -1194,9 +1265,9 @@ class QueueDataset:
         object.__setattr__(self, "campaign_digest", campaign_digest)
         object.__setattr__(self, "source_digest", source_digest)
         object.__setattr__(self, "input_revision", input_revision)
-        object.__setattr__(self, "accounting", accounting)
+        object.__setattr__(self, "accounting", _freeze(accounting))
         object.__setattr__(self, "missingness", tuple(dict.fromkeys(missingness)))
-        object.__setattr__(self, "review_context", review_context)
+        object.__setattr__(self, "review_context", _freeze(review_context))
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> QueueDataset:
@@ -1243,14 +1314,14 @@ class QueueDataset:
             "protocol_version": self.protocol_version,
             "protocol_digest": self.protocol_digest,
             "input_revision": self.input_revision,
-            "accounting": dict(self.accounting),
+            "accounting": _thaw(self.accounting),
             "missingness": list(self.missingness),
             "scan_summary": self.scan_summary.to_dict() if self.scan_summary else None,
             "coverage_deficits": [item.to_dict() for item in self.coverage_deficits],
             "signals": [record_to_dict(item) for item in self.signals],
             "findings": [record_to_dict(item) for item in self.findings],
             "review_records": [record_to_dict(item) for item in self.review_records],
-            "review_context": self.review_context,
+            "review_context": _thaw(self.review_context),
             "candidates": [item.to_dict() for item in self.candidates],
         }
 
@@ -1358,7 +1429,7 @@ class QueuePolicy:
             _nonnegative_int(self.max_control_selections, name="policy.max_control_selections")
         if not isinstance(self.control_enabled, bool):
             raise AuditQueueError("policy.control_enabled must be boolean")
-        object.__setattr__(self, "weights", normalized)
+        object.__setattr__(self, "weights", _freeze(normalized))
         object.__setattr__(self, "policy_version", policy_version)
         object.__setattr__(self, "max_defer_count", max_defer_count)
         object.__setattr__(self, "max_age", max_age)
@@ -1390,7 +1461,7 @@ class QueuePolicy:
             "schema_version": QUEUE_SELECTION_SCHEMA_VERSION,
             "mode": self.mode,
             "policy_version": self.policy_version,
-            "weights": dict(self.weights),
+            "weights": _thaw(self.weights),
             "max_defer_count": self.max_defer_count,
             "max_age": self.max_age,
             "control_schedule": list(self.control_schedule),
@@ -1634,8 +1705,8 @@ class SelectionExplanation:
         if self.selection_kind not in {"anomaly", "control", "pinned"}:
             raise AuditQueueError("selection.selection_kind must be anomaly, control, or pinned")
         object.__setattr__(self, "score", score)
-        object.__setattr__(self, "components", components)
-        object.__setattr__(self, "weighted_contributions", contributions)
+        object.__setattr__(self, "components", _freeze(components))
+        object.__setattr__(self, "weighted_contributions", _freeze(contributions))
         object.__setattr__(self, "reasons", _tuple_strings(self.reasons, name="selection.reasons"))
 
     @property
@@ -1655,8 +1726,8 @@ class SelectionExplanation:
             "priority_band": self.priority_band,
             "band_rank": self.band_rank,
             "score": self.score,
-            "components": dict(self.components),
-            "weighted_contributions": dict(self.weighted_contributions),
+            "components": _thaw(self.components),
+            "weighted_contributions": _thaw(self.weighted_contributions),
             "reasons": list(self.reasons),
             "selection_kind": self.selection_kind,
             "starvation_override": self.starvation_override,
@@ -1820,18 +1891,22 @@ class QueueSelectionContext:
         object.__setattr__(
             self,
             "components",
-            {
-                key: _bounded_unit(value, name=f"selection.components.{key}")
-                for key, value in components.items()
-            },
+            _freeze(
+                {
+                    key: _bounded_unit(value, name=f"selection.components.{key}")
+                    for key, value in components.items()
+                }
+            ),
         )
         object.__setattr__(
             self,
             "weighted_contributions",
-            {
-                key: _finite(value, name=f"selection.weighted_contributions.{key}")
-                for key, value in weighted_contributions.items()
-            },
+            _freeze(
+                {
+                    key: _finite(value, name=f"selection.weighted_contributions.{key}")
+                    for key, value in weighted_contributions.items()
+                }
+            ),
         )
         object.__setattr__(
             self,
@@ -1845,7 +1920,7 @@ class QueueSelectionContext:
             self, "stale_inputs", _tuple_strings(self.stale_inputs, name="selection.stale_inputs")
         )
         object.__setattr__(
-            self, "accounting", _mapping(self.accounting, name="selection.accounting")
+            self, "accounting", _freeze(_mapping(self.accounting, name="selection.accounting"))
         )
         _text(self.rng_state, name="selection.rng_state", allow_empty=True)
 
@@ -1893,12 +1968,12 @@ class QueueSelectionContext:
             "priority_band": self.priority_band,
             "band_rank": self.band_rank,
             "priority_score": self.priority_score,
-            "components": dict(self.components),
-            "weighted_contributions": dict(self.weighted_contributions),
+            "components": _thaw(self.components),
+            "weighted_contributions": _thaw(self.weighted_contributions),
             "selection_reasons": list(self.selection_reasons),
             "missingness": list(self.missingness),
             "rng_state": self.rng_state,
-            "accounting": dict(self.accounting),
+            "accounting": _thaw(self.accounting),
             "selection_index": self.selection_index,
             "stale_inputs": list(self.stale_inputs),
             "created_at": self.created_at,
@@ -1977,8 +2052,10 @@ class QueueState:
     operations: Mapping[str, str] = field(default_factory=dict)
     policy_identity: str = ""
     candidate_first_seen: Mapping[str, int] = field(default_factory=dict)
+    packet_content_identities: Mapping[str, str] = field(default_factory=dict)
+    packet_identity_materials: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:  # noqa: C901, PLR0912
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912, PLR0915
         for name, value in (
             ("state_revision", self.state_revision),
             ("input_revision", self.input_revision),
@@ -2007,7 +2084,7 @@ class QueueState:
         for key, value in self.packet_payloads.items():
             try:
                 packet_key = _text(key, name="state.packet_payloads key")
-                payload = _mapping(value, name=f"state.packet_payloads.{packet_key}")
+                payload = _mapping(_thaw(value), name=f"state.packet_payloads.{packet_key}")
                 packet = record_from_dict(payload)
             except (AuditContractError, KeyError, TypeError, ValueError) as exc:
                 raise QueueStateError(f"corrupt persisted packet snapshot {key!r}: {exc}") from exc
@@ -2029,7 +2106,53 @@ class QueueState:
             raise QueueStateError(
                 "previous packet snapshot is missing: " + ", ".join(missing_history)
             )
-        object.__setattr__(self, "packet_payloads", packet_payloads)
+        if not isinstance(self.packet_content_identities, Mapping):
+            raise QueueStateError("state.packet_content_identities must be a mapping")
+        packet_content_identities: dict[str, str] = {}
+        for key, identity in self.packet_content_identities.items():
+            packet_key = _text(key, name="state.packet_content_identities key")
+            if packet_key not in packet_payloads:
+                raise QueueStateError(
+                    f"packet content identity references missing snapshot: {packet_key}"
+                )
+            identity = _text(identity, name="state.packet_content_identities value")
+            if not _is_sha256_text(identity):
+                raise QueueStateError(f"packet content identity is malformed: {packet_key}")
+            expected_identity = _packet_content_identity(packet_payloads[packet_key])
+            if identity != expected_identity:
+                raise QueueStateError(f"packet content identity mismatch: {packet_key}")
+            packet_content_identities[packet_key] = identity
+        if set(packet_content_identities) != set(packet_payloads):
+            missing_identities = sorted(set(packet_payloads) - set(packet_content_identities))
+            raise QueueStateError(
+                "packet content identities are missing snapshots: " + ", ".join(missing_identities)
+            )
+        if not isinstance(self.packet_identity_materials, Mapping):
+            raise QueueStateError("state.packet_identity_materials must be a mapping")
+        packet_identity_materials: dict[str, Mapping[str, Any]] = {}
+        for key, material in self.packet_identity_materials.items():
+            packet_key = _text(key, name="state.packet_identity_materials key")
+            if packet_key not in packet_payloads:
+                raise QueueStateError(
+                    f"packet identity material references missing snapshot: {packet_key}"
+                )
+            material = _mapping(
+                _thaw(material), name=f"state.packet_identity_materials.{packet_key}"
+            )
+            if not packet_key.startswith("review-packet-") or _sha256(material) != packet_key[14:]:
+                raise QueueStateError(f"packet identity material mismatch: {packet_key}")
+            expected_content_identity = packet_content_identities[packet_key]
+            if material.get("packet_content_identity") != expected_content_identity:
+                raise QueueStateError(f"packet identity material content mismatch: {packet_key}")
+            packet_identity_materials[packet_key] = material
+        if set(packet_identity_materials) != set(packet_payloads):
+            missing_materials = sorted(set(packet_payloads) - set(packet_identity_materials))
+            raise QueueStateError(
+                "packet identity materials are missing snapshots: " + ", ".join(missing_materials)
+            )
+        object.__setattr__(self, "packet_payloads", _freeze(packet_payloads))
+        object.__setattr__(self, "packet_content_identities", _freeze(packet_content_identities))
+        object.__setattr__(self, "packet_identity_materials", _freeze(packet_identity_materials))
         history = tuple(
             item
             if isinstance(item, QueueSelectionContext)
@@ -2058,7 +2181,7 @@ class QueueState:
         object.__setattr__(
             self,
             "candidate_first_seen",
-            self._counts(self.candidate_first_seen, "candidate_first_seen"),
+            _freeze(self._counts(self.candidate_first_seen, "candidate_first_seen")),
         )
         if any(
             first_seen > self.selection_index for first_seen in self.candidate_first_seen.values()
@@ -2067,11 +2190,17 @@ class QueueState:
                 "state.candidate_first_seen cannot be later than state.selection_index"
             )
         object.__setattr__(
-            self, "presented_counts", self._counts(self.presented_counts, "presented_counts")
+            self,
+            "presented_counts",
+            _freeze(self._counts(self.presented_counts, "presented_counts")),
         )
-        object.__setattr__(self, "defer_counts", self._counts(self.defer_counts, "defer_counts"))
-        object.__setattr__(self, "defer_until", self._counts(self.defer_until, "defer_until"))
-        object.__setattr__(self, "skip_until", self._counts(self.skip_until, "skip_until"))
+        object.__setattr__(
+            self, "defer_counts", _freeze(self._counts(self.defer_counts, "defer_counts"))
+        )
+        object.__setattr__(
+            self, "defer_until", _freeze(self._counts(self.defer_until, "defer_until"))
+        )
+        object.__setattr__(self, "skip_until", _freeze(self._counts(self.skip_until, "skip_until")))
         requests: dict[str, tuple[str, ...]] = {}
         if not isinstance(self.more_evidence_requests, Mapping):
             raise QueueStateError("state.more_evidence_requests must be a mapping")
@@ -2079,14 +2208,18 @@ class QueueState:
             requests[_text(key, name="state.request key")] = _tuple_strings(
                 values, name=f"state.requests.{key}"
             )
-        object.__setattr__(self, "more_evidence_requests", requests)
+        object.__setattr__(self, "more_evidence_requests", _freeze(requests))
         object.__setattr__(
             self,
             "operations",
-            {
-                _text(key, name="state.operations key"): _text(value, name="state.operation digest")
-                for key, value in self.operations.items()
-            },
+            _freeze(
+                {
+                    _text(key, name="state.operations key"): _text(
+                        value, name="state.operation digest"
+                    )
+                    for key, value in self.operations.items()
+                }
+            ),
         )
 
     @staticmethod
@@ -2111,7 +2244,9 @@ class QueueState:
             "selection_index": self.selection_index,
             "current_packet_id": self.current_packet_id,
             "previous_packet_ids": list(self.previous_packet_ids),
-            "packet_payloads": {key: dict(value) for key, value in self.packet_payloads.items()},
+            "packet_payloads": _thaw(self.packet_payloads),
+            "packet_content_identities": _thaw(self.packet_content_identities),
+            "packet_identity_materials": _thaw(self.packet_identity_materials),
             "selection_history": [item.to_dict() for item in self.selection_history],
             "candidate_first_seen": dict(self.candidate_first_seen),
             "presented_counts": dict(self.presented_counts),
@@ -2144,6 +2279,8 @@ class QueueState:
             previous_packet_ids=payload.get("previous_packet_ids", ()),
             packet_payloads=payload.get("packet_payloads", {}),
             selection_history=payload.get("selection_history", ()),
+            packet_content_identities=payload.get("packet_content_identities", {}),
+            packet_identity_materials=payload.get("packet_identity_materials", {}),
             candidate_first_seen=payload.get("candidate_first_seen", {}),
             presented_counts=payload.get("presented_counts", {}),
             defer_counts=payload.get("defer_counts", {}),
@@ -2240,22 +2377,43 @@ class AuditQueue:
     def state_revision(self) -> int:
         return self.state.state_revision
 
+    def _packet_snapshot(self, packet_id: str, payload: Mapping[str, Any]) -> ReviewPacket:
+        expected_identity = self.state.packet_content_identities.get(packet_id)
+        if not isinstance(expected_identity, str):
+            raise QueueStateError(f"packet content identity is missing: {packet_id}")
+        identity_material = self.state.packet_identity_materials.get(packet_id)
+        if not isinstance(identity_material, Mapping):
+            raise QueueStateError(f"packet identity material is missing: {packet_id}")
+        if (
+            not packet_id.startswith("review-packet-")
+            or _sha256(identity_material) != packet_id[14:]
+        ):
+            raise QueueStateError(f"packet identity material mismatch: {packet_id}")
+        try:
+            actual_identity = _packet_content_identity(payload)
+        except (QueueInputError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"corrupt packet content identity {packet_id}: {exc}") from exc
+        if actual_identity != expected_identity:
+            raise QueueStateError(f"packet content identity mismatch: {packet_id}")
+        try:
+            packet = record_from_dict(_thaw(payload))
+        except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"corrupt packet snapshot {packet_id}: {exc}") from exc
+        if not isinstance(packet, ReviewPacket):
+            raise QueueStateError(f"packet snapshot is not a review_packet record: {packet_id}")
+        if packet.packet_id != packet_id:
+            raise QueueStateError(f"packet snapshot key does not match packet_id: {packet_id}")
+        if identity_material.get("packet_content_identity") != actual_identity:
+            raise QueueStateError(f"packet identity material content mismatch: {packet_id}")
+        return packet
+
     @property
     def current_packet(self) -> ReviewPacket | None:
-        payload = self.state.packet_payloads.get(self.state.current_packet_id)
+        packet_id = self.state.current_packet_id
+        payload = self.state.packet_payloads.get(packet_id)
         if payload is None:
             return None
-        try:
-            packet = record_from_dict(payload)
-        except (AuditContractError, KeyError, TypeError, ValueError) as exc:
-            raise QueueStateError(
-                f"corrupt current packet snapshot {self.state.current_packet_id}: {exc}"
-            ) from exc
-        if not isinstance(packet, ReviewPacket):
-            raise QueueStateError(
-                f"current packet snapshot is not a review_packet record: {self.state.current_packet_id}"
-            )
-        return packet
+        return self._packet_snapshot(packet_id, payload)
 
     @property
     def stale_inputs(self) -> tuple[str, ...]:
@@ -2973,6 +3131,8 @@ class AuditQueue:
     def _peer_candidates(  # noqa: C901
         self, primary: QueueCandidate
     ) -> tuple[tuple[EpisodeRef, ...], tuple[str, ...]]:
+        if primary.trace_available is False:
+            return (), (f"primary:{primary.episode_id}:trace-unavailable",)
         peers: list[EpisodeRef] = []
         missingness: list[str] = []
         for candidate in sorted(self.dataset.candidates, key=lambda item: item.episode_id):
@@ -3029,7 +3189,7 @@ class AuditQueue:
         explanation: SelectionExplanation,
         *,
         control_reason: str = "",
-    ) -> tuple[ReviewPacket, tuple[str, ...]]:
+    ) -> tuple[ReviewPacket, tuple[str, ...], Mapping[str, Any]]:
         peers, peer_missingness = self._peer_candidates(candidate)
         signals = self.dataset.signals_for(candidate.episode_id)
         missingness = list(
@@ -3044,6 +3204,7 @@ class AuditQueue:
             candidate.trace_available is None and not candidate.trace_identity
         ):
             missingness.append(f"primary:{candidate.episode_id}:trace-unavailable")
+        missingness = list(dict.fromkeys(missingness))
         reasons = list(explanation.reasons)
         if control_reason:
             reasons.append(f"control reason: {control_reason}")
@@ -3067,6 +3228,32 @@ class AuditQueue:
         packet_identity = {
             "campaign_digest": self.dataset.campaign_digest,
             "source_digest": self.dataset.source_digest,
+            # The input identity covers producer accounting, scan/coverage
+            # revisions, and every typed source record.  Binding it here
+            # prevents a packet ID from surviving a source revision change.
+            "input_identity": self.dataset.identity,
+            "source_revisions": {
+                "input_revision": self.dataset.input_revision,
+                "protocol_version": self.dataset.protocol_version,
+                "protocol_digest": self.dataset.protocol_digest,
+                "scan_summary_id": (
+                    self.dataset.scan_summary.summary_id if self.dataset.scan_summary else ""
+                ),
+                "scan_summary_revision": (
+                    self.dataset.scan_summary.revision if self.dataset.scan_summary else 0
+                ),
+                "scan_summary_source_revision": (
+                    self.dataset.scan_summary.source_revision if self.dataset.scan_summary else ""
+                ),
+                "scan_summary_source_id": (
+                    self.dataset.scan_summary.source_id if self.dataset.scan_summary else ""
+                ),
+                "coverage_revision": (
+                    _sha256([item.to_dict() for item in self.dataset.coverage_deficits])
+                    if self.dataset.coverage_deficits
+                    else ""
+                ),
+            },
             "primary": record_to_dict(candidate.episode),
             "peers": [record_to_dict(peer) for peer in peers],
             "signals": [record_to_dict(signal) for signal in signals],
@@ -3080,18 +3267,26 @@ class AuditQueue:
             "input_revision": self.dataset.input_revision,
             "scope": review_scope,
         }
+        # ReviewPacket itself is a closed BA-03 record.  Compute its canonical
+        # content digest independently of the generated packet ID, then bind
+        # that digest into the material hashed for the packet ID.  This keeps
+        # current/history snapshots lossless while detecting a forged packet
+        # payload even if a caller also edits the persisted digest field.
+        packet_fields = {
+            "primary": candidate.episode,
+            "peers": peers,
+            "signals": signals,
+            "selection_reasons": packet_reasons,
+            "missingness": tuple(missingness),
+            "policy_version": self.policy.policy_version,
+            "input_revision": self.dataset.input_revision,
+        }
+        provisional = ReviewPacket(packet_id="review-packet-content", **packet_fields)
+        packet_content_identity = _packet_content_identity(provisional)
+        packet_identity["packet_content_identity"] = packet_content_identity
         packet_id = "review-packet-" + _sha256(packet_identity)
-        packet = ReviewPacket(
-            packet_id=packet_id,
-            primary=candidate.episode,
-            peers=peers,
-            signals=signals,
-            selection_reasons=packet_reasons,
-            missingness=tuple(missingness),
-            policy_version=self.policy.policy_version,
-            input_revision=self.dataset.input_revision,
-        )
-        return packet, tuple(missingness)
+        packet = ReviewPacket(packet_id=packet_id, **packet_fields)
+        return packet, tuple(missingness), packet_identity
 
     def _persist_packet(self, packet: ReviewPacket, *, operation_id: str) -> None:
         if self.store is None:
@@ -3213,13 +3408,23 @@ class AuditQueue:
         return action
 
     def _advance_state(
-        self, *, context: QueueSelectionContext, packet: ReviewPacket, operation_id: str
+        self,
+        *,
+        context: QueueSelectionContext,
+        packet: ReviewPacket,
+        packet_identity: Mapping[str, Any],
+        operation_id: str,
     ) -> None:
         previous = list(self.state.previous_packet_ids)
         if self.state.current_packet_id:
             previous.append(self.state.current_packet_id)
         packets = dict(self.state.packet_payloads)
-        packets[packet.packet_id] = record_to_dict(packet)
+        packet_payload = record_to_dict(packet)
+        packets[packet.packet_id] = packet_payload
+        packet_content_identities = dict(self.state.packet_content_identities)
+        packet_content_identities[packet.packet_id] = _packet_content_identity(packet_payload)
+        packet_identity_materials = dict(self.state.packet_identity_materials)
+        packet_identity_materials[packet.packet_id] = dict(packet_identity)
         presented = dict(self.state.presented_counts)
         presented[context.primary_episode_id] = presented.get(context.primary_episode_id, 0) + 1
         operations = dict(self.state.operations)
@@ -3245,6 +3450,8 @@ class AuditQueue:
             current_packet_id=packet.packet_id,
             previous_packet_ids=tuple(previous),
             packet_payloads=packets,
+            packet_content_identities=packet_content_identities,
+            packet_identity_materials=packet_identity_materials,
             selection_history=(*self.state.selection_history, context),
             presented_counts=presented,
             control_draws=control_draws,
@@ -3297,7 +3504,9 @@ class AuditQueue:
                     else sorted(eligible, key=lambda item: item.episode_id)[0]
                 )
         explanation = self._explanation(candidate, selection_kind=selection_kind)
-        packet, missingness = self._packet(candidate, explanation, control_reason=control_reason)
+        packet, missingness, packet_identity = self._packet(
+            candidate, explanation, control_reason=control_reason
+        )
         context = QueueSelectionContext(
             selection_id="selection-"
             + _sha256(
@@ -3365,7 +3574,12 @@ class AuditQueue:
             actor_kind="agent",
             operation_id=f"{operation_id}:action",
         )
-        self._advance_state(context=context, packet=packet, operation_id=operation_id)
+        self._advance_state(
+            context=context,
+            packet=packet,
+            packet_identity=packet_identity,
+            operation_id=operation_id,
+        )
         return SelectionResult(packet=packet, context=context, explanation=explanation)
 
     next = select_next
@@ -3596,16 +3810,7 @@ class AuditQueue:
                         raise QueueStateError(
                             f"previous action {operation_id!r} references a missing packet snapshot"
                         )
-                    try:
-                        saved_packet = record_from_dict(saved_payload)
-                    except (AuditContractError, KeyError, TypeError, ValueError) as exc:
-                        raise QueueStateError(
-                            f"previous action {operation_id!r} references a corrupt packet snapshot"
-                        ) from exc
-                    if not isinstance(saved_packet, ReviewPacket):
-                        raise QueueStateError(
-                            f"previous action {operation_id!r} references a non-packet snapshot"
-                        )
+                    saved_packet = self._packet_snapshot(saved_context.packet_id, saved_payload)
                     return SelectionResult(packet=saved_packet, context=saved_context)
                 raise QueueOperationConflictError(
                     f"operation ID {operation_id!r} was reused for a different previous action"
@@ -3616,12 +3821,7 @@ class AuditQueue:
         packet_payload = self.state.packet_payloads.get(prior_id)
         if packet_payload is None:
             raise QueueStateError(f"previous packet snapshot is missing: {prior_id}")
-        try:
-            packet = record_from_dict(packet_payload)
-        except (AuditContractError, KeyError, TypeError, ValueError) as exc:
-            raise QueueStateError(f"corrupt previous packet snapshot {prior_id}: {exc}") from exc
-        if not isinstance(packet, ReviewPacket):
-            raise QueueStateError(f"previous snapshot is not a review_packet record: {prior_id}")
+        packet = self._packet_snapshot(prior_id, packet_payload)
         history = list(self.state.previous_packet_ids)
         history.pop()
         context = next(
@@ -3662,7 +3862,7 @@ class AuditQueue:
 
     previous = previous_packet
 
-    def record_review(  # noqa: C901, PLR0913
+    def record_review(  # noqa: C901, PLR0912, PLR0913
         self,
         episode_id: str = "",
         *,
@@ -3725,19 +3925,7 @@ class AuditQueue:
         except (AuditContractError, TypeError, ValueError) as exc:
             raise QueueInputError(f"invalid review record: {exc}") from exc
         review_action_operation = f"{operation_id}:action"
-        review_operation_digest = _sha256(
-            {
-                "review_id": review.review_id,
-                "episode_id": review.episode_id,
-                "scope": review.scope,
-                "outcome": review.outcome,
-                "author_kind": review.author_kind,
-                "author_id": review.author_id,
-                "source_revision": review.source_revision,
-                "annotation_ids": review.annotation_ids,
-                "notes": review.notes,
-            }
-        )
+        review_operation_digest = _review_content_identity(review)
         existing_operation = self.state.operations.get(review_action_operation)
         if existing_operation is not None:
             if existing_operation != review_operation_digest:
@@ -3753,10 +3941,22 @@ class AuditQueue:
                 None,
             )
             if existing_dataset_review is not None:
+                if _review_content_identity(existing_dataset_review) != review_operation_digest:
+                    raise QueueConflictError(
+                        f"review ID collision with a different durable review: {review.review_id}"
+                    )
                 return existing_dataset_review
         if self.store is not None:
-            existing = self.store.get(review.review_id)
-            if existing is not None and isinstance(existing.record, ReviewRecord):
+            existing = self.store.get(review.review_id, include_deleted=True)
+            if existing is not None:
+                if existing.deleted or not isinstance(existing.record, ReviewRecord):
+                    raise QueueConflictError(
+                        f"review ID collision with a different durable record: {review.review_id}"
+                    )
+                if _review_content_identity(existing.record) != review_operation_digest:
+                    raise QueueConflictError(
+                        f"review ID collision with a different durable review: {review.review_id}"
+                    )
                 review = existing.record
             else:
                 self.store.save(
@@ -3770,10 +3970,12 @@ class AuditQueue:
             (item for item in self.dataset.review_records if item.review_id == review.review_id),
             None,
         )
-        if existing_dataset_review is not None and existing_dataset_review != review:
-            raise QueueConflictError(
-                f"review ID collision with a different durable review: {review.review_id}"
-            )
+        if existing_dataset_review is not None:
+            if _review_content_identity(existing_dataset_review) != review_operation_digest:
+                raise QueueConflictError(
+                    f"review ID collision with a different durable review: {review.review_id}"
+                )
+            review = existing_dataset_review
         if existing_dataset_review is None:
             self.dataset = replace(
                 self.dataset, review_records=(*self.dataset.review_records, review)

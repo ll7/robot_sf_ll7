@@ -27,6 +27,13 @@ there is no pickle or executable payload.  Concurrent writers fail closed on
 a stale revision, and corrupt current or historical snapshots cannot be
 silently replaced by a new selection.
 
+Each saved packet has a recomputed canonical content digest and separately
+persisted identity material.  The content digest is bound into the packet ID,
+so changing rationale, missingness, peers, or any other packet field—including
+source/input revisions—cannot retain the old ID during resume.  Policy,
+dataset, selection-context, and state mappings are defensively frozen after
+construction; callers must serialize and construct a new value to change them.
+
 The Python API is equivalent:
 
 ```python
@@ -91,6 +98,15 @@ Peer matched-state display also requires the canonical
 source-trace content receipt/identity, and the full initial-state equivalence
 receipt bound to both trace IDs.  A caller's `compatible: true` flag or a
 minimal alignment mapping is insufficient.
+
+An explicitly unavailable primary trace suppresses all peers, even when a
+peer advertises a trace identity and alignment.  The packet remains a
+truthful primary review unit with trace missingness.  A durable review replay
+is idempotent only when its complete caller-controlled receipt matches; a
+changed outcome, note, author, source revision, annotation ID, or other review
+field is a conflict rather than a substitution.  `accounting.unavailable_detectors`
+accepts only a non-negative count or a sequence of non-empty detector IDs;
+other shapes are rejected before ranking.
 
 The queue consumes typed BA-01 `Signal` records and a stable `ScanSummary`
 identity/revision/accounting handle.  Missing BA-01 signals/scan summaries and

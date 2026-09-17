@@ -34,6 +34,7 @@ from robot_sf.analysis_workbench.audit_queue import (
     QueueState,
     QueueStateError,
     ScanSummary,
+    _packet_content_identity,
     load_queue_input,
 )
 from robot_sf.analysis_workbench.audit_store import AuditStore
@@ -396,7 +397,14 @@ def test_missing_and_incompatible_peers_are_explained_without_blocking_primary()
     assert any("incompatible-identity" in item for item in result.packet.missingness)
 
 
-def replace_candidate(candidate, *, source_digest: str | None = None, metadata=None):
+def replace_candidate(
+    candidate,
+    *,
+    source_digest: str | None = None,
+    metadata=None,
+    trace_available: bool | None = None,
+    trace_identity: str | None = None,
+):
     from robot_sf.analysis_workbench.audit_queue import QueueCandidate
 
     source_digest = source_digest or candidate.episode.source_digest
@@ -408,8 +416,8 @@ def replace_candidate(candidate, *, source_digest: str | None = None, metadata=N
         ),
         signals=candidate.signals,
         metadata=candidate.metadata if metadata is None else metadata,
-        trace_available=candidate.trace_available,
-        trace_identity=candidate.trace_identity,
+        trace_available=(candidate.trace_available if trace_available is None else trace_available),
+        trace_identity=(candidate.trace_identity if trace_identity is None else trace_identity),
         stratum_id=candidate.stratum_id,
         outcome=candidate.outcome,
     )
@@ -607,9 +615,176 @@ def test_corrupt_current_or_history_packet_snapshots_fail_closed(tmp_path: Path)
     resumed = AuditQueue(
         (_candidate("snapshot-a"), _candidate("snapshot-b")), state_path=state_path
     )
-    resumed.state.packet_payloads[first.packet.packet_id]["record_id"] = "forged-again"
-    with pytest.raises(QueueStateError, match="corrupt current packet snapshot"):
+    with pytest.raises(TypeError):
+        resumed.state.packet_payloads[first.packet.packet_id]["record_id"] = "forged-again"
+    forged_payloads = {key: dict(value) for key, value in resumed.state.packet_payloads.items()}
+    forged_payloads[first.packet.packet_id]["record_id"] = "forged-again"
+    object.__setattr__(resumed.state, "packet_payloads", forged_payloads)
+    with pytest.raises(QueueStateError, match="corrupt packet snapshot"):
         resumed.resume(reload=False)
+
+
+def test_packet_content_identity_binds_persisted_material(tmp_path: Path) -> None:
+    primary = _candidate("content-primary", trace=True)
+    peer = _candidate("content-peer", planner_id="orca", trace=True)
+    peer = replace_candidate(
+        peer, metadata={"event_alignment": _canonical_alignment(primary, peer)}
+    )
+    state_path = tmp_path / "content-state.json"
+    queue = AuditQueue((primary, peer), state_path=state_path)
+    selected = queue.select_next()
+    assert selected is not None
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    packet_id = selected.packet.packet_id
+    original_content_identity = payload["packet_content_identities"][packet_id]
+    payload["packet_payloads"][packet_id]["selection_reasons"].append("forged rationale")
+    payload["packet_content_identities"][packet_id] = _packet_content_identity(
+        payload["packet_payloads"][packet_id]
+    )
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(QueueStateError, match="packet identity material content mismatch"):
+        AuditQueue((primary, peer), state_path=state_path)
+
+    payload["packet_payloads"][packet_id]["selection_reasons"].pop()
+    payload["packet_content_identities"][packet_id] = original_content_identity
+    payload["packet_identity_materials"][packet_id]["peer_alignment"][0]["alignment"][
+        "provenance_gate"
+    ]["right_content_sha256"] = "a" * 64
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(QueueStateError, match="packet identity material mismatch"):
+        AuditQueue((primary, peer), state_path=state_path)
+
+
+def test_explicitly_missing_primary_trace_hides_even_canonical_peers() -> None:
+    primary = _candidate("missing-primary", trace=True)
+    missing_primary = replace_candidate(primary, trace_available=False)
+    peer = _candidate("available-peer", planner_id="orca", trace=True)
+    peer = replace_candidate(
+        peer,
+        metadata={"event_alignment": _canonical_alignment(missing_primary, peer)},
+    )
+    result = AuditQueue((missing_primary, peer)).select_next()
+
+    assert result is not None
+    assert result.packet.peers == ()
+    assert (
+        "primary:" + missing_primary.episode_id + ":trace-unavailable" in result.packet.missingness
+    )
+
+
+def test_review_idempotency_binds_full_durable_review_material(tmp_path: Path) -> None:
+    candidate = _candidate("review-idempotency")
+    with AuditStore(tmp_path / "audit") as store:
+        queue = AuditQueue((candidate,), store=store)
+        first = queue.record_review(
+            candidate.episode_id,
+            scope="full_episode",
+            outcome="pass",
+            author_id="reviewer",
+            notes="accepted",
+            annotation_ids=("annotation-a",),
+            review_id="review-fixed",
+            operation_id="review-operation",
+        )
+        replay = AuditQueue((candidate,), store=store).record_review(
+            candidate.episode_id,
+            scope="full_episode",
+            outcome="pass",
+            author_id="reviewer",
+            notes="accepted",
+            annotation_ids=("annotation-a",),
+            review_id="review-fixed",
+            operation_id="review-operation",
+        )
+        assert replay.review_id == first.review_id
+        with pytest.raises(QueueOperationConflictError):
+            queue.record_review(
+                candidate.episode_id,
+                scope="full_episode",
+                outcome="fail",
+                author_id="reviewer",
+                notes="accepted",
+                annotation_ids=("annotation-a",),
+                review_id="review-fixed",
+                operation_id="review-operation",
+            )
+        with pytest.raises(QueueConflictError):
+            AuditQueue((candidate,), store=store).record_review(
+                candidate.episode_id,
+                scope="full_episode",
+                outcome="pass",
+                author_id="reviewer",
+                notes="changed",
+                annotation_ids=("annotation-a",),
+                review_id="review-fixed",
+                operation_id="review-operation-2",
+            )
+        forged = ReviewRecord(
+            review_id=first.review_id,
+            episode_id=candidate.episode_id,
+            scope="full_episode",
+            outcome="pass",
+            author_id="reviewer",
+            source_revision=0,
+            annotation_ids=("annotation-a",),
+            notes="forged",
+        )
+        queue.dataset = QueueDataset((candidate,), review_records=(forged,))
+        with pytest.raises(QueueConflictError):
+            queue.record_review(
+                candidate.episode_id,
+                scope="full_episode",
+                outcome="pass",
+                author_id="reviewer",
+                notes="accepted",
+                annotation_ids=("annotation-a",),
+                review_id="review-fixed",
+                operation_id="review-operation",
+            )
+
+
+def test_policy_state_and_context_containers_are_deeply_immutable() -> None:
+    weights = dict(ACTIVE_WEIGHTS)
+    accounting = {"nested": {"source": "original"}}
+    policy = ActivePolicy(weights=weights)
+    candidate = _candidate("immutable-state")
+    queue = AuditQueue(
+        QueueDataset((candidate,), accounting=accounting),
+        policy=policy,
+    )
+    weights["novelty"] = 0.0
+    accounting["nested"]["source"] = "caller-mutated"
+    assert policy.weights["novelty"] == ACTIVE_WEIGHTS["novelty"]
+    assert queue.dataset.accounting["nested"]["source"] == "original"
+    with pytest.raises(TypeError):
+        policy.weights["novelty"] = 0.0
+
+    selected = queue.select_next()
+    assert selected is not None
+    with pytest.raises(TypeError):
+        selected.context.components["novelty"] = 0.0
+    with pytest.raises(TypeError):
+        selected.context.accounting["nested"]["source"] = "context-mutated"
+    with pytest.raises(TypeError):
+        queue.state.presented_counts[candidate.episode_id] = 9
+    with pytest.raises(TypeError):
+        queue.state.packet_payloads[selected.packet.packet_id]["selection_reasons"] = ()
+
+
+@pytest.mark.parametrize("value", ["detector", {"detector": True}, 1.5, None, True, ["ok", 3]])
+def test_unavailable_detector_declaration_has_an_exact_supported_shape(value) -> None:
+    with pytest.raises(QueueInputError, match="unavailable_detectors"):
+        QueueDataset(
+            (_candidate("bad-unavailable-shape"),),
+            accounting={"unavailable_detectors": value},
+        )
+
+    valid_count = QueueDataset(
+        (_candidate("valid-unavailable-count"),),
+        accounting={"unavailable_detectors": 0},
+    )
+    assert valid_count.accounting["unavailable_detectors"] == 0
 
 
 def test_minimal_caller_compatibility_bit_never_exposes_peer() -> None:

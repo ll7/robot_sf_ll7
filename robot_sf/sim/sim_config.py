@@ -7,6 +7,7 @@ from typing import Any
 from pysocialforce.config import resolve_obstacle_force_law_with_mode
 from pysocialforce.scene import normalize_integration_scheme
 
+from robot_sf.nav.map_config import normalize_goal_completion_policy
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.ped_npc.residual_adversary import (
@@ -308,6 +309,14 @@ class SimulationSettings:
     goal_radius: float = 1.0
     """Goal radius"""
 
+    goal_completion_policy: str | None = None
+    """Optional versioned route-success policy override.
+
+    ``None`` preserves map/default resolution to the historical
+    ``waypoint_radius_v1`` policy.  ``goal_zone_entry_v1`` must be selected
+    explicitly for rectangle-entry completion.
+    """
+
     stack_steps: int = 3
     """Deprecated alias for observation history depth.
 
@@ -550,6 +559,10 @@ class SimulationSettings:
         # Check that the goal radius is positive
         if self.goal_radius <= 0:
             raise ValueError("Goal radius mustn't be negative or zero!")
+        if self.goal_completion_policy is not None:
+            self.goal_completion_policy = normalize_goal_completion_policy(
+                self.goal_completion_policy
+            )
         # Check that the difficulty level is within the valid range
         if not 0 <= self.difficulty < len(self.ped_density_by_difficulty):
             raise ValueError("No pedestrian density registered for selected difficulty level!")

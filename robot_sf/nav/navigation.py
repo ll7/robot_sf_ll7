@@ -4,17 +4,24 @@ This module provides utilities to sample valid robot routes from a map definitio
 to track progress along those routes during navigation.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from math import atan2, dist
+from math import atan2, dist, isfinite
 from random import sample
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import Point, Polygon
 from shapely.prepared import PreparedGeometry, prep
 
-from robot_sf.common.types import Vec2D
+from robot_sf.common.types import Rect, Vec2D
 from robot_sf.nav.free_space_sampling import sample_free_points_in_bounds
-from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    MapDefinition,
+    normalize_goal_completion_policy,
+)
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.planner.classic_global_planner import PlanningError
 from robot_sf.planner.visibility_planner import PlanningFailedError
@@ -22,6 +29,71 @@ from robot_sf.planner.visibility_planner import PlanningFailedError
 _PLANNER_RETRY_ATTEMPTS = 5
 _DEGENERATE_SEGMENT_LENGTH_TOLERANCE = 1e-9
 _DEGENERATE_SEGMENT_LENGTH_SQ_TOLERANCE = _DEGENERATE_SEGMENT_LENGTH_TOLERANCE**2
+
+
+class SampledRoute(list[Vec2D]):
+    """Concrete sampled route with explicit route-to-goal-zone provenance.
+
+    The class intentionally remains a ``list`` subclass so existing planners and
+    callers retain the historical route sequence API.  The additional attributes
+    let the simulator bind the sampled route's final goal rectangle without
+    guessing from coordinates (which is ambiguous for overlapping zones).
+    """
+
+    def __init__(
+        self,
+        waypoints: Iterable[Vec2D],
+        *,
+        spawn_id: int | None,
+        goal_id: int | None,
+        goal_zone: Rect | None,
+    ) -> None:
+        """Initialize a list-compatible route with its source-zone binding.
+
+        Args:
+            waypoints: Ordered route points exposed through the legacy list API.
+            spawn_id: Source spawn-zone identifier, when available.
+            goal_id: Source goal-zone identifier, when available.
+            goal_zone: Polygon bound to the source route's goal.
+        """
+        super().__init__(waypoints)
+        self.spawn_id = spawn_id
+        self.goal_id = goal_id
+        self.goal_zone = goal_zone
+
+
+def _validate_goal_zone(goal_zone: Rect | None) -> Rect | None:
+    """Validate a route goal zone before it is used as a success predicate.
+
+    Returns:
+        Rect | None: The normalized finite zone, or ``None`` when unset.
+
+    Raises:
+        ValueError: If the zone is malformed, non-finite, or degenerate.
+    """
+    if goal_zone is None:
+        return None
+    try:
+        points = tuple((float(x), float(y)) for x, y in goal_zone)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("goal_zone must contain finite (x, y) points") from exc
+    if len(points) != 3 or not all(isfinite(x) and isfinite(y) for x, y in points):
+        raise ValueError("goal_zone must contain exactly three finite (x, y) points")
+    polygon = Polygon(points)
+    if polygon.is_empty or not polygon.is_valid or polygon.area <= 0.0:
+        raise ValueError("goal_zone must be a valid non-empty polygon")
+    return points
+
+
+def _goal_zone_polygon(goal_zone: Rect) -> Polygon:
+    """Build the rectangle represented by a three-corner ``Rect`` value.
+
+    Returns:
+        Polygon: Shapely polygon covering the full implied rectangle.
+    """
+    first, second, third = goal_zone
+    fourth = (first[0] + third[0] - second[0], first[1] + third[1] - second[1])
+    return Polygon((first, second, third, fourth))
 
 
 @dataclass(frozen=True)
@@ -219,16 +291,16 @@ def _sample_start_goal_global(
 def _sample_start_goal_from_routes(
     routes_for_spawn: list,
     obstacles: list[PreparedGeometry],
-) -> tuple[Vec2D, Vec2D]:
+) -> tuple[Vec2D, Vec2D, object]:
     """Sample start/goal from route spawn/goal zones.
 
     Returns:
-        tuple[Vec2D, Vec2D]: Sampled start and goal points.
+        tuple[Vec2D, Vec2D, object]: Sampled start/goal points and their source route.
     """
     route_choice = sample(routes_for_spawn, k=1)[0]
     start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=obstacles)[0]
     goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=obstacles)[0]
-    return start, goal
+    return start, goal, route_choice
 
 
 def _plan_with_planner(
@@ -237,11 +309,11 @@ def _plan_with_planner(
     spawn_id: int | None,
     global_sampling: bool,
     prepared_obstacles: list[PreparedGeometry],
-) -> tuple[list[Vec2D] | None, int]:
+) -> tuple[SampledRoute | None, int]:
     """Attempt to plan using the configured planner; return route or None plus chosen spawn_id.
 
     Returns:
-        tuple[list[Vec2D] | None, int]: Planned route (or None) and the spawn id used.
+        tuple[SampledRoute | None, int]: Planned route (or None) and the spawn id used.
     """
     if not map_def.robot_routes_by_spawn_id and not global_sampling:
         msg = "Planner mode enabled but no robot routes are defined on the map."
@@ -262,6 +334,7 @@ def _plan_with_planner(
     bounds = map_def.get_map_bounds()
 
     for attempt in range(_PLANNER_RETRY_ATTEMPTS):
+        route_choice = None
         sampled = (
             _sample_start_goal_global(
                 bounds,
@@ -273,7 +346,9 @@ def _plan_with_planner(
         )
         if sampled is None:
             continue
-        start, goal = sampled
+        start, goal = sampled[:2]
+        if len(sampled) == 3:
+            route_choice = sampled[2]
         try:
             planned = planner.plan(start, goal)
         except (PlanningFailedError, PlanningError) as exc:
@@ -300,7 +375,15 @@ def _plan_with_planner(
             attempt=attempt + 1,
             max_attempts=_PLANNER_RETRY_ATTEMPTS,
         )
-        return route, spawn_id
+        return (
+            SampledRoute(
+                route,
+                spawn_id=spawn_id,
+                goal_id=getattr(route_choice, "goal_id", None),
+                goal_zone=getattr(route_choice, "goal_zone", None),
+            ),
+            spawn_id,
+        )
 
     logger.error(
         "Planner failed after {attempts} attempts for spawn_id={spawn_id}; "
@@ -323,6 +406,9 @@ class RouteNavigator:
         waypoints: Ordered list of waypoints the robot must follow.
         waypoint_id: Index of the currently targeted waypoint.
         proximity_threshold: Distance tolerance for considering a waypoint reached.
+        completion_policy: Versioned route-success definition.
+        goal_zone: Goal polygon bound to the sampled route when using
+            ``goal_zone_entry_v1``.
         pos: Latest known robot position.
         reached_waypoint: Whether the current waypoint was reached on the last update.
     """
@@ -332,19 +418,56 @@ class RouteNavigator:
     proximity_threshold: float = 1.0  # info: should be set to vehicle radius + goal radius
     pos: Vec2D = field(default=(0, 0))
     reached_waypoint: bool = False
+    completion_policy: str = GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1
+    goal_zone: Rect | None = None
+    route_spawn_id: int | None = None
+    route_goal_id: int | None = None
+
+    def __post_init__(self) -> None:
+        """Validate the versioned success policy and any initial goal binding."""
+        self.completion_policy = normalize_goal_completion_policy(self.completion_policy)
+        self.goal_zone = _validate_goal_zone(self.goal_zone)
+        if self.completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1:
+            if self.waypoints and self.goal_zone is None:
+                raise ValueError("goal_zone_entry_v1 requires a goal_zone bound to the route")
+
+    @property
+    def uses_goal_zone_completion(self) -> bool:
+        """Whether route completion is defined by entry into the bound goal zone."""
+        return self.completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
+
+    def completion_metadata(self) -> dict[str, object]:
+        """Return JSON-safe success-definition and route-binding metadata."""
+        goal_zone = self.goal_zone
+        return {
+            "schema_version": "success_definition.v1",
+            "policy": self.completion_policy,
+            "criterion": (
+                "goal_zone_entry" if self.uses_goal_zone_completion else "waypoint_radius"
+            ),
+            "proximity_threshold_m": float(self.proximity_threshold),
+            "route_binding": {
+                "spawn_id": self.route_spawn_id,
+                "goal_id": self.route_goal_id,
+                "goal_zone": (
+                    [[float(x), float(y)] for x, y in goal_zone] if goal_zone is not None else None
+                ),
+            },
+        }
 
     @property
     def reached_destination(self) -> bool:
-        """Whether the final waypoint has been reached within the threshold.
+        """Whether the route satisfies its configured success definition.
 
         Returns:
-            bool: ``True`` when the last waypoint is within ``proximity_threshold`` of
-            ``pos`` or when the route is empty.
+            bool: ``True`` when the configured completion predicate is satisfied.
         """
-
-        return (
-            len(self.waypoints) == 0
-            or dist(self.waypoints[-1], self.pos) <= self.proximity_threshold
+        if self.uses_goal_zone_completion:
+            if not self.waypoints or self.goal_zone is None:
+                return False
+            return bool(_goal_zone_polygon(self.goal_zone).covers(Point(self.pos)))
+        return len(self.waypoints) == 0 or dist(self.waypoints[-1], self.pos) <= (
+            self.proximity_threshold
         )
 
     @property
@@ -414,13 +537,27 @@ class RouteNavigator:
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
-    def new_route(self, route: list[Vec2D], *, start_pos: Vec2D | None = None) -> None:
+    def new_route(
+        self,
+        route: list[Vec2D],
+        *,
+        start_pos: Vec2D | None = None,
+        goal_zone: Rect | None = None,
+        spawn_id: int | None = None,
+        goal_id: int | None = None,
+    ) -> None:
         """Replace the active route and reset progress.
 
         Args:
             route: Ordered list of waypoints to follow.
             start_pos: Optional spawn position used to derive a stable first handoff target.
+            goal_zone: Explicit goal polygon bound to this sampled route.
+            spawn_id: Source route spawn-zone identifier, when available.
+            goal_id: Source route goal-zone identifier, when available.
         """
+        normalized_goal_zone = _validate_goal_zone(goal_zone)
+        if self.uses_goal_zone_completion and normalized_goal_zone is None:
+            raise ValueError("goal_zone_entry_v1 requires a goal_zone bound to the route")
         self.waypoints = (
             _resolve_spawn_handoff_route(
                 route,
@@ -432,24 +569,44 @@ class RouteNavigator:
         )
         self.waypoint_id = 0
         self.reached_waypoint = False
+        self.goal_zone = normalized_goal_zone
+        self.route_spawn_id = spawn_id
+        self.route_goal_id = goal_id
         if start_pos is not None:
             self.pos = start_pos
 
 
-def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Vec2D]:
+def sample_route(
+    map_def: MapDefinition,
+    spawn_id: int | None = None,
+    *,
+    completion_policy: str | None = None,
+) -> SampledRoute:
     """Sample a concrete waypoint route for a robot spawn.
 
     Args:
         map_def: Map definition containing predefined routes and zones.
         spawn_id: Optional spawn identifier; chooses a random spawn when ``None``.
+        completion_policy: Optional effective policy override from the simulator config.
 
     Returns:
-        list[Vec2D]: Waypoints including sampled spawn and goal positions.
+        SampledRoute: Waypoints including sampled spawn and goal positions, with
+            explicit source route/goal-zone binding metadata.
     """
 
     planner = getattr(map_def, "_global_planner", None)
     use_planner = getattr(map_def, "_use_planner", False)
     global_sampling = bool(getattr(map_def, "_sample_positions_globally", False))
+    resolved_completion_policy = normalize_goal_completion_policy(
+        completion_policy
+        if completion_policy is not None
+        else getattr(map_def, "goal_completion_policy", None)
+    )
+    if resolved_completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1 and global_sampling:
+        raise ValueError(
+            "goal_zone_entry_v1 requires a predefined route bound to a goal zone; "
+            "global route sampling has no goal rectangle to enter"
+        )
     prepared_obstacles = get_prepared_obstacles(map_def)
     chosen_spawn = spawn_id
 
@@ -488,7 +645,12 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     # Construct the route with optional noise on intermediate waypoints only.
     settings = _resolve_navigation_settings(map_def)
     waypoints = _apply_waypoint_noise(route.waypoints, settings=settings)
-    route = [initial_spawn, *waypoints, final_goal]
+    route = SampledRoute(
+        [initial_spawn, *waypoints, final_goal],
+        spawn_id=route.spawn_id,
+        goal_id=route.goal_id,
+        goal_zone=route.goal_zone,
+    )
 
     return route
 
@@ -519,6 +681,7 @@ def get_prepared_obstacles(map_def: MapDefinition) -> list[PreparedGeometry]:
 __all__ = [
     "NavigationSettings",
     "RouteNavigator",
+    "SampledRoute",
     "get_prepared_obstacles",
     "sample_route",
 ]

@@ -61,8 +61,17 @@ if TYPE_CHECKING:
     from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
     from robot_sf.robot.robot_state import Robot
 
-from robot_sf.nav.map_config import MapDefinition, SocialGroupDefinition
-from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    MapDefinition,
+    SocialGroupDefinition,
+    normalize_goal_completion_policy,
+)
+from robot_sf.nav.navigation import (
+    RouteNavigator,
+    get_prepared_obstacles,
+    sample_route,
+)
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForce,
@@ -528,6 +537,7 @@ class Simulator:
     robots: list[Robot]
     goal_proximity_threshold: float
     random_start_pos: bool
+    goal_completion_policy: str = field(init=False)
     robot_navs: list[RouteNavigator] = field(init=False)
     pysf_sim: PySFSimulator = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
@@ -590,6 +600,12 @@ class Simulator:
             )
             self.peds_have_obstacle_forces = False
 
+        configured_policy = getattr(self.config, "goal_completion_policy", None)
+        map_policy = getattr(self.map_def, "goal_completion_policy", None)
+        self.goal_completion_policy = normalize_goal_completion_policy(
+            configured_policy if configured_policy is not None else map_policy
+        )
+
         self.sampler_capture = self._new_sampler_capture()
         (
             self.pysf_sim,
@@ -617,7 +633,11 @@ class Simulator:
         )
 
         self.robot_navs = [
-            RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
+            RouteNavigator(
+                proximity_threshold=self.goal_proximity_threshold,
+                completion_policy=self.goal_completion_policy,
+            )
+            for _ in self.robots
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
@@ -687,6 +707,16 @@ class Simulator:
                 ),
             )
         return dict(metadata_fn())
+
+    def goal_completion_metadata(self) -> dict[str, Any]:
+        """Return versioned success-definition and route-binding runtime metadata."""
+        if self.goal_completion_policy == GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1:
+            return {}
+        return {
+            "schema_version": "success_definition_runtime.v1",
+            "policy": self.goal_completion_policy,
+            "robots": [nav.completion_metadata() for nav in self.robot_navs],
+        }
 
     def _oracle_route_indices(self) -> tuple[int | None, ...]:
         """Return best-effort route indices aligned with simulator pedestrian rows."""
@@ -1616,8 +1646,18 @@ class Simulator:
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:], start_pos=waypoints[0])
+                waypoints = sample_route(
+                    self.map_def,
+                    None if self.random_start_pos else i,
+                    completion_policy=self.goal_completion_policy,
+                )
+                nav.new_route(
+                    waypoints[1:],
+                    start_pos=waypoints[0],
+                    goal_zone=getattr(waypoints, "goal_zone", None),
+                    spawn_id=getattr(waypoints, "spawn_id", None),
+                    goal_id=getattr(waypoints, "goal_id", None),
+                )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: list[RobotAction]) -> None:
@@ -1838,6 +1878,12 @@ class PedSimulator(Simulator):
         ego pedestrian state, initializes the physics simulator with pedestrian
         forces and robot interactions, and prepares robot navigation paths.
         """
+        configured_policy = getattr(self.config, "goal_completion_policy", None)
+        map_policy = getattr(self.map_def, "goal_completion_policy", None)
+        self.goal_completion_policy = normalize_goal_completion_policy(
+            configured_policy if configured_policy is not None else map_policy
+        )
+
         # NOTE (issue #4618 R2): the pedestrian-centric simulator intentionally
         # diverges from Simulator's heterogeneous-population wiring, and the
         # divergence is preserved (not unified) per issue #6465. It OMITS the
@@ -1872,7 +1918,11 @@ class PedSimulator(Simulator):
         )
 
         self.robot_navs = [
-            RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
+            RouteNavigator(
+                proximity_threshold=self.goal_proximity_threshold,
+                completion_policy=self.goal_completion_policy,
+            )
+            for _ in self.robots
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
@@ -1962,8 +2012,18 @@ class PedSimulator(Simulator):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:], start_pos=waypoints[0])
+                waypoints = sample_route(
+                    self.map_def,
+                    None if self.random_start_pos else i,
+                    completion_policy=self.goal_completion_policy,
+                )
+                nav.new_route(
+                    waypoints[1:],
+                    start_pos=waypoints[0],
+                    goal_zone=getattr(waypoints, "goal_zone", None),
+                    spawn_id=getattr(waypoints, "spawn_id", None),
+                    goal_id=getattr(waypoints, "goal_id", None),
+                )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
         # Ego_pedestrian reset
         if self.spawn_near_robot:

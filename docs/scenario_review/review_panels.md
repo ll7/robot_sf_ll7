@@ -95,10 +95,13 @@ The scene panel mounts an offline canvas that consumes the existing
 `threejs-viewer.v1` map/frame contract. When a local media URI is declared, the
 video panel mounts an HTML `<video>` element and applies only the explicit
 source-time-to-media-time mapping; remote media and nominal FPS alignment are
-not used. Metric traces expose one button per recorded sample with its exact
-source time, and hiding a metric removes its trace controls. The module has no
-Three.js, CDN, unpkg, or other remote asset import; media and source bytes
-remain outside the generated model.
+not used. Local media referenced by a generated HTML request is materialized
+under that output's `media/` directory and the model receives a safe relative
+URI. Absolute, traversal, scheme-relative, and network media paths are rejected
+by the offline browser policy unless an explicit media scheme is supplied.
+Metric traces expose one button per recorded sample with its exact source time,
+and hiding a metric removes its trace controls. The module has no Three.js, CDN,
+unpkg, or other remote asset import; source bytes remain read-only.
 
 ## Fixture and evidence boundary
 

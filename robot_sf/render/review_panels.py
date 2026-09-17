@@ -976,6 +976,10 @@ def _scene_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream:
     normalized.surface = {
         key: value for key, value in surface.items() if value not in (None, [], {})
     }
+    normalized.diagnostics.extend(_scene_surface_diagnostics(surface.get("map")))
+    if normalized.diagnostics and normalized.status == "available":
+        normalized.status = "partial"
+        normalized.reason = "scene_surface_geometry_invalid"
     return normalized
 
 
@@ -997,6 +1001,124 @@ def _scene_value(value: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_scene_point(value: Any) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or len(value) < 2:
+        return False
+    try:
+        _finite_number(value[0], "scene point x")
+        _finite_number(value[1], "scene point y")
+    except _InputError:
+        return False
+    return True
+
+
+def _valid_scene_line(value: Any) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or len(value) < 4:
+        return False
+    try:
+        for index in range(4):
+            _finite_number(value[index], f"scene line coordinate {index}")
+    except _InputError:
+        return False
+    return True
+
+
+def _scene_surface_diagnostics(  # noqa: C901, PLR0912
+    map_value: Any,
+) -> list[dict[str, Any]]:
+    """Validate renderer geometry without rejecting the recorded scene payload.
+
+    Returns:
+        Bounded diagnostics for malformed geometry fields.
+    """
+
+    diagnostics: list[dict[str, Any]] = []
+    if map_value is None:
+        return diagnostics
+    if not isinstance(map_value, Mapping):
+        return [{"reason_code": "scene_map_not_mapping"}]
+    bounds = map_value.get("bounds")
+    if bounds is not None:
+        if not isinstance(bounds, list):
+            diagnostics.append({"reason_code": "scene_map_bounds_not_list"})
+        else:
+            diagnostics.extend(
+                {"reason_code": "scene_map_bound_invalid", "source_index": index}
+                for index, line in enumerate(bounds)
+                if not _valid_scene_line(line)
+            )
+    obstacles = map_value.get("obstacles")
+    if obstacles is not None:
+        if not isinstance(obstacles, list):
+            diagnostics.append({"reason_code": "scene_map_obstacles_not_list"})
+        else:
+            for index, obstacle in enumerate(obstacles):
+                if not isinstance(obstacle, Mapping):
+                    diagnostics.append(
+                        {"reason_code": "scene_obstacle_not_mapping", "source_index": index}
+                    )
+                    continue
+                lines = obstacle.get("lines")
+                vertices = obstacle.get("vertices")
+                valid_geometry = False
+                if lines is not None:
+                    if not isinstance(lines, list):
+                        diagnostics.append(
+                            {
+                                "reason_code": "scene_obstacle_lines_not_list",
+                                "source_index": index,
+                            }
+                        )
+                    else:
+                        valid_geometry = any(_valid_scene_line(line) for line in lines)
+                        diagnostics.extend(
+                            {
+                                "reason_code": "scene_obstacle_line_invalid",
+                                "source_index": index,
+                            }
+                            for line in lines
+                            if not _valid_scene_line(line)
+                        )
+                if vertices is not None:
+                    if not isinstance(vertices, list):
+                        diagnostics.append(
+                            {
+                                "reason_code": "scene_obstacle_vertices_not_list",
+                                "source_index": index,
+                            }
+                        )
+                    else:
+                        valid_geometry = (
+                            valid_geometry
+                            or sum(_valid_scene_point(point) for point in vertices) >= 2
+                        )
+                        diagnostics.extend(
+                            {
+                                "reason_code": "scene_obstacle_vertex_invalid",
+                                "source_index": index,
+                            }
+                            for point in vertices
+                            if not _valid_scene_point(point)
+                        )
+                if not valid_geometry:
+                    diagnostics.append(
+                        {"reason_code": "scene_obstacle_geometry_missing", "source_index": index}
+                    )
+    zones = map_value.get("robot_goal_zones")
+    if zones is not None:
+        if not isinstance(zones, list):
+            diagnostics.append({"reason_code": "scene_robot_goal_zones_not_list"})
+        else:
+            diagnostics.extend(
+                {"reason_code": "scene_robot_goal_zone_invalid", "source_index": index}
+                for index, zone in enumerate(zones)
+                if not isinstance(zone, list)
+                or len(zone) < 3
+                or not all(_valid_scene_point(point) for point in zone)
+            )
+    return diagnostics
+
+
 def _video_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream:  # noqa: C901
     rows = _rows(source.payload, "entries", "mappings", "frames", "samples", "mapping")
     if not rows:
@@ -1007,7 +1129,7 @@ def _video_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream: 
             else None
         )
         if isinstance(timestamp_map, Mapping):
-            rows = _rows(timestamp_map, "mapping", "mappings")
+            rows = _rows(timestamp_map, "entries", "mapping", "mappings")
     stream = _normalize_samples(rows, source=source, config=config, video=True)
     stream.name = "video"
     presentation = config.get("presentation")
@@ -1028,6 +1150,18 @@ def _video_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream: 
     if isinstance(media_uri, str) and media_uri:
         stream.media_uri = media_uri
     media_times = [_media_time_from(row) if isinstance(row, Mapping) else None for row in rows]
+    missing_media_indices = [
+        sample.source_index
+        for sample in stream.samples
+        if sample.source_index < len(media_times) and media_times[sample.source_index] is None
+    ]
+    if missing_media_indices:
+        stream.status = "unavailable"
+        stream.reason = "media_time_missing"
+        stream.diagnostics.extend(
+            {"reason_code": "media_time_missing", "source_index": index}
+            for index in missing_media_indices
+        )
     media_order_invalid = False
     for index, (left, right) in enumerate(pairwise(media_times)):
         if left is None or right is None:
@@ -1106,6 +1240,7 @@ def _metric_samples(entry: Mapping[str, Any], source: _LoadedSource) -> list[dic
                 {"time_s": time_s, "value": _metric_scalar(value)}
                 for time_s, value in zip(times, raw, strict=True)
             ]
+        return list(raw)
     return []
 
 
@@ -1130,10 +1265,30 @@ def _metric_scalar(value: Any) -> Any:
 
 def _metric_streams(
     sources: Sequence[_LoadedSource], config: Mapping[str, Any]
-) -> tuple[dict[str, _Stream], dict[str, dict[str, Any]]]:
+) -> tuple[dict[str, _Stream], dict[str, dict[str, Any]], list[dict[str, Any]]]:
     streams: dict[str, _Stream] = {}
     definitions: dict[str, dict[str, Any]] = {}
+    diagnostics: list[dict[str, Any]] = []
     for source in sources:
+        payload = source.payload if isinstance(source.payload, Mapping) else {}
+        raw_entries = payload.get("metrics", payload.get("series"))
+        if isinstance(raw_entries, list):
+            diagnostics.extend(
+                {
+                    "artifact_id": source.ref.artifact_id,
+                    "reason_code": "metric_entry_not_mapping",
+                    "source_index": index,
+                }
+                for index, entry in enumerate(raw_entries)
+                if not isinstance(entry, Mapping)
+            )
+        elif raw_entries is not None and not isinstance(raw_entries, Mapping):
+            diagnostics.append(
+                {
+                    "artifact_id": source.ref.artifact_id,
+                    "reason_code": "metric_series_not_collection",
+                }
+            )
         for entry in _metric_entries(source):
             metric_id = _bounded_text(
                 entry.get("metric_id", entry.get("id", entry.get("name"))), "unnamed_metric"
@@ -1154,7 +1309,7 @@ def _metric_streams(
                 "derived": bool(entry.get("derived", False)),
                 "description": entry.get("description", ""),
             }
-    return streams, definitions
+    return streams, definitions, diagnostics
 
 
 def _derive_metrics_from_scene(  # noqa: C901
@@ -1672,6 +1827,95 @@ def _copy_web_component(output_dir: Path) -> Path:
     return destination
 
 
+def _materialize_local_media(  # noqa: C901
+    document: dict[str, Any], root: Path, output_dir: Path, output_directory: str
+) -> list[dict[str, Any]]:
+    """Copy one trusted local media source beside the emitted HTML.
+
+    Returns:
+        Emitted media artifact metadata, or an empty list when the URI is not a
+        local source that this offline component can materialize.
+    """
+
+    stream = document.get("streams", {}).get("video")
+    media_uri = stream.get("media_uri") if isinstance(stream, Mapping) else None
+    if not isinstance(media_uri, str) or not media_uri:
+        return []
+    value = media_uri.strip()
+    if (
+        not value
+        or value.startswith(("/", "\\", "//"))
+        or ":" in value.split("/", 1)[0]
+        or "?" in value
+        or "#" in value
+        or ".." in Path(value).parts
+        or ".." in PureWindowsPath(value).parts
+    ):
+        return []
+    source_ids = stream.get("source_ids", []) if isinstance(stream, Mapping) else []
+    source_identity = document.get("source_identity", {})
+    mapping_uri = None
+    if source_ids and isinstance(source_identity, Mapping):
+        identity = source_identity.get(source_ids[0])
+        if isinstance(identity, Mapping):
+            mapping_uri = identity.get("uri")
+    candidates = [Path(value)]
+    if isinstance(mapping_uri, str) and mapping_uri:
+        candidates.append(Path(mapping_uri).parent / Path(value))
+    source_path: Path | None = None
+    payload: bytes | None = None
+    try:
+        root_resolved = root.resolve(strict=True)
+        for candidate in candidates:
+            resolved = (
+                candidate.resolve(strict=False)
+                if candidate.is_absolute()
+                else (root / candidate).resolve(strict=False)
+            )
+            try:
+                resolved.relative_to(root_resolved)
+                payload = _read_regular(resolved)
+            except (OSError, _InputError, ValueError):
+                continue
+            source_path = resolved
+            break
+    except (OSError, ValueError):
+        source_path = None
+    if source_path is None or payload is None:
+        return []
+    digest = _sha256(payload)
+    source_name = source_path.name or "media.bin"
+    safe_name = (
+        "".join(
+            character if character.isalnum() or character in {".", "-", "_"} else "_"
+            for character in source_name
+        ).strip(".")
+        or "media.bin"
+    )
+    relative_uri = Path("media") / f"{digest[:16]}-{safe_name}"
+    target = output_dir / relative_uri
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("xb") as handle:
+        handle.write(payload)
+    safe_uri = relative_uri.as_posix()
+    for container_name in ("streams", "panels", "surfaces"):
+        container = document.get(container_name)
+        if isinstance(container, Mapping):
+            video = container.get("video")
+            if isinstance(video, dict) and "media_uri" in video:
+                video["media_uri"] = safe_uri
+    provenance = document.setdefault("provenance", {})
+    if isinstance(provenance, dict):
+        provenance["media_materialized"] = {"source_uri": media_uri, "uri": safe_uri}
+    return [
+        {
+            "artifact_id": relative_uri.as_posix(),
+            "uri": str(Path(output_directory) / relative_uri),
+            "sha256": digest,
+        }
+    ]
+
+
 def _panel_document(  # noqa: C901, PLR0912, PLR0915
     request: ComponentRequest,
     sources: Sequence[_LoadedSource],
@@ -1713,12 +1957,15 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
             )
     intervals, event_diagnostics = _event_intervals(event_sources)
     diagnostics.extend(event_diagnostics)
-    metric_streams, metric_definitions = _metric_streams(metric_sources, config)
+    metric_streams, metric_definitions, metric_diagnostics = _metric_streams(metric_sources, config)
+    diagnostics.extend(metric_diagnostics)
     goal = _goal_geometry(sources, scene, config)
     derived_streams, derived_definitions = _derive_metrics_from_scene(scene, goal, config)
     for metric_id, stream in derived_streams.items():
         metric_streams.setdefault(metric_id, stream)
         metric_definitions.setdefault(metric_id, derived_definitions[metric_id])
+    for stream in metric_streams.values():
+        diagnostics.extend(stream.diagnostics)
     if scene.status == "unavailable" and not scene_sources:
         diagnostics.append(
             {"reason_code": "scene_unavailable", "detail": "no scene source declared"}
@@ -2119,7 +2366,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             request, sources, request.config, load_diagnostics=load_diagnostics
         )
         document["diagnostics"] = diagnostics
-        emitted: list[dict[str, Any]] = []
+        emitted = _materialize_local_media(document, root, output_dir, request.output_directory)
         model_name = f"{PANEL_MODEL_SCHEMA_VERSION}.json"
         model_digest = _write_json(output_dir / model_name, document)
         emitted.append(

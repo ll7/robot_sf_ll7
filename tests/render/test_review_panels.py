@@ -295,7 +295,9 @@ def test_explicit_video_pause_allows_repeated_source_time(tmp_path: Path) -> Non
     document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
     assert document["panel_status"]["video"] == "available"
     assert [row["time_s"] for row in document["streams"]["video"]["samples"]] == [10.0, 10.0, 10.5]
-    assert document["streams"]["video"]["media_uri"] == "video.mp4"
+    media_uri = document["streams"]["video"]["media_uri"]
+    assert media_uri.startswith("media/")
+    assert (tmp_path / "out" / media_uri).is_file()
 
 
 def test_repeated_video_source_time_without_pause_is_unavailable(tmp_path: Path) -> None:
@@ -399,6 +401,46 @@ def test_metric_scalar_envelope_and_actor_alias_are_unwrapped(tmp_path: Path) ->
     assert document["metrics"]["clearance"]["stream"]["samples"][0]["value"] == 0.75
 
 
+def test_malformed_metric_rows_make_result_partial(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 1.0}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "metrics.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "metric-series.v1",
+                "series": [
+                    {
+                        "metric_id": "clearance",
+                        "samples": [{"value": 0.75}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = review_panels.run(
+        _request(
+            tmp_path,
+            output="out",
+            sources=[
+                {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+                {"artifact_id": "metrics", "uri": "metrics.json", "format": "metric-series.v1"},
+            ],
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "partial"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["metrics"]["clearance"]["stream"]["diagnostics"]
+    assert any(
+        diagnostic["reason_code"] == "source_time_missing" for diagnostic in result.diagnostics
+    )
+
+
 def test_scene_and_video_surface_metadata_are_available_offline(tmp_path: Path) -> None:
     (tmp_path / "scene.json").write_text(
         json.dumps(
@@ -433,10 +475,89 @@ def test_scene_and_video_surface_metadata_are_available_offline(tmp_path: Path) 
     assert result.status == "complete"
     document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
     assert document["scene_surface"]["map"]["width"] == 4.0
-    assert document["streams"]["video"]["media_uri"] == "clip.mp4"
-    assert document["panels"]["video"]["media_uri"] == "clip.mp4"
+    media_uri = document["streams"]["video"]["media_uri"]
+    assert media_uri.startswith("media/")
+    assert (tmp_path / "out" / media_uri).is_file()
+    assert document["panels"]["video"]["media_uri"] == media_uri
     assert document["surfaces"]["scene"]["mount"] == "mountSceneViewer"
     assert document["surfaces"]["video"]["renderer"] == "HTMLVideoElement"
+    assert any(artifact["uri"].endswith(media_uri) for artifact in result.artifacts)
+
+
+def test_malformed_scene_geometry_is_partial_with_diagnostics(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "threejs-viewer.v1",
+                "map": {
+                    "bounds": {"malformed": True},
+                    "obstacles": [{"vertices": [[0.0, "bad"]]}],
+                    "robot_goal_zones": "malformed",
+                },
+                "frames": [{"time_s": 1.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = review_panels.run(
+        _request(
+            tmp_path,
+            output="out",
+            sources=[{"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"}],
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "partial"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["streams"]["scene"]["status"] == "partial"
+    assert any(
+        diagnostic["reason_code"] == "scene_map_bounds_not_list"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_nested_source_relative_media_is_materialized_next_to_html(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 1.0}]}),
+        encoding="utf-8",
+    )
+    media_directory = tmp_path / "recordings"
+    media_directory.mkdir()
+    (media_directory / "video-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "media-mapping.v1",
+                "media_uri": "clip.mp4",
+                "entries": [{"sim_time_s": 1.0, "pts_s": 0.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (media_directory / "clip.mp4").write_bytes(b"opaque media")
+
+    result = review_panels.run(
+        _request(
+            tmp_path,
+            output="out",
+            sources=[
+                {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+                {
+                    "artifact_id": "video",
+                    "uri": "recordings/video-map.json",
+                    "format": "media-mapping.v1",
+                },
+            ],
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "complete"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    media_uri = document["streams"]["video"]["media_uri"]
+    assert media_uri.startswith("media/")
+    assert (tmp_path / "out" / media_uri).read_bytes() == b"opaque media"
 
 
 def test_context_revision_changes_on_seek_and_interval() -> None:

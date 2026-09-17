@@ -60,6 +60,25 @@ function clamp(value, minimum, maximum) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
+function trustedOfflineMediaUri(uri, allowedSchemes = []) {
+  if (typeof uri !== "string") return false;
+  const value = uri.trim();
+  if (!value || value.startsWith("/") || value.startsWith("\\") || value.startsWith("//")) {
+    return false;
+  }
+  let decoded = value;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch (_error) {
+    return false;
+  }
+  const path = decoded.split(/[?#]/, 1)[0];
+  if (path.split(/[\\/]/).some((part) => part === "..")) return false;
+  const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1]?.toLowerCase();
+  if (!scheme) return true;
+  return allowedSchemes.some((candidate) => String(candidate).toLowerCase() === scheme);
+}
+
 function scalarMetricValue(value) {
   let current = value;
   for (let depth = 0; depth < 3; depth += 1) {
@@ -214,7 +233,8 @@ function mapBounds(surface, positions, goal) {
     return [origin[0], origin[1], origin[0] + width, origin[1] + height];
   }
   const points = [...positions.map((entry) => entry.point), ...(goal ? [goal] : [])];
-  for (const line of map?.bounds || []) {
+  const bounds = Array.isArray(map?.bounds) ? map.bounds : [];
+  for (const line of bounds) {
     if (Array.isArray(line) && line.length >= 4) {
       points.push([Number(line[0]), Number(line[1])], [Number(line[2]), Number(line[3])]);
     }
@@ -251,37 +271,60 @@ function drawSceneCanvas(canvas, model, snapshot) {
   const scale = Math.min((width - 2 * margin) / spanX, (height - 2 * margin) / spanY);
   const toCanvas = ([x, y]) => [margin + (x - minX) * scale, height - margin - (y - minY) * scale];
   const map = surface.map || {};
+  const bounds = Array.isArray(map?.bounds) ? map.bounds : [];
+  const obstacles = Array.isArray(map?.obstacles) ? map.obstacles : [];
   context.strokeStyle = "#64748b";
   context.lineWidth = 1;
-  for (const line of map.bounds || []) {
+  for (const line of bounds) {
     if (!Array.isArray(line) || line.length < 4) continue;
-    const start = toCanvas([Number(line[0]), Number(line[1])]);
-    const end = toCanvas([Number(line[2]), Number(line[3])]);
+    const start = pointValue([line[0], line[1]]);
+    const end = pointValue([line[2], line[3]]);
+    if (!start || !end) continue;
+    const startCanvas = toCanvas(start);
+    const endCanvas = toCanvas(end);
     context.beginPath();
-    context.moveTo(start[0], start[1]);
-    context.lineTo(end[0], end[1]);
+    context.moveTo(startCanvas[0], startCanvas[1]);
+    context.lineTo(endCanvas[0], endCanvas[1]);
     context.stroke();
   }
   context.strokeStyle = "#ef4444";
-  for (const obstacle of map.obstacles || []) {
+  for (const obstacle of obstacles) {
     const lines = Array.isArray(obstacle?.lines) ? obstacle.lines : [];
     if (lines.length) {
       for (const line of lines) {
         if (!Array.isArray(line) || line.length < 4) continue;
-        const start = toCanvas([Number(line[0]), Number(line[1])]);
-        const end = toCanvas([Number(line[2]), Number(line[3])]);
+        const start = pointValue([line[0], line[1]]);
+        const end = pointValue([line[2], line[3]]);
+        if (!start || !end) continue;
+        const startCanvas = toCanvas(start);
+        const endCanvas = toCanvas(end);
         context.beginPath();
-        context.moveTo(start[0], start[1]);
-        context.lineTo(end[0], end[1]);
+        context.moveTo(startCanvas[0], startCanvas[1]);
+        context.lineTo(endCanvas[0], endCanvas[1]);
         context.stroke();
       }
       continue;
     }
     const vertices = Array.isArray(obstacle?.vertices) ? obstacle.vertices : [];
-    if (vertices.length < 2) continue;
+    const validVertices = vertices.map(pointValue).filter(Boolean);
+    if (validVertices.length < 2) continue;
+    context.beginPath();
+    validVertices.forEach((vertex, index) => {
+      const point = toCanvas(vertex);
+      if (index === 0) context.moveTo(point[0], point[1]);
+      else context.lineTo(point[0], point[1]);
+    });
+    context.closePath();
+    context.stroke();
+  }
+  const goalZones = Array.isArray(map?.robot_goal_zones) ? map.robot_goal_zones : [];
+  context.strokeStyle = "#22c55e";
+  for (const zone of goalZones) {
+    const vertices = Array.isArray(zone) ? zone.map(pointValue).filter(Boolean) : [];
+    if (vertices.length < 3) continue;
     context.beginPath();
     vertices.forEach((vertex, index) => {
-      const point = toCanvas(pointValue(vertex) || [0, 0]);
+      const point = toCanvas(vertex);
       if (index === 0) context.moveTo(point[0], point[1]);
       else context.lineTo(point[0], point[1]);
     });
@@ -361,19 +404,34 @@ export class ReviewPanelsController {
     this._videoElement = null;
     this._frameHandle = null;
     this._playbackLastMs = null;
+    this._allowedMediaSchemes = Array.isArray(options.allowedMediaSchemes)
+      ? options.allowedMediaSchemes
+      : [];
+    this._videoTargetTime = null;
     const clock = options.clock || {};
     this._now = typeof options.now === "function"
       ? options.now
       : (typeof clock.now === "function" ? clock.now.bind(clock) : defaultNow);
     this._scheduler = resolveScheduler(options, root);
     const time = this.model.time || {};
-    const cursor = time.cursor || this.model.context?.cursor || {};
-    const start = Number.isFinite(Number(time.origin_s)) ? Number(time.origin_s) : 0;
-    const end = Number.isFinite(Number(time.terminal_s)) ? Number(time.terminal_s) : start;
+    const cursor = this.model.context?.cursor || time.cursor || {};
+    const globalStart = Number.isFinite(Number(time.origin_s)) ? Number(time.origin_s) : 0;
+    const globalEnd = Number.isFinite(Number(time.terminal_s))
+      ? Number(time.terminal_s)
+      : globalStart;
+    const selectedIntervalId = this.model.context?.interval_id || time.interval?.interval_id || null;
+    const selectedInterval = (this.model.intervals || []).find(
+      (interval) => String(interval.interval_id) === String(selectedIntervalId),
+    );
+    const intervalStart = Number(selectedInterval?.start_s ?? time.interval?.start_s);
+    const intervalEnd = Number(selectedInterval?.end_s ?? time.interval?.end_s);
+    const start = Number.isFinite(intervalStart) ? intervalStart : globalStart;
+    const end = Number.isFinite(intervalEnd) ? intervalEnd : globalEnd;
+    const initialCursor = Number.isFinite(Number(cursor.time_s)) ? Number(cursor.time_s) : start;
     this.state = {
-      cursorTimeS: Number.isFinite(Number(cursor.time_s)) ? Number(cursor.time_s) : start,
+      cursorTimeS: clamp(initialCursor, start, end),
       contextRevision: Number(this.model.context?.context_revision || cursor.context_revision || 0),
-      intervalId: this.model.context?.interval_id || null,
+      intervalId: selectedIntervalId,
       playing: false,
       speed: Number(this.model.controls?.default_speed || 1.0),
       metricVisibility: Object.fromEntries(
@@ -407,7 +465,9 @@ export class ReviewPanelsController {
     this._document = null;
     this._sceneMount?.unmount?.();
     this._sceneMount = null;
+    this._videoElement?.pause?.();
     this._videoElement = null;
+    this._videoTargetTime = null;
     this.root = null;
     return this;
   }
@@ -469,7 +529,9 @@ export class ReviewPanelsController {
 
   _startPlayback() {
     if (this.state.playing) return;
-    if (this.state.cursorTimeS >= this.state.end) this.state.cursorTimeS = this.state.start;
+    if (this.state.cursorTimeS >= this.state.end) {
+      this._applyCursor(this.state.start, "restart", true);
+    }
     this.state.playing = true;
     this._playbackLastMs = finiteNumber(this._now(), 0);
     this._schedulePlayback();
@@ -610,7 +672,6 @@ export class ReviewPanelsController {
     if (!this.root) return;
     this._sceneMount?.unmount?.();
     this._sceneMount = null;
-    this._videoElement = null;
     this.root.replaceChildren();
     const documentRef = this._document || this.root.ownerDocument || document;
     const toolbar = documentRef.createElement("div");
@@ -676,6 +737,28 @@ export class ReviewPanelsController {
     this.root.appendChild(grid);
   }
 
+  _syncVideo(video, mediaTime, mappingStatus) {
+    this._videoTargetTime = mediaTime;
+    if (mediaTime !== null && ["available", "partial"].includes(mappingStatus)) {
+      const currentTime = finiteNumber(video.currentTime);
+      if (currentTime === null || Math.abs(currentTime - mediaTime) > 1e-3) {
+        try {
+          video.currentTime = mediaTime;
+        } catch (_error) {
+          // Browsers can reject a seek before metadata loads; the mapping stays visible.
+        }
+      }
+    }
+    if (this.state.playing) {
+      if (video.paused === true && typeof video.play === "function") {
+        const playResult = video.play();
+        playResult?.catch?.(() => {});
+      }
+    } else if (video.paused === false) {
+      video.pause?.();
+    }
+  }
+
   _contextPanel(documentRef) {
     const section = documentRef.createElement("section");
     section.className = "context-panel muted";
@@ -709,25 +792,38 @@ export class ReviewPanelsController {
     }
     if (kind === "video") {
       const uri = sourceVideoUri(this.model, snapshot);
-      if (uri && !/^(?:https?:|data:|blob:)/i.test(uri)) {
-        const video = documentRef.createElement("video");
-        video.controls = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = "metadata";
-        video.className = "review-video";
-        video.dataset.sourceUri = uri;
-        video.src = uri;
+      const mappingStatus = this.model.streams?.video?.status;
+      const mediaTime = videoPresentationTime(snapshot.value);
+      const mappingUsable =
+        snapshot.status === "available" &&
+        ["available", "partial"].includes(mappingStatus) &&
+        mediaTime !== null;
+      if (uri && mappingUsable && trustedOfflineMediaUri(uri, this._allowedMediaSchemes)) {
+        let video = this._videoElement;
+        if (!video || (video.ownerDocument && video.ownerDocument !== documentRef)) {
+          video = documentRef.createElement("video");
+          video.controls = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.preload = "metadata";
+          video.className = "review-video";
+          if (!video.dataset) video.dataset = {};
+          video.addEventListener?.("loadedmetadata", () => {
+            if (this._videoElement === video && this._videoTargetTime !== null) {
+              this._syncVideo(video, this._videoTargetTime, "available");
+            }
+          });
+        }
+        if (!video.dataset) video.dataset = {};
+        if (video.dataset.sourceUri !== uri) {
+          video.dataset.sourceUri = uri;
+          video.src = uri;
+        }
         section.appendChild(video);
         this._videoElement = video;
-        const mediaTime = videoPresentationTime(snapshot.value);
-        if (mediaTime !== null && snapshot.status === "available") {
-          try {
-            video.currentTime = mediaTime;
-          } catch (_error) {
-            // Browsers can reject a seek before metadata loads; the mapping stays visible.
-          }
-        }
+        this._syncVideo(video, mediaTime, mappingStatus);
+      } else {
+        this._videoElement?.pause?.();
       }
     }
     const text = documentRef.createElement("p");

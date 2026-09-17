@@ -16,6 +16,8 @@ class FakeElement {
     this.className = "";
     this.textContent = "";
     this.value = "";
+    this.currentTime = 0;
+    this.paused = true;
   }
 
   appendChild(child) {
@@ -53,6 +55,15 @@ class FakeElement {
         get: () => () => {},
       },
     );
+  }
+
+  play() {
+    this.paused = false;
+    return Promise.resolve();
+  }
+
+  pause() {
+    this.paused = true;
   }
 }
 
@@ -201,6 +212,10 @@ const controllerB = new ReviewPanelsController(model(), rootB, {
 assert.equal(documentRef.listeners.get("keydown").length, 2);
 assert.equal(findAll(rootA, (element) => element.tagName === "CANVAS").length, 1);
 assert.equal(findAll(rootA, (element) => element.tagName === "VIDEO").length, 1);
+const videoElement = findAll(rootA, (element) => element.tagName === "VIDEO")[0];
+controllerA.dispatch({ type: "seek", time_s: 2, source: "probe" });
+assert.equal(findAll(rootA, (element) => element.tagName === "VIDEO")[0], videoElement);
+assert.equal(videoElement.currentTime, 1);
 const sampleButtons = findAll(rootA, (element) => element.className === "metric-sample");
 assert.equal(sampleButtons.length, 2);
 sampleButtons[1].emit("click", { stopPropagation() {} });
@@ -211,6 +226,70 @@ assert.equal(controllerA.snapshot().metrics.clearance.visible, false);
 assert.equal(findAll(rootA, (element) => element.className === "metric-sample").length, 0);
 controllerA.unmount();
 assert.equal(documentRef.listeners.get("keydown").length, 1);
+
+const intervalModel = model();
+intervalModel.context = {
+  ...intervalModel.context,
+  interval_id: "short",
+  cursor: { time_s: 3, context_revision: 4 },
+};
+intervalModel.time.interval = { interval_id: "short", start_s: 1, end_s: 2 };
+intervalModel.intervals = [{ interval_id: "short", start_s: 1, end_s: 2 }];
+const intervalController = new ReviewPanelsController(intervalModel, null, {
+  now: () => now,
+  scheduler,
+});
+assert.equal(intervalController.state.cursorTimeS, 2);
+assert.equal(intervalController.state.start, 1);
+assert.equal(intervalController.state.end, 2);
+const restartRevision = intervalController.state.contextRevision;
+intervalController.dispatch({ type: "toggle-play" });
+assert.equal(intervalController.state.cursorTimeS, 1);
+assert.equal(intervalController.state.contextRevision, restartRevision + 1);
+intervalController.dispatch({ type: "toggle-play" });
+
+for (const uri of [
+  "file:///tmp/clip.mp4",
+  "//host/clip.mp4",
+  "ftp://host/clip.mp4",
+  "javascript:alert(1)",
+  "https://host/clip.mp4",
+  "/tmp/clip.mp4",
+  "../clip.mp4",
+]) {
+  const unsafeRoot = new FakeElement(documentRef, "main");
+  const unsafeModel = model();
+  unsafeModel.streams.video.media_uri = uri;
+  const unsafeController = new ReviewPanelsController(unsafeModel, unsafeRoot, {
+    now: () => now,
+    scheduler,
+  });
+  assert.equal(findAll(unsafeRoot, (element) => element.tagName === "VIDEO").length, 0);
+  unsafeController.unmount();
+}
+const unavailableMappingRoot = new FakeElement(documentRef, "main");
+const unavailableMappingModel = model();
+unavailableMappingModel.streams.video.status = "unavailable";
+const unavailableMappingController = new ReviewPanelsController(
+  unavailableMappingModel,
+  unavailableMappingRoot,
+  { now: () => now, scheduler },
+);
+assert.equal(findAll(unavailableMappingRoot, (element) => element.tagName === "VIDEO").length, 0);
+unavailableMappingController.unmount();
+
+const malformedSceneRoot = new FakeElement(documentRef, "main");
+const malformedSceneModel = model();
+malformedSceneModel.scene_surface = {
+  map: { bounds: { malformed: true }, obstacles: "malformed", robot_goal_zones: {} },
+};
+const malformedSceneController = new ReviewPanelsController(
+  malformedSceneModel,
+  malformedSceneRoot,
+  { now: () => now, scheduler },
+);
+assert.equal(findAll(malformedSceneRoot, (element) => element.tagName === "CANVAS").length, 1);
+malformedSceneController.unmount();
 
 const unmountProbe = new ReviewPanelsController(model(), rootA, {
   now: () => now,

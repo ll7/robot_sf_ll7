@@ -150,7 +150,9 @@ def _jsonable(value: Any) -> Any:
     if is_dataclass(value):
         return {key: _jsonable(item) for key, item in asdict(value).items()}
     if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
+        if any(not isinstance(key, str) for key in value):
+            raise AuditContractError("audit mappings must use string field names")
+        return {key: _jsonable(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
         return [_jsonable(item) for item in value]
     if isinstance(value, set):
@@ -177,6 +179,17 @@ def _strict_json_values(value: Any, *, path: str = "$") -> None:
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         for index, item in enumerate(value):
             _strict_json_values(item, path=f"{path}[{index}]")
+
+
+def _closed_mapping(value: Any, *, name: str) -> dict[str, Any]:
+    """Return a strict JSON mapping without silently coercing its fields."""
+
+    if not isinstance(value, Mapping):
+        raise AuditContractError(f"{name} must be a mapping")
+    result = dict(value)
+    _jsonable(result)
+    _strict_json_values(result, path=name)
+    return result
 
 
 def _reject_json_constant(token: str) -> Any:
@@ -433,9 +446,11 @@ class CampaignAudit:
         source_sha256 = _source_sha256(source)
         if source_sha256 and source_sha256 != source_digest:
             raise AuditIdentityError("source_digest does not match source.sha256")
+        metadata = _closed_mapping(self.metadata, name="metadata")
         object.__setattr__(self, "campaign_digest", campaign_digest)
         object.__setattr__(self, "source_digest", source_digest)
         object.__setattr__(self, "source", source)
+        object.__setattr__(self, "metadata", metadata)
 
 
 @dataclass(frozen=True, slots=True)
@@ -595,12 +610,26 @@ class Signal:
 
         _text(self.signal_id, name="signal_id")
         _text(self.detector_id, name="detector_id")
+        _optional_text(self.detector_version, name="detector_version")
+        _optional_text(self.reason_code, name="reason_code")
+        _optional_text(self.episode_id, name="episode_id")
+        _optional_text(self.message, name="message")
         if self.status not in SIGNAL_STATUSES:
             raise AuditContractError(f"signal status must be one of {SIGNAL_STATUSES}")
         if self.status in {"unavailable", "error"} and not self.message and not self.missingness:
             raise AuditContractError("unavailable/error signals require message or missingness")
         if self.interval is not None and not isinstance(self.interval, TimeInterval):
             object.__setattr__(self, "interval", _interval(self.interval))
+        evidence = _tuple_of_mappings(self.evidence, name="evidence")
+        measured = _closed_mapping(self.measured, name="measured")
+        threshold = (
+            None if self.threshold is None else _closed_mapping(self.threshold, name="threshold")
+        )
+        missingness = _tuple_of_strings(self.missingness, name="missingness")
+        object.__setattr__(self, "evidence", evidence)
+        object.__setattr__(self, "measured", measured)
+        object.__setattr__(self, "threshold", threshold)
+        object.__setattr__(self, "missingness", missingness)
 
 
 def _world_calibration(value: Mapping[str, Any] | ImageDisplayTransform | None) -> dict[str, Any]:
@@ -871,6 +900,12 @@ class Annotation:
         object.__setattr__(self, "provenance_reason", reason)
         if self.mode == "one_click" and self.evidence:
             raise AuditContractError("one-click annotations cannot carry detailed evidence")
+        evidence = _tuple_of_mappings(self.evidence, name="evidence")
+        tags = _tuple_of_strings(self.tags, name="tags")
+        metadata = _closed_mapping(self.metadata, name="metadata")
+        object.__setattr__(self, "evidence", evidence)
+        object.__setattr__(self, "tags", tags)
+        object.__setattr__(self, "metadata", metadata)
 
     @property
     def is_full_episode_review(self) -> bool:
@@ -975,6 +1010,23 @@ class Finding:
         ):
             if any(not isinstance(member, str) or not member for member in members):
                 raise AuditContractError(f"{name} must contain non-empty member IDs")
+        for name, values in (
+            ("evidence", self.evidence),
+            ("negative_evidence", self.negative_evidence),
+            ("diagnostic_results", self.diagnostic_results),
+        ):
+            object.__setattr__(self, name, _tuple_of_mappings(values, name=name))
+        object.__setattr__(
+            self, "observations", _tuple_of_strings(self.observations, name="observations")
+        )
+        object.__setattr__(
+            self, "hypotheses", _tuple_of_strings(self.hypotheses, name="hypotheses")
+        )
+        object.__setattr__(self, "tags", _tuple_of_strings(self.tags, name="tags"))
+        if self.github_issue is not None:
+            object.__setattr__(
+                self, "github_issue", _closed_mapping(self.github_issue, name="github_issue")
+            )
 
     @property
     def candidate_count(self) -> int:
@@ -1027,6 +1079,10 @@ class ActionRecord:
         _text(self.action_type, name="action_type")
         if self.actor_kind not in AUTHOR_KINDS:
             raise AuditContractError(f"actor_kind must be one of {AUTHOR_KINDS}")
+        _optional_text(self.actor_id, name="actor_id")
+        _optional_text(self.target_id, name="target_id")
+        _text(self.status, name="status")
+        object.__setattr__(self, "details", _closed_mapping(self.details, name="details"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1053,8 +1109,18 @@ class ReviewRecord:
             raise AuditContractError(f"review scope must be one of {REVIEW_SCOPES}")
         if self.author_kind not in AUTHOR_KINDS:
             raise AuditContractError(f"author_kind must be one of {AUTHOR_KINDS}")
-        if not isinstance(self.source_revision, int) or self.source_revision < 0:
+        if (
+            isinstance(self.source_revision, bool)
+            or not isinstance(self.source_revision, int)
+            or self.source_revision < 0
+        ):
             raise AuditContractError("source_revision must be a non-negative integer")
+        object.__setattr__(
+            self, "annotation_ids", _tuple_of_strings(self.annotation_ids, name="annotation_ids")
+        )
+        _optional_text(self.outcome, name="outcome")
+        _optional_text(self.author_id, name="author_id")
+        _optional_text(self.notes, name="notes")
 
 
 _RECORD_TYPES: dict[str, type[Any]] = {
@@ -1115,6 +1181,8 @@ def record_to_dict(record: Any, *, include_type: bool = True) -> dict[str, Any]:
     if include_type:
         payload["record_type"] = kind
     payload["record_id"] = record_id(record)
+    if include_type:
+        _validate_record_payload(payload)
     return payload
 
 
@@ -1123,9 +1191,7 @@ def _tuple_of_mappings(value: Any, *, name: str) -> tuple[Mapping[str, Any], ...
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise AuditContractError(f"{name} must be a sequence")
-    return tuple(
-        dict(item) if isinstance(item, Mapping) else _mapping_error(name) for item in value
-    )
+    return tuple(_closed_mapping(item, name=f"{name}[{index}]") for index, item in enumerate(value))
 
 
 def _mapping_error(name: str) -> Mapping[str, Any]:
@@ -1137,10 +1203,9 @@ def _tuple_of_strings(value: Any, *, name: str) -> tuple[str, ...]:
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise AuditContractError(f"{name} must be a sequence")
-    values = tuple(str(item) for item in value)
-    if any(not item for item in values):
+    if any(not isinstance(item, str) or not item for item in value):
         raise AuditContractError(f"{name} must contain non-empty strings")
-    return values
+    return tuple(value)
 
 
 def _interval(value: Any) -> TimeInterval | None:
@@ -1217,9 +1282,9 @@ def signal_from_dict(payload: Mapping[str, Any]) -> Signal:
         reason_code=str(payload.get("reason_code", "")),
         episode_id=str(payload.get("episode_id", "")),
         evidence=_tuple_of_mappings(payload.get("evidence", ()), name="evidence"),
-        measured=dict(payload.get("measured", {})),
+        measured=payload.get("measured", {}),
         interval=_interval(payload.get("interval")),
-        threshold=(dict(payload["threshold"]) if payload.get("threshold") is not None else None),
+        threshold=payload.get("threshold"),
         missingness=_tuple_of_strings(payload.get("missingness", ()), name="missingness"),
         message=str(payload.get("message", "")),
     )
@@ -1250,7 +1315,7 @@ def annotation_from_dict(payload: Mapping[str, Any]) -> Annotation:
         source_revision=payload.get("source_revision", 0),
         source_identity=str(payload.get("source_identity", "")),
         created_at=str(payload.get("created_at", utc_now())),
-        metadata=dict(payload.get("metadata", {})),
+        metadata=payload.get("metadata", {}),
         source_ref=_source_from_payload(payload.get("source_ref")),
         provenance_status=str(payload.get("provenance_status", SOURCE_PROVENANCE_UNAVAILABLE)),
         provenance_reason=str(payload.get("provenance_reason", "")),
@@ -1287,9 +1352,7 @@ def finding_from_dict(payload: Mapping[str, Any]) -> Finding:
         diagnostic_results=_tuple_of_mappings(
             payload.get("diagnostic_results", ()), name="diagnostic_results"
         ),
-        github_issue=(
-            dict(payload["github_issue"]) if payload.get("github_issue") is not None else None
-        ),
+        github_issue=payload.get("github_issue"),
         source_revision=str(payload.get("source_revision", "")),
         created_at=str(payload.get("created_at", utc_now())),
         updated_at=str(payload.get("updated_at", utc_now())),
@@ -1349,7 +1412,7 @@ def record_from_dict(payload: Mapping[str, Any]) -> Any:  # noqa: C901
                 values["source"] = _source_from_payload(values.get("source"))
             if kind in {"action_record", "review_record"}:
                 if kind == "action_record":
-                    values["details"] = dict(values.get("details", {}))
+                    values["details"] = values.get("details", {})
                 else:
                     values["annotation_ids"] = _tuple_of_strings(
                         values.get("annotation_ids", ()), name="annotation_ids"

@@ -72,6 +72,7 @@
     "event_id": {},
     "source_point": {},
     "seek_identity": {},
+    "actor_kind": {},
     "annotation_id": {},
     "classification": {},
     "mode": {},

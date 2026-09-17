@@ -212,6 +212,7 @@ class _JournalTransaction:
     changes: tuple[_Change, ...]
     request_digest: str
     actor: Mapping[str, Any]
+    unconditional: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -233,6 +234,7 @@ class _JournalTransaction:
             ],
             "request_digest": self.request_digest,
             "actor": dict(self.actor),
+            "unconditional": self.unconditional,
         }
 
 
@@ -419,7 +421,7 @@ class AuditStore:
         connection.commit()
         return connection
 
-    def _read_journal(  # noqa: C901, PLR0912
+    def _read_journal(  # noqa: C901, PLR0912, PLR0915
         self, *, recover: bool = False
     ) -> tuple[dict[str, Any], list[_JournalTransaction], int, bytes]:
         """Read canonical transactions and truncate only an incomplete tail.
@@ -436,6 +438,8 @@ class AuditStore:
             raise AuditCorruptionError("canonical journal is empty")
         header: dict[str, Any] | None = None
         transactions: list[_JournalTransaction] = []
+        operation_ids: set[str] = set()
+        latest_revisions: dict[str, int] = {}
         valid_offset = 0
         lines = raw.splitlines(keepends=True)
         for index, line in enumerate(lines):
@@ -469,11 +473,25 @@ class AuditStore:
                 header = dict(payload)
             else:
                 try:
-                    transactions.append(self._transaction_from_dict(payload))
+                    transaction = self._transaction_from_dict(payload)
                 except (KeyError, TypeError, ValueError, AuditStoreError) as exc:
                     raise AuditCorruptionError(
                         f"invalid canonical transaction {index + 1}: {exc}"
                     ) from exc
+                if transaction.operation_id in operation_ids:
+                    raise AuditCorruptionError(
+                        f"duplicate operation ID in canonical journal: {transaction.operation_id}"
+                    )
+                operation_ids.add(transaction.operation_id)
+                for change in transaction.changes:
+                    previous_revision = latest_revisions.get(change.record_id)
+                    if previous_revision is not None and change.revision <= previous_revision:
+                        raise AuditCorruptionError(
+                            "canonical record revisions are not increasing for "
+                            f"{change.record_id!r}"
+                        )
+                    latest_revisions[change.record_id] = change.revision
+                transactions.append(transaction)
             valid_offset += len(line)
             if index == len(lines) - 1 and not is_complete and recover:
                 # A crash can finish the JSON bytes before the final newline.
@@ -500,7 +518,7 @@ class AuditStore:
             previous = transaction.global_revision
         return header, transactions, valid_offset, raw
 
-    def _transaction_from_dict(  # noqa: C901, PLR0912
+    def _transaction_from_dict(  # noqa: C901, PLR0912, PLR0915
         self, payload: Mapping[str, Any]
     ) -> _JournalTransaction:
         unknown = set(payload) - {
@@ -513,6 +531,7 @@ class AuditStore:
             "changes",
             "request_digest",
             "actor",
+            "unconditional",
         }
         if unknown:
             raise AuditStoreError(
@@ -523,8 +542,15 @@ class AuditStore:
         if payload.get("schema_version") != AUDIT_JOURNAL_SCHEMA_VERSION:
             raise AuditStoreError("unsupported journal transaction schema")
         operation_id = payload.get("operation_id")
-        if not isinstance(operation_id, str) or not operation_id:
+        if not isinstance(operation_id, str) or not operation_id.strip():
             raise AuditStoreError("transaction operation_id is required")
+        actor = payload.get("actor", {})
+        if not isinstance(actor, Mapping):
+            raise AuditStoreError("actor must be a mapping")
+        actor = self._actor(actor)
+        unconditional = payload.get("unconditional", False)
+        if not isinstance(unconditional, bool):
+            raise AuditStoreError("transaction unconditional flag is invalid")
         changes: list[_Change] = []
         raw_changes = payload.get("changes")
         if (
@@ -533,6 +559,7 @@ class AuditStore:
             or not raw_changes
         ):
             raise AuditStoreError("transaction changes are required")
+        seen_record_ids: set[str] = set()
         for raw_change in raw_changes:
             if not isinstance(raw_change, Mapping):
                 raise AuditStoreError("transaction change is not an object")
@@ -552,9 +579,17 @@ class AuditStore:
             kind = raw_change.get("record_type")
             revision = raw_change.get("revision")
             deleted = raw_change.get("deleted")
-            if not isinstance(rid, str) or not rid or not isinstance(kind, str):
+            if not isinstance(rid, str) or not rid.strip() or not isinstance(kind, str):
                 raise AuditStoreError("transaction change identity is invalid")
-            if not isinstance(revision, int) or revision < 1 or not isinstance(deleted, bool):
+            if rid in seen_record_ids:
+                raise AuditStoreError(f"duplicate record ID in transaction: {rid}")
+            seen_record_ids.add(rid)
+            if (
+                isinstance(revision, bool)
+                or not isinstance(revision, int)
+                or revision < 1
+                or not isinstance(deleted, bool)
+            ):
                 raise AuditStoreError("transaction change revision/deleted fields are invalid")
             record_payload = raw_change.get("record")
             if deleted:
@@ -569,6 +604,11 @@ class AuditStore:
                     raise AuditStoreError(f"invalid record payload: {exc}") from exc
                 if record_id(typed) != rid or record_type(typed) != kind:
                     raise AuditStoreError("record payload identity disagrees with transaction")
+                author_kind = getattr(typed, "author_kind", None)
+                if author_kind is not None and actor["kind"] != author_kind:
+                    raise AuditStoreError(
+                        "transaction actor kind does not match record author_kind"
+                    )
                 record_payload = record_to_dict(typed)
             changes.append(
                 _Change(
@@ -584,26 +624,81 @@ class AuditStore:
             raise AuditStoreError("expected_revisions must be a mapping")
         expected_revisions: dict[str, int | None] = {}
         for key, value in expected.items():
-            if not isinstance(key, str) or (value is not None and not isinstance(value, int)):
+            if (
+                not isinstance(key, str)
+                or not key.strip()
+                or (
+                    value is not None
+                    and (isinstance(value, bool) or not isinstance(value, int) or value < 0)
+                )
+            ):
                 raise AuditStoreError("expected revision is invalid")
             expected_revisions[key] = value
-        actor = payload.get("actor", {})
-        if not isinstance(actor, Mapping):
-            raise AuditStoreError("actor must be a mapping")
         global_revision = payload.get("global_revision")
-        if not isinstance(global_revision, int) or global_revision < 1:
+        if (
+            isinstance(global_revision, bool)
+            or not isinstance(global_revision, int)
+            or global_revision < 1
+        ):
             raise AuditStoreError("global_revision is invalid")
+        committed_at = payload.get("committed_at", "")
+        if not isinstance(committed_at, str) or not committed_at:
+            raise AuditStoreError("committed_at is invalid")
         request_digest = payload.get("request_digest")
-        if not isinstance(request_digest, str) or len(request_digest) != 64:
+        if (
+            not isinstance(request_digest, str)
+            or len(request_digest) != 64
+            or any(char not in "0123456789abcdefABCDEF" for char in request_digest)
+        ):
             raise AuditStoreError("request_digest is invalid")
+        expected_digest = self._request_digest(
+            operation_id,
+            tuple(
+                (
+                    change.record_id,
+                    "tombstone" if change.deleted else change.record_type,
+                    change.record,
+                    change.deleted,
+                )
+                for change in changes
+            ),
+            expected_revisions,
+            actor,
+            unconditional=unconditional,
+        )
+        if request_digest.lower() != expected_digest and "unconditional" not in payload:
+            # The first BA-03 journal omitted the explicit flag while still
+            # including it in the request digest.  Accept that historical
+            # force-save encoding and normalize it on the next write.
+            legacy_digest = self._request_digest(
+                operation_id,
+                tuple(
+                    (
+                        change.record_id,
+                        "tombstone" if change.deleted else change.record_type,
+                        change.record,
+                        change.deleted,
+                    )
+                    for change in changes
+                ),
+                expected_revisions,
+                actor,
+                unconditional=True,
+            )
+            if request_digest.lower() == legacy_digest:
+                unconditional = True
+                expected_digest = legacy_digest
+        if request_digest.lower() != expected_digest:
+            raise AuditStoreError("transaction request_digest does not match canonical payload")
         return _JournalTransaction(
             operation_id=operation_id,
             global_revision=global_revision,
-            committed_at=str(payload.get("committed_at", "")),
+            committed_at=committed_at,
             expected_revisions=expected_revisions,
             changes=tuple(changes),
-            request_digest=request_digest,
-            actor=dict(actor),
+            request_digest=request_digest.lower(),
+            actor=actor,
+            unconditional=unconditional,
         )
 
     def _state(
@@ -777,6 +872,32 @@ class AuditStore:
         return transactions, offset, raw
 
     @staticmethod
+    def _validate_identifier(value: Any, *, name: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise AuditStoreError(f"{name} must be a non-empty string")
+        return value
+
+    @staticmethod
+    def _validate_revision(value: Any, *, name: str) -> int | None:
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+        ):
+            raise AuditStoreError(f"{name} must be a non-negative integer or null")
+        return value
+
+    @classmethod
+    def _validate_expected_revisions(
+        cls, value: Mapping[str, int | None], *, name: str = "expected_revisions"
+    ) -> dict[str, int | None]:
+        if not isinstance(value, Mapping):
+            raise AuditStoreError(f"{name} must be a mapping")
+        result: dict[str, int | None] = {}
+        for key, revision in value.items():
+            cls._validate_identifier(key, name=f"{name} key")
+            result[key] = cls._validate_revision(revision, name=f"{name}[{key!r}]")
+        return result
+
+    @staticmethod
     def _actor(actor: str | Mapping[str, Any], actor_id: str = "") -> dict[str, Any]:
         if isinstance(actor, Mapping):
             result = dict(actor)
@@ -784,6 +905,8 @@ class AuditStore:
             result = {"kind": actor, "id": actor_id}
         if result.get("kind") not in {"human", "detector", "agent"}:
             raise AuditStoreError("actor kind must be human, detector, or agent")
+        if "id" in result and not isinstance(result["id"], str):
+            raise AuditStoreError("actor id must be a string")
         return result
 
     @staticmethod
@@ -855,7 +978,7 @@ class AuditStore:
         """
 
         self._ensure_open()
-        if not operation_id or not isinstance(operation_id, str):
+        if not isinstance(operation_id, str) or not operation_id.strip():
             raise AuditStoreError("operation_id must be a non-empty string")
         record_list = list(records)
         if not record_list:
@@ -864,10 +987,11 @@ class AuditStore:
         if expected_revisions is None:
             expected_revisions = {}
         else:
-            expected_revisions = dict(expected_revisions)
+            expected_revisions = self._validate_expected_revisions(expected_revisions)
         if expected_revision is not None:
             if len(record_list) != 1:
                 raise AuditStoreError("expected_revision is only valid for a single-record commit")
+            self._validate_revision(expected_revision, name="expected_revision")
             expected_revisions[record_id(record_list[0])] = expected_revision
 
         changes_input: list[tuple[str, str, dict[str, Any] | None, bool]] = []
@@ -876,8 +1000,17 @@ class AuditStore:
                 rid = record_id(record)
                 kind = record_type(record)
                 payload = record_to_dict(record)
+                # Reconstruct and reserialize every payload before computing
+                # the request digest.  This closes the boundary for callers
+                # that mutate a frozen dataclass's nested mapping or pass a
+                # value whose constructor did not normalize it.
+                canonical_record = record_from_dict(payload)
+                payload = record_to_dict(canonical_record)
             except (AuditContractError, TypeError, ValueError) as exc:
                 raise AuditStoreError(f"record cannot be committed: {exc}") from exc
+            author_kind = getattr(canonical_record, "author_kind", None)
+            if author_kind is not None and author_kind != actor_payload["kind"]:
+                raise AuditStoreError("transaction actor kind must match record author_kind")
             changes_input.append((rid, kind, payload, False))
         request_digest = self._request_digest(
             operation_id,
@@ -934,6 +1067,7 @@ class AuditStore:
                 changes=changes,
                 request_digest=request_digest,
                 actor=actor_payload,
+                unconditional=_allow_unconditional,
             )
             updated, offset, raw = self._append_transaction_locked(transaction)
             self._project_transactions_locked(updated, offset, raw)
@@ -1116,6 +1250,9 @@ class AuditStore:
             Durable tombstone receipt.
         """
 
+        self._validate_identifier(rid, name="record_id")
+        self._validate_identifier(operation_id, name="operation_id")
+        self._validate_revision(expected_revision, name="expected_revision")
         self._ensure_open()
         with _PathLock(self.lock_path):
             _header, transactions, _offset, _raw = self._read_journal(recover=True)
@@ -1159,6 +1296,7 @@ class AuditStore:
                 ),
                 request_digest=request_digest,
                 actor=actor_payload,
+                unconditional=False,
             )
             updated, offset, raw = self._append_transaction_locked(transaction)
             self._project_transactions_locked(updated, offset, raw)
@@ -1228,24 +1366,56 @@ class AuditStore:
 
     rebuild_index = rebuild_projection
 
-    def export(self, destination: str | Path, *, include_projection: bool = False) -> Path:
+    def export(  # noqa: C901, PLR0912, PLR0915
+        self,
+        destination: str | Path,
+        *,
+        include_projection: bool = False,
+        overwrite: bool = False,
+    ) -> Path:
         """Create a portable directory or zip backup of committed audit data.
+
+        Existing destinations require explicit ``overwrite=True``.  The
+        complete artifact is staged beside the destination and swapped into
+        place only after all canonical bytes have been written.
 
         Returns:
             The created directory or archive path.
         """
 
         self._ensure_open()
-        self._ensure_projection()
         destination = Path(destination)
+        self._validate_export_destination(destination)
+        if destination.exists() and not overwrite:
+            raise AuditExportError(f"export destination exists; pass overwrite=True: {destination}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() and destination.is_symlink():
+            raise AuditExportError("export destination must not be a symbolic link")
+        if (
+            destination.exists()
+            and destination.suffix.lower() == ".zip"
+            and not destination.is_file()
+        ):
+            raise AuditExportError("zip export destination is not a regular file")
+        if (
+            destination.exists()
+            and destination.suffix.lower() != ".zip"
+            and not destination.is_dir()
+        ):
+            raise AuditExportError("directory export destination is not a directory")
         with _PathLock(self.lock_path):
             self._ensure_projection_locked()
             header, transactions, _offset, raw = self._read_journal(recover=True)
             self._assert_export_safe(transactions)
             manifest = self._manifest(header, transactions, raw)
             if destination.suffix.lower() == ".zip":
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                temporary = destination.with_suffix(destination.suffix + ".tmp")
+                fd, temporary_name = tempfile.mkstemp(
+                    prefix=f".{destination.name}.export-",
+                    suffix=".tmp",
+                    dir=destination.parent,
+                )
+                os.close(fd)
+                temporary = Path(temporary_name)
                 try:
                     with zipfile.ZipFile(
                         temporary, "w", compression=zipfile.ZIP_DEFLATED
@@ -1260,14 +1430,54 @@ class AuditStore:
                 finally:
                     temporary.unlink(missing_ok=True)
                 return destination
-            destination.mkdir(parents=True, exist_ok=True)
-            self._atomic_write(destination / self.JOURNAL_FILENAME, raw)
-            self._atomic_write(
-                destination / self.MANIFEST_FILENAME, (canonical_json(manifest) + "\n").encode()
+            staging = Path(
+                tempfile.mkdtemp(prefix=f".{destination.name}.export-", dir=destination.parent)
             )
-            if include_projection:
-                shutil.copy2(self.projection_path, destination / self.PROJECTION_FILENAME)
+            old_destination: Path | None = None
+            try:
+                self._atomic_write(staging / self.JOURNAL_FILENAME, raw)
+                self._atomic_write(
+                    staging / self.MANIFEST_FILENAME,
+                    (canonical_json(manifest) + "\n").encode(),
+                )
+                if include_projection:
+                    shutil.copy2(self.projection_path, staging / self.PROJECTION_FILENAME)
+                if destination.exists():
+                    old_destination = Path(
+                        tempfile.mkdtemp(prefix=f".{destination.name}.old-", dir=destination.parent)
+                    )
+                    old_destination.rmdir()
+                    os.replace(destination, old_destination)
+                try:
+                    os.replace(staging, destination)
+                    staging = Path()
+                except Exception:
+                    if old_destination is not None and old_destination.exists():
+                        os.replace(old_destination, destination)
+                        old_destination = None
+                    raise
+                if old_destination is not None and old_destination.exists():
+                    shutil.rmtree(old_destination)
+                    old_destination = None
+            finally:
+                if staging != Path() and staging.exists():
+                    shutil.rmtree(staging, ignore_errors=True)
+                if old_destination is not None and old_destination.exists():
+                    if not destination.exists():
+                        os.replace(old_destination, destination)
+                    else:
+                        shutil.rmtree(old_destination, ignore_errors=True)
             return destination
+
+    def _validate_export_destination(self, destination: Path) -> None:
+        """Reject any destination whose path overlaps the source store."""
+
+        source_root = self.root.resolve()
+        target = destination.resolve(strict=False)
+        if target == source_root or source_root in target.parents or target in source_root.parents:
+            raise AuditExportError(
+                "export destination overlaps the source store; choose a disjoint destination"
+            )
 
     backup = export
     export_backup = export
@@ -1549,17 +1759,12 @@ def _cli_parser() -> argparse.ArgumentParser:
 
 def _cli_export(args: argparse.Namespace) -> dict[str, Any]:
     destination = args.destination
-    if destination.exists():
-        if not args.overwrite:
-            raise AuditExportError(
-                f"export destination exists; pass --overwrite explicitly: {destination}"
-            )
-        if destination.is_dir():
-            shutil.rmtree(destination)
-        else:
-            destination.unlink()
     with AuditStore(args.root) as store:
-        output = store.export(destination, include_projection=args.include_projection)
+        output = store.export(
+            destination,
+            include_projection=args.include_projection,
+            overwrite=args.overwrite,
+        )
     return {"backup": str(output), "include_projection": bool(args.include_projection)}
 
 

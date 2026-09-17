@@ -10,9 +10,17 @@ import zipfile
 
 import pytest
 
-from robot_sf.analysis_workbench.audit_contracts import Annotation, EpisodeRef, TimeInterval
+from robot_sf.analysis_workbench.audit_contracts import (
+    Annotation,
+    AuditContractError,
+    EpisodeRef,
+    ReviewRecord,
+    Signal,
+    TimeInterval,
+)
 from robot_sf.analysis_workbench.audit_store import (
     AuditConflictError,
+    AuditExportError,
     AuditStore,
     AuditStoreError,
     OperationConflictError,
@@ -92,6 +100,128 @@ def test_existing_record_write_requires_cas_or_explicit_force_operation(tmp_path
         assert store.get("a").observed_behavior == "explicit overwrite"
         with pytest.raises(OperationConflictError):
             store.save(_annotation("a", text="explicit overwrite"), operation_id="op-force")
+
+
+@pytest.mark.parametrize("rid", ["", None, 123])
+def test_delete_rejects_invalid_record_ids_before_changing_journal(tmp_path, rid) -> None:
+    with AuditStore(tmp_path) as store:
+        before = store.canonical_path.read_bytes()
+        with pytest.raises(AuditStoreError):
+            store.delete(rid, operation_id="delete-invalid")
+        assert store.canonical_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("operation_id", ["", None, 123])
+def test_delete_rejects_invalid_operation_ids_before_changing_journal(
+    tmp_path, operation_id
+) -> None:
+    with AuditStore(tmp_path) as store:
+        before = store.canonical_path.read_bytes()
+        with pytest.raises(AuditStoreError):
+            store.delete("record", operation_id=operation_id)
+        assert store.canonical_path.read_bytes() == before
+
+
+def test_transaction_actor_must_match_annotation_and_review_author(tmp_path) -> None:
+    episode_id = _episode().episode_id
+    agent_annotation = Annotation(
+        annotation_id="agent-annotation",
+        episode_id=episode_id,
+        classification="unclear",
+        author_kind="agent",
+    )
+    agent_review = ReviewRecord(
+        review_id="agent-review",
+        episode_id=episode_id,
+        scope="interval",
+        author_kind="agent",
+    )
+    with AuditStore(tmp_path) as store:
+        before = store.canonical_path.read_bytes()
+        with pytest.raises(AuditStoreError, match="actor"):
+            store.save(agent_annotation, operation_id="op-human-annotation", expected_revision=0)
+        with pytest.raises(AuditStoreError, match="actor"):
+            store.save(agent_review, operation_id="op-human-review", expected_revision=0)
+        assert store.canonical_path.read_bytes() == before
+        assert (
+            store.save(
+                agent_annotation,
+                operation_id="op-agent-annotation",
+                expected_revision=0,
+                actor="agent",
+            ).revision
+            == 1
+        )
+        assert (
+            store.save(
+                agent_review,
+                operation_id="op-agent-review",
+                expected_revision=0,
+                actor="agent",
+            ).revision
+            == 1
+        )
+
+
+def test_invalid_measured_payload_never_reaches_journal(tmp_path) -> None:
+    with AuditStore(tmp_path) as store:
+        before = store.canonical_path.read_bytes()
+        with pytest.raises(AuditContractError):
+            Signal(signal_id="invalid-measured", detector_id="telemetry", measured=[])
+        assert store.canonical_path.read_bytes() == before
+
+
+def test_export_requires_overwrite_and_rejects_overlapping_destinations(tmp_path) -> None:
+    root = tmp_path / "store"
+    with AuditStore(root) as store:
+        store.save(_annotation("export"), operation_id="op-export", expected_revision=0)
+        for destination in (root, root / "nested" / "backup.zip", tmp_path):
+            before = store.canonical_path.read_bytes()
+            with pytest.raises(AuditExportError, match="destination"):
+                store.export(destination, overwrite=True)
+            assert store.canonical_path.read_bytes() == before
+
+
+def test_export_overwrite_stages_directory_output(tmp_path) -> None:
+    root = tmp_path / "store"
+    destination = tmp_path / "backup"
+    with AuditStore(root) as store:
+        store.save(_annotation("export-dir"), operation_id="op-export-dir", expected_revision=0)
+        store.export(destination)
+        (destination / "stale.txt").write_text("stale", encoding="utf-8")
+        store.export(destination, overwrite=True)
+    assert not (destination / "stale.txt").exists()
+    assert (destination / "audit.ndjson").exists()
+
+
+def test_tampered_digest_valid_backup_is_rejected_before_overwrite(tmp_path) -> None:
+    source_root = tmp_path / "source"
+    destination = tmp_path / "destination"
+    with AuditStore(source_root) as source:
+        source.save(_annotation("new"), operation_id="op-new", expected_revision=0)
+        source.save(_annotation("second"), operation_id="op-second", expected_revision=0)
+        backup = source.export(tmp_path / "backup.zip")
+    with AuditStore(destination) as old:
+        old.save(_annotation("old"), operation_id="op-old", expected_revision=0)
+
+    with zipfile.ZipFile(backup) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        lines = archive.read("audit.ndjson").splitlines()
+    transaction = json.loads(lines[1])
+    transaction["request_digest"] = "0" * 64
+    lines[1] = json.dumps(transaction, sort_keys=True).encode()
+    tampered_journal = b"\n".join(lines) + b"\n"
+    manifest["journal_digest"] = hashlib.sha256(tampered_journal).hexdigest()
+    tampered = tmp_path / "tampered.zip"
+    with zipfile.ZipFile(tampered, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest, sort_keys=True))
+        archive.writestr("audit.ndjson", tampered_journal)
+
+    with pytest.raises(AuditStoreError, match="digest"):
+        AuditStore.restore(tampered, destination, overwrite=True)
+    with AuditStore(destination) as preserved:
+        assert preserved.get("old") is not None
+        assert preserved.get("new") is None
 
 
 def test_tombstone_history_and_undo_keep_all_revisions(tmp_path) -> None:

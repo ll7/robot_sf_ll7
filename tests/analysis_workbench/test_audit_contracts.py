@@ -7,6 +7,7 @@ import math
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import (
+    ActionRecord,
     Annotation,
     AuditContractError,
     AuditIdentityError,
@@ -303,6 +304,13 @@ def test_missing_signal_is_explicit_and_records_round_trip() -> None:
     payload = record_to_dict(signal)
     validate_record(payload)
     assert deserialize_record(serialize_record(signal)) == signal
+
+
+def test_action_record_payload_validates_with_closed_root_properties() -> None:
+    action = ActionRecord(action_id="action-1", action_type="review", actor_kind="agent")
+    payload = record_to_dict(action)
+    validate_record(payload)
+    assert deserialize_record(serialize_record(action)) == action
 
 
 def test_deserialization_requires_version_and_type_specific_identity() -> None:

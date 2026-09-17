@@ -5,6 +5,8 @@ rankings, no simulator campaigns. Missing inputs must block with named
 reasons, never implicit zeros.
 """
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -57,6 +59,65 @@ def _costs(**overrides) -> ExternalCostInputs:
     return ExternalCostInputs(**base)
 
 
+def _service(**overrides) -> ServiceInputs:
+    base = {
+        "productive_distance_m": 1000.0,
+        "empty_distance_m": 0.0,
+        "operating_hours_s": 0.0,
+    }
+    base.update(overrides)
+    return ServiceInputs(**base)
+
+
+@pytest.mark.parametrize("field", ["fixed_per_period", "variable_per_km", "time_per_hour"])
+def test_absent_cost_rate_blocks_total(field: str) -> None:
+    obs = extract_operational_observables(_episode())
+    with pytest.raises(OperationalCostBlockedError, match=field):
+        compute_cost_breakdown(
+            observables=obs, service=_service(), costs=replace(_costs(), **{field: None})
+        )
+
+
+def test_default_rates_remain_unknown() -> None:
+    costs = ExternalCostInputs(annualized_capital=1000.0)
+    with pytest.raises(OperationalCostBlockedError, match="fixed_per_period"):
+        compute_cost_breakdown(
+            observables=extract_operational_observables(_episode()),
+            service=_service(),
+            costs=costs,
+        )
+
+
+@pytest.mark.parametrize("field", ["empty_distance_m", "operating_hours_s"])
+def test_absent_service_quantity_blocks_total(field: str) -> None:
+    with pytest.raises(OperationalCostBlockedError, match=field):
+        compute_cost_breakdown(
+            observables=extract_operational_observables(_episode()),
+            service=_service(**{field: None}),
+            costs=_costs(),
+        )
+
+
+def test_explicit_zero_service_hours_do_not_use_episode_time() -> None:
+    result = compute_cost_breakdown(
+        observables=extract_operational_observables(_episode(dt=3600)),
+        service=_service(operating_hours_s=0.0),
+        costs=_costs(variable_per_km=0.0),
+    )
+    assert result.variable_total == 0.0
+
+
+@pytest.mark.parametrize("field", ["fixed_per_period", "variable_per_km", "time_per_hour"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -1.0])
+def test_invalid_cost_rate_blocks_total(field: str, value: float) -> None:
+    with pytest.raises(OperationalCostBlockedError, match=field):
+        compute_cost_breakdown(
+            observables=extract_operational_observables(_episode()),
+            service=_service(),
+            costs=_costs(**{field: value}),
+        )
+
+
 def test_extract_observables_units_and_split() -> None:
     obs = extract_operational_observables(_episode(), result_status="goal_reached")
     assert obs.distance_m == pytest.approx(0.9)  # 9 steps * 0.1 m
@@ -97,7 +158,7 @@ def test_missing_cost_inputs_block_with_names() -> None:
     with pytest.raises(OperationalCostBlockedError, match="annualized_capital"):
         compute_cost_breakdown(
             observables=obs,
-            service=ServiceInputs(productive_distance_m=1000.0),
+            service=_service(productive_distance_m=1000.0),
             costs=ExternalCostInputs(),
         )
 
@@ -113,7 +174,7 @@ def test_zero_productive_distance_blocks() -> None:
     with pytest.raises(OperationalCostBlockedError, match="zero"):
         compute_cost_breakdown(
             observables=obs,
-            service=ServiceInputs(productive_distance_m=0.0, empty_distance_m=500.0),
+            service=_service(productive_distance_m=0.0, empty_distance_m=500.0),
             costs=_costs(),
         )
 
@@ -123,13 +184,13 @@ def test_zero_denominators_for_optional_units_block() -> None:
     with pytest.raises(OperationalCostBlockedError, match="completed_orders"):
         compute_cost_breakdown(
             observables=obs,
-            service=ServiceInputs(productive_distance_m=1000.0, completed_orders=0),
+            service=_service(productive_distance_m=1000.0, completed_orders=0),
             costs=_costs(),
         )
     with pytest.raises(OperationalCostBlockedError, match="passenger_km"):
         compute_cost_breakdown(
             observables=obs,
-            service=ServiceInputs(productive_distance_m=1000.0, passenger_km=0.0),
+            service=_service(productive_distance_m=1000.0, passenger_km=0.0),
             costs=_costs(),
         )
 
@@ -139,7 +200,7 @@ def test_double_counting_capital_blocked() -> None:
     with pytest.raises(OperationalCostBlockedError, match="double counting"):
         compute_cost_breakdown(
             observables=obs,
-            service=ServiceInputs(productive_distance_m=1000.0),
+            service=_service(productive_distance_m=1000.0),
             costs=_costs(annualized_capital=1000.0, full_investment=5000.0, lifetime_periods=5.0),
         )
 
@@ -149,12 +210,12 @@ def test_fixed_cost_dilution_property() -> None:
     obs = extract_operational_observables(_episode())
     near = compute_cost_breakdown(
         observables=obs,
-        service=ServiceInputs(productive_distance_m=1000.0),
+        service=_service(productive_distance_m=1000.0),
         costs=_costs(variable_per_km=0.0, time_per_hour=0.0),
     )
     far = compute_cost_breakdown(
         observables=obs,
-        service=ServiceInputs(productive_distance_m=2000.0),
+        service=_service(productive_distance_m=2000.0),
         costs=_costs(variable_per_km=0.0, time_per_hour=0.0),
     )
     assert far.fixed_component_per_productive_km == pytest.approx(
@@ -167,7 +228,7 @@ def test_empty_trips_carry_all_km_but_not_productive() -> None:
     obs = extract_operational_observables(_episode())
     result = compute_cost_breakdown(
         observables=obs,
-        service=ServiceInputs(productive_distance_m=1000.0, empty_distance_m=1000.0),
+        service=_service(productive_distance_m=1000.0, empty_distance_m=1000.0),
         costs=_costs(variable_per_km=0.0, time_per_hour=0.0),
     )
     assert result.cost_per_all_km == pytest.approx(result.cost_per_productive_km / 2.0)
@@ -179,9 +240,7 @@ def test_lifecycle_period_and_provenance_round_trip() -> None:
     obs = extract_operational_observables(_episode())
     result = compute_cost_breakdown(
         observables=obs,
-        service=ServiceInputs(
-            productive_distance_m=10000.0, completed_orders=50, passenger_km=200.0
-        ),
+        service=_service(productive_distance_m=10000.0, completed_orders=50, passenger_km=200.0),
         costs=_costs(
             annualized_capital=None,
             full_investment=5000.0,

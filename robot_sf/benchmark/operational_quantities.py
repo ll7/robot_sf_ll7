@@ -174,9 +174,9 @@ class ExternalCostInputs:
     full_investment: float | None = None
     lifetime_periods: float | None = None
     residual_value: float = 0.0
-    fixed_per_period: float = 0.0
-    variable_per_km: float = 0.0
-    time_per_hour: float = 0.0
+    fixed_per_period: float | None = None
+    variable_per_km: float | None = None
+    time_per_hour: float | None = None
     source: str = "unknown"
     source_date: str = "unknown"
     provenance: dict[str, Provenance] = field(default_factory=dict)
@@ -356,24 +356,33 @@ def compute_cost_breakdown(
             "(full_investment + lifetime_periods), not both"
         )
     capital_per_period = _resolve_capital_per_period(costs, missing)
-    if missing:
+    empty_m = _require_positive("empty_distance_m", service.empty_distance_m, missing)
+    operating_seconds = _require_positive("operating_hours_s", service.operating_hours_s, missing)
+    fixed_cost = _require_positive("fixed_per_period", costs.fixed_per_period, missing)
+    distance_rate = _require_positive("variable_per_km", costs.variable_per_km, missing)
+    time_rate = _require_positive("time_per_hour", costs.time_per_hour, missing)
+    if (
+        productive_m is None
+        or capital_per_period is None
+        or empty_m is None
+        or operating_seconds is None
+        or fixed_cost is None
+        or distance_rate is None
+        or time_rate is None
+    ):
         raise OperationalCostBlockedError(
             "cannot produce a total economic value; missing: " + ", ".join(missing)
         )
-    assert productive_m is not None and capital_per_period is not None
     if productive_m == 0:
         raise OperationalCostBlockedError(
             "productive_distance_m is zero: per-productive-km costs are undefined "
             "(empty trips alone cannot carry a productive-km denominator)"
         )
     productive_km = productive_m / 1000.0
-    empty_m = service.empty_distance_m or 0.0
-    if empty_m < 0 or not np.isfinite(empty_m):
-        raise OperationalCostBlockedError(f"empty_distance_m must be finite >= 0, got {empty_m!r}")
     all_km = (productive_m + empty_m) / 1000.0
-    operating_hours = (service.operating_hours_s or observables.sim_time_s) / 3600.0
-    fixed_per_period = capital_per_period + costs.fixed_per_period
-    variable_total = costs.variable_per_km * all_km + costs.time_per_hour * operating_hours
+    operating_hours = operating_seconds / 3600.0
+    fixed_per_period = capital_per_period + fixed_cost
+    variable_total = distance_rate * all_km + time_rate * operating_hours
     total = fixed_per_period + variable_total
     return CostBreakdown(
         currency=costs.currency,

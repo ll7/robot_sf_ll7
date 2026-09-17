@@ -373,6 +373,9 @@ Full details live in
   cannot produce a numeric total. Results are a sensitivity surface, not a market-price
   forecast, and never enter planner rankings. Postprocessor:
   `scripts/analysis/extract_operational_quantities_issue_9350.py`.
+* Cost calculation requires explicit finite, non-negative fixed, per-kilometer, and
+  per-hour rates, empty distance, and service operating seconds. Supply zero explicitly
+  when appropriate; episode exposure never substitutes for service operating time.
 
 ## Expected Schema & Provenance
 

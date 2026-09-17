@@ -177,6 +177,7 @@
     "observation_noise_mechanism_classifier.py",
     "observation_perturbation.py",
     "observation_quality.py",
+    "obstacle_force_diagnostic_receipt.py",
     "obstacle_sampling.py",
     "odd_contract.py",
     "odd_hazard_coverage_matrix.py",

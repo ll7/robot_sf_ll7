@@ -872,6 +872,10 @@ _FAST_FILES = {
     # coverage for persisted obstacle-force runtime metadata.
     "test_reset_metadata.py",
     "test_jsonl_recording.py",
+    # Obstacle-force diagnostic receipt tests are deterministic schema and
+    # provenance contracts for the receipt builder; keep them in the
+    # exact-head fast lane for changed-coverage admission (issue #8277).
+    "test_obstacle_force_diagnostic_receipt.py",
     # Pedestrian reset compatibility covers the simulator metadata forwarding
     # branch in the changed environment reset path.
     "test_pedestrian_env_compat.py",

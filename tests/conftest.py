@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",

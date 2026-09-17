@@ -14,7 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.analysis_workbench.audit_contracts import EpisodeRef, Finding, ReviewRecord, Signal
+from robot_sf.analysis_workbench.audit_contracts import (
+    EpisodeRef,
+    Finding,
+    ReviewRecord,
+    Signal,
+    record_to_dict,
+)
 from robot_sf.analysis_workbench.audit_queue import (
     ACTIVE_WEIGHTS,
     ActivePolicy,
@@ -25,6 +31,7 @@ from robot_sf.analysis_workbench.audit_queue import (
     QueueInputError,
     QueueOperationConflictError,
     QueuePolicy,
+    QueueState,
     QueueStateError,
     ScanSummary,
     load_queue_input,
@@ -624,6 +631,106 @@ def test_minimal_caller_compatibility_bit_never_exposes_peer() -> None:
     assert any("alignment-profile-mismatch" in item for item in result.packet.missingness)
 
 
+def test_peer_gate_rejects_incomplete_or_mismatched_owner_receipts() -> None:
+    primary = _candidate("gate-primary", trace=True)
+    peer = _candidate("gate-peer", planner_id="orca", trace=True)
+    queue = AuditQueue((primary, peer))
+
+    cases = [
+        None,
+        {"schema_version": "wrong-wrapper", "compatibility": _canonical_alignment(primary, peer)},
+        {
+            "schema_version": "review-alignment.v1",
+            "alignment_sha256": "a" * 64,
+            "compatibility": _canonical_alignment(primary, peer),
+        },
+        {
+            "pair_compatibility": _canonical_alignment(primary, peer),
+        },
+    ]
+    for alignment in cases:
+        compatible, reasons = queue._canonical_peer_alignment(primary, peer, alignment)
+        assert compatible is False
+        assert reasons
+
+    role_mismatch = _canonical_alignment(primary, peer)
+    role_mismatch["comparison_grain"]["left_role"] = "comparison_trace"
+    compatible, reasons = queue._canonical_peer_alignment(primary, peer, role_mismatch)
+    assert compatible is False
+    assert "alignment-role-mismatch" in reasons
+
+    source_field_mismatch = _canonical_alignment(primary, peer)
+    source_field_mismatch["provenance_gate"]["availability"]["map_id"] = {"status": "available"}
+    compatible, reasons = queue._canonical_peer_alignment(primary, peer, source_field_mismatch)
+    assert compatible is False
+    assert "alignment-source-field-missing:map_id" in reasons
+
+    source_mismatch = _canonical_alignment(primary, peer)
+    source_mismatch["right_source_trace"]["source"].update(
+        {"episode_id": "wrong", "scenario_id": "wrong", "planner_id": "wrong", "seed": 9}
+    )
+    source_mismatch_peer = replace_candidate(
+        peer,
+        metadata={
+            "event_alignment": source_mismatch,
+            "trace_content_sha256": "not-a-digest",
+        },
+    )
+    compatible, reasons = queue._canonical_peer_alignment(
+        primary, source_mismatch_peer, source_mismatch
+    )
+    assert compatible is False
+    assert "peer-source-episode_id-mismatch" in reasons
+    assert "peer-trace-content-identity-malformed" in reasons
+
+    primary_with_content = _candidate(
+        "gate-primary-content",
+        trace=True,
+        metadata={"trace_content_sha256": "a" * 64},
+    )
+    peer_with_content = _candidate("gate-peer-content", planner_id="orca", trace=True)
+    content_mismatch = _canonical_alignment(primary_with_content, peer_with_content)
+    content_mismatch["right_source_trace"]["content_sha256"] = "a" * 64
+    content_mismatch["provenance_gate"]["right_content_sha256"] = "f" * 64
+    peer_with_content = replace_candidate(
+        peer_with_content,
+        metadata={
+            "event_alignment": content_mismatch,
+            "trace_content_sha256": "b" * 64,
+        },
+    )
+    compatible, reasons = queue._canonical_peer_alignment(
+        primary_with_content, peer_with_content, content_mismatch
+    )
+    assert compatible is False
+    assert "peer-trace-content-identity-mismatch" in reasons
+    assert "primary-trace-content-identity-mismatch" in reasons
+
+    malformed_initial = _canonical_alignment(primary, peer)
+    malformed_initial["initial_state_equivalence"] = {
+        **malformed_initial["initial_state_equivalence"],
+        "actor_id_sets_equal": False,
+        "robot_position_delta_m": "not-a-number",
+        "actor_position_delta_m": {"actor": None},
+        "actor_velocity_delta_mps": {"actor": "not-a-number"},
+        "actor_radius_delta_m": {"actor": None},
+    }
+    malformed_initial_peer = replace_candidate(
+        peer,
+        metadata={
+            "event_alignment": malformed_initial,
+            "initial_state_identity": "a" * 64,
+        },
+    )
+    compatible, reasons = queue._canonical_peer_alignment(
+        primary, malformed_initial_peer, malformed_initial
+    )
+    assert compatible is False
+    assert "initial-state-actor-identity-mismatch" in reasons
+    assert "initial-state-field-malformed:robot_position_delta_m" in reasons
+    assert "initial-state-identity-mismatch" in reasons
+
+
 def test_packet_identity_binds_material_peer_alignment_content() -> None:
     primary = _candidate("identity-primary", trace=True)
     peer = _candidate("identity-peer", planner_id="orca", trace=True)
@@ -704,7 +811,12 @@ def test_scan_and_coverage_source_revision_mismatches_are_visible() -> None:
         source_digest="b" * 64,
         protocol_version="protocol-current",
         protocol_digest="p" * 64,
-        accounting={"scan_summary_id": "scan-other", "scan_summary_revision": 9},
+        accounting={
+            "scan_summary_id": "scan-other",
+            "scan_summary_revision": 9,
+            "scan_source_revision": "scan-other",
+            "scan_source_id": "source-other",
+        },
         scan_summary=ScanSummary(
             "scan-current",
             revision=2,
@@ -721,12 +833,27 @@ def test_scan_and_coverage_source_revision_mismatches_are_visible() -> None:
                 source_id="source-old",
                 protocol_id="digest-old",
             ),
+            CoverageDeficit(
+                "ppo|corridor|failure",
+                0,
+                1,
+                "scan-other-2",
+                "protocol-old-2",
+                source_id="source-old-2",
+                protocol_id="digest-old-2",
+            ),
         ),
+        input_revision=3,
     )
     assert "scan-summary:accounting-id-mismatch" in dataset.missingness
     assert "scan-summary:accounting-revision-mismatch" in dataset.missingness
     assert "scan-summary:source-revision-mismatch" in dataset.missingness
     assert "scan-summary:source-id-mismatch" in dataset.missingness
+    assert "scan-summary:input-revision-mismatch" in dataset.missingness
+    assert "scan-summary:accounting-source-revision-mismatch" in dataset.missingness
+    assert "scan-summary:accounting-source-id-mismatch" in dataset.missingness
+    assert "coverage:source-revision-mismatch" in dataset.missingness
+    assert "coverage:protocol-revision-mismatch" in dataset.missingness
     assert "coverage:ppo|corridor|success:source-revision-mismatch" in dataset.missingness
     assert "coverage:ppo|corridor|success:protocol-revision-mismatch" in dataset.missingness
     assert "coverage:ppo|corridor|success:source-id-mismatch" in dataset.missingness
@@ -763,6 +890,82 @@ def test_conflicting_global_and_local_signal_ids_fail_closed() -> None:
 def test_malformed_metadata_containers_raise_queue_input_error(metadata) -> None:
     with pytest.raises(QueueInputError):
         _candidate("malformed-metadata", metadata=metadata)
+
+
+def test_metadata_validation_rejects_scalars_and_accepts_explicit_strings() -> None:
+    # String conveniences are accepted only for descriptive fields; all
+    # identity/control containers remain explicitly typed.
+    descriptive = _candidate(
+        "metadata-strings",
+        metadata={
+            "geometry_signature": "single-geometry",
+            "tags": "single-tag",
+            "symptom": "single-symptom",
+        },
+    )
+    assert "geometry:single-geometry" in descriptive.feature_signatures
+    assert "tag:single-tag" in descriptive.feature_signatures
+    assert "symptom:single-symptom" in descriptive.feature_signatures
+
+    mapping_tags = _candidate("metadata-tag-map", metadata={"tags": {"tag-key": True}})
+    assert "tag:tag-key" in mapping_tags.feature_signatures
+
+    for metadata in (
+        {"alignment": "not-a-mapping"},
+        {"ordinary": "not-a-boolean"},
+        {"review_scope": 7},
+        {"trace": "not-a-trace"},
+    ):
+        with pytest.raises(QueueInputError):
+            _candidate("metadata-invalid", metadata=metadata)
+
+    with pytest.raises(QueueInputError, match="finite number"):
+        ActivePolicy(weights={"overflow": 10**1000})
+
+
+def test_state_snapshot_shape_and_symlink_errors_fail_closed(tmp_path: Path) -> None:
+    queue = AuditQueue((_candidate("state-shape"),))
+    selected = queue.select_next()
+    assert selected is not None
+    signal_payload = record_to_dict(
+        Signal(
+            signal_id="not-a-packet",
+            detector_id="detector",
+            status="flagged",
+        )
+    )
+    with pytest.raises(QueueStateError, match="not a review_packet"):
+        QueueState(packet_payloads={"not-a-packet": signal_payload})
+    with pytest.raises(QueueStateError, match="does not match packet_id"):
+        QueueState(packet_payloads={"wrong-key": record_to_dict(selected.packet)})
+    with pytest.raises(QueueStateError, match="current packet snapshot is missing"):
+        QueueState(current_packet_id="missing-packet")
+    with pytest.raises(QueueStateError, match="previous packet snapshot is missing"):
+        QueueState(previous_packet_ids=("missing-packet",))
+
+    real_state = tmp_path / "real-state.json"
+    AuditQueue((_candidate("symlink-state"),), state_path=real_state).select_next()
+    symlink_state = tmp_path / "symlink-state.json"
+    symlink_state.symlink_to(real_state)
+    with pytest.raises(QueueStateError, match="must not be a symlink"):
+        AuditQueue((_candidate("symlink-state"),), state_path=symlink_state)
+
+
+def test_invalid_detector_accounting_containers_fail_closed() -> None:
+    with pytest.raises(QueueInputError, match="detector_accounting must be a mapping"):
+        QueueDataset(
+            (_candidate("bad-detector-container"),), accounting={"detector_accounting": []}
+        )
+    with pytest.raises(QueueInputError, match="entries must be mappings"):
+        QueueDataset(
+            (_candidate("bad-detector-entry"),),
+            accounting={"detector_accounting": {"detector": "bad"}},
+        )
+    with pytest.raises(QueueInputError, match="must contain detector IDs"):
+        QueueDataset(
+            (_candidate("bad-detector-id"),),
+            accounting={"unavailable_detectors": [1]},
+        )
 
 
 def test_starvation_override_eventually_lifts_lower_band() -> None:

@@ -7,6 +7,7 @@ compatibility decision so an agent suggestion can be reviewed or rejected.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -179,9 +180,13 @@ def _compatibility(
     reasons: list[str] = []
     missing: list[str] = []
     incompatible: list[str] = []
-    required_fields = ("campaign_digest", "source_digest")
-    optional_fields = ("config_digest", "environment_digest")
-    for field_name in (*required_fields, *optional_fields):
+    required_fields = (
+        "campaign_digest",
+        "source_digest",
+        "config_digest",
+        "environment_digest",
+    )
+    for field_name in required_fields:
         left = query.get(field_name)
         right = candidate.get(field_name)
         if not left or not right:
@@ -196,8 +201,7 @@ def _compatibility(
             tuple(reasons),
             tuple(missing + [f"mismatch:{field}" for field in incompatible]),
         )
-    required_missing = [field for field in missing if field in required_fields]
-    if required_missing:
+    if missing:
         return UNKNOWN_COMPATIBILITY, tuple(reasons), tuple(missing)
     return COMPATIBLE, tuple(reasons), ()
 
@@ -215,16 +219,21 @@ def _set_values(case: Mapping[str, Any], *names: str) -> set[str]:
     return result
 
 
-def _numeric_mapping(case: Mapping[str, Any], *names: str) -> dict[str, float]:
+def _numeric_mapping(case: Mapping[str, Any], *names: str) -> tuple[dict[str, float], list[str]]:
     result: dict[str, float] = {}
+    missing: list[str] = []
     for name in names:
         value = case.get(name)
         if not isinstance(value, Mapping):
             continue
         for key, item in value.items():
             if isinstance(item, (int, float)) and not isinstance(item, bool):
-                result[str(key)] = float(item)
-    return result
+                numeric = float(item)
+                if math.isfinite(numeric):
+                    result[str(key)] = numeric
+                else:
+                    missing.append(f"nonfinite:{name}.{key}")
+    return result, missing
 
 
 def _similar_features(  # noqa: C901, PLR0912, PLR0915
@@ -242,7 +251,11 @@ def _similar_features(  # noqa: C901, PLR0912, PLR0915
             return 0.0, ["scenario_id differs"], {"scenario_match": False}, missing
         reasons.append("scenario_id matches")
         features["scenario_match"] = True
-        planner_match = query.get("planner_id") == candidate.get("planner_id")
+        planner_left, planner_right = query.get("planner_id"), candidate.get("planner_id")
+        if not planner_left or not planner_right:
+            missing.append("planner_id")
+            return 0.0, reasons, features, missing
+        planner_match = planner_left == planner_right
         features["planner_match"] = planner_match
         if planner_match:
             reasons.append("planner_id also matches; cross-planner contrast unavailable")
@@ -258,7 +271,11 @@ def _similar_features(  # noqa: C901, PLR0912, PLR0915
             return 0.0, ["planner_id differs"], {"planner_match": False}, missing
         reasons.append("planner_id matches")
         features["planner_match"] = True
-        if query.get("seed") == candidate.get("seed"):
+        query_seed, candidate_seed = query.get("seed"), candidate.get("seed")
+        if query_seed is None or candidate_seed is None:
+            missing.append("seed")
+            return 0.0, reasons, features, missing
+        if query_seed == candidate_seed:
             reasons.append("seed matches; realization contrast is limited")
             return 0.6, reasons, features, missing
         reasons.append("seed differs as requested for realization comparison")
@@ -296,8 +313,9 @@ def _similar_features(  # noqa: C901, PLR0912, PLR0915
         reasons.append("geometry features overlap" if overlap else "geometry differs")
         return score, reasons, features, missing
     if mode in {SIMILARITY_MODE_OUTCOME, SIMILARITY_MODE_METRIC}:
-        left = _numeric_mapping(query, "outcome", "metrics")
-        right = _numeric_mapping(candidate, "outcome", "metrics")
+        left, left_missing = _numeric_mapping(query, "outcome", "metrics")
+        right, right_missing = _numeric_mapping(candidate, "outcome", "metrics")
+        missing.extend((*left_missing, *right_missing))
         keys = sorted(set(left) & set(right))
         if not keys:
             missing.append("outcome/metrics")
@@ -341,6 +359,9 @@ def compatible_case_similarity(
         warnings.append("identity mismatch: candidate is not a compatible peer")
     elif compatibility == UNKNOWN_COMPATIBILITY:
         warnings.append("compatibility is unknown because required identity fields are missing")
+    elif feature_missing:
+        compatibility = UNKNOWN_COMPATIBILITY
+        warnings.append("similarity is unavailable because required mode fields are missing")
     return SimilarityResult(
         query_id=_case_id(query_mapping),
         candidate_id=_case_id(candidate_mapping),

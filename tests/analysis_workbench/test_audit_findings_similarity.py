@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from dataclasses import asdict
+
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import Annotation, EpisodeRef
@@ -35,6 +38,7 @@ def _episode(
         scenario_id="corridor",
         seed=seed,
         config_digest="c" * 64,
+        environment_digest="e" * 64,
     )
 
 
@@ -93,3 +97,41 @@ def test_similarity_explains_compatible_missing_and_incompatible_peers() -> None
         query, [incompatible, compatible], mode=SIMILARITY_MODE_SAME_SCENARIO
     )
     assert [item.candidate_id for item in ranked] == [compatible.episode_id]
+
+
+def test_similarity_missing_mode_fields_and_absent_seeds_are_unknown() -> None:
+    query = _episode("query", planner="ppo", seed=1)
+    missing_scenario = {
+        "case_id": "missing-scenario",
+        "campaign_digest": "a" * 64,
+        "source_digest": "b" * 64,
+        "planner_id": "orca",
+    }
+    unknown_scenario = compatible_case_similarity(query, missing_scenario)
+    assert unknown_scenario.compatibility == UNKNOWN_COMPATIBILITY
+    assert "scenario_id" in unknown_scenario.missingness
+
+    no_seed_left = _episode("no-seed-left", seed=None)
+    no_seed_right = _episode("no-seed-right", seed=None)
+    same_planner = compatible_case_similarity(
+        no_seed_left,
+        no_seed_right,
+        mode="same_planner_across_seeds",
+    )
+    assert same_planner.compatibility == UNKNOWN_COMPATIBILITY
+    assert "seed" in same_planner.missingness
+
+
+def test_similarity_excludes_nonfinite_metrics_as_missing() -> None:
+    query = _episode("query")
+    query_payload = asdict(query)
+    query_payload["case_id"] = query.episode_id
+    candidate_payload = asdict(query)
+    candidate_payload["case_id"] = "candidate"
+    result = compatible_case_similarity(
+        {**query_payload, "metrics": {"clearance": math.nan}},
+        {**candidate_payload, "metrics": {"clearance": 1.0}},
+        mode="metric_behaviour",
+    )
+    assert result.compatibility == UNKNOWN_COMPATIBILITY
+    assert any("nonfinite" in field for field in result.missingness)

@@ -50,6 +50,11 @@ FINDING_STATUSES = (
 )
 SIGNAL_STATUSES = ("flagged", "clear", "unavailable", "error")
 COORDINATE_FRAMES = ("world", "image")
+SOURCE_PROVENANCE_STATUSES = ("verified", "stale", "mutated", "unavailable")
+SOURCE_PROVENANCE_VERIFIED = "verified"
+SOURCE_PROVENANCE_STALE = "stale"
+SOURCE_PROVENANCE_MUTATED = "mutated"
+SOURCE_PROVENANCE_UNAVAILABLE = "unavailable"
 
 _DIGEST_LENGTHS = {40, 64}
 _T = TypeVar("_T")
@@ -108,6 +113,21 @@ def _digest(value: Any, *, name: str, required: bool = False) -> str:
         char not in "0123456789abcdefABCDEF" for char in value
     ):
         raise AuditContractError(f"{name} must be a 40- or 64-character hexadecimal digest")
+    return value.lower()
+
+
+def _source_sha256(source: SourceRef | None) -> str:
+    """Return a validated source SHA-256, or empty when it is unavailable."""
+
+    if source is None or not source.sha256:
+        return ""
+    value = source.sha256
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in value)
+    ):
+        raise AuditContractError("source.sha256 must be a 64-character hexadecimal digest")
     return value.lower()
 
 
@@ -173,8 +193,24 @@ def validate_record(payload: Mapping[str, Any]) -> None:
         AuditContractError: If JSON Schema or typed validation fails.
     """
 
+    record_from_dict(payload)
+
+
+def _validate_record_payload(payload: Mapping[str, Any]) -> None:
+    """Validate the envelope and record-type schema before construction."""
+
     if not isinstance(payload, Mapping):
         raise AuditContractError("record payload must be a mapping")
+    if "schema_version" not in payload:
+        raise AuditContractError("record schema_version is required")
+    version = payload["schema_version"]
+    if not isinstance(version, str):
+        raise AuditContractError("record schema_version must be a string")
+    _check_record_version(version)
+    if "record_type" not in payload:
+        raise AuditContractError("record record_type is required")
+    if "record_id" not in payload:
+        raise AuditContractError("record record_id is required")
     errors = sorted(
         Draft202012Validator(load_audit_record_schema()).iter_errors(payload),
         key=lambda error: list(error.absolute_path),
@@ -184,13 +220,13 @@ def validate_record(payload: Mapping[str, Any]) -> None:
             f"/{'/'.join(map(str, error.absolute_path))}: {error.message}" for error in errors
         )
         raise AuditContractError(details)
-    record_from_dict(payload)
 
 
 def _coerce_source(value: SourceRef | Mapping[str, Any] | None) -> SourceRef | None:
     if value is None:
         return None
     if isinstance(value, SourceRef):
+        _source_sha256(value)
         return value
     if not isinstance(value, Mapping):
         raise AuditContractError("source must be a SourceRef or mapping")
@@ -202,7 +238,9 @@ def _coerce_source(value: SourceRef | Mapping[str, Any] | None) -> SourceRef | N
     unknown = set(value) - known
     if unknown:
         raise AuditContractError(f"source contains unknown fields: {', '.join(sorted(unknown))}")
-    return SourceRef(**{name: value.get(name, "") for name in known})
+    source = SourceRef(**{name: value.get(name, "") for name in known})
+    _source_sha256(source)
+    return source
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,8 +331,14 @@ class EpisodeRef:
             "environment_digest": environment_digest,
         }
         generated_id = "episode-" + hashlib.sha256(canonical_json(identity).encode()).hexdigest()
-        episode_id = self.episode_id or generated_id
-        _text(episode_id, name="episode_id")
+        if self.episode_id and self.episode_id != generated_id:
+            raise AuditIdentityError(
+                "episode_id must equal the collision-resistant identity derived from its fields"
+            )
+        episode_id = generated_id
+        source_sha256 = _source_sha256(source)
+        if source_sha256 and source_sha256 != source_digest:
+            raise AuditIdentityError("source_digest does not match source.sha256")
         object.__setattr__(self, "campaign_digest", campaign_digest)
         object.__setattr__(self, "source_digest", source_digest)
         object.__setattr__(self, "execution_id", execution_id)
@@ -323,6 +367,16 @@ class EpisodeRef:
             "environment_digest": self.environment_digest,
         }
         return hashlib.sha256(canonical_json(payload).encode()).hexdigest()
+
+    @property
+    def source_provenance_status(self) -> str:
+        """Return whether the source pointer is hash-bound or unavailable."""
+
+        return (
+            SOURCE_PROVENANCE_VERIFIED
+            if _source_sha256(self.source)
+            else SOURCE_PROVENANCE_UNAVAILABLE
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,8 +472,14 @@ class Reference:
         if self.timestamp_s is not None:
             _finite(self.timestamp_s, name="reference.timestamp_s")
         if self.coordinate_frame == "world" and source is not None:
-            video_format = source.format.lower()
-            if video_format in {"video", "mp4", "webm", "image", "png", "jpg", "jpeg"}:
+            media_format = source.format.lower().strip()
+            is_media = (
+                media_format.startswith("video/")
+                or media_format.startswith("image/")
+                or media_format.startswith("video-")
+                or media_format in {"video", "mp4", "webm", "image", "png", "jpg", "jpeg"}
+            )
+            if is_media:
                 if not self.calibration:
                     raise AuditContractError(
                         "world coordinates on uncalibrated video are not allowed; provide calibration"
@@ -446,13 +506,15 @@ class Annotation:
     references: tuple[Reference, ...] = ()
     tags: tuple[str, ...] = ()
     review_scope: str = "interval"
-    source_revision: int = 0
+    source_revision: int | str = 0
     source_identity: str = ""
     created_at: str = field(default_factory=utc_now)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     source_ref: SourceRef | None = None
+    provenance_status: str = SOURCE_PROVENANCE_UNAVAILABLE
+    provenance_reason: str = ""
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912, PLR0915
         """Validate annotation mode, author, scope, and optional evidence."""
 
         _text(self.annotation_id, name="annotation_id")
@@ -467,8 +529,21 @@ class Annotation:
             raise AuditContractError(f"author_kind must be one of {AUTHOR_KINDS}")
         if self.review_scope not in REVIEW_SCOPES:
             raise AuditContractError(f"review_scope must be one of {REVIEW_SCOPES}")
-        if not isinstance(self.source_revision, int) or self.source_revision < 0:
+        if isinstance(self.source_revision, bool) or not isinstance(
+            self.source_revision, (int, str)
+        ):
+            raise AuditContractError("source_revision must be a non-negative integer or token")
+        if isinstance(self.source_revision, int) and self.source_revision < 0:
             raise AuditContractError("source_revision must be a non-negative integer")
+        revision_token = (
+            "" if self.source_revision in (0, "") else str(self.source_revision).strip()
+        )
+        if not revision_token and self.source_revision not in (0, ""):
+            raise AuditContractError("source_revision token must be non-empty")
+        if self.provenance_status not in SOURCE_PROVENANCE_STATUSES:
+            raise AuditContractError(
+                f"provenance_status must be one of {SOURCE_PROVENANCE_STATUSES}"
+            )
         if self.confidence is not None:
             confidence = _finite(self.confidence, name="confidence")
             if not 0.0 <= confidence <= 1.0:
@@ -481,7 +556,66 @@ class Annotation:
             for reference in self.references
         )
         object.__setattr__(self, "references", references)
-        object.__setattr__(self, "source_ref", _coerce_source(self.source_ref))
+        source = _coerce_source(self.source_ref)
+        source_sha256 = _source_sha256(source)
+        source_identity = (
+            self.source_identity.strip() if isinstance(self.source_identity, str) else ""
+        )
+        if not isinstance(self.source_identity, str):
+            raise AuditContractError("source_identity must be a string")
+        status = self.provenance_status
+        identity_matches_hash = bool(source_sha256 and source_identity.lower() == source_sha256)
+        identity_matches_artifact = bool(
+            source is not None and source_identity == source.artifact_id
+        )
+        if (
+            source_sha256
+            and source_identity
+            and not (identity_matches_hash or identity_matches_artifact)
+        ):
+            if status not in {SOURCE_PROVENANCE_STALE, SOURCE_PROVENANCE_MUTATED}:
+                raise AuditIdentityError(
+                    "annotation source_identity does not match source_ref.sha256"
+                )
+        if source is not None and source.source_commit:
+            if not revision_token:
+                if status == SOURCE_PROVENANCE_VERIFIED:
+                    raise AuditIdentityError(
+                        "annotation source_revision is unavailable for source_ref.source_commit"
+                    )
+                status = SOURCE_PROVENANCE_UNAVAILABLE
+            elif revision_token != source.source_commit:
+                if status not in {SOURCE_PROVENANCE_STALE, SOURCE_PROVENANCE_MUTATED}:
+                    raise AuditIdentityError("annotation source_revision does not match source_ref")
+        if status == SOURCE_PROVENANCE_VERIFIED and (
+            source is None or not source_sha256 or not identity_matches_hash
+        ):
+            raise AuditIdentityError(
+                "verified annotation provenance requires source_ref, source_identity, and source hash"
+            )
+        revision_unavailable = bool(
+            source is not None and source.source_commit and not revision_token
+        )
+        if (
+            status == SOURCE_PROVENANCE_UNAVAILABLE
+            and source_sha256
+            and identity_matches_hash
+            and not revision_unavailable
+        ):
+            status = SOURCE_PROVENANCE_VERIFIED
+        object.__setattr__(self, "source_ref", source)
+        object.__setattr__(self, "source_identity", source_identity)
+        object.__setattr__(self, "provenance_status", status)
+        if self.provenance_reason:
+            reason = self.provenance_reason
+        else:
+            reason = {
+                SOURCE_PROVENANCE_VERIFIED: "source identity and revision are bound",
+                SOURCE_PROVENANCE_STALE: "source changed after annotation; attachment is stale",
+                SOURCE_PROVENANCE_MUTATED: "source identity changed or was mutated",
+                SOURCE_PROVENANCE_UNAVAILABLE: "source identity or revision is unavailable",
+            }[status]
+        object.__setattr__(self, "provenance_reason", reason)
         if self.mode == "one_click" and self.evidence:
             raise AuditContractError("one-click annotations cannot carry detailed evidence")
 
@@ -496,6 +630,12 @@ class Annotation:
         """Return the taxonomy label under the trace-annotation vocabulary."""
 
         return self.classification
+
+    @property
+    def source_provenance_status(self) -> str:
+        """Return the explicit source attachment provenance status."""
+
+        return self.provenance_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -850,11 +990,13 @@ def annotation_from_dict(payload: Mapping[str, Any]) -> Annotation:
         references=tuple(reference_from_dict(item) for item in payload.get("references", ())),
         tags=_tuple_of_strings(payload.get("tags", ()), name="tags"),
         review_scope=str(payload.get("review_scope", "interval")),
-        source_revision=int(payload.get("source_revision", 0)),
+        source_revision=payload.get("source_revision", 0),
         source_identity=str(payload.get("source_identity", "")),
         created_at=str(payload.get("created_at", utc_now())),
         metadata=dict(payload.get("metadata", {})),
         source_ref=_source_from_payload(payload.get("source_ref")),
+        provenance_status=str(payload.get("provenance_status", SOURCE_PROVENANCE_UNAVAILABLE)),
+        provenance_reason=str(payload.get("provenance_reason", "")),
     )
 
 
@@ -925,45 +1067,49 @@ def record_from_dict(payload: Mapping[str, Any]) -> Any:  # noqa: C901
         The typed audit-contract instance represented by ``payload``.
     """
 
-    if not isinstance(payload, Mapping):
-        raise AuditContractError("record payload must be a mapping")
-    version = str(payload.get("schema_version", AUDIT_RECORD_SCHEMA_VERSION))
-    _check_record_version(version)
-    kind = payload.get("record_type")
-    if not isinstance(kind, str) or kind not in _RECORD_TYPES:
-        raise AuditContractError(f"unknown audit record_type: {kind!r}")
-    if kind == "episode_ref":
-        record = episode_ref_from_dict(payload)
-    elif kind == "signal":
-        record = signal_from_dict(payload)
-    elif kind == "reference":
-        record = reference_from_dict(payload)
-    elif kind == "annotation":
-        record = annotation_from_dict(payload)
-    elif kind == "finding":
-        record = finding_from_dict(payload)
-    elif kind == "review_packet":
-        record = review_packet_from_dict(payload)
-    else:
-        cls = _RECORD_TYPES[kind]
-        names = {item.name for item in fields(cls)}
-        values = {name: payload[name] for name in names if name in payload}
-        if kind == "campaign_audit":
-            values["source"] = _source_from_payload(values.get("source"))
-        if kind in {"action_record", "review_record"}:
-            if kind == "action_record":
-                values["details"] = dict(values.get("details", {}))
-            else:
-                values["annotation_ids"] = _tuple_of_strings(
-                    values.get("annotation_ids", ()), name="annotation_ids"
-                )
-        record = cls(**values)
-    declared_id = payload.get("record_id")
-    if declared_id is not None and declared_id != record_id(record):
+    _validate_record_payload(payload)
+    try:
+        kind = payload["record_type"]
+        if not isinstance(kind, str) or kind not in _RECORD_TYPES:
+            raise AuditContractError(f"unknown audit record_type: {kind!r}")
+        if kind == "episode_ref":
+            record = episode_ref_from_dict(payload)
+        elif kind == "signal":
+            record = signal_from_dict(payload)
+        elif kind == "reference":
+            record = reference_from_dict(payload)
+        elif kind == "annotation":
+            record = annotation_from_dict(payload)
+        elif kind == "finding":
+            record = finding_from_dict(payload)
+        elif kind == "review_packet":
+            record = review_packet_from_dict(payload)
+        else:
+            cls = _RECORD_TYPES[kind]
+            names = {item.name for item in fields(cls)}
+            values = {name: payload[name] for name in names if name in payload}
+            if kind == "campaign_audit":
+                values["source"] = _source_from_payload(values.get("source"))
+            if kind in {"action_record", "review_record"}:
+                if kind == "action_record":
+                    values["details"] = dict(values.get("details", {}))
+                else:
+                    values["annotation_ids"] = _tuple_of_strings(
+                        values.get("annotation_ids", ()), name="annotation_ids"
+                    )
+            record = cls(**values)
+        declared_id = payload["record_id"]
+        if declared_id != record_id(record):
+            raise AuditContractError(
+                f"record_id {declared_id!r} does not match {record_type(record)} identity"
+            )
+        return record
+    except AuditContractError:
+        raise
+    except (KeyError, TypeError, ValueError, IndexError, OverflowError) as exc:
         raise AuditContractError(
-            f"record_id {declared_id!r} does not match {record_type(record)} identity"
-        )
-    return record
+            f"invalid {payload.get('record_type', 'audit')} record: {exc}"
+        ) from exc
 
 
 def serialize_record(record: Any) -> str:
@@ -986,24 +1132,52 @@ def deserialize_record(value: str | bytes | Mapping[str, Any]) -> Any:
         The validated typed record.
     """
 
-    payload = json.loads(value) if isinstance(value, (str, bytes)) else value
-    return record_from_dict(payload)
+    try:
+        payload = json.loads(value) if isinstance(value, (str, bytes)) else value
+    except (TypeError, ValueError, UnicodeDecodeError) as exc:
+        raise AuditContractError(f"invalid audit JSON: {exc}") from exc
+    try:
+        return record_from_dict(payload)
+    except AuditContractError:
+        raise
+    except (KeyError, TypeError, ValueError, IndexError, OverflowError) as exc:
+        raise AuditContractError(f"invalid audit record: {exc}") from exc
 
 
 deserialize_audit_record = deserialize_record
 
 
 def write_ndjson(records: Sequence[Any], path: str | Path) -> Path:
-    """Write records as deterministic newline-delimited JSON.
+    """Write records through :class:`AuditStore`'s canonical writer.
+
+    ``audit.ndjson`` is a transaction journal, not a record-only file.  Keep
+    this compatibility helper restricted to that filename and route writes
+    through the serialized store so callers cannot create an unreadable
+    journal by writing bare records.
 
     Returns:
         The path written.
     """
 
     output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    data = "".join(serialize_record(record) + "\n" for record in records)
-    output.write_text(data, encoding="utf-8")
+    if output.name != "audit.ndjson":
+        raise AuditContractError(
+            "standalone record NDJSON is not a canonical audit journal; use AuditStore"
+        )
+    from robot_sf.analysis_workbench.audit_store import AuditStore  # noqa: PLC0415
+
+    record_list = list(records)
+    if not record_list:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        AuditStore(output.parent).close()
+        return output
+    payloads = [record_to_dict(record) for record in record_list]
+    operation_id = "ndjson-" + hashlib.sha256(canonical_json(payloads).encode()).hexdigest()
+    with AuditStore(output.parent) as store:
+        expected = {
+            record_id(record): store.get_revision(record_id(record)) for record in record_list
+        }
+        store.commit(record_list, operation_id=operation_id, expected_revisions=expected)
     return output
 
 
@@ -1014,13 +1188,17 @@ def read_ndjson(path: str | Path) -> list[Any]:
         Typed records in file order.
     """
 
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise AuditContractError(f"cannot read NDJSON: {exc}") from exc
     records: list[Any] = []
-    for line_number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, line in enumerate(lines, 1):
         if not line.strip():
             continue
         try:
             records.append(deserialize_record(line))
-        except (AuditContractError, json.JSONDecodeError) as exc:
+        except (AuditContractError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise AuditContractError(f"invalid NDJSON record at line {line_number}: {exc}") from exc
     return records
 
@@ -1054,6 +1232,11 @@ __all__ = [
     "FINDING_STATUSES",
     "REVIEW_SCOPES",
     "SIGNAL_STATUSES",
+    "SOURCE_PROVENANCE_MUTATED",
+    "SOURCE_PROVENANCE_STALE",
+    "SOURCE_PROVENANCE_STATUSES",
+    "SOURCE_PROVENANCE_UNAVAILABLE",
+    "SOURCE_PROVENANCE_VERIFIED",
     "ActionRecord",
     "Annotation",
     "AuditContractError",

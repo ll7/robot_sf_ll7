@@ -41,6 +41,11 @@ different episode identity. `Reference` accepts image-space points from video;
 world-space points from video require an explicit calibration mapping. Existing
 SREV `SourceRef`, trace/timeline, and annotation contracts remain the owners of
 those semantics; this package stores links and review metadata around them.
+An `EpisodeRef` with a `SourceRef.sha256` must use the same source digest. An
+annotation's hash-bound `source_identity` and optional `source_revision` are
+validated against its `source_ref`; explicit `verified`, `stale`, `mutated`,
+and `unavailable` provenance statuses prevent a changed or missing source from
+being silently rebound.
 
 Quick and one-click annotations do not require a cause, confidence, or detailed
 evidence. Their `review_scope` remains `interval` unless a caller explicitly
@@ -89,6 +94,12 @@ fields. Relocation does not rewrite source identities; callers must preserve or
 rehydrate the referenced artifact root and verify each `SourceRef` digest.
 `store.migrate_schema(...)` writes a versioned migrated copy without mutating
 the original store. Existing SQLite files are never required for restore.
+
+`store.save(...)` requires a compare-and-swap revision for an existing record;
+unconditional replacement is available only through the explicitly named
+`store.force_save(...)`. The compatibility `write_ndjson(...)` helper accepts
+only `audit.ndjson` and routes through `AuditStore`, so a record-only file cannot
+be mistaken for the canonical transaction journal.
 
 There is intentionally no hosted multi-user database, raw-trace format,
 simulator replay, automatic benchmark regrading, or network/GitHub side effect

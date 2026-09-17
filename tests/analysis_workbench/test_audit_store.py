@@ -73,6 +73,22 @@ def test_stale_revision_conflict_and_replayed_operation_are_explicit(tmp_path) -
             )
 
 
+def test_existing_record_write_requires_cas_or_explicit_force_operation(tmp_path) -> None:
+    with AuditStore(tmp_path) as store:
+        first = store.save(
+            _annotation("a", text="before"), operation_id="op-a", expected_revision=0
+        )
+        with pytest.raises(AuditConflictError, match="expected_revision"):
+            store.save(_annotation("a", text="silent overwrite"), operation_id="op-b")
+        forced = store.force_save(
+            _annotation("a", text="explicit overwrite"), operation_id="op-force"
+        )
+        assert forced.revision == first.revision + 1
+        assert store.get("a").observed_behavior == "explicit overwrite"
+        with pytest.raises(OperationConflictError):
+            store.save(_annotation("a", text="explicit overwrite"), operation_id="op-force")
+
+
 def test_tombstone_history_and_undo_keep_all_revisions(tmp_path) -> None:
     with AuditStore(tmp_path) as store:
         first = store.save(
@@ -139,3 +155,15 @@ def test_deleted_projection_rebuild_and_portable_restore(tmp_path) -> None:
         loaded = restored.get("a")
         assert loaded is not None
         assert loaded.record.annotation_id == "a"
+
+
+def test_overwrite_restore_discards_corrupt_projection(tmp_path) -> None:
+    source_root = tmp_path / "source"
+    destination = tmp_path / "destination"
+    with AuditStore(source_root) as source:
+        source.save(_annotation("a"), operation_id="op-a", expected_revision=0)
+        backup = source.export(tmp_path / "backup.zip", include_projection=True)
+    destination.mkdir()
+    (destination / "audit.sqlite3").write_bytes(b"not sqlite")
+    with AuditStore.restore(backup, destination, overwrite=True) as restored:
+        assert restored.get("a") is not None

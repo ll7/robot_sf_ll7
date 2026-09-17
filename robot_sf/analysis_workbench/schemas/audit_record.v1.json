@@ -22,5 +22,111 @@
     },
     "record_id": {"type": "string", "minLength": 1}
   },
+  "oneOf": [
+    {
+      "properties": {
+        "record_type": {"const": "campaign_audit"},
+        "audit_id": {"type": "string", "minLength": 1},
+        "campaign_digest": {"type": "string", "minLength": 1},
+        "source_digest": {"type": "string", "minLength": 1}
+      },
+      "required": ["audit_id", "campaign_digest", "source_digest"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "episode_ref"},
+        "episode_id": {"type": "string", "minLength": 1},
+        "campaign_digest": {"type": "string", "minLength": 1},
+        "source_digest": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "minLength": 1}
+      },
+      "required": ["episode_id", "campaign_digest", "source_digest", "execution_id"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "review_packet"},
+        "packet_id": {"type": "string", "minLength": 1},
+        "primary": {"type": "object"}
+      },
+      "required": ["packet_id", "primary"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "signal"},
+        "signal_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1}
+      },
+      "required": ["signal_id", "detector_id"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "reference"},
+        "reference_id": {"type": "string", "minLength": 1},
+        "coordinate_frame": {"enum": ["world", "image"]},
+        "point": {"type": "array", "minItems": 2, "maxItems": 2}
+      },
+      "required": ["reference_id", "coordinate_frame", "point"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "annotation"},
+        "annotation_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "classification": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["one_click", "quick", "full"]},
+        "author_kind": {"enum": ["human", "detector", "agent"]},
+        "review_scope": {"enum": ["interval", "full_episode"]}
+      },
+      "required": [
+        "annotation_id",
+        "episode_id",
+        "classification",
+        "mode",
+        "author_kind",
+        "review_scope"
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "finding"},
+        "finding_id": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": ["proposed", "under_investigation", "supported", "refuted", "resolved"]
+        },
+        "candidate_members": {"type": "array"},
+        "confirmed_members": {"type": "array"},
+        "negative_controls": {"type": "array"}
+      },
+      "required": [
+        "finding_id",
+        "title",
+        "status",
+        "candidate_members",
+        "confirmed_members",
+        "negative_controls"
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "action_record"},
+        "action_id": {"type": "string", "minLength": 1},
+        "action_type": {"type": "string", "minLength": 1},
+        "actor_kind": {"enum": ["human", "detector", "agent"]},
+        "status": {"type": "string", "minLength": 1}
+      },
+      "required": ["action_id", "action_type", "actor_kind", "status"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "review_record"},
+        "review_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "scope": {"enum": ["interval", "full_episode"]},
+        "author_kind": {"enum": ["human", "detector", "agent"]}
+      },
+      "required": ["review_id", "episode_id", "scope", "author_kind"]
+    }
+  ],
   "additionalProperties": true
 }

@@ -55,11 +55,15 @@ class AuditConflictError(AuditStoreError):
         self.expected_revision = expected
         self.actual_revision = actual
         super().__init__(
-            f"revision conflict for {record_id!r}: expected {expected!r}, current {actual}"
+            f"expected_revision is required for existing record {record_id!r}; "
+            f"current revision is {actual}"
+            if expected is None
+            else f"revision conflict for {record_id!r}: expected {expected!r}, current {actual}"
         )
 
 
 RevisionConflictError = AuditConflictError
+ExpectedRevisionRequiredError = AuditConflictError
 
 
 class OperationConflictError(AuditStoreError):
@@ -741,6 +745,8 @@ class AuditStore:
         changes: Sequence[tuple[str, str, dict[str, Any] | None, bool]],
         expected: Mapping[str, int | None],
         actor: Mapping[str, Any],
+        *,
+        unconditional: bool = False,
     ) -> str:
         payload = {
             "operation_id": operation_id,
@@ -755,10 +761,11 @@ class AuditStore:
             ],
             "expected_revisions": dict(expected),
             "actor": dict(actor),
+            "unconditional": unconditional,
         }
         return _digest_bytes(canonical_json(payload).encode("utf-8"))
 
-    def commit(  # noqa: C901
+    def commit(
         self,
         records: Sequence[Any],
         *,
@@ -767,6 +774,32 @@ class AuditStore:
         expected_revision: int | None = None,
         actor: str | Mapping[str, Any] = "human",
         actor_id: str = "",
+    ) -> CommitResult | BatchCommitResult:
+        """Commit records using compare-and-swap semantics.
+
+        Returns:
+            A scalar or batch commit receipt.
+        """
+
+        return self._commit(
+            records,
+            operation_id=operation_id,
+            expected_revisions=expected_revisions,
+            expected_revision=expected_revision,
+            actor=actor,
+            actor_id=actor_id,
+        )
+
+    def _commit(  # noqa: C901
+        self,
+        records: Sequence[Any],
+        *,
+        operation_id: str,
+        expected_revisions: Mapping[str, int | None] | None = None,
+        expected_revision: int | None = None,
+        actor: str | Mapping[str, Any] = "human",
+        actor_id: str = "",
+        _allow_unconditional: bool = False,
     ) -> CommitResult | BatchCommitResult:
         """Commit one or more records as one serialized transaction.
 
@@ -799,10 +832,12 @@ class AuditStore:
             except (AuditContractError, TypeError, ValueError) as exc:
                 raise AuditStoreError(f"record cannot be committed: {exc}") from exc
             changes_input.append((rid, kind, payload, False))
-        if len(changes_input) == 1:
-            expected_revisions.setdefault(changes_input[0][0], expected_revision)
         request_digest = self._request_digest(
-            operation_id, changes_input, expected_revisions, actor_payload
+            operation_id,
+            changes_input,
+            expected_revisions,
+            actor_payload,
+            unconditional=_allow_unconditional,
         )
         with _PathLock(self.lock_path):
             _header, transactions, _offset, _raw = self._read_journal(recover=True)
@@ -825,6 +860,12 @@ class AuditStore:
                 current = _state.get(rid)
                 current_revision = current.revision if current is not None else 0
                 expected = expected_revisions.get(rid)
+                if (
+                    current is not None
+                    and not _allow_unconditional
+                    and (rid not in expected_revisions or expected is None)
+                ):
+                    raise ExpectedRevisionRequiredError(rid, None, current_revision)
                 if expected is not None and expected != current_revision:
                     raise AuditConflictError(rid, expected, current_revision)
             global_revision = transactions[-1].global_revision + 1 if transactions else 1
@@ -880,6 +921,33 @@ class AuditStore:
     put = save
     append = save
     save_record = save
+
+    def force_save(
+        self,
+        record: Any,
+        *,
+        operation_id: str,
+        actor: str | Mapping[str, Any] = "human",
+        actor_id: str = "",
+    ) -> CommitResult:
+        """Persist a record without CAS only through an explicit force operation.
+
+        Returns:
+            The durable commit receipt.
+        """
+
+        result = self._commit(
+            [record],
+            operation_id=operation_id,
+            actor=actor,
+            actor_id=actor_id,
+            _allow_unconditional=True,
+        )
+        if not isinstance(result, CommitResult):  # pragma: no cover - one change is scalar.
+            raise AuditStoreError("force_save returned a batch receipt")
+        return result
+
+    force_update = force_save
 
     def _commit_result_from_transaction(
         self, transaction: _JournalTransaction, *, replayed: bool = False
@@ -1006,7 +1074,7 @@ class AuditStore:
             _header, transactions, _offset, _raw = self._read_journal(recover=True)
             state, _history, operations = self._state(transactions)
             actor_payload = self._actor(actor, actor_id)
-            expected = {rid: expected_revision}
+            expected = {} if expected_revision is None else {rid: expected_revision}
             changes_input = [(rid, "tombstone", None, True)]
             request_digest = self._request_digest(
                 operation_id, changes_input, expected, actor_payload
@@ -1024,6 +1092,8 @@ class AuditStore:
                 return result
             current = state.get(rid)
             current_revision = current.revision if current is not None else 0
+            if current is not None and expected_revision is None:
+                raise ExpectedRevisionRequiredError(rid, None, current_revision)
             if expected_revision is not None and expected_revision != current_revision:
                 raise AuditConflictError(rid, expected_revision, current_revision)
             transaction = _JournalTransaction(
@@ -1122,6 +1192,7 @@ class AuditStore:
         self._ensure_projection()
         destination = Path(destination)
         with _PathLock(self.lock_path):
+            self._ensure_projection_locked()
             header, transactions, _offset, raw = self._read_journal(recover=True)
             self._assert_export_safe(transactions)
             manifest = self._manifest(header, transactions, raw)
@@ -1204,7 +1275,7 @@ class AuditStore:
             visit(transaction.to_dict())
 
     @classmethod
-    def restore(
+    def restore(  # noqa: C901
         cls,
         backup: str | Path,
         destination: str | Path,
@@ -1256,6 +1327,9 @@ class AuditStore:
             temporary = destination / f".{cls.JOURNAL_FILENAME}.restore"
             cls._atomic_write(temporary, journal_bytes)
             os.replace(temporary, destination / cls.JOURNAL_FILENAME)
+            if overwrite:
+                for suffix in ("", "-wal", "-shm"):
+                    (destination / f"{cls.PROJECTION_FILENAME}{suffix}").unlink(missing_ok=True)
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
@@ -1359,6 +1433,7 @@ __all__ = [
     "BatchCommitResult",
     "CanonicalAuditStore",
     "CommitResult",
+    "ExpectedRevisionRequiredError",
     "OperationConflictError",
     "ProjectionCheckpoint",
     "ProjectionError",

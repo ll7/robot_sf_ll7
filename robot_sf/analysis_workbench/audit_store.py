@@ -36,11 +36,9 @@ from robot_sf.analysis_workbench.audit_contracts import (
     record_to_dict,
     record_type,
 )
+from robot_sf.common.optional_import import try_import
 
-try:  # pragma: no cover - exercised on the supported Linux runtime.
-    import fcntl
-except ImportError:  # pragma: no cover - keeps imports useful on Windows.
-    fcntl = None
+fcntl = try_import("fcntl")  # Platform-dependent stdlib module (Unix); None on Windows.
 
 
 class AuditStoreError(RuntimeError):

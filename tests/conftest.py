@@ -616,6 +616,10 @@ _FAST_FILES = {
     # Finite-float helper migration touches these deterministic benchmark
     # producers; their focused contract suites provide exact-head coverage.
     "test_collision_scenario_similarity.py",
+    # Three-width doorway application tests are deterministic manifest/matrix/
+    # preflight contracts for the #9348 application module; keep them in fast
+    # shards for the exact-head changed-coverage gate (issue #9348).
+    "test_issue_9348_three_width_doorway.py",
     "test_event_ledger.py",
     "test_scenario_coverage.py",
     "test_seed_distribution_report.py",

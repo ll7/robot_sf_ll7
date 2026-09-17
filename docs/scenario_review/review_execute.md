@@ -30,6 +30,7 @@ fixture patterns establish no population or causal conclusion.
 uv run python -m robot_sf.analysis_workbench.review_execute \
   --input tests/fixtures/scenario_review/review_execute/request.json \
   --config tests/fixtures/scenario_review/review_execute/config.json \
+  --admission-config tests/fixtures/scenario_review/review_execute/admission.json \
   --output output/scenario_review/srev-22-smoke
 ```
 
@@ -41,6 +42,54 @@ recipe, immutable config, and prior budget identity; a resumed config may
 extend a prior budget but may never reduce it. Terminal candidates are not
 retried, and a prior timeout/cancellation is settled as a failed candidate
 instead of being silently re-executed.
+
+### Source admission and preservation
+
+Every result that can be `complete` requires an additive, launcher-owned
+admission argument (`run(..., admission_config=...)` or CLI
+`--admission-config`) with `schema_version: executor-admission.v1`. It is
+external trust configuration, not request, recipe, or artifact content, and
+carries:
+
+```json
+{
+  "schema_version": "executor-admission.v1",
+  "source_root": "tests/fixtures/scenario_review/review_execute",
+  "receipt_reference": "receipt.json",
+  "receipt_sha256": "<sha256 of receipt.json>",
+  "preservation_destination": "external:post-execution-preservation",
+  "preservation_receipt_reference": "preservation-receipt.json",
+  "preservation_receipt_sha256": "<sha256 of preservation-receipt.json>",
+  "config_identity": "srev22-admitted-source-config.v1"
+}
+```
+
+The configured root must be a local directory. Receipt references are
+root-relative, traversal-free, and descriptor-relative no-follow regular
+files. Before the first child starts, before each episode, and again after
+output finalization, the executor calls the shared
+`resolve_admitted_source()` resolver against the pinned root directory FD. It
+binds the current request and recipe, source/config identities, and receipt
+digests, then rehashes the source bytes from protected descriptors. The
+runner's request projection binds the stable envelope, source declarations,
+and launcher `config_identity`; full execution controls remain bound in
+provenance and the resume ledger. The closed preservation receipt must contain
+exactly the required fields, including `evidence_boundary: diagnostic_only`
+and `scientific_claim_allowed: false`, and independently match the source
+receipt, recipe digest, config identity, and configured destination. Source,
+receipt, root, and preservation tampering therefore yields a typed
+`unavailable`/`failed` result and no complete artifacts; the recipe cannot
+nominate its own root or receipt.
+
+The checked-in positive fixture under
+`tests/fixtures/scenario_review/review_execute/` contains the source, admitted
+receipt, preservation receipt, request/runtime config, and separate launcher
+admission config. A legacy v1 request without an explicit launcher argument
+remains diagnostic-only but is returned as `unavailable` and cannot start
+execution or claim admitted completion; any request/config `admission` field
+is treated as untrusted data. Both the source and preservation receipts retain
+`scientific_claim_allowed: false`; source integrity is not scientific or
+benchmark admission.
 
 The component descriptor (`descriptor()`) declares the `bounded-execution`
 required capability and the `execute-report.v1` / `attempt-ledger.v1` /

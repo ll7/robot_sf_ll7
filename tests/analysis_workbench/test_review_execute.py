@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -22,13 +23,43 @@ from robot_sf.analysis_workbench.review_contracts import (
 from robot_sf.analysis_workbench.review_execute import (
     COMPONENT_ID,
     COMPONENT_VERSION,
+    ExecutorAdmissionConfig,
     _run_owned_child,
     descriptor,
-    run,
     validate_execute_config,
+    validate_executor_admission_config,
+)
+from robot_sf.analysis_workbench.review_execute import (
+    run as _component_run,
 )
 
 FIXTURES = "tests/fixtures/scenario_review/review_execute"
+
+
+def _fixture_admission_config(root: Path | None = None) -> ExecutorAdmissionConfig:
+    """Build the launcher-owned admission argument used by fixture tests."""
+    payload = _fixture_json("admission.json")
+    if root is not None:
+        payload["source_root"] = str(root)
+    return validate_executor_admission_config(payload)
+
+
+def run(
+    request: Any,
+    *,
+    base: Path | None = None,
+    resume: bool = False,
+    admission_config: ExecutorAdmissionConfig | None = None,
+) -> Any:
+    """Run fixture requests through an explicit launcher-owned config."""
+    return _component_run(
+        request,
+        base=base,
+        resume=resume,
+        admission_config=(
+            admission_config if admission_config is not None else _fixture_admission_config()
+        ),
+    )
 
 
 def _fixture_json(name: str) -> dict[str, Any]:
@@ -56,6 +87,33 @@ def _fixture_episode_identity() -> dict[str, Any]:
         "scenario_id": source_identity["scenario_id"],
         "source_ref": dict(source_identity["source_ref"]),
     }
+
+
+def _fixture_request_for_root(root: Path) -> Any:
+    """Point the external admission config at a private fixture copy."""
+    request = _fixture_request()
+    config = copy.deepcopy(request.config)
+    config["admission"]["source_root"] = str(root)
+    return replace(request, config=config)
+
+
+def _nested_fixture_admission_config(root: Path) -> ExecutorAdmissionConfig:
+    """Move both proof files under nested directories and return their config."""
+    receipt_reference = Path("proofs") / "receipts" / "admitted-source.json"
+    preservation_reference = Path("proofs") / "preservation" / "receipt.json"
+    (root / receipt_reference).parent.mkdir(parents=True)
+    (root / preservation_reference).parent.mkdir(parents=True)
+    (root / "receipt.json").rename(root / receipt_reference)
+    (root / "preservation-receipt.json").rename(root / preservation_reference)
+    payload = _fixture_json("admission.json")
+    payload.update(
+        {
+            "source_root": str(root),
+            "receipt_reference": str(receipt_reference),
+            "preservation_receipt_reference": str(preservation_reference),
+        }
+    )
+    return validate_executor_admission_config(payload)
 
 
 def _patch_fake_execution(
@@ -165,6 +223,465 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     assert manifest["evidence_boundary"] == "diagnostic_only"
     assert manifest["scientific_claim_allowed"] is False
     assert manifest["dependent_family_status"] == "standalone_fixture_only"
+
+
+def test_source_admission_positive_fixture_binds_external_proof(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A complete result records the externally anchored source and preservation proof."""
+    _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert result.provenance["scientific_claim_allowed"] is False
+    admission = result.provenance["source_admission"]
+    assert admission["receipt_id"] == "srev22-review-execute-receipt"
+    assert admission["preservation_destination"] == "external:post-execution-preservation"
+    assert admission["scientific_claim_allowed"] is False
+
+
+def test_nested_admission_receipts_complete_via_public_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Nested receipt references remain valid through the public run boundary."""
+    _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["receipt_reference"] == (
+        "proofs/receipts/admitted-source.json"
+    )
+    assert result.provenance["source_admission"]["preservation_receipt_reference"] == (
+        "proofs/preservation/receipt.json"
+    )
+
+
+def test_legacy_v1_config_cannot_claim_admitted_completion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Request-only admission declarations remain non-complete and do no work."""
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    request_only = _component_run(request, base=tmp_path)
+    assert request_only.status == "unavailable"
+    assert "legacy_config_requires_admission" in request_only.reason
+    assert calls == []
+
+    legacy_config = copy.deepcopy(request.config)
+    legacy_config.pop("admission")
+    result = _component_run(replace(request, config=legacy_config), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "legacy_config_requires_admission" in result.reason
+    assert calls == []
+
+
+def test_request_admission_cannot_override_launcher_trust_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A request-supplied root is ignored when the launcher supplies another root."""
+    _patch_fake_execution(monkeypatch)
+    attacker_root = tmp_path / "attacker-root"
+    shutil.copytree(Path(FIXTURES), attacker_root)
+    request = _fixture_request()
+    request_config = copy.deepcopy(request.config)
+    request_config["admission"]["source_root"] = str(attacker_root)
+    result = _component_run(
+        replace(request, config=request_config),
+        base=tmp_path,
+        admission_config=_fixture_admission_config(),
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["source_root"].endswith(
+        "tests/fixtures/scenario_review/review_execute"
+    )
+    assert str(attacker_root) not in result.provenance["source_admission"]["source_root"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("missing_receipt", "receipt_missing"),
+        ("receipt_tampered", "receipt_stale"),
+        ("preservation_tampered", "preservation_receipt_stale"),
+    ],
+)
+def test_external_admission_proof_failures_are_non_complete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mutation: str,
+    expected: str,
+) -> None:
+    """Missing or forged external proof never starts a child execution."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    if mutation == "missing_receipt":
+        (root / "receipt.json").unlink()
+    elif mutation == "receipt_tampered":
+        receipt = root / "receipt.json"
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        payload["receipt_id"] = "forged-receipt"
+        receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    else:
+        preservation = root / "preservation-receipt.json"
+        preservation.write_text(
+            preservation.read_text(encoding="utf-8").replace(
+                "external:post-execution-preservation", "external:forged-destination"
+            ),
+            encoding="utf-8",
+        )
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status in {"unavailable", "failed"}
+    assert expected in result.reason
+    assert calls == []
+
+
+def test_receipt_cannot_self_authorize_a_trust_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Receipt content cannot add an artifact-controlled trust-root declaration."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    receipt = root / "receipt.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["allowed_root"] = str(tmp_path / "attacker-controlled-root")
+    receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    request = _fixture_request_for_root(root)
+    config = copy.deepcopy(request.config)
+    external_admission = replace(
+        _fixture_admission_config(root),
+        receipt_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
+    )
+    result = run(
+        replace(request, config=config),
+        base=tmp_path,
+        admission_config=external_admission,
+    )
+    assert result.status == "failed"
+    assert "receipt_malformed" in result.reason
+    assert calls == []
+
+
+def test_preservation_receipt_true_claim_flag_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A preservation receipt cannot elevate the diagnostic scientific boundary."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    preservation = root / "preservation-receipt.json"
+    payload = json.loads(preservation.read_text(encoding="utf-8"))
+    payload["scientific_claim_allowed"] = True
+    preservation.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    external_admission = replace(
+        _fixture_admission_config(root),
+        preservation_receipt_sha256=hashlib.sha256(preservation.read_bytes()).hexdigest(),
+    )
+    result = _component_run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=external_admission,
+    )
+    assert result.status == "failed"
+    assert "preservation_receipt_malformed" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unknown"])
+def test_preservation_receipt_closed_schema_rejects_shape_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: str
+) -> None:
+    """Missing and unknown preservation fields cannot widen the receipt contract."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    preservation = root / "preservation-receipt.json"
+    payload = json.loads(preservation.read_text(encoding="utf-8"))
+    if mutation == "missing":
+        payload.pop("evidence_boundary")
+    else:
+        payload["attacker_extension"] = "claim-authority"
+    preservation.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    external_admission = replace(
+        _fixture_admission_config(root),
+        preservation_receipt_sha256=hashlib.sha256(preservation.read_bytes()).hexdigest(),
+    )
+    result = _component_run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=external_admission,
+    )
+    assert result.status == "failed"
+    assert "preservation_receipt_malformed" in result.reason
+    assert calls == []
+
+
+def test_recipe_cannot_self_authorize_a_different_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Recipe source metadata cannot override the external receipt/root binding."""
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    config = copy.deepcopy(request.config)
+    config["recipe"]["source_identity"]["source_uri"] = "attacker-owned.json"
+    result = run(replace(request, config=config), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "receipt_stale" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_root", "../outside"),
+        ("receipt_reference", "../receipt.json"),
+        ("preservation_receipt_reference", "../preservation-receipt.json"),
+    ],
+)
+def test_admission_config_rejects_traversal(field: str, value: str) -> None:
+    """Launcher admission paths are validated before any source is opened."""
+    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError
+
+    config = _fixture_json("config.json")
+    config["admission"][field] = value
+    with pytest.raises(ReviewExecuteError, match="source_admission_config"):
+        validate_execute_config(config)
+
+
+def test_source_root_symlink_is_rejected_before_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The configured root and source path cannot be redirected through symlinks."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes((root / "recipe.json").read_bytes())
+    source = root / "recipe.json"
+    source.unlink()
+    try:
+        source.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "unavailable"
+    assert "source_escaped_root" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize("reference_kind", ["receipt", "preservation"])
+def test_nested_admission_symlink_is_typed_non_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reference_kind: str
+) -> None:
+    """Nested proof symlinks fail closed without leaking an OS traceback."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    if reference_kind == "receipt":
+        reference = Path(admission.receipt_reference)
+        outside = tmp_path / "outside-receipt.json"
+    else:
+        reference = Path(admission.preservation_receipt_reference)
+        outside = tmp_path / "outside-preservation.json"
+    outside.write_bytes((root / reference).read_bytes())
+    (root / reference).unlink()
+    try:
+        (root / reference).symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "unavailable"
+    assert "unreadable" in result.reason
+    assert result.artifacts == ()
+    assert calls == []
+
+
+def test_nested_root_swap_is_typed_non_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A root pathname swapped to a symlink is rejected before any child starts."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    original_root = tmp_path / "original-admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _fixture_admission_config(root)
+    root.rename(original_root)
+    try:
+        root.symlink_to(original_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "unavailable"
+    assert "allowed_root_invalid" in result.reason
+    assert result.artifacts == ()
+    assert calls == []
+
+
+def test_pinned_root_survives_path_replacement_between_episodes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Replacing the configured root pathname cannot redirect a pinned admission."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def replace_root_after_first_child(job: dict[str, Any], timeout_s: float, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 1:
+            original_root = tmp_path / "original-root"
+            root.rename(original_root)
+            shutil.copytree(Path(FIXTURES), root)
+            (root / "recipe.json").write_bytes(b"attacker-replacement")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", replace_root_after_first_child)
+    result = _component_run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["source"]["sha256"] == (
+        "ea05e90eaabfef95fc794bed492594a918c92a9d889dd40a53bd80d449efcee2"
+    )
+
+
+def test_pinned_root_survives_intermediate_parent_replacement(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Replacing a parent component cannot redirect a pinned root descriptor."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    parent = tmp_path / "admission-parent"
+    root = parent / "admission-root"
+    parent.mkdir()
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def replace_parent_after_first_child(
+        job: dict[str, Any], timeout_s: float, **kwargs: Any
+    ) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 1:
+            replaced_parent = tmp_path / "original-admission-parent"
+            parent.rename(replaced_parent)
+            parent.mkdir()
+            shutil.copytree(Path(FIXTURES), parent / "admission-root")
+            (parent / "admission-root" / "recipe.json").write_bytes(b"attacker-replacement")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", replace_parent_after_first_child)
+    result = _component_run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["source"]["sha256"] == (
+        "ea05e90eaabfef95fc794bed492594a918c92a9d889dd40a53bd80d449efcee2"
+    )
+
+
+def test_source_mutation_at_complete_boundary_downgrades_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Bytes changed after the final child cannot pass the complete boundary."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def mutate_after_treatment(job: dict[str, Any], timeout_s: float, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 2:
+            source = root / "recipe.json"
+            source.write_bytes(source.read_bytes() + b"tampered")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", mutate_after_treatment)
+    result = run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "failed"
+    assert "source_mutated" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / request.output_directory / "execute-report.json").exists()
+
+
+def test_source_mutation_during_output_finalization_is_not_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Final output writes are followed by an integrity check before completion."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_writer = review_execute_module._write_complete_outputs
+
+    def write_then_mutate(executor: Any, provenance: dict[str, Any]) -> list[dict[str, Any]]:
+        artifacts = original_writer(executor, provenance)
+        source = root / "recipe.json"
+        source.write_bytes(source.read_bytes() + b"tampered-during-finalization")
+        return artifacts
+
+    monkeypatch.setattr(review_execute_module, "_write_complete_outputs", write_then_mutate)
+    result = _component_run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "failed"
+    assert "source_mutated" in result.reason
+    assert result.artifacts == ()
+    output_dir = tmp_path / request.output_directory
+    assert not (output_dir / "execute-report.json").exists()
+    assert not (output_dir / "preservation-manifest.json").exists()
 
 
 def test_repeated_runs_agree_on_logical_artifacts(
@@ -1063,7 +1580,7 @@ def test_unknown_factor_candidate_is_unavailable(tmp_path: Path) -> None:
     payload["config"]["max_candidates"] = 1
     result = run(component_request_from_dict(payload), base=tmp_path)
     assert result.status == "unavailable"
-    assert "unsupported intervention factor" in result.reason
+    assert "receipt_stale" in result.reason
 
 
 def test_wall_budget_exhaustion_before_first_candidate(tmp_path: Path) -> None:
@@ -1196,6 +1713,46 @@ def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: An
     assert missing["status"] == "failed"
 
 
+def test_nested_admission_receipts_complete_via_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    """The CLI preserves nested receipt references through launcher admission."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    admission_path = tmp_path / "admission.json"
+    request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
+    config_payload = _fixture_json("config.json")
+    config_payload["admission"] = admission.to_dict()
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    admission_path.write_text(json.dumps(admission.to_dict()), encoding="utf-8")
+    code = review_execute_module.main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--admission-config",
+            str(admission_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    result = component_result_from_dict(json.loads(capsys.readouterr().out))
+    assert code == 0
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["receipt_reference"] == (
+        "proofs/receipts/admitted-source.json"
+    )
+
+
 @pytest.mark.parametrize("parser_input", ["request", "config"])
 def test_cli_parser_limit_emits_stable_failed_result(
     tmp_path: Path, capsys: Any, parser_input: str
@@ -1250,10 +1807,15 @@ def test_cli_stdout_is_a_component_result_v1_envelope(
     request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
 
     def _fake_run(
-        request: Any, *, base: Path | None = None, resume: bool = False
+        request: Any,
+        *,
+        base: Path | None = None,
+        resume: bool = False,
+        admission_config: Any = None,
     ) -> ComponentResult:
         assert base == tmp_path
         assert resume is False
+        assert admission_config is None
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,

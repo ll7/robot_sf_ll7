@@ -1723,6 +1723,7 @@ def _open_source_fds(
     *,
     directory_flags: int,
     file_flags: int,
+    root_fd: int | None = None,
 ) -> tuple[int, list[int]]:
     """Open every source component relative to no-follow directory descriptors.
 
@@ -1731,9 +1732,14 @@ def _open_source_fds(
     """
     opened_fds: list[int] = []
     try:
-        root_fd = os.open(root, directory_flags)
-        opened_fds.append(root_fd)
-        parent_fd = root_fd
+        if root_fd is None:
+            opened_root_fd = os.open(root, directory_flags)
+        else:
+            opened_root_fd = os.dup(root_fd)
+            if not stat.S_ISDIR(os.fstat(opened_root_fd).st_mode):
+                raise OSError(errno.ENOTDIR, "pinned allowed root is not a directory")
+        opened_fds.append(opened_root_fd)
+        parent_fd = opened_root_fd
         for component in parts[:-1]:
             parent_fd = os.open(component, directory_flags, dir_fd=parent_fd)
             opened_fds.append(parent_fd)
@@ -1748,6 +1754,8 @@ def _open_source_fds(
 def _read_source_or_rejection(
     receipt: AdmittedSourceReceipt,
     root: Path,
+    *,
+    root_fd: int | None = None,
 ) -> tuple[str, bytes] | AdmittedSourceResolution:
     """Open, type-check, hash, and retain one source under a descriptor boundary.
 
@@ -1784,6 +1792,7 @@ def _read_source_or_rejection(
             parts,
             directory_flags=directory_flags,
             file_flags=file_flags,
+            root_fd=root_fd,
         )
         source_stat = os.fstat(source_fd)
         if not stat.S_ISREG(source_stat.st_mode):
@@ -1808,12 +1817,26 @@ def _read_source_or_rejection(
 
 def _resolve_allowed_root(
     allowed_root: str | Path,
+    *,
+    allowed_root_fd: int | None = None,
 ) -> tuple[Path | None, AdmittedSourceResolution | None]:
     """Resolve and require an existing directory trust boundary.
 
     Returns:
         The canonical root and no early result, or a stable root rejection.
     """
+    if allowed_root_fd is not None:
+        try:
+            if not stat.S_ISDIR(os.fstat(allowed_root_fd).st_mode):
+                raise OSError(errno.ENOTDIR, "pinned allowed root is not a directory")
+            root = Path(allowed_root)
+        except (OSError, TypeError, ValueError) as error:
+            return None, _resolution(
+                "unavailable",
+                ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
+                detail=_bounded_error_detail(error),
+            )
+        return root, None
     try:
         if isinstance(allowed_root, str) and not allowed_root.strip():
             raise ValueError("allowed root must contain non-whitespace text")
@@ -1834,6 +1857,8 @@ def _resolve_allowed_root(
 def _resolve_source_path(
     receipt: AdmittedSourceReceipt,
     root: Path,
+    *,
+    descriptor_bound: bool = False,
 ) -> tuple[Path | None, AdmittedSourceResolution | None]:
     """Validate a receipt URI beneath *root* before descriptor-bound source use.
 
@@ -1866,6 +1891,8 @@ def _resolve_source_path(
             detail="source URI is absolute, traverses its root, or uses a platform separator",
         )
     candidate = root.joinpath(uri_path)
+    if descriptor_bound:
+        return candidate, None
     try:
         resolved = candidate.resolve(strict=False)
         resolved.relative_to(root)
@@ -1879,7 +1906,7 @@ def _resolve_source_path(
     return resolved, None
 
 
-def resolve_admitted_source(
+def resolve_admitted_source(  # noqa: C901, PLR0913
     receipt: AdmittedSourceReceipt | Mapping[str, Any] | str | Path,
     *,
     allowed_root: str | Path,
@@ -1889,6 +1916,7 @@ def resolve_admitted_source(
     expected_recipe_sha256: str | None = None,
     expected_source_commit: str | None = None,
     expected_config_identity: str | None = None,
+    allowed_root_fd: int | None = None,
 ) -> AdmittedSourceResolution:
     """Resolve a receipt only after all source and identity checks pass.
 
@@ -1946,7 +1974,10 @@ def resolve_admitted_source(
     )
     if early is not None:
         return early
-    root, early = _resolve_allowed_root(allowed_root)
+    if allowed_root_fd is None:
+        root, early = _resolve_allowed_root(allowed_root)
+    else:
+        root, early = _resolve_allowed_root(allowed_root, allowed_root_fd=allowed_root_fd)
     root_or_result = _resolver_value_or_rejection(
         root,
         early,
@@ -1956,7 +1987,14 @@ def resolve_admitted_source(
     )
     if isinstance(root_or_result, AdmittedSourceResolution):
         return root_or_result
-    source_path, early = _resolve_source_path(parsed_receipt, root_or_result)
+    if allowed_root_fd is None:
+        source_path, early = _resolve_source_path(parsed_receipt, root_or_result)
+    else:
+        source_path, early = _resolve_source_path(
+            parsed_receipt,
+            root_or_result,
+            descriptor_bound=True,
+        )
     source_or_result = _resolver_value_or_rejection(
         source_path,
         early,
@@ -1968,7 +2006,14 @@ def resolve_admitted_source(
     if isinstance(source_or_result, AdmittedSourceResolution):
         return source_or_result
     source_path = source_or_result
-    observed_or_result = _read_source_or_rejection(parsed_receipt, root_or_result)
+    if allowed_root_fd is None:
+        observed_or_result = _read_source_or_rejection(parsed_receipt, root_or_result)
+    else:
+        observed_or_result = _read_source_or_rejection(
+            parsed_receipt,
+            root_or_result,
+            root_fd=allowed_root_fd,
+        )
     if isinstance(observed_or_result, AdmittedSourceResolution):
         return observed_or_result
     observed_sha256, source_bytes = observed_or_result

@@ -117,6 +117,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "inputs",
         "inputs affected files",
         "inputs and affected files",
+        "inputs and canonical owners",
         "inputs context",
         "inputs predecessor",
         "inputs predecessors",
@@ -127,6 +128,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "required contract fields",
     ),
     "acceptance": (
+        "acceptance",
         "acceptance and validation",
         "acceptance criteria",
         "completion",

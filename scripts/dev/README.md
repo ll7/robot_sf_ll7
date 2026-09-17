@@ -19,6 +19,7 @@ maintained entry point; run `uv run python scripts/dev/<script>.py --help`
 | Run a bounded command without flooding the terminal | `run_compact_validation.py` |
 | Count collected tests for validation metadata | `pytest_collect_count.py` |
 | Create a linked worktree for isolated work | `create_worktree.sh` |
+| Restore files without losing uncommitted work | `safe_checkout.sh` |
 | Reuse the main checkout environment in a worktree | `run_worktree_shared_venv.sh` |
 | Check worktree disk capacity or reclaim space | `check_worktree_capacity.py` |
 | Diagnose a worktree or stale CI state | `worktree_hygiene_snapshot.py`, `recover_stale_ci_run.py`, `diagnose_actions_job.py` |

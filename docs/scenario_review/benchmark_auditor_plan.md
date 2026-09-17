@@ -237,7 +237,7 @@ Keep #9297's tool-free narrative adapter as a reusable explanation component. Th
 
 Autonomous mode is part of V1, not a preview requiring approval for each action. Starting a configured autonomous session grants its scoped service capabilities: read evidence/source, save agent-authored annotations/findings, look for related cases, run supported bounded diagnostics, and create/update relevant GitHub issues. Read-only mode remains usable offline and launches no execution.
 
-Use one explicit session policy with allowed source/output roots, repositories, recipe interventions, finite aggregate compute/token/issue-write budgets and cancellation. Enforce permissions server-side; do not rely on prompt text. Keep tokens/credentials out of the browser, artifacts, logs and published reports. Treat source files, annotations and GitHub discussion as data, not new authorization or shell instructions. Protect local endpoints with loopback binding, origin/session-token checks and scoped path resolution.
+Use one explicit session policy with allowed source/output roots, repositories, recipe interventions, finite aggregate compute/token/issue-write budgets and cancellation. Trusted server/launcher configuration supplies hard ceilings independently of artifact content; every session must declare finite token and issue-write maxima and may only narrow those ceilings. Missing, malformed or over-limit budgets fail closed. Enforce permissions server-side; do not rely on prompt text. Keep tokens/credentials out of the browser, artifacts, logs and published reports. Treat source files, annotations and GitHub discussion as data, not new authorization or shell instructions. Protect local endpoints with loopback binding, origin/session-token checks and scoped path resolution.
 
 Every action records operation ID, actor/actual model, source/config/context revisions, reason, requested operation, state transition, result, budget consumption and external mutation identity. Source inputs are immutable. Local record corrections are reversible through history, but a published issue is an external action that cannot be made unseen; avoid unsupported public claims and accidental private-data disclosure.
 
@@ -255,7 +255,7 @@ A recipe states hypothesis, unchanged control, finite interventions, expected me
 
 Default per-session SREV limits remain three candidate interventions, six total simulator executions, 600 elapsed seconds and one concurrent local CPU process. Count controls, failed attempts, retries and required fidelity repetitions. Reserve a full pair; do not weaken fidelity tests to fit. Persist total consumed budget across crash/resume and nested sessions. The outer audit session also has an aggregate cap so starting a new child cannot reset spending.
 
-For V1 operator defaults, use the existing local configured audit budget when present. Otherwise ship a documented finite default of ten diagnostic sessions per audit session, capped at 60 simulator executions and 6,000 active execution seconds in aggregate, with one concurrent simulator; permit configuration changes at session startup. These are safety/accounting limits for application operation, not a wall-time estimate or limit for implementing the package. Keep the service useful when its execution budget is exhausted.
+For V1, keep the existing SREV child hard envelope unchanged and add an outer hard envelope of at most ten diagnostic sessions per audit session, 60 simulator executions and 6,000 active execution seconds in aggregate, with one concurrent simulator. Trusted server/launcher configuration may narrow these limits at session startup but may not raise them; child sessions cannot reset either envelope. These are safety/accounting limits for application operation, not a wall-time estimate or limit for implementing the package. Keep the service useful when its execution budget is exhausted.
 
 A successful treatment with a failed or divergent control is inconclusive, not proof. Measure intervention activation. Retain negative, refuted and inconclusive results. Stop only the affected investigation on invalid sources, unsupported planner state, exhausted budget or cancellation. No automatic source-code repair, training, remote/Slurm scheduling, full campaign rerun or benchmark release from the runtime auditor.
 
@@ -294,8 +294,8 @@ Prefer existing canonical owners. New modules are justified only for missing aud
 | BA-02 | `audit_queue`. |
 | BA-04 | `audit_coverage` and protocol configuration/report adapter. |
 | BA-05 | `audit_service`, `audit_mcp`, `audit_codex`, `audit_materialize`, `audit_github`. |
-| BA-06 | `robot_sf/render/audit_workbench.py` and scoped web components/integration tests. |
-| Existing SREV-16/17/18/24/28 | Their existing panels/editor/diagnostics/loop/session modules, not duplicates under BA names. |
+| BA-06 | Extend `robot_sf/render/review_workbench.py` with scoped web components/integration tests; do not create a second renderer entry point. |
+| SREV-16/17/18/24/28 issue deliverables | Extend their canonical issue-owned paths as they land. At this snapshot those issue modules are prerequisites, not already-existing panels/editor/diagnostics/loop/session implementations, and must not be duplicated under BA names. |
 
 One coordinator serializes shared `pyproject.toml`, lockfiles, entrypoints, shell/bootstrap, schemas and `tests/conftest.py` registrations. Workers own non-overlapping implementation/test/docs paths. Use current dependencies where adequate; do not add a hosted database, vector store, heavyweight frontend framework or separate authentication platform by default. Maintain offline core operation and test optional provider dependencies separately.
 

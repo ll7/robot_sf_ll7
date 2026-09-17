@@ -378,6 +378,121 @@ def test_retry_and_fidelity_attempts_are_accounted(tmp_path: Path) -> None:
     assert resumed.status == "complete"
 
 
+def _delete_retry_predecessor(journal: dict[str, Any]) -> None:
+    operations = journal["operations"]
+    predecessor = next(
+        operation
+        for operation in operations
+        if operation["kind"] == "control" and operation["attempt"] == 1
+    )
+    operations.remove(predecessor)
+    candidate = journal["candidates"]["retry"]
+    candidate["operation_ids"].remove(predecessor["operation_id"])
+    candidate["attempts"] -= 1
+    journal["outcomes"][0]["operation_ids"].remove(predecessor["operation_id"])
+    journal["executions_consumed"] -= 1
+    journal["accounting"]["controls"] -= 1
+    journal["accounting"]["failures"] -= 1
+
+
+def _retry_after_success(journal: dict[str, Any]) -> None:
+    predecessor = next(
+        operation
+        for operation in journal["operations"]
+        if operation["kind"] == "control" and operation["attempt"] == 1
+    )
+    predecessor["state"] = "completed"
+    predecessor["result"] = {"status": "ok", "metrics": _metrics("control")}
+    predecessor["failure_accounted"] = False
+    journal["accounting"]["failures"] = 0
+    journal["accounting"]["fidelity_attempts"] = 2
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [_delete_retry_predecessor, _retry_after_success],
+    ids=["deleted-predecessor", "retry-after-success"],
+)
+def test_resume_rejects_noncontiguous_or_invalid_retry_history(
+    tmp_path: Path, mutation: Any
+) -> None:
+    recipe = _recipe(
+        [{"intervention_id": "retry", "factor": "single_pedestrian_speed_offset", "priority": 1}],
+        max_candidates=1,
+        max_executions=4,
+    )
+    request = _request(recipe, output="retry-history")
+    request = ComponentRequest(
+        request.request_id,
+        request.component_id,
+        request.sources,
+        request.output_directory,
+        {**request.config, "max_retries": 1},
+    )
+
+    class RetryForValidation(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            if not self.calls:
+                self.calls.append({"operation_id": operation_id, "kind": kind, "attempt": attempt})
+                return {"status": "failed", "retryable": True, "reason": "transient"}
+            return super().execute(operation_id, candidate, kind, spec, attempt)
+
+    _run_injected(request, base=tmp_path, executor=RetryForValidation())
+    journal_path = tmp_path / "retry-history" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text())
+    mutation(journal)
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "retry" in resumed.reason
+
+
+def test_metricless_success_is_failed_and_immediately_resumable(tmp_path: Path) -> None:
+    class Metricless(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            del candidate, kind, spec, attempt
+            self.calls.append({"operation_id": operation_id})
+            return {"status": "ok"}
+
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="metricless")
+    first = _run_injected(request, base=tmp_path, executor=Metricless())
+    assert first.status == "failed"
+    journal = json.loads(
+        (tmp_path / "metricless" / SESSION_JOURNAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert journal["status"] == "failed"
+    assert journal["operations"][0]["state"] == "failed"
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "failed"
+    assert "cannot resume" not in resumed.reason
+    assert resumed_executor.calls == []
+
+
 def test_cancellation_after_control_does_not_dispatch_treatment(tmp_path: Path) -> None:
     executor = FakeExecutor()
     result = _run_injected(
@@ -682,10 +797,22 @@ def _forge_status_only_treatment_result(journal: dict[str, Any]) -> None:
     treatment["result"] = {"status": "ok"}
 
 
+def _forge_pair_verdict_from_retained_telemetry(journal: dict[str, Any]) -> None:
+    outcome = journal["outcomes"][0]
+    assert outcome["outcome"] == "survived"
+    outcome["outcome"] = "falsified"
+    outcome["verdict"] = "falsified"
+    outcome["negative"] = True
+
+
 @pytest.mark.parametrize(
     "mutation",
-    [_omit_treatment_from_complete_journal, _forge_status_only_treatment_result],
-    ids=["missing-treatment-pair", "status-only-treatment"],
+    [
+        _omit_treatment_from_complete_journal,
+        _forge_status_only_treatment_result,
+        _forge_pair_verdict_from_retained_telemetry,
+    ],
+    ids=["missing-treatment-pair", "status-only-treatment", "telemetry-verdict-mismatch"],
 )
 def test_resume_rejects_forged_complete_pair_journal(tmp_path: Path, mutation: Any) -> None:
     recipe = _recipe(max_candidates=1, max_executions=2)
@@ -827,6 +954,60 @@ def test_native_child_failure_precedes_retained_candidate_report(
         "status": "failed",
         "reason": "source admission failed",
     }
+
+
+def test_native_stale_execute_report_cannot_mask_failed_attempt_ledger(
+    tmp_path: Path,
+) -> None:
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe)
+    child_dir = tmp_path / "executor"
+    child_dir.mkdir(parents=True, exist_ok=True)
+    stale_report = {
+        "candidates": [
+            {
+                "intervention_id": "high",
+                "factor": "single_pedestrian_speed_offset",
+                "status": "complete",
+                "control_metrics": _metrics("control"),
+                "treatment_metrics": _metrics("treatment"),
+            }
+        ]
+    }
+    failed_ledger = {
+        "candidate_reports": [
+            {
+                "intervention_id": "high",
+                "factor": "single_pedestrian_speed_offset",
+                "status": "failed",
+                "reason": "control execution failed: child attempt failed",
+            }
+        ],
+        "attempts": [
+            {
+                "candidate_id": "high",
+                "kind": "control",
+                "status": "failed",
+                "reason": "child attempt failed",
+            }
+        ],
+    }
+    (child_dir / "execute-report.json").write_text(json.dumps(stale_report), encoding="utf-8")
+    (child_dir / "attempt-ledger.json").write_text(json.dumps(failed_ledger), encoding="utf-8")
+    adapter = _NativeExecutorAdapter(
+        request,
+        base=tmp_path,
+        executor_config={"max_candidates": 1, "max_executions": 2},
+        recipe=recipe,
+        admission_config={},
+        resume=True,
+    )
+    candidate = sorted(
+        recipe["interventions"], key=lambda item: (item["priority"], item["intervention_id"])
+    )[0]
+    result = adapter.execute(operation_id="one", candidate=candidate, kind="control")
+    assert result["status"] == "failed"
+    assert "disagrees" in result["reason"]
 
 
 def test_native_control_fidelity_failure_counts_child_check(
@@ -1121,6 +1302,31 @@ def test_wall_deadline_between_control_and_treatment(
     assert result.status == "partial"
     assert result.reason == "wall_timeout"
     assert [call["kind"] for call in executor.calls] == ["control"]
+
+
+def test_resume_rejects_lowered_persisted_elapsed_deadline(tmp_path: Path) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="elapsed-floor")
+    first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
+    assert first.status == "complete"
+    journal_path = tmp_path / "elapsed-floor" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    original_elapsed = float(journal["elapsed_s"])
+    # Keep the mutation below the persisted floor even when the fast test run
+    # rounds the first journal write to zero seconds.
+    journal["elapsed_s"] = max(0.0, original_elapsed - 0.001)
+    if journal["elapsed_s"] >= float(journal["elapsed_floor_s"]):
+        journal["elapsed_floor_s"] = max(float(journal["elapsed_floor_s"]), 0.001)
+        journal["elapsed_s"] = 0.0
+    assert journal["elapsed_s"] < float(journal["elapsed_floor_s"])
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "elapsed accounting" in resumed.reason
 
 
 def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:

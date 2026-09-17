@@ -38,6 +38,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -828,6 +829,65 @@ def _control_fidelity(result: Mapping[str, Any], *, motion_epsilon: float) -> tu
     return True, ""
 
 
+def _pair_telemetry(
+    control: Mapping[str, Any],
+    treatment: Mapping[str, Any],
+    *,
+    factor: str,
+    measurement: Mapping[str, Any],
+    motion_epsilon: float,
+) -> dict[str, Any]:
+    """Recompute the diagnostic pair verdict and measured activation flags.
+
+    Returns:
+        Canonical outcome, reason, activation flags, and metric availability.
+    """
+
+    metric_name = str(measurement["name"])
+    control_metrics = _extract_metrics(control)
+    treatment_metrics = _extract_metrics(treatment)
+    control_activated = _activation(control, control=None, motion_epsilon=motion_epsilon)
+    treatment_activated = _activation(treatment, control=control, motion_epsilon=motion_epsilon)
+    if metric_name not in control_metrics or metric_name not in treatment_metrics:
+        return {
+            "outcome": "inconclusive",
+            "reason": f"measurement_missing: {metric_name}",
+            "control_activated": control_activated,
+            "treatment_activated": treatment_activated,
+            "measurement_available": False,
+        }
+    try:
+        pair_result = evaluate_counterfactual_pair(
+            {
+                "mechanism_activated": control_activated,
+                "metrics": {metric_name: control_metrics[metric_name]},
+            },
+            {
+                "mechanism_activated": treatment_activated,
+                "metrics": {metric_name: treatment_metrics[metric_name]},
+            },
+            PairHypothesis(
+                expected_mechanism=factor,
+                outcome_metric=metric_name,
+                expected_direction=str(measurement["expected_direction"]),
+            ),
+        )
+        verdict = pair_result.verdict
+        reason = pair_result.reason
+    except (KeyError, TypeError, ValueError) as error:
+        verdict = "inconclusive"
+        reason = f"pair_evaluation_unavailable: {error}"
+    if verdict not in OUTCOMES:
+        verdict = "inconclusive"
+    return {
+        "outcome": verdict,
+        "reason": reason,
+        "control_activated": control_activated,
+        "treatment_activated": treatment_activated,
+        "measurement_available": True,
+    }
+
+
 def _reason(result: Mapping[str, Any], fallback: str) -> str:
     value = result.get("reason", result.get("error", fallback))
     return str(value) if value is not None else fallback
@@ -1059,6 +1119,7 @@ class ExperimentLoop:
             "executions_consumed": 0,
             "reserved_executions": 0,
             "elapsed_s": 0.0,
+            "elapsed_floor_s": 0.0,
             "status": "running",
             "stop_reason": "",
             "provenance": dict(self.provenance),
@@ -1071,7 +1132,18 @@ class ExperimentLoop:
         return self._elapsed_base + max(0.0, time.monotonic() - self._started_at)
 
     def _persist(self) -> None:
-        self._journal["elapsed_s"] = round(self._elapsed(), 6)
+        elapsed = self._elapsed()
+        prior_floor = self._journal.get("elapsed_floor_s", 0.0)
+        if (
+            isinstance(prior_floor, bool)
+            or not isinstance(prior_floor, (int, float))
+            or not math.isfinite(float(prior_floor))
+            or float(prior_floor) < 0.0
+        ):
+            raise ExperimentLoopError("elapsed accounting floor is invalid")
+        persisted_elapsed = max(float(elapsed), float(prior_floor))
+        self._journal["elapsed_s"] = round(persisted_elapsed, 6)
+        self._journal["elapsed_floor_s"] = round(persisted_elapsed, 6)
         self._journal["updated_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
         _atomic_write_json(self.journal_path, self._journal)
         # A stable alias keeps older consumers from needing a migration while
@@ -1239,6 +1311,7 @@ class ExperimentLoop:
         operation_ids_by_candidate: dict[str, list[str]] = {
             candidate_id: [] for candidate_id in prior_candidate_ids
         }
+        operations_by_candidate_kind: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
         dispatched_by_kind = {"control": 0, "treatment": 0}
         failed_operations = 0
         retry_operations = 0
@@ -1287,6 +1360,7 @@ class ExperimentLoop:
                 raise ExperimentLoopError("cannot resume: invalid operation dispatch count")
             dispatch_total += dispatch_count
             operation_ids_by_candidate[candidate_id].append(operation_id)
+            operations_by_candidate_kind.setdefault((candidate_id, kind), []).append(operation)
             if dispatch_count:
                 dispatched_by_kind[kind] += dispatch_count
             state = operation.get("state")
@@ -1317,6 +1391,8 @@ class ExperimentLoop:
                 }.get(result_status)
                 if expected_state != state:
                     raise ExperimentLoopError("cannot resume: operation result/state mismatch")
+            if state == "completed" and not _has_valid_result_metrics(result):
+                raise ExperimentLoopError("cannot resume: completed operation result is invalid")
             if state == "failed":
                 if operation.get("failure_accounted") is not True:
                     raise ExperimentLoopError("cannot resume: failed operation is unaccounted")
@@ -1327,6 +1403,31 @@ class ExperimentLoop:
                 )
             if dispatch_count and attempt > 1:
                 retry_operations += 1
+        for (candidate_id, kind), candidate_kind_operations in operations_by_candidate_kind.items():
+            ordered_operations = sorted(
+                candidate_kind_operations, key=lambda operation: int(operation["attempt"])
+            )
+            if [int(operation["attempt"]) for operation in ordered_operations] != list(
+                range(1, len(ordered_operations) + 1)
+            ):
+                raise ExperimentLoopError(
+                    f"cannot resume: {candidate_id} {kind} retry attempts are not contiguous"
+                )
+            for predecessor, _retry in pairwise(ordered_operations):
+                predecessor_status, predecessor_result = _status_from_result(
+                    predecessor.get("result")
+                )
+                if (
+                    predecessor.get("state") != "failed"
+                    or predecessor_status != "failed"
+                    or (
+                        predecessor_result.get("retryable") is not True
+                        and predecessor_result.get("retry") is not True
+                    )
+                ):
+                    raise ExperimentLoopError(
+                        f"cannot resume: {candidate_id} {kind} retry predecessor is invalid"
+                    )
         if dispatch_total != consumed:
             raise ExperimentLoopError(
                 "cannot resume: operation accounting does not match dispatches"
@@ -1469,19 +1570,58 @@ class ExperimentLoop:
                         raise ExperimentLoopError(
                             f"cannot resume: complete outcome {result_key} does not match operation"
                         )
+                pair_observation = _pair_telemetry(
+                    cast("Mapping[str, Any]", final_operations["control"].get("result")),
+                    cast("Mapping[str, Any]", final_operations["treatment"].get("result")),
+                    factor=str(expected_candidate.get("factor", "")),
+                    measurement=self.measurement,
+                    motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
+                )
+                if outcome.get("outcome") != pair_observation["outcome"]:
+                    raise ExperimentLoopError(
+                        "cannot resume: complete outcome contradicts pair telemetry"
+                    )
+                if (
+                    not isinstance(outcome.get("reason"), str)
+                    or outcome.get("reason") != (pair_observation["reason"])
+                ):
+                    raise ExperimentLoopError(
+                        "cannot resume: complete outcome reason contradicts pair telemetry"
+                    )
+                if pair_observation["measurement_available"] and (
+                    outcome.get("verdict") != pair_observation["outcome"]
+                ):
+                    raise ExperimentLoopError(
+                        "cannot resume: complete verdict contradicts pair telemetry"
+                    )
+                if (
+                    not pair_observation["measurement_available"]
+                    and "verdict" in outcome
+                    and outcome.get("verdict") != pair_observation["outcome"]
+                ):
+                    raise ExperimentLoopError(
+                        "cannot resume: complete verdict contradicts pair telemetry"
+                    )
                 if not isinstance(outcome.get("negative"), bool):
                     raise ExperimentLoopError(
                         "cannot resume: complete outcome negative flag invalid"
                     )
-                if outcome["negative"] != (outcome["outcome"] != "survived"):
+                if outcome["negative"] != (pair_observation["outcome"] != "survived"):
                     raise ExperimentLoopError(
-                        "cannot resume: complete outcome negative flag mismatch"
+                        "cannot resume: complete negative flag contradicts pair telemetry"
                     )
                 for key in ("control_activated", "treatment_activated"):
                     if key in outcome and not isinstance(outcome.get(key), bool):
                         raise ExperimentLoopError(
                             "cannot resume: complete outcome activation is invalid"
                         )
+                if pair_observation["measurement_available"] and any(
+                    outcome.get(key) != pair_observation[key]
+                    for key in ("control_activated", "treatment_activated")
+                ):
+                    raise ExperimentLoopError(
+                        "cannot resume: complete activation contradicts pair telemetry"
+                    )
                 activation = outcome.get("activation")
                 if activation is not None and (
                     not isinstance(activation, Mapping)
@@ -1503,6 +1643,21 @@ class ExperimentLoop:
                     )
                 ):
                     raise ExperimentLoopError("cannot resume: complete outcome activation mismatch")
+                if pair_observation["measurement_available"]:
+                    if not isinstance(activation, Mapping) or (
+                        activation.get("control") != pair_observation["control_activated"]
+                        or activation.get("treatment") != pair_observation["treatment_activated"]
+                    ):
+                        raise ExperimentLoopError(
+                            "cannot resume: complete activation contradicts pair telemetry"
+                        )
+                elif isinstance(activation, Mapping) and (
+                    activation.get("control") != pair_observation["control_activated"]
+                    or activation.get("treatment") != pair_observation["treatment_activated"]
+                ):
+                    raise ExperimentLoopError(
+                        "cannot resume: complete activation contradicts pair telemetry"
+                    )
             reservation = reservation_by_candidate.get(candidate_id)
             is_reserved = candidate_state_name in {"reserved", "dispatching"}
             if is_reserved:
@@ -1699,6 +1854,16 @@ class ExperimentLoop:
             or float(elapsed) < 0.0
         ):
             raise ExperimentLoopError("cannot resume: elapsed accounting is invalid")
+        elapsed_floor = payload.get("elapsed_floor_s", elapsed)
+        if (
+            isinstance(elapsed_floor, bool)
+            or not isinstance(elapsed_floor, (int, float))
+            or not math.isfinite(float(elapsed_floor))
+            or float(elapsed_floor) < 0.0
+            or float(elapsed) < float(elapsed_floor)
+        ):
+            raise ExperimentLoopError("cannot resume: elapsed accounting is not monotonic")
+        self._journal["elapsed_floor_s"] = float(elapsed_floor)
         self._elapsed_base = float(elapsed)
         self._started_at = time.monotonic()
         self._persist()
@@ -1896,6 +2061,13 @@ class ExperimentLoop:
                     self._persist()
                     return "failed", cast("dict[str, Any]", operation["result"]), operation_id
                 state, result = recovered
+                if state == "ok" and not _has_valid_result_metrics(result):
+                    state = "failed"
+                    result = {
+                        **result,
+                        "status": "failed",
+                        "reason": "invalid_success_result: successful operation lacks finite metrics",
+                    }
                 operation["state"] = "completed" if state == "ok" else state
                 operation["result"] = result
                 if state == "failed" and not operation.get("failure_accounted", False):
@@ -1997,6 +2169,13 @@ class ExperimentLoop:
                     raise
                 return "failed", cast("dict[str, Any]", operation["result"]), operation_id
             state, result = _status_from_result(raw_result)
+            if state == "ok" and not _has_valid_result_metrics(result):
+                state = "failed"
+                result = {
+                    **result,
+                    "status": "failed",
+                    "reason": "invalid_success_result: successful operation lacks finite metrics",
+                }
             operation["state"] = {
                 "ok": "completed",
                 "cancelled": "cancelled",
@@ -2196,17 +2375,21 @@ class ExperimentLoop:
             }
             self._record_outcome(candidate_id, outcome)
             return outcome
-        metric_name = str(self.measurement["name"])
-        control_metrics = _extract_metrics(control)
-        treatment_metrics = _extract_metrics(treatment)
-        if metric_name not in control_metrics or metric_name not in treatment_metrics:
+        pair_observation = _pair_telemetry(
+            control,
+            treatment,
+            factor=factor,
+            measurement=self.measurement,
+            motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
+        )
+        if not pair_observation["measurement_available"]:
             outcome = {
                 "intervention_id": candidate_id,
                 "priority": int(candidate["priority"]),
                 "factor": factor,
                 "status": "complete",
                 "outcome": "inconclusive",
-                "reason": f"measurement_missing: {metric_name}",
+                "reason": pair_observation["reason"],
                 "control": control,
                 "treatment": treatment,
                 "negative": True,
@@ -2214,32 +2397,10 @@ class ExperimentLoop:
             }
             self._record_outcome(candidate_id, outcome)
             return outcome
-        motion_epsilon = float(self.recipe.get("motion_epsilon_m", 0.05))
-        control_activated = _activation(control, control=None, motion_epsilon=motion_epsilon)
-        treatment_activated = _activation(treatment, control=control, motion_epsilon=motion_epsilon)
-        try:
-            pair_result = evaluate_counterfactual_pair(
-                {
-                    "mechanism_activated": control_activated,
-                    "metrics": {metric_name: control_metrics[metric_name]},
-                },
-                {
-                    "mechanism_activated": treatment_activated,
-                    "metrics": {metric_name: treatment_metrics[metric_name]},
-                },
-                PairHypothesis(
-                    expected_mechanism=factor,
-                    outcome_metric=metric_name,
-                    expected_direction=str(self.measurement["expected_direction"]),
-                ),
-            )
-            verdict = pair_result.verdict
-            verdict_reason = pair_result.reason
-        except (KeyError, TypeError, ValueError) as error:
-            verdict = "inconclusive"
-            verdict_reason = f"pair_evaluation_unavailable: {error}"
-        if verdict not in OUTCOMES:
-            verdict = "inconclusive"
+        verdict = str(pair_observation["outcome"])
+        verdict_reason = str(pair_observation["reason"])
+        control_activated = bool(pair_observation["control_activated"])
+        treatment_activated = bool(pair_observation["treatment_activated"])
         outcome = {
             "intervention_id": candidate_id,
             "priority": int(candidate["priority"]),
@@ -2545,6 +2706,7 @@ class _NativeExecutorAdapter:
         self.child_result: ComponentResult | None = None
         self.reports: dict[str, dict[str, Any]] = {}
         self._nested_attempts: dict[tuple[str, str], dict[str, Any]] = {}
+        self._nested_conflict: str | None = None
         self._child_started = False
         self._operation_context: dict[str, tuple[str, str]] = {}
 
@@ -2604,23 +2766,63 @@ class _NativeExecutorAdapter:
     def _read_nested_state(self) -> None:
         """Refresh child reports and attempts without dispatching any work."""
 
+        if self._nested_conflict is not None:
+            return
         report_path = self.base / "executor" / "execute-report.json"
         ledger_path = self.base / "executor" / "attempt-ledger.json"
-        reports = dict(self.reports)
-        nested_attempts: dict[tuple[str, str], dict[str, Any]] = {}
-        for path in (report_path, ledger_path):
+        documents: dict[str, Mapping[str, Any]] = {}
+        for label, path in (("execute-report", report_path), ("attempt-ledger", ledger_path)):
+            if not path.exists():
+                continue
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError, RecursionError):
-                continue
+            except (OSError, ValueError, RecursionError) as error:
+                self._nested_conflict = f"nested child {label} is unreadable: {error}"
+                self.reports = {}
+                self._nested_attempts = {}
+                return
             if not isinstance(payload, Mapping):
-                continue
+                self._nested_conflict = f"nested child {label} is not a mapping"
+                self.reports = {}
+                self._nested_attempts = {}
+                return
+            documents[label] = payload
+
+        def report_map(payload: Mapping[str, Any]) -> dict[str, dict[str, Any]] | None:
             raw_reports = payload.get("candidates", payload.get("candidate_reports", []))
-            if isinstance(raw_reports, list):
-                for item in raw_reports:
-                    if isinstance(item, Mapping) and isinstance(item.get("intervention_id"), str):
-                        reports.setdefault(str(item["intervention_id"]), dict(item))
-            raw_attempts = payload.get("attempts", [])
+            if not isinstance(raw_reports, list):
+                return None
+            parsed: dict[str, dict[str, Any]] = {}
+            for item in raw_reports:
+                if not isinstance(item, Mapping) or not isinstance(
+                    item.get("intervention_id"), str
+                ):
+                    return None
+                candidate_id = str(item["intervention_id"])
+                if candidate_id in parsed:
+                    return None
+                parsed[candidate_id] = dict(item)
+            return parsed
+
+        report_documents: dict[str, dict[str, dict[str, Any]]] = {}
+        for label, payload in documents.items():
+            parsed = report_map(payload)
+            if parsed is None:
+                self._nested_conflict = f"nested child {label} reports are malformed"
+                self.reports = {}
+                self._nested_attempts = {}
+                return
+            report_documents[label] = parsed
+
+        nested_attempts: dict[tuple[str, str], dict[str, Any]] = {}
+        ledger_payload = documents.get("attempt-ledger")
+        if ledger_payload is not None:
+            raw_attempts = ledger_payload.get("attempts", [])
+            if not isinstance(raw_attempts, list):
+                self._nested_conflict = "nested child attempt ledger is malformed"
+                self.reports = {}
+                self._nested_attempts = {}
+                return
             if isinstance(raw_attempts, list):
                 for item in raw_attempts:
                     if (
@@ -2628,8 +2830,118 @@ class _NativeExecutorAdapter:
                         and isinstance(item.get("candidate_id"), str)
                         and item.get("kind") in {"control", "treatment"}
                     ):
-                        nested_attempts[(str(item["candidate_id"]), str(item["kind"]))] = dict(item)
-        self.reports = reports
+                        key = (str(item["candidate_id"]), str(item["kind"]))
+                        if key in nested_attempts:
+                            self._nested_conflict = "nested child attempt ledger has duplicate pair"
+                            self.reports = {}
+                            self._nested_attempts = {}
+                            return
+                        nested_attempts[key] = dict(item)
+                    else:
+                        self._nested_conflict = "nested child attempt ledger has malformed attempt"
+                        self.reports = {}
+                        self._nested_attempts = {}
+                        return
+
+        report_documents_by_kind = list(report_documents.items())
+        if len(report_documents_by_kind) == 2:
+            first_label, first_reports = report_documents_by_kind[0]
+            second_label, second_reports = report_documents_by_kind[1]
+            try:
+                reports_disagree = set(first_reports) != set(second_reports) or any(
+                    _canonical_digest(first_reports[candidate_id])
+                    != _canonical_digest(second_reports[candidate_id])
+                    for candidate_id in set(first_reports) & set(second_reports)
+                )
+            except (ExperimentLoopError, RecursionError, TypeError, ValueError):
+                reports_disagree = True
+            if reports_disagree:
+                self._nested_conflict = f"nested child {first_label} disagrees with {second_label}"
+                self.reports = {}
+                self._nested_attempts = {}
+                return
+        if ledger_payload is not None and nested_attempts:
+            ledger_reports = report_documents.get("attempt-ledger", {})
+            attempt_candidate_ids = {candidate_id for candidate_id, _kind in nested_attempts}
+            if "execute-report" in report_documents and not attempt_candidate_ids.issubset(
+                set(ledger_reports)
+            ):
+                self._nested_conflict = "nested child attempt ledger disagrees with reports"
+                self.reports = {}
+                self._nested_attempts = {}
+                return
+            for candidate_id, report in ledger_reports.items():
+                matching = [
+                    attempt
+                    for (attempt_candidate_id, _kind), attempt in nested_attempts.items()
+                    if attempt_candidate_id == candidate_id
+                ]
+                if not matching:
+                    continue
+                statuses = {str(attempt.get("status")) for attempt in matching}
+                report_status = report.get("status")
+                if report_status == "complete" and (
+                    {(str(attempt.get("kind"))) for attempt in matching} != {"control", "treatment"}
+                    or statuses != {"ok"}
+                ):
+                    self._nested_conflict = "nested child complete report disagrees with attempts"
+                    self.reports = {}
+                    self._nested_attempts = {}
+                    return
+                if report_status == "unavailable" and matching:
+                    self._nested_conflict = (
+                        "nested child unavailable report disagrees with attempts"
+                    )
+                    self.reports = {}
+                    self._nested_attempts = {}
+                    return
+                if report_status in {"complete", "failed"}:
+                    for attempt in matching:
+                        if attempt.get("status") != "ok":
+                            continue
+                        report_metrics = report.get(f"{attempt.get('kind')}_metrics")
+                        attempt_metrics = attempt.get("metrics")
+                        try:
+                            metrics_disagree = (
+                                not isinstance(report_metrics, Mapping)
+                                or not isinstance(attempt_metrics, Mapping)
+                                or (
+                                    _canonical_digest(report_metrics)
+                                    != _canonical_digest(attempt_metrics)
+                                )
+                            )
+                        except (ExperimentLoopError, RecursionError, TypeError, ValueError):
+                            metrics_disagree = True
+                        if metrics_disagree:
+                            self._nested_conflict = (
+                                "nested child report metrics disagree with attempts"
+                            )
+                            self.reports = {}
+                            self._nested_attempts = {}
+                            return
+                if report_status == "failed" and statuses == {"ok"}:
+                    reason = str(report.get("reason", "")).lower()
+                    if "control_fidelity_failure" in reason:
+                        expected_kinds = {"control"}
+                    elif "treatment" in reason:
+                        expected_kinds = {"control", "treatment"}
+                    else:
+                        expected_kinds = set()
+                    if expected_kinds != {
+                        str(attempt.get("kind")) for attempt in matching
+                    } or expected_kinds == {"control", "treatment"}:
+                        self._nested_conflict = "nested child failed report disagrees with attempts"
+                        self.reports = {}
+                        self._nested_attempts = {}
+                        return
+
+        prior_reports = dict(self.reports)
+        if "attempt-ledger" in report_documents:
+            self.reports = dict(report_documents["attempt-ledger"])
+        elif "execute-report" in report_documents:
+            self.reports = dict(report_documents["execute-report"])
+        else:
+            self.reports = prior_reports
         self._nested_attempts = nested_attempts
 
         # A crash can land after the child has persisted both attempts but
@@ -2663,22 +2975,23 @@ class _NativeExecutorAdapter:
             if treatment_status == "ok" and isinstance(treatment.get("metrics"), Mapping):
                 treatment_metrics = dict(treatment["metrics"])
                 control_metrics = dict(control_metrics)
+                control_result = {"status": "ok", "metrics": control_metrics}
+                treatment_result = {"status": "ok", "metrics": treatment_metrics}
                 self.reports[candidate_id] = {
                     "intervention_id": candidate_id,
                     "factor": factor,
                     "status": "complete",
                     "control_metrics": control_metrics,
                     "treatment_metrics": treatment_metrics,
-                    "control_activated": bool(
-                        float(control_metrics.get("ped_displacement_m", 0.0))
-                        > float(self.recipe.get("motion_epsilon_m", 0.05))
+                    "control_activated": _activation(
+                        control_result,
+                        control=None,
+                        motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
                     ),
-                    "treatment_activated": bool(
-                        abs(
-                            float(treatment_metrics.get("ped_mean_speed_m_s", 0.0))
-                            - float(control_metrics.get("ped_mean_speed_m_s", 0.0))
-                        )
-                        > float(self.recipe.get("motion_epsilon_m", 0.05))
+                    "treatment_activated": _activation(
+                        treatment_result,
+                        control=control_result,
+                        motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
                     ),
                 }
             elif treatment_status in {"failed", "timed_out", "cancelled"}:
@@ -2807,6 +3120,8 @@ class _NativeExecutorAdapter:
 
     def _candidate_report(self, candidate_id: str) -> dict[str, Any] | None:
         self._read_nested_state()
+        if self._nested_conflict is not None:
+            return None
         if self.reports.get(candidate_id) is None and (not self._child_blocks_followup()):
             self._invoke(candidate_id)
         return self.reports.get(candidate_id)
@@ -2818,6 +3133,9 @@ class _NativeExecutorAdapter:
             ``True`` when a nested report settled the pair.
         """
 
+        self._read_nested_state()
+        if self._nested_conflict is not None:
+            return False
         report = self.reports.get(candidate_id)
         return report is not None and self._pair_complete(report)
 
@@ -2849,6 +3167,8 @@ class _NativeExecutorAdapter:
             # It must not start a new child pair merely because a stale outer
             # dispatch record exists.
             self._read_nested_state()
+            if self._nested_conflict is not None:
+                return {"status": "failed", "reason": self._nested_conflict}
             report = self.reports.get(candidate_id)
             if report is None and self._cancelled():
                 recovered_attempt = self._nested_attempt_result(candidate_id, kind)
@@ -2859,9 +3179,14 @@ class _NativeExecutorAdapter:
             if report is None:
                 report = self._candidate_report(candidate_id)
         else:
+            self._read_nested_state()
+            if self._nested_conflict is not None:
+                return {"status": "failed", "reason": self._nested_conflict}
             if self._cancelled() and not (kind == "treatment" and candidate_id in self.reports):
                 return {"status": "cancelled", "reason": "cancellation_requested"}
             report = self._candidate_report(candidate_id)
+        if self._nested_conflict is not None:
+            return {"status": "failed", "reason": self._nested_conflict}
         # A child admission/execution failure is authoritative even if an old
         # report remains in the nested ledger.  Retained data must not turn a
         # failed child boundary into an apparent successful operation.

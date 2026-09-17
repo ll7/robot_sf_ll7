@@ -868,22 +868,16 @@ def _explicit_activation(result: Mapping[str, Any]) -> bool | None:
 
 def _activation(
     result: Mapping[str, Any], *, control: Mapping[str, Any] | None, motion_epsilon: float
-) -> bool:
-    explicit = _explicit_activation(result)
-    if explicit is not None:
-        return explicit
-    metrics = _extract_metrics(result)
-    displacement = metrics.get("ped_displacement_m")
-    if isinstance(displacement, (int, float)) and not isinstance(displacement, bool):
-        if control is None:
-            return float(displacement) > motion_epsilon
-    if control is not None:
-        control_metrics = _extract_metrics(control)
-        treatment_speed = metrics.get("ped_mean_speed_m_s")
-        control_speed = control_metrics.get("ped_mean_speed_m_s")
-        if isinstance(treatment_speed, (int, float)) and isinstance(control_speed, (int, float)):
-            return abs(float(treatment_speed) - float(control_speed)) > motion_epsilon
-    return False
+) -> bool | None:
+    """Return only an executor-declared activation value.
+
+    The compatibility helper intentionally does not infer activation from
+    motion metrics.  ``None`` is the truthful result when the executor omits
+    its activation contract.
+    """
+
+    del control, motion_epsilon
+    return _explicit_activation(result)
 
 
 def _control_fidelity(result: Mapping[str, Any], *, motion_epsilon: float) -> tuple[bool, str]:
@@ -926,14 +920,38 @@ def _pair_telemetry(
     metric_name = str(measurement["name"])
     control_metrics = _extract_metrics(control)
     treatment_metrics = _extract_metrics(treatment)
-    control_activated = _activation(control, control=None, motion_epsilon=motion_epsilon)
-    treatment_activated = _activation(treatment, control=control, motion_epsilon=motion_epsilon)
+    # Finite motion/metric values do not prove that the intended intervention
+    # mechanism was active.  Activation is a separate executor contract and
+    # must be explicit for both sides of the pair before a measured verdict
+    # can be emitted.  Keep ``None`` visible for missing telemetry instead of
+    # manufacturing a false activation bit from sparse metrics.
+    control_activated = _explicit_activation(control)
+    treatment_activated = _explicit_activation(treatment)
+    if control_activated is None or treatment_activated is None:
+        missing_sides = [
+            side
+            for side, value in (
+                ("control", control_activated),
+                ("treatment", treatment_activated),
+            )
+            if value is None
+        ]
+        return {
+            "outcome": "inconclusive",
+            "reason": "activation_missing: explicit activation telemetry is required for "
+            + ", ".join(missing_sides),
+            "control_activated": control_activated,
+            "treatment_activated": treatment_activated,
+            "activation_available": False,
+            "measurement_available": False,
+        }
     if metric_name not in control_metrics or metric_name not in treatment_metrics:
         return {
             "outcome": "inconclusive",
             "reason": f"measurement_missing: {metric_name}",
             "control_activated": control_activated,
             "treatment_activated": treatment_activated,
+            "activation_available": True,
             "measurement_available": False,
         }
     try:
@@ -964,6 +982,7 @@ def _pair_telemetry(
         "reason": reason,
         "control_activated": control_activated,
         "treatment_activated": treatment_activated,
+        "activation_available": True,
         "measurement_available": True,
     }
 
@@ -988,6 +1007,15 @@ def _is_negative_outcome(outcome: Mapping[str, Any]) -> bool:
     if status in NEGATIVE_OUTCOME_STATUSES:
         return True
     return status == "complete" and outcome.get("outcome") != "survived"
+
+
+def _is_retryable_failed_operation(operation: Mapping[str, Any]) -> bool:
+    """Return whether one durable operation can be retried on an extension."""
+
+    if operation.get("state") != "failed":
+        return False
+    status, result = _status_from_result(operation.get("result"))
+    return status == "failed" and (result.get("retryable") is True or result.get("retry") is True)
 
 
 class ExperimentLoop:
@@ -1041,6 +1069,20 @@ class ExperimentLoop:
         else:
             self.source_admission = dict(source_admission)
         self.provenance = dict(provenance or {})
+        # Answerability is derived from the immutable request/config input,
+        # never from a caller-asserted or mutable journal field.  The public
+        # entrypoint validates this optional contract before constructing the
+        # loop; direct callers use the same request-bound source.
+        configured_answerability = (
+            self.request.config.get("answerability")
+            if isinstance(self.request.config, Mapping)
+            else None
+        )
+        if configured_answerability is not None and not isinstance(
+            configured_answerability, Mapping
+        ):
+            raise ExperimentLoopError("invalid_config: answerability must be a mapping")
+        self._answerability_document = _answerability_document(configured_answerability)
         _validate_loop_budget(self.recipe, budget)
         self.session_id = (
             session_id or f"{request.request_id}:{_canonical_digest(self.recipe)[:16]}"
@@ -1220,7 +1262,7 @@ class ExperimentLoop:
             "status": "running",
             "stop_reason": "",
             "provenance": dict(self.provenance),
-            "answerability": None,
+            "answerability": self._answerability_document,
             "created_utc": datetime.now(UTC).isoformat(timespec="seconds"),
             "updated_utc": datetime.now(UTC).isoformat(timespec="seconds"),
         }
@@ -1272,6 +1314,10 @@ class ExperimentLoop:
         ):
             if payload.get(key) != expected.get(key):
                 raise ExperimentLoopError(f"cannot resume: journal {key} identity mismatch")
+        if "answerability" not in payload or payload["answerability"] != expected.get(
+            "answerability"
+        ):
+            raise ExperimentLoopError("cannot resume: journal answerability mismatch")
         for key in ("evidence_boundary", "scientific_claim_allowed", "dependent_family_status"):
             if payload.get(key) != expected.get(key):
                 raise ExperimentLoopError(f"cannot resume: journal {key} boundary mismatch")
@@ -1601,7 +1647,24 @@ class ExperimentLoop:
                 if candidate_state_name in TERMINAL_CANDIDATE_STATES:
                     raise ExperimentLoopError("cannot resume: terminal candidate lacks outcome")
                 if candidate_state_name == "pending" and candidate_operations:
-                    raise ExperimentLoopError("cannot resume: pending candidate has operations")
+                    # A widened retry ceiling deliberately reopens a failed
+                    # candidate while retaining every prior operation for
+                    # accounting and idempotent recovery.  Such a pending
+                    # candidate is valid only when all retained operations
+                    # are settled and at least one is a retryable failure.
+                    if not (
+                        candidate_state.get("retry_reopened") is True
+                        and all(
+                            operation_by_id[item].get("state")
+                            in {"completed", "failed", "cancelled", "unavailable"}
+                            for item in candidate_operations
+                        )
+                        and any(
+                            _is_retryable_failed_operation(operation_by_id[item])
+                            for item in candidate_operations
+                        )
+                    ):
+                        raise ExperimentLoopError("cannot resume: pending candidate has operations")
             elif candidate_state_name != candidate_outcome.get("status"):
                 raise ExperimentLoopError("cannot resume: candidate state/outcome mismatch")
             if (
@@ -1681,6 +1744,10 @@ class ExperimentLoop:
                     measurement=self.measurement,
                     motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
                 )
+                if not pair_observation["activation_available"]:
+                    raise ExperimentLoopError(
+                        "cannot resume: complete outcome lacks explicit activation telemetry"
+                    )
                 if outcome.get("outcome") != pair_observation["outcome"]:
                     raise ExperimentLoopError(
                         "cannot resume: complete outcome contradicts pair telemetry"
@@ -1931,8 +1998,49 @@ class ExperimentLoop:
                 raise ExperimentLoopError(
                     "cannot resume: cancelled journal stop reason is inconsistent"
                 )
+        # A terminal exhausted-candidates session may be continued when a
+        # caller explicitly widens the candidate ceiling and the deterministic
+        # catalog contributes new pending candidates.  Other terminal reasons
+        # (cancellation, recipe terminal conditions, unsupported/admission
+        # failures) remain immutable.  Likewise, a candidate-execution
+        # failure is reopened only when the caller widens the retry ceiling and
+        # the retained final operation is explicitly retryable.
+        candidate_ceiling_widened = len(current_order) > len(prior_order)
+        reopen_exhausted = (
+            journal_status == "complete"
+            and payload["stop_reason"] == "exhausted_candidates"
+            and candidate_ceiling_widened
+        )
+        retryable_failed_candidates: set[str] = set()
+        if (
+            journal_status in {"failed", "partial"}
+            and payload["stop_reason"] == "candidate_execution_failed"
+            and int(current_budget["max_retries"]) > int(prior_budget["max_retries"])
+        ):
+            for candidate_id, candidate_state in payload["candidates"].items():
+                if candidate_state.get("state") != "failed":
+                    continue
+                candidate_operations = operation_ids_by_candidate.get(candidate_id, [])
+                if any(
+                    _is_retryable_failed_operation(operation_by_id[operation_id])
+                    and int(operation_by_id[operation_id].get("attempt", 0))
+                    <= int(current_budget["max_retries"]) + 1
+                    for operation_id in candidate_operations
+                ):
+                    retryable_failed_candidates.add(candidate_id)
+
+        # Only resumable sessions may admit a widened candidate prefix.  Keep
+        # immutable terminal sessions closed without leaving a complete
+        # journal containing unexecuted candidates.
+        admit_widened_candidates = (
+            journal_status == "running"
+            or (journal_status == "partial" and payload["stop_reason"] in _RESUMABLE_STOP_REASONS)
+            or reopen_exhausted
+            or bool(retryable_failed_candidates)
+        )
+        effective_order = current_order if admit_widened_candidates else prior_order
         existing_candidate_ids = set(payload["candidates"])
-        for candidate in current_order:
+        for candidate in effective_order:
             candidate_id = str(candidate["intervention_id"])
             if candidate_id in existing_candidate_ids:
                 continue
@@ -1944,11 +2052,24 @@ class ExperimentLoop:
                 "attempts": 0,
                 "operation_ids": [],
             }
-        payload["candidate_order"] = current_order
+        payload["candidate_order"] = effective_order
         payload["budget"] = self.budget.to_dict()
         payload["policy"] = self.policy.to_dict()
         payload["config_digest"] = expected["config_digest"]
         payload["config_identity_digest"] = expected["config_identity_digest"]
+        if reopen_exhausted or retryable_failed_candidates:
+            for candidate_id in retryable_failed_candidates:
+                payload["candidates"][candidate_id]["state"] = "pending"
+                payload["candidates"][candidate_id]["retry_reopened"] = True
+                payload["candidates"][candidate_id].pop("reservation", None)
+            if retryable_failed_candidates:
+                payload["outcomes"] = [
+                    outcome
+                    for outcome in payload["outcomes"]
+                    if outcome.get("intervention_id") not in retryable_failed_candidates
+                ]
+            payload["status"] = "running"
+            payload["stop_reason"] = ""
         self._journal = payload
         elapsed = payload.get("elapsed_s", 0.0)
         if (
@@ -2499,6 +2620,21 @@ class ExperimentLoop:
             measurement=self.measurement,
             motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
         )
+        if not pair_observation["activation_available"]:
+            outcome = {
+                "intervention_id": candidate_id,
+                "priority": int(candidate["priority"]),
+                "factor": factor,
+                "status": "unavailable",
+                "outcome": "inconclusive",
+                "reason": pair_observation["reason"],
+                "control": control,
+                "treatment": treatment,
+                "negative": True,
+                "operation_ids": operation_ids,
+            }
+            self._record_outcome(candidate_id, outcome)
+            return outcome
         if not pair_observation["measurement_available"]:
             outcome = {
                 "intervention_id": candidate_id,
@@ -2729,7 +2865,7 @@ class ExperimentLoop:
             },
             "accounting": dict(self._journal.get("accounting", {})),
             "operations": list(self._journal.get("operations", [])),
-            "answerability": self._journal.get("answerability"),
+            "answerability": self._answerability_document,
             "provenance": {
                 **dict(self.provenance),
                 "component_id": COMPONENT_ID,
@@ -3560,27 +3696,11 @@ class _NativeExecutorAdapter:
                 continue
             treatment_status = treatment.get("status")
             if treatment_status == "ok" and isinstance(treatment.get("metrics"), Mapping):
-                treatment_metrics = dict(treatment["metrics"])
-                control_metrics = dict(control_metrics)
-                control_result = {"status": "ok", "metrics": control_metrics}
-                treatment_result = {"status": "ok", "metrics": treatment_metrics}
-                self.reports[candidate_id] = {
-                    "intervention_id": candidate_id,
-                    "factor": factor,
-                    "status": "complete",
-                    "control_metrics": control_metrics,
-                    "treatment_metrics": treatment_metrics,
-                    "control_activated": _activation(
-                        control_result,
-                        control=None,
-                        motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
-                    ),
-                    "treatment_activated": _activation(
-                        treatment_result,
-                        control=control_result,
-                        motion_epsilon=float(self.recipe.get("motion_epsilon_m", 0.05)),
-                    ),
-                }
+                # The child attempt ledger carries metrics but not the
+                # explicit activation contract.  Do not infer a measured
+                # activation bit from those metrics; a missing child report
+                # must be re-opened through the child executor instead.
+                continue
             elif treatment_status in {"failed", "timed_out", "cancelled"}:
                 self.reports[candidate_id] = {
                     "intervention_id": candidate_id,
@@ -3661,14 +3781,17 @@ class _NativeExecutorAdapter:
         metrics = report.get("control_metrics")
         if not isinstance(metrics, Mapping):
             return {"status": "failed", "reason": "native report lacks control_metrics"}
-        return {
+        result: dict[str, Any] = {
             "status": "ok",
             "metrics": dict(metrics),
-            "mechanism_activated": bool(report.get("control_activated", False)),
             "fidelity": fidelity,
             "native_fidelity_attempts": 1,
             "native_pair_complete": self._pair_complete(report),
         }
+        activation = report.get("control_activated")
+        if isinstance(activation, bool):
+            result["mechanism_activated"] = activation
+        return result
 
     def _invoke(self, candidate_id: str) -> None:
         child_request = self._child_request(candidate_id)
@@ -3803,10 +3926,16 @@ class _NativeExecutorAdapter:
         if not isinstance(metrics, Mapping):
             return {"status": "failed", "reason": f"native report lacks {metrics_key}"}
         activated_key = "control_activated" if kind == "control" else "treatment_activated"
+        activation = report.get(activated_key)
+        if not isinstance(activation, bool):
+            return {
+                "status": "unavailable",
+                "reason": f"native report lacks {activated_key} activation telemetry",
+            }
         result = {
             "status": "ok",
             "metrics": dict(metrics),
-            "mechanism_activated": bool(report.get(activated_key, False)),
+            "mechanism_activated": activation,
             "fidelity": True,
             "native_pair_complete": self._pair_complete(report),
         }
@@ -4136,9 +4265,6 @@ def run(
             resume=resume,
             cancel=cancel,
         )
-        if validated.answerability is not None:
-            loop._journal["answerability"] = _answerability_document(validated.answerability)
-            loop._persist()
         return loop.run()
     except ExperimentLoopError as error:
         return ComponentResult(

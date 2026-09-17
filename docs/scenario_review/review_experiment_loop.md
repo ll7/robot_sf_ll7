@@ -47,6 +47,10 @@ treatments, failures, retries, and fidelity attempts consume execution budget.
 The loop records both `executions_consumed` and `reserved_executions`; a
 candidate is not started unless two execution slots are available. A failed
 control-fidelity check records the control and blocks treatment interpretation.
+Finite metrics alone do not establish intervention activation: both control and
+treatment must return explicit activation telemetry from the executor. If
+either side omits that contract, the pair is retained as an unavailable,
+inconclusive operational outcome without a measured-activation claim.
 On the native path, `fidelity_attempts` includes the child executor's measured
 control check as well as the loop-level check; a child control-fidelity failure
 therefore remains accounted even though no treatment is dispatched.
@@ -96,6 +100,15 @@ operation IDs, reservations, attempts, and elapsed time. It is atomically
 replaced after reservation, before dispatch, after each result, and at
 settlement.
 
+Reopening is narrow and explicit: an `exhausted_candidates` session is resumed
+only when a widened candidate ceiling admits new deterministic-prefix
+candidates; a `candidate_execution_failed` session is resumed only when a
+widened retry ceiling exposes a retained failed, retryable operation. Existing
+execution and elapsed accounting is retained in both cases. Cancellation,
+recipe-terminal, unsupported/unavailable, source-admission, and other
+non-retryable terminal reasons remain closed on resume, even when a caller
+widens a ceiling.
+
 Operation IDs are deterministic (`session:candidate:<id>:control|treatment`,
 with a retry suffix only when explicitly configured). A completed operation is
 never dispatched again. Each retained outcome indexes every operation ID for
@@ -128,6 +141,11 @@ flag. These checks detect inconsistent or stale local state; they do not turn a
 mutable diagnostic journal into cryptographic proof of execution. Tampered
 source proof, recipe, candidate order, identity, or journal accounting returns
 a failed resume result.
+
+Answerability is recomputed from the request/config contract for every
+invocation. The report never copies a mutable journal assertion: a request with
+no answerability contract reports `null`, and a journal answerability mismatch
+fails resume closed.
 
 The session directory also has an atomic `.experiment-loop.lock`. A controller
 holds it from journal load/reservation through settlement and releases it only

@@ -168,6 +168,7 @@ class FakeExecutor:
         result = {
             "status": "ok",
             "metrics": _metrics(kind, value=self.values.get(candidate["intervention_id"], 1.2)),
+            "mechanism_activated": True,
         }
         self.results[operation_id] = result
         return result
@@ -451,6 +452,105 @@ def test_resume_extends_pair_budget_without_resetting_consumed_attempts(tmp_path
     assert journal["executions_consumed"] == 4
 
 
+def test_resume_widens_exhausted_candidate_ceiling_without_restarting_prefix(
+    tmp_path: Path,
+) -> None:
+    recipe = _recipe(max_candidates=2, max_executions=4)
+    first_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "widen-candidates",
+        {"recipe": recipe, "max_candidates": 1, "max_executions": 2},
+    )
+    first_executor = FakeExecutor()
+    first = _run_injected(first_request, base=tmp_path, executor=first_executor)
+    assert first.status == "complete"
+    assert first.reason == "exhausted_candidates"
+    assert [call["candidate"] for call in first_executor.calls] == ["high", "high"]
+
+    resumed_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "widen-candidates",
+        {"recipe": recipe, "max_candidates": 2, "max_executions": 4},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "complete"
+    assert [call["candidate"] for call in resumed_executor.calls] == ["tie-id", "tie-id"]
+    journal = json.loads(
+        (tmp_path / "widen-candidates" / SESSION_JOURNAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert [item["intervention_id"] for item in journal["outcomes"]] == ["high", "tie-id"]
+    assert journal["executions_consumed"] == 4
+
+
+def test_resume_widens_retry_ceiling_for_retryable_failed_outcome(tmp_path: Path) -> None:
+    recipe = _recipe(
+        [{"intervention_id": "retry", "factor": "single_pedestrian_speed_offset", "priority": 1}],
+        max_candidates=1,
+        max_executions=4,
+    )
+    first_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "widen-retries",
+        {"recipe": recipe, "max_retries": 0},
+    )
+
+    class RetryableFailure(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            del candidate, spec
+            self.calls.append({"operation_id": operation_id, "kind": kind, "attempt": attempt})
+            return {"status": "failed", "retryable": True, "reason": "transient"}
+
+    first = _run_injected(
+        first_request,
+        base=tmp_path,
+        executor=RetryableFailure(),
+    )
+    assert first.status == "failed"
+    assert first.reason == "candidate_execution_failed"
+
+    resumed_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "widen-retries",
+        {"recipe": recipe, "max_retries": 1},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "complete"
+    assert [call["kind"] for call in resumed_executor.calls] == ["control", "treatment"]
+    journal = json.loads(
+        (tmp_path / "widen-retries" / SESSION_JOURNAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert journal["accounting"]["retries"] == 1
+    assert journal["accounting"]["failures"] == 1
+    assert journal["executions_consumed"] == 3
+
+
 def test_retry_and_fidelity_attempts_are_accounted(tmp_path: Path) -> None:
     recipe = _recipe(
         [{"intervention_id": "retry", "factor": "single_pedestrian_speed_offset", "priority": 1}],
@@ -695,6 +795,104 @@ def test_negative_export_is_derived_from_status_not_mutable_flag() -> None:
     )
 
 
+def test_sparse_metrics_without_explicit_activation_are_unavailable(
+    tmp_path: Path,
+) -> None:
+    class SparseActivation(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            result.pop("mechanism_activated")
+            return result
+
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="activation-missing")
+    result = _run_injected(request, base=tmp_path, executor=SparseActivation())
+    assert result.status == "unavailable"
+    report = json.loads(
+        (tmp_path / "activation-missing" / "experiment-loop-report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    outcome = report["outcomes"][0]
+    assert outcome["status"] == "unavailable"
+    assert outcome["outcome"] == "inconclusive"
+    assert "activation_missing" in outcome["reason"]
+    assert "activation" not in outcome
+    assert report["negative_outcomes"] == [outcome]
+
+
+def test_resume_does_not_reopen_cancellation_when_ceiling_widens(tmp_path: Path) -> None:
+    recipe = _recipe(max_candidates=2, max_executions=4)
+    first_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "immutable-cancel",
+        {
+            "recipe": recipe,
+            "max_candidates": 1,
+            "max_executions": 2,
+            "cancel_requested": True,
+        },
+    )
+    first_executor = FakeExecutor()
+    first = _run_injected(first_request, base=tmp_path, executor=first_executor)
+    assert first.status == "cancelled"
+    assert first_executor.calls == []
+
+    resumed_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "immutable-cancel",
+        {"recipe": recipe, "max_candidates": 2, "max_executions": 4},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "cancelled"
+    assert resumed.reason == "cancellation_requested"
+    assert resumed_executor.calls == []
+
+
+def test_resume_answerability_is_authoritative_to_request_config(tmp_path: Path) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="answerability")
+    first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
+    assert first.status == "complete"
+    journal_path = tmp_path / "answerability" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["answerability"] = {
+        "schema_version": "research_answerability.v1",
+        "state": "answerable",
+        "decision_capable": True,
+        "reasons": [],
+        "warnings": [],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "answerability" in resumed.reason
+    report = json.loads(
+        (tmp_path / "answerability" / "experiment-loop-report.json").read_text(encoding="utf-8")
+    )
+    assert report["answerability"] is None
+
+
 def test_unsupported_recipe_and_failed_control_fidelity_are_truthful(tmp_path: Path) -> None:
     unsupported = _recipe(
         [{"intervention_id": "bad", "factor": "unsupported-factor", "priority": 1}],
@@ -749,7 +947,11 @@ def test_crash_after_dispatch_recovers_by_operation_id_without_duplicate(tmp_pat
             attempt: int,
         ) -> dict[str, Any]:
             self.calls.append({"operation_id": operation_id, "kind": kind})
-            result = {"status": "ok", "metrics": _metrics(kind)}
+            result = {
+                "status": "ok",
+                "metrics": _metrics(kind),
+                "mechanism_activated": True,
+            }
             self.results[operation_id] = result
             raise KeyboardInterrupt("simulated crash after dispatch")
 
@@ -1443,9 +1645,45 @@ def test_native_operation_recovery_uses_exact_map_for_retry_in_candidate_id(
         "status": "complete",
         "control_metrics": _metrics("control"),
         "treatment_metrics": _metrics("treatment"),
+        "control_activated": True,
+        "treatment_activated": True,
     }
     assert adapter.result_for(operation_id)["status"] == "ok"
     assert adapter.result_for(operation_id.replace(candidate_id, "literal")) is None
+
+
+def test_native_report_without_activation_does_not_infer_from_metrics(tmp_path: Path) -> None:
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe)
+    adapter = _NativeExecutorAdapter(
+        request,
+        base=tmp_path,
+        executor_config={"max_candidates": 1, "max_executions": 2},
+        recipe=recipe,
+        admission_config={},
+        resume=False,
+    )
+    candidate = sorted(
+        recipe["interventions"], key=lambda item: (item["priority"], item["intervention_id"])
+    )[0]
+    adapter.child_result = ComponentResult(
+        request_id=request.request_id,
+        component_id="srev22-review-execute",
+        status="complete",
+    )
+    adapter.reports[candidate["intervention_id"]] = {
+        "intervention_id": candidate["intervention_id"],
+        "status": "complete",
+        "control_metrics": _metrics("control"),
+        "treatment_metrics": _metrics("treatment"),
+    }
+    result = adapter.execute(
+        operation_id="control",
+        candidate=candidate,
+        kind="control",
+    )
+    assert result["status"] == "unavailable"
+    assert "activation telemetry" in result["reason"]
 
 
 def test_wall_deadline_between_control_and_treatment(

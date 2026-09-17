@@ -233,6 +233,9 @@ def test_standalone_checker_uses_current_time_not_stale_generated_at(tmp_path: P
     manifest = _case()
     manifest["generated_at"] = (now - timedelta(days=30)).isoformat().replace("+00:00", "Z")
     manifest.pop("as_of", None)
+    manifest["expiring_resource"]["deadline"]["evidence_as_of"] = now.isoformat().replace(
+        "+00:00", "Z"
+    )
     manifest["expiring_resource"]["deadline"]["timestamp"] = (
         (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
     )

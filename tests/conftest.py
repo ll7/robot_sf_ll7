@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Benchmark Auditor record and journal tests are deterministic schema,
+    # provenance, and persistence contracts for BA-03 (issue #9484).
+    "test_audit_contracts.py",
+    "test_audit_store.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",

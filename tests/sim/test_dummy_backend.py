@@ -12,7 +12,10 @@ import numpy as np
 import pytest
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
-from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    MapDefinition,
+)
 from robot_sf.sim.backends import dummy_backend
 from robot_sf.sim.backends.dummy_backend import DummySimulator, dummy_factory
 
@@ -90,3 +93,20 @@ def test_dummy_simulator_uses_default_spawn_selection_when_resetting(
     DummySimulator(map_def=test_map, seed=1, step_dt=0.1, goal_proximity_threshold=1.0)
 
     assert seen_spawn_ids == [None]
+
+
+def test_dummy_simulator_reports_versioned_goal_completion_metadata(
+    test_map: MapDefinition,
+) -> None:
+    """Opting into goal-zone completion exposes a complete runtime contract."""
+    simulator = DummySimulator(
+        map_def=test_map,
+        seed=2,
+        goal_completion_policy=GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    )
+
+    metadata = simulator.goal_completion_metadata()
+
+    assert metadata["schema_version"] == "success_definition_runtime.v1"
+    assert metadata["policy"] == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
+    assert len(metadata["robots"]) == 1

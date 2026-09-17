@@ -4563,9 +4563,7 @@ def test_gh_comment_body_file_dev_stdin_empty_rejected(tmp_path: Path) -> None:
     calls = tmp_path / "gh-calls.txt"
     fake_gh = fake_bin / "gh"
     fake_gh.write_text(
-        "#!/usr/bin/env bash\n"
-        "set -eu\n"
-        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n',
+        '#!/usr/bin/env bash\nset -eu\nprintf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n',
         encoding="utf-8",
     )
     fake_gh.chmod(0o755)

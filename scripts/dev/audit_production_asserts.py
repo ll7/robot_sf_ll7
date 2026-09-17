@@ -376,13 +376,31 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_references=("#9394",),
     ),
     (
-        "robot_sf/analysis_workbench/review_context.py",
-        "run",
-        "output_dir is not None",
+        "robot_sf/analysis_workbench/review_storyboard.py",
+        "_verify_reference",
+        "raw is not None",
     ): _review(
-        "The output directory is assigned exactly once by the reservation helper, which returns a reserved directory or raises; every earlier exit releases the possibly-None reservation first, so reaching the write site proves a reserved directory exists.",
+        "The reader returns (bytes, None) on success and (None, error-code) on every failure path (unsafe path, unreadable, non-regular, oversize); the caller returns early whenever the error code is set, so reaching the digest site proves raw is bytes.",
         ownership_status="unowned_residual",
-        ownership_references=("#9443",),
+        ownership_references=("#9458",),
+    ),
+    (
+        "robot_sf/render/review_media_qa.py",
+        "_fetch_source_bytes",
+        "raw is not None",
+    ): _review(
+        "The source-byte reader returns non-None raw bytes on success and non-None failure metadata on error; the caller returns early when failure is set, narrowing raw before SHA-256 computation.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
+    ),
+    (
+        "robot_sf/render/review_media_qa.py",
+        "_load_inputs",
+        "raw is not None and state is not None",
+    ): _review(
+        "The source fetcher returns non-None raw bytes and non-None integrity state on success; the caller appends diagnostics and continues on failure, narrowing both values before JSON decoding.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
     ),
 }
 

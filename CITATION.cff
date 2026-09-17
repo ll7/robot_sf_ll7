@@ -2,9 +2,7 @@ cff-version: 1.2.0
 title: robot_sf_ll7
 message: >-
   If you use this repository or its benchmark release protocol, please cite the
-  software using this metadata. This untagged file stages the planned v0.0.6
-  software release and awaits maintainer approval; it does not authorize
-  publication.
+  published v0.0.7 software release using this metadata.
 type: software
 authors:
   - name: Lennart Luttkus
@@ -12,12 +10,10 @@ authors:
 repository-code: https://github.com/ll7/robot_sf_ll7
 license: GPL-3.0-only
 # Kept in lockstep with the latest full release tag (plain X.Y.Z) by the
-# release workflow and scripts/dev/check_version_alignment.py. An explicit,
-# non-authorizing preparation marker may stage the next target on an untagged
-# tree while maintainer approval is pending; tag-time alignment remains strict.
-# The git tag/release line is the single source of truth for the version; the
-# benchmark release protocol context lives in the title/abstract, not here.
-version: 0.0.6
+# release workflow and scripts/dev/check_version_alignment.py. The git
+# tag/release line is the single source of truth for the version; the benchmark
+# release protocol context lives in the title/abstract, not here.
+version: 0.0.7
 abstract: >-
   Social navigation simulation and benchmark tooling with a paper-facing,
   pre-1.0 benchmark release protocol.

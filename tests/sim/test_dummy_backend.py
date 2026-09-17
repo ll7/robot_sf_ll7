@@ -76,8 +76,12 @@ def test_dummy_simulator_uses_default_spawn_selection_when_resetting(
     seen_spawn_ids: list[int | None] = []
 
     def fake_sample_route(
-        _map_def: MapDefinition, spawn_id: int | None
+        _map_def: MapDefinition,
+        spawn_id: int | None,
+        *,
+        completion_policy: str | None = None,
     ) -> list[tuple[float, float]]:
+        del completion_policy
         seen_spawn_ids.append(spawn_id)
         return [(0.0, 0.0), (1.0, 0.0)]
 

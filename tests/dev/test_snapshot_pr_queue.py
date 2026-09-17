@@ -2320,3 +2320,109 @@ def test_fetch_pr_classifies_stdout_quota_as_graphql_quota_fallback(returncode: 
     assert payload["error_kind"] == "graphql_quota_exhausted"
     assert payload["data_source"] == "rest_fallback_graphql_quota"
     assert payload["review_threads"] == "unknown_graphql_quota"
+
+
+def _two_row_pr_list() -> list[dict[str, object]]:
+    """Return a canned two-row ``gh pr list`` payload for budget tests."""
+    return [
+        {
+            "number": 2681,
+            "title": "active PR",
+            "state": "OPEN",
+            "isDraft": False,
+            "url": "https://github.test/pull/2681",
+            "labels": [{"name": "merge-ready"}],
+            "headRefName": "feature",
+            "headRefOid": "cafe00",
+            "mergeable": "MERGEABLE",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+            "comments": [],
+        },
+        {
+            "number": 2682,
+            "title": "second PR",
+            "state": "OPEN",
+            "isDraft": False,
+            "url": "https://github.test/pull/2682",
+            "labels": [],
+            "headRefName": "feat2",
+            "headRefOid": "cafe01",
+            "mergeable": "MERGEABLE",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+            "comments": [],
+        },
+    ]
+
+
+def _expired_clock() -> object:
+    """Return a monotonic clock that is already past any positive deadline."""
+    calls = {"count": 0}
+
+    def _tick() -> float:
+        calls["count"] += 1
+        return 0.0 if calls["count"] == 1 else 10_000.0
+
+    return MagicMock(side_effect=_tick)
+
+
+def test_snapshot_active_prs_wall_budget_reports_truncated_fast() -> None:
+    """An expired wall budget stops fan-out with zero row fetches (issue #9469)."""
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("time.monotonic", _expired_clock()),
+        patch("scripts.dev.snapshot_pr_queue._pr_payload_from_dict") as mock_row,
+    ):
+        mock_gh.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(_two_row_pr_list()), stderr=""
+        )
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2, max_wall_seconds=5.0)
+
+    assert payload["truncated"] is True
+    assert "wall budget" in payload["truncation_note"]
+    assert payload["prs"] == []
+    mock_row.assert_not_called()
+
+
+def test_snapshot_active_prs_generous_budget_keeps_all_rows() -> None:
+    """A generous wall budget preserves the existing unbounded behavior."""
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(_two_row_pr_list()), stderr=""
+        )
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2, max_wall_seconds=100.0)
+
+    assert payload["truncated"] is True  # at-cap rows stay informational
+    assert "wall budget" not in payload["truncation_note"]
+    assert len(payload["prs"]) == 2
+
+
+def test_snapshot_active_rest_fallback_wall_budget_skips_row_fetch() -> None:
+    """The REST fallback honors the same deadline without per-PR calls."""
+    requested: list[str] = []
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        requested.append(path)
+        if path == "pulls?state=open&per_page=2&page=1":
+            return [
+                {"number": 42, "head": {"sha": "head-42"}},
+                {"number": 43, "head": {"sha": "head-43"}},
+            ]
+        raise AssertionError(f"unexpected REST path after budget: {path}")
+
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+        patch("time.monotonic", _expired_clock()),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2, max_wall_seconds=5.0)
+
+    assert payload["truncated"] is True
+    assert "wall budget" in payload["truncation_note"]
+    assert payload["prs"] == []
+    assert not any(path.startswith("pulls/42") for path in requested)

@@ -39,6 +39,8 @@ import math
 import multiprocessing
 import os
 import platform
+import re
+import stat
 import subprocess
 import sys
 import time
@@ -47,16 +49,25 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 from robot_sf.analysis_workbench.review_contracts import (
+    ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
+    ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+    ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+    ADMITTED_SOURCE_REASON_SOURCE_MUTATED,
     COMPONENT_REQUEST_SCHEMA_VERSION,
     COMPONENT_RESULT_SCHEMA_VERSION,
+    MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
+    AdmittedSourceResolution,
     ComponentRequest,
     ComponentResult,
     ReviewContractsValidationError,
     component_request_from_dict,
     component_result_from_dict,
+    experiment_recipe_canonical_digest,
     experiment_recipe_from_dict,
+    resolve_admitted_source,
 )
 from robot_sf.benchmark.counterfactual_pair import (
     PairHypothesis,
@@ -72,6 +83,8 @@ EXECUTE_REPORT_SCHEMA_VERSION = "execute-report.v1"
 ATTEMPT_LEDGER_SCHEMA_VERSION = "attempt-ledger.v1"
 ACTIVATION_TRACE_SCHEMA_VERSION = "activation-trace.v1"
 PRESERVATION_MANIFEST_SCHEMA_VERSION = "preservation-manifest.v1"
+EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION = "executor-admission.v1"
+PRESERVATION_RECEIPT_SCHEMA_VERSION = "srev22-preservation-receipt.v1"
 
 SUPPORTED_INPUT_VERSIONS = (COMPONENT_REQUEST_SCHEMA_VERSION,)
 REQUIRED_CAPABILITIES = ("bounded-execution",)
@@ -132,6 +145,9 @@ _SUPPORTED_FIXTURE_SOURCE_REFERENCE = (
     ("uri", "recipe.json"),
     ("format", "experiment-recipe.v1"),
 )
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_MAX_ADMISSION_CONFIG_TEXT = 4_096
+_MAX_PRESERVATION_RECEIPT_BYTES = 256 * 1024
 
 _DT_S = 0.1
 _ROBOT_GOAL = (16.8, 16.8)
@@ -153,6 +169,69 @@ class ReviewExecuteError(RobotSfError, ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutorAdmissionConfig:
+    """Caller-owned source and preservation trust configuration.
+
+    This configuration is intentionally separate from the recipe.  A recipe can
+    identify the source it expects, but it cannot choose the root or receipts
+    that make that source admissible.
+    """
+
+    schema_version: str
+    source_root: str
+    receipt_reference: str
+    receipt_sha256: str
+    preservation_destination: str
+    preservation_receipt_reference: str
+    preservation_receipt_sha256: str
+    config_identity: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the validated external admission configuration."""
+        return {
+            "schema_version": self.schema_version,
+            "source_root": self.source_root,
+            "receipt_reference": self.receipt_reference,
+            "receipt_sha256": self.receipt_sha256,
+            "preservation_destination": self.preservation_destination,
+            "preservation_receipt_reference": self.preservation_receipt_reference,
+            "preservation_receipt_sha256": self.preservation_receipt_sha256,
+            "config_identity": self.config_identity,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _AdmissionProof:
+    """The source and external preservation proof used by one invocation."""
+
+    config: ExecutorAdmissionConfig
+    root: Path
+    source: AdmittedSourceResolution
+    receipt_sha256: str
+    preservation_receipt_sha256: str
+    preservation_receipt: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return non-secret, non-source-byte admission provenance."""
+        receipt = self.source.receipt
+        source = receipt.source if receipt is not None else None
+        return {
+            "schema_version": self.config.schema_version,
+            "source_root": str(self.root),
+            "receipt_reference": self.config.receipt_reference,
+            "receipt_sha256": self.receipt_sha256,
+            "receipt_id": receipt.receipt_id if receipt is not None else None,
+            "source": source.to_dict() if source is not None else None,
+            "preservation_destination": self.config.preservation_destination,
+            "preservation_receipt_reference": self.config.preservation_receipt_reference,
+            "preservation_receipt_sha256": self.preservation_receipt_sha256,
+            "config_identity": self.config.config_identity,
+            "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+            "scientific_claim_allowed": False,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ExecuteConfig:
     """Validated execution config (closed allowlist, never arbitrary code)."""
 
@@ -169,6 +248,7 @@ class ExecuteConfig:
     required_component_version: str | None = None
     intervention_parameters: dict[str, Any] = field(default_factory=dict)
     recipe: dict[str, Any] = field(default_factory=dict)
+    admission: ExecutorAdmissionConfig | None = None
 
 
 def descriptor() -> dict[str, Any]:
@@ -200,7 +280,169 @@ def _is_finite_number(value: Any) -> bool:
     )
 
 
-def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
+def _admission_text(
+    raw: Mapping[str, Any], key: str, errors: list[str], *, allow_empty: bool = False
+) -> str:
+    """Validate one bounded admission-config string and return a safe value.
+
+    Returns:
+        The validated value, or an empty string after recording an error.
+    """
+    value = raw.get(key)
+    if not isinstance(value, str) or (not allow_empty and not value.strip()):
+        errors.append(f"source_admission_config: {key} must be a non-empty string")
+        return ""
+    if len(value) > _MAX_ADMISSION_CONFIG_TEXT:
+        errors.append(
+            f"source_admission_config: {key} exceeds {_MAX_ADMISSION_CONFIG_TEXT} characters"
+        )
+        return ""
+    if "\x00" in value:
+        errors.append(f"source_admission_config: {key} contains a NUL character")
+        return ""
+    return value
+
+
+def _admission_sha256(raw: Mapping[str, Any], key: str, errors: list[str]) -> str:
+    """Validate one externally anchored SHA-256 digest.
+
+    Returns:
+        The normalized digest, or an empty string after recording an error.
+    """
+    value = _admission_text(raw, key, errors)
+    if value and _SHA256_RE.fullmatch(value) is None:
+        errors.append(f"source_admission_config: {key} must be a 64-hex SHA-256")
+    return value.lower()
+
+
+def _admission_relative_reference(raw: Mapping[str, Any], key: str, errors: list[str]) -> str:
+    """Validate a receipt reference as a root-relative local path.
+
+    Returns:
+        The validated reference, or an empty string after recording an error.
+    """
+    value = _admission_text(raw, key, errors)
+    if not value:
+        return value
+    try:
+        path = Path(value)
+        uri = urlsplit(value)
+    except (OSError, TypeError, ValueError):
+        errors.append(f"source_admission_config: {key} must be a local relative path")
+        return ""
+    if (
+        path.is_absolute()
+        or not path.parts
+        or value in {".", ".."}
+        or ".." in path.parts
+        or "\\" in value
+        or uri.scheme
+        or uri.netloc
+        or uri.query
+        or uri.fragment
+    ):
+        errors.append(
+            f"source_admission_config: {key} must be a relative path without traversal or URI syntax"
+        )
+    return value
+
+
+def _validate_executor_admission_config(
+    raw: Any, *, source: Any = None
+) -> ExecutorAdmissionConfig | None:
+    """Validate the external, versioned executor admission configuration.
+
+    ``None`` is retained as a documented legacy diagnostic path.  The runner
+    handles it as unavailable and never starts an episode or emits complete
+    artifacts, so old v1 requests cannot silently claim admitted completion.
+
+    Returns:
+        The validated config, or ``None`` for the legacy diagnostic path.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ReviewExecuteError(
+            ["source_admission_config: admission must be a mapping"], source=source
+        )
+    allowed = {
+        "schema_version",
+        "source_root",
+        "receipt_reference",
+        "receipt_sha256",
+        "preservation_destination",
+        "preservation_receipt_reference",
+        "preservation_receipt_sha256",
+        "config_identity",
+    }
+    unknown = sorted((str(key) for key in raw if key not in allowed), key=str)
+    if unknown:
+        raise ReviewExecuteError(
+            ["source_admission_config: unknown keys are rejected: " + ", ".join(unknown)],
+            source=source,
+        )
+    errors: list[str] = []
+    schema_version = _admission_text(raw, "schema_version", errors)
+    if schema_version and schema_version != EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION:
+        errors.append(
+            "source_admission_config: schema_version must be "
+            f"{EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION}"
+        )
+    source_root = _admission_text(raw, "source_root", errors)
+    if source_root:
+        try:
+            source_root_path = Path(source_root)
+            root_uri = urlsplit(source_root)
+        except (OSError, TypeError, ValueError):
+            source_root_path = None
+            root_uri = None
+        if (
+            source_root_path is None
+            or root_uri is None
+            or root_uri.scheme
+            or root_uri.netloc
+            or root_uri.query
+            or root_uri.fragment
+            or "\\" in source_root
+            or ".." in source_root_path.parts
+        ):
+            errors.append(
+                "source_admission_config: source_root must be a local path without traversal"
+            )
+    receipt_reference = _admission_relative_reference(raw, "receipt_reference", errors)
+    receipt_sha256 = _admission_sha256(raw, "receipt_sha256", errors)
+    preservation_destination = _admission_text(raw, "preservation_destination", errors)
+    if preservation_destination and (
+        not preservation_destination.startswith(_SAFE_PRESERVATION_DESTINATION_PREFIXES)
+        or Path(preservation_destination).is_absolute()
+        or ".." in Path(preservation_destination).parts
+    ):
+        errors.append(
+            "source_admission_config: preservation_destination must be a safe external:, "
+            "artifact:, or fixture: URI"
+        )
+    preservation_receipt_reference = _admission_relative_reference(
+        raw, "preservation_receipt_reference", errors
+    )
+    preservation_receipt_sha256 = _admission_sha256(raw, "preservation_receipt_sha256", errors)
+    config_identity = _admission_text(raw, "config_identity", errors)
+    if errors:
+        raise ReviewExecuteError(errors, source=source)
+    return ExecutorAdmissionConfig(
+        schema_version=schema_version,
+        source_root=source_root,
+        receipt_reference=receipt_reference,
+        receipt_sha256=receipt_sha256,
+        preservation_destination=preservation_destination,
+        preservation_receipt_reference=preservation_receipt_reference,
+        preservation_receipt_sha256=preservation_receipt_sha256,
+        config_identity=config_identity,
+    )
+
+
+def validate_execute_config(  # noqa: C901
+    raw: Any, *, source: Any = None
+) -> ExecuteConfig:
     """Validate raw execution config against the closed allowlist.
 
     Args:
@@ -229,6 +471,7 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         "required_component_version",
         "intervention_parameters",
         "recipe",
+        "admission",
     }
     unknown = sorted((key for key in raw if key not in allowed), key=str)
     if unknown:
@@ -291,6 +534,11 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         errors.append("intervention_parameters must be a mapping")
     else:
         _validate_intervention_parameters(intervention_parameters, errors)
+    try:
+        admission = _validate_executor_admission_config(raw.get("admission"), source=source)
+    except ReviewExecuteError as error:
+        errors.extend(error.errors)
+        admission = None
     if errors:
         raise ReviewExecuteError(errors, source=source)
     return ExecuteConfig(
@@ -307,6 +555,7 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         required_component_version=required_version,
         intervention_parameters=dict(intervention_parameters),
         recipe=dict(raw["recipe"]),
+        admission=admission,
     )
 
 
@@ -587,6 +836,109 @@ def _write_json(path: Path, payload: Any) -> str:
         os.fsync(handle.fileno())
     tmp_path.replace(path)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _read_admission_file(path: Path, *, label: str, maximum_bytes: int) -> bytes:
+    """Read one external admission file as a bounded no-follow regular file.
+
+    Returns:
+        The bounded file bytes.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if not isinstance(nofollow, int) or not isinstance(nonblocking, int):
+        raise OSError(f"{label} cannot be read safely on this platform")
+    flags = os.O_RDONLY | nofollow | nonblocking | getattr(os, "O_CLOEXEC", 0)
+    file_descriptor = os.open(path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(file_descriptor).st_mode):
+            raise OSError(f"{label} must be a regular file")
+        content = os.read(file_descriptor, maximum_bytes + 1)
+    finally:
+        os.close(file_descriptor)
+    if len(content) > maximum_bytes:
+        raise OSError(f"{label} exceeds maximum size of {maximum_bytes} bytes")
+    return content
+
+
+def _admission_path(
+    root: Path, reference: str, *, label: str
+) -> tuple[Path | None, tuple[str, str] | None]:
+    """Resolve a root-relative admission reference without following symlinks.
+
+    Returns:
+        A resolved path and no failure, or no path and a typed failure pair.
+    """
+    path = Path(reference)
+    if path.is_absolute() or not path.parts or ".." in path.parts or "\\" in reference:
+        return None, (
+            "unavailable",
+            f"source_admission: {label} escapes the configured source root",
+        )
+    candidate = root.joinpath(*path.parts)
+    current = root
+    try:
+        for component in path.parts:
+            current = current / component
+            if current.is_symlink():
+                return None, (
+                    "unavailable",
+                    f"source_admission: {label} contains an unsafe symlink",
+                )
+        resolved = candidate.resolve(strict=False)
+        resolved.relative_to(root)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, ("unavailable", f"source_admission: {label} escaped root: {error}")
+    return resolved, None
+
+
+def _parse_admission_json(
+    path: Path, *, label: str, maximum_bytes: int
+) -> tuple[dict[str, Any] | None, tuple[str, str] | None, str | None]:
+    """Read one bounded JSON proof, returning bytes digest for external anchoring.
+
+    Returns:
+        Parsed payload, optional typed failure, and the raw-bytes digest.
+    """
+    try:
+        content = _read_admission_file(path, label=label, maximum_bytes=maximum_bytes)
+    except FileNotFoundError:
+        reason = (
+            "receipt_missing"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_missing"
+        )
+        return None, ("unavailable", f"source_admission: {reason}"), None
+    except (OSError, UnicodeError) as error:
+        reason = (
+            "receipt_unreadable"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_unreadable"
+        )
+        return None, ("unavailable", f"source_admission: {reason}: {error}"), None
+    digest = hashlib.sha256(content).hexdigest()
+    try:
+        payload = json.loads(
+            content.decode("utf-8"),
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"non-standard JSON constant: {value}")
+            ),
+        )
+    except (UnicodeError, ValueError, RecursionError) as error:
+        reason = (
+            "receipt_malformed"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_malformed"
+        )
+        return None, ("failed", f"source_admission: {reason}: {error}"), digest
+    if not isinstance(payload, dict):
+        reason = (
+            "receipt_malformed"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_malformed"
+        )
+        return None, ("failed", f"source_admission: {reason}: document must be an object"), digest
+    return payload, None, digest
 
 
 def _repo_commit() -> str:
@@ -1060,6 +1412,7 @@ def _config_identity_document(config: ExecuteConfig) -> dict[str, Any]:
         "required_component_version": config.required_component_version,
         "intervention_parameters": dict(config.intervention_parameters),
         "recipe_digest": _canonical_digest(config.recipe),
+        "admission": config.admission.to_dict() if config.admission is not None else None,
     }
 
 
@@ -1318,6 +1671,7 @@ class _Executor:
     config: ExecuteConfig
     recipe: dict[str, Any]
     output_dir: Path
+    admission_proof: _AdmissionProof | None = None
     resume: bool = False
     _attempts: list[dict[str, Any]] = field(default_factory=list)
     _executions_consumed: int = 0
@@ -1353,6 +1707,17 @@ class _Executor:
 
     def _record_attempt(self, attempt: dict[str, Any]) -> None:
         self._attempts.append(attempt)
+
+    def _refresh_admission(self) -> None:
+        """Re-verify source and preservation proof immediately before execution."""
+        proof, failure = _resolve_executor_admission(self.request, self.config, self.recipe)
+        if failure is not None or proof is None:
+            status, reason = failure or (
+                "failed",
+                "source_admission: resolver returned no proof",
+            )
+            raise _SourceAdmissionRejected(status, reason)
+        self.admission_proof = proof
 
     def _record_progress(self) -> None:
         """Persist attempts and candidate state after every execution boundary."""
@@ -1418,6 +1783,8 @@ class _Executor:
             raise ReviewExecuteError(["cannot resume: ledger scientific-claim boundary is invalid"])
         if ledger.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
             raise ReviewExecuteError(["cannot resume: ledger dependent-family boundary is invalid"])
+        if ledger.get("source_admission") != self.admission_proof.to_dict():
+            raise ReviewExecuteError(["cannot resume: source admission proof identity mismatch"])
         if ledger.get("config_identity_digest") != _canonical_digest(
             _config_identity_document(self.config)
         ):
@@ -1634,6 +2001,7 @@ class _Executor:
             "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
             "scientific_claim_allowed": False,
             "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+            "source_admission": self.admission_proof.to_dict(),
             "wall_elapsed_s": round(self._elapsed(), 3),
         }
         return _write_json(self.output_dir / "attempt-ledger.json", payload)
@@ -1641,6 +2009,7 @@ class _Executor:
     def _run_episode(  # noqa: C901
         self, candidate_id: str, kind: str, spec: dict[str, Any]
     ) -> dict[str, Any]:
+        self._refresh_admission()
         if not self._budget_remaining():
             raise _ExecutionBudgetExhausted("execution_budget_exhausted: no execution slot remains")
         wall_remaining = self._wall_remaining()
@@ -1944,6 +2313,15 @@ class _ExecutionStubbornChild(Exception):
     """Internal signal: an owned child process resisted termination."""
 
 
+class _SourceAdmissionRejected(Exception):
+    """Internal signal: source or preservation proof changed during execution."""
+
+    def __init__(self, status: str, reason: str):
+        self.status = status if status in {"unavailable", "failed"} else "failed"
+        self.reason = reason
+        super().__init__(reason)
+
+
 def _measurement_for_recipe(recipe: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     measurements = recipe.get("measurements", [])
     if not isinstance(measurements, list) or not measurements:
@@ -1988,6 +2366,7 @@ def _write_complete_outputs(
         "component_id": COMPONENT_ID,
         "recipe_id": str(executor.recipe.get("recipe_id", "")),
         "source_identity": dict(executor.recipe.get("source_identity", {})),
+        "source_admission": executor.admission_proof.to_dict(),
         "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
         "benchmark_success": False,
         "scientific_claim_allowed": False,
@@ -2008,6 +2387,7 @@ def _write_complete_outputs(
         "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
         "scientific_claim_allowed": False,
         "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+        "source_admission": executor.admission_proof.to_dict(),
         "traces": list(executor._traces),
     }
     executor._write_ledger()
@@ -2022,6 +2402,7 @@ def _write_complete_outputs(
         "recipe_digest": _canonical_digest(executor.recipe),
         "config_digest": _canonical_digest(_config_document(executor.config)),
         "source_identity": dict(executor.recipe.get("source_identity", {})),
+        "source_admission": executor.admission_proof.to_dict(),
         "retrieval_destination": str(executor.recipe.get("preservation_destination", "")),
         "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
         "benchmark_success": False,
@@ -2103,6 +2484,201 @@ def _final_result(
             status="failed",
             reason=f"internal_result_invalid: {'; '.join(error.errors)}",
         )
+
+
+def _admission_failure(status: str, reason: str, detail: str = "") -> tuple[str, str]:
+    """Normalize one source-admission failure into a typed result pair.
+
+    Returns:
+        A non-complete result status and bounded reason prefix.
+    """
+    normalized_status = status if status in {"unavailable", "failed"} else "failed"
+    normalized_reason = f"source_admission: {reason}"
+    if detail:
+        normalized_reason += f": {detail}"
+    return normalized_status, normalized_reason
+
+
+def _source_admission_request_projection(request: ComponentRequest) -> ComponentRequest:
+    """Project the source-level request identity used by the executor.
+
+    Runtime controls are not source-artifact content and are already bound by
+    the full executor config in provenance and resume state.  The receipt binds
+    the stable request envelope, source declarations, and launcher admission
+    identity without creating a receipt-hash cycle through path and digest
+    references in the external admission block.
+
+    Returns:
+        A validated request carrying only source-level admission identity.
+    """
+    admission = request.config.get("admission")
+    if isinstance(admission, Mapping):
+        admission_identity = {
+            "schema_version": admission.get("schema_version"),
+            "config_identity": admission.get("config_identity"),
+        }
+    else:
+        admission_identity = None
+    return ComponentRequest(
+        request_id=request.request_id,
+        component_id=request.component_id,
+        sources=request.sources,
+        output_directory=request.output_directory,
+        config={"admission": admission_identity} if admission_identity is not None else {},
+        required_capabilities=request.required_capabilities,
+    )
+
+
+def _resolve_executor_admission(  # noqa: C901, PLR0912
+    request: ComponentRequest,
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+) -> tuple[_AdmissionProof | None, tuple[str, str] | None]:
+    """Resolve the caller-owned source and preservation proof.
+
+    The source receipt itself remains untrusted data.  Its bytes are anchored
+    by the external config digest, and the canonical resolver binds the parsed
+    receipt to the current request and recipe before returning protected source
+    bytes.  The preservation receipt is independently anchored and checked
+    against the same source, recipe, config identity, and destination.
+
+    Returns:
+        An admission proof, or a typed non-complete result pair.
+    """
+    admission = config.admission
+    if admission is None:
+        return None, _admission_failure(
+            "unavailable",
+            "legacy_config_requires_admission",
+            "executor-admission.v1 is required; legacy diagnostic requests cannot claim completion",
+        )
+    try:
+        configured_root = Path(admission.source_root)
+        if configured_root.is_symlink():
+            return None, _admission_failure(
+                "unavailable", "allowed_root_invalid", "source_root must not be a symlink"
+            )
+        root = configured_root.resolve(strict=True)
+    except FileNotFoundError:
+        return None, _admission_failure(
+            "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, "source_root is missing"
+        )
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        return None, _admission_failure(
+            "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, str(error)
+        )
+    if not root.is_dir():
+        return None, _admission_failure(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
+            "source_root is not a directory",
+        )
+
+    receipt_path, failure = _admission_path(
+        root, admission.receipt_reference, label="receipt_reference"
+    )
+    if failure is not None or receipt_path is None:
+        return None, failure or _admission_failure("failed", "receipt_reference_invalid")
+    receipt_payload, failure, receipt_digest = _parse_admission_json(
+        receipt_path,
+        label="admitted-source receipt",
+        maximum_bytes=MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
+    )
+    if failure is not None or receipt_payload is None or receipt_digest is None:
+        return None, failure or _admission_failure(
+            "failed", ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED
+        )
+    if receipt_digest != admission.receipt_sha256:
+        return None, _admission_failure(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            "external receipt digest does not match executor admission config",
+        )
+    try:
+        request_projection = _source_admission_request_projection(request)
+        source_resolution = resolve_admitted_source(
+            receipt_payload,
+            allowed_root=root,
+            request=request_projection,
+            recipe=recipe,
+            expected_config_identity=admission.config_identity,
+        )
+    except (
+        OSError,
+        RecursionError,
+        TypeError,
+        ValueError,
+        ReviewContractsValidationError,
+    ) as error:
+        return None, _admission_failure("failed", "resolver_error", str(error))
+    if source_resolution.status != "admitted" or source_resolution.receipt is None:
+        return None, _admission_failure(
+            source_resolution.status,
+            source_resolution.reason,
+            source_resolution.detail,
+        )
+    if source_resolution.source_bytes is None:
+        return None, _admission_failure(
+            "failed",
+            ADMITTED_SOURCE_REASON_SOURCE_MUTATED,
+            "resolver returned no protected source bytes",
+        )
+    if recipe.get("preservation_destination") != admission.preservation_destination:
+        return None, _admission_failure(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            "preservation destination differs between recipe and external config",
+        )
+
+    preservation_path, failure = _admission_path(
+        root,
+        admission.preservation_receipt_reference,
+        label="preservation_receipt_reference",
+    )
+    if failure is not None or preservation_path is None:
+        return None, failure or _admission_failure(
+            "failed", "preservation_receipt_reference_invalid"
+        )
+    preservation_payload, failure, preservation_digest = _parse_admission_json(
+        preservation_path,
+        label="preservation receipt",
+        maximum_bytes=_MAX_PRESERVATION_RECEIPT_BYTES,
+    )
+    if failure is not None or preservation_payload is None or preservation_digest is None:
+        return None, failure or _admission_failure("failed", "preservation_receipt_malformed")
+    if preservation_digest != admission.preservation_receipt_sha256:
+        return None, _admission_failure(
+            "unavailable",
+            "preservation_receipt_stale",
+            "external preservation receipt digest does not match executor admission config",
+        )
+    expected_preservation = {
+        "schema_version": PRESERVATION_RECEIPT_SCHEMA_VERSION,
+        "status": "preserved",
+        "destination": admission.preservation_destination,
+        "source_receipt_id": source_resolution.receipt.receipt_id,
+        "source_sha256": source_resolution.receipt.source.sha256,
+        "recipe_sha256": experiment_recipe_canonical_digest(recipe),
+        "config_identity": admission.config_identity,
+    }
+    for key, expected in expected_preservation.items():
+        if preservation_payload.get(key) != expected:
+            return None, _admission_failure(
+                "unavailable",
+                "preservation_receipt_stale",
+                f"preservation receipt {key} does not match the admitted invocation",
+            )
+    return (
+        _AdmissionProof(
+            config=admission,
+            root=root,
+            source=source_resolution,
+            receipt_sha256=receipt_digest,
+            preservation_receipt_sha256=preservation_digest,
+            preservation_receipt=preservation_payload,
+        ),
+        None,
+    )
 
 
 def _admit_request(  # noqa: C901
@@ -2390,10 +2966,12 @@ def _drive_candidates(
         return "cancelled", f"cancelled_by_user: {error}"
     except _ExecutionStubbornChild as error:
         return "failed", str(error)
+    except _SourceAdmissionRejected as error:
+        return error.status, error.reason
     return status, reason
 
 
-def _settle(  # noqa: C901
+def _settle(  # noqa: C901, PLR0912
     executor: _Executor, provenance: dict[str, Any], status: str, reason: str
 ) -> ComponentResult:
     """Settle the final result envelope for a driven executor.
@@ -2402,6 +2980,28 @@ def _settle(  # noqa: C901
         Validated component result for the recorded candidate reports.
     """
     request = executor.request
+    final_proof, admission_failure = _resolve_executor_admission(
+        request, executor.config, executor.recipe
+    )
+    if admission_failure is not None or final_proof is None:
+        failure_status, failure_reason = admission_failure or (
+            "failed",
+            "source_admission: resolver returned no proof at complete-result boundary",
+        )
+        try:
+            executor._write_ledger()
+        except (OSError, TypeError, ValueError) as error:
+            failure_reason += f"; output_write_failed: {error}"
+            failure_status = "failed"
+        return _final_result(
+            request,
+            status=failure_status,
+            reason=failure_reason,
+            diagnostics=tuple(_diagnostics(executor)),
+            provenance=provenance,
+        )
+    executor.admission_proof = final_proof
+    provenance["source_admission"] = final_proof.to_dict()
     selected_ids = {
         str(candidate["intervention_id"])
         for candidate in _select_candidates(executor.recipe, executor.config.max_candidates)
@@ -2498,6 +3098,13 @@ def run(
     if early is not None or config is None or recipe_doc is None or measurement is None:
         assert early is not None
         return early
+    admission_proof, admission_failure = _resolve_executor_admission(request, config, recipe_doc)
+    if admission_failure is not None or admission_proof is None:
+        failure_status, failure_reason = admission_failure or (
+            "failed",
+            "source_admission: resolver returned no proof during admission",
+        )
+        return _final_result(request, status=failure_status, reason=failure_reason)
     output_dir, dir_early = _prepare_output_dir(request, root, resume=resume)
     if dir_early is not None or output_dir is None:
         assert dir_early is not None
@@ -2507,6 +3114,7 @@ def run(
         config=config,
         recipe=recipe_doc,
         output_dir=output_dir,
+        admission_proof=admission_proof,
         resume=resume,
         _started_at=start_time,
     )
@@ -2521,6 +3129,7 @@ def run(
     provenance["request_digest"] = _canonical_digest(_request_identity_document(request))
     provenance["recipe_digest"] = _canonical_digest(recipe_doc)
     provenance["config_digest"] = _canonical_digest(_config_document(config))
+    provenance["source_admission"] = admission_proof.to_dict()
     provenance["sources"] = [
         {
             "artifact_id": source.artifact_id,

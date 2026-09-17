@@ -1,0 +1,9 @@
+{
+  "config_identity": "srev22-admitted-source-config.v1",
+  "destination": "external:post-execution-preservation",
+  "recipe_sha256": "669a0bbeb47ae38378424f57597358dd65161feb541aebd091fb6ace1a072b3f",
+  "schema_version": "srev22-preservation-receipt.v1",
+  "source_receipt_id": "srev22-review-execute-receipt",
+  "source_sha256": "ea05e90eaabfef95fc794bed492594a918c92a9d889dd40a53bd80d449efcee2",
+  "status": "preserved"
+}

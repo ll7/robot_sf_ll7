@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -56,6 +57,14 @@ def _fixture_episode_identity() -> dict[str, Any]:
         "scenario_id": source_identity["scenario_id"],
         "source_ref": dict(source_identity["source_ref"]),
     }
+
+
+def _fixture_request_for_root(root: Path) -> Any:
+    """Point the external admission config at a private fixture copy."""
+    request = _fixture_request()
+    config = copy.deepcopy(request.config)
+    config["admission"]["source_root"] = str(root)
+    return replace(request, config=config)
 
 
 def _patch_fake_execution(
@@ -165,6 +174,177 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     assert manifest["evidence_boundary"] == "diagnostic_only"
     assert manifest["scientific_claim_allowed"] is False
     assert manifest["dependent_family_status"] == "standalone_fixture_only"
+
+
+def test_source_admission_positive_fixture_binds_external_proof(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A complete result records the externally anchored source and preservation proof."""
+    _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert result.provenance["scientific_claim_allowed"] is False
+    admission = result.provenance["source_admission"]
+    assert admission["receipt_id"] == "srev22-review-execute-receipt"
+    assert admission["preservation_destination"] == "external:post-execution-preservation"
+    assert admission["scientific_claim_allowed"] is False
+
+
+def test_legacy_v1_config_cannot_claim_admitted_completion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Requests without the additive admission config remain non-complete and do no work."""
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    legacy_config = copy.deepcopy(request.config)
+    legacy_config.pop("admission")
+    result = run(replace(request, config=legacy_config), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "legacy_config_requires_admission" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("missing_receipt", "receipt_missing"),
+        ("receipt_tampered", "receipt_stale"),
+        ("preservation_tampered", "preservation_receipt_stale"),
+    ],
+)
+def test_external_admission_proof_failures_are_non_complete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mutation: str,
+    expected: str,
+) -> None:
+    """Missing or forged external proof never starts a child execution."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    if mutation == "missing_receipt":
+        (root / "receipt.json").unlink()
+    elif mutation == "receipt_tampered":
+        receipt = root / "receipt.json"
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        payload["receipt_id"] = "forged-receipt"
+        receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    else:
+        preservation = root / "preservation-receipt.json"
+        preservation.write_text(
+            preservation.read_text(encoding="utf-8").replace(
+                "external:post-execution-preservation", "external:forged-destination"
+            ),
+            encoding="utf-8",
+        )
+    result = run(_fixture_request_for_root(root), base=tmp_path)
+    assert result.status in {"unavailable", "failed"}
+    assert expected in result.reason
+    assert calls == []
+
+
+def test_receipt_cannot_self_authorize_a_trust_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Receipt content cannot add an artifact-controlled trust-root declaration."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    receipt = root / "receipt.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["allowed_root"] = str(tmp_path / "attacker-controlled-root")
+    receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    request = _fixture_request_for_root(root)
+    config = copy.deepcopy(request.config)
+    config["admission"]["receipt_sha256"] = hashlib.sha256(receipt.read_bytes()).hexdigest()
+    result = run(replace(request, config=config), base=tmp_path)
+    assert result.status == "failed"
+    assert "receipt_malformed" in result.reason
+    assert calls == []
+
+
+def test_recipe_cannot_self_authorize_a_different_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Recipe source metadata cannot override the external receipt/root binding."""
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    config = copy.deepcopy(request.config)
+    config["recipe"]["source_identity"]["source_uri"] = "attacker-owned.json"
+    result = run(replace(request, config=config), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "receipt_stale" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_root", "../outside"),
+        ("receipt_reference", "../receipt.json"),
+        ("preservation_receipt_reference", "../preservation-receipt.json"),
+    ],
+)
+def test_admission_config_rejects_traversal(field: str, value: str) -> None:
+    """Launcher admission paths are validated before any source is opened."""
+    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError
+
+    config = _fixture_json("config.json")
+    config["admission"][field] = value
+    with pytest.raises(ReviewExecuteError, match="source_admission_config"):
+        validate_execute_config(config)
+
+
+def test_source_root_symlink_is_rejected_before_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The configured root and source path cannot be redirected through symlinks."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes((root / "recipe.json").read_bytes())
+    source = root / "recipe.json"
+    source.unlink()
+    try:
+        source.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(_fixture_request_for_root(root), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "source_escaped_root" in result.reason
+    assert calls == []
+
+
+def test_source_mutation_at_complete_boundary_downgrades_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Bytes changed after the final child cannot pass the complete boundary."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def mutate_after_treatment(job: dict[str, Any], timeout_s: float, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 2:
+            source = root / "recipe.json"
+            source.write_bytes(source.read_bytes() + b"tampered")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", mutate_after_treatment)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "source_mutated" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / request.output_directory / "execute-report.json").exists()
 
 
 def test_repeated_runs_agree_on_logical_artifacts(
@@ -1063,7 +1243,7 @@ def test_unknown_factor_candidate_is_unavailable(tmp_path: Path) -> None:
     payload["config"]["max_candidates"] = 1
     result = run(component_request_from_dict(payload), base=tmp_path)
     assert result.status == "unavailable"
-    assert "unsupported intervention factor" in result.reason
+    assert "receipt_stale" in result.reason
 
 
 def test_wall_budget_exhaustion_before_first_candidate(tmp_path: Path) -> None:

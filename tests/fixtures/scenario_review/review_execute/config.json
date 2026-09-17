@@ -9,6 +9,16 @@
   "per_execution_timeout_s": 120.0,
   "activation_speed_tolerance_m_s": 0.05,
   "motion_epsilon_m": 0.05,
+  "admission": {
+    "schema_version": "executor-admission.v1",
+    "source_root": "tests/fixtures/scenario_review/review_execute",
+    "receipt_reference": "receipt.json",
+    "receipt_sha256": "578805260c1c37404ad81677867916705e48f10dba01e5493dfcd691651f0822",
+    "preservation_destination": "external:post-execution-preservation",
+    "preservation_receipt_reference": "preservation-receipt.json",
+    "preservation_receipt_sha256": "926af61e723c1ad6e073f811aedffa748ea0a40435062e7d54d76b7d094e669f",
+    "config_identity": "srev22-admitted-source-config.v1"
+  },
   "intervention_parameters": {
     "ped-speed-up": {"speed_delta_m_s": 0.5},
     "ped-speed-down": {"speed_delta_m_s": -0.5},
@@ -25,6 +35,11 @@
         "uri": "recipe.json",
         "format": "experiment-recipe.v1"
       },
+      "source_uri": "recipe.json",
+      "source_format": "experiment-recipe.v1",
+      "source_schema": "experiment-recipe.v1",
+      "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
+      "config_identity": "srev22-admitted-source-config.v1",
       "kind": "fixture",
       "origin": "synthetic-constructed",
       "evidence_boundary": "diagnostic_only",
@@ -48,6 +63,6 @@
       "control_fidelity_failure_blocks_treatment"
     ],
     "preservation_destination": "external:post-execution-preservation",
-    "admission_reference": "srev22-fixture-admission"
+    "admission_reference": "srev22-review-execute-receipt"
   }
 }

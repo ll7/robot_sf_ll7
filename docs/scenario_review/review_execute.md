@@ -42,6 +42,49 @@ extend a prior budget but may never reduce it. Terminal candidates are not
 retried, and a prior timeout/cancellation is settled as a failed candidate
 instead of being silently re-executed.
 
+### Source admission and preservation
+
+Every result that can be `complete` requires an additive
+`config.admission` object with `schema_version: executor-admission.v1` supplied
+by the executor or launcher. It is external trust configuration, not recipe
+content, and carries:
+
+```json
+{
+  "schema_version": "executor-admission.v1",
+  "source_root": "tests/fixtures/scenario_review/review_execute",
+  "receipt_reference": "receipt.json",
+  "receipt_sha256": "<sha256 of receipt.json>",
+  "preservation_destination": "external:post-execution-preservation",
+  "preservation_receipt_reference": "preservation-receipt.json",
+  "preservation_receipt_sha256": "<sha256 of preservation-receipt.json>",
+  "config_identity": "srev22-admitted-source-config.v1"
+}
+```
+
+The configured root must be a local directory. Receipt references are
+root-relative, traversal-free, and no-follow regular files. Before the first
+child starts, and again before a complete result is emitted, the executor
+calls the shared `resolve_admitted_source()` resolver. It binds the current
+request and recipe (the launcher-only admission block is excluded from the v1
+request digest), source/config identities, and receipt digests, then rehashes
+the source bytes from a protected descriptor. The runner's request projection
+binds the stable envelope, source declarations, and admission
+`config_identity`; full execution controls remain bound in provenance and the
+resume ledger. The external preservation receipt
+must independently match the source receipt, recipe digest, config identity,
+and configured destination. Source, receipt, root, and preservation tampering
+therefore yields a typed `unavailable`/`failed` result and no complete
+artifacts; the recipe cannot nominate its own root or receipt.
+
+The checked-in positive fixture under
+`tests/fixtures/scenario_review/review_execute/` contains the source, admitted
+receipt, preservation receipt, and matching config. A legacy v1 request without
+`config.admission` remains diagnostic-only but is returned as `unavailable` and
+cannot start execution or claim admitted completion. Both the source and
+preservation receipts retain `scientific_claim_allowed: false`; source
+integrity is not scientific or benchmark admission.
+
 The component descriptor (`descriptor()`) declares the `bounded-execution`
 required capability and the `execute-report.v1` / `attempt-ledger.v1` /
 `activation-trace.v1` / `preservation-manifest.v1` output types. Request a

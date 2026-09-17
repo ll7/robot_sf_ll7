@@ -12,12 +12,18 @@ from pysocialforce.config import (
 )
 
 from robot_sf.planner import socnav as _socnav
+from robot_sf.planner.socnav_base import (
+    SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+    SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+)
 from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
 SocNavPlannerPolicy = _socnav.SocNavPlannerPolicy
 sf_forces = _socnav.sf_forces
+
+SOCIAL_FORCE_GOAL_APPROACH_METADATA_SCHEMA = "social_force_goal_approach_metadata.v1"
 
 
 class SocialForcePlannerAdapter(SamplingPlannerAdapter):
@@ -35,12 +41,16 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             )
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters: dict[str, Any] = {}
+        self._goal_approach_applied = False
+        self._goal_approach_runtime_parameters: dict[str, Any] = {}
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
         del seed
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters = {}
+        self._goal_approach_applied = False
+        self._goal_approach_runtime_parameters = {}
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -60,10 +70,21 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
         to_goal = goal - robot_pos
         goal_dist = float(np.linalg.norm(to_goal))
+        self._goal_approach_applied = False
+        self._goal_approach_runtime_parameters = {}
         if goal_dist < self.config.goal_tolerance:
             return np.zeros(2, dtype=float)
 
         dt = self._resolve_dt(observation)
+        goal_approach = self._goal_approach_context(
+            observation,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            robot_state=robot_state,
+            goal_state=goal_state,
+            goal=goal,
+            goal_dist=goal_dist,
+        )
         desired_speed = min(self.config.social_force_desired_speed, self.config.max_linear_speed)
         desired_speed = min(desired_speed, goal_dist / max(dt, self._EPS))
         goal_dir = to_goal / (goal_dist + self._EPS)
@@ -71,9 +92,18 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         desired_force = (desired_vel - robot_vel) / max(self.config.social_force_tau, self._EPS)
 
         social_force = self._compute_social_force(robot_pos, robot_vel, ped_state, robot_heading)
-        obstacle_force = self._compute_obstacle_force(
-            observation, robot_pos, robot_heading, robot_vel, robot_state
-        )
+        if goal_approach is None:
+            obstacle_force = self._compute_obstacle_force(
+                observation, robot_pos, robot_heading, robot_vel, robot_state
+            )
+        else:
+            # The segment-clear check in ``_goal_approach_context`` is the
+            # opt-in terminal controller's wall-avoidance guard.  Keep the
+            # pedestrian force active, but do not let the legacy static-wall
+            # gradient reintroduce the known goal-limit cycle.
+            obstacle_force = np.zeros(2, dtype=float)
+            self._goal_approach_applied = True
+            self._obstacle_force_applied = False
         interaction_force = self.config.social_force_repulsion_weight * (
             social_force + obstacle_force
         )
@@ -87,7 +117,92 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             velocity_world = (
                 velocity_world / (speed + self._EPS) * float(self.config.max_linear_speed)
             )
+        if goal_approach is not None:
+            approach_speed = min(
+                float(self.config.social_force_goal_approach_max_speed),
+                float(self.config.max_linear_speed),
+                max(
+                    0.0,
+                    (goal_dist - float(self.config.social_force_goal_approach_stop_distance))
+                    / max(dt, self._EPS),
+                ),
+            )
+            approach_velocity = goal_dir * approach_speed
+            velocity_world = 0.5 * velocity_world + 0.5 * approach_velocity
+            speed = float(np.linalg.norm(velocity_world))
+            if speed > approach_speed:
+                velocity_world = velocity_world / (speed + self._EPS) * approach_speed
         return np.asarray(velocity_world, dtype=float)
+
+    def _goal_approach_context(
+        self,
+        observation: dict,
+        *,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        robot_state: dict,
+        goal_state: dict,
+        goal: np.ndarray,
+        goal_dist: float,
+    ) -> bool | None:
+        """Return whether the explicit terminal goal controller may take over.
+
+        The correction is intentionally narrow: it applies only to the final
+        waypoint (``goal.next`` is the route sentinel), within a bounded radius,
+        and when occupancy cells leave a swept robot-radius corridor clear. A
+        blocked segment always falls through to the historical obstacle force.
+        """
+        version = getattr(
+            self.config,
+            "social_force_goal_approach_version",
+            SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+        )
+        if version != SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1:
+            return None
+
+        next_goal = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
+        if float(np.linalg.norm(next_goal)) > max(float(self.config.goal_tolerance), self._EPS):
+            return None
+        approach_radius = max(float(self.config.social_force_goal_approach_radius), 0.0)
+        if goal_dist > approach_radius:
+            return None
+
+        # The correction is an occupancy-backed exception. Without a grid we
+        # cannot establish that the terminal segment is free, so retain the
+        # historical wall force (and its degraded-input semantics).
+        if self._obstacle_grid_payload(observation) is None:
+            return None
+        centers, radii = self._extract_obstacles_from_grid(
+            observation,
+            robot_pos,
+            robot_heading,
+        )
+        robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
+        clearance = max(float(self.config.social_force_goal_approach_clearance), 0.0)
+        segment = goal - robot_pos
+        segment_sq = float(np.dot(segment, segment))
+        segment_clear = segment_sq > self._EPS
+        if segment_clear:
+            for center, obstacle_radius in zip(centers, radii, strict=False):
+                projection = float(
+                    np.clip(np.dot(center - robot_pos, segment) / segment_sq, 0.0, 1.0)
+                )
+                nearest = robot_pos + projection * segment
+                required_clearance = robot_radius + float(obstacle_radius) + clearance
+                if float(np.linalg.norm(center - nearest)) <= required_clearance:
+                    segment_clear = False
+                    break
+
+        self._goal_approach_runtime_parameters = {
+            "final_goal": True,
+            "approach_radius_m": approach_radius,
+            "stop_distance_m": float(self.config.social_force_goal_approach_stop_distance),
+            "max_speed_mps": float(self.config.social_force_goal_approach_max_speed),
+            "corridor_clearance_m": clearance,
+            "obstacle_points_considered": int(centers.shape[0]),
+            "segment_clear": segment_clear,
+        }
+        return True if segment_clear else None
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """Compute (v, w) using social-force goal + interaction forces.
@@ -477,6 +592,39 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         return {
             "planner_type": "SocialForcePlannerAdapter",
             "obstacle_force_law": self.obstacle_force_law_metadata(),
+            "goal_approach": self.goal_approach_metadata(),
+        }
+
+    def goal_approach_metadata(self) -> dict[str, Any]:
+        """Return explicit goal-approach version and runtime parameters."""
+        config = getattr(self, "config", None)
+        version = getattr(
+            config,
+            "social_force_goal_approach_version",
+            SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+        )
+        parameters: dict[str, Any] = {
+            "approach_radius_m": float(getattr(config, "social_force_goal_approach_radius", 4.0)),
+            "stop_distance_m": float(
+                getattr(config, "social_force_goal_approach_stop_distance", 1.75)
+            ),
+            "max_speed_mps": float(getattr(config, "social_force_goal_approach_max_speed", 0.75)),
+            "corridor_clearance_m": float(
+                getattr(config, "social_force_goal_approach_clearance", 0.25)
+            ),
+        }
+        parameters.update(getattr(self, "_goal_approach_runtime_parameters", {}))
+        return {
+            "schema_version": SOCIAL_FORCE_GOAL_APPROACH_METADATA_SCHEMA,
+            "version": str(version),
+            "enabled": str(version) != SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+            "applied": bool(getattr(self, "_goal_approach_applied", False)),
+            "resolution_mode": getattr(
+                config,
+                "social_force_goal_approach_resolution_mode",
+                "historical_unversioned",
+            ),
+            "parameters": parameters,
         }
 
     def obstacle_force_law_metadata(self) -> dict[str, Any]:
@@ -521,6 +669,8 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
 
 
 __all__ = [
+    "SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1",
+    "SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1",
     "SocialForcePlannerAdapter",
     "make_social_force_policy",
 ]

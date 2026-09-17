@@ -376,13 +376,13 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_references=("#9394",),
     ),
     (
-        "robot_sf/analysis_workbench/review_context.py",
-        "run",
-        "output_dir is not None",
+        "robot_sf/analysis_workbench/review_storyboard.py",
+        "_verify_reference",
+        "raw is not None",
     ): _review(
-        "The output directory is assigned exactly once by the reservation helper, which returns a reserved directory or raises; every earlier exit releases the possibly-None reservation first, so reaching the write site proves a reserved directory exists.",
+        "The reader returns (bytes, None) on success and (None, error-code) on every failure path (unsafe path, unreadable, non-regular, oversize); the caller returns early whenever the error code is set, so reaching the digest site proves raw is bytes.",
         ownership_status="unowned_residual",
-        ownership_references=("#9443",),
+        ownership_references=("#9458",),
     ),
 }
 

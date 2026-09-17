@@ -20,9 +20,12 @@ uv run python -m robot_sf.analysis_workbench.audit_queue \
 `select` emits one `ReviewPacket` and its structured selection context.  Add
 `--state output/audit-queue/state.json` to `select` and `resume` for durable,
 lossless local state.  State is strict JSON, atomically replaced, and guarded
-by a monotonic compare-and-swap revision.  It contains the RNG state, packet
-snapshots, selection history, defer/pin/request actions, and input identity;
-there is no pickle or executable payload.
+by a monotonic compare-and-swap revision under a stable sibling lock
+(`state.json.lock`).  It contains the RNG state, validated packet snapshots,
+selection history, defer/pin/request actions, and input/policy identities;
+there is no pickle or executable payload.  Concurrent writers fail closed on
+a stale revision, and corrupt current or historical snapshots cannot be
+silently replaced by a new selection.
 
 The Python API is equivalent:
 
@@ -83,11 +86,20 @@ missingness; it never blocks single-episode primary review.  Similarity is a
 retrieval explanation only: it does not imply review, confirmation, a matched
 state, a common cause, or a scientific exemplar.
 
+Peer matched-state display also requires the canonical
+`pair_compatibility.deterministic.v1` profile, complete provenance checks,
+source-trace content receipt/identity, and the full initial-state equivalence
+receipt bound to both trace IDs.  A caller's `compatible: true` flag or a
+minimal alignment mapping is insufficient.
+
 The queue consumes typed BA-01 `Signal` records and a stable `ScanSummary`
 identity/revision/accounting handle.  Missing BA-01 signals/scan summaries and
-missing BA-04 deficits are reported explicitly as unavailable.  A changed
-scan/finding/input revision is surfaced as stale on resume; prior selection
-history is retained and must not be silently rebound.
+missing BA-04 deficits are reported explicitly as unavailable.  Detector-level
+unavailable/error accounting and coverage/scan source ID or revision
+mismatches remain visible in packet missingness.  The offline root document
+must carry the exact `audit-queue-input.v1` schema version.  A changed
+scan/finding/input/policy-semantic revision is surfaced as stale on resume;
+prior selection history is retained and must not be silently rebound.
 
 ## Actions and review credit
 
@@ -97,7 +109,8 @@ written with `AuditStore.save` using an operation ID and compare-and-swap
 revision.  Selected packets are emitted as BA-03 records.  Selection actions
 are agent-authored with `human_review_granted: false`; selection never writes a
 `ReviewRecord`.  Call `record_review(scope="full_episode", ...)` only for an
-explicit human/agent review receipt.  Replaying an operation is idempotent;
+explicit human/agent review receipt; only a human full-episode receipt grants
+coverage credit.  Replaying an operation is idempotent;
 reusing it with a different payload or saving against a stale queue revision
 fails closed.
 

@@ -9,12 +9,14 @@ agent, simulator, shell command, or network request.
 from __future__ import annotations
 
 import json
+import multiprocessing
 from pathlib import Path
 
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import EpisodeRef, Finding, ReviewRecord, Signal
 from robot_sf.analysis_workbench.audit_queue import (
+    ACTIVE_WEIGHTS,
     ActivePolicy,
     AuditQueue,
     CoverageDeficit,
@@ -72,6 +74,101 @@ def _candidate(
         outcome=outcome,
         stratum_id=stratum_id,
     )
+
+
+def _canonical_alignment(primary, peer):
+    """Build the owner-shaped compatibility receipt required for peer display."""
+
+    checks = {
+        "scenario_id_equal": True,
+        "coordinate_frame_equal": True,
+        "units_equal": True,
+        "seed_equal": True,
+        "planner_id_different": True,
+        "map_id_present": True,
+        "map_id_equal": True,
+        "horizon_present": True,
+        "horizon_equal": True,
+        "config_digest_present": True,
+        "time_step_s_present": True,
+        "time_step_s_equal": True,
+    }
+    availability = {
+        name: {"left": "fixture", "right": "fixture", "status": "available"}
+        for name in ("map_id", "horizon", "config_digest", "time_step_s")
+    }
+    initial = {
+        "status": "available",
+        "equivalent": True,
+        "robot_position_delta_m": 0.0,
+        "robot_velocity_delta_mps": 0.0,
+        "robot_heading_delta_rad": 0.0,
+        "robot_radius_delta_m": 0.0,
+        "actor_id_sets_equal": True,
+        "actor_position_delta_m": {},
+        "actor_velocity_delta_mps": {},
+        "actor_radius_delta_m": {},
+        "max_actor_position_delta_m": None,
+        "max_actor_velocity_delta_mps": None,
+        "max_actor_radius_delta_m": None,
+        "position_tolerance_m": 1e-6,
+        "heading_tolerance_rad": 1e-6,
+    }
+    return {
+        "profile_version": "pair_compatibility.deterministic.v1",
+        "status": "available",
+        "comparison_grain": {
+            "grain_id": "matched_planner_pair",
+            "left_role": "primary_trace",
+            "right_role": "comparison_trace",
+        },
+        "provenance": {
+            "left_artifact_id": f"artifact-{primary.episode.execution_id}",
+            "right_artifact_id": f"artifact-{peer.episode.execution_id}",
+            "left_trace_id": primary.trace_identity,
+            "right_trace_id": peer.trace_identity,
+        },
+        "provenance_gate": {
+            "status": "available",
+            "compatible": True,
+            "comparison_grain": "matched_planner_pair",
+            "left_content_sha256": "e" * 64,
+            "right_content_sha256": "f" * 64,
+            "checks": checks,
+            "availability": availability,
+            "time_step_contracts": {
+                "left": {"status": "available"},
+                "right": {"status": "available"},
+            },
+        },
+        "right_source_trace": {
+            "status": "available",
+            "schema_version": "simulation_trace_export.v1",
+            "trace_id": peer.trace_identity,
+            "content_sha256": "f" * 64,
+            "content_receipt": {"content_contract": {}},
+            "source": {
+                "episode_id": peer.episode_id,
+                "scenario_id": peer.scenario_id,
+                "planner_id": peer.planner_id,
+                "seed": peer.episode.seed,
+            },
+        },
+        "initial_state_equivalence": initial,
+    }
+
+
+def _select_from_worker(state_path: str, start_event, result_queue) -> None:
+    """Attempt one synchronized state write in a separate process."""
+
+    queue = AuditQueue((_candidate("cross-process"),), state_path=state_path)
+    start_event.wait(timeout=10)
+    try:
+        queue.select_next()
+    except QueueConflictError:
+        result_queue.put("conflict")
+    else:
+        result_queue.put("ok")
 
 
 def test_fixed_priority_bands_are_lexicographic_before_weights() -> None:
@@ -267,18 +364,16 @@ def test_missing_and_incompatible_peers_are_explained_without_blocking_primary()
     compatible = _candidate(
         "compatible",
         planner_id="orca",
-        metadata={
-            "event_alignment": {"status": "available", "provenance_gate": {"compatible": True}}
-        },
         trace=True,
+    )
+    compatible = replace_candidate(
+        compatible,
+        metadata={"event_alignment": _canonical_alignment(primary, compatible)},
     )
     missing = _candidate("missing", planner_id="social-force", trace=False)
     incompatible = _candidate(
         "incompatible",
         planner_id="mpc",
-        metadata={
-            "event_alignment": {"status": "available", "provenance_gate": {"compatible": True}}
-        },
         trace=True,
     )
     # Source identity differs, so this row cannot be represented as a peer.
@@ -294,9 +389,10 @@ def test_missing_and_incompatible_peers_are_explained_without_blocking_primary()
     assert any("incompatible-identity" in item for item in result.packet.missingness)
 
 
-def replace_candidate(candidate, *, source_digest: str):
+def replace_candidate(candidate, *, source_digest: str | None = None, metadata=None):
     from robot_sf.analysis_workbench.audit_queue import QueueCandidate
 
+    source_digest = source_digest or candidate.episode.source_digest
     return QueueCandidate(
         _episode(
             candidate.episode.execution_id,
@@ -304,7 +400,7 @@ def replace_candidate(candidate, *, source_digest: str):
             source_digest=source_digest,
         ),
         signals=candidate.signals,
-        metadata=candidate.metadata,
+        metadata=candidate.metadata if metadata is None else metadata,
         trace_available=candidate.trace_available,
         trace_identity=candidate.trace_identity,
         stratum_id=candidate.stratum_id,
@@ -458,3 +554,301 @@ def test_checked_in_fixture_supports_offline_rank_and_select() -> None:
     assert result.context.accounting["expected_rows"] == 4
     assert result.context.scan_summary_id == "scan-summary-4"
     assert result.context.seed == 11
+
+
+@pytest.mark.skipif(
+    not hasattr(multiprocessing, "get_context"), reason="multiprocessing context unavailable"
+)
+def test_state_cas_serializes_synchronized_cross_process_writers(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("fork")
+    state_path = str(tmp_path / "state.json")
+    start_event = context.Event()
+    result_queue = context.Queue()
+    workers = [
+        context.Process(target=_select_from_worker, args=(state_path, start_event, result_queue))
+        for _ in range(2)
+    ]
+    for worker in workers:
+        worker.start()
+    start_event.set()
+    results = [result_queue.get(timeout=10) for _ in workers]
+    for worker in workers:
+        worker.join(timeout=10)
+    assert sorted(results) == ["conflict", "ok"]
+    assert all(worker.exitcode == 0 for worker in workers)
+    payload = json.loads(Path(state_path).read_text(encoding="utf-8"))
+    assert payload["state_revision"] == 1
+    assert Path(f"{state_path}.lock").is_file()
+
+
+def test_corrupt_current_or_history_packet_snapshots_fail_closed(tmp_path: Path) -> None:
+    state_path = tmp_path / "state.json"
+    queue = AuditQueue((_candidate("snapshot-a"), _candidate("snapshot-b")), state_path=state_path)
+    first = queue.select_next()
+    assert first is not None
+    second = queue.select_next()
+    assert second is not None
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["packet_payloads"][first.packet.packet_id]["record_id"] = "forged"
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(QueueStateError, match="corrupt persisted packet snapshot"):
+        AuditQueue((_candidate("snapshot-a"), _candidate("snapshot-b")), state_path=state_path)
+
+    payload["packet_payloads"][first.packet.packet_id]["record_id"] = first.packet.packet_id
+    payload["current_packet_id"] = first.packet.packet_id
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    resumed = AuditQueue(
+        (_candidate("snapshot-a"), _candidate("snapshot-b")), state_path=state_path
+    )
+    resumed.state.packet_payloads[first.packet.packet_id]["record_id"] = "forged-again"
+    with pytest.raises(QueueStateError, match="corrupt current packet snapshot"):
+        resumed.resume(reload=False)
+
+
+def test_minimal_caller_compatibility_bit_never_exposes_peer() -> None:
+    primary = _candidate("canonical-primary", trace=True)
+    peer = _candidate(
+        "caller-claims-compatible",
+        planner_id="orca",
+        trace=True,
+        metadata={
+            "event_alignment": {
+                "status": "available",
+                "provenance_gate": {"status": "available", "compatible": True},
+            }
+        },
+    )
+    result = AuditQueue((primary, peer)).select_next()
+    assert result is not None
+    assert result.packet.peers == ()
+    assert any("alignment-profile-mismatch" in item for item in result.packet.missingness)
+
+
+def test_packet_identity_binds_material_peer_alignment_content() -> None:
+    primary = _candidate("identity-primary", trace=True)
+    peer = _candidate("identity-peer", planner_id="orca", trace=True)
+    aligned = replace_candidate(
+        peer,
+        metadata={"event_alignment": _canonical_alignment(primary, peer)},
+    )
+    first = AuditQueue((primary, aligned)).select_next()
+    assert first is not None
+    changed = _canonical_alignment(primary, peer)
+    changed["right_source_trace"]["content_sha256"] = "e" * 64
+    changed_peer = replace_candidate(peer, metadata={"event_alignment": changed})
+    second = AuditQueue((primary, changed_peer)).select_next()
+    assert second is not None
+    assert first.packet.packet_id != second.packet.packet_id
+
+
+def test_policy_semantics_change_marks_resume_stale(tmp_path: Path) -> None:
+    state_path = tmp_path / "policy-state.json"
+    candidate = _candidate("policy-stale")
+    original = AuditQueue((candidate,), policy=ActivePolicy(), state_path=state_path)
+    assert original.select_next() is not None
+    changed_weights = dict(ACTIVE_WEIGHTS)
+    changed_weights["novelty"] = 0.91
+    changed = AuditQueue(
+        (candidate,),
+        policy=ActivePolicy(weights=changed_weights),
+        state_path=state_path,
+    )
+    resumed = changed.resume()
+    assert resumed is not None
+    assert "stale-policy-semantics" in resumed.packet.missingness
+
+
+def test_queue_dataset_requires_exact_root_schema_version() -> None:
+    with pytest.raises(QueueInputError, match="unsupported queue input schema_version"):
+        QueueDataset.from_mapping({"schema_version": "audit-queue.v99", "candidates": []})
+    with pytest.raises(QueueInputError, match="unsupported queue input schema_version"):
+        QueueDataset.from_mapping({"candidates": []})
+
+
+def test_detector_unavailable_accounting_is_propagated() -> None:
+    dataset = QueueDataset(
+        (_candidate("detector-unavailable"),),
+        scan_summary=ScanSummary(
+            "scan-detector",
+            detector_accounting={
+                "video.v1": {"status": "unavailable", "reason": "not recorded"},
+                "collision.v1": {"status": "error", "reason": "corrupt"},
+            },
+        ),
+    )
+    assert "ba-01-detector:video.v1:unavailable" in dataset.missingness
+    assert "ba-01-detector:collision.v1:error" in dataset.missingness
+    assert set(dataset.accounting["unavailable_detectors"]) == {"video.v1", "collision.v1"}
+
+    signal_dataset = QueueDataset(
+        (
+            _candidate(
+                "signal-detector-unavailable",
+                signals=(
+                    Signal(
+                        signal_id="missing-signal",
+                        detector_id="video.v1",
+                        status="unavailable",
+                        message="trace was not recorded",
+                    ),
+                ),
+            ),
+        )
+    )
+    assert "ba-01-detector:video.v1:unavailable" in signal_dataset.missingness
+
+
+def test_scan_and_coverage_source_revision_mismatches_are_visible() -> None:
+    dataset = QueueDataset(
+        (_candidate("coverage-mismatch"),),
+        source_digest="b" * 64,
+        protocol_version="protocol-current",
+        protocol_digest="p" * 64,
+        accounting={"scan_summary_id": "scan-other", "scan_summary_revision": 9},
+        scan_summary=ScanSummary(
+            "scan-current",
+            revision=2,
+            source_revision="scan-stale",
+            source_id="source-stale",
+        ),
+        coverage_deficits=(
+            CoverageDeficit(
+                "ppo|corridor|success",
+                0,
+                1,
+                "scan-other",
+                "protocol-old",
+                source_id="source-old",
+                protocol_id="digest-old",
+            ),
+        ),
+    )
+    assert "scan-summary:accounting-id-mismatch" in dataset.missingness
+    assert "scan-summary:accounting-revision-mismatch" in dataset.missingness
+    assert "scan-summary:source-revision-mismatch" in dataset.missingness
+    assert "scan-summary:source-id-mismatch" in dataset.missingness
+    assert "coverage:ppo|corridor|success:source-revision-mismatch" in dataset.missingness
+    assert "coverage:ppo|corridor|success:protocol-revision-mismatch" in dataset.missingness
+    assert "coverage:ppo|corridor|success:source-id-mismatch" in dataset.missingness
+    assert "coverage:ppo|corridor|success:protocol-id-mismatch" in dataset.missingness
+
+
+def test_conflicting_global_and_local_signal_ids_fail_closed() -> None:
+    candidate = _candidate(
+        "signal-conflict",
+        signals=(
+            Signal(
+                signal_id="duplicate",
+                detector_id="local-detector",
+                status="flagged",
+                reason_code="one",
+            ),
+        ),
+    )
+    global_signal = Signal(
+        signal_id="duplicate", detector_id="global-detector", status="clear", reason_code="two"
+    )
+    with pytest.raises(QueueInputError, match="conflicting signal payload"):
+        QueueDataset((candidate,), signals=(global_signal,))
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"finding_ids": [{"not": "an-id"}]},
+        {"symptoms": {"not": "a-sequence"}},
+        {"competing_hypotheses": "characters-are-not-hypotheses"},
+    ],
+)
+def test_malformed_metadata_containers_raise_queue_input_error(metadata) -> None:
+    with pytest.raises(QueueInputError):
+        _candidate("malformed-metadata", metadata=metadata)
+
+
+def test_starvation_override_eventually_lifts_lower_band() -> None:
+    low = _candidate("starved-low", metadata={"safety_severity": 1.0})
+    policy = ActivePolicy(control_enabled=False, max_age=2)
+    queue = AuditQueue(
+        (low, _candidate("high-0", metadata={"benchmark_config_defect": 1.0})), policy=policy
+    )
+    assert queue.select_next().packet.primary.execution_id == "high-0"  # type: ignore[union-attr]
+    queue.update_dataset(
+        (
+            low,
+            _candidate("high-0", metadata={"benchmark_config_defect": 1.0}),
+            _candidate("high-1", metadata={"benchmark_config_defect": 1.0}),
+        )
+    )
+    assert queue.select_next().packet.primary.execution_id == "high-1"  # type: ignore[union-attr]
+    queue.update_dataset(
+        (
+            low,
+            _candidate("high-0", metadata={"benchmark_config_defect": 1.0}),
+            _candidate("high-1", metadata={"benchmark_config_defect": 1.0}),
+            _candidate("high-2", metadata={"benchmark_config_defect": 1.0}),
+        )
+    )
+    result = queue.select_next()
+    assert result is not None
+    assert result.packet.primary.execution_id == "starved-low"
+    assert result.context.selection_kind == "anomaly"
+
+
+def test_only_human_full_episode_reviews_grant_coverage_credit() -> None:
+    control = _candidate(
+        "coverage-credit",
+        metadata={"control_eligible": True, "ordinary": True},
+    )
+    reviews = (
+        ReviewRecord("detector-review", control.episode_id, "full_episode", author_kind="detector"),
+        ReviewRecord("agent-review", control.episode_id, "full_episode", author_kind="agent"),
+        ReviewRecord("interval-review", control.episode_id, "interval", author_kind="human"),
+    )
+    queue = AuditQueue(
+        QueueDataset(
+            (control,),
+            review_records=reviews,
+            coverage_deficits=(CoverageDeficit(control.effective_stratum_id, 0, 1, "s", "p"),),
+        ),
+        policy=ActivePolicy(control_schedule=(0,), max_control_selections=1),
+    )
+    result = queue.select_next()
+    assert result is not None
+    assert queue._reviewed_ids() == set()
+    assert result.context.selection_kind == "control"
+
+
+def test_controls_require_an_ordinary_success_or_failure_outcome() -> None:
+    candidate = _candidate(
+        "nonordinary-control",
+        metadata={"control_eligible": True, "ordinary": True},
+        outcome="diagnostic-only",
+    )
+    queue = AuditQueue(
+        (candidate,),
+        policy=ActivePolicy(control_schedule=(0,), max_control_selections=1),
+    )
+    assert candidate.control_eligible is False
+    result = queue.select_next()
+    assert result is not None
+    assert result.context.selection_kind == "anomaly"
+
+
+def test_manual_actions_reject_unknown_episode_ids() -> None:
+    queue = AuditQueue((_candidate("known-action"),))
+    with pytest.raises(QueueInputError, match="known episode"):
+        queue.pin("unknown-episode")
+    with pytest.raises(QueueInputError, match="known episode"):
+        queue.skip("unknown-episode")
+    with pytest.raises(QueueInputError, match="known episode"):
+        queue.record_review("unknown-episode")
+    with pytest.raises(QueueInputError, match="known episode"):
+        queue.more_evidence("need evidence", "unknown-episode")
+
+
+def test_annotation_id_scalar_is_rejected_without_character_splitting() -> None:
+    candidate = _candidate("annotation-scalar")
+    queue = AuditQueue((candidate,))
+    assert queue.select_next() is not None
+    with pytest.raises(QueueInputError, match="annotation_ids"):
+        queue.record_review(annotation_ids="annotation-1")

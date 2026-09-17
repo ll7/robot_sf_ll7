@@ -28,10 +28,16 @@ import random
 import sys
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+try:  # ``fcntl`` is the fail-closed POSIX lock owner for queue state files.
+    import fcntl
+except ImportError:  # pragma: no cover - the supported runner is POSIX.
+    fcntl = None
 
 from robot_sf.analysis_workbench.audit_contracts import (
     ActionRecord,
@@ -42,8 +48,8 @@ from robot_sf.analysis_workbench.audit_contracts import (
     ReviewRecord,
     Signal,
     finding_from_dict,
+    record_from_dict,
     record_to_dict,
-    review_packet_from_dict,
     signal_from_dict,
 )
 from robot_sf.analysis_workbench.audit_similarity import (
@@ -52,7 +58,10 @@ from robot_sf.analysis_workbench.audit_similarity import (
     UNKNOWN_COMPATIBILITY,
     compatible_case_similarity,
 )
-from robot_sf.analysis_workbench.event_alignment import unavailable_pair_compatibility
+from robot_sf.analysis_workbench.event_alignment import (
+    PAIR_COMPATIBILITY_PROFILE_VERSION,
+    unavailable_pair_compatibility,
+)
 
 if TYPE_CHECKING:
     from robot_sf.analysis_workbench.audit_store import AuditStore
@@ -66,6 +75,7 @@ except ImportError:  # pragma: no cover - minimal installations may omit benchma
 
 
 QUEUE_SCHEMA_VERSION = "audit-queue.v1"
+QUEUE_INPUT_SCHEMA_VERSION = "audit-queue-input.v1"
 QUEUE_SELECTION_SCHEMA_VERSION = "audit-queue-selection.v1"
 QUEUE_POLICY_FIXED = "fixed"
 QUEUE_POLICY_ACTIVE = "active"
@@ -181,7 +191,10 @@ def _text(value: Any, *, name: str, allow_empty: bool = False) -> str:
 def _finite(value: Any, *, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise QueueInputError(f"{name} must be a finite number")
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, TypeError) as exc:
+        raise QueueInputError(f"{name} must be a finite number") from exc
     if not math.isfinite(result):
         raise QueueInputError(f"{name} must be a finite number")
     return result
@@ -222,6 +235,112 @@ def _sequence(value: Any, *, name: str) -> tuple[Any, ...]:
     return tuple(value)
 
 
+def _metadata_strings(
+    metadata: Mapping[str, Any],
+    name: str,
+    *,
+    allow_string: bool = False,
+) -> tuple[str, ...]:
+    """Validate one metadata collection before ranking can inspect it.
+
+    Metadata is intentionally extensible, but collections consumed by the
+    queue must not be allowed to fail later with a raw ``TypeError`` (for
+    example, a mapping inside ``finding_ids`` cannot be hashed).  A scalar
+    string is accepted only for the human-oriented symptom/tag conveniences;
+    ID collections remain explicitly sequence-shaped.
+    """
+
+    if name not in metadata or metadata[name] is None:
+        return ()
+    value = metadata[name]
+    if isinstance(value, str):
+        if not allow_string:
+            raise QueueInputError(f"candidate metadata {name} must be a sequence of strings")
+        return (_text(value, name=f"candidate metadata {name}"),)
+    if isinstance(value, (bytes, bytearray)) or not isinstance(value, Sequence):
+        raise QueueInputError(f"candidate metadata {name} must be a sequence of strings")
+    result: list[str] = []
+    for index, item in enumerate(value):
+        result.append(_text(item, name=f"candidate metadata {name}[{index}]"))
+    return tuple(dict.fromkeys(result))
+
+
+def _metadata_tags(metadata: Mapping[str, Any]) -> None:
+    """Validate the tag container accepted by feature-signature extraction."""
+
+    if "tags" not in metadata or metadata["tags"] is None:
+        return
+    value = metadata["tags"]
+    if isinstance(value, Mapping):
+        for key in value:
+            _text(key, name="candidate metadata tags key")
+        return
+    _metadata_strings(metadata, "tags", allow_string=True)
+
+
+def _metadata_alignment(metadata: Mapping[str, Any]) -> None:
+    """Require alignment aliases to remain structured mappings."""
+
+    for name in ("alignment", "event_alignment", "review_alignment", "pair_compatibility"):
+        if (
+            name in metadata
+            and metadata[name] is not None
+            and not isinstance(metadata[name], Mapping)
+        ):
+            raise QueueInputError(f"candidate metadata {name} must be a mapping")
+
+
+def _metadata_boolean(metadata: Mapping[str, Any], name: str) -> None:
+    if name in metadata and metadata[name] is not None and not isinstance(metadata[name], bool):
+        raise QueueInputError(f"candidate metadata {name} must be boolean")
+
+
+def _metadata_validate(metadata: Mapping[str, Any]) -> None:
+    """Validate the extensible metadata fields consumed by queue policies."""
+
+    _metadata_strings(metadata, "finding_ids")
+    _metadata_strings(metadata, "feature_signatures")
+    for name in ("geometry_signature", "geometry", "symptoms", "symptom"):
+        _metadata_strings(metadata, name, allow_string=True)
+    for name in (
+        "competing_hypotheses",
+        "hypothesis_evidence",
+        "unresolved_requests",
+        "evidence_requests",
+    ):
+        _metadata_strings(metadata, name)
+    for name in ("review_scope", "initial_state_identity", "trace_content_sha256"):
+        if name in metadata and metadata[name] is not None:
+            _text(metadata[name], name=f"candidate metadata {name}")
+    _metadata_tags(metadata)
+    _metadata_alignment(metadata)
+    if (
+        "trace" in metadata
+        and metadata["trace"] is not None
+        and not isinstance(metadata["trace"], Mapping)
+    ):
+        raise QueueInputError("candidate metadata trace must be a mapping")
+    for name in ("control_eligible", "ordinary", "contradictory_evidence", "contradicts_finding"):
+        _metadata_boolean(metadata, name)
+    for name in ("more_evidence_requested",):
+        if name in metadata and metadata[name] is not None:
+            _bounded_unit(metadata[name], name=f"candidate metadata {name}")
+
+
+def _annotation_ids(value: Any) -> tuple[str, ...]:
+    """Normalize annotation IDs without turning a scalar into characters."""
+
+    if value is None:
+        return ()
+    if isinstance(value, (str, bytes, bytearray)) or not isinstance(value, Sequence):
+        raise QueueInputError("annotation_ids must be a sequence of non-empty strings")
+    return tuple(
+        dict.fromkeys(
+            _text(item, name=f"annotation_ids[{index}]") for index, item in enumerate(value)
+        )
+    )
+
+
 def _strict_json(  # noqa: C901
     value: Any, *, path: str = "$", depth: int = 0, nodes: list[int] | None = None
 ) -> None:
@@ -258,6 +377,47 @@ def _mapping(value: Any, *, name: str) -> dict[str, Any]:
     result = dict(value)
     _strict_json(result, path=name)
     return result
+
+
+@contextmanager
+def _state_lock(path: Path):
+    """Hold the stable sibling lock used by every state-file CAS.
+
+    The lock file is deliberately never removed: all writers derive the same
+    sibling identity from the state path, including writers in other
+    processes.  Falling back to an unlocked write would turn the revision
+    check into a time-of-check/time-of-use race, so platforms without POSIX
+    advisory locking fail closed.
+    """
+
+    if fcntl is None:
+        raise QueueStateError("cross-process queue state locking is unavailable")
+    lock_path = path.with_name(f"{path.name}.lock")
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_RDWR | os.O_CREAT
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(lock_path, flags, 0o600)
+        handle = os.fdopen(descriptor, "a+", encoding="utf-8")
+    except OSError as exc:
+        raise QueueStateError(f"cannot open queue state lock {lock_path}: {exc}") from exc
+    locked = False
+    try:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            locked = True
+        except OSError as exc:
+            raise QueueStateError(f"cannot lock queue state {path}: {exc}") from exc
+        yield
+    finally:
+        try:
+            if locked:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except OSError as exc:
+            raise QueueStateError(f"cannot unlock queue state {path}: {exc}") from exc
+        finally:
+            handle.close()
 
 
 def _canonical(value: Any) -> str:
@@ -318,6 +478,8 @@ class CoverageDeficit:
     protocol_revision: str = ""
     reason: str = ""
     status: str = CONTROL_STATUS_UNDER_REVIEW
+    source_id: str = ""
+    protocol_id: str = ""
 
     def __post_init__(self) -> None:
         _text(self.stratum_id, name="coverage.stratum_id")
@@ -333,11 +495,15 @@ class CoverageDeficit:
             self.protocol_revision, name="coverage.protocol_revision", allow_empty=True
         )
         reason = _text(self.reason, name="coverage.reason", allow_empty=True)
+        source_id = _text(self.source_id, name="coverage.source_id", allow_empty=True)
+        protocol_id = _text(self.protocol_id, name="coverage.protocol_id", allow_empty=True)
         object.__setattr__(self, "observed", observed)
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "source_revision", source_revision)
         object.__setattr__(self, "protocol_revision", protocol_revision)
         object.__setattr__(self, "reason", reason)
+        object.__setattr__(self, "source_id", source_id)
+        object.__setattr__(self, "protocol_id", protocol_id)
 
     @property
     def gap(self) -> int:
@@ -363,6 +529,8 @@ class CoverageDeficit:
             "target": self.target,
             "source_revision": self.source_revision,
             "protocol_revision": self.protocol_revision,
+            "source_id": self.source_id,
+            "protocol_id": self.protocol_id,
             "reason": self.reason,
             "status": self.status,
         }
@@ -378,6 +546,8 @@ class CoverageDeficit:
             protocol_revision=payload.get("protocol_revision", ""),
             reason=payload.get("reason", ""),
             status=payload.get("status", CONTROL_STATUS_UNDER_REVIEW),
+            source_id=payload.get("source_id", payload.get("source", "")),
+            protocol_id=payload.get("protocol_id", payload.get("protocol", "")),
         )
 
 
@@ -393,6 +563,8 @@ class ScanSummary:
     detector_accounting: Mapping[str, Any] = field(default_factory=dict)
     status: str = "available"
     missingness: tuple[str, ...] = ()
+    source_revision: str = ""
+    source_id: str = ""
 
     def __post_init__(self) -> None:
         _text(self.summary_id, name="scan_summary.summary_id")
@@ -406,30 +578,47 @@ class ScanSummary:
         detector_accounting = _mapping(
             self.detector_accounting, name="scan_summary.detector_accounting"
         )
+        for detector_id, details in detector_accounting.items():
+            _text(detector_id, name="scan_summary.detector_accounting detector")
+            if not isinstance(details, Mapping):
+                raise QueueInputError("scan_summary.detector_accounting entries must be mappings")
+            _strict_json(details, path=f"scan_summary.detector_accounting.{detector_id}")
         _text(self.status, name="scan_summary.status")
         if self.status not in {"available", CONTROL_STATUS_UNAVAILABLE, "error"}:
             raise QueueInputError("scan_summary.status must be available, unavailable, or error")
+        source_revision = _text(
+            self.source_revision, name="scan_summary.source_revision", allow_empty=True
+        )
+        source_id = _text(self.source_id, name="scan_summary.source_id", allow_empty=True)
         object.__setattr__(self, "revision", revision)
         object.__setattr__(self, "accounting", accounting)
         object.__setattr__(self, "detector_accounting", detector_accounting)
         object.__setattr__(
             self, "missingness", _tuple_strings(self.missingness, name="scan_summary.missingness")
         )
+        object.__setattr__(self, "source_revision", source_revision)
+        object.__setattr__(self, "source_id", source_id)
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> ScanSummary:
         payload = _mapping(value, name="scan_summary")
+        source_digest = payload.get("source_digest", "")
+        source_id = payload.get("source_id", "")
+        if not source_digest and isinstance(source_id, str) and len(source_id) == 64:
+            source_digest = source_id
         return cls(
             summary_id=payload.get(
                 "summary_id", payload.get("scan_id", payload.get("identity", ""))
             ),
             revision=payload.get("revision", payload.get("input_revision", 0)),
             campaign_digest=payload.get("campaign_digest", payload.get("campaign_id", "")),
-            source_digest=payload.get("source_digest", payload.get("source_id", "")),
+            source_digest=source_digest,
             accounting=payload.get("accounting", {}),
             detector_accounting=payload.get("detector_accounting", payload.get("detectors", {})),
             status=payload.get("status", "available"),
             missingness=payload.get("missingness", ()),
+            source_revision=payload.get("source_revision", ""),
+            source_id=source_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -443,6 +632,8 @@ class ScanSummary:
             "detector_accounting": dict(self.detector_accounting),
             "status": self.status,
             "missingness": list(self.missingness),
+            "source_revision": self.source_revision,
+            "source_id": self.source_id,
         }
 
 
@@ -506,6 +697,7 @@ class QueueCandidate:
             signal_ids.add(item.signal_id)
             signals.append(item)
         metadata = _mapping(self.metadata, name=f"candidate[{episode.episode_id}].metadata")
+        _metadata_validate(metadata)
         trace_available = self.trace_available
         trace = metadata.get("trace")
         if trace_available is None and "trace_available" in metadata:
@@ -620,16 +812,24 @@ class QueueCandidate:
                 raise QueueInputError(
                     f"candidate {self.episode_id} control_eligible must be boolean"
                 )
-            return explicit
-        ordinary = self.metadata.get("ordinary")
-        if ordinary is not None:
-            if not isinstance(ordinary, bool):
-                raise QueueInputError(f"candidate {self.episode_id} ordinary must be boolean")
-            return ordinary
-        # A missing declaration is not an implicit control.  The control
-        # stream must be explicitly detector-independent so a future detector
-        # cannot silently reclassify ordinary rows or make a prevalence claim.
-        return False
+            eligible = explicit
+        else:
+            ordinary = self.metadata.get("ordinary")
+            if ordinary is not None:
+                if not isinstance(ordinary, bool):
+                    raise QueueInputError(f"candidate {self.episode_id} ordinary must be boolean")
+                eligible = ordinary
+            else:
+                # A missing declaration is not an implicit control.  The control
+                # stream must be explicitly detector-independent so a future detector
+                # cannot silently reclassify ordinary rows or make a prevalence claim.
+                eligible = False
+        if not eligible:
+            return False
+        outcome = self.outcome or str(self.metadata.get("outcome", ""))
+        if outcome.strip().lower() not in CONTROL_OUTCOMES:
+            return False
+        return True
 
     @property
     def feature_signatures(self) -> tuple[str, ...]:
@@ -730,6 +930,16 @@ class QueueDataset:
                 raise QueueInputError(f"duplicate global signal_id: {item.signal_id}")
             global_signal_ids.add(item.signal_id)
             global_signals.append(item)
+        signal_by_id = {signal.signal_id: signal for signal in global_signals}
+        for candidate in candidates:
+            for signal in candidate.signals:
+                existing = signal_by_id.get(signal.signal_id)
+                if existing is not None and existing != signal:
+                    raise QueueInputError(
+                        "conflicting signal payload for signal_id "
+                        f"{signal.signal_id!r} between global and local queue inputs"
+                    )
+                signal_by_id.setdefault(signal.signal_id, signal)
         findings: list[Finding] = []
         for index, finding in enumerate(_sequence(self.findings, name="queue.findings")):
             if isinstance(finding, Finding):
@@ -756,7 +966,7 @@ class QueueDataset:
                             author_kind=review.get("author_kind", "human"),
                             author_id=review.get("author_id", ""),
                             source_revision=review.get("source_revision", 0),
-                            annotation_ids=tuple(review.get("annotation_ids", ())),
+                            annotation_ids=_annotation_ids(review.get("annotation_ids", ())),
                             created_at=review.get("created_at", _utc_now()),
                             notes=review.get("notes", ""),
                         )
@@ -795,8 +1005,9 @@ class QueueDataset:
         input_revision = _nonnegative_int(self.input_revision, name="queue.input_revision")
         if input_revision == 0 and summary is not None:
             input_revision = summary.revision
+        supplied_accounting = _mapping(self.accounting, name="queue.accounting")
         accounting = dict(summary.accounting) if summary is not None else {}
-        accounting.update(_mapping(self.accounting, name="queue.accounting"))
+        accounting.update(supplied_accounting)
         review_context = (
             None
             if self.review_context is None
@@ -828,6 +1039,48 @@ class QueueDataset:
         if summary is not None and self.source_digest and summary.source_digest:
             if self.source_digest != summary.source_digest:
                 missingness.append("scan-summary:source-identity-mismatch")
+        if summary is not None:
+            supplied_summary_id = supplied_accounting.get("scan_summary_id")
+            if supplied_summary_id is not None and supplied_summary_id != summary.summary_id:
+                missingness.append("scan-summary:accounting-id-mismatch")
+            supplied_summary_revision = supplied_accounting.get("scan_summary_revision")
+            if (
+                supplied_summary_revision is not None
+                and supplied_summary_revision != summary.revision
+            ):
+                missingness.append("scan-summary:accounting-revision-mismatch")
+            if self.input_revision and self.input_revision != summary.revision:
+                missingness.append("scan-summary:input-revision-mismatch")
+            if summary.source_revision and summary.source_revision != summary.summary_id:
+                missingness.append("scan-summary:source-revision-mismatch")
+            if summary.source_id and source_digest and summary.source_id != source_digest:
+                missingness.append("scan-summary:source-id-mismatch")
+            supplied_source_revision = next(
+                (
+                    supplied_accounting[name]
+                    for name in ("scan_source_revision", "source_revision")
+                    if name in supplied_accounting
+                ),
+                None,
+            )
+            expected_source_revision = summary.source_revision or summary.summary_id
+            if (
+                supplied_source_revision is not None
+                and supplied_source_revision != expected_source_revision
+            ):
+                missingness.append("scan-summary:accounting-source-revision-mismatch")
+            supplied_source_id = next(
+                (
+                    supplied_accounting[name]
+                    for name in ("scan_source_id", "source_id")
+                    if name in supplied_accounting
+                ),
+                None,
+            )
+            expected_source_id = summary.source_id or source_digest
+            if supplied_source_id is not None and expected_source_id:
+                if supplied_source_id != expected_source_id:
+                    missingness.append("scan-summary:accounting-source-id-mismatch")
         if campaign_digest:
             missingness.extend(
                 f"candidate:{candidate.episode_id}:campaign-identity-mismatch"
@@ -848,14 +1101,90 @@ class QueueDataset:
             missingness.extend(
                 f"ba-01-scan-summary:{item}" for item in summary.missingness or (summary.status,)
             )
+        detector_accounting = accounting.get("detector_accounting", {})
+        if not isinstance(detector_accounting, Mapping):
+            raise QueueInputError("queue.accounting.detector_accounting must be a mapping")
+        unavailable_detectors: list[str] = []
+        for detector_id, details in detector_accounting.items():
+            _text(detector_id, name="queue.accounting.detector_accounting detector")
+            if not isinstance(details, Mapping):
+                raise QueueInputError(
+                    "queue.accounting.detector_accounting entries must be mappings"
+                )
+            _strict_json(details, path=f"queue.accounting.detector_accounting.{detector_id}")
+            status = details.get("status")
+            if status in {CONTROL_STATUS_UNAVAILABLE, CONTROL_STATUS_ERROR}:
+                unavailable_detectors.append(detector_id)
+                missingness.append(f"ba-01-detector:{detector_id}:{status}")
+        declared_unavailable = accounting.get("unavailable_detectors", ())
+        if isinstance(declared_unavailable, Sequence) and not isinstance(
+            declared_unavailable, (str, bytes)
+        ):
+            for detector_id in declared_unavailable:
+                if not isinstance(detector_id, str) or not detector_id:
+                    raise QueueInputError(
+                        "queue.accounting.unavailable_detectors must contain detector IDs"
+                    )
+                unavailable_detectors.append(detector_id)
+                missingness.append(f"ba-01-detector:{detector_id}:unavailable")
+        for signal in signal_by_id.values():
+            if signal.status in {CONTROL_STATUS_UNAVAILABLE, CONTROL_STATUS_ERROR}:
+                unavailable_detectors.append(signal.detector_id)
+                missingness.append(f"ba-01-detector:{signal.detector_id}:{signal.status}")
+        if unavailable_detectors:
+            detector_ids = sorted(set(unavailable_detectors))
+            declared_count = accounting.get("unavailable_detectors")
+            if isinstance(declared_count, int) and not isinstance(declared_count, bool):
+                # Preserve BA-01's denominator/count field and expose the
+                # detector identities in a separate, unambiguous field.
+                accounting["unavailable_detector_ids"] = detector_ids
+            else:
+                accounting["unavailable_detectors"] = detector_ids
         if not deficits:
             missingness.append("ba-04-coverage-deficits:unavailable")
         else:
+            coverage_source_revisions = {
+                item.source_revision for item in deficits if item.source_revision
+            }
+            coverage_protocol_revisions = {
+                item.protocol_revision for item in deficits if item.protocol_revision
+            }
+            if len(coverage_source_revisions) > 1:
+                missingness.append("coverage:source-revision-mismatch")
+            if len(coverage_protocol_revisions) > 1:
+                missingness.append("coverage:protocol-revision-mismatch")
             missingness.extend(
                 f"coverage:{deficit.stratum_id}:revision-unavailable"
                 for deficit in deficits
                 if not deficit.source_revision or not deficit.protocol_revision
             )
+            for deficit in deficits:
+                if summary is not None and deficit.source_revision:
+                    if deficit.source_revision != summary.summary_id:
+                        missingness.append(
+                            f"coverage:{deficit.stratum_id}:source-revision-mismatch"
+                        )
+                    if (
+                        summary.source_revision
+                        and deficit.source_revision != summary.source_revision
+                    ):
+                        missingness.append(
+                            f"coverage:{deficit.stratum_id}:scan-source-revision-mismatch"
+                        )
+                if deficit.source_id:
+                    expected_source = source_digest or (
+                        summary.source_id if summary is not None else ""
+                    )
+                    if expected_source and deficit.source_id != expected_source:
+                        missingness.append(f"coverage:{deficit.stratum_id}:source-id-mismatch")
+                if self.protocol_version and deficit.protocol_revision:
+                    if deficit.protocol_revision != self.protocol_version:
+                        missingness.append(
+                            f"coverage:{deficit.stratum_id}:protocol-revision-mismatch"
+                        )
+                if self.protocol_digest and deficit.protocol_id:
+                    if deficit.protocol_id != self.protocol_digest:
+                        missingness.append(f"coverage:{deficit.stratum_id}:protocol-id-mismatch")
         object.__setattr__(self, "candidates", tuple(candidates))
         object.__setattr__(self, "signals", tuple(global_signals))
         object.__setattr__(self, "findings", tuple(findings))
@@ -872,6 +1201,12 @@ class QueueDataset:
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> QueueDataset:
         payload = _mapping(value, name="queue input")
+        version = payload.get("schema_version")
+        if version != QUEUE_INPUT_SCHEMA_VERSION:
+            raise QueueInputError(
+                "unsupported queue input schema_version: "
+                f"{version!r}; expected {QUEUE_INPUT_SCHEMA_VERSION!r}"
+            )
         candidates = payload.get("candidates", payload.get("episodes", ()))
         if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
             raise QueueInputError("queue input candidates must be a sequence")
@@ -894,9 +1229,30 @@ class QueueDataset:
             protocol_digest=payload.get("protocol_digest", ""),
             input_revision=payload.get("input_revision", 0),
             accounting=payload.get("accounting", {}),
-            missingness=tuple(payload.get("missingness", ())),
+            missingness=payload.get("missingness", ()),
             review_context=payload.get("review_context"),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the exact versioned root document accepted by ``from_mapping``."""
+
+        return {
+            "schema_version": QUEUE_INPUT_SCHEMA_VERSION,
+            "campaign_digest": self.campaign_digest,
+            "source_digest": self.source_digest,
+            "protocol_version": self.protocol_version,
+            "protocol_digest": self.protocol_digest,
+            "input_revision": self.input_revision,
+            "accounting": dict(self.accounting),
+            "missingness": list(self.missingness),
+            "scan_summary": self.scan_summary.to_dict() if self.scan_summary else None,
+            "coverage_deficits": [item.to_dict() for item in self.coverage_deficits],
+            "signals": [record_to_dict(item) for item in self.signals],
+            "findings": [record_to_dict(item) for item in self.findings],
+            "review_records": [record_to_dict(item) for item in self.review_records],
+            "review_context": self.review_context,
+            "candidates": [item.to_dict() for item in self.candidates],
+        }
 
     @property
     def identity(self) -> str:
@@ -1401,6 +1757,7 @@ class QueueSelectionContext:
     selection_index: int = 0
     stale_inputs: tuple[str, ...] = ()
     created_at: str = field(default_factory=_utc_now)
+    policy_identity: str = ""
 
     def __post_init__(self) -> None:
         _text(self.selection_id, name="selection.selection_id")
@@ -1410,6 +1767,7 @@ class QueueSelectionContext:
         if self.policy_mode not in {QUEUE_POLICY_FIXED, QUEUE_POLICY_ACTIVE}:
             raise QueueStateError("selection.policy_mode must be fixed or active")
         _text(self.policy_version, name="selection.policy_version")
+        _text(self.policy_identity, name="selection.policy_identity", allow_empty=True)
         input_revision = _nonnegative_int(self.input_revision, name="selection.input_revision")
         _text(self.input_identity, name="selection.input_identity")
         for name, value in (
@@ -1513,6 +1871,7 @@ class QueueSelectionContext:
             "primary_episode_id": self.primary_episode_id,
             "policy_mode": self.policy_mode,
             "policy_version": self.policy_version,
+            "policy_identity": self.policy_identity,
             "input_revision": self.input_revision,
             "input_identity": self.input_identity,
             "campaign_digest": self.campaign_digest,
@@ -1554,6 +1913,7 @@ class QueueSelectionContext:
             primary_episode_id=payload["primary_episode_id"],
             policy_mode=payload.get("policy_mode", QUEUE_POLICY_ACTIVE),
             policy_version=payload.get("policy_version", DEFAULT_POLICY_VERSION),
+            policy_identity=payload.get("policy_identity", ""),
             input_revision=payload.get("input_revision", 0),
             input_identity=payload.get("input_identity", "unknown"),
             campaign_digest=payload.get("campaign_digest", ""),
@@ -1584,7 +1944,7 @@ class QueueSelectionContext:
             rng_state=payload.get("rng_state", ""),
             accounting=payload.get("accounting", {}),
             selection_index=payload.get("selection_index", 0),
-            stale_inputs=tuple(payload.get("stale_inputs", ())),
+            stale_inputs=payload.get("stale_inputs", ()),
             created_at=payload.get("created_at", _utc_now()),
         )
 
@@ -1615,8 +1975,10 @@ class QueueState:
     control_draws: int = 0
     control_schedule_cursor: int = 0
     operations: Mapping[str, str] = field(default_factory=dict)
+    policy_identity: str = ""
+    candidate_first_seen: Mapping[str, int] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         for name, value in (
             ("state_revision", self.state_revision),
             ("input_revision", self.input_revision),
@@ -1626,6 +1988,7 @@ class QueueState:
         ):
             _nonnegative_int(value, name=f"state.{name}")
         _text(self.input_identity, name="state.input_identity", allow_empty=True)
+        _text(self.policy_identity, name="state.policy_identity", allow_empty=True)
         _text(self.rng_state, name="state.rng_state", allow_empty=True)
         _text(self.current_packet_id, name="state.current_packet_id", allow_empty=True)
         if not isinstance(self.packet_payloads, Mapping):
@@ -1640,26 +2003,69 @@ class QueueState:
         object.__setattr__(
             self, "pinned_ids", _tuple_strings(self.pinned_ids, name="state.pinned_ids")
         )
-        object.__setattr__(
-            self,
-            "packet_payloads",
-            {
-                _text(key, name="state.packet_payloads key"): _mapping(
-                    value, name=f"state.packet_payloads.{key}"
+        packet_payloads: dict[str, Mapping[str, Any]] = {}
+        for key, value in self.packet_payloads.items():
+            try:
+                packet_key = _text(key, name="state.packet_payloads key")
+                payload = _mapping(value, name=f"state.packet_payloads.{packet_key}")
+                packet = record_from_dict(payload)
+            except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+                raise QueueStateError(f"corrupt persisted packet snapshot {key!r}: {exc}") from exc
+            if not isinstance(packet, ReviewPacket):
+                raise QueueStateError(f"packet snapshot {packet_key} is not a review_packet record")
+            if packet.packet_id != packet_key:
+                raise QueueStateError(
+                    f"packet snapshot key {packet_key} does not match packet_id {packet.packet_id}"
                 )
-                for key, value in self.packet_payloads.items()
-            },
+            packet_payloads[packet_key] = payload
+        if self.current_packet_id and self.current_packet_id not in packet_payloads:
+            raise QueueStateError(f"current packet snapshot is missing: {self.current_packet_id}")
+        missing_history = [
+            packet_id
+            for packet_id in (*self.previous_packet_ids,)
+            if packet_id not in packet_payloads
+        ]
+        if missing_history:
+            raise QueueStateError(
+                "previous packet snapshot is missing: " + ", ".join(missing_history)
+            )
+        object.__setattr__(self, "packet_payloads", packet_payloads)
+        history = tuple(
+            item
+            if isinstance(item, QueueSelectionContext)
+            else QueueSelectionContext.from_mapping(item)
+            for item in _sequence(self.selection_history, name="state.selection_history")
         )
+        for item in history:
+            if item.packet_id not in packet_payloads:
+                raise QueueStateError(
+                    f"selection history references missing packet snapshot: {item.packet_id}"
+                )
+            try:
+                packet = record_from_dict(packet_payloads[item.packet_id])
+            except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+                raise QueueStateError(
+                    f"corrupt historical packet snapshot {item.packet_id}: {exc}"
+                ) from exc
+            if (
+                not isinstance(packet, ReviewPacket)
+                or packet.primary.episode_id != item.primary_episode_id
+            ):
+                raise QueueStateError(
+                    f"selection history primary does not match packet snapshot: {item.packet_id}"
+                )
+        object.__setattr__(self, "selection_history", history)
         object.__setattr__(
             self,
-            "selection_history",
-            tuple(
-                item
-                if isinstance(item, QueueSelectionContext)
-                else QueueSelectionContext.from_mapping(item)
-                for item in _sequence(self.selection_history, name="state.selection_history")
-            ),
+            "candidate_first_seen",
+            self._counts(self.candidate_first_seen, "candidate_first_seen"),
         )
+        if any(
+            first_seen > self.selection_index for first_seen in self.candidate_first_seen.values()
+        ):
+            raise QueueStateError(
+                "state.candidate_first_seen cannot be later than state.selection_index"
+            )
         object.__setattr__(
             self, "presented_counts", self._counts(self.presented_counts, "presented_counts")
         )
@@ -1700,12 +2106,14 @@ class QueueState:
             "state_revision": self.state_revision,
             "input_revision": self.input_revision,
             "input_identity": self.input_identity,
+            "policy_identity": self.policy_identity,
             "rng_state": self.rng_state,
             "selection_index": self.selection_index,
             "current_packet_id": self.current_packet_id,
             "previous_packet_ids": list(self.previous_packet_ids),
             "packet_payloads": {key: dict(value) for key, value in self.packet_payloads.items()},
             "selection_history": [item.to_dict() for item in self.selection_history],
+            "candidate_first_seen": dict(self.candidate_first_seen),
             "presented_counts": dict(self.presented_counts),
             "defer_counts": dict(self.defer_counts),
             "defer_until": dict(self.defer_until),
@@ -1729,12 +2137,14 @@ class QueueState:
             state_revision=payload.get("state_revision", 0),
             input_revision=payload.get("input_revision", 0),
             input_identity=payload.get("input_identity", ""),
+            policy_identity=payload.get("policy_identity", ""),
             rng_state=payload.get("rng_state", ""),
             selection_index=payload.get("selection_index", 0),
             current_packet_id=payload.get("current_packet_id", ""),
             previous_packet_ids=payload.get("previous_packet_ids", ()),
             packet_payloads=payload.get("packet_payloads", {}),
             selection_history=payload.get("selection_history", ()),
+            candidate_first_seen=payload.get("candidate_first_seen", {}),
             presented_counts=payload.get("presented_counts", {}),
             defer_counts=payload.get("defer_counts", {}),
             defer_until=payload.get("defer_until", {}),
@@ -1795,6 +2205,7 @@ class AuditQueue:
             normalized = QueueDataset(tuple(dataset))
         self.dataset = normalized
         self.policy = policy or QueuePolicy.active()
+        self._policy_identity = _sha256(self.policy.to_dict())
         if rng is not None and not isinstance(rng, random.Random):
             raise AuditQueueError("rng must be random.Random")
         if isinstance(seed, bool) or not isinstance(seed, int):
@@ -1808,10 +2219,14 @@ class AuditQueue:
         self.state = QueueState(
             input_revision=self.dataset.input_revision,
             input_identity=self.dataset.identity,
+            policy_identity=self._policy_identity,
             rng_state=_encode_rng(self._rng.getstate()),
+            candidate_first_seen={item.episode_id: 0 for item in self.dataset.candidates},
         )
         if self.state_path is not None and self.state_path.exists():
             self._load_state_from_disk()
+        else:
+            self._ensure_candidate_first_seen()
 
     @classmethod
     def from_input(cls, *args: Any, **kwargs: Any) -> AuditQueue:
@@ -1831,9 +2246,16 @@ class AuditQueue:
         if payload is None:
             return None
         try:
-            return review_packet_from_dict(payload)
-        except (AuditContractError, KeyError, TypeError, ValueError):
-            return None
+            packet = record_from_dict(payload)
+        except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+            raise QueueStateError(
+                f"corrupt current packet snapshot {self.state.current_packet_id}: {exc}"
+            ) from exc
+        if not isinstance(packet, ReviewPacket):
+            raise QueueStateError(
+                f"current packet snapshot is not a review_packet record: {self.state.current_packet_id}"
+            )
+        return packet
 
     @property
     def stale_inputs(self) -> tuple[str, ...]:
@@ -1856,6 +2278,8 @@ class AuditQueue:
 
     def _load_state_from_disk(self) -> None:
         assert self.state_path is not None
+        if self.state_path.is_symlink():
+            raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
         try:
             payload = _read_json(self.state_path)
             state = QueueState.from_mapping(payload)
@@ -1864,11 +2288,22 @@ class AuditQueue:
         except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
             raise QueueStateError(f"cannot resume queue state {self.state_path}: {exc}") from exc
         self.state = state
+        self._ensure_candidate_first_seen(default_index=0)
         self._persisted_revision = state.state_revision
         self._stale_inputs = self._compare_input_identity(state)
 
-    def _compare_input_identity(self, state: QueueState) -> tuple[str, ...]:
+    def _ensure_candidate_first_seen(self, *, default_index: int | None = None) -> None:
+        first_seen = dict(self.state.candidate_first_seen)
+        default = self.state.selection_index if default_index is None else default_index
+        for candidate in self.dataset.candidates:
+            first_seen.setdefault(candidate.episode_id, default)
+        if first_seen != self.state.candidate_first_seen:
+            self.state = replace(self.state, candidate_first_seen=first_seen)
+
+    def _compare_input_identity(self, state: QueueState) -> tuple[str, ...]:  # noqa: C901
         stale: list[str] = []
+        if state.policy_identity != self._policy_identity:
+            stale.append("stale-policy-semantics")
         if state.input_identity and state.input_identity != self.dataset.identity:
             stale.append("stale-input-revision")
         if state.input_revision != self.dataset.input_revision:
@@ -1881,6 +2316,8 @@ class AuditQueue:
                 or old_context.policy_version != self.policy.policy_version
             ):
                 stale.append("stale-policy-version")
+            if old_context.policy_identity != self._policy_identity:
+                stale.append("stale-policy-semantics")
             if old_context.scan_summary_id and (
                 summary is None or old_context.scan_summary_id != summary.summary_id
             ):
@@ -1916,6 +2353,7 @@ class AuditQueue:
         old_summary = self.dataset.scan_summary
         old_findings = _finding_digest(self.dataset.findings)
         self.dataset = new_dataset
+        self._ensure_candidate_first_seen(default_index=self.state.selection_index)
         stale = list(self._stale_inputs)
         if old_identity != new_dataset.identity:
             stale.append("stale-input-revision")
@@ -1935,15 +2373,18 @@ class AuditQueue:
         return self._stale_inputs
 
     def _reviewed_ids(self) -> set[str]:
-        return {review.episode_id for review in self.dataset.review_records}
+        # Only a human's full-episode receipt grants coverage credit.  A
+        # detector/agent proposal or interval inspection remains useful
+        # evidence for redundancy, but it must not make a control stratum look
+        # reviewed.
+        return {
+            review.episode_id
+            for review in self.dataset.review_records
+            if review.author_kind == "human" and review.scope == "full_episode"
+        }
 
     def _finding_for(self, candidate: QueueCandidate) -> tuple[Finding, ...]:
-        ids = (
-            set(candidate.metadata.get("finding_ids", ()))
-            if isinstance(candidate.metadata.get("finding_ids", ()), Sequence)
-            and not isinstance(candidate.metadata.get("finding_ids", ()), (str, bytes))
-            else set()
-        )
+        ids = set(_metadata_strings(candidate.metadata, "finding_ids"))
         return tuple(
             finding
             for finding in self.dataset.findings
@@ -2035,7 +2476,13 @@ class AuditQueue:
                 request_score = 1.0
             if finding.status in {"proposed", "under_investigation"} and finding.hypotheses:
                 hypothesis_gain = max(hypothesis_gain, min(1.0, len(finding.hypotheses) / 3.0))
-        age = min(1.0, self.state.selection_index / max(self.policy.max_age, 1))
+        first_seen = self.state.candidate_first_seen.get(
+            candidate.episode_id, self.state.selection_index
+        )
+        age = min(
+            1.0,
+            max(self.state.selection_index - first_seen, 0) / max(self.policy.max_age, 1),
+        )
         presented = self.state.presented_counts.get(candidate.episode_id, 0)
         age = max(age, min(1.0, presented / max(self.policy.max_age, 1)))
         defer_count = self.state.defer_counts.get(candidate.episode_id, 0)
@@ -2083,8 +2530,13 @@ class AuditQueue:
         }
         score = _weighted_score(score_components, weights)
         defer_count = self.state.defer_counts.get(candidate.episode_id, 0)
-        age = self.state.selection_index - self.state.presented_counts.get(candidate.episode_id, 0)
-        starvation = defer_count >= self.policy.max_defer_count or age >= self.policy.max_age
+        first_seen = self.state.candidate_first_seen.get(
+            candidate.episode_id, self.state.selection_index
+        )
+        age = self.state.selection_index - first_seen
+        presented_count = self.state.presented_counts.get(candidate.episode_id, 0)
+        starvation_limit = self.policy.max_age * (presented_count + 1)
+        starvation = defer_count >= self.policy.max_defer_count or (age >= starvation_limit)
         reasons = [f"priority band: {band} (lexicographic rank {PRIORITY_BAND_RANK[band]})"]
         reasons.extend(band_reasons)
         reasons.extend(
@@ -2104,7 +2556,7 @@ class AuditQueue:
                 )
         if starvation:
             reasons.append(
-                "age/defer limit reached; starvation safeguard keeps the candidate eligible"
+                "age/defer limit reached; starvation safeguard may lift the candidate across bands"
             )
         if selection_kind == "control":
             reasons.append(
@@ -2146,8 +2598,8 @@ class AuditQueue:
         ranked = [(item, self._explanation(item)) for item in candidates]
         ranked.sort(
             key=lambda pair: (
-                pair[1].band_rank,
                 0 if pair[1].starvation_override else 1,
+                pair[1].band_rank,
                 -pair[1].score,
                 pair[0].episode_id,
             )
@@ -2171,12 +2623,13 @@ class AuditQueue:
         deficits = [item for item in self.dataset.coverage_deficits if item.is_under_review]
         deficits.sort(key=lambda item: (-item.deficit, item.stratum_id))
         for deficit in deficits:
-            matches = [
-                item for item in candidates if item.effective_stratum_id == deficit.stratum_id
-            ]
+            matches = sorted(
+                (item for item in candidates if item.effective_stratum_id == deficit.stratum_id),
+                key=lambda item: item.episode_id,
+            )
             if matches:
                 return deficit, matches
-        return None, list(candidates)
+        return None, sorted(candidates, key=lambda item: item.episode_id)
 
     def _control_due(
         self, candidates: Sequence[QueueCandidate]
@@ -2200,6 +2653,323 @@ class AuditQueue:
         due = schedule_due or bool(deficit and self.state.control_draws == 0)
         return due, deficit, matches
 
+    @staticmethod
+    def _alignment_for(candidate: QueueCandidate) -> Mapping[str, Any] | None:
+        for name in ("alignment", "event_alignment", "review_alignment", "pair_compatibility"):
+            value = candidate.metadata.get(name)
+            if isinstance(value, Mapping):
+                return value
+        return None
+
+    @staticmethod
+    def _sha256_text(value: Any) -> bool:
+        return (
+            isinstance(value, str)
+            and len(value) == 64
+            and all(char in "0123456789abcdefABCDEF" for char in value)
+        )
+
+    def _canonical_peer_alignment(  # noqa: C901, PLR0912, PLR0915
+        self,
+        primary: QueueCandidate,
+        candidate: QueueCandidate,
+        alignment: Mapping[str, Any] | None,
+    ) -> tuple[bool, tuple[str, ...]]:
+        """Require the owner-produced pair contract before exposing a peer.
+
+        A caller-provided ``compatible: true`` bit is not evidence.  The
+        queue admits a peer only when the canonical profile, provenance gate,
+        source trace identity, and full initial-state equivalence record are
+        present and bind to both queue candidates.
+        """
+
+        if alignment is None:
+            return False, ("alignment-unavailable",)
+        outer_alignment = alignment
+        canonical = alignment
+        nested_compatibility = alignment.get("compatibility")
+        if isinstance(nested_compatibility, Mapping):
+            canonical = nested_compatibility
+            if alignment.get("schema_version") != "review-alignment.v1":
+                reasons = ["alignment-wrapper-profile-mismatch"]
+            else:
+                reasons = []
+                digest = alignment.get("alignment_sha256")
+                if not self._sha256_text(digest):
+                    reasons.append("alignment-content-identity-unavailable")
+                else:
+                    try:
+                        expected_digest = _sha256(
+                            {
+                                "comparison_grain": alignment.get("comparison_grain"),
+                                "tolerances": alignment.get("tolerances"),
+                                "compatibility": nested_compatibility,
+                                "anchor": alignment.get("anchor"),
+                                "durations_s": alignment.get("durations_s"),
+                                "interpretation": alignment.get("interpretation"),
+                            }
+                        )
+                    except QueueInputError:
+                        expected_digest = ""
+                    if digest.lower() != expected_digest:
+                        reasons.append("alignment-content-identity-mismatch")
+        elif isinstance(alignment.get("pair_compatibility"), Mapping):
+            canonical = alignment["pair_compatibility"]
+            reasons = []
+        else:
+            reasons = []
+        if canonical.get("profile_version") != PAIR_COMPATIBILITY_PROFILE_VERSION:
+            reasons.append("alignment-profile-mismatch")
+        if canonical.get("status") != "available":
+            reasons.append("alignment-unavailable")
+        grain = canonical.get("comparison_grain")
+        if not isinstance(grain, Mapping) or grain.get("grain_id") != "matched_planner_pair":
+            reasons.append("alignment-grain-mismatch")
+        elif (
+            grain.get("left_role") != "primary_trace"
+            or grain.get("right_role") != "comparison_trace"
+        ):
+            reasons.append("alignment-role-mismatch")
+
+        provenance = outer_alignment.get("provenance")
+        gate = canonical.get("provenance_gate")
+        if not isinstance(provenance, Mapping) and isinstance(gate, Mapping):
+            # The lower-level event-alignment owner emits trace identities in
+            # the gate rather than the review-alignment wrapper's provenance.
+            provenance = {
+                "left_trace_id": gate.get("left_trace_id"),
+                "right_trace_id": gate.get("right_trace_id"),
+            }
+        if not isinstance(provenance, Mapping):
+            reasons.append("alignment-provenance-unavailable")
+        else:
+            for name in ("left_artifact_id", "right_artifact_id"):
+                # Artifact IDs are available in the review-alignment wrapper;
+                # direct pair-compatibility records bind the same relation via
+                # their canonical left/right trace IDs.
+                if name not in provenance:
+                    continue
+                if not isinstance(provenance.get(name), str) or not provenance[name]:
+                    reasons.append(f"alignment-{name}-unavailable")
+            if isinstance(nested_compatibility, Mapping):
+                for name in ("left_artifact_id", "right_artifact_id"):
+                    if not isinstance(provenance.get(name), str) or not provenance[name]:
+                        reasons.append(f"alignment-{name}-unavailable")
+            if provenance.get("left_trace_id") != primary.trace_identity:
+                reasons.append("alignment-left-trace-identity-mismatch")
+            if provenance.get("right_trace_id") != candidate.trace_identity:
+                reasons.append("alignment-right-trace-identity-mismatch")
+        if isinstance(nested_compatibility, Mapping) and not isinstance(
+            outer_alignment.get("provenance"), Mapping
+        ):
+            reasons.append("alignment-provenance-unavailable")
+
+        if not primary.trace_identity:
+            reasons.append("primary-trace-identity-unavailable")
+        if not candidate.trace_identity:
+            reasons.append("peer-trace-identity-unavailable")
+        if primary.episode.seed != candidate.episode.seed:
+            reasons.append("peer-seed-mismatch")
+
+        checks = gate.get("checks") if isinstance(gate, Mapping) else None
+        availability = gate.get("availability") if isinstance(gate, Mapping) else None
+        if not isinstance(gate, Mapping) or gate.get("status") != "available":
+            reasons.append("alignment-provenance-gate-unavailable")
+        if isinstance(gate, Mapping) and gate.get("compatible") is not True:
+            reasons.append("alignment-provenance-gate-incompatible")
+        if isinstance(gate, Mapping) and gate.get("comparison_grain") != "matched_planner_pair":
+            reasons.append("alignment-gate-grain-mismatch")
+        if not isinstance(checks, Mapping):
+            reasons.append("alignment-provenance-checks-unavailable")
+        else:
+            required_checks = (
+                "scenario_id_equal",
+                "coordinate_frame_equal",
+                "units_equal",
+                "seed_equal",
+                "planner_id_different",
+                "map_id_present",
+                "map_id_equal",
+                "horizon_present",
+                "horizon_equal",
+                "config_digest_present",
+                "time_step_s_present",
+                "time_step_s_equal",
+            )
+            reasons.extend(
+                f"alignment-check-failed:{name}"
+                for name in required_checks
+                if checks.get(name) is not True
+            )
+        if not isinstance(availability, Mapping):
+            reasons.append("alignment-provenance-availability-unavailable")
+        else:
+            for name in ("map_id", "horizon", "config_digest", "time_step_s"):
+                entry = availability.get(name)
+                if not isinstance(entry, Mapping) or entry.get("status") != "available":
+                    reasons.append(f"alignment-source-field-unavailable:{name}")
+                elif entry.get("left") is None or entry.get("right") is None:
+                    reasons.append(f"alignment-source-field-missing:{name}")
+        contracts = gate.get("time_step_contracts") if isinstance(gate, Mapping) else None
+        if not isinstance(contracts, Mapping) or any(
+            not isinstance(contracts.get(side), Mapping)
+            or contracts[side].get("status") != "available"
+            for side in ("left", "right")
+        ):
+            reasons.append("alignment-time-step-contract-unavailable")
+
+        right_source = canonical.get("right_source_trace")
+        if not isinstance(right_source, Mapping):
+            reasons.append("peer-source-trace-unavailable")
+        else:
+            if right_source.get("status") != "available":
+                reasons.append("peer-source-trace-unavailable")
+            if right_source.get("schema_version") != "simulation_trace_export.v1":
+                reasons.append("peer-source-trace-profile-mismatch")
+            if right_source.get("trace_id") != candidate.trace_identity:
+                reasons.append("peer-source-trace-identity-mismatch")
+            if not self._sha256_text(right_source.get("content_sha256")):
+                reasons.append("peer-source-content-identity-unavailable")
+            receipt = right_source.get("content_receipt")
+            if not isinstance(receipt, Mapping) or not isinstance(
+                receipt.get("content_contract"), Mapping
+            ):
+                reasons.append("peer-source-content-receipt-unavailable")
+            source = right_source.get("source")
+            if not isinstance(source, Mapping):
+                reasons.append("peer-source-identity-unavailable")
+            else:
+                expected = {
+                    "episode_id": candidate.episode_id,
+                    "scenario_id": candidate.scenario_id,
+                    "planner_id": candidate.planner_id,
+                    "seed": candidate.episode.seed,
+                }
+                for name, expected_value in expected.items():
+                    if name == "episode_id":
+                        accepted_episode_ids = {
+                            candidate.episode_id,
+                            candidate.episode.execution_id,
+                        }
+                        if source.get(name) not in accepted_episode_ids:
+                            reasons.append(f"peer-source-{name}-mismatch")
+                        continue
+                    if source.get(name) != expected_value:
+                        reasons.append(f"peer-source-{name}-mismatch")
+            expected_content = candidate.metadata.get("trace_content_sha256")
+            if expected_content is not None:
+                if not self._sha256_text(expected_content):
+                    reasons.append("peer-trace-content-identity-malformed")
+                elif expected_content.lower() != str(right_source.get("content_sha256")).lower():
+                    reasons.append("peer-trace-content-identity-mismatch")
+
+        if isinstance(gate, Mapping):
+            for name, source_name in (
+                ("left_content_sha256", "primary-trace-content"),
+                ("right_content_sha256", "peer-trace-content"),
+            ):
+                content_digest = gate.get(name)
+                if not self._sha256_text(content_digest):
+                    reasons.append(f"{source_name}-identity-unavailable")
+                elif (
+                    name == "right_content_sha256"
+                    and isinstance(right_source, Mapping)
+                    and self._sha256_text(right_source.get("content_sha256"))
+                    and content_digest.lower() != right_source["content_sha256"].lower()
+                ):
+                    reasons.append("peer-trace-content-identity-mismatch")
+                elif name == "left_content_sha256":
+                    expected_primary_content = primary.metadata.get("trace_content_sha256")
+                    if expected_primary_content is not None:
+                        if not self._sha256_text(expected_primary_content):
+                            reasons.append("primary-trace-content-identity-malformed")
+                        elif content_digest.lower() != expected_primary_content.lower():
+                            reasons.append("primary-trace-content-identity-mismatch")
+
+        initial = canonical.get("initial_state_equivalence")
+        if (
+            not isinstance(initial, Mapping)
+            or initial.get("status") != "available"
+            or initial.get("equivalent") is not True
+        ):
+            reasons.append("initial-state-equivalence-unavailable")
+        else:
+            # These fields are the canonical event-alignment owner's complete
+            # initial-state identity/equivalence receipt.  A bare equivalent
+            # flag is deliberately insufficient.
+            required_initial_fields = (
+                "robot_position_delta_m",
+                "robot_velocity_delta_mps",
+                "robot_heading_delta_rad",
+                "robot_radius_delta_m",
+                "actor_id_sets_equal",
+                "actor_position_delta_m",
+                "actor_velocity_delta_mps",
+                "actor_radius_delta_m",
+                "max_actor_position_delta_m",
+                "max_actor_velocity_delta_mps",
+                "max_actor_radius_delta_m",
+                "position_tolerance_m",
+                "heading_tolerance_rad",
+            )
+            reasons.extend(
+                f"initial-state-field-unavailable:{name}"
+                for name in required_initial_fields
+                if name not in initial
+            )
+            if initial.get("actor_id_sets_equal") is not True:
+                reasons.append("initial-state-actor-identity-mismatch")
+            numeric_fields = (
+                "robot_position_delta_m",
+                "robot_velocity_delta_mps",
+                "robot_heading_delta_rad",
+                "robot_radius_delta_m",
+                "max_actor_position_delta_m",
+                "max_actor_velocity_delta_mps",
+                "max_actor_radius_delta_m",
+                "position_tolerance_m",
+                "heading_tolerance_rad",
+            )
+            for name in numeric_fields:
+                value = initial.get(name)
+                if value is None and name.startswith("max_actor_"):
+                    continue
+                try:
+                    _finite(value, name=f"initial-state.{name}")
+                except QueueInputError:
+                    reasons.append(f"initial-state-field-malformed:{name}")
+            for name, allow_none in (
+                ("actor_position_delta_m", False),
+                ("actor_velocity_delta_mps", False),
+                ("actor_radius_delta_m", True),
+            ):
+                values = initial.get(name)
+                if not isinstance(values, Mapping):
+                    reasons.append(f"initial-state-field-malformed:{name}")
+                    continue
+                for actor_id, value in values.items():
+                    if not isinstance(actor_id, str):
+                        reasons.append(f"initial-state-field-malformed:{name}")
+                        continue
+                    if value is None:
+                        if not allow_none:
+                            reasons.append(f"initial-state-field-malformed:{name}")
+                        continue
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        reasons.append(f"initial-state-field-malformed:{name}")
+                    else:
+                        try:
+                            _finite(value, name=f"initial-state.{name}.{actor_id}")
+                        except QueueInputError:
+                            reasons.append(f"initial-state-field-malformed:{name}")
+            expected_initial = candidate.metadata.get("initial_state_identity")
+            if expected_initial is not None:
+                if not isinstance(expected_initial, str) or not expected_initial:
+                    reasons.append("initial-state-identity-malformed")
+                elif expected_initial != _sha256(initial):
+                    reasons.append("initial-state-identity-mismatch")
+        return not reasons, tuple(dict.fromkeys(reasons))
+
     def _peer_candidates(  # noqa: C901
         self, primary: QueueCandidate
     ) -> tuple[tuple[EpisodeRef, ...], tuple[str, ...]]:
@@ -2221,12 +2991,7 @@ class AuditQueue:
             similarity = compatible_case_similarity(
                 primary.episode, candidate.episode, mode=SIMILARITY_MODE_SAME_SCENARIO
             )
-            alignment = candidate.metadata.get(
-                "event_alignment",
-                candidate.metadata.get(
-                    "review_alignment", candidate.metadata.get("pair_compatibility")
-                ),
-            )
+            alignment = self._alignment_for(candidate)
             if alignment is None:
                 alignment = unavailable_pair_compatibility(
                     "peer_alignment_unavailable", comparison_grain="matched_planner_pair"
@@ -2237,16 +3002,13 @@ class AuditQueue:
             if similarity.compatibility == UNKNOWN_COMPATIBILITY:
                 missingness.append(f"peer:{candidate.episode_id}:compatibility-unknown")
                 continue
-            alignment_status = alignment.get("status") if isinstance(alignment, Mapping) else None
-            alignment_gate = (
-                alignment.get("provenance_gate", {}) if isinstance(alignment, Mapping) else {}
-            )
-            compatible = (
-                alignment_status == "available"
-                and isinstance(alignment_gate, Mapping)
-                and alignment_gate.get("compatible") is True
+            compatible, alignment_reasons = self._canonical_peer_alignment(
+                primary, candidate, alignment
             )
             if not compatible:
+                missingness.extend(
+                    f"peer:{candidate.episode_id}:{reason}" for reason in alignment_reasons
+                )
                 missingness.append(f"peer:{candidate.episode_id}:alignment-incompatible")
                 continue
             if candidate.planner_id == primary.planner_id:
@@ -2289,13 +3051,34 @@ class AuditQueue:
             reasons.append(
                 "some peer traces were omitted because compatibility or trace capability was unavailable"
             )
+        packet_reasons = tuple(dict.fromkeys(reasons))
+        peer_alignment = [
+            {
+                "episode_id": item.episode_id,
+                "trace_identity": item.trace_identity,
+                "alignment": self._alignment_for(item),
+            }
+            for item in sorted(self.dataset.candidates, key=lambda value: value.episode_id)
+            if item.episode_id != candidate.episode_id
+            and item.scenario_id == candidate.scenario_id
+            and self._alignment_for(item) is not None
+        ]
+        review_scope = self._review_scope(candidate, peers)
         packet_identity = {
             "campaign_digest": self.dataset.campaign_digest,
             "source_digest": self.dataset.source_digest,
-            "primary_episode_id": candidate.episode_id,
+            "primary": record_to_dict(candidate.episode),
+            "peers": [record_to_dict(peer) for peer in peers],
+            "signals": [record_to_dict(signal) for signal in signals],
+            "selection_reasons": list(packet_reasons),
+            "missingness": list(missingness),
+            "primary_alignment": self._alignment_for(candidate),
+            "peer_alignment": peer_alignment,
+            "selection": explanation.to_dict(),
+            "control_reason": control_reason,
             "policy_version": self.policy.policy_version,
             "input_revision": self.dataset.input_revision,
-            "scope": self._review_scope(candidate, peers),
+            "scope": review_scope,
         }
         packet_id = "review-packet-" + _sha256(packet_identity)
         packet = ReviewPacket(
@@ -2303,7 +3086,7 @@ class AuditQueue:
             primary=candidate.episode,
             peers=peers,
             signals=signals,
-            selection_reasons=tuple(dict.fromkeys(reasons)),
+            selection_reasons=packet_reasons,
             missingness=tuple(missingness),
             policy_version=self.policy.policy_version,
             input_revision=self.dataset.input_revision,
@@ -2332,36 +3115,53 @@ class AuditQueue:
         if self.state_path is None:
             return
         path = self.state_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        expected = self._persisted_revision if expected_revision is None else expected_revision
-        if path.exists():
-            try:
-                current = QueueState.from_mapping(_read_json(path)).state_revision
-            except (OSError, QueueInputError, QueueStateError) as exc:
-                raise QueueStateError(f"cannot compare queue state {path}: {exc}") from exc
-            if current != expected:
-                raise QueueConflictError(
-                    f"queue state revision conflict: expected {expected}, current {current}"
-                )
-        elif expected not in {0, self._persisted_revision}:
-            raise QueueConflictError(f"queue state does not exist at expected revision {expected}")
-        payload = _canonical(self.state.to_dict()) + "\n"
-        fd, temporary = tempfile.mkstemp(
-            prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent), text=True
-        )
+        if path.is_symlink():
+            raise QueueStateError(f"queue state path must not be a symlink: {path}")
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-            self._persisted_revision = self.state.state_revision
+            path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
+            raise QueueStateError(
+                f"cannot prepare queue state directory {path.parent}: {exc}"
+            ) from exc
+        expected = self._persisted_revision if expected_revision is None else expected_revision
+        with _state_lock(path):
+            if path.exists():
+                try:
+                    current = QueueState.from_mapping(_read_json(path)).state_revision
+                except (
+                    OSError,
+                    QueueInputError,
+                    QueueStateError,
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                ) as exc:
+                    raise QueueStateError(f"cannot compare queue state {path}: {exc}") from exc
+                if current != expected:
+                    raise QueueConflictError(
+                        f"queue state revision conflict: expected {expected}, current {current}"
+                    )
+            elif expected not in {0, self._persisted_revision}:
+                raise QueueConflictError(
+                    f"queue state does not exist at expected revision {expected}"
+                )
+            payload = _canonical(self.state.to_dict()) + "\n"
+            fd, temporary = tempfile.mkstemp(
+                prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent), text=True
+            )
             try:
-                os.unlink(temporary)
-            except OSError:
-                pass
-            raise QueueStateError(f"cannot persist queue state: {exc}") from exc
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, path)
+                self._persisted_revision = self.state.state_revision
+            except OSError as exc:
+                try:
+                    os.unlink(temporary)
+                except OSError:
+                    pass
+                raise QueueStateError(f"cannot persist queue state: {exc}") from exc
 
     def save_state(self, *, expected_revision: int | None = None) -> int:
         """Persist lossless JSON state with compare-and-swap semantics."""
@@ -2439,6 +3239,7 @@ class AuditQueue:
             state_revision=self.state.state_revision + 1,
             input_revision=self.dataset.input_revision,
             input_identity=self.dataset.identity,
+            policy_identity=self._policy_identity,
             rng_state=_encode_rng(self._rng.getstate()),
             selection_index=self.state.selection_index + 1,
             current_packet_id=packet.packet_id,
@@ -2510,6 +3311,7 @@ class AuditQueue:
             primary_episode_id=candidate.episode_id,
             policy_mode=self.policy.mode,
             policy_version=self.policy.policy_version,
+            policy_identity=self._policy_identity,
             input_revision=self.dataset.input_revision,
             input_identity=self.dataset.identity,
             campaign_digest=candidate.episode.campaign_digest,
@@ -2577,6 +3379,10 @@ class AuditQueue:
             self._load_state_from_disk()
         packet = self.current_packet
         if packet is None:
+            if self.state.current_packet_id:
+                raise QueueStateError(
+                    "current packet snapshot is missing: " + self.state.current_packet_id
+                )
             return self.select_next()
         context = next(
             (
@@ -2587,7 +3393,9 @@ class AuditQueue:
             None,
         )
         if context is None:
-            return self.select_next(force_current=True)
+            raise QueueStateError(
+                "selection history is missing for current packet snapshot: " + packet.packet_id
+            )
         if self._stale_inputs:
             missingness = tuple(dict.fromkeys((*packet.missingness, *self._stale_inputs)))
             packet = replace(
@@ -2601,7 +3409,7 @@ class AuditQueue:
             context = replace(context, missingness=missingness, stale_inputs=self._stale_inputs)
         return SelectionResult(packet=packet, context=context)
 
-    def _manual_mutation(  # noqa: C901
+    def _manual_mutation(  # noqa: C901, PLR0912
         self,
         action_type: str,
         target_id: str,
@@ -2625,6 +3433,15 @@ class AuditQueue:
             target = str(packet.get("primary", {}).get("episode_id", target)) if packet else target
         if not target:
             raise AuditQueueError(f"{action_type} requires a target episode or current packet")
+        candidate_ids = {item.episode_id for item in self.dataset.candidates}
+        finding_ids = {item.finding_id for item in self.dataset.findings}
+        if action_type == "more_evidence":
+            if target not in candidate_ids and target not in finding_ids:
+                raise QueueInputError(
+                    f"more_evidence target is not a known episode or finding: {target}"
+                )
+        elif target not in candidate_ids:
+            raise QueueInputError(f"{action_type} target is not a known episode: {target}")
         target_was_current = target_was_current or target == self._current_primary_id()
         operation_id = operation_id or f"queue-{action_type}-{self.state.state_revision}-{target}"
         _text(operation_id, name="queue action operation_id")
@@ -2779,7 +3596,16 @@ class AuditQueue:
                         raise QueueStateError(
                             f"previous action {operation_id!r} references a missing packet snapshot"
                         )
-                    saved_packet = review_packet_from_dict(saved_payload)
+                    try:
+                        saved_packet = record_from_dict(saved_payload)
+                    except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+                        raise QueueStateError(
+                            f"previous action {operation_id!r} references a corrupt packet snapshot"
+                        ) from exc
+                    if not isinstance(saved_packet, ReviewPacket):
+                        raise QueueStateError(
+                            f"previous action {operation_id!r} references a non-packet snapshot"
+                        )
                     return SelectionResult(packet=saved_packet, context=saved_context)
                 raise QueueOperationConflictError(
                     f"operation ID {operation_id!r} was reused for a different previous action"
@@ -2789,8 +3615,13 @@ class AuditQueue:
         prior_id = self.state.previous_packet_ids[-1]
         packet_payload = self.state.packet_payloads.get(prior_id)
         if packet_payload is None:
-            return None
-        packet = review_packet_from_dict(packet_payload)
+            raise QueueStateError(f"previous packet snapshot is missing: {prior_id}")
+        try:
+            packet = record_from_dict(packet_payload)
+        except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"corrupt previous packet snapshot {prior_id}: {exc}") from exc
+        if not isinstance(packet, ReviewPacket):
+            raise QueueStateError(f"previous snapshot is not a review_packet record: {prior_id}")
         history = list(self.state.previous_packet_ids)
         history.pop()
         context = next(
@@ -2847,12 +3678,16 @@ class AuditQueue:
         """Persist explicit review credit; selection itself never calls this."""
 
         target = episode_id
+        if target and not isinstance(target, str):
+            raise QueueInputError("review target episode_id must be a string")
         if not target and self.state.current_packet_id:
             packet = self.current_packet
             target = packet.primary.episode_id if packet else ""
         if not target:
             raise AuditQueueError("record_review requires an episode or current packet")
-        annotation_ids = tuple(annotation_ids)
+        if target not in {item.episode_id for item in self.dataset.candidates}:
+            raise QueueInputError(f"review target is not a known episode: {target}")
+        annotation_ids = _annotation_ids(annotation_ids)
         if operation_id is None:
             operation_id = "queue-review-" + _sha256(
                 {
@@ -2875,17 +3710,20 @@ class AuditQueue:
                 "operation_id": operation_id,
             }
         )
-        review = ReviewRecord(
-            review_id=review_id,
-            episode_id=target,
-            scope=scope,
-            outcome=outcome,
-            author_kind=author_kind,
-            author_id=author_id,
-            source_revision=self.dataset.input_revision,
-            annotation_ids=tuple(annotation_ids),
-            notes=notes,
-        )
+        try:
+            review = ReviewRecord(
+                review_id=review_id,
+                episode_id=target,
+                scope=scope,
+                outcome=outcome,
+                author_kind=author_kind,
+                author_id=author_id,
+                source_revision=self.dataset.input_revision,
+                annotation_ids=annotation_ids,
+                notes=notes,
+            )
+        except (AuditContractError, TypeError, ValueError) as exc:
+            raise QueueInputError(f"invalid review record: {exc}") from exc
         review_action_operation = f"{operation_id}:action"
         review_operation_digest = _sha256(
             {
@@ -3087,6 +3925,7 @@ __all__ = [
     "PRIORITY_SAFETY",
     "PRIORITY_STATISTICAL",
     "PRIORITY_UNEXPLAINED",
+    "QUEUE_INPUT_SCHEMA_VERSION",
     "ActivePolicy",
     "AuditQueue",
     "AuditQueueConflictError",

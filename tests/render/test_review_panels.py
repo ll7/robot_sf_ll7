@@ -573,6 +573,85 @@ def test_media_materialization_failures_are_partial_and_scrubbed(
     assert any(diagnostic["reason_code"] == reason_code for diagnostic in result.diagnostics)
 
 
+def test_build_panel_model_validates_missing_media_before_complete(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 1.0}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "video-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "media-mapping.v1",
+                "media_uri": "missing-clip.mp4",
+                "entries": [{"source_t_s": 1.0, "pts_s": 0.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    document = review_panels.build_panel_model(
+        _request(
+            tmp_path,
+            output="not-written",
+            sources=[
+                {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+                {"artifact_id": "video", "uri": "video-map.json", "format": "media-mapping.v1"},
+            ],
+        ),
+        base=tmp_path,
+    )
+
+    assert document["status"] == "partial"
+    assert document["panel_status"]["video"] == "unavailable"
+    assert document["streams"]["video"]["media_uri"] is None
+    assert any(
+        diagnostic["reason_code"] == "media_source_missing"
+        for diagnostic in document["diagnostics"]
+    )
+
+
+def test_nested_unsafe_video_aliases_are_scrubbed_from_panel_model(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 1.0}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "video-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "media-mapping.v1",
+                "entries": [
+                    {
+                        "source_t_s": 1.0,
+                        "pts_s": 0.0,
+                        "value": {"media_uri": "javascript:alert(1)"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    document = review_panels.build_panel_model(
+        _request(
+            tmp_path,
+            output="not-written",
+            sources=[
+                {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+                {"artifact_id": "video", "uri": "video-map.json", "format": "media-mapping.v1"},
+            ],
+        ),
+        base=tmp_path,
+    )
+
+    encoded = json.dumps(document, sort_keys=True)
+    assert document["status"] == "partial"
+    assert document["panel_status"]["video"] == "unavailable"
+    assert "javascript:alert(1)" not in encoded
+    assert any(
+        diagnostic["reason_code"] == "media_uri_unsafe" for diagnostic in document["diagnostics"]
+    )
+
+
 def test_malformed_scene_geometry_is_partial_with_diagnostics(tmp_path: Path) -> None:
     (tmp_path / "scene.json").write_text(
         json.dumps(

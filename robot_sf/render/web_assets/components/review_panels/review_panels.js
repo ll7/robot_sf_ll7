@@ -551,6 +551,10 @@ export class ReviewPanelsController {
       : null;
   }
 
+  _pauseAtEnd() {
+    if (this.state.cursorTimeS >= this.state.end) this._pausePlayback();
+  }
+
   _startPlayback() {
     if (this.state.playing) return;
     if (this.state.cursorTimeS >= this.state.end) {
@@ -599,6 +603,7 @@ export class ReviewPanelsController {
         );
         this._applyCursor(Number(samples[index].time_s), action.source || "keyboard", true);
         this._resetPlaybackAnchor();
+        this._pauseAtEnd();
       }
     } else if (type === "toggle-play") {
       if (this.state.playing) this._pausePlayback();
@@ -640,6 +645,7 @@ export class ReviewPanelsController {
       if (metric && target !== null) {
         this._applyCursor(target, action.source || "metric", true);
         this._resetPlaybackAnchor();
+        this._pauseAtEnd();
       }
     } else if (type === "event-seek") {
       const event = (this.model.events || []).find(
@@ -649,6 +655,7 @@ export class ReviewPanelsController {
       if (event && target !== null) {
         this._applyCursor(target, action.source || "event", true);
         this._resetPlaybackAnchor();
+        this._pauseAtEnd();
       }
     }
     if (this.root) this.render();
@@ -896,7 +903,12 @@ export class ReviewPanelsController {
       row.appendChild(label);
       this._bindControl(row, "click", (event) => {
         if (event.target === toggle) return;
-        this.dispatch({ type: "metric-seek", metric_id: metricId, source: "metric" });
+        this.dispatch({
+          type: "metric-seek",
+          metric_id: metricId,
+          time_s: current.sample_time_s,
+          source: "metric",
+        });
       });
       if (metric.visible) {
         const trace = documentRef.createElement("div");

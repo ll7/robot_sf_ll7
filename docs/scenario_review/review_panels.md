@@ -16,6 +16,11 @@ from robot_sf.render.review_panels import run
 result = run(component_request)
 ```
 
+`build_panel_model(request, base=...)` exposes the same renderer-neutral model
+without reserving or writing an output directory. It still performs local media
+trust and existence admission, so a missing or unsafe mapped media source is
+diagnostic/partial in both APIs.
+
 `component_request` is the shared `component-request.v1` envelope. The
 component id is `srev16-review-panels`; `descriptor()` and
 `descriptor_document()` expose its `component-descriptor.v1` contract. The

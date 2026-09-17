@@ -409,6 +409,70 @@ def _scrub_media_uri_fields(value: Any) -> None:
             _scrub_media_uri_fields(nested)
 
 
+def _scrub_unsafe_media_uris(value: Any) -> bool:
+    """Remove unsafe media URI aliases from a JSON-shaped model.
+
+    Returns:
+        Whether at least one unsafe alias was removed.
+    """
+
+    unsafe = False
+    if isinstance(value, dict):
+        for key in list(value):
+            if key in {"media_uri", "media_source_uri", "video_uri"}:
+                candidate = value[key]
+                if candidate is not None and (
+                    not isinstance(candidate, str) or _unsafe_media_uri(candidate)
+                ):
+                    value.pop(key, None)
+                    unsafe = True
+        for nested in value.values():
+            unsafe = _scrub_unsafe_media_uris(nested) or unsafe
+    elif isinstance(value, list):
+        for nested in value:
+            unsafe = _scrub_unsafe_media_uris(nested) or unsafe
+    return unsafe
+
+
+def _mark_media_unavailable(
+    document: dict[str, Any], reason: str, reason_code: str
+) -> dict[str, Any]:
+    """Mark the video surface unavailable and scrub all media aliases.
+
+    Returns:
+        The bounded diagnostic describing the rejected media.
+    """
+
+    streams = document.get("streams")
+    stream = streams.get("video") if isinstance(streams, Mapping) else None
+    source_ids = stream.get("source_ids", []) if isinstance(stream, Mapping) else []
+    artifact_id = str(source_ids[0]) if source_ids else "video"
+    diagnostic = {"artifact_id": artifact_id, "reason_code": reason_code}
+    if isinstance(stream, dict):
+        stream["media_uri"] = None
+        stream["status"] = "unavailable"
+        stream["reason"] = reason
+        stream.setdefault("diagnostics", []).append(diagnostic)
+        _scrub_media_uri_fields(stream.get("source_identity"))
+    for container_name in ("panels", "surfaces"):
+        container = document.get(container_name)
+        video = container.get("video") if isinstance(container, Mapping) else None
+        if isinstance(video, dict):
+            video["media_uri"] = None
+            video["status"] = "unavailable"
+            video["reason"] = reason
+    panel_status = document.get("panel_status")
+    if isinstance(panel_status, dict):
+        panel_status["video"] = "unavailable"
+    _scrub_media_uri_fields(document.get("source_identity"))
+    provenance = document.get("provenance")
+    if isinstance(provenance, Mapping):
+        _scrub_media_uri_fields(provenance.get("config"))
+    if document.get("status") == STATUS_COMPLETE:
+        document["status"] = STATUS_PARTIAL
+    return diagnostic
+
+
 def _resolve_under(root: Path, value: str, *, kind: str) -> Path:
     """Resolve a path under ``root`` and reject symlink escapes.
 
@@ -1901,53 +1965,28 @@ def _copy_web_component(output_dir: Path) -> Path:
     return destination
 
 
-def _materialize_local_media(  # noqa: C901, PLR0915
-    document: dict[str, Any], root: Path, output_dir: Path, output_directory: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Copy one trusted local media source beside the emitted HTML.
+def _locate_local_media(
+    document: dict[str, Any], root: Path
+) -> tuple[Path | None, bytes | None, list[dict[str, Any]]]:
+    """Validate and locate one local media source without copying it.
 
     Returns:
-        Emitted media artifact metadata and materialization diagnostics.
+        Source path, read-only bytes, and any admission diagnostics.
     """
 
-    stream = document.get("streams", {}).get("video")
+    streams = document.get("streams")
+    stream = streams.get("video") if isinstance(streams, Mapping) else None
     media_uri = stream.get("media_uri") if isinstance(stream, Mapping) else None
     if not isinstance(media_uri, str) or not media_uri:
-        return [], []
+        return None, None, []
     value = media_uri.strip()
-    source_ids = stream.get("source_ids", []) if isinstance(stream, Mapping) else []
-    artifact_id = str(source_ids[0]) if source_ids else "video"
-
-    def mark_unavailable(reason: str, reason_code: str) -> list[dict[str, Any]]:
-        diagnostic = {"artifact_id": artifact_id, "reason_code": reason_code}
-        if isinstance(stream, dict):
-            stream["media_uri"] = None
-            stream["status"] = "unavailable"
-            stream["reason"] = reason
-            stream.setdefault("diagnostics", []).append(diagnostic)
-            _scrub_media_uri_fields(stream.get("source_identity"))
-        panels = document.get("panels")
-        surfaces = document.get("surfaces")
-        for container in (panels, surfaces):
-            video = container.get("video") if isinstance(container, Mapping) else None
-            if isinstance(video, dict):
-                video["media_uri"] = None
-                video["status"] = "unavailable"
-                video["reason"] = reason
-        panel_status = document.get("panel_status")
-        if isinstance(panel_status, dict):
-            panel_status["video"] = "unavailable"
-        source_identity = document.get("source_identity")
-        _scrub_media_uri_fields(source_identity)
-        provenance = document.get("provenance")
-        if isinstance(provenance, Mapping):
-            _scrub_media_uri_fields(provenance.get("config"))
-        if document.get("status") == STATUS_COMPLETE:
-            document["status"] = STATUS_PARTIAL
-        return [diagnostic]
-
     if not value or _unsafe_media_uri(value):
-        return [], mark_unavailable("media_uri_unsafe", "media_uri_unsafe")
+        return (
+            None,
+            None,
+            [_mark_media_unavailable(document, "media_uri_unsafe", "media_uri_unsafe")],
+        )
+    source_ids = stream.get("source_ids", []) if isinstance(stream, Mapping) else []
     source_identity = document.get("source_identity", {})
     mapping_uri = None
     if source_ids and isinstance(source_identity, Mapping):
@@ -1978,7 +2017,39 @@ def _materialize_local_media(  # noqa: C901, PLR0915
     except (OSError, ValueError):
         source_path = None
     if source_path is None or payload is None:
-        return [], mark_unavailable("media_source_missing", "media_source_missing")
+        return (
+            None,
+            None,
+            [_mark_media_unavailable(document, "media_source_missing", "media_source_missing")],
+        )
+    return source_path, payload, []
+
+
+def _validate_local_media(document: dict[str, Any], root: Path) -> list[dict[str, Any]]:
+    """Apply the run-time local media admission checks without writing output.
+
+    Returns:
+        Admission diagnostics, if the local media is unavailable or unsafe.
+    """
+
+    _source_path, _payload, diagnostics = _locate_local_media(document, root)
+    return diagnostics
+
+
+def _materialize_local_media(
+    document: dict[str, Any], root: Path, output_dir: Path, output_directory: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Copy one trusted local media source beside the emitted HTML.
+
+    Returns:
+        Emitted media artifact metadata and materialization diagnostics.
+    """
+
+    stream = document.get("streams", {}).get("video")
+    media_uri = stream.get("media_uri") if isinstance(stream, Mapping) else None
+    source_path, payload, diagnostics = _locate_local_media(document, root)
+    if diagnostics or source_path is None or payload is None:
+        return [], diagnostics
     digest = _sha256(payload)
     source_name = source_path.name or "media.bin"
     safe_name = (
@@ -2326,6 +2397,12 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         },
         "diagnostics": diagnostics,
     }
+    if _scrub_unsafe_media_uris(document):
+        diagnostics.append(
+            _mark_media_unavailable(document, "media_uri_unsafe", "media_uri_unsafe")
+        )
+        document["diagnostics"] = diagnostics
+        status = str(document.get("status", status))
     return document, diagnostics, status
 
 
@@ -2350,6 +2427,10 @@ def build_panel_model(request: ComponentRequest, *, base: Path | None = None) ->
         request, sources, request.config, load_diagnostics=load_diagnostics
     )
     document["diagnostics"] = diagnostics
+    media_diagnostics = _validate_local_media(document, root)
+    if media_diagnostics:
+        diagnostics.extend(media_diagnostics)
+        document["diagnostics"] = diagnostics
     return document
 
 

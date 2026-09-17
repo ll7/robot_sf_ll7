@@ -260,6 +260,10 @@ const videoElement = findAll(rootA, (element) => element.tagName === "VIDEO")[0]
 controllerA.dispatch({ type: "seek", time_s: 2, source: "probe" });
 assert.equal(findAll(rootA, (element) => element.tagName === "VIDEO")[0], videoElement);
 assert.equal(videoElement.currentTime, 1);
+controllerA.dispatch({ type: "seek", time_s: 3, source: "probe" });
+const metricRow = findAll(rootA, (element) => element.className === "metric-row")[0];
+metricRow.emit("click", { target: metricRow });
+assert.equal(controllerA.state.cursorTimeS, 2);
 const sampleButtons = findAll(rootA, (element) => element.className === "metric-sample");
 assert.equal(sampleButtons.length, 2);
 sampleButtons[1].emit("click", { stopPropagation() {} });
@@ -302,6 +306,27 @@ intervalController.dispatch({ type: "toggle-play" });
 assert.equal(intervalController.state.cursorTimeS, 1);
 assert.equal(intervalController.state.contextRevision, restartRevision + 1);
 intervalController.dispatch({ type: "toggle-play" });
+
+const endStep = new ReviewPanelsController(model(), null, { now: () => now, scheduler });
+endStep.dispatch({ type: "toggle-play" });
+endStep.dispatch({ type: "step", delta: 99 });
+assert.equal(endStep.state.cursorTimeS, 4);
+assert.equal(endStep.state.playing, false);
+const endMetric = new ReviewPanelsController(model(), null, { now: () => now, scheduler });
+endMetric.dispatch({ type: "toggle-play" });
+endMetric.dispatch({ type: "metric-seek", metric_id: "clearance", time_s: 99 });
+assert.equal(endMetric.state.cursorTimeS, 4);
+assert.equal(endMetric.state.playing, false);
+const endEventModel = model();
+endEventModel.events = [{ event_id: "terminal", start_s: 4, end_s: 4 }];
+const endEvent = new ReviewPanelsController(endEventModel, null, { now: () => now, scheduler });
+endEvent.dispatch({ type: "toggle-play" });
+endEvent.dispatch({ type: "event-seek", event_id: "terminal" });
+assert.equal(endEvent.state.cursorTimeS, 4);
+assert.equal(endEvent.state.playing, false);
+endStep.unmount();
+endMetric.unmount();
+endEvent.unmount();
 
 for (const uri of [
   "file:///tmp/clip.mp4",

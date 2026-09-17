@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from robot_sf.analysis_workbench import review_execute
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
     ComponentResult,
@@ -26,6 +28,7 @@ from robot_sf.analysis_workbench.review_experiment_loop import (
     LoopBudget,
     LoopPolicy,
     _canonical_digest,
+    _is_negative_outcome,
     _NativeExecutorAdapter,
     _operation_id,
     _request_identity,
@@ -218,6 +221,138 @@ def _native_fixture_request(
         request_payload["config"],
     )
     return request, admission
+
+
+def _write_valid_native_pair(
+    child_request: ComponentRequest,
+    base: Path,
+    admission_config: Any,
+) -> None:
+    """Write the supported SREV-22 child envelope used by recovery tests."""
+
+    effective_config = {
+        **child_request.config,
+        "admission": admission_config.to_dict(),
+    }
+    validated = review_execute.validate_execute_config(effective_config)
+    proof, failure = review_execute._resolve_executor_admission(
+        child_request,
+        validated,
+        validated.recipe,
+        admission=admission_config,
+    )
+    assert proof is not None, failure
+    source_admission = proof.to_dict()
+    os.close(proof.root_fd)
+    control_metrics = _metrics("control")
+    treatment_metrics = _metrics("treatment", value=1.2)
+    report = {
+        "intervention_id": "ped-speed-up",
+        "factor": "single_pedestrian_speed_offset",
+        "status": "complete",
+        "verdict": "survived",
+        "verdict_reason": "mechanism activated and min_robot_ped_distance_m moved increase by +0.2",
+        "control_metrics": control_metrics,
+        "treatment_metrics": treatment_metrics,
+        "control_activated": True,
+        "treatment_activated": True,
+        "nonintervened_config_match": True,
+    }
+    attempts = [
+        {
+            "candidate_id": "ped-speed-up",
+            "kind": "control",
+            "status": "ok",
+            "elapsed_s": 0.001,
+            "metrics": control_metrics,
+        },
+        {
+            "candidate_id": "ped-speed-up",
+            "kind": "treatment",
+            "status": "ok",
+            "elapsed_s": 0.001,
+            "metrics": treatment_metrics,
+        },
+    ]
+    traces = [
+        {
+            "schema_version": review_execute.ACTIVATION_TRACE_SCHEMA_VERSION,
+            "intervention_id": "ped-speed-up",
+            "factor": "single_pedestrian_speed_offset",
+            "control_activated": True,
+            "treatment_activated": True,
+            "control_metrics": control_metrics,
+            "treatment_metrics": treatment_metrics,
+        }
+    ]
+    ledger = {
+        "schema_version": review_execute.ATTEMPT_LEDGER_SCHEMA_VERSION,
+        "request_id": child_request.request_id,
+        "component_id": review_execute.COMPONENT_ID,
+        "recipe_id": validated.recipe["recipe_id"],
+        "request_digest": review_execute._canonical_digest(
+            review_execute._request_identity_document(child_request)
+        ),
+        "recipe_digest": review_execute._canonical_digest(validated.recipe),
+        "config_identity_digest": review_execute._canonical_digest(
+            review_execute._config_identity_document(validated)
+        ),
+        "budget": review_execute._config_budget_document(validated),
+        "attempts": attempts,
+        "executions_consumed": 2,
+        "candidate_reports": [report],
+        "traces": traces,
+        "evidence_boundary": "diagnostic_only",
+        "scientific_claim_allowed": False,
+        "dependent_family_status": "standalone_fixture_only",
+        "source_admission": source_admission,
+        "wall_elapsed_s": 0.001,
+    }
+    provenance = review_execute._commit_provenance()
+    provenance.update(
+        {
+            "recipe_id": validated.recipe["recipe_id"],
+            "source_identity": dict(validated.recipe["source_identity"]),
+            "request_digest": ledger["request_digest"],
+            "recipe_digest": ledger["recipe_digest"],
+            "config_digest": review_execute._canonical_digest(
+                review_execute._config_document(validated)
+            ),
+            "source_admission": source_admission,
+            "sources": [
+                {
+                    "artifact_id": source.artifact_id,
+                    "uri": source.uri,
+                    "format": source.format,
+                }
+                for source in child_request.sources
+            ],
+            "output_directory": child_request.output_directory,
+        }
+    )
+    execute_report = {
+        "schema_version": review_execute.EXECUTE_REPORT_SCHEMA_VERSION,
+        "request_id": child_request.request_id,
+        "component_id": review_execute.COMPONENT_ID,
+        "recipe_id": validated.recipe["recipe_id"],
+        "source_identity": dict(validated.recipe["source_identity"]),
+        "source_admission": source_admission,
+        "evidence_boundary": "diagnostic_only",
+        "benchmark_success": False,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": "standalone_fixture_only",
+        "candidates": [report],
+        "budget": {
+            **review_execute._config_budget_document(validated),
+            "executions_consumed": 2,
+            "wall_elapsed_s": 0.001,
+        },
+        "provenance": provenance,
+    }
+    child_dir = base / "executor"
+    child_dir.mkdir(parents=True, exist_ok=True)
+    (child_dir / "attempt-ledger.json").write_text(json.dumps(ledger), encoding="utf-8")
+    (child_dir / "execute-report.json").write_text(json.dumps(execute_report), encoding="utf-8")
 
 
 def test_descriptor_and_priority_then_id_ordering(tmp_path: Path) -> None:
@@ -548,6 +683,16 @@ def test_negative_outcomes_are_retained(tmp_path: Path) -> None:
     report = json.loads((tmp_path / "loop" / "experiment-loop-report.json").read_text())
     assert [item["outcome"] for item in report["outcomes"]] == ["falsified", "inconclusive"]
     assert len(report["negative_outcomes"]) == 2
+
+
+def test_negative_export_is_derived_from_status_not_mutable_flag() -> None:
+    assert _is_negative_outcome({"status": "failed", "negative": False}) is True
+    assert _is_negative_outcome({"status": "unavailable", "negative": False}) is True
+    assert _is_negative_outcome({"status": "cancelled", "negative": False}) is True
+    assert (
+        _is_negative_outcome({"status": "complete", "outcome": "survived", "negative": True})
+        is False
+    )
 
 
 def test_unsupported_recipe_and_failed_control_fidelity_are_truthful(tmp_path: Path) -> None:
@@ -1171,24 +1316,15 @@ def test_native_crash_resume_recovers_nested_pair_before_cancellation(
     def crash_after_nested_pair(
         child_request: ComponentRequest, *, base: Path, **kwargs: Any
     ) -> ComponentResult:
-        del kwargs
+        admission_config = kwargs["admission_config"]
         child_calls.append("nested")
-        child_dir = base / "executor"
-        child_dir.mkdir(parents=True, exist_ok=True)
-        report = {
-            "candidates": [
-                {
-                    "intervention_id": "ped-speed-up",
-                    "factor": "single_pedestrian_speed_offset",
-                    "status": "complete",
-                    "control_metrics": _metrics("control"),
-                    "treatment_metrics": _metrics("treatment", value=1.2),
-                    "control_activated": True,
-                    "treatment_activated": True,
-                }
-            ]
-        }
-        (child_dir / "execute-report.json").write_text(json.dumps(report), encoding="utf-8")
+        _write_valid_native_pair(child_request, base, admission_config)
+        if len(child_calls) > 1:
+            return ComponentResult(
+                request_id=child_request.request_id,
+                component_id="srev22-review-execute",
+                status="complete",
+            )
         raise KeyboardInterrupt("crash after nested pair")
 
     monkeypatch.setattr(
@@ -1207,7 +1343,7 @@ def test_native_crash_resume_recovers_nested_pair_before_cancellation(
         cancel=lambda: True,
     )
     assert resumed.status == "cancelled"
-    assert child_calls == ["nested"]
+    assert child_calls == ["nested", "nested"]
     journal = json.loads((tmp_path / "native-crash-resume" / SESSION_JOURNAL_FILENAME).read_text())
     assert {operation["state"] for operation in journal["operations"]} == {"completed"}
     assert [operation["kind"] for operation in journal["operations"]] == [
@@ -1223,7 +1359,50 @@ def test_native_crash_resume_recovers_nested_pair_before_cancellation(
         admission_config=admission,
     )
     assert repeated.status == "cancelled"
+    assert child_calls == ["nested", "nested"]
+
+
+def test_native_recovery_rejects_unbound_nested_artifacts_before_child_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request, admission = _native_fixture_request("native-unbound-recovery")
+    child_calls: list[str] = []
+
+    def crash_after_nested_pair(
+        child_request: ComponentRequest, *, base: Path, **kwargs: Any
+    ) -> ComponentResult:
+        child_calls.append("nested")
+        _write_valid_native_pair(child_request, base, kwargs["admission_config"])
+        raise KeyboardInterrupt("crash after nested pair")
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        crash_after_nested_pair,
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run(request, base=tmp_path, autonomous=True, admission_config=admission)
+    ledger_path = tmp_path / "native-unbound-recovery" / "executor" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["request_digest"] = "0" * 64
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    resumed = run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        admission_config=admission,
+    )
+    assert resumed.status == "failed"
     assert child_calls == ["nested"]
+    journal = json.loads(
+        (tmp_path / "native-unbound-recovery" / SESSION_JOURNAL_FILENAME).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert (
+        "nested child recovery identity binding mismatch"
+        in journal["operations"][0]["result"]["reason"]
+    )
 
 
 def test_native_operation_recovery_uses_exact_map_for_retry_in_candidate_id(
@@ -1304,6 +1483,75 @@ def test_wall_deadline_between_control_and_treatment(
     assert [call["kind"] for call in executor.calls] == ["control"]
 
 
+def test_post_result_cancellation_precedes_recipe_terminal_marker(tmp_path: Path) -> None:
+    cancellation = {"requested": False}
+
+    class TerminalTreatment(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            result["terminal"] = True
+            if kind == "treatment":
+                cancellation["requested"] = True
+            return result
+
+    request = _request(_recipe(max_candidates=2, max_executions=4), output="post-cancel")
+    executor = TerminalTreatment()
+    result = _run_injected(
+        request,
+        base=tmp_path,
+        executor=executor,
+        cancel=lambda: cancellation["requested"],
+    )
+    assert result.status == "cancelled"
+    assert result.reason == "cancellation_requested"
+    assert [call["candidate"] for call in executor.calls] == ["high", "high"]
+
+
+def test_post_result_wall_deadline_precedes_recipe_terminal_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_monotonic = time.monotonic
+    clock = {"jump": 0.0}
+    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+
+    class TerminalTreatment(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            result["terminal"] = True
+            if kind == "treatment":
+                clock["jump"] = 1.0
+            return result
+
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe, output="post-deadline")
+    request = ComponentRequest(
+        request.request_id,
+        request.component_id,
+        request.sources,
+        request.output_directory,
+        {**request.config, "wall_timeout_s": 0.5},
+    )
+    executor = TerminalTreatment()
+    result = _run_injected(request, base=tmp_path, executor=executor)
+    assert result.status == "partial"
+    assert result.reason == "wall_timeout"
+    assert [call["kind"] for call in executor.calls] == ["control", "treatment"]
+
+
 def test_resume_rejects_lowered_persisted_elapsed_deadline(tmp_path: Path) -> None:
     request = _request(_recipe(max_candidates=1, max_executions=2), output="elapsed-floor")
     first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
@@ -1327,6 +1575,24 @@ def test_resume_rejects_lowered_persisted_elapsed_deadline(tmp_path: Path) -> No
     )
     assert resumed.status == "failed"
     assert "elapsed accounting" in resumed.reason
+
+
+def test_resume_rejects_missing_persisted_elapsed_floor(tmp_path: Path) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="missing-floor")
+    first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
+    assert first.status == "complete"
+    journal_path = tmp_path / "missing-floor" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    del journal["elapsed_floor_s"]
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "elapsed accounting floor is missing" in resumed.reason
 
 
 def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:

@@ -104,25 +104,30 @@ are accepted once and normalized on load. Recovery binds the exact operation
 record to its candidate and kind; operation IDs are opaque, so valid candidate
 IDs containing `:retry:` are not parsed or stripped. A journal state of
 `dispatching` is recovered through the executor's idempotent
-`result_for`/`recover` interface when available; native recovery reads an
-already persisted child report/attempt before honoring cancellation and never
-starts a new pair solely to settle a stale outer dispatch. Without a result, a
-dispatching operation is retained as a failed unknown operation rather than
-blindly run a second time. Resume validates status/state/outcome, complete
-control+treatment result shape, operation, reservation, and consumed-execution
-invariants before accepting any terminal journal. For a complete pair, the
-survived/falsified/inconclusive verdict, measured activation flags, reason, and
-negative flag are recomputed from the retained control/treatment telemetry;
-stored summaries that disagree are rejected. Native resume also fails closed
-when `execute-report.json` and `attempt-ledger.json` disagree, and requires a
-contiguous retry chain whose predecessor is a failed, retryable attempt. A
-persisted elapsed-time floor is monotonic, so lowering the journal's elapsed
-value cannot reset the wall deadline. A successful operation without finite
-telemetry is converted to a failed operation before it is persisted, keeping
-the terminal journal immediately resumable. These checks detect inconsistent
-or stale local state; they do not turn a mutable diagnostic journal into
-cryptographic proof of execution. Tampered source proof, recipe, candidate
-order, identity, or journal accounting returns a failed resume result.
+`result_for`/`recover` interface when available; native recovery first checks
+the exact supported child report/attempt-ledger schemas, request/recipe/config
+digests, admitted source proof, candidate prefix, and current child dispatch,
+then asks the child executor to validate its own ledger before using a retained
+pair. A stale or self-consistent but unbound nested artifact cannot complete an
+outer operation. Without a result, a dispatching operation is retained as a
+failed unknown operation rather than blindly run a second time. Resume validates
+status/state/outcome, complete control+treatment result shape, operation,
+reservation, and consumed-execution invariants before accepting any terminal
+journal. For a complete pair, the survived/falsified/inconclusive verdict,
+measured activation flags, reason, and negative flag are recomputed from the
+retained control/treatment telemetry; stored summaries that disagree are
+rejected. Native resume also fails closed when `execute-report.json` and
+`attempt-ledger.json` disagree, and requires a contiguous retry chain whose
+predecessor is a failed, retryable attempt. A current-schema journal must carry
+its persisted elapsed-time floor; that floor is monotonic, so lowering the
+journal's elapsed value cannot reset the wall deadline. A successful operation
+without finite telemetry is converted to a failed operation before it is
+persisted, keeping the terminal journal immediately resumable. Negative export
+classification is derived from canonical status/outcome rather than a mutable
+flag. These checks detect inconsistent or stale local state; they do not turn a
+mutable diagnostic journal into cryptographic proof of execution. Tampered
+source proof, recipe, candidate order, identity, or journal accounting returns
+a failed resume result.
 
 The session directory also has an atomic `.experiment-loop.lock`. A controller
 holds it from journal load/reservation through settlement and releases it only

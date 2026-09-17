@@ -36,7 +36,7 @@ import platform
 import sys
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
@@ -146,6 +146,86 @@ _ALLOWED_CONFIG_KEYS = frozenset(
 )
 _SUPPORTED_FACTORS = frozenset(review_execute.SUPPORTED_FACTORS)
 _SUPPORTED_MEASUREMENTS = frozenset(review_execute.SUPPORTED_MEASUREMENTS)
+
+_NATIVE_LEDGER_KEYS = frozenset(
+    {
+        "schema_version",
+        "request_id",
+        "component_id",
+        "recipe_id",
+        "request_digest",
+        "recipe_digest",
+        "config_identity_digest",
+        "budget",
+        "attempts",
+        "executions_consumed",
+        "candidate_reports",
+        "traces",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+        "source_admission",
+        "wall_elapsed_s",
+    }
+)
+_NATIVE_EXECUTE_REPORT_KEYS = frozenset(
+    {
+        "schema_version",
+        "request_id",
+        "component_id",
+        "recipe_id",
+        "source_identity",
+        "source_admission",
+        "evidence_boundary",
+        "benchmark_success",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+        "candidates",
+        "budget",
+        "provenance",
+    }
+)
+_NATIVE_PROVENANCE_KEYS = frozenset(
+    {
+        "component_id",
+        "component_version",
+        "commit",
+        "python",
+        "platform",
+        "created_utc",
+        "evidence_boundary",
+        "benchmark_success",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+        "recipe_id",
+        "source_identity",
+        "request_digest",
+        "recipe_digest",
+        "config_digest",
+        "source_admission",
+        "sources",
+        "output_directory",
+    }
+)
+_NATIVE_COMPLETE_REPORT_KEYS = frozenset(
+    {
+        "intervention_id",
+        "factor",
+        "status",
+        "verdict",
+        "verdict_reason",
+        "control_metrics",
+        "treatment_metrics",
+        "control_activated",
+        "treatment_activated",
+        "nonintervened_config_match",
+    }
+)
+_NATIVE_FAILED_REPORT_KEYS = frozenset(
+    {"intervention_id", "factor", "status", "reason", "nonintervened_config_match"}
+)
+_NATIVE_FAILED_REPORT_WITH_CONTROL_KEYS = _NATIVE_FAILED_REPORT_KEYS | {"control_metrics"}
+_NATIVE_UNAVAILABLE_REPORT_KEYS = frozenset({"intervention_id", "factor", "status", "reason"})
 
 
 class ExperimentLoopError(ValueError):
@@ -893,6 +973,23 @@ def _reason(result: Mapping[str, Any], fallback: str) -> str:
     return str(value) if value is not None else fallback
 
 
+def _is_negative_outcome(outcome: Mapping[str, Any]) -> bool:
+    """Derive the negative export classification from the outcome itself.
+
+    The journal flag is a convenience for readers, not an authority.  Every
+    failed, unavailable, or cancelled operation is negative by definition;
+    only a complete pair that actually survived is non-negative.
+
+    Returns:
+        ``True`` when the canonical outcome classification is negative.
+    """
+
+    status = outcome.get("status")
+    if status in NEGATIVE_OUTCOME_STATUSES:
+        return True
+    return status == "complete" and outcome.get("outcome") != "survived"
+
+
 class ExperimentLoop:
     """Run one finite candidate set against a durable session journal.
 
@@ -1447,6 +1544,13 @@ class ExperimentLoop:
                 raise ExperimentLoopError("cannot resume: duplicate or unknown outcome record")
             if outcome.get("status") not in TERMINAL_CANDIDATE_STATES:
                 raise ExperimentLoopError("cannot resume: invalid outcome status")
+            if (
+                outcome.get("status") in NEGATIVE_OUTCOME_STATUSES
+                and outcome.get("negative") is not True
+            ):
+                raise ExperimentLoopError(
+                    "cannot resume: non-complete outcome negative flag is invalid"
+                )
             outcome_operation_ids = outcome.get("operation_ids", [])
             if not isinstance(outcome_operation_ids, list) or not all(
                 isinstance(item, str) for item in outcome_operation_ids
@@ -1854,7 +1958,12 @@ class ExperimentLoop:
             or float(elapsed) < 0.0
         ):
             raise ExperimentLoopError("cannot resume: elapsed accounting is invalid")
-        elapsed_floor = payload.get("elapsed_floor_s", elapsed)
+        # Current-schema journals must carry the persisted monotonic floor.
+        # Falling back to mutable ``elapsed_s`` would let an attacker lower
+        # both values and reset the wall deadline on resume.
+        if "elapsed_floor_s" not in payload:
+            raise ExperimentLoopError("cannot resume: elapsed accounting floor is missing")
+        elapsed_floor = payload["elapsed_floor_s"]
         if (
             isinstance(elapsed_floor, bool)
             or not isinstance(elapsed_floor, (int, float))
@@ -2224,6 +2333,14 @@ class ExperimentLoop:
     def _record_outcome(self, candidate_id: str, outcome: Mapping[str, Any]) -> None:
         state = self._candidate_state(candidate_id)
         normalized_outcome = dict(outcome)
+        status = normalized_outcome.get("status")
+        # Keep the persisted convenience flag canonical.  The report exporter
+        # derives this independently so a mutable flag cannot hide a negative
+        # terminal result.
+        if status in NEGATIVE_OUTCOME_STATUSES:
+            normalized_outcome["negative"] = True
+        elif status == "complete" and "outcome" in normalized_outcome:
+            normalized_outcome["negative"] = normalized_outcome.get("outcome") != "survived"
         # Candidate operation IDs include every durable retry attempt.  The
         # outcome is the resume index as well as the user-facing summary, so
         # retain that complete history instead of only the final attempt IDs.
@@ -2536,6 +2653,18 @@ class ExperimentLoop:
                     break
                 outcome = self._execute_candidate(candidate)
                 outcomes = [dict(item) for item in self._journal["outcomes"]]
+                # A child can finish with a recipe-terminal marker at the
+                # same instant cancellation or the wall budget becomes true.
+                # Recheck the controller boundary after the result and make it
+                # authoritative over that marker.
+                if self._cancelled():
+                    self._journal["status"] = "cancelled"
+                    self._journal["stop_reason"] = "cancellation_requested"
+                    break
+                if self._elapsed() >= self.budget.wall_timeout_s:
+                    self._journal["status"] = "partial"
+                    self._journal["stop_reason"] = "wall_timeout"
+                    break
                 if outcome.get("status") == "cancelled":
                     self._journal["status"] = "cancelled"
                     self._journal["stop_reason"] = str(
@@ -2591,7 +2720,7 @@ class ExperimentLoop:
             "stop_reason": self._journal.get("stop_reason", ""),
             "candidate_order": self._journal.get("candidate_order", []),
             "outcomes": outcomes,
-            "negative_outcomes": [item for item in outcomes if item.get("negative")],
+            "negative_outcomes": [item for item in outcomes if _is_negative_outcome(item)],
             "budget": {
                 **self.budget.to_dict(),
                 "executions_consumed": self._journal.get("executions_consumed", 0),
@@ -2693,6 +2822,7 @@ class _NativeExecutorAdapter:
         executor_config: Mapping[str, Any],
         recipe: Mapping[str, Any],
         admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig,
+        source_admission: Mapping[str, Any] | None = None,
         resume: bool,
         cancel: Callable[[], bool] | Any | None = None,
     ) -> None:
@@ -2701,6 +2831,9 @@ class _NativeExecutorAdapter:
         self.executor_config = dict(executor_config)
         self.recipe = dict(recipe)
         self.admission_config = admission_config
+        self.source_admission = (
+            dict(source_admission) if isinstance(source_admission, Mapping) else None
+        )
         self.resume = resume
         self.cancel = cancel
         self.child_result: ComponentResult | None = None
@@ -2709,6 +2842,7 @@ class _NativeExecutorAdapter:
         self._nested_conflict: str | None = None
         self._child_started = False
         self._operation_context: dict[str, tuple[str, str]] = {}
+        self._active_dispatch: tuple[str, str] | None = None
 
     def bind_operation_map(self, operations: Any) -> None:
         """Bind exact journal operation identities for crash recovery.
@@ -2731,6 +2865,8 @@ class _NativeExecutorAdapter:
                 and kind in {"control", "treatment"}
             ):
                 self._operation_context[operation_id] = (candidate_id, str(kind))
+                if operation.get("state") == "dispatching":
+                    self._active_dispatch = (candidate_id, str(kind))
 
     def _cancelled(self) -> bool:
         if self.cancel is None:
@@ -2762,6 +2898,446 @@ class _NativeExecutorAdapter:
             "source_escaped_root",
         )
         return not self.reports or any(marker in reason for marker in admission_markers)
+
+    def _child_request(self, candidate_id: str) -> ComponentRequest:
+        """Build the request envelope used for a native dispatch.
+
+        Returns:
+            The bounded child request for ``candidate_id``.
+        """
+
+        ordered_candidates = _candidate_order(self.recipe)
+        try:
+            candidate_index = next(
+                index
+                for index, item in enumerate(ordered_candidates, start=1)
+                if str(item["intervention_id"]) == candidate_id
+            )
+        except StopIteration as error:
+            raise ExperimentLoopError(
+                f"native executor candidate is unknown: {candidate_id}"
+            ) from error
+        config = dict(self.executor_config)
+        config["recipe"] = self.recipe
+        config["max_candidates"] = min(candidate_index, DEFAULT_MAX_CANDIDATES)
+        config["max_executions"] = min(
+            int(config.get("max_executions", DEFAULT_MAX_EXECUTIONS)), DEFAULT_MAX_EXECUTIONS
+        )
+        return ComponentRequest(
+            request_id=self.request.request_id,
+            component_id=review_execute.COMPONENT_ID,
+            sources=self.request.sources,
+            output_directory="executor",
+            config=config,
+            required_capabilities=self.request.required_capabilities,
+        )
+
+    def _child_request_and_config(
+        self, candidate_id: str
+    ) -> tuple[ComponentRequest, review_execute.ExecuteConfig, dict[str, Any]]:
+        """Build and validate the exact child envelope used for recovery.
+
+        Returns:
+            Child request, validated effective config, and its admission proof.
+
+        Raises:
+            ExperimentLoopError: If the native child envelope cannot be
+                validated before recovery.
+        """
+
+        child_request = self._child_request(candidate_id)
+        config = dict(child_request.config)
+        if isinstance(self.admission_config, review_execute.ExecutorAdmissionConfig):
+            admission = review_execute.validate_executor_admission_config(
+                self.admission_config.to_dict()
+            )
+        else:
+            admission = review_execute.validate_executor_admission_config(self.admission_config)
+        effective_payload = {**config, "admission": admission.to_dict()}
+        try:
+            validated = review_execute.validate_execute_config(effective_payload)
+        except review_execute.ReviewExecuteError as error:
+            raise ExperimentLoopError(
+                f"native child config is invalid: {'; '.join(error.errors)}"
+            ) from error
+        return child_request, validated, admission.to_dict()
+
+    @staticmethod
+    def _native_metrics_valid(value: Any) -> bool:
+        return (
+            isinstance(value, Mapping)
+            and set(value) == review_execute.REQUIRED_TELEMETRY_METRICS
+            and all(
+                isinstance(item, (int, float))
+                and not isinstance(item, bool)
+                and math.isfinite(float(item))
+                for item in value.values()
+            )
+        )
+
+    def _validate_nested_recovery(
+        self,
+        documents: Mapping[str, Mapping[str, Any]],
+        report_documents: Mapping[str, Mapping[str, Mapping[str, Any]]],
+        nested_attempts: Mapping[tuple[str, str], Mapping[str, Any]],
+    ) -> str | None:
+        """Validate child artifacts before using them for native recovery.
+
+        The child executor remains the final ledger authority.  This local
+        envelope check prevents a self-consistent but stale or unbound file
+        from being used before that child call, and gives the recovery path a
+        current candidate/operation binding to enforce.
+
+        Returns:
+            A fail-closed reason, or ``None`` when the envelope is supported.
+        """
+
+        if not self.resume or self.child_result is not None or not documents:
+            return None
+        if self.source_admission is None:
+            return "nested child recovery requires an admitted source proof"
+        ledger = documents.get("attempt-ledger")
+        if ledger is None:
+            return "nested child attempt ledger is required for recovery"
+        if set(ledger) != _NATIVE_LEDGER_KEYS:
+            return "nested child attempt ledger schema is unsupported"
+        try:
+            child_request, child_config, _admission = self._child_request_and_config(
+                self._active_dispatch[0] if self._active_dispatch is not None else ""
+            )
+        except (
+            ExperimentLoopError,
+            review_execute.ReviewExecuteError,
+            TypeError,
+            ValueError,
+        ) as error:
+            return f"nested child recovery binding is invalid: {error}"
+        expected_request_digest = review_execute._canonical_digest(
+            review_execute._request_identity_document(child_request)
+        )
+        expected_recipe_digest = review_execute._canonical_digest(self.recipe)
+        expected_config_identity_digest = review_execute._canonical_digest(
+            review_execute._config_identity_document(child_config)
+        )
+        if (
+            ledger.get("schema_version") != review_execute.ATTEMPT_LEDGER_SCHEMA_VERSION
+            or ledger.get("request_id") != child_request.request_id
+            or ledger.get("component_id") != review_execute.COMPONENT_ID
+            or ledger.get("recipe_id") != str(self.recipe.get("recipe_id", ""))
+            or ledger.get("request_digest") != expected_request_digest
+            or ledger.get("recipe_digest") != expected_recipe_digest
+            or ledger.get("config_identity_digest") != expected_config_identity_digest
+            or ledger.get("source_admission") != self.source_admission
+            or ledger.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY
+            or ledger.get("scientific_claim_allowed") is not False
+            or ledger.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS
+        ):
+            return "nested child recovery identity binding mismatch"
+        expected_budget = review_execute._config_budget_document(child_config)
+        prior_budget = ledger.get("budget")
+        if not isinstance(prior_budget, Mapping) or set(prior_budget) != set(expected_budget):
+            return "nested child recovery budget binding is malformed"
+        if (
+            not isinstance(prior_budget.get("max_candidates"), int)
+            or isinstance(prior_budget.get("max_candidates"), bool)
+            or not isinstance(prior_budget.get("max_executions"), int)
+            or isinstance(prior_budget.get("max_executions"), bool)
+            or not isinstance(prior_budget.get("wall_timeout_s"), (int, float))
+            or isinstance(prior_budget.get("wall_timeout_s"), bool)
+            or not math.isfinite(float(prior_budget.get("wall_timeout_s")))
+            or int(prior_budget["max_candidates"]) < 1
+            or int(prior_budget["max_executions"]) < 1
+            or float(prior_budget["wall_timeout_s"]) <= 0.0
+            or int(prior_budget["max_candidates"]) > int(expected_budget["max_candidates"])
+            or int(prior_budget["max_executions"]) > int(expected_budget["max_executions"])
+            or float(prior_budget["wall_timeout_s"]) > float(expected_budget["wall_timeout_s"])
+        ):
+            return "nested child recovery budget binding is invalid"
+        prior_config = replace(
+            child_config,
+            max_candidates=int(prior_budget["max_candidates"]),
+            max_executions=int(prior_budget["max_executions"]),
+            wall_timeout_s=float(prior_budget["wall_timeout_s"]),
+        )
+        config_digests = {
+            review_execute._canonical_digest(review_execute._config_document(child_config)),
+            review_execute._canonical_digest(review_execute._config_document(prior_config)),
+        }
+        attempts = ledger.get("attempts")
+        if not isinstance(attempts, list):
+            return "nested child attempt ledger attempts are malformed"
+        validated_attempt_keys: set[tuple[str, str]] = set()
+        attempt_candidate_ids: set[str] = set()
+        recipe_candidate_ids = {
+            str(item["intervention_id"]) for item in _candidate_order(self.recipe)
+        }
+        for index, attempt in enumerate(attempts):
+            if not isinstance(attempt, Mapping):
+                return f"nested child attempt {index} is malformed"
+            candidate = attempt.get("candidate_id")
+            kind = attempt.get("kind")
+            status = attempt.get("status")
+            key = (candidate, kind)
+            if (
+                not isinstance(candidate, str)
+                or candidate not in recipe_candidate_ids
+                or kind not in {"control", "treatment"}
+                or status not in {"ok", "failed", "timed_out", "cancelled"}
+                or key in validated_attempt_keys
+                or set(attempt)
+                != (
+                    {"candidate_id", "kind", "status", "elapsed_s", "metrics"}
+                    if status == "ok"
+                    else {"candidate_id", "kind", "status", "reason", "elapsed_s"}
+                )
+            ):
+                return f"nested child attempt {index} is unsupported"
+            elapsed = attempt.get("elapsed_s")
+            if (
+                not isinstance(elapsed, (int, float))
+                or isinstance(elapsed, bool)
+                or not math.isfinite(float(elapsed))
+                or float(elapsed) < 0.0
+            ):
+                return f"nested child attempt {index} timing is invalid"
+            if status == "ok" and not self._native_metrics_valid(attempt.get("metrics")):
+                return f"nested child attempt {index} metrics are invalid"
+            validated_attempt_keys.add(key)
+            attempt_candidate_ids.add(candidate)
+        if any(
+            kind == "treatment" and (candidate, "control") not in validated_attempt_keys
+            for candidate, kind in validated_attempt_keys
+        ):
+            return "nested child treatment attempt lacks its control"
+        consumed = ledger.get("executions_consumed")
+        if not isinstance(consumed, int) or isinstance(consumed, bool) or consumed != len(attempts):
+            return "nested child execution accounting is inconsistent"
+        wall_elapsed = ledger.get("wall_elapsed_s")
+        if (
+            not isinstance(wall_elapsed, (int, float))
+            or isinstance(wall_elapsed, bool)
+            or not math.isfinite(float(wall_elapsed))
+            or float(wall_elapsed) < 0.0
+        ):
+            return "nested child ledger wall timing is invalid"
+        ledger_reports = report_documents.get("attempt-ledger", {})
+        candidate_by_id = {
+            str(item["intervention_id"]): item for item in _candidate_order(self.recipe)
+        }
+        for candidate_id, report in ledger_reports.items():
+            if candidate_id not in candidate_by_id or not isinstance(report, Mapping):
+                return "nested child candidate report is not bound to the recipe"
+            factor = candidate_by_id[candidate_id].get("factor", "")
+            status = report.get("status")
+            allowed_keys = {
+                "complete": _NATIVE_COMPLETE_REPORT_KEYS,
+                "failed": _NATIVE_FAILED_REPORT_KEYS,
+                "unavailable": _NATIVE_UNAVAILABLE_REPORT_KEYS,
+            }.get(status)
+            if allowed_keys is None:
+                return f"nested child candidate report {candidate_id} is unsupported"
+            if status == "failed":
+                if set(report) not in {
+                    _NATIVE_FAILED_REPORT_KEYS,
+                    _NATIVE_FAILED_REPORT_WITH_CONTROL_KEYS,
+                }:
+                    return f"nested child candidate report {candidate_id} is unsupported"
+            elif set(report) != allowed_keys:
+                return f"nested child candidate report {candidate_id} is unsupported"
+            if report.get("factor") != factor:
+                return f"nested child candidate report {candidate_id} factor is not bound"
+            if not isinstance(report.get("reason"), str) and status in {"failed", "unavailable"}:
+                return f"nested child candidate report {candidate_id} reason is malformed"
+            matching = {
+                kind: attempt
+                for (attempt_candidate, kind), attempt in nested_attempts.items()
+                if attempt_candidate == candidate_id
+            }
+            if status == "complete":
+                if set(matching) != {"control", "treatment"} or any(
+                    item.get("status") != "ok" for item in matching.values()
+                ):
+                    return f"nested child complete report {candidate_id} is not paired"
+                if report.get("nonintervened_config_match") is not True or any(
+                    not self._native_metrics_valid(report.get(key))
+                    for key in ("control_metrics", "treatment_metrics")
+                ):
+                    return f"nested child complete report {candidate_id} is malformed"
+                if (
+                    not isinstance(report.get("verdict"), str)
+                    or not isinstance(report.get("verdict_reason"), str)
+                    or not isinstance(report.get("control_activated"), bool)
+                    or not isinstance(report.get("treatment_activated"), bool)
+                ):
+                    return f"nested child complete report {candidate_id} is malformed"
+                if any(
+                    review_execute._canonical_digest(report[f"{kind}_metrics"])
+                    != review_execute._canonical_digest(matching[kind].get("metrics"))
+                    for kind in ("control", "treatment")
+                ):
+                    return f"nested child report {candidate_id} metrics are not ledger-bound"
+            elif status == "failed":
+                if report.get("nonintervened_config_match") is not True:
+                    return f"nested child failed report {candidate_id} is malformed"
+                for kind in ("control", "treatment"):
+                    metrics = report.get(f"{kind}_metrics")
+                    if metrics is not None and not self._native_metrics_valid(metrics):
+                        return f"nested child failed report {candidate_id} metrics are invalid"
+                if not matching:
+                    return f"nested child failed report {candidate_id} lacks attempts"
+                if any(
+                    attempt.get("status") == "ok"
+                    and report.get(f"{kind}_metrics") is not None
+                    and review_execute._canonical_digest(report[f"{kind}_metrics"])
+                    != review_execute._canonical_digest(attempt.get("metrics"))
+                    for kind, attempt in matching.items()
+                ):
+                    return f"nested child failed report {candidate_id} metrics are not ledger-bound"
+            elif matching:
+                return f"nested child unavailable report {candidate_id} disagrees with attempts"
+        traces = ledger.get("traces")
+        if not isinstance(traces, list) or not all(isinstance(item, Mapping) for item in traces):
+            return "nested child activation traces are malformed"
+        trace_keys = {
+            "schema_version",
+            "intervention_id",
+            "factor",
+            "control_activated",
+            "treatment_activated",
+            "control_metrics",
+            "treatment_metrics",
+        }
+        if any(
+            set(trace) != trace_keys
+            or trace.get("schema_version") != review_execute.ACTIVATION_TRACE_SCHEMA_VERSION
+            for trace in traces
+        ):
+            return "nested child activation trace schema is unsupported"
+        complete_ids = {
+            candidate_id
+            for candidate_id, report in ledger_reports.items()
+            if report.get("status") == "complete"
+        }
+        trace_ids = {str(trace.get("intervention_id")) for trace in traces}
+        if trace_ids != complete_ids or len(trace_ids) != len(traces):
+            return "nested child activation traces do not match reports"
+        if any(
+            trace.get("factor")
+            != candidate_by_id.get(str(trace.get("intervention_id")), {}).get("factor", "")
+            for trace in traces
+        ):
+            return "nested child activation trace is not recipe-bound"
+        try:
+            review_execute._verify_resume_envelope(
+                attempts=[dict(item) for item in attempts],
+                reports=[dict(item) for item in ledger_reports.values()],
+                traces=[dict(item) for item in traces],
+                config=child_config,
+                recipe=self.recipe,
+            )
+        except (review_execute.ReviewExecuteError, TypeError, ValueError, KeyError) as error:
+            return f"nested child recovery result validation failed: {error}"
+        if set(ledger_reports) != set(report_documents.get("execute-report", ledger_reports)):
+            return "nested child report documents disagree"
+        active = self._active_dispatch
+        if active is not None:
+            active_candidate, active_kind = active
+            ordered_ids = [str(item["intervention_id"]) for item in _candidate_order(self.recipe)]
+            try:
+                active_index = ordered_ids.index(active_candidate)
+            except ValueError:
+                return "nested child recovery candidate is not recipe-bound"
+            reported_ids = set(ledger_reports) | attempt_candidate_ids
+            expected_prefix = set(ordered_ids[:active_index])
+            if not reported_ids.issubset(expected_prefix | {active_candidate}):
+                return "nested child recovery candidate is outside current prefix"
+            if active_candidate not in reported_ids and reported_ids != expected_prefix:
+                return "nested child recovery current dispatch is not bound"
+            if (
+                active_candidate in reported_ids
+                and (active_candidate, active_kind) not in validated_attempt_keys
+            ):
+                return "nested child recovery operation is not bound to current dispatch"
+        execute_payload = documents.get("execute-report")
+        if execute_payload is not None:
+            if set(execute_payload) != _NATIVE_EXECUTE_REPORT_KEYS:
+                return "nested child execute report schema is unsupported"
+            if (
+                execute_payload.get("schema_version")
+                != review_execute.EXECUTE_REPORT_SCHEMA_VERSION
+                or execute_payload.get("request_id") != child_request.request_id
+                or execute_payload.get("component_id") != review_execute.COMPONENT_ID
+                or execute_payload.get("recipe_id") != str(self.recipe.get("recipe_id", ""))
+                or execute_payload.get("source_identity") != self.recipe.get("source_identity")
+                or execute_payload.get("source_admission") != self.source_admission
+                or execute_payload.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY
+                or execute_payload.get("benchmark_success") is not False
+                or execute_payload.get("scientific_claim_allowed") is not False
+                or execute_payload.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS
+            ):
+                return "nested child execute report identity binding mismatch"
+            budget = execute_payload.get("budget")
+            if not isinstance(budget, Mapping) or set(budget) != {
+                "max_candidates",
+                "max_executions",
+                "executions_consumed",
+                "wall_timeout_s",
+                "wall_elapsed_s",
+            }:
+                return "nested child execute report budget is malformed"
+            if (
+                budget.get("executions_consumed") != consumed
+                or not isinstance(budget.get("max_candidates"), int)
+                or isinstance(budget.get("max_candidates"), bool)
+                or not isinstance(budget.get("max_executions"), int)
+                or isinstance(budget.get("max_executions"), bool)
+                or not isinstance(budget.get("wall_timeout_s"), (int, float))
+                or isinstance(budget.get("wall_timeout_s"), bool)
+                or not isinstance(budget.get("wall_elapsed_s"), (int, float))
+                or isinstance(budget.get("wall_elapsed_s"), bool)
+                or not math.isfinite(float(budget.get("wall_timeout_s")))
+                or not math.isfinite(float(budget.get("wall_elapsed_s")))
+                or float(budget.get("wall_timeout_s")) <= 0.0
+                or float(budget.get("wall_elapsed_s")) < 0.0
+                or any(
+                    budget.get(key) != prior_budget.get(key)
+                    for key in (
+                        "max_candidates",
+                        "max_executions",
+                        "wall_timeout_s",
+                    )
+                )
+            ):
+                return "nested child execute report accounting disagrees with ledger"
+            provenance = execute_payload.get("provenance")
+            if not isinstance(provenance, Mapping) or set(provenance) != _NATIVE_PROVENANCE_KEYS:
+                return "nested child execute report provenance is missing"
+            expected_sources = [
+                {
+                    "artifact_id": source.artifact_id,
+                    "uri": source.uri,
+                    "format": source.format,
+                }
+                for source in child_request.sources
+            ]
+            if (
+                provenance.get("recipe_id") != str(self.recipe.get("recipe_id", ""))
+                or provenance.get("request_digest") != expected_request_digest
+                or provenance.get("recipe_digest") != expected_recipe_digest
+                or provenance.get("source_identity") != self.recipe.get("source_identity")
+                or provenance.get("source_admission") != self.source_admission
+                or provenance.get("component_id") != review_execute.COMPONENT_ID
+                or provenance.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY
+                or provenance.get("benchmark_success") is not False
+                or provenance.get("scientific_claim_allowed") is not False
+                or provenance.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS
+                or provenance.get("sources") != expected_sources
+                or provenance.get("output_directory") != child_request.output_directory
+            ):
+                return "nested child execute report provenance binding mismatch"
+            if provenance.get("config_digest") not in config_digests:
+                return "nested child execute report config binding mismatch"
+        return None
 
     def _read_nested_state(self) -> None:
         """Refresh child reports and attempts without dispatching any work."""
@@ -2935,6 +3511,17 @@ class _NativeExecutorAdapter:
                         self._nested_attempts = {}
                         return
 
+        recovery_error = self._validate_nested_recovery(
+            documents,
+            report_documents,
+            nested_attempts,
+        )
+        if recovery_error is not None:
+            self._nested_conflict = recovery_error
+            self.reports = {}
+            self._nested_attempts = {}
+            return
+
         prior_reports = dict(self.reports)
         if "attempt-ledger" in report_documents:
             self.reports = dict(report_documents["attempt-ledger"])
@@ -3084,31 +3671,7 @@ class _NativeExecutorAdapter:
         }
 
     def _invoke(self, candidate_id: str) -> None:
-        ordered_candidates = _candidate_order(self.recipe)
-        try:
-            candidate_index = next(
-                index
-                for index, item in enumerate(ordered_candidates, start=1)
-                if str(item["intervention_id"]) == candidate_id
-            )
-        except StopIteration as error:
-            raise ExperimentLoopError(
-                f"native executor candidate is unknown: {candidate_id}"
-            ) from error
-        config = dict(self.executor_config)
-        config["recipe"] = self.recipe
-        config["max_candidates"] = min(candidate_index, DEFAULT_MAX_CANDIDATES)
-        config["max_executions"] = min(
-            int(config.get("max_executions", DEFAULT_MAX_EXECUTIONS)), DEFAULT_MAX_EXECUTIONS
-        )
-        child_request = ComponentRequest(
-            request_id=self.request.request_id,
-            component_id=review_execute.COMPONENT_ID,
-            sources=self.request.sources,
-            output_directory="executor",
-            config=config,
-            required_capabilities=self.request.required_capabilities,
-        )
+        child_request = self._child_request(candidate_id)
         self.child_result = review_execute.run(
             child_request,
             base=self.base,
@@ -3122,7 +3685,13 @@ class _NativeExecutorAdapter:
         self._read_nested_state()
         if self._nested_conflict is not None:
             return None
-        if self.reports.get(candidate_id) is None and (not self._child_blocks_followup()):
+        # A report discovered while recovering is only a hint until the
+        # child executor has re-opened and validated its own ledger.  This
+        # authorization call is also what prevents a stale nested report from
+        # completing an outer operation without a current child boundary.
+        if self.resume and self.child_result is None and self.reports.get(candidate_id) is not None:
+            self._invoke(candidate_id)
+        elif self.reports.get(candidate_id) is None and (not self._child_blocks_followup()):
             self._invoke(candidate_id)
         return self.reports.get(candidate_id)
 
@@ -3176,7 +3745,7 @@ class _NativeExecutorAdapter:
                     "status": "cancelled",
                     "reason": "cancellation_requested",
                 }
-            if report is None:
+            if report is None or (self.resume and self.child_result is None):
                 report = self._candidate_report(candidate_id)
         else:
             self._read_nested_state()
@@ -3252,6 +3821,7 @@ class _NativeExecutorAdapter:
         operation_id = kwargs.get("operation_id")
         if isinstance(operation_id, str) and candidate_id and kind in {"control", "treatment"}:
             self._operation_context[operation_id] = (candidate_id, kind)
+            self._active_dispatch = (candidate_id, kind)
         return self._operation_result(candidate_id, kind)
 
     def result_for(self, operation_id: str) -> Mapping[str, Any] | None:
@@ -3262,6 +3832,7 @@ class _NativeExecutorAdapter:
         if context is None:
             return None
         candidate_id, kind = context
+        self._active_dispatch = (candidate_id, kind)
         return self._operation_result(candidate_id, kind, recovering=True)
 
 
@@ -3545,6 +4116,7 @@ def run(
             executor_config=native_config,
             recipe=validated.recipe,
             admission_config=normalized_admission,
+            source_admission=source_document,
             resume=resume,
             cancel=cancel,
         )

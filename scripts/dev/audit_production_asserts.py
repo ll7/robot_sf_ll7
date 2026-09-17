@@ -384,6 +384,24 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=("#9458",),
     ),
+    (
+        "robot_sf/render/review_media_qa.py",
+        "_fetch_source_bytes",
+        "raw is not None",
+    ): _review(
+        "The source-byte reader returns non-None raw bytes on success and non-None failure metadata on error; the caller returns early when failure is set, narrowing raw before SHA-256 computation.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
+    ),
+    (
+        "robot_sf/render/review_media_qa.py",
+        "_load_inputs",
+        "raw is not None and state is not None",
+    ): _review(
+        "The source fetcher returns non-None raw bytes and non-None integrity state on success; the caller appends diagnostics and continues on failure, narrowing both values before JSON decoding.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
+    ),
 }
 
 

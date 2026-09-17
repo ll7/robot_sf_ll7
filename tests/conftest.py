@@ -417,6 +417,9 @@ _FAST_FILES = {
     # provenance, and persistence contracts for BA-03 (issue #9484).
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
+    # Benchmark Auditor queue tests are deterministic policy, control-stream,
+    # provenance, and save/resume contracts for BA-02 (issue #9486).
+    "test_audit_queue.py",
     "test_audit_store.py",
     "test_audit_store_cli.py",
     "test_grid_socnav_extractor.py",

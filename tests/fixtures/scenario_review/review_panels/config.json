@@ -1,0 +1,5 @@
+{
+  "sample_resolution_s": 0.4,
+  "cursor_time_s": 10.5,
+  "requested_metrics": ["clearance", "collision_count", "goal_distance"]
+}

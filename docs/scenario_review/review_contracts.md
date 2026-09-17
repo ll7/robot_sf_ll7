@@ -192,6 +192,11 @@ simulation-time base, and named extension slots. Behaviour boundaries:
 `--descriptor` prints the component descriptor (`component-descriptor.v1`) without
 executing a request.
 
+The SREV-16 synchronized panel extension consumes the same component-request
+envelope and explicit source-time boundary. See
+[`review_panels.md`](./review_panels.md) for its standalone API/CLI, panel model,
+nearest-sample rule, context revision, and offline browser controls.
+
 ## Errors
 
 Validation failures carry stable reason codes with source pointers

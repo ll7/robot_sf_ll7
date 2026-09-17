@@ -97,6 +97,25 @@ def _fixture_request_for_root(root: Path) -> Any:
     return replace(request, config=config)
 
 
+def _nested_fixture_admission_config(root: Path) -> ExecutorAdmissionConfig:
+    """Move both proof files under nested directories and return their config."""
+    receipt_reference = Path("proofs") / "receipts" / "admitted-source.json"
+    preservation_reference = Path("proofs") / "preservation" / "receipt.json"
+    (root / receipt_reference).parent.mkdir(parents=True)
+    (root / preservation_reference).parent.mkdir(parents=True)
+    (root / "receipt.json").rename(root / receipt_reference)
+    (root / "preservation-receipt.json").rename(root / preservation_reference)
+    payload = _fixture_json("admission.json")
+    payload.update(
+        {
+            "source_root": str(root),
+            "receipt_reference": str(receipt_reference),
+            "preservation_receipt_reference": str(preservation_reference),
+        }
+    )
+    return validate_executor_admission_config(payload)
+
+
 def _patch_fake_execution(
     monkeypatch: pytest.MonkeyPatch, *, fail_treatment_speed: float | None = None
 ) -> list[dict[str, Any]]:
@@ -219,6 +238,28 @@ def test_source_admission_positive_fixture_binds_external_proof(
     assert admission["receipt_id"] == "srev22-review-execute-receipt"
     assert admission["preservation_destination"] == "external:post-execution-preservation"
     assert admission["scientific_claim_allowed"] is False
+
+
+def test_nested_admission_receipts_complete_via_public_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Nested receipt references remain valid through the public run boundary."""
+    _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["receipt_reference"] == (
+        "proofs/receipts/admitted-source.json"
+    )
+    assert result.provenance["source_admission"]["preservation_receipt_reference"] == (
+        "proofs/preservation/receipt.json"
+    )
 
 
 def test_legacy_v1_config_cannot_claim_admitted_completion(
@@ -440,6 +481,63 @@ def test_source_root_symlink_is_rejected_before_execution(
     )
     assert result.status == "unavailable"
     assert "source_escaped_root" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize("reference_kind", ["receipt", "preservation"])
+def test_nested_admission_symlink_is_typed_non_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reference_kind: str
+) -> None:
+    """Nested proof symlinks fail closed without leaking an OS traceback."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    if reference_kind == "receipt":
+        reference = Path(admission.receipt_reference)
+        outside = tmp_path / "outside-receipt.json"
+    else:
+        reference = Path(admission.preservation_receipt_reference)
+        outside = tmp_path / "outside-preservation.json"
+    outside.write_bytes((root / reference).read_bytes())
+    (root / reference).unlink()
+    try:
+        (root / reference).symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "unavailable"
+    assert "unreadable" in result.reason
+    assert result.artifacts == ()
+    assert calls == []
+
+
+def test_nested_root_swap_is_typed_non_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A root pathname swapped to a symlink is rejected before any child starts."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    original_root = tmp_path / "original-admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _fixture_admission_config(root)
+    root.rename(original_root)
+    try:
+        root.symlink_to(original_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "unavailable"
+    assert "allowed_root_invalid" in result.reason
+    assert result.artifacts == ()
     assert calls == []
 
 
@@ -1613,6 +1711,46 @@ def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: An
     assert missing_code == 1
     assert missing["schema_version"] == "component-result.v1"
     assert missing["status"] == "failed"
+
+
+def test_nested_admission_receipts_complete_via_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    """The CLI preserves nested receipt references through launcher admission."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    admission_path = tmp_path / "admission.json"
+    request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
+    config_payload = _fixture_json("config.json")
+    config_payload["admission"] = admission.to_dict()
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    admission_path.write_text(json.dumps(admission.to_dict()), encoding="utf-8")
+    code = review_execute_module.main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--admission-config",
+            str(admission_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    result = component_result_from_dict(json.loads(capsys.readouterr().out))
+    assert code == 0
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["receipt_reference"] == (
+        "proofs/receipts/admitted-source.json"
+    )
 
 
 @pytest.mark.parametrize("parser_input", ["request", "config"])

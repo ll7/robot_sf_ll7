@@ -965,14 +965,14 @@ def _open_admission_reference(root_fd: int, reference: str) -> int:
             next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
             opened_fds.append(next_fd)
             os.close(parent_fd)
+            opened_fds.remove(parent_fd)
             parent_fd = next_fd
         file_fd = os.open(path.parts[-1], file_flags, dir_fd=parent_fd)
         opened_fds.append(file_fd)
         if not stat.S_ISREG(os.fstat(file_fd).st_mode):
             raise OSError("admission reference must be a regular file")
-        for opened_fd in reversed(opened_fds[:-1]):
-            os.close(opened_fd)
-        opened_fds[:] = [file_fd]
+        os.close(parent_fd)
+        opened_fds.remove(parent_fd)
         return file_fd
     except BaseException:
         for file_descriptor in reversed(opened_fds):

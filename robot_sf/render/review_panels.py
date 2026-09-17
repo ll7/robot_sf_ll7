@@ -286,6 +286,8 @@ class _Stream:
     source_identity: dict[str, Any] = field(default_factory=dict)
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
     gaps: list[dict[str, float]] = field(default_factory=list)
+    media_uri: str | None = None
+    surface: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -437,6 +439,32 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _actor_alias_from_row(row: Mapping[str, Any]) -> Any:
+    """Find an explicitly recorded actor alias in one bounded scene row.
+
+    Returns:
+        Recorded actor identifier, or ``None`` when the row has no alias.
+    """
+
+    state = row.get("state")
+    state_robot = state.get("robot") if isinstance(state, Mapping) else None
+    for candidate in (row, state, row.get("robot"), state_robot):
+        if not isinstance(candidate, Mapping):
+            continue
+        for key in ("actor_id", "actor", "ego_actor_id", "robot_actor_id"):
+            value = candidate.get(key)
+            if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+                return value
+    actors = row.get("actors")
+    if isinstance(actors, Mapping):
+        for candidate in actors.values():
+            if isinstance(candidate, Mapping):
+                value = _actor_alias_from_row(candidate)
+                if value is not None:
+                    return value
+    return None
+
+
 def _identity(ref: SourceRef, payload: Any) -> dict[str, Any]:  # noqa: C901
     """Collect declared/embedded source identity without inventing values.
 
@@ -481,6 +509,8 @@ def _identity(ref: SourceRef, payload: Any) -> dict[str, Any]:  # noqa: C901
         "config_identity": ("config_identity", "config_digest", "config_hash"),
         "coordinate_frame": ("coordinate_frame",),
         "units": ("units",),
+        "actor_id": ("actor_id", "actor", "ego_actor_id", "robot_actor_id"),
+        "media_uri": ("media_uri", "media_source_uri", "video_uri"),
     }
     result: dict[str, Any] = {key: value for key, value in declared.items() if value is not None}
     for output_key, keys in aliases.items():
@@ -494,6 +524,14 @@ def _identity(ref: SourceRef, payload: Any) -> dict[str, Any]:  # noqa: C901
                 and not isinstance(value, bool)
             ):
                 result[output_key] = value
+                break
+    if "actor_id" not in result and isinstance(payload, Mapping):
+        for row in _rows(payload, "frames", "steps", "samples")[:1]:
+            if not isinstance(row, Mapping):
+                continue
+            actor = _actor_alias_from_row(row)
+            if isinstance(actor, (str, int, float)) and not isinstance(actor, bool):
+                result["actor_id"] = actor
                 break
     return result
 
@@ -566,7 +604,6 @@ def _load_sources(
                     "detail": "declared sha256 does not match source bytes",
                 }
             )
-            diagnostics.extend(source.diagnostics)
         sources.append(source)
     return sources, diagnostics
 
@@ -633,7 +670,15 @@ def _time_from(row: Mapping[str, Any], *, video: bool = False) -> float | None:
     """
 
     keys = (
-        ("source_time_s", "sim_time_s", "simulation_time_s", "time_s", "timestamp_s")
+        (
+            "source_time_s",
+            "source_t_s",
+            "sim_time_s",
+            "simulation_time_s",
+            "time_s",
+            "t_s",
+            "timestamp_s",
+        )
         if not video
         else (
             "source_time_s",
@@ -692,12 +737,13 @@ def _derive_resolution(samples: Sequence[Sample], declared: float | None) -> flo
     return min(spacings) / 2.0
 
 
-def _normalize_samples(
+def _normalize_samples(  # noqa: C901
     rows: Sequence[Any],
     *,
     source: _LoadedSource,
     config: Mapping[str, Any],
     video: bool = False,
+    value_only: bool = False,
 ) -> _Stream:
     """Normalize rows and retain missingness/regression diagnostics.
 
@@ -718,9 +764,12 @@ def _normalize_samples(
         if time_s is None:
             stream.diagnostics.append({"reason_code": "source_time_missing", "source_index": index})
             continue
-        value = dict(raw)
-        value.pop("source_time_s", None)
-        value["time_s"] = time_s
+        if value_only:
+            value = raw.get("value")
+        else:
+            value = dict(raw)
+            value.pop("source_time_s", None)
+            value["time_s"] = time_s
         samples.append(
             Sample(
                 time_s=time_s,
@@ -730,6 +779,7 @@ def _normalize_samples(
                     raw.get("missing", False)
                     or raw.get("available") is False
                     or ("value" in raw and raw.get("value") is None)
+                    or (value_only and "value" not in raw)
                 ),
             )
         )
@@ -739,9 +789,19 @@ def _normalize_samples(
         stream.reason = "source_time_unavailable"
         stream.status = "unavailable"
         return stream
-    if any(right.time_s <= left.time_s for left, right in pairwise(samples)):
-        stream.diagnostics.append({"reason_code": "source_time_not_strictly_increasing"})
-        stream.reason = "source_time_not_strictly_increasing"
+    invalid_order = False
+    for left, right in pairwise(samples):
+        if right.time_s < left.time_s:
+            invalid_order = True
+            stream.diagnostics.append({"reason_code": "source_time_decreased"})
+        elif right.time_s == left.time_s and not (
+            video and (_pause_marker(left.value) or _pause_marker(right.value))
+        ):
+            invalid_order = True
+            stream.diagnostics.append({"reason_code": "source_time_duplicate_without_pause"})
+    if invalid_order:
+        stream.diagnostics.append({"reason_code": "source_time_not_nondecreasing"})
+        stream.reason = "source_time_not_nondecreasing"
         stream.status = "unavailable"
         stream.samples = samples
         return stream
@@ -759,6 +819,43 @@ def _normalize_samples(
     stream.status = "partial" if stream.diagnostics else "available"
     stream.reason = "" if stream.status == "available" else "source_rows_skipped"
     return stream
+
+
+def _pause_marker(value: Any) -> bool:
+    """Return whether a mapped video row explicitly declares a legal pause."""
+
+    if not isinstance(value, Mapping):
+        return False
+    if value.get("is_pause") is True or value.get("pause") is True:
+        return True
+    if value.get("pause_duration_s") is not None:
+        return True
+    semantics = value.get("semantics", value.get("mapping_semantics"))
+    if isinstance(semantics, Mapping):
+        semantics = semantics.get("type", semantics.get("kind", semantics.get("mode")))
+    if isinstance(semantics, Sequence) and not isinstance(semantics, (str, bytes)):
+        return any(_pause_marker({"semantics": item}) for item in semantics)
+    return isinstance(semantics, str) and semantics.strip().lower() in {
+        "pause",
+        "hold",
+        "presentation_pause",
+    }
+
+
+def _media_time_from(row: Mapping[str, Any]) -> float | None:
+    """Extract explicit presentation/media time for monotonicity checks.
+
+    Returns:
+        Finite media/presentation time, or ``None`` when it is not declared.
+    """
+
+    for key in ("presentation_t_s", "media_t_s", "media_time_s", "pts_s"):
+        if key in row and row[key] is not None:
+            try:
+                return _finite_number(row[key], key)
+            except _InputError:
+                return None
+    return None
 
 
 def nearest_sample(stream: _Stream | Mapping[str, Any], target_time_s: float) -> NearestSample:
@@ -867,6 +964,18 @@ def _scene_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream:
         )
         for sample in normalized.samples
     ]
+    payload = source.payload if isinstance(source.payload, Mapping) else {}
+    surface = {
+        "schema_version": SCENE_SCHEMA_VERSION,
+        "map": payload.get("map"),
+        "trajectory": payload.get("trajectory", []),
+        "view": payload.get("view"),
+        "fidelity": payload.get("fidelity"),
+        "limitations": payload.get("limitations", []),
+    }
+    normalized.surface = {
+        key: value for key, value in surface.items() if value not in (None, [], {})
+    }
     return normalized
 
 
@@ -888,8 +997,8 @@ def _scene_value(value: Any) -> dict[str, Any]:
     return result
 
 
-def _video_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream:
-    rows = _rows(source.payload, "mappings", "frames", "samples", "mapping")
+def _video_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream:  # noqa: C901
+    rows = _rows(source.payload, "entries", "mappings", "frames", "samples", "mapping")
     if not rows:
         presentation = config.get("presentation")
         timestamp_map = (
@@ -901,6 +1010,45 @@ def _video_stream(source: _LoadedSource, config: Mapping[str, Any]) -> _Stream:
             rows = _rows(timestamp_map, "mapping", "mappings")
     stream = _normalize_samples(rows, source=source, config=config, video=True)
     stream.name = "video"
+    presentation = config.get("presentation")
+    media_uri = config.get("media_uri", config.get("video_uri"))
+    if isinstance(presentation, Mapping) and not media_uri:
+        media_uri = presentation.get("media_uri", presentation.get("video_uri"))
+    if not media_uri:
+        media_uri = source.identity.get("media_uri")
+    if not media_uri and Path(source.ref.uri).suffix.lower() in {
+        ".mp4",
+        ".webm",
+        ".ogg",
+        ".ogv",
+        ".mov",
+        ".m4v",
+    }:
+        media_uri = source.ref.uri
+    if isinstance(media_uri, str) and media_uri:
+        stream.media_uri = media_uri
+    media_times = [_media_time_from(row) if isinstance(row, Mapping) else None for row in rows]
+    media_order_invalid = False
+    for index, (left, right) in enumerate(pairwise(media_times)):
+        if left is None or right is None:
+            continue
+        if right < left:
+            media_order_invalid = True
+            stream.diagnostics.append({"reason_code": "media_time_decreased", "index": index + 1})
+        elif right == left:
+            left_row = rows[index] if isinstance(rows[index], Mapping) else {}
+            right_row = rows[index + 1] if isinstance(rows[index + 1], Mapping) else {}
+            if not (_pause_marker(left_row) or _pause_marker(right_row)):
+                media_order_invalid = True
+                stream.diagnostics.append(
+                    {
+                        "reason_code": "media_time_duplicate_without_pause",
+                        "index": index + 1,
+                    }
+                )
+    if media_order_invalid:
+        stream.status = "unavailable"
+        stream.reason = "media_time_not_nondecreasing"
     # ``_normalize_samples`` intentionally does not accept presentation PTS as
     # source time.  Retain useful media fields while exposing the mapped time.
     return stream
@@ -941,21 +1089,43 @@ def _metric_entries(source: _LoadedSource) -> list[dict[str, Any]]:
 
 
 def _metric_samples(entry: Mapping[str, Any], source: _LoadedSource) -> list[dict[str, Any]]:
+    if "time_s" in entry or "t_s" in entry or "source_time_s" in entry or "source_t_s" in entry:
+        return [{**dict(entry), "value": _metric_scalar(entry.get("value"))}]
     raw = entry.get("samples", entry.get("values", entry.get("data", [])))
     if isinstance(raw, Mapping):
         # A mapping from timestamp to value is accepted only because each key is
         # an explicit timestamp, never because an index/fps was inferred.
-        return [{"time_s": key, "value": value} for key, value in raw.items()]
+        return [{"time_s": key, "value": _metric_scalar(value)} for key, value in raw.items()]
     if isinstance(raw, list):
         if raw and all(isinstance(row, Mapping) for row in raw):
-            return [dict(row) for row in raw]
+            return [{**dict(row), "value": _metric_scalar(row.get("value"))} for row in raw]
         payload = source.payload if isinstance(source.payload, Mapping) else {}
         times = payload.get("times_s", payload.get("time_s"))
         if isinstance(times, list) and len(times) == len(raw):
             return [
-                {"time_s": time_s, "value": value} for time_s, value in zip(times, raw, strict=True)
+                {"time_s": time_s, "value": _metric_scalar(value)}
+                for time_s, value in zip(times, raw, strict=True)
             ]
     return []
+
+
+def _metric_scalar(value: Any) -> Any:
+    """Unwrap the scalar in a metric value envelope without inventing data.
+
+    Returns:
+        The unwrapped scalar or the original value when no scalar envelope exists.
+    """
+
+    current = value
+    for _ in range(3):
+        if not isinstance(current, Mapping) or "value" not in current:
+            break
+        nested = current["value"]
+        if isinstance(nested, Mapping):
+            current = nested
+            continue
+        return nested
+    return current
 
 
 def _metric_streams(
@@ -971,7 +1141,7 @@ def _metric_streams(
             if not metric_id or metric_id in streams:
                 continue
             rows = _metric_samples(entry, source)
-            stream = _normalize_samples(rows, source=source, config=config)
+            stream = _normalize_samples(rows, source=source, config=config, value_only=True)
             stream.name = f"metric:{metric_id}"
             streams[metric_id] = stream
             unit = entry.get("unit", entry.get("units"))
@@ -1060,7 +1230,7 @@ def _derive_metrics_from_scene(  # noqa: C901
             availability="ok",
             identity={"artifact_id": "derived-scene", "format": "derived"},
         )
-        stream = _normalize_samples(rows, source=source, config=config)
+        stream = _normalize_samples(rows, source=source, config=config, value_only=True)
         stream.name = f"metric:{metric_id}"
         streams[metric_id] = stream
         definitions[metric_id] = {
@@ -1293,21 +1463,20 @@ def _context_from_sources(
     cursor_time_s: float,
     interval_id: str | None,
 ) -> ReviewContext:
-    identity: dict[str, Any] = {}
-    for source in sources:
-        if source.identity:
-            identity = source.identity
-            break
-
     def _selected(name: str, *aliases: str) -> str | None:
         value = config.get(name)
-        if value is None:
-            value = identity.get(name)
-        if value is None:
-            for alias in aliases:
-                value = identity.get(alias)
+        if value is not None:
+            return str(value)
+        keys = (name, *aliases)
+        for key in aliases:
+            value = config.get(key)
+            if value is not None:
+                return str(value)
+        for source in sources:
+            for key in keys:
+                value = source.identity.get(key)
                 if value is not None:
-                    break
+                    return str(value)
         return str(value) if value is not None else None
 
     return ReviewContext(
@@ -1315,7 +1484,7 @@ def _context_from_sources(
         execution_id=_selected("execution_id", "run_id", "trace_id"),
         episode_id=_selected("episode_id"),
         interval_id=interval_id,
-        actor_id=_selected("actor_id"),
+        actor_id=_selected("actor_id", "actor", "ego_actor_id", "robot_actor_id"),
         cursor=SourceTimeCursor(cursor_time_s, 0, "initial", interval_id),
         context_revision=0,
     )
@@ -1392,6 +1561,8 @@ def _stream_document(stream: _Stream) -> dict[str, Any]:
         "resolution_s": stream.resolution_s,
         "source_ids": list(stream.source_ids),
         "source_identity": dict(stream.source_identity),
+        "media_uri": stream.media_uri,
+        "surface": dict(stream.surface),
         "gaps": list(stream.gaps),
         "samples": [
             {
@@ -1429,6 +1600,8 @@ def _panel_snapshot(stream: _Stream, cursor_time_s: float, *, panel_name: str) -
         "resolution_s": selected.resolution_s,
         "source_index": selected.source_index,
         "value": selected.value if selected.status == "available" else None,
+        "media_uri": stream.media_uri,
+        "surface": dict(stream.surface),
     }
 
 
@@ -1445,7 +1618,9 @@ def _render_html(document: Mapping[str, Any]) -> str:
         "button,select{font:inherit;padding:.35rem .55rem;background:#1f2937;color:inherit;border:1px solid #4b5563;border-radius:.3rem}"
         "input[type=range]{width:100%}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}"
         ".panel{background:#1f2937;border-radius:.4rem;padding:.75rem;min-height:9rem}.panel h2{margin:.1rem 0 .5rem;font-size:1rem}"
-        ".muted{color:#cbd5e1;font-size:.85rem}.unavailable{color:#fca5a5}.metric-row{display:flex;gap:.4rem;align-items:center}"
+        ".muted{color:#cbd5e1;font-size:.85rem}.unavailable{color:#fca5a5}.metric-row{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}"
+        ".review-scene-canvas,.review-video{display:block;width:100%;max-height:24rem;background:#0f172a;border-radius:.3rem}"
+        ".metric-trace{display:flex;gap:.2rem;align-items:center;width:100%}.metric-sample{padding:0 .2rem;border:0;background:transparent;color:#38bdf8}"
         "pre{white-space:pre-wrap;overflow:auto;font-size:.76rem;max-height:15rem}"
         "@media(max-width:800px){.grid{grid-template-columns:1fr}}"
         "</style></head><body><main>"
@@ -1498,7 +1673,11 @@ def _copy_web_component(output_dir: Path) -> Path:
 
 
 def _panel_document(  # noqa: C901, PLR0912, PLR0915
-    request: ComponentRequest, sources: Sequence[_LoadedSource], config: Mapping[str, Any]
+    request: ComponentRequest,
+    sources: Sequence[_LoadedSource],
+    config: Mapping[str, Any],
+    *,
+    load_diagnostics: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     """Build the complete renderer-neutral model and return diagnostics/status.
 
@@ -1506,7 +1685,7 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         Panel model, diagnostics, and complete/partial/unavailable status.
     """
 
-    diagnostics: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = [dict(item) for item in load_diagnostics]
     for source in sources:
         diagnostics.extend(source.diagnostics)
     usable = [source for source in sources if source.payload is not None]
@@ -1570,7 +1749,8 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         }
         for source in sources
     }
-    visibility = config.get("metric_visibility", config.get("metrics_visible", []))
+    visibility = config.get("metric_visibility", config.get("metrics_visible"))
+    visibility_declared = visibility is not None
     if isinstance(visibility, Mapping):
         visible_ids = {str(key) for key, value in visibility.items() if value is True}
     elif isinstance(visibility, list):
@@ -1578,7 +1758,7 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
     else:
         visible_ids = set()
     default_ids = [metric_id for metric_id in DEFAULT_METRIC_IDS if metric_id in metric_definitions]
-    if not visible_ids:
+    if not visibility_declared:
         visible_ids = set(default_ids[:4])
     metrics_document: dict[str, Any] = {}
     requested_metric_ids = config.get(
@@ -1669,6 +1849,7 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         "component_id": COMPONENT_ID,
         "component_version": COMPONENT_VERSION,
         "request_id": request.request_id,
+        "status": status,
         "evidence_boundary": "analysis_workbench_only",
         "diagnostic_only": True,
         "time": {
@@ -1692,7 +1873,7 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
                 "status": (
                     "available"
                     if any(
-                        source.identity.get(key)
+                        source.identity.get(key) is not None
                         for key in (
                             "source_commit",
                             "config_identity",
@@ -1701,13 +1882,14 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
                             "scenario_id",
                             "planner_id",
                             "seed",
+                            "actor_id",
                         )
                     )
                     else "unavailable"
                 ),
                 "reason": ""
                 if any(
-                    source.identity.get(key)
+                    source.identity.get(key) is not None
                     for key in (
                         "source_commit",
                         "config_identity",
@@ -1716,6 +1898,7 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
                         "scenario_id",
                         "planner_id",
                         "seed",
+                        "actor_id",
                     )
                 )
                 else "source identity fields were not recorded",
@@ -1724,6 +1907,22 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         },
         "goal_geometry": goal,
         "goal": goal,
+        "scene_surface": dict(scene.surface),
+        "surfaces": {
+            "scene": {
+                "renderer": "offline-canvas",
+                "mount": "mountSceneViewer",
+                "contract": SCENE_SCHEMA_VERSION,
+                "status": scene.status,
+            },
+            "video": {
+                "renderer": "HTMLVideoElement",
+                "mount": "review-video",
+                "mapping": "explicit_source_time_only",
+                "media_uri": video.media_uri,
+                "status": video.status,
+            },
+        },
         "streams": {name: _stream_document(stream) for name, stream in streams.items()},
         "panels": {
             "scene": {
@@ -1783,8 +1982,10 @@ def build_panel_model(request: ComponentRequest, *, base: Path | None = None) ->
         raise TypeError("request must be a ComponentRequest")
     root = (base or Path.cwd()).resolve()
     sources, load_diagnostics = _load_sources(request, root)
-    document, diagnostics, _status = _panel_document(request, sources, request.config)
-    document["diagnostics"] = load_diagnostics + diagnostics
+    document, diagnostics, _status = _panel_document(
+        request, sources, request.config, load_diagnostics=load_diagnostics
+    )
+    document["diagnostics"] = diagnostics
     return document
 
 
@@ -1914,8 +2115,9 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
     try:
         sources, load_diagnostics = _load_sources(request, root)
         output_dir = _reserve_output(root, request.output_directory)
-        document, diagnostics, status = _panel_document(request, sources, request.config)
-        diagnostics = load_diagnostics + diagnostics
+        document, diagnostics, status = _panel_document(
+            request, sources, request.config, load_diagnostics=load_diagnostics
+        )
         document["diagnostics"] = diagnostics
         emitted: list[dict[str, Any]] = []
         model_name = f"{PANEL_MODEL_SCHEMA_VERSION}.json"

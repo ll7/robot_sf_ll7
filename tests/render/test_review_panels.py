@@ -86,6 +86,7 @@ def test_fixture_builds_all_panels_with_source_time_and_provenance(tmp_path: Pat
     assert result.status == "complete"
     assert len(result.artifacts) == 4
     document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["status"] == "complete"
     assert document["time"]["authority"] == "simulation_time"
     assert document["time"]["origin_s"] == 10.0
     assert document["time"]["terminal_s"] == 12.2
@@ -252,6 +253,190 @@ def test_request_config_timestamp_map_is_explicitly_consumed(tmp_path: Path) -> 
     document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
     assert document["panel_status"]["video"] == "available"
     assert document["streams"]["video"]["samples"][1]["value"]["frame_idx"] == 1
+
+
+def test_explicit_video_pause_allows_repeated_source_time(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 10.0}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "video.mp4").write_bytes(b"opaque media")
+    request = _request(
+        tmp_path,
+        output="out",
+        sources=[
+            {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+            {"artifact_id": "video", "uri": "video.mp4", "format": "video-mp4.v1"},
+        ],
+        config={
+            "sample_resolution_s": 0.5,
+            "media_uri": "video.mp4",
+            "presentation": {
+                "presentation_timestamp_map": {
+                    "policy": "explicit_table",
+                    "mapping": [
+                        {"frame_idx": 0, "presentation_t_s": 0.0, "source_t_s": 10.0},
+                        {
+                            "frame_idx": 1,
+                            "presentation_t_s": 0.0,
+                            "source_t_s": 10.0,
+                            "is_pause": True,
+                        },
+                        {"frame_idx": 2, "presentation_t_s": 0.2, "source_t_s": 10.5},
+                    ],
+                }
+            },
+        },
+    )
+
+    result = review_panels.run(request, base=tmp_path)
+
+    assert result.status == "complete"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["panel_status"]["video"] == "available"
+    assert [row["time_s"] for row in document["streams"]["video"]["samples"]] == [10.0, 10.0, 10.5]
+    assert document["streams"]["video"]["media_uri"] == "video.mp4"
+
+
+def test_repeated_video_source_time_without_pause_is_unavailable(tmp_path: Path) -> None:
+    (tmp_path / "video.mp4").write_bytes(b"opaque media")
+    request = _request(
+        tmp_path,
+        output="out",
+        sources=[{"artifact_id": "video", "uri": "video.mp4", "format": "video-mp4.v1"}],
+        config={
+            "presentation": {
+                "presentation_timestamp_map": {
+                    "mapping": [
+                        {"frame_idx": 0, "presentation_t_s": 0.0, "source_t_s": 10.0},
+                        {"frame_idx": 1, "presentation_t_s": 0.1, "source_t_s": 10.0},
+                    ]
+                }
+            }
+        },
+    )
+
+    result = review_panels.run(request, base=tmp_path)
+
+    assert result.status == "partial"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["streams"]["video"]["reason"] == "source_time_not_nondecreasing"
+    assert any(
+        diagnostic["reason_code"] == "source_time_duplicate_without_pause"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_missing_declared_source_is_partial_without_complete_artifacts(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 1.0}]}),
+        encoding="utf-8",
+    )
+    request = _request(
+        tmp_path,
+        output="out",
+        sources=[
+            {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+            {"artifact_id": "missing", "uri": "missing.json", "format": "metric-series.v1"},
+        ],
+    )
+
+    result = review_panels.run(request, base=tmp_path)
+
+    assert result.status == "partial"
+    assert result.artifacts == ()
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["status"] == "partial"
+    assert any(diagnostic["reason_code"] == "source_missing" for diagnostic in result.diagnostics)
+
+
+def test_metric_scalar_envelope_and_actor_alias_are_unwrapped(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "threejs-viewer.v1",
+                "source_identity": {"episode_id": "episode-1"},
+                "frames": [
+                    {
+                        "time_s": 1.0,
+                        "robot": {"actor": "ego-1", "position": [0.0, 0.0]},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "metrics.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "metric-series.v1",
+                "series": [
+                    {
+                        "metric_id": "clearance",
+                        "units": "m",
+                        "samples": [{"time_s": 1.0, "value": {"value": 0.75, "unit": "m"}}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    request = _request(
+        tmp_path,
+        output="out",
+        sources=[
+            {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+            {"artifact_id": "metrics", "uri": "metrics.json", "format": "metric-series.v1"},
+        ],
+    )
+
+    result = review_panels.run(request, base=tmp_path)
+
+    assert result.status == "complete"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["context"]["actor_id"] == "ego-1"
+    assert document["source_identity"]["scene"]["actor_id"] == "ego-1"
+    assert document["metrics"]["clearance"]["stream"]["samples"][0]["value"] == 0.75
+
+
+def test_scene_and_video_surface_metadata_are_available_offline(tmp_path: Path) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "threejs-viewer.v1",
+                "map": {"width": 4.0, "height": 3.0, "origin": [0.0, 0.0]},
+                "frames": [{"time_s": 1.0, "robot": {"position": [1.0, 1.0]}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "clip.mp4").write_bytes(b"opaque media")
+    request = _request(
+        tmp_path,
+        output="out",
+        sources=[
+            {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+            {"artifact_id": "video", "uri": "clip.mp4", "format": "video-mp4.v1"},
+        ],
+        config={
+            "media_uri": "clip.mp4",
+            "presentation": {
+                "presentation_timestamp_map": {
+                    "mapping": [{"frame_idx": 0, "pts_s": 0.0, "source_t_s": 1.0}]
+                }
+            },
+        },
+    )
+
+    result = review_panels.run(request, base=tmp_path)
+
+    assert result.status == "complete"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["scene_surface"]["map"]["width"] == 4.0
+    assert document["streams"]["video"]["media_uri"] == "clip.mp4"
+    assert document["panels"]["video"]["media_uri"] == "clip.mp4"
+    assert document["surfaces"]["scene"]["mount"] == "mountSceneViewer"
+    assert document["surfaces"]["video"]["renderer"] == "HTMLVideoElement"
 
 
 def test_context_revision_changes_on_seek_and_interval() -> None:

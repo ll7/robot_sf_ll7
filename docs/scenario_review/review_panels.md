@@ -85,8 +85,20 @@ do not grant benchmark or scientific admission.
 The local web module provides play/pause, previous/next scene step, speed
 selection, interval selection, metric toggles, event seeks, and a shared
 scrubber. Space, Left/Right arrows, and `+`/`-` work when focus is not in a
-text-entry control. The module has no Three.js, CDN, unpkg, or other remote
-asset import; media and source bytes remain outside the generated model.
+text-entry control. Playback advances the source-time cursor from an injectable
+wall-clock/request-animation-frame delta multiplied by the selected speed; it
+clamps to the selected interval and pauses at its end. The controller exposes a
+deterministic `tick(now_ms)` method for headless runtime probes, and cancels
+scheduled handles and its per-controller keyboard listener on pause/unmount.
+
+The scene panel mounts an offline canvas that consumes the existing
+`threejs-viewer.v1` map/frame contract. When a local media URI is declared, the
+video panel mounts an HTML `<video>` element and applies only the explicit
+source-time-to-media-time mapping; remote media and nominal FPS alignment are
+not used. Metric traces expose one button per recorded sample with its exact
+source time, and hiding a metric removes its trace controls. The module has no
+Three.js, CDN, unpkg, or other remote asset import; media and source bytes
+remain outside the generated model.
 
 ## Fixture and evidence boundary
 

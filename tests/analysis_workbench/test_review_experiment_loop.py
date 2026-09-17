@@ -193,6 +193,33 @@ def _run_injected(
     )
 
 
+def _native_fixture_request(
+    output: str,
+    *,
+    max_candidates: int = 1,
+    max_executions: int = 2,
+) -> tuple[ComponentRequest, dict[str, Any]]:
+    fixture_root = Path("tests/fixtures/scenario_review/review_experiment_loop")
+    request_payload = json.loads((fixture_root / "request.json").read_text())
+    config = json.loads((fixture_root / "config.json").read_text())
+    admission = json.loads((fixture_root / "admission.json").read_text())
+    request_payload["config"] = {
+        **config,
+        "max_candidates": max_candidates,
+        "max_executions": max_executions,
+        "executor_config": {**config["executor_config"], "horizon_steps": 1},
+    }
+    request_payload["output_directory"] = output
+    request = ComponentRequest(
+        request_payload["request_id"],
+        request_payload["component_id"],
+        (SourceRef(**request_payload["sources"][0]),),
+        request_payload["output_directory"],
+        request_payload["config"],
+    )
+    return request, admission
+
+
 def test_descriptor_and_priority_then_id_ordering(tmp_path: Path) -> None:
     assert descriptor()["component_id"] == COMPONENT_ID
     assert descriptor()["output_types"] == [
@@ -333,6 +360,22 @@ def test_retry_and_fidelity_attempts_are_accounted(tmp_path: Path) -> None:
         "retries": 1,
         "fidelity_attempts": 1,
     }
+    journal["outcomes"][0]["operation_ids"] = [
+        next(
+            operation["operation_id"]
+            for operation in reversed(journal["operations"])
+            if operation["kind"] == kind
+        )
+        for kind in ("control", "treatment")
+    ]
+    (tmp_path / "loop" / SESSION_JOURNAL_FILENAME).write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "complete"
 
 
 def test_cancellation_after_control_does_not_dispatch_treatment(tmp_path: Path) -> None:
@@ -619,6 +662,50 @@ def test_resume_rejects_forged_terminal_journal(tmp_path: Path, mutation: Any) -
     assert "cannot resume" in resumed.reason
 
 
+def _omit_treatment_from_complete_journal(journal: dict[str, Any]) -> None:
+    treatment = next(
+        operation for operation in journal["operations"] if operation["kind"] == "treatment"
+    )
+    journal["operations"].remove(treatment)
+    candidate = journal["candidates"]["high"]
+    candidate["operation_ids"].remove(treatment["operation_id"])
+    candidate["attempts"] = 1
+    journal["accounting"]["treatments"] = 0
+    journal["executions_consumed"] = 1
+    journal["outcomes"][0]["operation_ids"] = list(candidate["operation_ids"])
+
+
+def _forge_status_only_treatment_result(journal: dict[str, Any]) -> None:
+    treatment = next(
+        operation for operation in journal["operations"] if operation["kind"] == "treatment"
+    )
+    treatment["result"] = {"status": "ok"}
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [_omit_treatment_from_complete_journal, _forge_status_only_treatment_result],
+    ids=["missing-treatment-pair", "status-only-treatment"],
+)
+def test_resume_rejects_forged_complete_pair_journal(tmp_path: Path, mutation: Any) -> None:
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe)
+    first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
+    assert first.status == "complete"
+    journal_path = tmp_path / "loop" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text())
+    mutation(journal)
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "cannot resume" in resumed.reason
+
+
 def test_native_adapter_dispatches_one_pair_per_candidate_and_honors_cancel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -742,6 +829,101 @@ def test_native_child_failure_precedes_retained_candidate_report(
     }
 
 
+def test_native_control_fidelity_failure_counts_child_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request, admission = _native_fixture_request("native-fidelity")
+
+    def fake_child_run(
+        child_request: ComponentRequest, *, base: Path, **kwargs: Any
+    ) -> ComponentResult:
+        del kwargs
+        child_dir = base / "executor"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        report = {
+            "candidates": [
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "failed",
+                    "reason": "control_fidelity_failure: synthetic child check",
+                    "control_metrics": _metrics("control"),
+                }
+            ]
+        }
+        (child_dir / "execute-report.json").write_text(json.dumps(report), encoding="utf-8")
+        return ComponentResult(
+            request_id=child_request.request_id,
+            component_id="srev22-review-execute",
+            status="failed",
+            reason="candidate_execution_failed: control_fidelity_failure: synthetic child check",
+        )
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        fake_child_run,
+    )
+    result = run(request, base=tmp_path, autonomous=True, admission_config=admission)
+    assert result.status == "failed"
+    journal = json.loads((tmp_path / "native-fidelity" / SESSION_JOURNAL_FILENAME).read_text())
+    assert journal["accounting"] == {
+        "controls": 1,
+        "treatments": 0,
+        "failures": 0,
+        "retries": 0,
+        "fidelity_attempts": 2,
+    }, result.reason
+
+
+def test_native_treatment_failure_preserves_treatment_side_accounting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request, admission = _native_fixture_request("native-treatment-failure")
+
+    def fake_child_run(
+        child_request: ComponentRequest, *, base: Path, **kwargs: Any
+    ) -> ComponentResult:
+        del kwargs
+        child_dir = base / "executor"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        report = {
+            "candidates": [
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "failed",
+                    "reason": "treatment execution failed: synthetic treatment error",
+                    "control_metrics": _metrics("control"),
+                }
+            ]
+        }
+        (child_dir / "execute-report.json").write_text(json.dumps(report), encoding="utf-8")
+        return ComponentResult(
+            request_id=child_request.request_id,
+            component_id="srev22-review-execute",
+            status="failed",
+            reason="candidate_execution_failed: treatment execution failed: synthetic treatment error",
+        )
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        fake_child_run,
+    )
+    result = run(request, base=tmp_path, autonomous=True, admission_config=admission)
+    assert result.status == "failed"
+    journal = json.loads(
+        (tmp_path / "native-treatment-failure" / SESSION_JOURNAL_FILENAME).read_text()
+    )
+    assert journal["accounting"] == {
+        "controls": 1,
+        "treatments": 1,
+        "failures": 1,
+        "retries": 0,
+        "fidelity_attempts": 2,
+    }
+    assert [item["kind"] for item in journal["operations"]] == ["control", "treatment"]
+
+
 def test_native_cancellation_during_pair_settles_both_outer_operations(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -797,6 +979,70 @@ def test_native_cancellation_during_pair_settles_both_outer_operations(
     assert control["status"] == treatment["status"] == "ok"
     assert control["native_pair_complete"] is True
     assert treatment["native_pair_complete"] is True
+
+
+def test_native_crash_resume_recovers_nested_pair_before_cancellation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request, admission = _native_fixture_request("native-crash-resume")
+    child_calls: list[str] = []
+
+    def crash_after_nested_pair(
+        child_request: ComponentRequest, *, base: Path, **kwargs: Any
+    ) -> ComponentResult:
+        del kwargs
+        child_calls.append("nested")
+        child_dir = base / "executor"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        report = {
+            "candidates": [
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                    "control_metrics": _metrics("control"),
+                    "treatment_metrics": _metrics("treatment", value=1.2),
+                    "control_activated": True,
+                    "treatment_activated": True,
+                }
+            ]
+        }
+        (child_dir / "execute-report.json").write_text(json.dumps(report), encoding="utf-8")
+        raise KeyboardInterrupt("crash after nested pair")
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        crash_after_nested_pair,
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run(request, base=tmp_path, autonomous=True, admission_config=admission)
+
+    resumed = run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        admission_config=admission,
+        cancel=lambda: True,
+    )
+    assert resumed.status == "cancelled"
+    assert child_calls == ["nested"]
+    journal = json.loads((tmp_path / "native-crash-resume" / SESSION_JOURNAL_FILENAME).read_text())
+    assert {operation["state"] for operation in journal["operations"]} == {"completed"}
+    assert [operation["kind"] for operation in journal["operations"]] == [
+        "control",
+        "treatment",
+    ]
+    assert journal["accounting"]["treatments"] == 1
+    repeated = run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        admission_config=admission,
+    )
+    assert repeated.status == "cancelled"
+    assert child_calls == ["nested"]
 
 
 def test_native_operation_recovery_uses_exact_map_for_retry_in_candidate_id(

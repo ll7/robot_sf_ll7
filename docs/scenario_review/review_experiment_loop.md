@@ -47,6 +47,9 @@ treatments, failures, retries, and fidelity attempts consume execution budget.
 The loop records both `executions_consumed` and `reserved_executions`; a
 candidate is not started unless two execution slots are available. A failed
 control-fidelity check records the control and blocks treatment interpretation.
+On the native path, `fidelity_attempts` includes the child executor's measured
+control check as well as the loop-level check; a child control-fidelity failure
+therefore remains accounted even though no treatment is dispatched.
 The wall deadline is checked before dispatch and again between control and
 treatment, so treatment is never newly dispatched after the control budget is
 exhausted. Evaluated or inconclusive candidates are never silently retried.
@@ -95,15 +98,20 @@ settlement.
 
 Operation IDs are deterministic (`session:candidate:<id>:control|treatment`,
 with a retry suffix only when explicitly configured). A completed operation is
-never dispatched again. Recovery binds the exact operation record to its
-candidate and kind; operation IDs are opaque, so valid candidate IDs containing
-`:retry:` are not parsed or stripped. A journal state of `dispatching` is
-recovered through the executor's idempotent `result_for`/`recover` interface
-when available; without a result, it is retained as a failed unknown operation
-rather than blindly run a second time. Resume validates status/state/outcome,
-operation, reservation, and consumed-execution invariants before accepting any
-terminal journal. Tampered source proof, recipe, candidate order, identity, or
-journal accounting returns a failed resume result.
+never dispatched again. Each retained outcome indexes every operation ID for
+that candidate, including failed retry attempts; older final-pair-only indexes
+are accepted once and normalized on load. Recovery binds the exact operation
+record to its candidate and kind; operation IDs are opaque, so valid candidate
+IDs containing `:retry:` are not parsed or stripped. A journal state of
+`dispatching` is recovered through the executor's idempotent
+`result_for`/`recover` interface when available; native recovery reads an
+already persisted child report/attempt before honoring cancellation and never
+starts a new pair solely to settle a stale outer dispatch. Without a result, a
+dispatching operation is retained as a failed unknown operation rather than
+blindly run a second time. Resume validates status/state/outcome, complete
+control+treatment result shape, operation, reservation, and consumed-execution
+invariants before accepting any terminal journal. Tampered source proof, recipe,
+candidate order, identity, or journal accounting returns a failed resume result.
 
 The session directory also has an atomic `.experiment-loop.lock`. A controller
 holds it from journal load/reservation through settlement and releases it only

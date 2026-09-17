@@ -419,6 +419,10 @@ _FAST_FILES = {
     "test_audit_findings_similarity.py",
     "test_audit_store.py",
     "test_audit_store_cli.py",
+    # BA-01 campaign accounting and detector-family tests are deterministic
+    # offline contracts; keep changed coverage in the exact-head fast lane.
+    "test_audit_scan.py",
+    "test_audit_detectors.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",

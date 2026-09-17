@@ -363,6 +363,17 @@ Full details live in
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 
+**Operational quantities for external cost models (opt-in, diagnostic-only)**
+* `robot_sf/benchmark/operational_quantities.py` (issue #9350) exposes simulator-measured
+  quantities (distance, simulated/active/idle time, goal result, exposure, IDs) as typed inputs
+  to an optional external total-cost model. Queue time stays unknown (no simulator timer);
+  productive distance, orders, passenger load, prices, and supervision are external assumptions
+  with currency, period, source/date, provenance, and uncertainty.
+* Missing inputs block with named reasons instead of implicit zeros; trajectory-only data
+  cannot produce a numeric total. Results are a sensitivity surface, not a market-price
+  forecast, and never enter planner rankings. Postprocessor:
+  `scripts/analysis/extract_operational_quantities_issue_9350.py`.
+
 ## Expected Schema & Provenance
 
 Each episode record is schema-validated against

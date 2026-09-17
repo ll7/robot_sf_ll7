@@ -1,0 +1,1 @@
+{"declared_frame_count": 3, "duration_s": 0.2, "format": "synthetic-frames", "fps": 10.0, "frames": [{"blank": true, "frame_index": 0, "labels": [], "t_s": 0.0}, {"blank": true, "frame_index": 1, "labels": [], "t_s": 0.1}, {"blank": true, "frame_index": 2, "labels": [], "t_s": 0.2}], "height": 180, "schema_version": "media-qa-frames.v1", "width": 320}

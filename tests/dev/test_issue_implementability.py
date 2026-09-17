@@ -933,6 +933,7 @@ def test_unknown_verification_variant_still_rejected() -> None:
         "Inputs / Predecessor",
         "Inputs / Predecessors",
         "Inputs / Prerequisites",
+        "Inputs and Canonical Owners",
     ],
 )
 def test_compound_inputs_heading_aliases_satisfy_inputs(heading: str) -> None:
@@ -943,6 +944,16 @@ def test_compound_inputs_heading_aliases_satisfy_inputs(heading: str) -> None:
 
     assert report["contract"]["fields"]["inputs"]["present"] is True
     assert "inputs" not in report["contract"]["missing_fields"]
+
+
+def test_bare_acceptance_heading_satisfies_acceptance() -> None:
+    """Issue #9462: a bare 'Acceptance' heading satisfies the acceptance field."""
+    body = COMPLETE_BODY.replace("## Acceptance Criteria", "## Acceptance")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["contract"]["fields"]["acceptance"]["present"] is True
+    assert "acceptance" not in report["contract"]["missing_fields"]
 
 
 @pytest.mark.parametrize(

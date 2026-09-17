@@ -123,7 +123,9 @@ domain-aware review. `evidence:blocked` is a blocker, not a degraded success.
 
 1. Read the live labels and the issue body before changing metadata.
 2. Preserve explicit blocked, running, review, resource, and evidence markers;
-   do not infer readiness from their absence.
+   do not infer readiness from their absence. The autonomous audit may remove
+   `state:running` only when its explicit six-hour stale-running reclaim policy
+   has complete progress evidence and no active execution record.
 3. Use the shared issue-audit plan and its REST readback for label changes; do not
    hand-create labels or silently rename them.
 4. After recording a decision, verify the terminal issue/PR state from GitHub.

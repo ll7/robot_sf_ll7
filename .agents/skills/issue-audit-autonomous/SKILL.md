@@ -18,7 +18,9 @@ output_schema: skill_run_summary.v1
 Use this entry point for unattended open-issue inventory and safe contract
 cleanup. It may repair unambiguous labels, expose proven blockers, and close
 issues only under the shared closure contract. It never enters a question loop
-or chooses maintainer policy.
+or chooses maintainer policy. Its default invocation also reclaims
+`state:running` after six hours without attributable progress when complete
+inventory proves that no active execution record remains.
 
 Read docs/context/issue_audit_contract.md before operating. The deterministic
 classifier and mutation executor are in
@@ -33,6 +35,7 @@ inventory includes relationship-shaped body content.
 
        uv run python scripts/dev/issue_audit_core.py plan \
          --mode autonomous --include-comments \
+         --reclaim-stale-running-after-hours 6 \
          --max-closed-pr-pages 50 \
          --max-wall-seconds 420 \
          --output output/issue_audit_plan.json
@@ -102,6 +105,11 @@ inventory includes relationship-shaped body content.
   before triage can block the issue again.
 - Add state:ready only with concrete acceptance or validation evidence and no
   active or unresolved gate.
+- When the plan enables `--reclaim-stale-running-after-hours 6`, remove only
+  `state:running` when complete comment evidence shows that the latest
+  attributable progress is older than six hours and no active claim, PR,
+  worktree, or job is present. Record the cutoff and progress source in the
+  plan; do not add `state:ready`, release claims, or close the issue.
 - Close only with a merged issue-linked PR plus the documented completion
   condition in docs/context/issue_audit_contract.md.
 - Do not create or infer native Parent, Blocked by, Blocking, or Relates to links in the label/
@@ -116,8 +124,9 @@ inventory includes relationship-shaped body content.
   publications.
 - Never submit compute or reinterpret benchmark, provenance, rights, or
   paper-facing evidence.
-- Preserve state:running when no active record is observable; uncertain state
-  is not readiness or completion.
+- Preserve state:running when the reclaim policy is disabled, progress evidence
+  is incomplete, or an active claim, PR, worktree, or job is observable.
+  Staleness alone is not readiness or completion.
 - Preserve optional research unless it is duplicate, invalid, superseded, or
   complete.
 - Fail closed on partial inventory, missing label inventory, unavailable

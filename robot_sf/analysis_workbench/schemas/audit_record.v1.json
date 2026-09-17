@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/audit_record.v1.json",
+  "title": "Robot SF Audit Record v1",
+  "description": "Versioned durable records used by the offline benchmark auditor.",
+  "type": "object",
+  "required": ["schema_version", "record_type", "record_id"],
+  "properties": {
+    "schema_version": {"const": "audit-record.v1"},
+    "record_type": {
+      "enum": [
+        "campaign_audit",
+        "episode_ref",
+        "review_packet",
+        "signal",
+        "reference",
+        "annotation",
+        "finding",
+        "action_record",
+        "review_record"
+      ]
+    },
+    "record_id": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

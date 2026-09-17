@@ -11,6 +11,7 @@ import zipfile
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import (
+    ActionRecord,
     Annotation,
     AuditContractError,
     EpisodeRef,
@@ -20,6 +21,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 )
 from robot_sf.analysis_workbench.audit_store import (
     AuditConflictError,
+    AuditCorruptionError,
     AuditExportError,
     AuditStore,
     AuditStoreError,
@@ -163,6 +165,45 @@ def test_transaction_actor_must_match_annotation_and_review_author(tmp_path) -> 
         )
 
 
+def test_transaction_actor_must_match_action_actor_on_save_and_replay(tmp_path) -> None:
+    action = ActionRecord(
+        action_id="agent-action",
+        action_type="review",
+        actor_kind="agent",
+    )
+    with AuditStore(tmp_path) as store:
+        before = store.canonical_path.read_bytes()
+        with pytest.raises(AuditStoreError, match="actor"):
+            store.save(action, operation_id="op-human-action", expected_revision=0)
+        assert store.canonical_path.read_bytes() == before
+        store.save(action, operation_id="op-agent-action", expected_revision=0, actor="agent")
+        store.close()
+
+    lines = tmp_path.joinpath("audit.ndjson").read_bytes().splitlines()
+    transaction = json.loads(lines[1])
+    transaction["actor"]["kind"] = "human"
+    changes = tuple(
+        (
+            change["record_id"],
+            "tombstone" if change["deleted"] else change["record_type"],
+            change["record"],
+            change["deleted"],
+        )
+        for change in transaction["changes"]
+    )
+    transaction["request_digest"] = AuditStore._request_digest(
+        transaction["operation_id"],
+        changes,
+        transaction["expected_revisions"],
+        transaction["actor"],
+        unconditional=transaction.get("unconditional", False),
+    )
+    lines[1] = json.dumps(transaction, sort_keys=True).encode()
+    tmp_path.joinpath("audit.ndjson").write_bytes(b"\n".join(lines) + b"\n")
+    with pytest.raises(AuditCorruptionError, match="actor kind"):
+        AuditStore(tmp_path)
+
+
 def test_invalid_measured_payload_never_reaches_journal(tmp_path) -> None:
     with AuditStore(tmp_path) as store:
         before = store.canonical_path.read_bytes()
@@ -222,6 +263,63 @@ def test_tampered_digest_valid_backup_is_rejected_before_overwrite(tmp_path) -> 
     with AuditStore(destination) as preserved:
         assert preserved.get("old") is not None
         assert preserved.get("new") is None
+
+
+def test_restore_rejects_digest_valid_sensitive_backup_before_overwrite(tmp_path) -> None:
+    source_root = tmp_path / "source"
+    destination = tmp_path / "destination"
+    with AuditStore(source_root) as source:
+        source.save(_annotation("new"), operation_id="op-new", expected_revision=0)
+        backup = source.export(tmp_path / "backup.zip")
+    with AuditStore(destination) as old:
+        old.save(_annotation("old"), operation_id="op-old", expected_revision=0)
+
+    with zipfile.ZipFile(backup) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        lines = archive.read("audit.ndjson").splitlines()
+    transaction = json.loads(lines[1])
+    transaction["changes"][0]["record"]["metadata"] = {"password": "secret"}
+    changes = tuple(
+        (
+            change["record_id"],
+            "tombstone" if change["deleted"] else change["record_type"],
+            change["record"],
+            change["deleted"],
+        )
+        for change in transaction["changes"]
+    )
+    transaction["request_digest"] = AuditStore._request_digest(
+        transaction["operation_id"],
+        changes,
+        transaction["expected_revisions"],
+        transaction["actor"],
+        unconditional=transaction.get("unconditional", False),
+    )
+    lines[1] = json.dumps(transaction, sort_keys=True).encode()
+    tampered_journal = b"\n".join(lines) + b"\n"
+    manifest["journal_digest"] = hashlib.sha256(tampered_journal).hexdigest()
+    tampered = tmp_path / "sensitive.zip"
+    with zipfile.ZipFile(tampered, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest, sort_keys=True))
+        archive.writestr("audit.ndjson", tampered_journal)
+
+    with pytest.raises(AuditExportError, match="sensitive"):
+        AuditStore.restore(tampered, destination, overwrite=True)
+    with AuditStore(destination) as preserved:
+        assert preserved.get("old") is not None
+        assert preserved.get("new") is None
+
+
+def test_restore_requires_explicit_overwrite_for_empty_existing_destination(tmp_path) -> None:
+    source_root = tmp_path / "source"
+    destination = tmp_path / "destination"
+    with AuditStore(source_root) as source:
+        source.save(_annotation("new"), operation_id="op-new", expected_revision=0)
+        backup = source.export(tmp_path / "backup.zip")
+    destination.mkdir()
+    with pytest.raises(AuditExportError, match="overwrite"):
+        AuditStore.restore(backup, destination)
+    assert not (destination / "audit.ndjson").exists()
 
 
 def test_tombstone_history_and_undo_keep_all_revisions(tmp_path) -> None:

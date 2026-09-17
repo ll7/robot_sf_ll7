@@ -604,11 +604,7 @@ class AuditStore:
                     raise AuditStoreError(f"invalid record payload: {exc}") from exc
                 if record_id(typed) != rid or record_type(typed) != kind:
                     raise AuditStoreError("record payload identity disagrees with transaction")
-                author_kind = getattr(typed, "author_kind", None)
-                if author_kind is not None and actor["kind"] != author_kind:
-                    raise AuditStoreError(
-                        "transaction actor kind does not match record author_kind"
-                    )
+                self._validate_record_actor(typed, actor["kind"])
                 record_payload = record_to_dict(typed)
             changes.append(
                 _Change(
@@ -910,6 +906,15 @@ class AuditStore:
         return result
 
     @staticmethod
+    def _validate_record_actor(record: Any, actor_kind: str) -> None:
+        """Require the transaction actor to equal any declared record actor."""
+
+        for field_name in ("author_kind", "actor_kind"):
+            declared_kind = getattr(record, field_name, None)
+            if declared_kind is not None and actor_kind != declared_kind:
+                raise AuditStoreError(f"transaction actor kind does not match record {field_name}")
+
+    @staticmethod
     def _request_digest(
         operation_id: str,
         changes: Sequence[tuple[str, str, dict[str, Any] | None, bool]],
@@ -1008,9 +1013,7 @@ class AuditStore:
                 payload = record_to_dict(canonical_record)
             except (AuditContractError, TypeError, ValueError) as exc:
                 raise AuditStoreError(f"record cannot be committed: {exc}") from exc
-            author_kind = getattr(canonical_record, "author_kind", None)
-            if author_kind is not None and author_kind != actor_payload["kind"]:
-                raise AuditStoreError("transaction actor kind must match record author_kind")
+            self._validate_record_actor(canonical_record, actor_payload["kind"])
             changes_input.append((rid, kind, payload, False))
         request_digest = self._request_digest(
             operation_id,
@@ -1547,10 +1550,12 @@ class AuditStore:
 
         backup_path = Path(backup)
         destination = Path(destination)
+        if destination.exists() and not overwrite:
+            raise AuditExportError(
+                f"restore destination exists; pass --overwrite explicitly: {destination}"
+            )
         if destination.exists() and not destination.is_dir():
             raise AuditExportError(f"restore destination is not a directory: {destination}")
-        if destination.exists() and any(destination.iterdir()) and not overwrite:
-            raise AuditExportError(f"restore destination is not empty: {destination}")
         parent = destination.parent
         parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.restore-", dir=parent))
@@ -1597,6 +1602,8 @@ class AuditStore:
             # complete journal and proved its SQLite checkpoint.
             cls._atomic_write(staging / cls.JOURNAL_FILENAME, journal_bytes)
             staged_store = cls(staging, recover_incomplete=False)
+            _header, staged_transactions, _offset, _raw = staged_store._read_journal(recover=False)
+            cls._assert_export_safe(staged_transactions)
             staged_store.close()
             staged_store = None
 

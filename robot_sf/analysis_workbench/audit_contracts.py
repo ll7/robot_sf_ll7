@@ -87,8 +87,6 @@ def _text(value: Any, *, name: str, allow_empty: bool = False) -> str:
 
 
 def _optional_text(value: Any, *, name: str) -> str:
-    if value is None:
-        return ""
     return _text(value, name=name, allow_empty=True)
 
 
@@ -268,6 +266,15 @@ def _coerce_source(value: SourceRef | Mapping[str, Any] | None) -> SourceRef | N
     if value is None:
         return None
     if isinstance(value, SourceRef):
+        _text(value.artifact_id, name="source.artifact_id")
+        _text(value.uri, name="source.uri")
+        _text(value.format, name="source.format")
+        for name in {item.name for item in fields(SourceRef)} - {
+            "artifact_id",
+            "uri",
+            "format",
+        }:
+            _optional_text(getattr(value, name), name=f"source.{name}")
         _source_sha256(value)
         return value
     if not isinstance(value, Mapping):
@@ -280,6 +287,11 @@ def _coerce_source(value: SourceRef | Mapping[str, Any] | None) -> SourceRef | N
     unknown = set(value) - known
     if unknown:
         raise AuditContractError(f"source contains unknown fields: {', '.join(sorted(unknown))}")
+    _text(value["artifact_id"], name="source.artifact_id")
+    _text(value["uri"], name="source.uri")
+    _text(value["format"], name="source.format")
+    for name in known - {"artifact_id", "uri", "format"}:
+        _optional_text(value.get(name, ""), name=f"source.{name}")
     source = SourceRef(**{name: value.get(name, "") for name in known})
     _source_sha256(source)
     return source
@@ -355,6 +367,9 @@ class EpisodeRef:
         for name, value in (
             ("planner_id", self.planner_id),
             ("scenario_id", self.scenario_id),
+            ("episode_id", self.episode_id),
+            ("campaign_id", self.campaign_id),
+            ("source_id", self.source_id),
         ):
             _optional_text(value, name=name)
         if self.seed is not None and not isinstance(self.seed, (int, str)):
@@ -439,9 +454,12 @@ class CampaignAudit:
         """Validate campaign-level identity and source metadata."""
 
         _text(self.audit_id, name="audit_id")
+        _optional_text(self.title, name="title")
         campaign_digest = _digest(self.campaign_digest, name="campaign_digest", required=True)
         source_digest = _digest(self.source_digest, name="source_digest", required=True)
         _check_record_version(self.schema_version)
+        _optional_text(self.protocol_version, name="protocol_version")
+        _optional_text(self.protocol_digest, name="protocol_digest")
         source = _coerce_source(self.source)
         source_sha256 = _source_sha256(source)
         if source_sha256 and source_sha256 != source_digest:
@@ -705,6 +723,15 @@ class Reference:
             else _finite(self.timestamp_s, name="reference.timestamp_s")
         )
         source_revision = _optional_text(self.source_revision, name="reference.source_revision")
+        for name, value in (
+            ("actor_id", self.actor_id),
+            ("object_id", self.object_id),
+            ("goal_id", self.goal_id),
+            ("waypoint_id", self.waypoint_id),
+            ("metric_id", self.metric_id),
+            ("event_id", self.event_id),
+        ):
+            _optional_text(value, name=f"reference.{name}")
         if source is not None and source.source_commit and source_revision:
             if source_revision != source.source_commit:
                 raise AuditIdentityError("reference source_revision does not match source_ref")
@@ -801,6 +828,14 @@ class Annotation:
 
         _text(self.annotation_id, name="annotation_id")
         _text(self.episode_id, name="episode_id")
+        for name, value in (
+            ("author_id", self.author_id),
+            ("observed_behavior", self.observed_behavior),
+            ("suspected_cause", self.suspected_cause),
+            ("provenance_reason", self.provenance_reason),
+        ):
+            _optional_text(value, name=name)
+        _text(self.created_at, name="created_at")
         if self.classification not in ANNOTATION_CLASSIFICATIONS:
             raise AuditContractError(
                 f"annotation classification must be one of {ANNOTATION_CLASSIFICATIONS}"
@@ -943,6 +978,7 @@ class ReviewPacket:
         """Validate the selected primary episode and peer context."""
 
         _text(self.packet_id, name="packet_id")
+        _optional_text(self.policy_version, name="policy_version")
         primary = (
             self.primary
             if isinstance(self.primary, EpisodeRef)
@@ -959,7 +995,11 @@ class ReviewPacket:
         object.__setattr__(self, "primary", primary)
         object.__setattr__(self, "peers", peers)
         object.__setattr__(self, "signals", signals)
-        if not isinstance(self.input_revision, int) or self.input_revision < 0:
+        if (
+            isinstance(self.input_revision, bool)
+            or not isinstance(self.input_revision, int)
+            or self.input_revision < 0
+        ):
             raise AuditContractError("input_revision must be a non-negative integer")
 
     @property
@@ -1001,6 +1041,9 @@ class Finding:
 
         _text(self.finding_id, name="finding_id")
         _text(self.title, name="title")
+        _optional_text(self.source_revision, name="source_revision")
+        _text(self.created_at, name="created_at")
+        _text(self.updated_at, name="updated_at")
         if self.status not in FINDING_STATUSES:
             raise AuditContractError(f"finding status must be one of {FINDING_STATUSES}")
         for name, members in (
@@ -1082,6 +1125,7 @@ class ActionRecord:
         _optional_text(self.actor_id, name="actor_id")
         _optional_text(self.target_id, name="target_id")
         _text(self.status, name="status")
+        _text(self.created_at, name="created_at")
         object.__setattr__(self, "details", _closed_mapping(self.details, name="details"))
 
 
@@ -1121,6 +1165,7 @@ class ReviewRecord:
         _optional_text(self.outcome, name="outcome")
         _optional_text(self.author_id, name="author_id")
         _optional_text(self.notes, name="notes")
+        _text(self.created_at, name="created_at")
 
 
 _RECORD_TYPES: dict[str, type[Any]] = {
@@ -1166,7 +1211,7 @@ def record_id(record: Any) -> str:
         "review_record": "review_id",
     }[kind]
     if hasattr(record, field_name):
-        return str(getattr(record, field_name))
+        return _text(getattr(record, field_name), name=f"{kind}.{field_name}")
     raise AuditContractError(f"record type {kind} has no stable ID")
 
 
@@ -1215,7 +1260,7 @@ def _interval(value: Any) -> TimeInterval | None:
         return value
     if not isinstance(value, Mapping):
         raise AuditContractError("interval must be a mapping")
-    return TimeInterval(float(value["start_s"]), float(value.get("end_s", value["start_s"])))
+    return TimeInterval(value["start_s"], value.get("end_s", value["start_s"]))
 
 
 def _source_from_payload(value: Any) -> SourceRef | None:
@@ -1230,40 +1275,40 @@ def episode_ref_from_dict(payload: Mapping[str, Any]) -> EpisodeRef:
     """
 
     return EpisodeRef(
-        campaign_digest=str(payload.get("campaign_digest", payload.get("campaign_id", ""))),
-        source_digest=str(payload.get("source_digest", payload.get("source_id", ""))),
-        execution_id=str(payload.get("execution_id", "")),
-        planner_id=str(payload.get("planner_id", "")),
-        scenario_id=str(payload.get("scenario_id", "")),
+        campaign_digest=payload.get("campaign_digest", payload.get("campaign_id", "")),
+        source_digest=payload.get("source_digest", payload.get("source_id", "")),
+        execution_id=payload.get("execution_id", ""),
+        planner_id=payload.get("planner_id", ""),
+        scenario_id=payload.get("scenario_id", ""),
         seed=payload.get("seed"),
-        attempt=int(payload.get("attempt", 0)),
-        config_digest=str(payload.get("config_digest", "")),
-        checkpoint_digest=str(payload.get("checkpoint_digest", "")),
-        environment_digest=str(payload.get("environment_digest", "")),
+        attempt=payload.get("attempt", 0),
+        config_digest=payload.get("config_digest", ""),
+        checkpoint_digest=payload.get("checkpoint_digest", ""),
+        environment_digest=payload.get("environment_digest", ""),
         source=_source_from_payload(payload.get("source")),
-        episode_id=str(payload.get("episode_id", "")),
+        episode_id=payload.get("episode_id", ""),
     )
 
 
 def reference_from_dict(payload: Mapping[str, Any]) -> Reference:
     return Reference(
-        reference_id=str(payload["reference_id"]),
-        coordinate_frame=str(payload["coordinate_frame"]),
+        reference_id=payload["reference_id"],
+        coordinate_frame=payload["coordinate_frame"],
         point=tuple(payload["point"]),
         source=_source_from_payload(payload.get("source")),
         timestamp_s=payload.get("timestamp_s"),
         source_revision=payload.get("source_revision", ""),
         calibration=payload.get("calibration"),
-        actor_id=str(payload.get("actor_id", "")),
-        object_id=str(payload.get("object_id", "")),
-        goal_id=str(payload.get("goal_id", "")),
-        waypoint_id=str(payload.get("waypoint_id", "")),
-        metric_id=str(payload.get("metric_id", "")),
-        event_id=str(payload.get("event_id", "")),
+        actor_id=payload.get("actor_id", ""),
+        object_id=payload.get("object_id", ""),
+        goal_id=payload.get("goal_id", ""),
+        waypoint_id=payload.get("waypoint_id", ""),
+        metric_id=payload.get("metric_id", ""),
+        event_id=payload.get("event_id", ""),
         source_point=(
             tuple(payload["source_point"]) if payload.get("source_point") is not None else None
         ),
-        seek_identity=str(payload.get("seek_identity", "")),
+        seek_identity=payload.get("seek_identity", ""),
     )
 
 
@@ -1275,18 +1320,18 @@ def signal_from_dict(payload: Mapping[str, Any]) -> Signal:
     """
 
     return Signal(
-        signal_id=str(payload["signal_id"]),
-        detector_id=str(payload["detector_id"]),
-        detector_version=str(payload.get("detector_version", "")),
-        status=str(payload.get("status", "flagged")),
-        reason_code=str(payload.get("reason_code", "")),
-        episode_id=str(payload.get("episode_id", "")),
+        signal_id=payload["signal_id"],
+        detector_id=payload["detector_id"],
+        detector_version=payload.get("detector_version", ""),
+        status=payload.get("status", "flagged"),
+        reason_code=payload.get("reason_code", ""),
+        episode_id=payload.get("episode_id", ""),
         evidence=_tuple_of_mappings(payload.get("evidence", ()), name="evidence"),
         measured=payload.get("measured", {}),
         interval=_interval(payload.get("interval")),
         threshold=payload.get("threshold"),
         missingness=_tuple_of_strings(payload.get("missingness", ()), name="missingness"),
-        message=str(payload.get("message", "")),
+        message=payload.get("message", ""),
     )
 
 
@@ -1298,27 +1343,27 @@ def annotation_from_dict(payload: Mapping[str, Any]) -> Annotation:
     """
 
     return Annotation(
-        annotation_id=str(payload["annotation_id"]),
-        episode_id=str(payload["episode_id"]),
-        classification=str(payload["classification"]),
-        mode=str(payload.get("mode", "quick")),
-        author_kind=str(payload.get("author_kind", "human")),
-        author_id=str(payload.get("author_id", "")),
+        annotation_id=payload["annotation_id"],
+        episode_id=payload["episode_id"],
+        classification=payload["classification"],
+        mode=payload.get("mode", "quick"),
+        author_kind=payload.get("author_kind", "human"),
+        author_id=payload.get("author_id", ""),
         interval=_interval(payload.get("interval")),
-        observed_behavior=str(payload.get("observed_behavior", "")),
-        suspected_cause=str(payload.get("suspected_cause", "")),
+        observed_behavior=payload.get("observed_behavior", ""),
+        suspected_cause=payload.get("suspected_cause", ""),
         evidence=_tuple_of_mappings(payload.get("evidence", ()), name="evidence"),
         confidence=payload.get("confidence"),
         references=tuple(reference_from_dict(item) for item in payload.get("references", ())),
         tags=_tuple_of_strings(payload.get("tags", ()), name="tags"),
-        review_scope=str(payload.get("review_scope", "interval")),
+        review_scope=payload.get("review_scope", "interval"),
         source_revision=payload.get("source_revision", 0),
-        source_identity=str(payload.get("source_identity", "")),
-        created_at=str(payload.get("created_at", utc_now())),
+        source_identity=payload.get("source_identity", ""),
+        created_at=payload.get("created_at", utc_now()),
         metadata=payload.get("metadata", {}),
         source_ref=_source_from_payload(payload.get("source_ref")),
-        provenance_status=str(payload.get("provenance_status", SOURCE_PROVENANCE_UNAVAILABLE)),
-        provenance_reason=str(payload.get("provenance_reason", "")),
+        provenance_status=payload.get("provenance_status", SOURCE_PROVENANCE_UNAVAILABLE),
+        provenance_reason=payload.get("provenance_reason", ""),
     )
 
 
@@ -1330,9 +1375,9 @@ def finding_from_dict(payload: Mapping[str, Any]) -> Finding:
     """
 
     return Finding(
-        finding_id=str(payload["finding_id"]),
-        title=str(payload["title"]),
-        status=str(payload.get("status", "proposed")),
+        finding_id=payload["finding_id"],
+        title=payload["title"],
+        status=payload.get("status", "proposed"),
         candidate_members=_tuple_of_strings(
             payload.get("candidate_members", ()), name="candidate_members"
         ),
@@ -1353,9 +1398,9 @@ def finding_from_dict(payload: Mapping[str, Any]) -> Finding:
             payload.get("diagnostic_results", ()), name="diagnostic_results"
         ),
         github_issue=payload.get("github_issue"),
-        source_revision=str(payload.get("source_revision", "")),
-        created_at=str(payload.get("created_at", utc_now())),
-        updated_at=str(payload.get("updated_at", utc_now())),
+        source_revision=payload.get("source_revision", ""),
+        created_at=payload.get("created_at", utc_now()),
+        updated_at=payload.get("updated_at", utc_now()),
     )
 
 
@@ -1367,7 +1412,7 @@ def review_packet_from_dict(payload: Mapping[str, Any]) -> ReviewPacket:
     """
 
     return ReviewPacket(
-        packet_id=str(payload["packet_id"]),
+        packet_id=payload["packet_id"],
         primary=episode_ref_from_dict(payload["primary"]),
         peers=tuple(episode_ref_from_dict(item) for item in payload.get("peers", ())),
         signals=tuple(signal_from_dict(item) for item in payload.get("signals", ())),
@@ -1375,8 +1420,8 @@ def review_packet_from_dict(payload: Mapping[str, Any]) -> ReviewPacket:
             payload.get("selection_reasons", ()), name="selection_reasons"
         ),
         missingness=_tuple_of_strings(payload.get("missingness", ()), name="missingness"),
-        policy_version=str(payload.get("policy_version", "")),
-        input_revision=int(payload.get("input_revision", 0)),
+        policy_version=payload.get("policy_version", ""),
+        input_revision=payload.get("input_revision", 0),
     )
 
 

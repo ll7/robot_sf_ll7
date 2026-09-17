@@ -350,6 +350,20 @@ def test_deserialization_rejects_nonfinite_numbers_and_unknown_fields() -> None:
         )
 
 
+def test_deserialization_rejects_non_string_closed_text_fields() -> None:
+    annotation = Annotation(
+        annotation_id="strict-text",
+        episode_id=_episode().episode_id,
+        classification="unclear",
+    )
+    payload = record_to_dict(annotation)
+    for field_name in ("observed_behavior", "author_id", "created_at", "provenance_reason"):
+        malformed = dict(payload)
+        malformed[field_name] = 1
+        with pytest.raises(AuditContractError, match=field_name):
+            deserialize_record(malformed)
+
+
 def test_write_ndjson_cannot_create_a_record_only_journal(tmp_path) -> None:
     signal = Signal(signal_id="signal-1", detector_id="telemetry")
     with pytest.raises(AuditContractError, match="canonical audit journal"):

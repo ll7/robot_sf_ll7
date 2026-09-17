@@ -73,8 +73,10 @@ loops cannot move the cursor.
   metric values, and declared precursor/recovery links. Clicking an event seeks
   to its recorded start time.
 - **Goal geometry** exposes the actual supplied goal point and completion
-  boundary with source and coordinate-frame metadata. Each is independently
-  `available` or `unavailable`; no centroid or decorative fallback is used.
+  boundary with source and coordinate-frame metadata. Canonical
+  `threejs-viewer.v1` map goal zones are preserved as the completion boundary
+  and provide a representative first-zone centroid when no explicit point is
+  recorded. Each field is independently `available` or `unavailable`.
 
 Every source retains declared and computed identity/integrity, source URI,
 format, and `admission: not_evaluated`. Integrity and diagnostic availability
@@ -97,8 +99,10 @@ video panel mounts an HTML `<video>` element and applies only the explicit
 source-time-to-media-time mapping; remote media and nominal FPS alignment are
 not used. Local media referenced by a generated HTML request is materialized
 under that output's `media/` directory and the model receives a safe relative
-URI. Absolute, traversal, scheme-relative, and network media paths are rejected
-by the offline browser policy unless an explicit media scheme is supplied.
+URI. Missing files and absolute, traversal, scheme-relative, or network media
+paths emit diagnostics, scrub the video URI, and downgrade the result; the
+offline browser policy rejects the same paths unless an explicit media scheme is
+supplied.
 Metric traces expose one button per recorded sample with its exact source time,
 and hiding a metric removes its trace controls. The module has no Three.js, CDN,
 unpkg, or other remote asset import; source bytes remain read-only.

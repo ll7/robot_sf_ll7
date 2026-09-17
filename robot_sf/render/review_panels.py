@@ -22,11 +22,13 @@ import shutil
 import stat
 from bisect import bisect_left
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from importlib import resources
 from itertools import pairwise
 from pathlib import Path, PureWindowsPath
 from typing import Any
+from urllib.parse import unquote
 
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
@@ -376,6 +378,35 @@ def _unsafe_path(value: str) -> bool:
         or "\\" in value
         or any(ord(character) < 32 or ord(character) == 127 for character in value)
     )
+
+
+def _unsafe_media_uri(value: str) -> bool:
+    """Return whether a media URI violates the offline browser trust policy."""
+
+    if not isinstance(value, str):
+        return True
+    try:
+        decoded = unquote(value)
+    except (TypeError, ValueError):
+        return True
+    if "?" in decoded or "#" in decoded:
+        return True
+    if ":" in decoded.split("/", 1)[0]:
+        return True
+    return _unsafe_path(decoded)
+
+
+def _scrub_media_uri_fields(value: Any) -> None:
+    """Remove media URI aliases from a JSON-shaped object after rejection."""
+
+    if isinstance(value, dict):
+        for key in ("media_uri", "media_source_uri", "video_uri"):
+            value.pop(key, None)
+        for nested in value.values():
+            _scrub_media_uri_fields(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _scrub_media_uri_fields(nested)
 
 
 def _resolve_under(root: Path, value: str, *, kind: str) -> Path:
@@ -1524,7 +1555,7 @@ def _event_intervals(
     return intervals, diagnostics
 
 
-def _goal_geometry(  # noqa: C901, PLR0912
+def _goal_geometry(  # noqa: C901, PLR0912, PLR0915
     sources: Sequence[_LoadedSource], scene: _Stream, config: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Return actual goal/completion geometry or explicit unavailable states."""
@@ -1571,6 +1602,43 @@ def _goal_geometry(  # noqa: C901, PLR0912
                 break
         if point is not None and boundary is not None:
             break
+    # ``threejs-viewer.v1`` is canonical for scene geometry.  Its map carries
+    # polygonal robot goal zones rather than a separately named point or
+    # completion boundary.  Preserve every zone and derive the representative
+    # point from the first valid polygon only as a display/metric convenience.
+    if point is None or boundary is None:
+        for source in sources:
+            payload = source.payload
+            map_value = payload.get("map") if isinstance(payload, Mapping) else None
+            zones = map_value.get("robot_goal_zones") if isinstance(map_value, Mapping) else None
+            if not isinstance(zones, list):
+                continue
+            normalized_zones: list[list[list[float]]] = []
+            for zone in zones:
+                if not isinstance(zone, list) or len(zone) < 3:
+                    continue
+                if not all(_valid_scene_point(point_value) for point_value in zone):
+                    continue
+                normalized_zones.append(
+                    [
+                        [_finite_number(point_value[0]), _finite_number(point_value[1])]
+                        for point_value in zone
+                    ]
+                )
+            if not normalized_zones:
+                continue
+            first_zone = normalized_zones[0]
+            if point is None:
+                point = [
+                    sum(point_value[0] for point_value in first_zone) / len(first_zone),
+                    sum(point_value[1] for point_value in first_zone) / len(first_zone),
+                ]
+                point_source = f"{source.ref.artifact_id}:map.robot_goal_zones"
+            if boundary is None:
+                boundary = {"type": "robot_goal_zones", "zones": normalized_zones}
+                boundary_source = f"{source.ref.artifact_id}:map.robot_goal_zones"
+            if point is not None and boundary is not None:
+                break
     if point is None and isinstance(config.get("goal_point"), Sequence):
         candidate = config["goal_point"]
         if len(candidate) >= 2:
@@ -1594,6 +1662,11 @@ def _goal_geometry(  # noqa: C901, PLR0912
         "source": boundary_source or None,
         "reason": "" if boundary is not None else "completion_boundary_not_recorded",
     }
+    goal_zones = (
+        boundary.get("zones")
+        if isinstance(boundary, Mapping) and boundary.get("type") == "robot_goal_zones"
+        else None
+    )
     return {
         "point": point_state,
         "completion_boundary": boundary_state,
@@ -1601,6 +1674,7 @@ def _goal_geometry(  # noqa: C901, PLR0912
         "goal_point_status": point_state["status"],
         "completion_boundary_value": boundary,
         "completion_boundary_status": boundary_state["status"],
+        "goal_zones": goal_zones,
         "coordinate_frame": next(
             (
                 source.identity.get("coordinate_frame")
@@ -1827,41 +1901,63 @@ def _copy_web_component(output_dir: Path) -> Path:
     return destination
 
 
-def _materialize_local_media(  # noqa: C901
+def _materialize_local_media(  # noqa: C901, PLR0915
     document: dict[str, Any], root: Path, output_dir: Path, output_directory: str
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Copy one trusted local media source beside the emitted HTML.
 
     Returns:
-        Emitted media artifact metadata, or an empty list when the URI is not a
-        local source that this offline component can materialize.
+        Emitted media artifact metadata and materialization diagnostics.
     """
 
     stream = document.get("streams", {}).get("video")
     media_uri = stream.get("media_uri") if isinstance(stream, Mapping) else None
     if not isinstance(media_uri, str) or not media_uri:
-        return []
+        return [], []
     value = media_uri.strip()
-    if (
-        not value
-        or value.startswith(("/", "\\", "//"))
-        or ":" in value.split("/", 1)[0]
-        or "?" in value
-        or "#" in value
-        or ".." in Path(value).parts
-        or ".." in PureWindowsPath(value).parts
-    ):
-        return []
     source_ids = stream.get("source_ids", []) if isinstance(stream, Mapping) else []
+    artifact_id = str(source_ids[0]) if source_ids else "video"
+
+    def mark_unavailable(reason: str, reason_code: str) -> list[dict[str, Any]]:
+        diagnostic = {"artifact_id": artifact_id, "reason_code": reason_code}
+        if isinstance(stream, dict):
+            stream["media_uri"] = None
+            stream["status"] = "unavailable"
+            stream["reason"] = reason
+            stream.setdefault("diagnostics", []).append(diagnostic)
+            _scrub_media_uri_fields(stream.get("source_identity"))
+        panels = document.get("panels")
+        surfaces = document.get("surfaces")
+        for container in (panels, surfaces):
+            video = container.get("video") if isinstance(container, Mapping) else None
+            if isinstance(video, dict):
+                video["media_uri"] = None
+                video["status"] = "unavailable"
+                video["reason"] = reason
+        panel_status = document.get("panel_status")
+        if isinstance(panel_status, dict):
+            panel_status["video"] = "unavailable"
+        source_identity = document.get("source_identity")
+        _scrub_media_uri_fields(source_identity)
+        provenance = document.get("provenance")
+        if isinstance(provenance, Mapping):
+            _scrub_media_uri_fields(provenance.get("config"))
+        if document.get("status") == STATUS_COMPLETE:
+            document["status"] = STATUS_PARTIAL
+        return [diagnostic]
+
+    if not value or _unsafe_media_uri(value):
+        return [], mark_unavailable("media_uri_unsafe", "media_uri_unsafe")
     source_identity = document.get("source_identity", {})
     mapping_uri = None
     if source_ids and isinstance(source_identity, Mapping):
         identity = source_identity.get(source_ids[0])
         if isinstance(identity, Mapping):
             mapping_uri = identity.get("uri")
-    candidates = [Path(value)]
+    candidates: list[Path] = []
     if isinstance(mapping_uri, str) and mapping_uri:
         candidates.append(Path(mapping_uri).parent / Path(value))
+    candidates.append(Path(value))
     source_path: Path | None = None
     payload: bytes | None = None
     try:
@@ -1882,7 +1978,7 @@ def _materialize_local_media(  # noqa: C901
     except (OSError, ValueError):
         source_path = None
     if source_path is None or payload is None:
-        return []
+        return [], mark_unavailable("media_source_missing", "media_source_missing")
     digest = _sha256(payload)
     source_name = source_path.name or "media.bin"
     safe_name = (
@@ -1907,13 +2003,16 @@ def _materialize_local_media(  # noqa: C901
     provenance = document.setdefault("provenance", {})
     if isinstance(provenance, dict):
         provenance["media_materialized"] = {"source_uri": media_uri, "uri": safe_uri}
-    return [
-        {
-            "artifact_id": relative_uri.as_posix(),
-            "uri": str(Path(output_directory) / relative_uri),
-            "sha256": digest,
-        }
-    ]
+    return (
+        [
+            {
+                "artifact_id": relative_uri.as_posix(),
+                "uri": str(Path(output_directory) / relative_uri),
+                "sha256": digest,
+            }
+        ],
+        [],
+    )
 
 
 def _panel_document(  # noqa: C901, PLR0912, PLR0915
@@ -1955,6 +2054,17 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
                     "detail": "video requires explicit source_time_s mapping; FPS alignment is forbidden",
                 }
             )
+        if video.media_uri and _unsafe_media_uri(video.media_uri):
+            media_diagnostic = {
+                "artifact_id": video_sources[0].ref.artifact_id,
+                "reason_code": "media_uri_unsafe",
+            }
+            video.status = "unavailable"
+            video.reason = "media_uri_unsafe"
+            video.media_uri = None
+            _scrub_media_uri_fields(video.source_identity)
+            video.diagnostics.append(media_diagnostic)
+            diagnostics.append(media_diagnostic)
     intervals, event_diagnostics = _event_intervals(event_sources)
     diagnostics.extend(event_diagnostics)
     metric_streams, metric_definitions, metric_diagnostics = _metric_streams(metric_sources, config)
@@ -1996,6 +2106,10 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         }
         for source in sources
     }
+    if video.reason == "media_uri_unsafe":
+        for identity in source_identity.values():
+            for key in ("media_uri", "media_source_uri", "video_uri"):
+                identity.pop(key, None)
     visibility = config.get("metric_visibility", config.get("metrics_visible"))
     visibility_declared = visibility is not None
     if isinstance(visibility, Mapping):
@@ -2091,6 +2205,9 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         status = STATUS_UNAVAILABLE
     if missing_required and not any(stream.samples for stream in streams.values()):
         status = STATUS_UNAVAILABLE
+    provenance_config = deepcopy(dict(config))
+    if video.reason == "media_uri_unsafe":
+        _scrub_media_uri_fields(provenance_config)
     document = {
         "schema_version": PANEL_MODEL_SCHEMA_VERSION,
         "component_id": COMPONENT_ID,
@@ -2201,7 +2318,7 @@ def _panel_document(  # noqa: C901, PLR0912, PLR0915
         },
         "provenance": {
             "source_identity": source_identity,
-            "config": dict(config),
+            "config": provenance_config,
             "admission": "not_evaluated",
             "evidence_status": "diagnostic_only",
             "generated_by": COMPONENT_ID,
@@ -2305,7 +2422,9 @@ def _result(
     )
 
 
-def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
+def run(  # noqa: C901
+    request: ComponentRequest, *, base: Path | None = None
+) -> ComponentResult:
     """Build one offline synchronized panel model for a validated request.
 
     Returns:
@@ -2366,7 +2485,14 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             request, sources, request.config, load_diagnostics=load_diagnostics
         )
         document["diagnostics"] = diagnostics
-        emitted = _materialize_local_media(document, root, output_dir, request.output_directory)
+        media_artifacts, media_diagnostics = _materialize_local_media(
+            document, root, output_dir, request.output_directory
+        )
+        if media_diagnostics:
+            diagnostics.extend(media_diagnostics)
+            document["diagnostics"] = diagnostics
+            status = str(document.get("status", status))
+        emitted = media_artifacts
         model_name = f"{PANEL_MODEL_SCHEMA_VERSION}.json"
         model_digest = _write_json(output_dir / model_name, document)
         emitted.append(

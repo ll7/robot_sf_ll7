@@ -72,9 +72,10 @@ function trustedOfflineMediaUri(uri, allowedSchemes = []) {
   } catch (_error) {
     return false;
   }
+  if (decoded.includes("?") || decoded.includes("#") || decoded.includes("\\")) return false;
   const path = decoded.split(/[?#]/, 1)[0];
   if (path.split(/[\\/]/).some((part) => part === "..")) return false;
-  const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1]?.toLowerCase();
+  const scheme = /^([a-z][a-z\d+.-]*):/i.exec(decoded)?.[1]?.toLowerCase();
   if (!scheme) return true;
   return allowedSchemes.some((candidate) => String(candidate).toLowerCase() === scheme);
 }
@@ -441,6 +442,7 @@ export class ReviewPanelsController {
       end,
     };
     this._lastDispatch = null;
+    this._controlCleanups = [];
     this._boundKeyHandler = (event) => this.handleKey(event);
     if (root) this.mount(root);
   }
@@ -458,7 +460,9 @@ export class ReviewPanelsController {
   }
 
   unmount() {
+    const staleRoot = this.root;
     this._pausePlayback();
+    this._clearControlBindings();
     if (this._document?.removeEventListener) {
       this._document.removeEventListener("keydown", this._boundKeyHandler);
     }
@@ -468,8 +472,22 @@ export class ReviewPanelsController {
     this._videoElement?.pause?.();
     this._videoElement = null;
     this._videoTargetTime = null;
+    if (staleRoot?.replaceChildren) {
+      staleRoot.replaceChildren();
+    } else {
+      while (staleRoot?.firstChild) staleRoot.removeChild?.(staleRoot.firstChild);
+    }
     this.root = null;
     return this;
+  }
+
+  _bindControl(target, type, handler) {
+    target?.addEventListener?.(type, handler);
+    this._controlCleanups.push(() => target?.removeEventListener?.(type, handler));
+  }
+
+  _clearControlBindings() {
+    for (const cleanup of this._controlCleanups.splice(0)) cleanup();
   }
 
   snapshot() {
@@ -527,6 +545,12 @@ export class ReviewPanelsController {
     }
   }
 
+  _resetPlaybackAnchor() {
+    this._playbackLastMs = this.state.playing
+      ? finiteNumber(this._now(), this._playbackLastMs ?? 0)
+      : null;
+  }
+
   _startPlayback() {
     if (this.state.playing) return;
     if (this.state.cursorTimeS >= this.state.end) {
@@ -560,7 +584,7 @@ export class ReviewPanelsController {
       const value = finiteNumber(action.time_s);
       if (value === null) return this.snapshot();
       this._applyCursor(value, action.source || "seek", Boolean(action.force_revision));
-      if (this.state.playing) this._playbackLastMs = finiteNumber(this._now(), this._playbackLastMs);
+      this._resetPlaybackAnchor();
       if (this.state.cursorTimeS >= this.state.end) this._pausePlayback();
     } else if (type === "step") {
       const samples = this.model.streams?.scene?.samples || [];
@@ -574,6 +598,7 @@ export class ReviewPanelsController {
           )
         );
         this._applyCursor(Number(samples[index].time_s), action.source || "keyboard", true);
+        this._resetPlaybackAnchor();
       }
     } else if (type === "toggle-play") {
       if (this.state.playing) this._pausePlayback();
@@ -581,7 +606,10 @@ export class ReviewPanelsController {
       this._lastDispatch = { type, source: action.source || "keyboard" };
     } else if (type === "set-speed") {
       const speed = finiteNumber(action.speed);
-      if (speed !== null && speed > 0) this.state.speed = speed;
+      if (speed !== null && speed > 0) {
+        this.state.speed = speed;
+        this._resetPlaybackAnchor();
+      }
       this._lastDispatch = { type, source: action.source || "control" };
     } else if (type === "set-interval") {
       const intervalId = action.interval_id == null ? null : String(action.interval_id);
@@ -595,8 +623,8 @@ export class ReviewPanelsController {
         this.state.end = Number(this.model.time?.terminal_s ?? this.state.start);
       }
       this._applyCursor(clamp(this.state.cursorTimeS, this.state.start, this.state.end), "interval", true);
+      this._resetPlaybackAnchor();
       if (this.state.cursorTimeS >= this.state.end) this._pausePlayback();
-      else if (this.state.playing) this._playbackLastMs = finiteNumber(this._now(), this._playbackLastMs);
       this._lastDispatch = { type, source: action.source || "control" };
     } else if (type === "toggle-metric") {
       const metricId = String(action.metric_id || "");
@@ -611,13 +639,17 @@ export class ReviewPanelsController {
       const target = finiteNumber(candidate);
       if (metric && target !== null) {
         this._applyCursor(target, action.source || "metric", true);
+        this._resetPlaybackAnchor();
       }
     } else if (type === "event-seek") {
       const event = (this.model.events || []).find(
         (candidate) => String(candidate.event_id) === String(action.event_id)
       );
       const target = finiteNumber(event?.seek_time_s ?? event?.start_s);
-      if (event && target !== null) this._applyCursor(target, action.source || "event", true);
+      if (event && target !== null) {
+        this._applyCursor(target, action.source || "event", true);
+        this._resetPlaybackAnchor();
+      }
     }
     if (this.root) this.render();
     return this.snapshot();
@@ -670,6 +702,7 @@ export class ReviewPanelsController {
 
   render() {
     if (!this.root) return;
+    this._clearControlBindings();
     this._sceneMount?.unmount?.();
     this._sceneMount = null;
     this.root.replaceChildren();
@@ -679,13 +712,13 @@ export class ReviewPanelsController {
     const play = documentRef.createElement("button");
     play.type = "button";
     play.textContent = this.state.playing ? "Pause" : "Play";
-    play.addEventListener("click", () => this.dispatch({ type: "toggle-play", source: "control" }));
+    this._bindControl(play, "click", () => this.dispatch({ type: "toggle-play", source: "control" }));
     toolbar.appendChild(play);
     for (const [label, delta] of [["Previous", -1], ["Next", 1]]) {
       const button = documentRef.createElement("button");
       button.type = "button";
       button.textContent = label;
-      button.addEventListener("click", () => this.dispatch({ type: "step", delta, source: "control" }));
+      this._bindControl(button, "click", () => this.dispatch({ type: "step", delta, source: "control" }));
       toolbar.appendChild(button);
     }
     const speed = documentRef.createElement("select");
@@ -696,7 +729,7 @@ export class ReviewPanelsController {
       option.selected = Number(value) === this.state.speed;
       speed.appendChild(option);
     }
-    speed.addEventListener("change", () => this.dispatch({ type: "set-speed", speed: speed.value, source: "control" }));
+    this._bindControl(speed, "change", () => this.dispatch({ type: "set-speed", speed: speed.value, source: "control" }));
     toolbar.appendChild(speed);
     const interval = documentRef.createElement("select");
     const whole = documentRef.createElement("option");
@@ -710,7 +743,7 @@ export class ReviewPanelsController {
       option.selected = item.interval_id === this.state.intervalId;
       interval.appendChild(option);
     }
-    interval.addEventListener("change", () => this.dispatch({ type: "set-interval", interval_id: interval.value || null, source: "control" }));
+    this._bindControl(interval, "change", () => this.dispatch({ type: "set-interval", interval_id: interval.value || null, source: "control" }));
     toolbar.appendChild(interval);
     this.root.appendChild(toolbar);
 
@@ -720,7 +753,7 @@ export class ReviewPanelsController {
     slider.max = String(this.state.end);
     slider.step = "any";
     slider.value = String(this.state.cursorTimeS);
-    slider.addEventListener("input", () => this.dispatch({ type: "seek", time_s: slider.value, source: "scrubber" }));
+    this._bindControl(slider, "input", () => this.dispatch({ type: "seek", time_s: slider.value, source: "scrubber" }));
     this.root.appendChild(slider);
     const cursor = documentRef.createElement("p");
     cursor.className = "muted";
@@ -808,13 +841,13 @@ export class ReviewPanelsController {
           video.preload = "metadata";
           video.className = "review-video";
           if (!video.dataset) video.dataset = {};
-          video.addEventListener?.("loadedmetadata", () => {
-            if (this._videoElement === video && this._videoTargetTime !== null) {
-              this._syncVideo(video, this._videoTargetTime, "available");
-            }
-          });
         }
         if (!video.dataset) video.dataset = {};
+        this._bindControl(video, "loadedmetadata", () => {
+          if (this._videoElement === video && this._videoTargetTime !== null) {
+            this._syncVideo(video, this._videoTargetTime, "available");
+          }
+        });
         if (video.dataset.sourceUri !== uri) {
           video.dataset.sourceUri = uri;
           video.src = uri;
@@ -853,15 +886,15 @@ export class ReviewPanelsController {
       const toggle = documentRef.createElement("input");
       toggle.type = "checkbox";
       toggle.checked = metric.visible;
-      toggle.addEventListener("click", (event) => event.stopPropagation());
-      toggle.addEventListener("change", () => this.dispatch({ type: "toggle-metric", metric_id: metricId, source: "control" }));
+      this._bindControl(toggle, "click", (event) => event.stopPropagation());
+      this._bindControl(toggle, "change", () => this.dispatch({ type: "toggle-metric", metric_id: metricId, source: "control" }));
       row.appendChild(toggle);
       const label = documentRef.createElement("span");
       const unit = metric.unit || "unit unavailable";
       const current = metric.current;
       label.textContent = `${metric.label} [${unit}] — ${current.status === "available" ? displayMetricValue(current.value) : `missing (${current.reason})`}`;
       row.appendChild(label);
-      row.addEventListener("click", (event) => {
+      this._bindControl(row, "click", (event) => {
         if (event.target === toggle) return;
         this.dispatch({ type: "metric-seek", metric_id: metricId, source: "metric" });
       });
@@ -876,7 +909,7 @@ export class ReviewPanelsController {
           point.dataset.timeS = String(sample.time_s);
           point.title = `${metric.label} at source time ${sample.time_s}`;
           point.textContent = "●";
-          point.addEventListener("click", (event) => {
+          this._bindControl(point, "click", (event) => {
             event.stopPropagation();
             this.dispatch({ type: "metric-seek", metric_id: metricId, time_s: sample.time_s, source: "metric-sample" });
           });
@@ -905,7 +938,7 @@ export class ReviewPanelsController {
       const button = documentRef.createElement("button");
       button.type = "button";
       button.textContent = `${event.event_type} ${event.start_s}–${event.end_s}${event.selected ? " (selected)" : ""}`;
-      button.addEventListener("click", () => this.dispatch({ type: "event-seek", event_id: event.event_id, source: "event" }));
+      this._bindControl(button, "click", () => this.dispatch({ type: "event-seek", event_id: event.event_id, source: "event" }));
       section.appendChild(button);
     }
     if (!this.model.events?.length) {

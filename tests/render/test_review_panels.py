@@ -484,6 +484,95 @@ def test_scene_and_video_surface_metadata_are_available_offline(tmp_path: Path) 
     assert any(artifact["uri"].endswith(media_uri) for artifact in result.artifacts)
 
 
+def test_canonical_scene_goal_zones_populate_goal_geometry(tmp_path: Path) -> None:
+    zone = [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0], [1.0, 4.0]]
+    (tmp_path / "scene.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "threejs-viewer.v1",
+                "map": {"robot_goal_zones": [zone]},
+                "frames": [{"time_s": 1.0, "robot": {"position": [0.0, 0.0]}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = review_panels.run(
+        _request(
+            tmp_path,
+            output="out",
+            sources=[{"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"}],
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "complete"
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["goal_geometry"]["goal_point"] == [2.0, 3.0]
+    assert document["goal_geometry"]["goal_point_status"] == "available"
+    boundary = document["goal_geometry"]["completion_boundary"]["value"]
+    assert boundary["type"] == "robot_goal_zones"
+    assert boundary["zones"] == [zone]
+    assert document["goal_geometry"]["completion_boundary_status"] == "available"
+
+
+@pytest.mark.parametrize(
+    "media_uri, reason_code",
+    [
+        ("file:///tmp/clip.mp4", "media_uri_unsafe"),
+        ("//host/clip.mp4", "media_uri_unsafe"),
+        ("ftp://host/clip.mp4", "media_uri_unsafe"),
+        ("javascript:alert(1)", "media_uri_unsafe"),
+        ("https://host/clip.mp4", "media_uri_unsafe"),
+        ("/tmp/clip.mp4", "media_uri_unsafe"),
+        ("../clip.mp4", "media_uri_unsafe"),
+        ("%2e%2e/clip.mp4", "media_uri_unsafe"),
+        ("clip.mp4?download=1", "media_uri_unsafe"),
+        ("clip.mp4#fragment", "media_uri_unsafe"),
+        (r"folder\clip.mp4", "media_uri_unsafe"),
+        ("missing-clip.mp4", "media_source_missing"),
+    ],
+)
+def test_media_materialization_failures_are_partial_and_scrubbed(
+    tmp_path: Path, media_uri: str, reason_code: str
+) -> None:
+    (tmp_path / "scene.json").write_text(
+        json.dumps({"schema_version": "threejs-viewer.v1", "frames": [{"time_s": 1.0}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "video-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "media-mapping.v1",
+                "media_uri": media_uri,
+                "entries": [{"source_t_s": 1.0, "pts_s": 0.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = review_panels.run(
+        _request(
+            tmp_path,
+            output="out",
+            sources=[
+                {"artifact_id": "scene", "uri": "scene.json", "format": "threejs-viewer.v1"},
+                {"artifact_id": "video", "uri": "video-map.json", "format": "media-mapping.v1"},
+            ],
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "partial"
+    assert result.artifacts == ()
+    document = json.loads((tmp_path / "out" / "review-panels.v1.json").read_text())
+    assert document["status"] == "partial"
+    assert document["panel_status"]["video"] == "unavailable"
+    assert document["streams"]["video"]["media_uri"] is None
+    assert document["panels"]["video"]["media_uri"] is None
+    assert "media_uri" not in document["streams"]["video"]["source_identity"]
+    assert any(diagnostic["reason_code"] == reason_code for diagnostic in result.diagnostics)
+
+
 def test_malformed_scene_geometry_is_partial_with_diagnostics(tmp_path: Path) -> None:
     (tmp_path / "scene.json").write_text(
         json.dumps(

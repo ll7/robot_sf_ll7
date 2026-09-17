@@ -176,6 +176,50 @@ playback.dispatch({ type: "set-speed", speed: 2 });
 now = 1500;
 playback.tick(now);
 assert.equal(playback.state.cursorTimeS, 2);
+
+now = 0;
+const controlClock = new ReviewPanelsController(model(), null, {
+  now: () => now,
+  scheduler,
+});
+controlClock.dispatch({ type: "toggle-play" });
+now = 1000;
+controlClock.tick(now);
+assert.equal(controlClock.state.cursorTimeS, 1);
+now = 1500;
+controlClock.dispatch({ type: "set-speed", speed: 2 });
+now = 2500;
+controlClock.tick(now);
+assert.equal(controlClock.state.cursorTimeS, 3);
+now = 3000;
+controlClock.dispatch({ type: "metric-seek", metric_id: "clearance", time_s: 1 });
+now = 3500;
+controlClock.tick(now);
+assert.equal(controlClock.state.cursorTimeS, 2);
+controlClock.dispatch({ type: "step", delta: -1 });
+now = 4000;
+controlClock.tick(now);
+assert.equal(controlClock.state.cursorTimeS, 2);
+controlClock.unmount();
+
+const eventClockModel = model();
+eventClockModel.events = [{ event_id: "near-miss", start_s: 2, end_s: 2.5, seek_time_s: 2 }];
+now = 4000;
+const eventClock = new ReviewPanelsController(eventClockModel, null, {
+  now: () => now,
+  scheduler,
+});
+eventClock.dispatch({ type: "toggle-play" });
+now = 5000;
+eventClock.tick(now);
+assert.equal(eventClock.state.cursorTimeS, 1);
+now = 5500;
+eventClock.dispatch({ type: "event-seek", event_id: "near-miss" });
+now = 6000;
+eventClock.tick(now);
+assert.equal(eventClock.state.cursorTimeS, 2.5);
+eventClock.unmount();
+
 playback.dispatch({ type: "toggle-play" });
 assert.equal(playback.state.playing, false);
 assert.ok(cancelled.size >= 1);
@@ -226,6 +270,17 @@ assert.equal(controllerA.snapshot().metrics.clearance.visible, false);
 assert.equal(findAll(rootA, (element) => element.className === "metric-sample").length, 0);
 controllerA.unmount();
 assert.equal(documentRef.listeners.get("keydown").length, 1);
+assert.equal(rootA.children.length, 0);
+controllerA.mount(rootA);
+assert.equal(documentRef.listeners.get("keydown").length, 2);
+assert.equal(findAll(rootA, (element) => element.tagName === "CANVAS").length, 1);
+assert.equal(findAll(rootA, (element) => element.tagName === "VIDEO").length, 1);
+const staleControl = findAll(rootA, (element) => element.tagName === "BUTTON")[0];
+controllerA.unmount();
+assert.equal(rootA.children.length, 0);
+assert.equal(documentRef.listeners.get("keydown").length, 1);
+staleControl.emit("click");
+assert.equal(controllerA.state.playing, false);
 
 const intervalModel = model();
 intervalModel.context = {
@@ -256,6 +311,10 @@ for (const uri of [
   "https://host/clip.mp4",
   "/tmp/clip.mp4",
   "../clip.mp4",
+  "%2e%2e/clip.mp4",
+  "clip.mp4?download=1",
+  "clip.mp4#fragment",
+  "folder\\clip.mp4",
 ]) {
   const unsafeRoot = new FakeElement(documentRef, "main");
   const unsafeModel = model();

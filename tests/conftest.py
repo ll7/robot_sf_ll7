@@ -472,6 +472,9 @@ _FAST_FILES = {
     # Paired-effect metric-contract tests are deterministic schema, provenance,
     # and materialization coverage for the native counterfactual producer.
     "test_paired_effect_metric_contract.py",
+    # Offline synchronized review-panel contract and runtime-model tests are
+    # deterministic coverage for the SREV-16 renderer component.
+    "test_review_panels.py",
     # Operational-quantities tests are deterministic synthetic arithmetic
     # coverage for the changed benchmark producer (issue #9350).
     "test_operational_quantities.py",

@@ -147,6 +147,21 @@ def test_goal_zone_entry_completion_rejects_outside_position():
     assert not navi.reached_destination
 
 
+def test_legacy_waypoint_policy_ignores_degenerate_goal_zone_placeholder():
+    """Legacy replay payloads keep waypoint-radius semantics with point placeholders."""
+    placeholder = ((7.0, 5.0), (7.0, 5.0), (7.0, 5.0))
+    navi = RouteNavigator(
+        [(0.0, 0.0), (7.0, 5.0)],
+        goal_zone=placeholder,
+    )
+
+    navi.new_route([(0.0, 0.0), (7.0, 5.0)], goal_zone=placeholder)
+    navi.update_position((7.0, 5.0))
+
+    assert navi.goal_zone is None
+    assert navi.reached_destination
+
+
 def test_goal_completion_policy_fails_closed_for_unknown_or_missing_goal_zone():
     """Unknown policies and unbound goal-zone policies must not silently downgrade."""
     with pytest.raises(ValueError, match="Unknown goal_completion_policy"):

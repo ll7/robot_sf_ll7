@@ -426,10 +426,19 @@ class RouteNavigator:
     def __post_init__(self) -> None:
         """Validate the versioned success policy and any initial goal binding."""
         self.completion_policy = normalize_goal_completion_policy(self.completion_policy)
-        self.goal_zone = _validate_goal_zone(self.goal_zone)
         if self.completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1:
+            self.goal_zone = _validate_goal_zone(self.goal_zone)
             if self.waypoints and self.goal_zone is None:
                 raise ValueError("goal_zone_entry_v1 requires a goal_zone bound to the route")
+        elif self.goal_zone is not None:
+            # Historical waypoint-radius runs do not use a goal-zone predicate.  Some
+            # generated-replay inputs carry a point-like placeholder in this metadata
+            # field; retain valid bindings for diagnostics but ignore malformed legacy
+            # values so the historical completion contract remains unchanged.
+            try:
+                self.goal_zone = _validate_goal_zone(self.goal_zone)
+            except ValueError:
+                self.goal_zone = None
 
     @property
     def uses_goal_zone_completion(self) -> bool:
@@ -555,9 +564,19 @@ class RouteNavigator:
             spawn_id: Source route spawn-zone identifier, when available.
             goal_id: Source route goal-zone identifier, when available.
         """
-        normalized_goal_zone = _validate_goal_zone(goal_zone)
-        if self.uses_goal_zone_completion and normalized_goal_zone is None:
-            raise ValueError("goal_zone_entry_v1 requires a goal_zone bound to the route")
+        if self.uses_goal_zone_completion:
+            normalized_goal_zone = _validate_goal_zone(goal_zone)
+            if normalized_goal_zone is None:
+                raise ValueError("goal_zone_entry_v1 requires a goal_zone bound to the route")
+        elif goal_zone is not None:
+            # Preserve legacy waypoint-radius behavior for old replay payloads that
+            # use a degenerate point placeholder instead of a rectangle.
+            try:
+                normalized_goal_zone = _validate_goal_zone(goal_zone)
+            except ValueError:
+                normalized_goal_zone = None
+        else:
+            normalized_goal_zone = None
         self.waypoints = (
             _resolve_spawn_handoff_route(
                 route,

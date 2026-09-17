@@ -934,6 +934,7 @@ def test_unknown_verification_variant_still_rejected() -> None:
         "Inputs / Predecessors",
         "Inputs / Prerequisites",
         "Inputs and Canonical Owners",
+        "Inputs and Existing Owners",
     ],
 )
 def test_compound_inputs_heading_aliases_satisfy_inputs(heading: str) -> None:
@@ -961,6 +962,7 @@ def test_bare_acceptance_heading_satisfies_acceptance() -> None:
     [
         "Scope and Non-goals",
         "Scope / Non-goals",
+        "Scope and Implementation Plan",
     ],
 )
 def test_compound_scope_heading_aliases_satisfy_scope(heading: str) -> None:

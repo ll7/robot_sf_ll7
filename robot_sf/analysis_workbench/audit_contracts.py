@@ -57,6 +57,7 @@ SOURCE_PROVENANCE_MUTATED = "mutated"
 SOURCE_PROVENANCE_UNAVAILABLE = "unavailable"
 
 _DIGEST_LENGTHS = {40, 64}
+_IMAGE_DIMENSION_LIMIT = 100_000_000
 _T = TypeVar("_T")
 AUDIT_RECORD_SCHEMA_FILE = Path(__file__).with_name("schemas") / "audit_record.v1.json"
 
@@ -98,6 +99,14 @@ def _finite(value: Any, *, name: str) -> float:
     if not math.isfinite(result):
         raise AuditContractError(f"{name} must be a finite number")
     return result
+
+
+def _dimension(value: Any, *, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AuditContractError(f"{name} must be a positive integer")
+    if value < 1 or value > _IMAGE_DIMENSION_LIMIT:
+        raise AuditContractError(f"{name} must be between 1 and {_IMAGE_DIMENSION_LIMIT}")
+    return value
 
 
 def _digest(value: Any, *, name: str, required: bool = False) -> str:
@@ -155,6 +164,25 @@ def _jsonable(value: Any) -> Any:
     raise AuditContractError(f"unsupported value in audit record: {type(value).__name__}")
 
 
+def _strict_json_values(value: Any, *, path: str = "$") -> None:
+    """Reject non-finite values before schema validation or typed construction."""
+
+    if isinstance(value, float) and not math.isfinite(value):
+        raise AuditContractError(f"{path} contains a non-finite number")
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise AuditContractError(f"{path} contains a non-string field name")
+            _strict_json_values(item, path=f"{path}.{key}")
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        for index, item in enumerate(value):
+            _strict_json_values(item, path=f"{path}[{index}]")
+
+
+def _reject_json_constant(token: str) -> Any:
+    raise AuditContractError(f"invalid audit JSON constant: {token}")
+
+
 def canonical_json(value: Any) -> str:
     """Serialize a record deterministically for digests and NDJSON writes.
 
@@ -201,6 +229,7 @@ def _validate_record_payload(payload: Mapping[str, Any]) -> None:
 
     if not isinstance(payload, Mapping):
         raise AuditContractError("record payload must be a mapping")
+    _strict_json_values(payload)
     if "schema_version" not in payload:
         raise AuditContractError("record schema_version is required")
     version = payload["schema_version"]
@@ -397,10 +426,151 @@ class CampaignAudit:
         """Validate campaign-level identity and source metadata."""
 
         _text(self.audit_id, name="audit_id")
-        _digest(self.campaign_digest, name="campaign_digest", required=True)
-        _digest(self.source_digest, name="source_digest", required=True)
+        campaign_digest = _digest(self.campaign_digest, name="campaign_digest", required=True)
+        source_digest = _digest(self.source_digest, name="source_digest", required=True)
         _check_record_version(self.schema_version)
-        _coerce_source(self.source)
+        source = _coerce_source(self.source)
+        source_sha256 = _source_sha256(source)
+        if source_sha256 and source_sha256 != source_digest:
+            raise AuditIdentityError("source_digest does not match source.sha256")
+        object.__setattr__(self, "campaign_digest", campaign_digest)
+        object.__setattr__(self, "source_digest", source_digest)
+        object.__setattr__(self, "source", source)
+
+
+@dataclass(frozen=True, slots=True)
+class ImageDisplayTransform:
+    """Closed transform between source-image and displayed crop coordinates.
+
+    Coordinates are kept as exact floating-point affine values; no pixel
+    rounding is applied.  This makes a source/display/source round trip
+    reversible while the dimensions and crop are still bounded and typed.
+    """
+
+    source_width: int
+    source_height: int
+    display_width: int
+    display_height: int
+    crop_x: float = 0.0
+    crop_y: float = 0.0
+    crop_width: float | None = None
+    crop_height: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate dimensions and the crop rectangle."""
+
+        source_width = _dimension(self.source_width, name="source_width")
+        source_height = _dimension(self.source_height, name="source_height")
+        display_width = _dimension(self.display_width, name="display_width")
+        display_height = _dimension(self.display_height, name="display_height")
+        crop_x = _finite(self.crop_x, name="crop_x")
+        crop_y = _finite(self.crop_y, name="crop_y")
+        crop_width = (
+            float(source_width)
+            if self.crop_width is None
+            else _finite(self.crop_width, name="crop_width")
+        )
+        crop_height = (
+            float(source_height)
+            if self.crop_height is None
+            else _finite(self.crop_height, name="crop_height")
+        )
+        if crop_x < 0 or crop_y < 0 or crop_width <= 0 or crop_height <= 0:
+            raise AuditContractError(
+                "crop rectangle must have finite non-negative origin and positive size"
+            )
+        if crop_x + crop_width > source_width or crop_y + crop_height > source_height:
+            raise AuditContractError("crop rectangle must be contained in the source image")
+        object.__setattr__(self, "source_width", source_width)
+        object.__setattr__(self, "source_height", source_height)
+        object.__setattr__(self, "display_width", display_width)
+        object.__setattr__(self, "display_height", display_height)
+        object.__setattr__(self, "crop_x", crop_x)
+        object.__setattr__(self, "crop_y", crop_y)
+        object.__setattr__(self, "crop_width", crop_width)
+        object.__setattr__(self, "crop_height", crop_height)
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> ImageDisplayTransform:
+        """Build a transform while rejecting opaque or unknown fields.
+
+        Returns:
+            A validated closed transform.
+        """
+
+        if not isinstance(value, Mapping):
+            raise AuditContractError("image calibration must be a transform mapping")
+        allowed = {
+            "source_width",
+            "source_height",
+            "display_width",
+            "display_height",
+            "crop_x",
+            "crop_y",
+            "crop_width",
+            "crop_height",
+        }
+        unknown = set(value) - allowed
+        if unknown:
+            raise AuditContractError(
+                f"image calibration transform contains unknown fields: {', '.join(sorted(unknown))}"
+            )
+        required = {"source_width", "source_height", "display_width", "display_height"}
+        missing = required - set(value)
+        if missing:
+            raise AuditContractError(
+                f"image calibration transform is missing fields: {', '.join(sorted(missing))}"
+            )
+        try:
+            return cls(**{name: value[name] for name in allowed if name in value})
+        except (TypeError, ValueError, KeyError) as exc:
+            raise AuditContractError(f"invalid image calibration transform: {exc}") from exc
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the closed transform mapping used in canonical records."""
+
+        return {
+            "source_width": self.source_width,
+            "source_height": self.source_height,
+            "display_width": self.display_width,
+            "display_height": self.display_height,
+            "crop_x": self.crop_x,
+            "crop_y": self.crop_y,
+            "crop_width": self.crop_width,
+            "crop_height": self.crop_height,
+        }
+
+    @staticmethod
+    def _point(point: Sequence[Any], *, name: str) -> tuple[float, float]:
+        if isinstance(point, (str, bytes)) or len(point) != 2:
+            raise AuditContractError(f"{name} must contain exactly two coordinates")
+        return (_finite(point[0], name=f"{name}[0]"), _finite(point[1], name=f"{name}[1]"))
+
+    def source_to_display(self, point: Sequence[Any]) -> tuple[float, float]:
+        """Map a source-image point into the displayed crop.
+
+        Returns:
+            The displayed coordinates.
+        """
+
+        x, y = self._point(point, name="source point")
+        return (
+            (x - self.crop_x) * self.display_width / self.crop_width,
+            (y - self.crop_y) * self.display_height / self.crop_height,
+        )
+
+    def display_to_source(self, point: Sequence[Any]) -> tuple[float, float]:
+        """Map a displayed crop point back to source-image coordinates.
+
+        Returns:
+            The source-image coordinates.
+        """
+
+        x, y = self._point(point, name="display point")
+        return (
+            x * self.crop_width / self.display_width + self.crop_x,
+            y * self.crop_height / self.display_height + self.crop_y,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -433,6 +603,35 @@ class Signal:
             object.__setattr__(self, "interval", _interval(self.interval))
 
 
+def _world_calibration(value: Mapping[str, Any] | ImageDisplayTransform | None) -> dict[str, Any]:
+    """Validate the explicit mapping shape required for media-world coordinates.
+
+    Returns:
+        A shallow copy of the validated calibration mapping.
+    """
+
+    if not isinstance(value, Mapping):
+        raise AuditContractError(
+            "media-world calibration must be a mapping with kind, version, and parameters"
+        )
+    allowed = {"kind", "version", "parameters"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise AuditContractError(
+            f"media-world calibration contains unknown fields: {', '.join(sorted(unknown))}"
+        )
+    if not isinstance(value.get("kind"), str) or not value["kind"].strip():
+        raise AuditContractError("media-world calibration kind is required")
+    version = value.get("version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise AuditContractError("media-world calibration version must be a positive integer")
+    parameters = value.get("parameters")
+    if not isinstance(parameters, Mapping) or not parameters:
+        raise AuditContractError("media-world calibration parameters must be a non-empty mapping")
+    _strict_json_values(parameters)
+    return dict(value)
+
+
 @dataclass(frozen=True, slots=True)
 class Reference:
     """A source-bound spatial/metric/event reference.
@@ -448,44 +647,98 @@ class Reference:
     source: SourceRef | None = None
     timestamp_s: float | None = None
     source_revision: str = ""
-    calibration: Mapping[str, Any] | None = None
+    calibration: Mapping[str, Any] | ImageDisplayTransform | None = None
     actor_id: str = ""
     object_id: str = ""
     goal_id: str = ""
     waypoint_id: str = ""
     metric_id: str = ""
     event_id: str = ""
+    source_point: tuple[float, float] | None = None
+    seek_identity: str = ""
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         """Validate coordinates and reject uncalibrated video-world rebinding."""
 
         _text(self.reference_id, name="reference_id")
         if self.coordinate_frame not in COORDINATE_FRAMES:
             raise AuditContractError(f"coordinate_frame must be one of {COORDINATE_FRAMES}")
-        if len(self.point) != 2:
+        if isinstance(self.point, (str, bytes)) or len(self.point) != 2:
             raise AuditContractError("reference point must contain exactly two coordinates")
         point = (
             _finite(self.point[0], name="reference.point[0]"),
             _finite(self.point[1], name="reference.point[1]"),
         )
         source = _coerce_source(self.source)
-        if self.timestamp_s is not None:
-            _finite(self.timestamp_s, name="reference.timestamp_s")
+        timestamp = (
+            None
+            if self.timestamp_s is None
+            else _finite(self.timestamp_s, name="reference.timestamp_s")
+        )
+        source_revision = _optional_text(self.source_revision, name="reference.source_revision")
+        if source is not None and source.source_commit and source_revision:
+            if source_revision != source.source_commit:
+                raise AuditIdentityError("reference source_revision does not match source_ref")
+        seek_identity = _optional_text(self.seek_identity, name="reference.seek_identity")
+        source_point = self.source_point
+        if source_point is None:
+            source_point = point if self.coordinate_frame == "image" else None
+        elif isinstance(source_point, (str, bytes)) or len(source_point) != 2:
+            raise AuditContractError("reference source_point must contain exactly two coordinates")
+        if source_point is not None:
+            source_point = (
+                _finite(source_point[0], name="reference.source_point[0]"),
+                _finite(source_point[1], name="reference.source_point[1]"),
+            )
+        calibration = self.calibration
+        if calibration is not None and not isinstance(
+            calibration, (Mapping, ImageDisplayTransform)
+        ):
+            raise AuditContractError("reference calibration must be a typed transform mapping")
+        if self.coordinate_frame == "image" and calibration is not None:
+            calibration = (
+                calibration
+                if isinstance(calibration, ImageDisplayTransform)
+                else ImageDisplayTransform.from_mapping(calibration)
+            )
         if self.coordinate_frame == "world" and source is not None:
             media_format = source.format.lower().strip()
             is_media = (
                 media_format.startswith("video/")
                 or media_format.startswith("image/")
                 or media_format.startswith("video-")
-                or media_format in {"video", "mp4", "webm", "image", "png", "jpg", "jpeg"}
+                or media_format
+                in {
+                    "video",
+                    "mp4",
+                    "webm",
+                    "image",
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "video-mp4.v1",
+                    "image/jpeg",
+                }
             )
             if is_media:
                 if not self.calibration:
                     raise AuditContractError(
                         "world coordinates on uncalibrated video are not allowed; provide calibration"
                     )
+                calibration = _world_calibration(calibration)
         object.__setattr__(self, "point", point)
         object.__setattr__(self, "source", source)
+        object.__setattr__(self, "timestamp_s", timestamp)
+        object.__setattr__(self, "source_revision", source_revision)
+        object.__setattr__(self, "source_point", source_point)
+        object.__setattr__(self, "seek_identity", seek_identity)
+        object.__setattr__(self, "calibration", calibration)
+
+    @property
+    def source_coordinates(self) -> tuple[float, float] | None:
+        """Return source-image coordinates without replacing them by display coordinates."""
+
+        return self.source_point
 
 
 @dataclass(frozen=True, slots=True)
@@ -934,7 +1187,7 @@ def reference_from_dict(payload: Mapping[str, Any]) -> Reference:
         point=tuple(payload["point"]),
         source=_source_from_payload(payload.get("source")),
         timestamp_s=payload.get("timestamp_s"),
-        source_revision=str(payload.get("source_revision", "")),
+        source_revision=payload.get("source_revision", ""),
         calibration=payload.get("calibration"),
         actor_id=str(payload.get("actor_id", "")),
         object_id=str(payload.get("object_id", "")),
@@ -942,6 +1195,10 @@ def reference_from_dict(payload: Mapping[str, Any]) -> Reference:
         waypoint_id=str(payload.get("waypoint_id", "")),
         metric_id=str(payload.get("metric_id", "")),
         event_id=str(payload.get("event_id", "")),
+        source_point=(
+            tuple(payload["source_point"]) if payload.get("source_point") is not None else None
+        ),
+        seek_identity=str(payload.get("seek_identity", "")),
     )
 
 
@@ -1133,9 +1390,16 @@ def deserialize_record(value: str | bytes | Mapping[str, Any]) -> Any:
     """
 
     try:
-        payload = json.loads(value) if isinstance(value, (str, bytes)) else value
+        payload = (
+            json.loads(value, parse_constant=_reject_json_constant)
+            if isinstance(value, (str, bytes))
+            else value
+        )
+        _strict_json_values(payload)
     except (TypeError, ValueError, UnicodeDecodeError) as exc:
         raise AuditContractError(f"invalid audit JSON: {exc}") from exc
+    except AuditContractError:
+        raise
     try:
         return record_from_dict(payload)
     except AuditContractError:
@@ -1169,19 +1433,35 @@ def write_ndjson(records: Sequence[Any], path: str | Path) -> Path:
     record_list = list(records)
     if not record_list:
         output.parent.mkdir(parents=True, exist_ok=True)
-        AuditStore(output.parent).close()
+        with AuditStore(output.parent):
+            pass
         return output
     payloads = [record_to_dict(record) for record in record_list]
-    operation_id = "ndjson-" + hashlib.sha256(canonical_json(payloads).encode()).hexdigest()
+    record_ids = [record_id(record) for record in record_list]
+    if len(set(record_ids)) != len(record_ids):
+        raise AuditContractError("NDJSON writes cannot contain duplicate record IDs")
     with AuditStore(output.parent) as store:
+        current = {rid: store.get(rid, include_deleted=True) for rid in record_ids}
+        if all(
+            item is not None
+            and not item.deleted
+            and item.record is not None
+            and canonical_json(record_to_dict(item.record)) == canonical_json(payload)
+            for item, payload in zip(current.values(), payloads, strict=True)
+        ) and len(current) == len(payloads):
+            return output
         expected = {
-            record_id(record): store.get_revision(record_id(record)) for record in record_list
+            rid: (stored.revision if stored is not None else 0) for rid, stored in current.items()
         }
+        operation_payload = {"records": payloads, "expected_revisions": expected}
+        operation_id = (
+            "ndjson-" + hashlib.sha256(canonical_json(operation_payload).encode()).hexdigest()
+        )
         store.commit(record_list, operation_id=operation_id, expected_revisions=expected)
     return output
 
 
-def read_ndjson(path: str | Path) -> list[Any]:
+def read_ndjson(path: str | Path) -> list[Any]:  # noqa: C901
     """Read and validate every complete canonical record in an NDJSON file.
 
     Returns:
@@ -1193,6 +1473,38 @@ def read_ndjson(path: str | Path) -> list[Any]:
     except (OSError, UnicodeDecodeError) as exc:
         raise AuditContractError(f"cannot read NDJSON: {exc}") from exc
     records: list[Any] = []
+    first_payload: Mapping[str, Any] | None = None
+    for line in lines:
+        if line.strip():
+            try:
+                candidate = json.loads(line, parse_constant=_reject_json_constant)
+            except (TypeError, ValueError, UnicodeDecodeError, AuditContractError) as exc:
+                raise AuditContractError(f"invalid NDJSON record at line 1: {exc}") from exc
+            if isinstance(candidate, Mapping):
+                first_payload = candidate
+            break
+    if first_payload is not None and first_payload.get("kind") == "header":
+        if first_payload.get("schema_version") != AUDIT_JOURNAL_SCHEMA_VERSION:
+            raise AuditContractError("unsupported audit journal schema")
+        from robot_sf.analysis_workbench.audit_store import AuditStore, AuditStoreError  # noqa: PLC0415
+
+        try:
+            with AuditStore(Path(path).parent) as store:
+                latest: dict[str, Any | None] = {}
+                order: list[str] = []
+                for transaction in store.journal():
+                    for change in transaction["changes"]:
+                        rid = str(change["record_id"])
+                        if rid not in order:
+                            order.append(rid)
+                        latest[rid] = (
+                            record_from_dict(change["record"])
+                            if change["record"] is not None
+                            else None
+                        )
+                return [latest[rid] for rid in order if latest.get(rid) is not None]
+        except (AuditStoreError, OSError, AuditContractError) as exc:
+            raise AuditContractError(f"invalid audit journal: {exc}") from exc
     for line_number, line in enumerate(lines, 1):
         if not line.strip():
             continue
@@ -1244,6 +1556,7 @@ __all__ = [
     "CampaignAudit",
     "EpisodeRef",
     "Finding",
+    "ImageDisplayTransform",
     "Reference",
     "ReviewPacket",
     "ReviewRecord",

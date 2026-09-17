@@ -8,11 +8,13 @@ browser and agent clients cannot append independently or lose a revision.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
 import shutil
 import sqlite3
+import sys
 import tempfile
 import threading
 import uuid
@@ -272,6 +274,10 @@ def _digest_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _reject_json_constant(token: str) -> Any:
+    raise AuditExportError(f"non-finite JSON constant is not allowed: {token}")
+
+
 def _mapping(value: Any, *, name: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise AuditStoreError(f"{name} must be a mapping")
@@ -299,6 +305,7 @@ class AuditStore:
         *,
         projection_failure_hook: Callable[[Mapping[str, Any]], None] | None = None,
         fail_after_journal_once: bool = False,
+        recover_incomplete: bool = True,
     ) -> None:
         """Open or create a canonical store at ``root``.
 
@@ -306,6 +313,7 @@ class AuditStore:
             root: Directory containing canonical and projected artifacts.
             projection_failure_hook: Optional fault-injection callback.
             fail_after_journal_once: Simulate one crash before projection.
+            recover_incomplete: Recover a partial final journal line when true.
         """
 
         self.root = Path(root)
@@ -315,11 +323,12 @@ class AuditStore:
         self.lock_path = self.root / self.LOCK_FILENAME
         self._projection_failure_hook = projection_failure_hook
         self._fail_after_journal_once = fail_after_journal_once
+        self._recover_incomplete = recover_incomplete
         self._closed = False
         self._ensure_header()
         self._connection = self._open_connection()
         with _PathLock(self.lock_path):
-            self._read_journal(recover=True)
+            self._read_journal(recover=self._recover_incomplete)
             self._ensure_projection_locked()
 
     def __enter__(self) -> AuditStore:
@@ -410,7 +419,7 @@ class AuditStore:
         connection.commit()
         return connection
 
-    def _read_journal(  # noqa: C901
+    def _read_journal(  # noqa: C901, PLR0912
         self, *, recover: bool = False
     ) -> tuple[dict[str, Any], list[_JournalTransaction], int, bytes]:
         """Read canonical transactions and truncate only an incomplete tail.
@@ -433,8 +442,8 @@ class AuditStore:
             is_complete = line.endswith(b"\n")
             content = line[:-1] if is_complete else line
             try:
-                payload = json.loads(content.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                payload = json.loads(content.decode("utf-8"), parse_constant=_reject_json_constant)
+            except (UnicodeDecodeError, json.JSONDecodeError, AuditExportError) as exc:
                 if index == len(lines) - 1 and not is_complete and recover:
                     break
                 raise AuditCorruptionError(f"invalid canonical line {index + 1}: {exc}") from exc
@@ -446,6 +455,17 @@ class AuditStore:
                     or payload.get("schema_version") != AUDIT_JOURNAL_SCHEMA_VERSION
                 ):
                     raise AuditCorruptionError("canonical journal header is invalid")
+                unknown_header = set(payload) - {
+                    "schema_version",
+                    "kind",
+                    "store_id",
+                    "created_at",
+                }
+                if unknown_header:
+                    raise AuditCorruptionError(
+                        "canonical journal header contains unknown fields: "
+                        + ", ".join(sorted(unknown_header))
+                    )
                 header = dict(payload)
             else:
                 try:
@@ -483,6 +503,21 @@ class AuditStore:
     def _transaction_from_dict(  # noqa: C901, PLR0912
         self, payload: Mapping[str, Any]
     ) -> _JournalTransaction:
+        unknown = set(payload) - {
+            "schema_version",
+            "kind",
+            "operation_id",
+            "global_revision",
+            "committed_at",
+            "expected_revisions",
+            "changes",
+            "request_digest",
+            "actor",
+        }
+        if unknown:
+            raise AuditStoreError(
+                "transaction contains unknown fields: " + ", ".join(sorted(unknown))
+            )
         if payload.get("kind") != "transaction":
             raise AuditStoreError("unexpected canonical entry kind")
         if payload.get("schema_version") != AUDIT_JOURNAL_SCHEMA_VERSION:
@@ -501,6 +536,18 @@ class AuditStore:
         for raw_change in raw_changes:
             if not isinstance(raw_change, Mapping):
                 raise AuditStoreError("transaction change is not an object")
+            unknown_change = set(raw_change) - {
+                "record_id",
+                "record_type",
+                "revision",
+                "deleted",
+                "record",
+            }
+            if unknown_change:
+                raise AuditStoreError(
+                    "transaction change contains unknown fields: "
+                    + ", ".join(sorted(unknown_change))
+                )
             rid = raw_change.get("record_id")
             kind = raw_change.get("record_type")
             revision = raw_change.get("revision")
@@ -1275,7 +1322,7 @@ class AuditStore:
             visit(transaction.to_dict())
 
     @classmethod
-    def restore(  # noqa: C901
+    def restore(  # noqa: C901, PLR0912, PLR0915
         cls,
         backup: str | Path,
         destination: str | Path,
@@ -1290,10 +1337,15 @@ class AuditStore:
 
         backup_path = Path(backup)
         destination = Path(destination)
+        if destination.exists() and not destination.is_dir():
+            raise AuditExportError(f"restore destination is not a directory: {destination}")
         if destination.exists() and any(destination.iterdir()) and not overwrite:
             raise AuditExportError(f"restore destination is not empty: {destination}")
-        destination.mkdir(parents=True, exist_ok=True)
-        temporary: Path | None = None
+        parent = destination.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.restore-", dir=parent))
+        old_destination: Path | None = None
+        staged_store: AuditStore | None = None
         try:
             if backup_path.is_dir():
                 source_journal = backup_path / cls.JOURNAL_FILENAME
@@ -1303,7 +1355,10 @@ class AuditStore:
                         "backup directory is missing canonical journal or manifest"
                     )
                 journal_bytes = source_journal.read_bytes()
-                manifest = json.loads(source_manifest.read_text(encoding="utf-8"))
+                manifest = json.loads(
+                    source_manifest.read_text(encoding="utf-8"),
+                    parse_constant=_reject_json_constant,
+                )
             elif backup_path.is_file() and zipfile.is_zipfile(backup_path):
                 with zipfile.ZipFile(backup_path) as archive:
                     names = set(archive.namelist())
@@ -1314,7 +1369,9 @@ class AuditStore:
                     if any(name.startswith("/") or ".." in Path(name).parts for name in names):
                         raise AuditExportError("backup archive contains unsafe paths")
                     journal_bytes = archive.read(cls.JOURNAL_FILENAME)
-                    manifest = json.loads(archive.read(cls.MANIFEST_FILENAME))
+                    manifest = json.loads(
+                        archive.read(cls.MANIFEST_FILENAME), parse_constant=_reject_json_constant
+                    )
             else:
                 raise AuditExportError(f"unsupported backup path: {backup_path}")
             if (
@@ -1324,17 +1381,56 @@ class AuditStore:
                 raise AuditExportError("unsupported or malformed backup manifest")
             if manifest.get("journal_digest") != _digest_bytes(journal_bytes):
                 raise AuditExportError("backup journal digest does not match manifest")
-            temporary = destination / f".{cls.JOURNAL_FILENAME}.restore"
-            cls._atomic_write(temporary, journal_bytes)
-            os.replace(temporary, destination / cls.JOURNAL_FILENAME)
-            if overwrite:
-                for suffix in ("", "-wal", "-shm"):
-                    (destination / f"{cls.PROJECTION_FILENAME}{suffix}").unlink(missing_ok=True)
+
+            # Validate and rebuild in a same-parent staging directory.  The
+            # destination is untouched until this constructor has replayed the
+            # complete journal and proved its SQLite checkpoint.
+            cls._atomic_write(staging / cls.JOURNAL_FILENAME, journal_bytes)
+            staged_store = cls(staging, recover_incomplete=False)
+            staged_store.close()
+            staged_store = None
+
+            if destination.exists():
+                old_destination = Path(
+                    tempfile.mkdtemp(prefix=f".{destination.name}.old-", dir=parent)
+                )
+                old_destination.rmdir()
+                os.replace(destination, old_destination)
+            try:
+                os.replace(staging, destination)
+            except Exception:
+                if old_destination is not None and old_destination.exists():
+                    os.replace(old_destination, destination)
+                    old_destination = None
+                raise
+            staging = Path()
+            try:
+                restored = cls(destination)
+            except Exception:
+                if destination.exists():
+                    shutil.rmtree(destination)
+                if old_destination is not None and old_destination.exists():
+                    os.replace(old_destination, destination)
+                    old_destination = None
+                raise
+            if old_destination is not None and old_destination.exists():
+                shutil.rmtree(old_destination)
+                old_destination = None
+            return restored
+        except json.JSONDecodeError as exc:
+            raise AuditExportError(f"backup manifest is invalid JSON: {exc}") from exc
         finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
-        store = cls(destination)
-        return store
+            if staged_store is not None:
+                staged_store.close()
+            if staging != Path() and staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+            if old_destination is not None and old_destination.exists():
+                # The only remaining old directory is a failed swap; restore
+                # it before cleaning up a stale staging artifact.
+                if not destination.exists():
+                    os.replace(old_destination, destination)
+                else:
+                    shutil.rmtree(old_destination, ignore_errors=True)
 
     restore_backup = restore
 
@@ -1419,6 +1515,115 @@ class AuditStore:
             return [transaction.to_dict() for transaction in transactions]
 
 
+def _checkpoint_dict(checkpoint: ProjectionCheckpoint) -> dict[str, Any]:
+    return {
+        "revision": checkpoint.revision,
+        "offset": checkpoint.offset,
+        "digest": checkpoint.digest,
+    }
+
+
+def _cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Inspect and move portable BA-03 audit stores")
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    inspect = commands.add_parser("inspect", help="report the current projection")
+    inspect.add_argument("root", type=Path)
+    inspect.add_argument("--include-deleted", action="store_true")
+
+    rebuild = commands.add_parser("rebuild", help="rebuild SQLite from the canonical journal")
+    rebuild.add_argument("root", type=Path)
+
+    export = commands.add_parser("export", help="create a portable backup")
+    export.add_argument("root", type=Path)
+    export.add_argument("destination", type=Path)
+    export.add_argument("--include-projection", action="store_true")
+    export.add_argument("--overwrite", action="store_true")
+
+    restore = commands.add_parser("restore", help="validate and restore a portable backup")
+    restore.add_argument("backup", type=Path)
+    restore.add_argument("destination", type=Path)
+    restore.add_argument("--overwrite", action="store_true")
+    return parser
+
+
+def _cli_export(args: argparse.Namespace) -> dict[str, Any]:
+    destination = args.destination
+    if destination.exists():
+        if not args.overwrite:
+            raise AuditExportError(
+                f"export destination exists; pass --overwrite explicitly: {destination}"
+            )
+        if destination.is_dir():
+            shutil.rmtree(destination)
+        else:
+            destination.unlink()
+    with AuditStore(args.root) as store:
+        output = store.export(destination, include_projection=args.include_projection)
+    return {"backup": str(output), "include_projection": bool(args.include_projection)}
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run bounded offline audit-store commands with JSON output and exit codes.
+
+    Returns:
+        Zero on success, or two for a bounded contract/storage error.
+    """
+
+    parser = _cli_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "inspect":
+            with AuditStore(args.root) as store:
+                records = store.list_records(include_deleted=args.include_deleted)
+                result = {
+                    "root": str(args.root),
+                    "checkpoint": _checkpoint_dict(store.checkpoint()),
+                    "record_count": len(records),
+                    "records": [
+                        {
+                            "record_id": item.record_id,
+                            "record_type": item.record_type,
+                            "revision": item.revision,
+                            "deleted": item.deleted,
+                        }
+                        for item in records
+                    ],
+                }
+        elif args.command == "rebuild":
+            with AuditStore(args.root) as store:
+                result = {"root": str(args.root), **_checkpoint_dict(store.rebuild_projection())}
+        elif args.command == "export":
+            result = _cli_export(args)
+        elif args.command == "restore":
+            if args.destination.exists() and not args.overwrite:
+                raise AuditExportError(
+                    f"restore destination exists; pass --overwrite explicitly: {args.destination}"
+                )
+            with AuditStore.restore(
+                args.backup, args.destination, overwrite=args.overwrite
+            ) as store:
+                result = {
+                    "root": str(args.destination),
+                    "checkpoint": _checkpoint_dict(store.checkpoint()),
+                }
+        else:  # pragma: no cover - argparse enforces the command choices.
+            raise AuditStoreError(f"unknown command: {args.command}")
+    except (AuditContractError, AuditStoreError, OSError, ValueError) as exc:
+        json.dump(
+            {"error": str(exc), "error_type": type(exc).__name__},
+            sys.stderr,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+        )
+        sys.stderr.write("\n")
+        return 2
+    json.dump(result, sys.stdout, ensure_ascii=False, allow_nan=False, sort_keys=True)
+    sys.stdout.write("\n")
+    return 0
+
+
 CanonicalAuditStore = AuditStore
 AuditWriter = AuditStore
 
@@ -1439,4 +1644,9 @@ __all__ = [
     "ProjectionError",
     "RevisionConflictError",
     "StoredRecord",
+    "main",
 ]
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised by offline CLI smoke tests.
+    raise SystemExit(main())

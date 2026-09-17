@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import (
     Annotation,
     AuditContractError,
     AuditIdentityError,
+    CampaignAudit,
     EpisodeRef,
+    ImageDisplayTransform,
     Reference,
     Signal,
     TimeInterval,
@@ -42,6 +46,13 @@ def test_episode_identity_does_not_collapse_reruns_with_same_lookup_fields() -> 
     assert first.episode_id != second.episode_id
     assert first.episode_id != changed_config.episode_id
     assert first.identity_key != second.identity_key
+
+
+def test_episode_identity_includes_campaign_for_second_campaign_probe() -> None:
+    first = _episode(campaign_digest="a" * 64)
+    second_campaign = _episode(campaign_digest="d" * 64)
+    assert first.episode_id != second_campaign.episode_id
+    assert first.identity_key != second_campaign.identity_key
 
 
 def test_episode_id_cannot_override_collision_resistant_identity() -> None:
@@ -90,6 +101,138 @@ def test_reference_rejects_world_coordinates_from_uncalibrated_video() -> None:
         reference_id="r-2", coordinate_frame="image", point=(10.0, 20.0), source=source
     )
     assert image.coordinate_frame == "image"
+
+
+def test_image_display_transform_round_trips_crop_resize_and_preserves_seek_identity() -> None:
+    transform = ImageDisplayTransform(
+        source_width=1000,
+        source_height=800,
+        crop_x=100,
+        crop_y=50,
+        crop_width=400,
+        crop_height=200,
+        display_width=800,
+        display_height=400,
+    )
+    display_point = transform.source_to_display((300.0, 100.0))
+    assert display_point == (400.0, 100.0)
+    assert transform.display_to_source(display_point) == (300.0, 100.0)
+    source = SourceRef(artifact_id="frame", uri="video.mp4", format="image/jpeg")
+    reference = Reference(
+        reference_id="r-image",
+        coordinate_frame="image",
+        point=(300.0, 100.0),
+        source=source,
+        timestamp_s=12.5,
+        source_revision="commit-1",
+        calibration=transform,
+        seek_identity="pts:375000",
+    )
+    assert reference.source_point == (300.0, 100.0)
+    assert reference.timestamp_s == 12.5
+    assert reference.seek_identity == "pts:375000"
+    restored = deserialize_record(serialize_record(reference))
+    assert restored == reference
+
+
+def test_image_display_transform_rejects_invalid_bounds_and_opaque_calibration() -> None:
+    with pytest.raises(AuditContractError, match="source_width"):
+        ImageDisplayTransform(
+            source_width=0,
+            source_height=100,
+            display_width=100,
+            display_height=100,
+        )
+    with pytest.raises(AuditContractError, match="finite"):
+        ImageDisplayTransform(
+            source_width=100,
+            source_height=100,
+            display_width=100,
+            display_height=100,
+            crop_x=math.nan,
+        )
+    with pytest.raises(AuditContractError, match="crop"):
+        ImageDisplayTransform(
+            source_width=100,
+            source_height=100,
+            display_width=100,
+            display_height=100,
+            crop_x=90,
+            crop_width=20,
+        )
+    source = SourceRef(artifact_id="frame", uri="frame.jpg", format="image/jpeg")
+    with pytest.raises(AuditContractError, match="transform"):
+        Reference(
+            reference_id="r-opaque",
+            coordinate_frame="image",
+            point=(1.0, 2.0),
+            source=source,
+            calibration=1.0,
+        )
+    with pytest.raises(AuditContractError, match="calibration"):
+        Reference(
+            reference_id="r-world-bad",
+            coordinate_frame="world",
+            point=(1.0, 2.0),
+            source=SourceRef(artifact_id="video", uri="video.mp4", format="video/mp4"),
+            calibration={"scale": 2.0},
+        )
+    valid_world_calibration = {
+        "kind": "world_from_image.v1",
+        "version": 1,
+        "parameters": {"matrix": [[1.0, 0.0], [0.0, 1.0]]},
+    }
+    world = Reference(
+        reference_id="r-world-good",
+        coordinate_frame="world",
+        point=(1.0, 2.0),
+        source=SourceRef(artifact_id="video", uri="video.mp4", format="video/mp4"),
+        calibration=valid_world_calibration,
+    )
+    assert world.calibration == valid_world_calibration
+
+
+def test_reference_source_revision_must_bind_source_commit() -> None:
+    source = SourceRef(
+        artifact_id="frame",
+        uri="frame.jpg",
+        format="image/jpeg",
+        source_commit="commit-1",
+    )
+    with pytest.raises(AuditIdentityError, match="source_revision"):
+        Reference(
+            reference_id="r-mismatch",
+            coordinate_frame="image",
+            point=(1.0, 2.0),
+            source=source,
+            source_revision="commit-2",
+        )
+    assert (
+        Reference(
+            reference_id="r-match",
+            coordinate_frame="image",
+            point=(1.0, 2.0),
+            source=source,
+            source_revision="commit-1",
+        ).source_revision
+        == "commit-1"
+    )
+
+
+def test_campaign_source_digest_must_bind_source_sha256() -> None:
+    source = SourceRef(
+        artifact_id="campaign",
+        uri="campaign.json",
+        format="json",
+        sha256="d" * 64,
+    )
+    with pytest.raises(AuditIdentityError, match="source_digest"):
+        CampaignAudit(
+            audit_id="audit-1",
+            campaign_digest="a" * 64,
+            source_digest="b" * 64,
+            source=source,
+        )
 
 
 def test_annotation_source_identity_mismatch_is_rejected_and_unavailable_is_explicit() -> None:
@@ -181,6 +324,24 @@ def test_deserialization_requires_version_and_type_specific_identity() -> None:
         deserialize_record("{not-json")
 
 
+def test_deserialization_rejects_nonfinite_numbers_and_unknown_fields() -> None:
+    signal = Signal(signal_id="signal-strict", detector_id="telemetry")
+    unknown = record_to_dict(signal)
+    unknown["unexpected"] = True
+    with pytest.raises(AuditContractError):
+        deserialize_record(unknown)
+    nonfinite = record_to_dict(signal)
+    nonfinite["measured"] = {"score": float("nan")}
+    with pytest.raises(AuditContractError):
+        deserialize_record(nonfinite)
+    with pytest.raises(AuditContractError):
+        deserialize_record(
+            '{"schema_version":"audit-record.v1","record_type":"signal",'
+            '"record_id":"signal-strict","signal_id":"signal-strict",'
+            '"detector_id":"telemetry","measured":{"score":NaN}}'
+        )
+
+
 def test_write_ndjson_cannot_create_a_record_only_journal(tmp_path) -> None:
     signal = Signal(signal_id="signal-1", detector_id="telemetry")
     with pytest.raises(AuditContractError, match="canonical audit journal"):
@@ -190,3 +351,19 @@ def test_write_ndjson_cannot_create_a_record_only_journal(tmp_path) -> None:
 
     with AuditStore(tmp_path) as store:
         assert store.get("signal-1") is not None
+
+
+def test_write_ndjson_round_trips_store_journal_and_repeats_are_noops(tmp_path) -> None:
+    from robot_sf.analysis_workbench.audit_contracts import read_ndjson
+
+    signal = Signal(signal_id="z-signal-journal", detector_id="telemetry")
+    first = Signal(signal_id="a-signal-journal", detector_id="telemetry")
+    journal = tmp_path / "audit.ndjson"
+    write_ndjson([signal, first], journal)
+    before = journal.read_bytes()
+    write_ndjson([signal, first], journal)
+    assert journal.read_bytes() == before
+    assert read_ndjson(journal) == [signal, first]
+    changed = Signal(signal_id="z-signal-journal", detector_id="telemetry", reason_code="new")
+    write_ndjson([changed, first], journal)
+    assert read_ndjson(journal) == [changed, first]

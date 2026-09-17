@@ -38,7 +38,12 @@ request raises `OperationConflictError`.
 scenario, and seed are lookup fields and never form the complete identity. A
 rerun, changed configuration, checkpoint, or environment therefore receives a
 different episode identity. `Reference` accepts image-space points from video;
-world-space points from video require an explicit calibration mapping. Existing
+image references retain source-image coordinates, timestamp, and optional seek
+identity. Use the closed `ImageDisplayTransform` contract for source size, crop,
+and display size when a UI resize/crop is involved; it provides exact
+source/display round trips. World-space points from video require an explicit
+`{"kind": ..., "version": ..., "parameters": {...}}` calibration mapping.
+Opaque calibration scalars are rejected. Existing
 SREV `SourceRef`, trace/timeline, and annotation contracts remain the owners of
 those semantics; this package stores links and review metadata around them.
 An `EpisodeRef` with a `SourceRef.sha256` must use the same source digest. An
@@ -99,7 +104,30 @@ the original store. Existing SQLite files are never required for restore.
 unconditional replacement is available only through the explicitly named
 `store.force_save(...)`. The compatibility `write_ndjson(...)` helper accepts
 only `audit.ndjson` and routes through `AuditStore`, so a record-only file cannot
-be mistaken for the canonical transaction journal.
+be mistaken for the canonical transaction journal. Repeating an identical
+`write_ndjson(...)` call is an idempotent no-op; changed payloads use a new
+operation ID and the current revisions as compare-and-swap expectations.
+
+## Offline command line
+
+The bounded, machine-readable command line uses exit code `0` for success and
+`2` for contract, collision, or storage errors. It never fetches raw media or
+contacts a service:
+
+```bash
+python -m robot_sf.analysis_workbench.audit_store inspect audit-data
+python -m robot_sf.analysis_workbench.audit_store rebuild audit-data
+python -m robot_sf.analysis_workbench.audit_store export audit-data audit-backup.zip
+python -m robot_sf.analysis_workbench.audit_store restore audit-backup.zip relocated-audit
+python -m robot_sf.analysis_workbench.audit_store restore audit-backup.zip audit-data --overwrite
+```
+
+`export` and `restore` refuse existing destinations unless `--overwrite` is
+explicit. Restore validates and rebuilds in a same-parent staging directory,
+then swaps it atomically; a malformed or digest-valid-but-unreadable backup
+leaves an existing destination untouched. `inspect` and `rebuild` report JSON
+checkpoint and record metadata on standard output; errors are JSON on standard
+error.
 
 There is intentionally no hosted multi-user database, raw-trace format,
 simulator replay, automatic benchmark regrading, or network/GitHub side effect

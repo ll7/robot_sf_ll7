@@ -950,6 +950,9 @@ _FAST_FILES = {
     # SREV-02 review-import tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9271).
     "test_review_import.py",
+    # SREV-07 review-storyboard tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9276).
+    "test_review_storyboard.py",
     # SREV-06 review-context tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9275).
     "test_review_context.py",

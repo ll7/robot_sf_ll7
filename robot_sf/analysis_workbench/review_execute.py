@@ -45,7 +45,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -85,6 +85,19 @@ ACTIVATION_TRACE_SCHEMA_VERSION = "activation-trace.v1"
 PRESERVATION_MANIFEST_SCHEMA_VERSION = "preservation-manifest.v1"
 EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION = "executor-admission.v1"
 PRESERVATION_RECEIPT_SCHEMA_VERSION = "srev22-preservation-receipt.v1"
+_PRESERVATION_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "destination",
+        "source_receipt_id",
+        "source_sha256",
+        "recipe_sha256",
+        "config_identity",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+    }
+)
 
 SUPPORTED_INPUT_VERSIONS = (COMPONENT_REQUEST_SCHEMA_VERSION,)
 REQUIRED_CAPABILITIES = ("bounded-execution",)
@@ -148,6 +161,7 @@ _SUPPORTED_FIXTURE_SOURCE_REFERENCE = (
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _MAX_ADMISSION_CONFIG_TEXT = 4_096
 _MAX_PRESERVATION_RECEIPT_BYTES = 256 * 1024
+_ADMISSION_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 
 _DT_S = 0.1
 _ROBOT_GOAL = (16.8, 16.8)
@@ -206,6 +220,7 @@ class _AdmissionProof:
 
     config: ExecutorAdmissionConfig
     root: Path
+    root_fd: int
     source: AdmittedSourceResolution
     receipt_sha256: str
     preservation_receipt_sha256: str
@@ -232,6 +247,14 @@ class _AdmissionProof:
 
 
 @dataclass(frozen=True, slots=True)
+class _PinnedAdmissionRoot:
+    """Descriptor-pinned launcher trust root retained across one execution."""
+
+    path: Path
+    fd: int
+
+
+@dataclass(frozen=True, slots=True)
 class ExecuteConfig:
     """Validated execution config (closed allowlist, never arbitrary code)."""
 
@@ -248,6 +271,9 @@ class ExecuteConfig:
     required_component_version: str | None = None
     intervention_parameters: dict[str, Any] = field(default_factory=dict)
     recipe: dict[str, Any] = field(default_factory=dict)
+    # Populated only from the explicit launcher argument in ``run``.  A raw
+    # request/config admission declaration is parsed for migration diagnostics
+    # but never becomes an authority source.
     admission: ExecutorAdmissionConfig | None = None
 
 
@@ -438,6 +464,28 @@ def _validate_executor_admission_config(
         preservation_receipt_sha256=preservation_receipt_sha256,
         config_identity=config_identity,
     )
+
+
+def validate_executor_admission_config(raw: Any, *, source: Any = None) -> ExecutorAdmissionConfig:
+    """Validate launcher-owned source admission configuration.
+
+    Args:
+        raw: External executor/launcher configuration, never request content.
+        source: Optional source label for error messages.
+
+    Returns:
+        A validated admission configuration suitable for ``run``.
+
+    Raises:
+        ReviewExecuteError: If the external configuration is absent or invalid.
+    """
+    config = _validate_executor_admission_config(raw, source=source)
+    if config is None:
+        raise ReviewExecuteError(
+            ["source_admission_config: explicit launcher admission configuration is required"],
+            source=source,
+        )
+    return config
 
 
 def validate_execute_config(  # noqa: C901
@@ -838,70 +886,132 @@ def _write_json(path: Path, payload: Any) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _read_admission_file(path: Path, *, label: str, maximum_bytes: int) -> bytes:
-    """Read one external admission file as a bounded no-follow regular file.
+def _admission_open_flags(*, directory: bool) -> int | None:
+    """Return descriptor-relative no-follow flags or ``None`` if unsupported."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory_flag = getattr(os, "O_DIRECTORY", None)
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if (
+        not _ADMISSION_SUPPORTS_DIR_FD
+        or not isinstance(nofollow, int)
+        or not isinstance(nonblocking, int)
+        or (directory and not isinstance(directory_flag, int))
+    ):
+        return None
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0)
+    if directory:
+        flags |= directory_flag
+    else:
+        flags |= nonblocking
+    return flags
+
+
+def _open_pinned_admission_root(source_root: str) -> _PinnedAdmissionRoot:
+    """Pin every configured root component with descriptor-relative no-follow opens.
+
+    Returns:
+        A pinned root path and open directory descriptor.
+    """
+    directory_flags = _admission_open_flags(directory=True)
+    if directory_flags is None:
+        raise OSError("descriptor-relative admission root protection is unavailable")
+    configured = Path(source_root)
+    if configured.is_absolute():
+        current_fd = os.open(configured.anchor, directory_flags)
+        components = configured.parts[1:]
+        display_path = configured
+    else:
+        current_fd = os.open(".", directory_flags)
+        components = configured.parts
+        display_path = Path.cwd() / configured
+    try:
+        for component in components:
+            if component in {"", "."}:
+                continue
+            next_fd = os.open(component, directory_flags, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        if not stat.S_ISDIR(os.fstat(current_fd).st_mode):
+            raise OSError("configured source root is not a directory")
+        return _PinnedAdmissionRoot(path=display_path, fd=current_fd)
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _open_admission_reference(root_fd: int, reference: str) -> int:
+    """Open a root-relative receipt through pinned directory descriptors.
+
+    Returns:
+        An open regular-file descriptor owned by the caller.
+    """
+    directory_flags = _admission_open_flags(directory=True)
+    file_flags = _admission_open_flags(directory=False)
+    path = Path(reference)
+    if (
+        directory_flags is None
+        or file_flags is None
+        or path.is_absolute()
+        or not path.parts
+        or ".." in path.parts
+        or "\\" in reference
+    ):
+        raise OSError("admission reference is not a safe relative path")
+    opened_fds: list[int] = []
+    try:
+        parent_fd = os.dup(root_fd)
+        opened_fds.append(parent_fd)
+        for component in path.parts[:-1]:
+            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            opened_fds.append(next_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        file_fd = os.open(path.parts[-1], file_flags, dir_fd=parent_fd)
+        opened_fds.append(file_fd)
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise OSError("admission reference must be a regular file")
+        for opened_fd in reversed(opened_fds[:-1]):
+            os.close(opened_fd)
+        opened_fds[:] = [file_fd]
+        return file_fd
+    except BaseException:
+        for file_descriptor in reversed(opened_fds):
+            try:
+                os.close(file_descriptor)
+            except OSError:
+                pass
+        raise
+
+
+def _read_admission_fd(file_descriptor: int, *, label: str, maximum_bytes: int) -> bytes:
+    """Read bounded bytes from one already-open regular admission file.
 
     Returns:
         The bounded file bytes.
     """
-    nofollow = getattr(os, "O_NOFOLLOW", None)
-    nonblocking = getattr(os, "O_NONBLOCK", None)
-    if not isinstance(nofollow, int) or not isinstance(nonblocking, int):
-        raise OSError(f"{label} cannot be read safely on this platform")
-    flags = os.O_RDONLY | nofollow | nonblocking | getattr(os, "O_CLOEXEC", 0)
-    file_descriptor = os.open(path, flags)
-    try:
-        if not stat.S_ISREG(os.fstat(file_descriptor).st_mode):
-            raise OSError(f"{label} must be a regular file")
-        content = os.read(file_descriptor, maximum_bytes + 1)
-    finally:
-        os.close(file_descriptor)
-    if len(content) > maximum_bytes:
-        raise OSError(f"{label} exceeds maximum size of {maximum_bytes} bytes")
-    return content
-
-
-def _admission_path(
-    root: Path, reference: str, *, label: str
-) -> tuple[Path | None, tuple[str, str] | None]:
-    """Resolve a root-relative admission reference without following symlinks.
-
-    Returns:
-        A resolved path and no failure, or no path and a typed failure pair.
-    """
-    path = Path(reference)
-    if path.is_absolute() or not path.parts or ".." in path.parts or "\\" in reference:
-        return None, (
-            "unavailable",
-            f"source_admission: {label} escapes the configured source root",
-        )
-    candidate = root.joinpath(*path.parts)
-    current = root
-    try:
-        for component in path.parts:
-            current = current / component
-            if current.is_symlink():
-                return None, (
-                    "unavailable",
-                    f"source_admission: {label} contains an unsafe symlink",
-                )
-        resolved = candidate.resolve(strict=False)
-        resolved.relative_to(root)
-    except (OSError, RuntimeError, ValueError) as error:
-        return None, ("unavailable", f"source_admission: {label} escaped root: {error}")
-    return resolved, None
+    content = bytearray()
+    while True:
+        chunk = os.read(file_descriptor, maximum_bytes + 1 - len(content))
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > maximum_bytes:
+            raise OSError(f"{label} exceeds maximum size of {maximum_bytes} bytes")
+    return bytes(content)
 
 
 def _parse_admission_json(
-    path: Path, *, label: str, maximum_bytes: int
+    root_fd: int, reference: str, *, label: str, maximum_bytes: int
 ) -> tuple[dict[str, Any] | None, tuple[str, str] | None, str | None]:
     """Read one bounded JSON proof, returning bytes digest for external anchoring.
 
     Returns:
         Parsed payload, optional typed failure, and the raw-bytes digest.
     """
+    file_descriptor: int | None = None
     try:
-        content = _read_admission_file(path, label=label, maximum_bytes=maximum_bytes)
+        file_descriptor = _open_admission_reference(root_fd, reference)
+        content = _read_admission_fd(file_descriptor, label=label, maximum_bytes=maximum_bytes)
     except FileNotFoundError:
         reason = (
             "receipt_missing"
@@ -916,6 +1026,9 @@ def _parse_admission_json(
             else "preservation_receipt_unreadable"
         )
         return None, ("unavailable", f"source_admission: {reason}: {error}"), None
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
     digest = hashlib.sha256(content).hexdigest()
     try:
         payload = json.loads(
@@ -1710,7 +1823,17 @@ class _Executor:
 
     def _refresh_admission(self) -> None:
         """Re-verify source and preservation proof immediately before execution."""
-        proof, failure = _resolve_executor_admission(self.request, self.config, self.recipe)
+        proof, failure = _resolve_executor_admission(
+            self.request,
+            self.config,
+            self.recipe,
+            admission=self.config.admission,
+            pinned_root=(
+                _PinnedAdmissionRoot(self.admission_proof.root, self.admission_proof.root_fd)
+                if self.admission_proof is not None
+                else None
+            ),
+        )
         if failure is not None or proof is None:
             status, reason = failure or (
                 "failed",
@@ -1718,6 +1841,13 @@ class _Executor:
             )
             raise _SourceAdmissionRejected(status, reason)
         self.admission_proof = proof
+
+    def _close_admission_root(self) -> None:
+        """Close the invocation-owned pinned root descriptor exactly once."""
+        if self.admission_proof is None or self.admission_proof.root_fd < 0:
+            return
+        os.close(self.admission_proof.root_fd)
+        self.admission_proof = replace(self.admission_proof, root_fd=-1)
 
     def _record_progress(self) -> None:
         """Persist attempts and candidate state after every execution boundary."""
@@ -2441,6 +2571,17 @@ def _write_complete_outputs(
     ]
 
 
+def _remove_complete_outputs(executor: _Executor) -> None:
+    """Remove artifacts that must not represent completion after final recheck."""
+    for artifact_name in (
+        "execute-report.json",
+        "activation-traces.json",
+        "attempt-ledger.json",
+        "preservation-manifest.json",
+    ):
+        (executor.output_dir / artifact_name).unlink(missing_ok=True)
+
+
 def _diagnostics(executor: _Executor) -> list[dict[str, Any]]:
     return [
         {
@@ -2499,7 +2640,59 @@ def _admission_failure(status: str, reason: str, detail: str = "") -> tuple[str,
     return normalized_status, normalized_reason
 
 
-def _source_admission_request_projection(request: ComponentRequest) -> ComponentRequest:
+def _validate_preservation_receipt(
+    payload: dict[str, Any], expected: dict[str, Any]
+) -> tuple[str, str] | None:
+    """Validate the closed diagnostic-only preservation receipt contract.
+
+    Returns:
+        A typed failure pair, or ``None`` when the receipt is valid.
+    """
+    if set(payload) != _PRESERVATION_RECEIPT_FIELDS:
+        unknown = sorted(set(payload) - _PRESERVATION_RECEIPT_FIELDS)
+        missing = sorted(_PRESERVATION_RECEIPT_FIELDS - set(payload))
+        detail = f"unknown={unknown}; missing={missing}"
+        return _admission_failure("failed", "preservation_receipt_malformed", detail)
+    if payload.get("scientific_claim_allowed") is not False:
+        return _admission_failure(
+            "failed",
+            "preservation_receipt_malformed",
+            "scientific_claim_allowed must be false",
+        )
+    if payload.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY:
+        return _admission_failure(
+            "failed",
+            "preservation_receipt_malformed",
+            "evidence_boundary must be diagnostic_only",
+        )
+    for key in _PRESERVATION_RECEIPT_FIELDS - {
+        "scientific_claim_allowed",
+        "evidence_boundary",
+    }:
+        if not isinstance(payload.get(key), str) or not payload[key].strip():
+            return _admission_failure(
+                "failed",
+                "preservation_receipt_malformed",
+                f"{key} must be a non-empty string",
+            )
+    for key in ("source_sha256", "recipe_sha256"):
+        if _SHA256_RE.fullmatch(payload[key]) is None:
+            return _admission_failure(
+                "failed", "preservation_receipt_malformed", f"{key} must be a SHA-256"
+            )
+    for key, actual in expected.items():
+        if payload.get(key) != actual:
+            return _admission_failure(
+                "unavailable",
+                "preservation_receipt_stale",
+                f"preservation receipt {key} does not match the admitted invocation",
+            )
+    return None
+
+
+def _source_admission_request_projection(
+    request: ComponentRequest, admission: ExecutorAdmissionConfig
+) -> ComponentRequest:
     """Project the source-level request identity used by the executor.
 
     Runtime controls are not source-artifact content and are already bound by
@@ -2511,30 +2704,81 @@ def _source_admission_request_projection(request: ComponentRequest) -> Component
     Returns:
         A validated request carrying only source-level admission identity.
     """
-    admission = request.config.get("admission")
-    if isinstance(admission, Mapping):
-        admission_identity = {
-            "schema_version": admission.get("schema_version"),
-            "config_identity": admission.get("config_identity"),
-        }
-    else:
-        admission_identity = None
     return ComponentRequest(
         request_id=request.request_id,
         component_id=request.component_id,
         sources=request.sources,
         output_directory=request.output_directory,
-        config={"admission": admission_identity} if admission_identity is not None else {},
+        config={
+            "admission": {
+                "schema_version": admission.schema_version,
+                "config_identity": admission.config_identity,
+            }
+        },
         required_capabilities=request.required_capabilities,
     )
 
 
-def _resolve_executor_admission(  # noqa: C901, PLR0912
+def _resolve_executor_admission(
     request: ComponentRequest,
     config: ExecuteConfig,
     recipe: dict[str, Any],
+    *,
+    admission: ExecutorAdmissionConfig | None = None,
+    pinned_root: _PinnedAdmissionRoot | None = None,
+) -> tuple[_AdmissionProof | None, tuple[str, str] | None]:
+    """Resolve admission while retaining one launcher-owned root descriptor.
+
+    Returns:
+        An admission proof, or a typed non-complete failure pair.
+    """
+    if admission is None:
+        return None, _admission_failure(
+            "unavailable",
+            "legacy_config_requires_admission",
+            "executor-admission.v1 is required; request config cannot authorize its own source",
+        )
+    owns_root = pinned_root is None
+    if pinned_root is None:
+        try:
+            pinned_root = _open_pinned_admission_root(admission.source_root)
+        except FileNotFoundError:
+            return None, _admission_failure(
+                "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, "source_root is missing"
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            return None, _admission_failure(
+                "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, str(error)
+            )
+    try:
+        proof, failure = _resolve_executor_admission_at_root(
+            request,
+            config,
+            recipe,
+            admission=admission,
+            pinned_root=pinned_root,
+        )
+    except BaseException:
+        if owns_root:
+            os.close(pinned_root.fd)
+        raise
+    if owns_root and proof is None:
+        os.close(pinned_root.fd)
+    return proof, failure
+
+
+def _resolve_executor_admission_at_root(
+    request: ComponentRequest,
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+    *,
+    admission: ExecutorAdmissionConfig,
+    pinned_root: _PinnedAdmissionRoot,
 ) -> tuple[_AdmissionProof | None, tuple[str, str] | None]:
     """Resolve the caller-owned source and preservation proof.
+
+    ``admission`` must come from the explicit launcher boundary.  It is never
+    inferred from ``request.config`` or from the recipe.
 
     The source receipt itself remains untrusted data.  Its bytes are anchored
     by the external config digest, and the canonical resolver binds the parsed
@@ -2545,42 +2789,11 @@ def _resolve_executor_admission(  # noqa: C901, PLR0912
     Returns:
         An admission proof, or a typed non-complete result pair.
     """
-    admission = config.admission
-    if admission is None:
-        return None, _admission_failure(
-            "unavailable",
-            "legacy_config_requires_admission",
-            "executor-admission.v1 is required; legacy diagnostic requests cannot claim completion",
-        )
-    try:
-        configured_root = Path(admission.source_root)
-        if configured_root.is_symlink():
-            return None, _admission_failure(
-                "unavailable", "allowed_root_invalid", "source_root must not be a symlink"
-            )
-        root = configured_root.resolve(strict=True)
-    except FileNotFoundError:
-        return None, _admission_failure(
-            "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, "source_root is missing"
-        )
-    except (OSError, RuntimeError, TypeError, ValueError) as error:
-        return None, _admission_failure(
-            "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, str(error)
-        )
-    if not root.is_dir():
-        return None, _admission_failure(
-            "unavailable",
-            ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
-            "source_root is not a directory",
-        )
-
-    receipt_path, failure = _admission_path(
-        root, admission.receipt_reference, label="receipt_reference"
-    )
-    if failure is not None or receipt_path is None:
-        return None, failure or _admission_failure("failed", "receipt_reference_invalid")
+    root = pinned_root.path
+    root_fd = pinned_root.fd
     receipt_payload, failure, receipt_digest = _parse_admission_json(
-        receipt_path,
+        root_fd,
+        admission.receipt_reference,
         label="admitted-source receipt",
         maximum_bytes=MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
     )
@@ -2595,10 +2808,11 @@ def _resolve_executor_admission(  # noqa: C901, PLR0912
             "external receipt digest does not match executor admission config",
         )
     try:
-        request_projection = _source_admission_request_projection(request)
+        request_projection = _source_admission_request_projection(request, admission)
         source_resolution = resolve_admitted_source(
             receipt_payload,
             allowed_root=root,
+            allowed_root_fd=root_fd,
             request=request_projection,
             recipe=recipe,
             expected_config_identity=admission.config_identity,
@@ -2630,17 +2844,9 @@ def _resolve_executor_admission(  # noqa: C901, PLR0912
             "preservation destination differs between recipe and external config",
         )
 
-    preservation_path, failure = _admission_path(
-        root,
-        admission.preservation_receipt_reference,
-        label="preservation_receipt_reference",
-    )
-    if failure is not None or preservation_path is None:
-        return None, failure or _admission_failure(
-            "failed", "preservation_receipt_reference_invalid"
-        )
     preservation_payload, failure, preservation_digest = _parse_admission_json(
-        preservation_path,
+        root_fd,
+        admission.preservation_receipt_reference,
         label="preservation receipt",
         maximum_bytes=_MAX_PRESERVATION_RECEIPT_BYTES,
     )
@@ -2660,18 +2866,19 @@ def _resolve_executor_admission(  # noqa: C901, PLR0912
         "source_sha256": source_resolution.receipt.source.sha256,
         "recipe_sha256": experiment_recipe_canonical_digest(recipe),
         "config_identity": admission.config_identity,
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
     }
-    for key, expected in expected_preservation.items():
-        if preservation_payload.get(key) != expected:
-            return None, _admission_failure(
-                "unavailable",
-                "preservation_receipt_stale",
-                f"preservation receipt {key} does not match the admitted invocation",
-            )
+    preservation_failure = _validate_preservation_receipt(
+        preservation_payload, expected_preservation
+    )
+    if preservation_failure is not None:
+        return None, preservation_failure
     return (
         _AdmissionProof(
             config=admission,
             root=root,
+            root_fd=root_fd,
             source=source_resolution,
             receipt_sha256=receipt_digest,
             preservation_receipt_sha256=preservation_digest,
@@ -2971,7 +3178,7 @@ def _drive_candidates(
     return status, reason
 
 
-def _settle(  # noqa: C901, PLR0912
+def _settle(  # noqa: C901, PLR0912, PLR0915
     executor: _Executor, provenance: dict[str, Any], status: str, reason: str
 ) -> ComponentResult:
     """Settle the final result envelope for a driven executor.
@@ -2981,7 +3188,15 @@ def _settle(  # noqa: C901, PLR0912
     """
     request = executor.request
     final_proof, admission_failure = _resolve_executor_admission(
-        request, executor.config, executor.recipe
+        request,
+        executor.config,
+        executor.recipe,
+        admission=executor.config.admission,
+        pinned_root=(
+            _PinnedAdmissionRoot(executor.admission_proof.root, executor.admission_proof.root_fd)
+            if executor.admission_proof is not None
+            else None
+        ),
     )
     if admission_failure is not None or final_proof is None:
         failure_status, failure_reason = admission_failure or (
@@ -3052,6 +3267,39 @@ def _settle(  # noqa: C901, PLR0912
                     if art_file.is_file():
                         art_file.unlink(missing_ok=True)
             else:
+                finalized_proof, finalized_failure = _resolve_executor_admission(
+                    request,
+                    executor.config,
+                    executor.recipe,
+                    admission=executor.config.admission,
+                    pinned_root=(
+                        _PinnedAdmissionRoot(
+                            executor.admission_proof.root, executor.admission_proof.root_fd
+                        )
+                        if executor.admission_proof is not None
+                        else None
+                    ),
+                )
+                if finalized_failure is not None or finalized_proof is None:
+                    _remove_complete_outputs(executor)
+                    failure_status, failure_reason = finalized_failure or (
+                        "failed",
+                        "source_admission: resolver returned no proof after output finalization",
+                    )
+                    try:
+                        executor._write_ledger()
+                    except (OSError, TypeError, ValueError) as error:
+                        failure_reason += f"; output_write_failed: {error}"
+                        failure_status = "failed"
+                    return _final_result(
+                        request,
+                        status=failure_status,
+                        reason=failure_reason,
+                        diagnostics=tuple(_diagnostics(executor)),
+                        provenance=provenance,
+                    )
+                executor.admission_proof = finalized_proof
+                provenance["source_admission"] = finalized_proof.to_dict()
                 return _final_result(
                     request,
                     status="complete",
@@ -3077,8 +3325,12 @@ def _settle(  # noqa: C901, PLR0912
     )
 
 
-def run(
-    request: ComponentRequest, *, base: Path | None = None, resume: bool = False
+def run(  # noqa: C901
+    request: ComponentRequest,
+    *,
+    base: Path | None = None,
+    resume: bool = False,
+    admission_config: ExecutorAdmissionConfig | Mapping[str, Any] | None = None,
 ) -> ComponentResult:
     """Execute one bounded review-execute request.
 
@@ -3087,6 +3339,7 @@ def run(
         base: Base directory the request output directory resolves under.
         resume: Reuse an existing output directory ledger instead of failing
             on output collision.
+        admission_config: Validated launcher-owned source admission config.
 
     Returns:
         Component result with artifacts (complete only), diagnostics, and
@@ -3098,7 +3351,35 @@ def run(
     if early is not None or config is None or recipe_doc is None or measurement is None:
         assert early is not None
         return early
-    admission_proof, admission_failure = _resolve_executor_admission(request, config, recipe_doc)
+    try:
+        if admission_config is None:
+            external_admission = None
+        elif isinstance(admission_config, ExecutorAdmissionConfig):
+            external_admission = validate_executor_admission_config(admission_config.to_dict())
+        else:
+            external_admission = validate_executor_admission_config(admission_config)
+    except ReviewExecuteError as error:
+        return _final_result(
+            request,
+            status="failed",
+            reason=f"invalid_source_admission_config: {'; '.join(error.errors)}",
+        )
+    if external_admission is None:
+        return _final_result(
+            request,
+            status="unavailable",
+            reason=(
+                "source_admission: legacy_config_requires_admission: explicit launcher "
+                "admission configuration is required; request config cannot authorize its own source"
+            ),
+        )
+    config = replace(config, admission=external_admission)
+    admission_proof, admission_failure = _resolve_executor_admission(
+        request,
+        config,
+        recipe_doc,
+        admission=external_admission,
+    )
     if admission_failure is not None or admission_proof is None:
         failure_status, failure_reason = admission_failure or (
             "failed",
@@ -3108,6 +3389,7 @@ def run(
     output_dir, dir_early = _prepare_output_dir(request, root, resume=resume)
     if dir_early is not None or output_dir is None:
         assert dir_early is not None
+        os.close(admission_proof.root_fd)
         return dir_early
     executor = _Executor(
         request=request,
@@ -3122,7 +3404,9 @@ def run(
         try:
             executor._load_resume_ledger()
         except ReviewExecuteError as error:
-            return _final_result(request, status="failed", reason="; ".join(error.errors))
+            result = _final_result(request, status="failed", reason="; ".join(error.errors))
+            executor._close_admission_root()
+            return result
     provenance = _commit_provenance()
     provenance["recipe_id"] = str(recipe_doc.get("recipe_id", ""))
     provenance["source_identity"] = dict(recipe_doc.get("source_identity", {}))
@@ -3145,35 +3429,48 @@ def run(
             executor._write_ledger()
         except (OSError, TypeError, ValueError) as ledger_error:
             reason += f"; output_write_failed: {ledger_error}"
-        return _final_result(
+        result = _final_result(
             request,
             status="failed",
             reason=reason,
             diagnostics=tuple(_diagnostics(executor)),
             provenance=provenance,
         )
+        executor._close_admission_root()
+        return result
     try:
         status, reason = _drive_candidates(executor, config, measurement)
-        return _settle(executor, provenance, status, reason)
+        result = _settle(executor, provenance, status, reason)
+        executor._close_admission_root()
+        return result
     except Exception as error:  # noqa: BLE001 - fail closed while preserving the ledger
         reason = f"execution_failed: {type(error).__name__}: {error}"
+        _remove_complete_outputs(executor)
         try:
             executor._write_ledger()
         except (OSError, TypeError, ValueError) as ledger_error:
             reason += f"; output_write_failed: {ledger_error}"
-        return _final_result(
+        result = _final_result(
             request,
             status="failed",
             reason=reason,
             diagnostics=tuple(_diagnostics(executor)),
             provenance=provenance,
         )
+        executor._close_admission_root()
+        return result
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Execute SREV-22 bounded review experiments.")
     parser.add_argument("--input", required=True, help="Component request JSON file.")
     parser.add_argument("--config", required=False, default=None, help="Optional config JSON file.")
+    parser.add_argument(
+        "--admission-config",
+        required=False,
+        default=None,
+        help="Launcher-owned executor admission JSON file (required for completion).",
+    )
     parser.add_argument("--output", required=True, help="Output directory (must not exist).")
     parser.add_argument("--base", required=False, default=None, help="Base directory for output.")
     parser.add_argument(
@@ -3222,7 +3519,7 @@ def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
     return 1
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     """CLI entry point for the review-execute component.
 
     Args:
@@ -3240,6 +3537,22 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(payload, dict):
         return _print_cli_failure("invalid_input: request must be a JSON object")
     request_id, component_id = _cli_identity(payload)
+    external_admission: ExecutorAdmissionConfig | None = None
+    if args.admission_config is not None:
+        try:
+            admission_payload = json.loads(Path(args.admission_config).read_text(encoding="utf-8"))
+            external_admission = validate_executor_admission_config(
+                admission_payload, source=args.admission_config
+            )
+        except (OSError, ValueError, RecursionError):
+            return _print_cli_failure(
+                "invalid_input: admission config JSON cannot be parsed safely", payload=payload
+            )
+        except ReviewExecuteError as error:
+            return _print_cli_failure(
+                f"invalid_input: admission config is invalid: {'; '.join(error.errors)}",
+                payload=payload,
+            )
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))
@@ -3266,7 +3579,10 @@ def main(argv: list[str] | None = None) -> int:
             payload={"request_id": request_id, "component_id": component_id},
         )
     result = run(
-        request, base=Path(args.base) if args.base is not None else None, resume=args.resume
+        request,
+        base=Path(args.base) if args.base is not None else None,
+        resume=args.resume,
+        admission_config=external_admission,
     )
     print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
     return 0 if result.status == "complete" else 1

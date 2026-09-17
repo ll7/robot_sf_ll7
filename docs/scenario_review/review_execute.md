@@ -30,6 +30,7 @@ fixture patterns establish no population or causal conclusion.
 uv run python -m robot_sf.analysis_workbench.review_execute \
   --input tests/fixtures/scenario_review/review_execute/request.json \
   --config tests/fixtures/scenario_review/review_execute/config.json \
+  --admission-config tests/fixtures/scenario_review/review_execute/admission.json \
   --output output/scenario_review/srev-22-smoke
 ```
 
@@ -44,10 +45,11 @@ instead of being silently re-executed.
 
 ### Source admission and preservation
 
-Every result that can be `complete` requires an additive
-`config.admission` object with `schema_version: executor-admission.v1` supplied
-by the executor or launcher. It is external trust configuration, not recipe
-content, and carries:
+Every result that can be `complete` requires an additive, launcher-owned
+admission argument (`run(..., admission_config=...)` or CLI
+`--admission-config`) with `schema_version: executor-admission.v1`. It is
+external trust configuration, not request, recipe, or artifact content, and
+carries:
 
 ```json
 {
@@ -63,27 +65,31 @@ content, and carries:
 ```
 
 The configured root must be a local directory. Receipt references are
-root-relative, traversal-free, and no-follow regular files. Before the first
-child starts, and again before a complete result is emitted, the executor
-calls the shared `resolve_admitted_source()` resolver. It binds the current
-request and recipe (the launcher-only admission block is excluded from the v1
-request digest), source/config identities, and receipt digests, then rehashes
-the source bytes from a protected descriptor. The runner's request projection
-binds the stable envelope, source declarations, and admission
-`config_identity`; full execution controls remain bound in provenance and the
-resume ledger. The external preservation receipt
-must independently match the source receipt, recipe digest, config identity,
-and configured destination. Source, receipt, root, and preservation tampering
-therefore yields a typed `unavailable`/`failed` result and no complete
-artifacts; the recipe cannot nominate its own root or receipt.
+root-relative, traversal-free, and descriptor-relative no-follow regular
+files. Before the first child starts, before each episode, and again after
+output finalization, the executor calls the shared
+`resolve_admitted_source()` resolver against the pinned root directory FD. It
+binds the current request and recipe, source/config identities, and receipt
+digests, then rehashes the source bytes from protected descriptors. The
+runner's request projection binds the stable envelope, source declarations,
+and launcher `config_identity`; full execution controls remain bound in
+provenance and the resume ledger. The closed preservation receipt must contain
+exactly the required fields, including `evidence_boundary: diagnostic_only`
+and `scientific_claim_allowed: false`, and independently match the source
+receipt, recipe digest, config identity, and configured destination. Source,
+receipt, root, and preservation tampering therefore yields a typed
+`unavailable`/`failed` result and no complete artifacts; the recipe cannot
+nominate its own root or receipt.
 
 The checked-in positive fixture under
 `tests/fixtures/scenario_review/review_execute/` contains the source, admitted
-receipt, preservation receipt, and matching config. A legacy v1 request without
-`config.admission` remains diagnostic-only but is returned as `unavailable` and
-cannot start execution or claim admitted completion. Both the source and
-preservation receipts retain `scientific_claim_allowed: false`; source
-integrity is not scientific or benchmark admission.
+receipt, preservation receipt, request/runtime config, and separate launcher
+admission config. A legacy v1 request without an explicit launcher argument
+remains diagnostic-only but is returned as `unavailable` and cannot start
+execution or claim admitted completion; any request/config `admission` field
+is treated as untrusted data. Both the source and preservation receipts retain
+`scientific_claim_allowed: false`; source integrity is not scientific or
+benchmark admission.
 
 The component descriptor (`descriptor()`) declares the `bounded-execution`
 required capability and the `execute-report.v1` / `attempt-ledger.v1` /

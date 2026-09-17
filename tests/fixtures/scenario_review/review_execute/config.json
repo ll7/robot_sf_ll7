@@ -16,7 +16,7 @@
     "receipt_sha256": "578805260c1c37404ad81677867916705e48f10dba01e5493dfcd691651f0822",
     "preservation_destination": "external:post-execution-preservation",
     "preservation_receipt_reference": "preservation-receipt.json",
-    "preservation_receipt_sha256": "926af61e723c1ad6e073f811aedffa748ea0a40435062e7d54d76b7d094e669f",
+    "preservation_receipt_sha256": "12241ce084d6e02d5776b7b0a19c68d7208481ed2dbc14bb9984ff69892cc304",
     "config_identity": "srev22-admitted-source-config.v1"
   },
   "intervention_parameters": {

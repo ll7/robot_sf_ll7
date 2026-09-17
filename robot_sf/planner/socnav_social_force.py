@@ -669,8 +669,6 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
 
 
 __all__ = [
-    "SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1",
-    "SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1",
     "SocialForcePlannerAdapter",
     "make_social_force_policy",
 ]

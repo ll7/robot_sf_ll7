@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/audit_record.v1.json",
+  "title": "Robot SF Audit Record v1",
+  "description": "Versioned durable records used by the offline benchmark auditor.",
+  "type": "object",
+  "required": ["schema_version", "record_type", "record_id"],
+  "properties": {
+    "schema_version": {"const": "audit-record.v1"},
+    "record_type": {
+      "enum": [
+        "campaign_audit",
+        "episode_ref",
+        "review_packet",
+        "signal",
+        "reference",
+        "annotation",
+        "finding",
+        "action_record",
+        "review_record"
+      ]
+    },
+    "record_id": {"type": "string", "minLength": 1},
+    "audit_id": {},
+    "campaign_digest": {},
+    "source_digest": {},
+    "title": {},
+    "protocol_version": {},
+    "protocol_digest": {},
+    "source": {},
+    "metadata": {},
+    "execution_id": {},
+    "planner_id": {},
+    "scenario_id": {},
+    "seed": {},
+    "attempt": {},
+    "config_digest": {},
+    "checkpoint_digest": {},
+    "environment_digest": {},
+    "episode_id": {},
+    "campaign_id": {},
+    "source_id": {},
+    "packet_id": {},
+    "primary": {},
+    "peers": {},
+    "signals": {},
+    "selection_reasons": {},
+    "missingness": {},
+    "policy_version": {},
+    "input_revision": {},
+    "signal_id": {},
+    "detector_id": {},
+    "detector_version": {},
+    "status": {},
+    "reason_code": {},
+    "evidence": {},
+    "measured": {},
+    "interval": {},
+    "threshold": {},
+    "message": {},
+    "reference_id": {},
+    "coordinate_frame": {},
+    "point": {},
+    "timestamp_s": {},
+    "source_revision": {},
+    "calibration": {},
+    "actor_id": {},
+    "object_id": {},
+    "goal_id": {},
+    "waypoint_id": {},
+    "metric_id": {},
+    "event_id": {},
+    "source_point": {},
+    "seek_identity": {},
+    "actor_kind": {},
+    "annotation_id": {},
+    "classification": {},
+    "mode": {},
+    "author_kind": {},
+    "author_id": {},
+    "observed_behavior": {},
+    "suspected_cause": {},
+    "confidence": {},
+    "references": {},
+    "tags": {},
+    "review_scope": {},
+    "source_identity": {},
+    "created_at": {},
+    "source_ref": {},
+    "provenance_status": {},
+    "provenance_reason": {},
+    "finding_id": {},
+    "candidate_members": {},
+    "confirmed_members": {},
+    "negative_controls": {},
+    "observations": {},
+    "hypotheses": {},
+    "negative_evidence": {},
+    "diagnostic_results": {},
+    "github_issue": {},
+    "updated_at": {},
+    "action_id": {},
+    "action_type": {},
+    "target_id": {},
+    "details": {},
+    "review_id": {},
+    "scope": {},
+    "outcome": {},
+    "annotation_ids": {},
+    "notes": {}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "record_type": {"const": "campaign_audit"},
+        "audit_id": {"type": "string", "minLength": 1},
+        "campaign_digest": {"type": "string", "minLength": 1},
+        "source_digest": {"type": "string", "minLength": 1}
+      },
+      "required": ["audit_id", "campaign_digest", "source_digest"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "episode_ref"},
+        "episode_id": {"type": "string", "minLength": 1},
+        "campaign_digest": {"type": "string", "minLength": 1},
+        "source_digest": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "minLength": 1}
+      },
+      "required": ["episode_id", "campaign_digest", "source_digest", "execution_id"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "review_packet"},
+        "packet_id": {"type": "string", "minLength": 1},
+        "primary": {"type": "object"}
+      },
+      "required": ["packet_id", "primary"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "signal"},
+        "signal_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1}
+      },
+      "required": ["signal_id", "detector_id"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "reference"},
+        "reference_id": {"type": "string", "minLength": 1},
+        "coordinate_frame": {"enum": ["world", "image"]},
+        "point": {"type": "array", "minItems": 2, "maxItems": 2}
+      },
+      "required": ["reference_id", "coordinate_frame", "point"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "annotation"},
+        "annotation_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "classification": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["one_click", "quick", "full"]},
+        "author_kind": {"enum": ["human", "detector", "agent"]},
+        "review_scope": {"enum": ["interval", "full_episode"]}
+      },
+      "required": [
+        "annotation_id",
+        "episode_id",
+        "classification",
+        "mode",
+        "author_kind",
+        "review_scope"
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "finding"},
+        "finding_id": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": ["proposed", "under_investigation", "supported", "refuted", "resolved"]
+        },
+        "candidate_members": {"type": "array"},
+        "confirmed_members": {"type": "array"},
+        "negative_controls": {"type": "array"}
+      },
+      "required": [
+        "finding_id",
+        "title",
+        "status",
+        "candidate_members",
+        "confirmed_members",
+        "negative_controls"
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "action_record"},
+        "action_id": {"type": "string", "minLength": 1},
+        "action_type": {"type": "string", "minLength": 1},
+        "actor_kind": {"enum": ["human", "detector", "agent"]},
+        "status": {"type": "string", "minLength": 1}
+      },
+      "required": ["action_id", "action_type", "actor_kind", "status"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "review_record"},
+        "review_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "scope": {"enum": ["interval", "full_episode"]},
+        "author_kind": {"enum": ["human", "detector", "agent"]}
+      },
+      "required": ["review_id", "episode_id", "scope", "author_kind"]
+    }
+  ],
+  "additionalProperties": false
+}

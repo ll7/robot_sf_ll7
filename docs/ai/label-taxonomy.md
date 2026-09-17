@@ -42,8 +42,8 @@ resource, type, and evidence labels:
 
 | Family / labels | Meaning |
 | --- | --- |
-| `blocked`, `blocked-external` | Work is blocked; `blocked-external` identifies an unavailable external input or action. Prefer the more specific `state:blocked` or `state:blocked-external-input` when the execution-state classifier is the relevant authority. |
-| `parked`, `parked-revivable` | Work is intentionally not active; `parked-revivable` must retain a revival condition. |
+| `blocked` | Generic blocked marker; external-input blocks use the more specific `state:blocked-external-input` label. |
+| `state:parked` | Work is intentionally not active; retain a revival condition in the issue context when applicable. |
 | `deferred`, `wontfix` | Deferred or deliberately not pursued; neither is a dispatch signal. |
 | `follow-up`, `friction`, `campaign` | Successor/residual work, process or tooling friction, and campaign/evidence context. |
 
@@ -71,7 +71,8 @@ coexist:
 execution-state precedence set. Verify the issue/PR terminal state separately.
 
 These are composable state qualifiers rather than replacement execution states:
-`state:review`, `state:needs-artifact-promotion`, and `state:needs-interpretation`.
+`state:parked`, `state:review`, `state:needs-artifact-promotion`, and
+`state:needs-interpretation`.
 An issue with no `state:*` label is undispatchable, not implicitly ready. A
 `resource:*` label never promotes an issue to ready.
 

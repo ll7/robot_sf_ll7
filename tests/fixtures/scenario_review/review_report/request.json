@@ -1,0 +1,19 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev14-smoke",
+  "component_id": "review-report",
+  "sources": [
+    {
+      "artifact_id": "bundle",
+      "uri": "tests/fixtures/scenario_review/review_report/bundle.json",
+      "format": "review-bundle",
+      "schema": "review-bundle.v1"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-14-smoke",
+  "config": {},
+  "required_capabilities": [
+    "report-generation",
+    "traceable-captions"
+  ]
+}

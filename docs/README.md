@@ -147,6 +147,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for external datasets including Stanford Drone Dataset, SocNavBench, ETH/UCY, and AMV calibration-source assets
 * **[ETH/UCY External Trajectory Data](./datasets/eth-ucy.md)** - Public acquisition, citation, and expected layout notes for locally staged ETH BIWI and UCY Crowds-by-Example trajectories
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
+* **[Explicit Issue Relationships](./context/issue_relationships.md)** - Canonical body block, native GitHub relationship workflow, and fail-closed migration audit
 * **[Agent Workflow Entrypoints And Large-File Navigation](./ai/agent_workflow_entrypoints.md)** - Correct `uv run` command patterns, validation entrypoints, model registry path, and targeted large-file reading guidance for agents
 * **[Agent Run Manifest](./agent_run_manifest.md)** - Lightweight `agent_run_manifest.yaml` convention for making substantial agent-assisted runs auditable: when it is required, where to store it, trace/log hygiene, and a copyable template
 * **[Issue #2013 Backend Adapter Contract](./context/issue_2013_backend_adapter_contract.md)** - Required adapter fields, fail-closed behavior, and claim boundaries for alternate simulator backend integration

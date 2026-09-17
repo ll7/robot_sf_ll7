@@ -56,6 +56,11 @@ Always-required core context:
 - `docs/maintainer_values.md`: maintainer principles and tie-breakers.
 - `AGENTS.md`: invariants, precedence, and this router.
 - `docs/ai/agent_workflow_entrypoints.md`: route table, command entrypoints, handoff format, and large-file navigation.
+- **Issue/PR relationships**: `docs/context/issue_relationships.md`, issue/PR templates, and the
+  lifecycle skills. Keep explicit body mirrors, set native links only from the owning writable
+  worktree, and treat review-only worktrees as read-only graph verification. Direct relationship
+  CLI operations require `gh >= 2.100.0`; older or unsupported CLIs must use the documented REST
+  or UI fallback and fail closed rather than treating missing fields as `none`.
 
 The route table is the single owner of task-to-guidance routing; references are required by default
 and optional only when marked optional/illustrative, generated, or explicitly background. For the
@@ -104,6 +109,12 @@ merge. The guarded merger promotes that same head to `merge-ready` after green
 required checks, then runs the existing merge preflight. CI completion alone
 does not start another review cycle. A moved head, substantive finding, or
 removed readiness label requires normal triage.
+
+Issue-linked PRs opened from a worktree must fill the template's `Issue Relationship Mirror` from
+the linked issue's fresh native Parent/Blocked by/Blocking state. Keep `Closes`/`Refs` in `Linked
+Issues` for coverage semantics, use `none` for unestablished edges, and never infer relationships
+from mentions. See `docs/context/issue_relationships.md` for the readback and review-only-worktree
+boundary.
 
 Use conventional commits. A PR states intent, linked issues, validation commands, artifact
 disposition, and downstream propagation; because merges squash, reconcile the final title and body

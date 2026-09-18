@@ -632,6 +632,30 @@ def _source_revision_payload(
     }
 
 
+def _source_revision_token(
+    model: Mapping[str, Any],
+    source_refs: Mapping[str, SourceRef],
+    source_digests: Mapping[str, str],
+) -> str:
+    """Return the cross-runtime canonical storyboard source revision token.
+
+    The browser editor computes this same compact, sorted JSON token.  Keep the
+    source revision readable rather than hashing it so a generated Python
+    model can be saved by the browser without an adapter-specific translation.
+    ``source_identity`` remains the SHA-256 identity token; this token is the
+    revision of the identity inputs.
+    """
+
+    context = model.get("context")
+    context_revision = context.get("source_revision", "") if isinstance(context, Mapping) else ""
+    return canonical_json(
+        {
+            "revisions": _source_revision_payload(source_refs, source_digests),
+            "context": context_revision or "",
+        }
+    )
+
+
 def _context_value(model: Mapping[str, Any], name: str, default: Any = None) -> Any:
     context = model.get("context")
     if isinstance(context, Mapping) and name in context:
@@ -1953,8 +1977,7 @@ class ReviewEditorSession:
         return hashlib.sha256(canonical_json(identity).encode()).hexdigest()
 
     def _source_revision_token(self) -> str:
-        revisions = _source_revision_payload(self.source_refs, self.source_digests)
-        return hashlib.sha256(canonical_json(revisions).encode()).hexdigest()
+        return _source_revision_token(self.model, self.source_refs, self.source_digests)
 
     def select(
         self,
@@ -2494,9 +2517,7 @@ def _build_model(
 ) -> dict[str, Any]:
     identity = _source_identity(panel_model, source_refs, source_digests)
     source_identity_token = hashlib.sha256(canonical_json(identity).encode()).hexdigest()
-    source_revision_token = hashlib.sha256(
-        canonical_json(_source_revision_payload(source_refs, source_digests)).encode()
-    ).hexdigest()
+    source_revision_token = _source_revision_token(panel_model, source_refs, source_digests)
     origin, duration = _derive_time_bounds(panel_model)
     storyboard_value = panel_model.get("storyboard")
     if storyboard_value is None:
@@ -2542,6 +2563,8 @@ def _build_model(
         "request_id": request.request_id,
         "context": context,
         "source_identity": identity,
+        "storyboard_record_id": "storyboard-"
+        + hashlib.sha256(source_identity_token.encode()).hexdigest(),
         # Keep the renderer-neutral panel data available to snapping and
         # offline reference inspection.  It is copied, never edited in place;
         # source files remain immutable.

@@ -1,9 +1,46 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   ReviewEditorController,
   overlayCommands,
+  sourceRevision,
+  storyboardRecordId,
 } from "../../robot_sf/render/web_assets/components/review_editor/review_editor.js";
+
+if (process.argv[2]) {
+  const bundle = JSON.parse(readFileSync(process.argv[2], "utf8"));
+  const pythonModel = bundle.model || bundle;
+  const pythonController = new ReviewEditorController(pythonModel);
+  const prepared = [];
+  await pythonController.saveStoryboard({
+    transaction: {
+      atomic: true,
+      prepare: async (record, token) => {
+        prepared.push({ record, token });
+        return { record, token };
+      },
+      commit: async () => ({ revision: 1 }),
+    },
+  });
+  assert.equal(prepared.length, 1);
+  assert.equal(prepared[0].token.expected_revision, 0);
+  assert.equal(prepared[0].token.record_id, pythonModel.storyboard_record_id);
+  assert.equal(prepared[0].record.details.source_identity, pythonModel.storyboard.source_identity);
+  assert.equal(prepared[0].record.details.source_revision, pythonModel.storyboard.source_revision);
+  const legacyModel = JSON.parse(JSON.stringify(pythonModel));
+  delete legacyModel.storyboard_record_id;
+  assert.equal(storyboardRecordId(legacyModel), pythonModel.storyboard_record_id);
+  if (bundle.stored) {
+    await pythonController.reload({
+      record_id: pythonModel.storyboard_record_id,
+      load: async () => bundle.stored,
+    });
+    assert.equal(pythonController.snapshot().autosave.saved_revision, bundle.stored.revision);
+  }
+  console.log("review_editor_python_model_runtime: ok");
+  process.exit(0);
+}
 
 class Element {
   constructor(documentRef, tagName) {
@@ -37,7 +74,10 @@ const model = {
   schema_version: "review-editor.v1",
   context: { episode_id: "ep", execution_id: "run", cursor: { time_s: 2 }, selection_revision: 4 },
   time: { terminal_s: 2 },
-  source_identity: { units: "m", sources: { panel: { artifact_id: "panel", sha256: "a".repeat(64), source_commit: "run-1" } } },
+  source_identity: { units: "m", sources: { panel: {
+    artifact_id: "panel", sha256: "a".repeat(64), source_commit: "run-1",
+    schema: "panel.v1", config_identity: "cfg",
+  } } },
   annotations: [],
   storyboard: {
     schema_version: "review-storyboard-edit.v1",
@@ -46,6 +86,13 @@ const model = {
     order: ["a"], captions: { a: "old" },
   },
 };
+const canonicalSourceRevision = sourceRevision(model);
+model.storyboard.source_revision = canonicalSourceRevision;
+assert.equal(
+  storyboardRecordId(model),
+  "storyboard-29a47556ff0f216b8a5199defaf57c039ac6a0221a5f72d34774b265ab842aee",
+);
+assert.equal(sourceRevision(model), canonicalSourceRevision);
 const controller = new ReviewEditorController(model, root);
 controller.dispatch({ type: "one-click", label: "bug" });
 assert.equal(controller.snapshot().annotations.length, 1);
@@ -133,6 +180,28 @@ sourceController.model.source_identity.sources.panel.sha256 = "b".repeat(64);
 releaseSource();
 await assert.rejects(sourceSave, /stale source identity/);
 assert.equal(sourceCommitted, false);
+const revisionController = new ReviewEditorController(model);
+const revisionTokens = [];
+const revisionTransaction = {
+  atomic: true,
+  prepare: async (_record, token) => {
+    revisionTokens.push({ record_id: token.record_id, expected_revision: token.expected_revision });
+    return { token };
+  },
+  commit: async (_proposal, token) => ({ revision: token.expected_revision + 1 }),
+};
+revisionController.dispatch({ type: "one-click", label: "normal" });
+const annotationA = revisionController.snapshot().annotations.at(-1);
+await revisionController.save(annotationA, { transaction: revisionTransaction });
+revisionController.dispatch({ type: "one-click", label: "bug" });
+const annotationB = revisionController.snapshot().annotations.at(-1);
+await revisionController.save(annotationB, { transaction: revisionTransaction });
+await revisionController.saveStoryboard({ transaction: revisionTransaction });
+assert.deepEqual(revisionTokens, [
+  { record_id: annotationA.annotation_id, expected_revision: 0 },
+  { record_id: annotationB.annotation_id, expected_revision: 0 },
+  { record_id: revisionController.storyboardRecordId, expected_revision: 0 },
+]);
 let releaseCommit;
 let commitEntered;
 const pendingCommit = new Promise((resolve) => { releaseCommit = resolve; });
@@ -302,5 +371,34 @@ await controller.reload({
   }),
 });
 assert.equal(controller.snapshot().autosave.saved_revision, 4);
+const canonicalStoryboard = {
+  schema_version: "audit-record.v1",
+  record_type: "action_record",
+  record_id: controller.storyboardRecordId,
+  action_id: controller.storyboardRecordId,
+  action_type: "storyboard_edit",
+  actor_kind: "human",
+  actor_id: "",
+  target_id: "source-token",
+  status: "committed",
+  details: {
+    schema_version: "review-storyboard-edit.v1",
+    record_id: controller.storyboardRecordId,
+    source_identity: "source-token",
+    source_revision: controller.snapshot().storyboard.source_revision,
+    storyboard: {
+      schema_version: "review-storyboard-edit.v1",
+      source_identity: "source-token",
+      source_revision: controller.snapshot().storyboard.source_revision,
+      intervals: [], order: [], captions: {},
+    },
+  },
+};
+await controller.reload({
+  record_id: controller.storyboardRecordId,
+  load: async () => ({ revision: 5, record: canonicalStoryboard }),
+});
+assert.equal(controller.snapshot().autosave.saved_revision, 5);
+assert.equal(controller.snapshot().record_revisions[controller.storyboardRecordId], 5);
 controller.unmount();
 console.log("review_editor_runtime: ok");

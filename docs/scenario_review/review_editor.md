@@ -69,6 +69,20 @@ durable write capability from the controller. Reload accepts only the explicit
 revisions, a nonnegative non-tombstone record revision, and source-bounded
 intervals.
 
+The storyboard source revision is the canonical compact JSON token
+`{"context": <context source revision>, "revisions": {<artifact>: {"config_identity": ..., "schema": ..., "sha256": ..., "source_commit": ...}}}`,
+with sorted keys and no insignificant whitespace. Python and browser models use
+this same token; the source identity remains the SHA-256 token. Python BA-03
+reloads use the canonical `audit-record.v1` `action_record` envelope, with the
+storyboard schema, source identity, and source revision in `details`. The
+browser accepts that envelope and its browser transaction equivalent only when
+record/action IDs, target identity, source identity, source revision, and
+storyboard payload all match the current source. Storyboard IDs are
+`storyboard-` plus SHA-256 of the source identity token in both runtimes.
+Browser compare-and-swap expectations are tracked by durable record ID; the
+latest global autosave status is informational and is never reused for a
+different annotation or storyboard record.
+
 `StoryboardEditor` validates source intervals, preserves captions and order,
 supports undo/redo, and writes only to a caller-declared export destination.
 Saving and loading use canonical JSON so a round trip is byte-stable.

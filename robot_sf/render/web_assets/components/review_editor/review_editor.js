@@ -13,6 +13,7 @@
 
 export const EDITOR_MODEL_SCHEMA_VERSION = "review-editor.v1";
 export const STORYBOARD_SCHEMA_VERSION = "review-storyboard-edit.v1";
+export const AUDIT_RECORD_SCHEMA_VERSION = "audit-record.v1";
 export const ANNOTATION_SPEEDS = ["one_click", "quick", "full"];
 export const TRIAGE_CLASSIFICATIONS = Object.freeze({
   normal: "normal",
@@ -47,13 +48,85 @@ function sameJson(left, right) {
   return stableStringify(left) === stableStringify(right);
 }
 
-function hashToken(value) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(value);
+  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+  const padded = new Uint8Array(paddedLength);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const bitLength = bytes.length * 8;
+  const highLength = Math.floor(bitLength / 0x100000000);
+  const lowLength = bitLength >>> 0;
+  const lengthOffset = padded.length - 8;
+  padded[lengthOffset] = (highLength >>> 24) & 0xff;
+  padded[lengthOffset + 1] = (highLength >>> 16) & 0xff;
+  padded[lengthOffset + 2] = (highLength >>> 8) & 0xff;
+  padded[lengthOffset + 3] = highLength & 0xff;
+  padded[lengthOffset + 4] = (lowLength >>> 24) & 0xff;
+  padded[lengthOffset + 5] = (lowLength >>> 16) & 0xff;
+  padded[lengthOffset + 6] = (lowLength >>> 8) & 0xff;
+  padded[lengthOffset + 7] = lowLength & 0xff;
+  const constants = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b,
+    0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01,
+    0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7,
+    0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152,
+    0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+    0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+    0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08,
+    0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f,
+    0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ];
+  const state = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ];
+  const rotateRight = (word, bits) => (word >>> bits) | (word << (32 - bits));
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    const words = new Uint32Array(64);
+    for (let index = 0; index < 16; index += 1) {
+      const position = offset + index * 4;
+      words[index] = ((padded[position] << 24) | (padded[position + 1] << 16)
+        | (padded[position + 2] << 8) | padded[position + 3]) >>> 0;
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const first = words[index - 15];
+      const second = words[index - 2];
+      const smallSigma0 = rotateRight(first, 7) ^ rotateRight(first, 18) ^ (first >>> 3);
+      const smallSigma1 = rotateRight(second, 17) ^ rotateRight(second, 19) ^ (second >>> 10);
+      words[index] = (words[index - 16] + smallSigma0 + words[index - 7] + smallSigma1) >>> 0;
+    }
+    let [a, b, c, d, e, f, g, h] = state;
+    for (let index = 0; index < 64; index += 1) {
+      const bigSigma1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+      const choose = (e & f) ^ (~e & g);
+      const temporary1 = (h + bigSigma1 + choose + constants[index] + words[index]) >>> 0;
+      const bigSigma0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const temporary2 = (bigSigma0 + majority) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temporary1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temporary1 + temporary2) >>> 0;
+    }
+    state[0] = (state[0] + a) >>> 0;
+    state[1] = (state[1] + b) >>> 0;
+    state[2] = (state[2] + c) >>> 0;
+    state[3] = (state[3] + d) >>> 0;
+    state[4] = (state[4] + e) >>> 0;
+    state[5] = (state[5] + f) >>> 0;
+    state[6] = (state[6] + g) >>> 0;
+    state[7] = (state[7] + h) >>> 0;
   }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return state.map((word) => word.toString(16).padStart(8, "0")).join("");
 }
 
 function intervalValue(value, fallback = null) {
@@ -140,7 +213,9 @@ function sourceIdentity(model) {
 function sourceRevision(model) {
   const identity = sourceIdentity(model);
   const sources = identity.sources && typeof identity.sources === "object" ? identity.sources : {};
-  const revisions = Object.fromEntries(Object.entries(sources).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [
+  const revisions = Object.fromEntries(Object.entries(sources).sort(([left], [right]) => (
+    left < right ? -1 : (left > right ? 1 : 0)
+  )).map(([key, item]) => [
     key,
     item && typeof item === "object"
       ? {
@@ -162,10 +237,14 @@ function storyboardSourceIdentity(model) {
 }
 
 function storyboardRecordId(model) {
+  const identity = storyboardSourceIdentity(model);
+  const identityToken = typeof identity === "string"
+    ? identity
+    : sha256Hex(stableStringify(identity));
   return String(
     model?.storyboard_record_id
       || model?.storyboard?.record_id
-      || `storyboard-${hashToken(stableStringify(storyboardSourceIdentity(model)))}`,
+      || `storyboard-${sha256Hex(identityToken)}`,
   );
 }
 
@@ -373,6 +452,7 @@ export class ReviewEditorController {
       selectionRevision: Number(context(this.model).selection_revision || context(this.model).context_revision || 0),
       annotations: Array.isArray(this.model.annotations) ? clone(this.model.annotations) : [],
       storyboard: normalizeStoryboard(this.model.storyboard, this.model),
+      recordRevisions: {},
       overlayState: {
         ...(this.model.overlay_state || {}),
         numbered: this.model.overlay_state?.numbered ?? true,
@@ -552,6 +632,7 @@ export class ReviewEditorController {
       selection_revision: this.state.selectionRevision,
       annotations: clone(this.state.annotations),
       storyboard: clone(this.state.storyboard),
+      record_revisions: clone(this.state.recordRevisions),
       overlay_state: clone(this.state.overlayState),
       autosave: clone(this.state.autosave),
       source_identity: clone(sourceIdentity(this.model)),
@@ -568,6 +649,33 @@ export class ReviewEditorController {
       source_revision: sourceRevision(this.model),
       context: clone(context(this.model)),
     };
+  }
+
+  _recordId(record) {
+    return String(
+      record?.record_id
+        || record?.annotation_id
+        || record?.review_id
+        || record?.action_id
+        || "",
+    );
+  }
+
+  _expectedRevision(record, explicitRevision) {
+    if (explicitRevision !== undefined && explicitRevision !== null) return explicitRevision;
+    const recordId = this._recordId(record);
+    const knownRevision = this.state.recordRevisions[recordId];
+    if (Number.isInteger(knownRevision)) return knownRevision;
+    const recordRevision = Number.isInteger(record?.revision)
+      ? record.revision
+      : (Number.isInteger(record?.record_revision) ? record.record_revision : null);
+    return recordRevision ?? 0;
+  }
+
+  _rememberRevision(recordId, revision) {
+    if (recordId && Number.isInteger(revision) && revision >= 0) {
+      this.state.recordRevisions[recordId] = revision;
+    }
   }
 
   _assertSaveContext(captured) {
@@ -646,12 +754,7 @@ export class ReviewEditorController {
     if (!record) throw new Error("record is required for save");
     const transaction = this._transaction(options);
     const operationId = options.operation_id || newId("operation");
-    const recordRevision = Number.isInteger(record?.revision)
-      ? record.revision
-      : (Number.isInteger(record?.record_revision) ? record.record_revision : null);
-    const expectedRevision = options.expected_revision
-      ?? this.state.autosave.saved_revision
-      ?? recordRevision;
+    const expectedRevision = this._expectedRevision(record, options.expected_revision);
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
       throw new Error("expected_revision is required for every durable save");
     }
@@ -671,7 +774,7 @@ export class ReviewEditorController {
       source_identity: saveContext.source_identity,
       source_revision: saveContext.source_revision,
       context: saveContext.context,
-      record_id: String(record.annotation_id || record.review_id || record.action_id || ""),
+      record_id: this._recordId(record),
       actor_kind: options.actor_kind || this.options.actor_kind || "human",
       actor_id: options.actor_id || this.options.actor_id || "",
     });
@@ -695,11 +798,13 @@ export class ReviewEditorController {
       }
       this._assertSaveContext(saveContext);
       const receipt = await transaction.commit(proposal, token);
+      const savedRevision = receipt?.revision ?? receipt?.record_revision ?? null;
+      this._rememberRevision(token.record_id, savedRevision);
       this.state.autosave = {
         state: "saved",
         operation_id: operationId,
         expected_revision: expectedRevision,
-        saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
+        saved_revision: savedRevision,
         selection_revision: saveContext.selection_revision,
         error: "",
         conflict: null,
@@ -724,7 +829,8 @@ export class ReviewEditorController {
   async saveStoryboard(options = {}) {
     const transaction = this._transaction(options, true);
     const operationId = options.operation_id || newId("operation");
-    const expectedRevision = options.expected_revision ?? this.state.autosave.saved_revision;
+    const recordId = String(options.record_id || this.storyboardRecordId);
+    const expectedRevision = this._expectedRevision({ record_id: recordId }, options.expected_revision);
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
       throw new Error("expected_revision is required for every durable save");
     }
@@ -733,7 +839,6 @@ export class ReviewEditorController {
     if (expectedSelectionRevision !== saveContext.selection_revision) {
       throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${saveContext.selection_revision}`);
     }
-    const recordId = String(options.record_id || this.storyboardRecordId);
     const storyboard = normalizeStoryboard(this.state.storyboard, this.model);
     if (!sameJson(storyboard.source_identity, storyboardSourceIdentity(this.model)) || storyboard.source_revision !== sourceRevision(this.model)) {
       throw new Error("storyboard source identity or revision is stale");
@@ -777,9 +882,11 @@ export class ReviewEditorController {
       }
       this._assertSaveContext(saveContext);
       const receipt = await transaction.commit(proposal, token);
+      const savedRevision = receipt?.revision ?? receipt?.record_revision ?? null;
+      this._rememberRevision(recordId, savedRevision);
       this.state.autosave = {
         state: "saved", operation_id: operationId, expected_revision: expectedRevision,
-        saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
+        saved_revision: savedRevision,
         selection_revision: saveContext.selection_revision, error: "", conflict: null,
       };
       this._render();
@@ -809,11 +916,17 @@ export class ReviewEditorController {
     if (!record || typeof record !== "object" || record.deleted === true || record.tombstone === true) {
       throw new Error("loaded storyboard tombstone or record is invalid");
     }
-    if (record.record_type !== "storyboard_edit" || record.action_type !== "storyboard_edit") {
+    const canonicalAction = record.record_type === "action_record";
+    const browserStoryboard = record.record_type === "storyboard_edit";
+    if ((!canonicalAction && !browserStoryboard) || record.action_type !== "storyboard_edit") {
       throw new Error("loaded storyboard record/action type is invalid");
     }
-    if (loaded?.record_type !== undefined && loaded.record_type !== "storyboard_edit") {
+    if (loaded?.record_type !== undefined && loaded.record_type !== record.record_type) {
       throw new Error("loaded storyboard record type is invalid");
+    }
+    if (canonicalAction
+      && (record.schema_version !== AUDIT_RECORD_SCHEMA_VERSION || record.status !== "committed")) {
+      throw new Error("loaded storyboard canonical action record is invalid");
     }
     if (record.record_id !== expectedRecordId || record.action_id !== expectedRecordId) {
       throw new Error("loaded storyboard record identity does not match requested record");
@@ -831,12 +944,23 @@ export class ReviewEditorController {
     if (details.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
     if (details.record_id !== expectedRecordId) throw new Error("loaded storyboard record_id is invalid");
     if (!sameJson(record?.target_id, expectedSourceIdentity)) throw new Error("loaded storyboard target identity is stale");
-    if (!Object.prototype.hasOwnProperty.call(record, "source_identity")
-      || !Object.prototype.hasOwnProperty.call(record, "source_revision")) {
-      throw new Error("loaded storyboard top-level source identity and revision are required");
+    if (canonicalAction) {
+      if (Object.prototype.hasOwnProperty.call(record, "source_identity")
+        && !sameJson(record.source_identity, expectedSourceIdentity)) {
+        throw new Error("loaded storyboard source identity is stale");
+      }
+      if (Object.prototype.hasOwnProperty.call(record, "source_revision")
+        && record.source_revision !== expectedSourceRevision) {
+        throw new Error("loaded storyboard source revision is stale");
+      }
+    } else {
+      if (!Object.prototype.hasOwnProperty.call(record, "source_identity")
+        || !Object.prototype.hasOwnProperty.call(record, "source_revision")) {
+        throw new Error("loaded storyboard top-level source identity and revision are required");
+      }
+      if (!sameJson(record.source_identity, sourceIdentity(this.model))) throw new Error("loaded storyboard source identity is stale");
+      if (record.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
     }
-    if (!sameJson(record.source_identity, sourceIdentity(this.model))) throw new Error("loaded storyboard source identity is stale");
-    if (record.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
     const payload = details.storyboard;
     if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "schema_version") || !Object.prototype.hasOwnProperty.call(payload, "source_identity") || !Object.prototype.hasOwnProperty.call(payload, "source_revision")) {
       throw new Error("loaded storyboard schema, source identity, and source revision are required");
@@ -848,6 +972,7 @@ export class ReviewEditorController {
     if (!sameJson(normalized.source_identity, expectedSourceIdentity)) throw new Error("loaded storyboard source identity is stale");
     if (normalized.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
     this.state.storyboard = normalized;
+    this._rememberRevision(expectedRecordId, revision);
     this.state.autosave = {
       state: "saved",
       operation_id: "",
@@ -875,7 +1000,6 @@ export class ReviewEditorController {
       void this.dispatch({
         type: "save",
         record: this.state.annotations.at(-1),
-        expected_revision: this.state.autosave.saved_revision ?? 0,
       }).catch(() => {});
     } else if (key === "n") {
       event.preventDefault?.();
@@ -922,7 +1046,6 @@ export class ReviewEditorController {
       void this.dispatch({
         type: "save",
         record: latest(),
-        expected_revision: this.state.autosave.saved_revision ?? 0,
       }).catch(() => {});
     }));
     wrapper.appendChild(noteActions);
@@ -957,7 +1080,7 @@ export class ReviewEditorController {
       storyboard.appendChild(row);
     }
     storyboard.appendChild(createButton(documentRef, "Save storyboard", () => {
-      void this.dispatch({ type: "save-storyboard", expected_revision: this.state.autosave.saved_revision ?? 0 }).catch(() => {});
+      void this.dispatch({ type: "save-storyboard" }).catch(() => {});
     }));
     wrapper.appendChild(storyboard);
     const sourceStatus = documentRef.createElement("p");
@@ -975,6 +1098,8 @@ export class ReviewEditorController {
 export function mountReviewEditor(model, root, options = {}) {
   return new ReviewEditorController(model, root, options);
 }
+
+export { sourceRevision, storyboardRecordId };
 
 const dataElement = typeof document === "undefined" ? null : document.getElementById("review-editor-data");
 const rootElement = typeof document === "undefined" ? null : document.getElementById("review-editor-root");

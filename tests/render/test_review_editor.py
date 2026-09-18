@@ -16,6 +16,7 @@ import pytest
 from robot_sf.analysis_workbench.audit_contracts import (
     ActionRecord,
     Reference,
+    record_to_dict,
 )
 from robot_sf.analysis_workbench.audit_store import AuditConflictError, CommitResult
 from robot_sf.analysis_workbench.review_contracts import component_request_from_dict
@@ -244,6 +245,13 @@ def test_storyboard_adapter_persistence_round_trips_with_cas(tmp_path: Path) -> 
         session = review_editor.ReviewEditorSession(model, adapter=adapter)
         session.storyboard.add_interval("a", 10.2, 10.5, caption="near miss")
         receipt = session.save_storyboard(operation_id="story-1", expected_revision=0)
+        stored = adapter.get(session.storyboard_record_id(), include_deleted=True)
+        assert stored is not None and isinstance(stored.record, ActionRecord)
+        canonical = record_to_dict(stored.record)
+        assert canonical["schema_version"] == "audit-record.v1"
+        assert canonical["record_type"] == "action_record"
+        assert canonical["record_id"] == session.storyboard_record_id()
+        assert canonical["details"]["source_revision"] == session._source_revision_token()
         reloaded = review_editor.ReviewEditorSession(model, adapter=adapter)
         reloaded.reload_storyboard()
         assert receipt.revision == 1
@@ -383,6 +391,61 @@ def test_verified_provenance_requires_matching_nonempty_identity_and_revision() 
         {"scene": "a" * 64},
     )
     assert rebound["provenance_status"] == "stale"
+
+
+def test_python_storyboard_revision_uses_browser_canonical_token() -> None:
+    source_hash = "a" * 64
+    ref = review_editor.SourceRef(
+        artifact_id="panel",
+        uri="panel.json",
+        format="review-panels.v1",
+        schema="panel.v1",
+        sha256=source_hash,
+        source_commit="run-1",
+        config_identity="cfg",
+    )
+    model = {
+        "context": {},
+        "source_identity": {
+            "sources": {
+                "panel": {
+                    "sha256": source_hash,
+                    "source_commit": "run-1",
+                    "schema": "panel.v1",
+                    "config_identity": "cfg",
+                }
+            }
+        },
+    }
+    session = review_editor.ReviewEditorSession(
+        model, source_refs={"panel": ref}, source_digests={"panel": source_hash}
+    )
+    expected = (
+        '{"context":"","revisions":{"panel":{"config_identity":"cfg",'
+        '"schema":"panel.v1","sha256":"' + source_hash + '","source_commit":"run-1"}}}'
+    )
+    assert session._source_revision_token() == expected
+    assert session.storyboard.snapshot()["source_revision"] == expected
+
+
+def test_python_generated_model_can_save_storyboard_in_browser_runtime(tmp_path: Path) -> None:
+    model = _model(tmp_path)
+    with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
+        session = review_editor.ReviewEditorSession(model, adapter=adapter)
+        session.save_storyboard(operation_id="python-browser-reload", expected_revision=0)
+        stored = adapter.get(session.storyboard_record_id(), include_deleted=True)
+        assert stored is not None and stored.record is not None
+        bundle = {
+            "model": model,
+            "stored": {"revision": stored.revision, "record": record_to_dict(stored.record)},
+        }
+    model_path = tmp_path / "review-editor.v1.json"
+    model_path.write_text(json.dumps(bundle), encoding="utf-8")
+    script = Path(__file__).resolve().parent / "review_editor_runtime.mjs"
+    completed = subprocess.run(
+        ["node", str(script), str(model_path)], check=True, capture_output=True, text=True
+    )
+    assert "review_editor_python_model_runtime: ok" in completed.stdout
 
 
 def test_storyboard_reload_rejects_tombstones_revisions_types_and_missing_provenance(

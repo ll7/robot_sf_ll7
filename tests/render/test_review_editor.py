@@ -47,6 +47,9 @@ def test_fixture_emits_offline_editor_and_preserves_source(tmp_path: Path) -> No
     ).read_text(encoding="utf-8")
     assert "localStorage" not in html + javascript
     assert "http://" not in html + javascript
+    assert "review-editor-root" in html
+    assert "review-editor-data" in html
+    assert 'getElementById("review-editor-root")' in javascript
     assert (tmp_path / "panel-model.json").read_bytes() == before
 
 
@@ -164,6 +167,68 @@ def test_store_adapter_cas_conflict_and_failed_autosave_preserve_local_edit(tmp_
         assert adapter.get(first.annotation_id).revision == receipt.revision
 
 
+def test_save_does_not_fill_missing_expected_revision_from_current_store(tmp_path: Path) -> None:
+    model = {"context": {"episode_id": "ep", "execution_id": "run"}}
+    with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
+        session = review_editor.ReviewEditorSession(model, adapter=adapter)
+        first = session.create_quick("unclear", annotation_id="same")
+        session.save_annotation(first, operation_id="first", expected_revision=0)
+        replacement = session.create_quick("unclear", annotation_id="same")
+        with pytest.raises(AuditConflictError, match="expected_revision is required"):
+            session.save_annotation(replacement, operation_id="replacement")
+
+
+def test_source_origin_resolution_and_schema_are_fail_closed(tmp_path: Path) -> None:
+    model = {
+        "context": {"episode_id": "ep"},
+        "time": {"origin_s": 10.0, "terminal_s": 12.0},
+        "streams": {
+            "scene": {
+                "resolution_s": 0.1,
+                "samples": [{"time_s": 10.0, "value": {"robot": {"id": "r", "position": [1, 2]}}}],
+            }
+        },
+    }
+    with pytest.raises(review_editor.InvalidIntervalError):
+        review_editor.make_quick_annotation(model, "unclear", interval=(1.0, 2.0))
+    with pytest.raises(review_editor.ReviewEditorError, match="geometry unavailable"):
+        review_editor.snap_reference(model, "actor", target_id="r", timestamp_s=11.0)
+    with pytest.raises(review_editor.ReviewEditorError, match="schema_version"):
+        review_editor.StoryboardEditor.from_mapping(
+            {
+                "schema_version": "review-storyboard-edit.v0",
+                "intervals": [],
+                "order": [],
+                "captions": {},
+            }
+        )
+
+    panel = tmp_path / "panel.json"
+    panel.write_text('{"schema_version":"review-panels.v0"}', encoding="utf-8")
+    payload = json.loads((FIXTURE_ROOT / "request.json").read_text(encoding="utf-8"))
+    payload["sources"][0].update(
+        uri="panel.json", sha256=hashlib.sha256(panel.read_bytes()).hexdigest()
+    )
+    request = component_request_from_dict(payload, source="request.json")
+    with pytest.raises(review_editor.ReviewEditorError, match="review-panels.v1"):
+        review_editor.build_editor_model(request, base=tmp_path)
+
+
+def test_storyboard_adapter_persistence_round_trips_with_cas(tmp_path: Path) -> None:
+    model = {
+        "context": {"episode_id": "ep", "execution_id": "run"},
+        "time": {"origin_s": 10.0, "terminal_s": 12.0},
+    }
+    with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
+        session = review_editor.ReviewEditorSession(model, adapter=adapter)
+        session.storyboard.add_interval("a", 10.2, 10.5, caption="near miss")
+        receipt = session.save_storyboard(operation_id="story-1", expected_revision=0)
+        reloaded = review_editor.ReviewEditorSession(model, adapter=adapter)
+        reloaded.reload_storyboard()
+        assert receipt.revision == 1
+        assert reloaded.storyboard.snapshot()["intervals"][0]["caption"] == "near miss"
+
+
 def test_stale_selection_and_failed_service_save_preserve_local_edit(tmp_path: Path) -> None:
     model = _model(tmp_path)
     session = review_editor.ReviewEditorSession(
@@ -224,6 +289,51 @@ def test_stale_source_is_explicit_and_not_rebound(tmp_path: Path) -> None:
         and {"panel": hashlib.sha256(panel.read_bytes()).hexdigest()},
     )
     assert annotation.provenance_status == "stale"
+
+
+def test_existing_annotation_revision_is_marked_stale_on_source_revision_change(
+    tmp_path: Path,
+) -> None:
+    panel = tmp_path / "panel-model.json"
+    shutil.copyfile(FIXTURE_ROOT / "panel-model.json", panel)
+    payload = json.loads((FIXTURE_ROOT / "request.json").read_text(encoding="utf-8"))
+    payload["sources"][0].update(
+        uri="panel-model.json",
+        sha256=hashlib.sha256(panel.read_bytes()).hexdigest(),
+        source_commit="b" * 40,
+    )
+    payload["config"] = {
+        "annotations": [
+            {
+                "record_type": "annotation",
+                "annotation_id": "old",
+                "episode_id": "episode-17",
+                "classification": "unclear",
+                "mode": "quick",
+                "author_kind": "human",
+                "source_identity": payload["sources"][0]["sha256"],
+                "source_revision": "a" * 40,
+                "provenance_status": "verified",
+            }
+        ]
+    }
+    model = review_editor.build_editor_model(
+        component_request_from_dict(payload, source="request.json"), base=tmp_path
+    )
+    assert model["annotations"][0]["provenance_status"] == "stale"
+
+
+def test_untrusted_config_and_storyboard_exports_reject_symlinks(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"schema_version":"review-panels.v1"}', encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.symlink_to(outside)
+    with pytest.raises(review_editor.ReviewEditorError):
+        review_editor._strict_cli_json(str(config))
+    export = tmp_path / "storyboard.json"
+    export.symlink_to(outside)
+    with pytest.raises(review_editor.ReviewEditorError):
+        review_editor.StoryboardEditor().save(export, overwrite=True)
 
 
 def test_node_browser_controller_honours_typing_shortcut_suppression() -> None:

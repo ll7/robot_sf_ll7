@@ -37,7 +37,7 @@ const model = {
   schema_version: "review-editor.v1",
   context: { episode_id: "ep", execution_id: "run", cursor: { time_s: 2 }, selection_revision: 4 },
   time: { terminal_s: 2 },
-  source_identity: { units: "m" },
+  source_identity: { units: "m", sources: { panel: { artifact_id: "panel", sha256: "a".repeat(64), source_commit: "run-1" } } },
   annotations: [],
   storyboard: { intervals: [{ interval_id: "a", start_s: 1, end_s: 2, caption: "old" }], order: ["a"], captions: { a: "old" } },
 };
@@ -45,6 +45,10 @@ const controller = new ReviewEditorController(model, root);
 controller.dispatch({ type: "one-click", label: "bug" });
 assert.equal(controller.snapshot().annotations.length, 1);
 assert.equal(controller.snapshot().annotations[0].suspected_cause, undefined);
+assert.equal(controller.snapshot().annotations[0].source_identity, "a".repeat(64));
+controller.dispatch({ type: "select-time", time_s: 1.5 });
+controller.dispatch({ type: "quick-note", classification: "unclear" });
+assert.equal(controller.snapshot().annotations.at(-1).metadata.selection_revision, controller.snapshot().selection_revision);
 controller.dispatch({ type: "select-interval", interval_id: "a" });
 controller.dispatch({ type: "quick-note", classification: "unclear", observed_behavior: "interval note" });
 assert.deepEqual(controller.snapshot().annotations.at(-1).interval, { start_s: 1, end_s: 2 });
@@ -53,14 +57,30 @@ assert.throws(
   /invalid storyboard interval/,
 );
 controller.dispatch({ type: "undo" });
-assert.equal(controller.snapshot().annotations.length, 1);
-controller.dispatch({ type: "redo" });
 assert.equal(controller.snapshot().annotations.length, 2);
+controller.dispatch({ type: "redo" });
+assert.equal(controller.snapshot().annotations.length, 3);
 const beforeTyping = controller.snapshot().annotations.length;
 const textarea = new Element(documentRef, "textarea");
 for (const listener of documentRef.listeners.get("keydown") || []) listener({ key: "b", target: textarea, preventDefault() {} });
 assert.equal(controller.snapshot().annotations.length, beforeTyping);
+let preventedSave = false;
+for (const listener of documentRef.listeners.get("keydown") || []) listener({ key: "s", ctrlKey: true, target: root, preventDefault() { preventedSave = true; } });
+assert.equal(controller.snapshot().annotations.length, beforeTyping);
+assert.equal(preventedSave, true);
+let release;
+const pending = new Promise((resolve) => { release = resolve; });
+const savedRow = controller.snapshot().annotations.at(-1);
+const savePromise = controller.save(savedRow, { expected_revision: 0, save: async () => { await pending; return { revision: 1 }; } });
+controller.dispatch({ type: "select-time", time_s: 1.75 });
+release();
+await assert.rejects(savePromise, /stale selection revision after save/);
+assert.equal(controller.snapshot().autosave.state, "error");
 const commands = overlayCommands(model, [{ reference_id: "a", coordinate_frame: "image", point: [10, 20] }, { reference_id: "b", coordinate_frame: "image", point: [20, 20] }], { distances: true });
 assert.equal(commands.some((item) => item.kind === "distance"), false);
+await controller.reload({
+  load: async () => ({ revision: 4, record: { details: { storyboard: { intervals: [], order: [], captions: {} } } } }),
+});
+assert.equal(controller.snapshot().autosave.saved_revision, 4);
 controller.unmount();
 console.log("review_editor_runtime: ok");

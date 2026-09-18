@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import stat
 import uuid
 from collections.abc import Mapping, Sequence
@@ -39,6 +40,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
     ANNOTATION_CLASSIFICATIONS,
     ANNOTATION_MODES,
     AUTHOR_KINDS,
+    ActionRecord,
     Annotation,
     Reference,
     ReviewRecord,
@@ -388,24 +390,175 @@ def _resolve_under(root: Path, value: str, *, kind: str) -> Path:
     return candidate
 
 
+def _open_parent_no_follow(path: Path) -> tuple[int, str]:
+    """Open a path's parent directory without traversing symlinks.
+
+    The returned directory descriptor remains stable if an attacker swaps a
+    parent path after validation.  Callers must close it after operating on
+    the returned basename with ``dir_fd``.
+    """
+
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    parts = absolute.parts
+    if not parts:
+        raise ReviewEditorError("unsafe_path: empty path")
+    if absolute.anchor:
+        descriptor = os.open(
+            absolute.anchor,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+        )
+        components = parts[1:]
+    else:  # pragma: no cover - ``absolute`` is normally anchored above.
+        descriptor = os.open(
+            ".", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+        )
+        components = parts
+    if not components:
+        os.close(descriptor)
+        raise ReviewEditorError("unsafe_path: path has no basename")
+    try:
+        for component in components[:-1]:
+            if component in {"", "."}:
+                continue
+            next_descriptor = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=descriptor,
+            )
+            os.close(descriptor)
+            descriptor = next_descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+    return descriptor, components[-1]
+
+
+def _read_regular_path(path: Path, *, kind: str) -> bytes:
+    """Read one bounded regular file through a no-follow descriptor."""
+
+    parent_fd, basename = _open_parent_no_follow(path)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            basename,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_fd,
+        )
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            raise ReviewEditorError(f"{kind}_not_regular_file")
+        if opened.st_size > MAX_SOURCE_BYTES:
+            raise ReviewEditorError(f"{kind}_too_large")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = None
+            payload = stream.read(MAX_SOURCE_BYTES + 1)
+        if len(payload) > MAX_SOURCE_BYTES:
+            raise ReviewEditorError(f"{kind}_too_large")
+        return payload
+    except OSError as error:
+        raise ReviewEditorError(f"{kind}_unreadable") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        os.close(parent_fd)
+
+
+def _mkdir_no_follow(path: Path, *, exist_ok: bool = True) -> None:
+    """Create a directory tree without following swapped-in symlink parents."""
+
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    parts = absolute.parts
+    descriptor = os.open(
+        absolute.anchor or ".",
+        os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        components = parts[1:] if absolute.anchor else parts
+        for index, component in enumerate(components):
+            if component in {"", "."}:
+                continue
+            try:
+                next_descriptor = os.open(
+                    component,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=descriptor,
+                )
+                if index == len(components) - 1 and not exist_ok:
+                    os.close(next_descriptor)
+                    raise FileExistsError(component, "mkdir", str(path))
+            except FileNotFoundError:
+                os.mkdir(component, dir_fd=descriptor)
+                next_descriptor = os.open(
+                    component,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=descriptor,
+                )
+            os.close(descriptor)
+            descriptor = next_descriptor
+    except FileExistsError:
+        if not exist_ok:
+            raise ReviewEditorError(f"output_collision: {path}")
+        raise
+    finally:
+        os.close(descriptor)
+
+
+def _write_atomic(path: Path, payload: bytes, *, overwrite: bool = False) -> None:
+    """Write bytes atomically, rejecting symlink destinations and races."""
+
+    if len(payload) > MAX_OUTPUT_BYTES:
+        raise ReviewEditorError("editor output exceeds size limit")
+    parent_fd, basename = _open_parent_no_follow(path)
+    temporary = f".{basename}.tmp-{uuid.uuid4().hex}"
+    descriptor: int | None = None
+    try:
+        try:
+            existing = os.stat(basename, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and not overwrite:
+            raise ReviewEditorError(f"output_collision: {path}")
+        if existing is not None and not stat.S_ISREG(existing.st_mode):
+            raise ReviewEditorError(f"output_symlink_or_nonregular: {path}")
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent_fd,
+        )
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = None
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if overwrite:
+            os.replace(temporary, basename, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+        else:
+            os.link(
+                temporary,
+                basename,
+                src_dir_fd=parent_fd,
+                dst_dir_fd=parent_fd,
+                follow_symlinks=False,
+            )
+            os.unlink(temporary, dir_fd=parent_fd)
+    except OSError as error:
+        raise ReviewEditorError(f"cannot write output: {error}") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        try:
+            os.unlink(temporary, dir_fd=parent_fd)
+        except FileNotFoundError:
+            pass
+        os.close(parent_fd)
+
+
 def _read_source(root: Path, ref: SourceRef) -> tuple[Any, str, bool]:
     path = _resolve_under(root, ref.uri, kind="source")
     try:
-        current = path.parent
-        root_path = root.resolve(strict=True)
-        while current != root_path:
-            if current.is_symlink():
-                raise ReviewEditorError(f"source_symlink_rejected: {ref.artifact_id}")
-            current = current.parent
-        stat_result = path.stat()
-        if path.is_symlink():
-            raise ReviewEditorError(f"source_symlink_rejected: {ref.artifact_id}")
-        if not stat.S_ISREG(stat_result.st_mode):
-            raise ReviewEditorError(f"source_not_regular_file: {ref.artifact_id}")
-        if stat_result.st_size > MAX_SOURCE_BYTES:
-            raise ReviewEditorError(f"source_too_large: {ref.artifact_id}")
-        raw = path.read_bytes()
-    except OSError as error:
+        raw = _read_regular_path(path, kind=f"source:{ref.artifact_id}")
+    except ReviewEditorError as error:
         raise ReviewEditorError(f"source_unreadable: {ref.artifact_id}") from error
     digest = hashlib.sha256(raw).hexdigest()
     if ref.sha256 and digest.lower() != ref.sha256.lower():
@@ -484,6 +637,29 @@ def _current_time(model: Mapping[str, Any], fallback: float = 0.0) -> float:
     return _finite(fallback, name="fallback time")
 
 
+def _time_bounds(model: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    """Return the recorded source-time origin and terminal, if declared."""
+
+    time_block = model.get("time")
+    if not isinstance(time_block, Mapping):
+        return None, None
+    origin = time_block.get("origin_s", time_block.get("start_s"))
+    terminal = time_block.get("terminal_s", time_block.get("end_s"))
+    return (
+        None if origin is None else _finite(origin, name="time.origin_s"),
+        None if terminal is None else _finite(terminal, name="time.terminal_s"),
+    )
+
+
+def _validate_model_interval(model: Mapping[str, Any], interval: TimeInterval) -> TimeInterval:
+    origin, terminal = _time_bounds(model)
+    if origin is not None and interval.start_s < origin:
+        raise InvalidIntervalError("interval must be contained in source time range")
+    if terminal is not None and interval.end_s > terminal:
+        raise InvalidIntervalError("interval must be contained in source time range")
+    return interval
+
+
 def _selected_interval(model: Mapping[str, Any]) -> Mapping[str, Any] | None:
     """Return the currently selected recorded storyboard interval, if any."""
 
@@ -530,15 +706,18 @@ def _interval_from(value: Any, *, default_time: float | None = None) -> TimeInte
     return TimeInterval(start_value, end_value)
 
 
-def validate_interval(value: Any, *, duration_s: float | None = None) -> TimeInterval:
-    """Validate a non-reversed interval and optional source duration."""
+def validate_interval(
+    value: Any, *, duration_s: float | None = None, origin_s: float = 0.0
+) -> TimeInterval:
+    """Validate a non-reversed interval and optional absolute source bounds."""
 
     interval = _interval_from(value)
     if interval is None:  # pragma: no cover - _interval_from always returns here.
         raise InvalidIntervalError("interval is required")
     if duration_s is not None:
         duration = _finite(duration_s, name="duration_s")
-        if interval.start_s < 0 or interval.end_s > duration:
+        origin = _finite(origin_s, name="origin_s")
+        if interval.start_s < origin or interval.end_s > duration:
             raise InvalidIntervalError("interval must be contained in source duration")
     return interval
 
@@ -699,6 +878,8 @@ def make_one_click_annotation(
         interval if interval is not None or time_s is not None else _selected_interval(model),
         default_time=_current_time(model) if time_s is None else _finite(time_s, name="time_s"),
     )
+    if selected_interval is not None:
+        selected_interval = _validate_model_interval(model, selected_interval)
     return Annotation(
         annotation_id=annotation_id or f"annotation-{uuid.uuid4().hex}",
         episode_id=_episode_id(model),
@@ -743,6 +924,8 @@ def make_quick_annotation(
         interval if interval is not None or time_s is not None else _selected_interval(model),
         default_time=_current_time(model) if time_s is None else _finite(time_s, name="time_s"),
     )
+    if selected_interval is not None:
+        selected_interval = _validate_model_interval(model, selected_interval)
     return Annotation(
         annotation_id=annotation_id or f"annotation-{uuid.uuid4().hex}",
         episode_id=_episode_id(model),
@@ -796,6 +979,8 @@ def make_full_annotation(
         interval if interval is not None else _selected_interval(model),
         default_time=_current_time(model),
     )
+    if selected_interval is not None:
+        selected_interval = _validate_model_interval(model, selected_interval)
     normalized_evidence = tuple(dict(item) for item in measured_evidence)
     for item in normalized_evidence:
         if not isinstance(item, Mapping):
@@ -893,9 +1078,15 @@ def _sample_at(model: Mapping[str, Any], time_s: float) -> Mapping[str, Any] | N
     ]
     if not candidates:
         return None
-    return min(
+    selected = min(
         candidates, key=lambda item: (abs(float(item["time_s"]) - time_s), float(item["time_s"]))
     )
+    resolution = stream.get("resolution_s") if isinstance(stream, Mapping) else None
+    if isinstance(resolution, (int, float)) and not isinstance(resolution, bool):
+        if math.isfinite(float(resolution)) and float(resolution) >= 0:
+            if abs(float(selected["time_s"]) - time_s) > float(resolution):
+                return None
+    return selected
 
 
 def _actor_point(sample: Mapping[str, Any] | None, actor_id: str) -> tuple[float, float] | None:
@@ -995,6 +1186,14 @@ def create_reference(
             raise ReviewEditorError(
                 "world reference requires verified scene geometry or calibration"
             )
+        if media and calibration and declared_frame != "world":
+            calibration_kind = (
+                str(calibration.get("kind", "")).strip().lower()
+                if isinstance(calibration, Mapping)
+                else ""
+            )
+            if not calibration_kind.startswith("verified"):
+                raise ReviewEditorError("world reference requires a calibration marked verified")
     if coordinate_frame == "image" and source_value is None:
         raise ReviewEditorError("image reference requires a media source identity")
     return Reference(
@@ -1157,6 +1356,11 @@ def snap_reference(
     )
     if sample is None:
         raise ReviewEditorError(f"recorded metric sample unavailable: {target_id}")
+    resolution = stream.get("resolution_s") if isinstance(stream, Mapping) else None
+    if isinstance(resolution, (int, float)) and not isinstance(resolution, bool):
+        if math.isfinite(float(resolution)) and float(resolution) >= 0:
+            if abs(float(sample["time_s"]) - timestamp) > float(resolution):
+                raise ReviewEditorError(f"recorded metric sample unavailable: {target_id}")
     raw_value = sample.get("value")
     if isinstance(raw_value, Mapping):
         raw_value = raw_value.get("value")
@@ -1216,6 +1420,12 @@ def build_overlay_commands(
             if reference.coordinate_frame == "image" and reference.source_point is not None
             else None
         )
+        display_point = None
+        if source_point is not None and reference.calibration is not None:
+            transform = reference.calibration
+            mapper = getattr(transform, "source_to_display", None)
+            if callable(mapper):
+                display_point = list(mapper(source_point))
         if state.numbered:
             commands.append(
                 {
@@ -1225,6 +1435,7 @@ def build_overlay_commands(
                     "coordinate_frame": reference.coordinate_frame,
                     "point": list(reference.point),
                     "source_point": source_point,
+                    "display_point": display_point,
                     "timestamp_s": reference.timestamp_s,
                 }
             )
@@ -1235,6 +1446,7 @@ def build_overlay_commands(
                     "reference_id": reference.reference_id,
                     "actor_id": reference.actor_id,
                     "source_point": source_point,
+                    "display_point": display_point,
                     "timestamp_s": reference.timestamp_s,
                 }
             )
@@ -1246,6 +1458,7 @@ def build_overlay_commands(
                     "actor_id": reference.actor_id,
                     "point": list(reference.point),
                     "source_point": source_point,
+                    "display_point": display_point,
                     "coordinate_frame": reference.coordinate_frame,
                 }
             )
@@ -1256,6 +1469,7 @@ def build_overlay_commands(
                     "reference_id": reference.reference_id,
                     "point": list(reference.point),
                     "source_point": source_point,
+                    "display_point": display_point,
                     "coordinate_frame": reference.coordinate_frame,
                 }
             )
@@ -1263,7 +1477,14 @@ def build_overlay_commands(
         world = [item for item in normalized if item.coordinate_frame == "world"]
         units = _units_for(model, world[0].source if world else None)
         world_units = {_units_for(model, item.source) for item in world}
-        if len(world) >= 2 and len(world_units) == 1 and units:
+        world_sources = {
+            (
+                item.source.artifact_id if item.source is not None else "",
+                item.source.sha256 if item.source is not None else "",
+            )
+            for item in world
+        }
+        if len(world) >= 2 and len(world_units) == 1 and len(world_sources) == 1 and units:
             first, second = world[:2]
             distance = math.hypot(
                 first.point[0] - second.point[0], first.point[1] - second.point[1]
@@ -1289,6 +1510,7 @@ class StoryboardState:
     captions: Mapping[str, str] = field(default_factory=dict)
     source_identity: str = ""
     duration_s: float | None = None
+    origin_s: float = 0.0
 
     def __post_init__(self) -> None:
         entries: list[dict[str, Any]] = []
@@ -1300,7 +1522,7 @@ class StoryboardState:
             interval_id = _text(
                 entry.get("interval_id", entry.get("id", "")), name="interval_id", limit=512
             )
-            interval = validate_interval(entry, duration_s=self.duration_s)
+            interval = validate_interval(entry, duration_s=self.duration_s, origin_s=self.origin_s)
             entry["interval_id"] = interval_id
             entry["start_s"] = interval.start_s
             entry["end_s"] = interval.end_s
@@ -1325,9 +1547,13 @@ class StoryboardState:
         *,
         duration_s: float | None = None,
         source_identity: str = "",
+        origin_s: float = 0.0,
     ) -> StoryboardState:
         if value is None:
-            return cls(duration_s=duration_s, source_identity=source_identity)
+            return cls(duration_s=duration_s, source_identity=source_identity, origin_s=origin_s)
+        version = value.get("schema_version")
+        if version is not None and version != STORYBOARD_SCHEMA_VERSION:
+            raise ReviewEditorError(f"unsupported storyboard schema_version: {version!r}")
         raw_intervals = value.get(
             "intervals", value.get("clips", value.get("source_intervals", []))
         )
@@ -1347,6 +1573,7 @@ class StoryboardState:
             dict(captions),
             source_identity or str(value.get("source_identity", "")),
             duration_s if duration_s is not None else value.get("duration_s"),
+            _finite(value.get("origin_s", origin_s), name="origin_s"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1354,6 +1581,7 @@ class StoryboardState:
             "schema_version": STORYBOARD_SCHEMA_VERSION,
             "source_identity": self.source_identity,
             "duration_s": self.duration_s,
+            "origin_s": self.origin_s,
             "intervals": [dict(item) for item in self.intervals],
             "order": list(self.order),
             "captions": dict(self.captions),
@@ -1369,12 +1597,16 @@ class StoryboardEditor:
         *,
         duration_s: float | None = None,
         source_identity: str = "",
+        origin_s: float = 0.0,
     ):
         self._state = (
             storyboard
             if isinstance(storyboard, StoryboardState)
             else StoryboardState.from_mapping(
-                storyboard, duration_s=duration_s, source_identity=source_identity
+                storyboard,
+                duration_s=duration_s,
+                source_identity=source_identity,
+                origin_s=origin_s,
             )
         )
         self._undo: list[StoryboardState] = []
@@ -1387,12 +1619,16 @@ class StoryboardEditor:
         *,
         duration_s: float | None = None,
         source_identity: str = "",
+        origin_s: float = 0.0,
     ) -> StoryboardEditor:
         """Build an editor from a versioned or compatible storyboard mapping."""
 
         return cls(
             StoryboardState.from_mapping(
-                value, duration_s=duration_s, source_identity=source_identity
+                value,
+                duration_s=duration_s,
+                source_identity=source_identity,
+                origin_s=origin_s,
             )
         )
 
@@ -1416,7 +1652,9 @@ class StoryboardEditor:
         if any(item["interval_id"] == normalized_id for item in self._state.intervals):
             raise ReviewEditorError(f"duplicate storyboard interval: {normalized_id}")
         interval = validate_interval(
-            {"start_s": start_s, "end_s": end_s}, duration_s=self._state.duration_s
+            {"start_s": start_s, "end_s": end_s},
+            duration_s=self._state.duration_s,
+            origin_s=self._state.origin_s,
         )
         entry = {
             "interval_id": normalized_id,
@@ -1431,12 +1669,15 @@ class StoryboardEditor:
                 {**self._state.captions, normalized_id: str(caption)},
                 self._state.source_identity,
                 self._state.duration_s,
+                self._state.origin_s,
             )
         )
 
     def update_interval(self, interval_id: str, start_s: float, end_s: float) -> StoryboardState:
         interval = validate_interval(
-            {"start_s": start_s, "end_s": end_s}, duration_s=self._state.duration_s
+            {"start_s": start_s, "end_s": end_s},
+            duration_s=self._state.duration_s,
+            origin_s=self._state.origin_s,
         )
         entries = [dict(item) for item in self._state.intervals]
         for entry in entries:
@@ -1449,6 +1690,7 @@ class StoryboardEditor:
                         self._state.captions,
                         self._state.source_identity,
                         self._state.duration_s,
+                        self._state.origin_s,
                     )
                 )
         raise ReviewEditorError(f"unknown storyboard interval: {interval_id}")
@@ -1467,6 +1709,7 @@ class StoryboardEditor:
                 {**self._state.captions, interval_id: str(caption)},
                 self._state.source_identity,
                 self._state.duration_s,
+                self._state.origin_s,
             )
         )
 
@@ -1478,6 +1721,7 @@ class StoryboardEditor:
                 self._state.captions,
                 self._state.source_identity,
                 self._state.duration_s,
+                self._state.origin_s,
             )
         )
 
@@ -1495,6 +1739,7 @@ class StoryboardEditor:
                 captions,
                 self._state.source_identity,
                 self._state.duration_s,
+                self._state.origin_s,
             )
         )
 
@@ -1514,17 +1759,15 @@ class StoryboardEditor:
 
     def save(self, destination: str | Path, *, overwrite: bool = False) -> Path:
         path = Path(destination)
-        if path.exists() and not overwrite:
-            raise ReviewEditorError(f"export destination already exists: {path}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(canonical_json(self._state.to_dict()) + "\n", encoding="utf-8")
+        payload = (canonical_json(self._state.to_dict()) + "\n").encode("utf-8")
+        _write_atomic(path, payload, overwrite=overwrite)
         return path
 
     export = save
 
     @classmethod
     def load(cls, path: str | Path) -> StoryboardEditor:
-        payload = _strict_loads(Path(path).read_bytes())
+        payload = _strict_loads(_read_regular_path(Path(path), kind="storyboard"))
         if not isinstance(payload, Mapping):
             raise ReviewEditorError("storyboard export must be an object")
         return cls(StoryboardState.from_mapping(payload))
@@ -1582,10 +1825,16 @@ class ReviewEditorSession:
                 if isinstance(self.model.get("time"), Mapping)
                 else None
             )
+            origin = (
+                self.model.get("time", {}).get("origin_s", 0.0)
+                if isinstance(self.model.get("time"), Mapping)
+                else 0.0
+            )
             self.storyboard = StoryboardEditor(
                 StoryboardState.from_mapping(
                     self.model.get("storyboard"),
                     duration_s=duration,
+                    origin_s=origin,
                     source_identity=self._source_identity_token(),
                 )
             )
@@ -1633,6 +1882,7 @@ class ReviewEditorSession:
             raise StaleSelectionError(expected_selection_revision, self.selection_revision)
 
     def create_one_click(self, label: str, **kwargs: Any) -> Annotation:
+        kwargs.setdefault("author_kind", self.actor_kind)
         return make_one_click_annotation(
             self.model,
             label,
@@ -1642,6 +1892,7 @@ class ReviewEditorSession:
         )
 
     def create_quick(self, classification: str, **kwargs: Any) -> Annotation:
+        kwargs.setdefault("author_kind", self.actor_kind)
         return make_quick_annotation(
             self.model,
             classification,
@@ -1651,6 +1902,7 @@ class ReviewEditorSession:
         )
 
     def create_full(self, classification: str, **kwargs: Any) -> Annotation:
+        kwargs.setdefault("author_kind", self.actor_kind)
         return make_full_annotation(
             self.model,
             classification,
@@ -1680,11 +1932,32 @@ class ReviewEditorSession:
         if self.adapter is None:
             raise ReviewEditorError("a BA-03/BA-05 persistence adapter is required for save")
         op_id = operation_id or f"review-editor-{uuid.uuid4().hex}"
+        record_id = getattr(
+            record,
+            "annotation_id",
+            getattr(record, "review_id", getattr(record, "action_id", "")),
+        )
+        existing = self.adapter.get(record_id, include_deleted=True)
+        declared_author = getattr(record, "author_kind", getattr(record, "actor_kind", None))
+        if (
+            existing is not None
+            and existing.record is not None
+            and declared_author is not None
+            and getattr(
+                existing.record,
+                "author_kind",
+                getattr(existing.record, "actor_kind", declared_author),
+            )
+            != declared_author
+        ):
+            raise ReviewEditorError(
+                "author_kind change requires a new record; preserve the original history"
+            )
         self.pending_record = record
         self.autosave_status = AutosaveStatus(
             "pending",
             op_id,
-            getattr(record, "annotation_id", getattr(record, "review_id", "")),
+            record_id,
             expected_revision,
             None,
             self.selection_revision,
@@ -1757,9 +2030,7 @@ class ReviewEditorSession:
         return self._save(
             annotation,
             operation_id=operation_id,
-            expected_revision=expected_revision
-            if expected_revision is not None
-            else (self.adapter.get_revision(annotation.annotation_id) if self.adapter else 0),
+            expected_revision=expected_revision,
             expected_selection_revision=expected_selection_revision,
         )
 
@@ -1774,11 +2045,66 @@ class ReviewEditorSession:
         return self._save(
             review,
             operation_id=operation_id,
-            expected_revision=expected_revision
-            if expected_revision is not None
-            else (self.adapter.get_revision(review.review_id) if self.adapter else 0),
+            expected_revision=expected_revision,
             expected_selection_revision=expected_selection_revision,
         )
+
+    def storyboard_record_id(self) -> str:
+        """Return the stable BA-03 record ID for this source storyboard."""
+
+        return "storyboard-" + hashlib.sha256(self._source_identity_token().encode()).hexdigest()
+
+    def save_storyboard(
+        self,
+        *,
+        operation_id: str | None = None,
+        expected_revision: int | None = None,
+        expected_selection_revision: int | None = None,
+    ) -> CommitResult:
+        """Persist the storyboard through the BA-03/BA-05 adapter.
+
+        BA-03 has no separate storyboard record type, so the edit is an
+        auditable ``ActionRecord`` whose closed details carry the versioned
+        storyboard document.  It remains in the canonical journal and uses
+        the same compare-and-swap and operation-id semantics as annotations.
+        """
+
+        storyboard = self.storyboard.snapshot()
+        record = ActionRecord(
+            action_id=self.storyboard_record_id(),
+            action_type="storyboard_edit",
+            actor_kind=self.actor_kind,
+            actor_id=self.actor_id,
+            target_id=self._source_identity_token(),
+            details={"schema_version": STORYBOARD_SCHEMA_VERSION, "storyboard": storyboard},
+        )
+        return self._save(
+            record,
+            operation_id=operation_id,
+            expected_revision=expected_revision,
+            expected_selection_revision=expected_selection_revision,
+        )
+
+    def reload_storyboard(self) -> StoryboardEditor:
+        """Reload the last durable storyboard edit from the shared adapter."""
+
+        if self.adapter is None:
+            raise ReviewEditorError("a persistence adapter is required for reload")
+        stored = self.adapter.get(self.storyboard_record_id(), include_deleted=True)
+        if stored is None or not isinstance(stored.record, ActionRecord):
+            return self.storyboard
+        payload = stored.record.details.get("storyboard")
+        if not isinstance(payload, Mapping):
+            raise ReviewEditorError("stored storyboard edit is malformed")
+        self.storyboard = StoryboardEditor.from_mapping(payload)
+        self.pending_record = None
+        self.autosave_status = AutosaveStatus(
+            "saved",
+            record_id=self.storyboard_record_id(),
+            saved_revision=stored.revision,
+            selection_revision=self.selection_revision,
+        )
+        return self.storyboard
 
     autosave = save_annotation
 
@@ -1817,19 +2143,32 @@ ReviewEditor = ReviewEditorSession
 
 
 def _normalize_storyboard(
-    value: Mapping[str, Any] | None, *, duration_s: float | None, source_identity: str
+    value: Mapping[str, Any] | None,
+    *,
+    duration_s: float | None,
+    source_identity: str,
+    origin_s: float = 0.0,
 ) -> dict[str, Any]:
     return StoryboardState.from_mapping(
-        value, duration_s=duration_s, source_identity=source_identity
+        value,
+        duration_s=duration_s,
+        origin_s=origin_s,
+        source_identity=source_identity,
     ).to_dict()
 
 
-def _derive_duration(model: Mapping[str, Any]) -> float | None:
+def _derive_time_bounds(model: Mapping[str, Any]) -> tuple[float | None, float | None]:
     time_block = model.get("time")
-    if isinstance(time_block, Mapping) and isinstance(time_block.get("terminal_s"), (int, float)):
-        return float(time_block["terminal_s"])
+    if isinstance(time_block, Mapping):
+        origin = time_block.get("origin_s", time_block.get("start_s"))
+        terminal = time_block.get("terminal_s", time_block.get("end_s"))
+        if isinstance(terminal, (int, float)) and not isinstance(terminal, bool):
+            return (
+                float(origin) if isinstance(origin, (int, float)) else 0.0,
+                float(terminal),
+            )
     streams = model.get("streams")
-    ends = []
+    samples_times: list[float] = []
     if isinstance(streams, Mapping):
         for stream in streams.values():
             if isinstance(stream, Mapping):
@@ -1838,8 +2177,12 @@ def _derive_duration(model: Mapping[str, Any]) -> float | None:
                     if isinstance(sample, Mapping) and isinstance(
                         sample.get("time_s"), (int, float)
                     ):
-                        ends.append(float(sample["time_s"]))
-    return max(ends) if ends else None
+                        samples_times.append(float(sample["time_s"]))
+    return (min(samples_times), max(samples_times)) if samples_times else (None, None)
+
+
+def _derive_duration(model: Mapping[str, Any]) -> float | None:
+    return _derive_time_bounds(model)[1]
 
 
 def _annotation_hints(model: Mapping[str, Any]) -> dict[str, Any]:
@@ -1881,6 +2224,39 @@ def _annotation_hints(model: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _rebind_annotation_provenance(
+    item: Mapping[str, Any],
+    source_refs: Mapping[str, SourceRef],
+    source_digests: Mapping[str, str],
+) -> dict[str, Any]:
+    """Carry forward raw annotations while marking changed source bindings stale."""
+
+    result = dict(item)
+    raw_source = item.get("source_ref")
+    artifact_id = ""
+    if isinstance(raw_source, Mapping):
+        artifact_id = str(raw_source.get("artifact_id", ""))
+    if not artifact_id and len(source_refs) == 1:
+        artifact_id = next(iter(source_refs))
+    ref = source_refs.get(artifact_id)
+    if ref is None:
+        return result
+    digest = source_digests.get(artifact_id, "")
+    identity = str(item.get("source_identity", ""))
+    revision = item.get("source_revision", "")
+    stale_reason = ""
+    if ref.sha256 and digest and ref.sha256.lower() != digest.lower():
+        stale_reason = "source bytes do not match declared source hash"
+    elif identity and identity not in {artifact_id, digest, ref.sha256}:
+        stale_reason = "annotation source identity does not match current source"
+    elif ref.source_commit and revision not in {ref.source_commit, 0, "", None}:
+        stale_reason = "annotation source revision does not match current source"
+    if stale_reason:
+        result["provenance_status"] = "stale"
+        result["provenance_reason"] = stale_reason
+    return result
+
+
 def _build_model(
     request: ComponentRequest,
     *,
@@ -1890,19 +2266,24 @@ def _build_model(
     diagnostics: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     identity = _source_identity(panel_model, source_refs, source_digests)
-    duration = _derive_duration(panel_model)
+    origin, duration = _derive_time_bounds(panel_model)
     storyboard_value = panel_model.get("storyboard")
     if storyboard_value is None:
         storyboard_value = request.config.get("storyboard")
     storyboard = _normalize_storyboard(
         storyboard_value if isinstance(storyboard_value, Mapping) else None,
         duration_s=duration,
+        origin_s=origin or 0.0,
         source_identity=hashlib.sha256(canonical_json(identity).encode()).hexdigest(),
     )
     annotations = request.config.get("annotations", panel_model.get("annotations", []))
     if not isinstance(annotations, Sequence) or isinstance(annotations, (str, bytes)):
         raise ReviewEditorError("annotations must be a list")
-    serialized_annotations = [dict(item) for item in annotations if isinstance(item, Mapping)]
+    serialized_annotations = [
+        _rebind_annotation_provenance(item, source_refs, source_digests)
+        for item in annotations
+        if isinstance(item, Mapping)
+    ]
     context = (
         dict(panel_model.get("context", {}))
         if isinstance(panel_model.get("context"), Mapping)
@@ -2012,14 +2393,17 @@ def _find_panel_model(
             )
     inline = request.config.get("panel_model")
     if isinstance(inline, Mapping):
+        if inline.get("schema_version") != "review-panels.v1":
+            raise ReviewEditorError("panel_model schema_version must be review-panels.v1")
         return inline, refs, digests
     for ref in request.sources:
         payload = payloads.get(ref.artifact_id)
-        if isinstance(payload, Mapping) and (
-            payload.get("schema_version") == "review-panels.v1"
-            or ref.format in {"review-panels", "review-panels.v1"}
-        ):
+        if isinstance(payload, Mapping) and payload.get("schema_version") == "review-panels.v1":
             return payload, refs, digests
+        if isinstance(payload, Mapping) and ref.format in {"review-panels", "review-panels.v1"}:
+            raise ReviewEditorError(
+                f"source {ref.artifact_id!r} does not declare review-panels.v1 schema"
+            )
     # A direct scene model is useful for a minimal offline fixture.  Keep it
     # clearly diagnostic and do not attempt to run a simulator or renderer.
     for ref in request.sources:
@@ -2085,9 +2469,7 @@ def build_editor_model(request: ComponentRequest, *, base: Path | None = None) -
 
 def _write_json(path: Path, payload: Any) -> str:
     encoded = (canonical_json(payload) + "\n").encode("utf-8")
-    if len(encoded) > MAX_OUTPUT_BYTES:
-        raise ReviewEditorError("editor output exceeds size limit")
-    path.write_bytes(encoded)
+    _write_atomic(path, encoded)
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -2097,7 +2479,7 @@ def _render_html(model: Mapping[str, Any]) -> str:
         """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Robot SF review editor</title>
 <style>body{font-family:system-ui,sans-serif;margin:1rem;color:#111}button{margin:.2rem}.editor-grid{display:grid;grid-template-columns:2fr 1fr;gap:1rem}.surface{min-height:18rem;border:1px solid #aaa;padding:1rem}.stale{color:#9a3412}.autosave{font-weight:600}</style></head>
-<body><h1>Offline review editor</h1><p id="source-status"></p><div class="editor-grid"><section class="surface" id="review-surface" tabindex="0"><p>Recorded scene/video surface; source-time references only.</p></section><aside><h2>Annotations</h2><div id="annotation-actions"></div><p class="autosave" id="autosave-status">not saved</p><h2>Storyboard</h2><div id="storyboard"></div></aside></div>
+<body><h1>Offline review editor</h1><div class="editor-grid"><section class="surface" id="review-editor-root" tabindex="0"><p>Recorded scene/video surface; source-time references only.</p></section></div>
 <script type="application/json" id="review-editor-data">"""
         + payload
         + r"""</script>
@@ -2108,11 +2490,11 @@ def _render_html(model: Mapping[str, Any]) -> str:
 
 def _copy_web_component(output_dir: Path) -> Path:
     destination = output_dir / "components" / "review_editor" / "review_editor.js"
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    _mkdir_no_follow(destination.parent, exist_ok=True)
     asset = resources.files("robot_sf.render.web_assets").joinpath(
         "components", "review_editor", "review_editor.js"
     )
-    destination.write_text(asset.read_text(encoding="utf-8"), encoding="utf-8")
+    _write_atomic(destination, asset.read_bytes())
     return destination
 
 
@@ -2181,9 +2563,10 @@ def _result(
 
 def _reserve_output(root: Path, value: str) -> Path:
     path = _resolve_under(root, value, kind="output")
-    if path.exists():
-        raise ReviewEditorError(f"output_collision: {value}")
-    path.mkdir(parents=True)
+    try:
+        _mkdir_no_follow(path, exist_ok=False)
+    except FileExistsError as error:
+        raise ReviewEditorError(f"output_collision: {value}") from error
     return path
 
 
@@ -2228,7 +2611,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         )
         html = _render_html(model)
         html_bytes = html.encode("utf-8")
-        (output_dir / OUTPUT_HTML_FILENAME).write_bytes(html_bytes)
+        _write_atomic(output_dir / OUTPUT_HTML_FILENAME, html_bytes)
         emitted.append(
             {
                 "artifact_id": OUTPUT_HTML_FILENAME,
@@ -2289,7 +2672,9 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
 
 def _strict_cli_json(path: str) -> Any:
     try:
-        return _strict_loads(Path(path).read_bytes())
+        return _strict_loads(_read_regular_path(Path(path), kind="config"))
+    except ReviewEditorError:
+        raise
     except OSError as error:
         raise ReviewEditorError(f"cannot read request: {error}") from error
 

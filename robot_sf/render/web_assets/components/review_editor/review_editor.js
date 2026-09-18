@@ -43,7 +43,8 @@ function intervalValue(value, fallback = null) {
 function validSourceInterval(model, start, end) {
   if (start === null || end === null || end < start) return false;
   const duration = finite(model?.time?.terminal_s);
-  return duration === null || (start >= 0 && end <= duration);
+  const origin = finite(model?.time?.origin_s ?? model?.time?.start_s, 0);
+  return start >= origin && (duration === null || end <= duration);
 }
 
 function context(model) {
@@ -59,6 +60,28 @@ function sourceIdentity(model) {
   return model?.source_identity && typeof model.source_identity === "object"
     ? model.source_identity
     : {};
+}
+
+function sourceEntry(model) {
+  const identity = sourceIdentity(model);
+  const sources = identity.sources && typeof identity.sources === "object" ? identity.sources : {};
+  const first = Object.values(sources).find((item) => item && typeof item === "object");
+  return first || null;
+}
+
+function sourceBinding(model, extra = {}) {
+  const entry = extra.source_ref && typeof extra.source_ref === "object"
+    ? extra.source_ref
+    : sourceEntry(model);
+  const identity = sourceIdentity(model);
+  const artifactId = entry?.artifact_id || "";
+  const status = model?.source_identity_status?.[artifactId]?.status || (entry?.sha256 ? "verified" : "unavailable");
+  return {
+    source_ref: entry ? clone(entry) : undefined,
+    source_identity: extra.source_identity || entry?.sha256 || entry?.artifact_id || identity.sha256 || "",
+    source_revision: extra.source_revision || entry?.source_commit || context(model).source_revision || 0,
+    provenance_status: extra.provenance_status || status,
+  };
 }
 
 function selectedInterval(model, intervalId, storyboard = null) {
@@ -92,6 +115,11 @@ function annotation(model, mode, classification, extra = {}) {
     end_s: finite(extra.time_s, currentTime(model)),
   };
   const normalized = intervalValue(selectedInterval, { start_s: currentTime(model), end_s: currentTime(model) });
+  if (!normalized || !validSourceInterval(model, normalized.start_s, normalized.end_s)) {
+    throw new Error("annotation interval is outside the recorded source time range");
+  }
+  const binding = sourceBinding(model, extra);
+  const selectionRevision = Number(extra.selection_revision ?? context(model).selection_revision ?? context(model).context_revision ?? 0);
   const row = {
     record_type: "annotation",
     annotation_id: extra.annotation_id || newId("annotation"),
@@ -108,14 +136,13 @@ function annotation(model, mode, classification, extra = {}) {
     references: Array.isArray(extra.references) ? clone(extra.references) : [],
     evidence: Array.isArray(extra.evidence) ? clone(extra.evidence) : [],
     review_scope: extra.full_episode ? "full_episode" : "interval",
-    source_identity: extra.source_identity || sourceIdentity(model).sha256 || "",
-    source_revision: extra.source_revision || context(model).source_revision || 0,
+    ...binding,
     metadata: {
       ...(extra.metadata || {}),
       actors: Array.isArray(extra.actors) ? [...extra.actors] : [],
       notes: extra.notes || "",
       execution_id: String(context(model).execution_id || ""),
-      selection_revision: Number(context(model).selection_revision || context(model).context_revision || 0),
+      selection_revision: selectionRevision,
     },
   };
   // One-click and quick records intentionally contain no causal requirement;
@@ -143,11 +170,30 @@ export function overlayCommands(model, references, overlays = {}) {
   );
   const rows = Array.isArray(references) ? references : [];
   const commands = [];
+  const displayPoint = (reference) => {
+    const transform = reference?.calibration;
+    const sourcePoint = reference?.source_point;
+    if (reference?.coordinate_frame !== "image" || !Array.isArray(sourcePoint) || !transform) return null;
+    const sourceWidth = finite(transform.source_width);
+    const sourceHeight = finite(transform.source_height);
+    const displayWidth = finite(transform.display_width);
+    const displayHeight = finite(transform.display_height);
+    const cropX = finite(transform.crop_x, 0);
+    const cropY = finite(transform.crop_y, 0);
+    const cropWidth = finite(transform.crop_width, sourceWidth);
+    const cropHeight = finite(transform.crop_height, sourceHeight);
+    if (![sourceWidth, sourceHeight, displayWidth, displayHeight, cropWidth, cropHeight].every((value) => value !== null && value > 0)) return null;
+    return [
+      (Number(sourcePoint[0]) - cropX) * displayWidth / cropWidth,
+      (Number(sourcePoint[1]) - cropY) * displayHeight / cropHeight,
+    ];
+  };
   rows.forEach((reference, index) => {
     if (!reference || !Array.isArray(reference.point)) return;
     const sourcePoint = reference.coordinate_frame === "image" && Array.isArray(reference.source_point)
       ? [...reference.source_point]
       : null;
+    const transformedPoint = displayPoint(reference);
     if (state.numbered) {
       commands.push({
         kind: "numbered",
@@ -156,24 +202,27 @@ export function overlayCommands(model, references, overlays = {}) {
         coordinate_frame: reference.coordinate_frame,
         point: [...reference.point],
         source_point: sourcePoint,
+        display_point: transformedPoint,
         timestamp_s: reference.timestamp_s ?? null,
       });
     }
     if (state.highlights && reference.actor_id) {
-      commands.push({ kind: "highlight", reference_id: reference.reference_id, actor_id: reference.actor_id, source_point: sourcePoint });
+      commands.push({ kind: "highlight", reference_id: reference.reference_id, actor_id: reference.actor_id, source_point: sourcePoint, display_point: transformedPoint });
     }
     if (state.arrows && reference.actor_id) {
-      commands.push({ kind: "arrow", reference_id: reference.reference_id, actor_id: reference.actor_id, point: [...reference.point], source_point: sourcePoint, coordinate_frame: reference.coordinate_frame });
+      commands.push({ kind: "arrow", reference_id: reference.reference_id, actor_id: reference.actor_id, point: [...reference.point], source_point: sourcePoint, display_point: transformedPoint, coordinate_frame: reference.coordinate_frame });
     }
     if (state.rings) {
-      commands.push({ kind: "ring", reference_id: reference.reference_id, point: [...reference.point], source_point: sourcePoint, coordinate_frame: reference.coordinate_frame });
+      commands.push({ kind: "ring", reference_id: reference.reference_id, point: [...reference.point], source_point: sourcePoint, display_point: transformedPoint, coordinate_frame: reference.coordinate_frame });
     }
   });
   const world = rows.filter((item) => item?.coordinate_frame === "world" && Array.isArray(item.point));
   const units = sourceUnits(model, world);
+  const worldUnits = world.map((item) => item?.source?.units || sourceIdentity(model).units || "");
+  const sourceKeys = world.map((item) => `${item?.source?.artifact_id || ""}:${item?.source?.sha256 || ""}`);
   // A distance is a measurement in the recorded coordinate frame.  No image
   // or canvas distance is ever emitted.
-  if (state.distances && world.length >= 2 && units) {
+  if (state.distances && world.length >= 2 && units && worldUnits.every((value) => value === units) && sourceKeys.every((value) => value === sourceKeys[0])) {
     const [first, second] = world;
     const dx = Number(first.point[0]) - Number(second.point[0]);
     const dy = Number(first.point[1]) - Number(second.point[1]);
@@ -292,6 +341,7 @@ export class ReviewEditorController {
       if (!CLASSIFICATIONS.includes(classification)) return this.snapshot();
       this._mutate(() => this.state.annotations.push(annotation(this.model, "one_click", classification, {
         ...action,
+        selection_revision: this.state.selectionRevision,
         interval: action.interval || selectedInterval(this.model, this.state.selectedInterval, this.state.storyboard),
         time_s: this.state.selectedTime,
       })));
@@ -299,6 +349,7 @@ export class ReviewEditorController {
       if (!CLASSIFICATIONS.includes(action.classification)) return this.snapshot();
       this._mutate(() => this.state.annotations.push(annotation(this.model, "quick", action.classification, {
         ...action,
+        selection_revision: this.state.selectionRevision,
         interval: action.interval || selectedInterval(this.model, this.state.selectedInterval, this.state.storyboard),
         time_s: this.state.selectedTime,
       })));
@@ -306,6 +357,7 @@ export class ReviewEditorController {
       if (!CLASSIFICATIONS.includes(action.classification)) return this.snapshot();
       this._mutate(() => this.state.annotations.push(annotation(this.model, "full", action.classification, {
         ...action,
+        selection_revision: this.state.selectionRevision,
         interval: action.interval || selectedInterval(this.model, this.state.selectedInterval, this.state.storyboard),
         time_s: this.state.selectedTime,
       })));
@@ -366,6 +418,8 @@ export class ReviewEditorController {
       }
     } else if (type === "save") {
       return this.save(action.record || this.state.annotations.at(-1), action);
+    } else if (type === "save-storyboard") {
+      return this.saveStoryboard(action);
     }
     this._render();
     return this.snapshot();
@@ -392,7 +446,15 @@ export class ReviewEditorController {
     const save = options.save || this.options.save;
     if (typeof save !== "function") throw new Error("a BA-03/BA-05 save callback is required");
     const operationId = options.operation_id || newId("operation");
-    const expectedRevision = options.expected_revision ?? this.state.autosave.saved_revision ?? 0;
+    const recordRevision = Number.isInteger(record?.revision)
+      ? record.revision
+      : (Number.isInteger(record?.record_revision) ? record.record_revision : null);
+    const expectedRevision = options.expected_revision
+      ?? this.state.autosave.saved_revision
+      ?? recordRevision;
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+      throw new Error("expected_revision is required for every durable save");
+    }
     const recordSelectionRevision = Number(record?.metadata?.selection_revision);
     const expectedSelectionRevision = options.expected_selection_revision ?? (
       Number.isInteger(recordSelectionRevision) ? recordSelectionRevision : this.state.selectionRevision
@@ -400,12 +462,13 @@ export class ReviewEditorController {
     if (expectedSelectionRevision !== this.state.selectionRevision) {
       throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${this.state.selectionRevision}`);
     }
+    const saveSelectionRevision = this.state.selectionRevision;
     this.state.autosave = {
       state: "pending",
       operation_id: operationId,
       expected_revision: expectedRevision,
       saved_revision: null,
-      selection_revision: this.state.selectionRevision,
+      selection_revision: saveSelectionRevision,
       error: "",
       conflict: null,
     };
@@ -414,16 +477,19 @@ export class ReviewEditorController {
       const receipt = await save(clone(record), {
         operation_id: operationId,
         expected_revision: expectedRevision,
-        selection_revision: this.state.selectionRevision,
+        selection_revision: saveSelectionRevision,
         actor_kind: options.actor_kind || this.options.actor_kind || "human",
         actor_id: options.actor_id || this.options.actor_id || "",
       });
+      if (this.state.selectionRevision !== saveSelectionRevision) {
+        throw new Error(`stale selection revision after save: expected ${saveSelectionRevision}, current ${this.state.selectionRevision}`);
+      }
       this.state.autosave = {
         state: "saved",
         operation_id: operationId,
         expected_revision: expectedRevision,
         saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
-        selection_revision: this.state.selectionRevision,
+        selection_revision: saveSelectionRevision,
         error: "",
         conflict: null,
       };
@@ -435,13 +501,86 @@ export class ReviewEditorController {
         operation_id: operationId,
         expected_revision: expectedRevision,
         saved_revision: null,
-        selection_revision: this.state.selectionRevision,
+        selection_revision: saveSelectionRevision,
         error: String(error?.message || error),
         conflict: clone(error?.conflict || error?.details?.conflict || null),
       };
       this._render();
       throw error;
     }
+  }
+
+  async saveStoryboard(options = {}) {
+    const save = options.save_storyboard || options.save || this.options.saveStoryboard || this.options.save;
+    if (typeof save !== "function") throw new Error("a BA-03/BA-05 storyboard save callback is required");
+    const operationId = options.operation_id || newId("operation");
+    const expectedRevision = options.expected_revision ?? this.state.autosave.saved_revision;
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+      throw new Error("expected_revision is required for every durable save");
+    }
+    const expectedSelectionRevision = options.expected_selection_revision ?? this.state.selectionRevision;
+    if (expectedSelectionRevision !== this.state.selectionRevision) {
+      throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${this.state.selectionRevision}`);
+    }
+    const saveSelectionRevision = this.state.selectionRevision;
+    const record = {
+      record_type: "storyboard_edit",
+      schema_version: "review-storyboard-edit.v1",
+      source_identity: clone(sourceIdentity(this.model)),
+      storyboard: clone(this.state.storyboard),
+    };
+    this.state.autosave = {
+      state: "pending", operation_id: operationId, expected_revision: expectedRevision,
+      saved_revision: null, selection_revision: saveSelectionRevision, error: "", conflict: null,
+    };
+    this._render();
+    try {
+      const receipt = await save(record, {
+        operation_id: operationId,
+        expected_revision: expectedRevision,
+        selection_revision: saveSelectionRevision,
+        actor_kind: options.actor_kind || this.options.actor_kind || "human",
+        actor_id: options.actor_id || this.options.actor_id || "",
+      });
+      if (this.state.selectionRevision !== saveSelectionRevision) {
+        throw new Error(`stale selection revision after save: expected ${saveSelectionRevision}, current ${this.state.selectionRevision}`);
+      }
+      this.state.autosave = {
+        state: "saved", operation_id: operationId, expected_revision: expectedRevision,
+        saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
+        selection_revision: saveSelectionRevision, error: "", conflict: null,
+      };
+      this._render();
+      return receipt;
+    } catch (error) {
+      this.state.autosave = {
+        state: "error", operation_id: operationId, expected_revision: expectedRevision,
+        saved_revision: null, selection_revision: saveSelectionRevision,
+        error: String(error?.message || error), conflict: clone(error?.conflict || error?.details?.conflict || null),
+      };
+      this._render();
+      throw error;
+    }
+  }
+
+  async reload(options = {}) {
+    const load = options.load || this.options.load;
+    if (typeof load !== "function") throw new Error("a BA-03/BA-05 load callback is required");
+    const loaded = await load(options.record_id || options.storyboard_id || "");
+    const payload = loaded?.record?.details?.storyboard || loaded?.details?.storyboard || loaded?.storyboard;
+    if (!payload || typeof payload !== "object") throw new Error("loaded storyboard record is malformed");
+    this.state.storyboard = clone(payload);
+    this.state.autosave = {
+      state: "saved",
+      operation_id: "",
+      expected_revision: loaded?.revision ?? loaded?.record_revision ?? 0,
+      saved_revision: loaded?.revision ?? loaded?.record_revision ?? 0,
+      selection_revision: this.state.selectionRevision,
+      error: "",
+      conflict: null,
+    };
+    this._render();
+    return this.snapshot();
   }
 
   _onKeydown(event) {
@@ -453,6 +592,13 @@ export class ReviewEditorController {
     } else if ((event.ctrlKey || event.metaKey) && key === "y") {
       event.preventDefault?.();
       this.dispatch({ type: "redo" });
+    } else if ((event.ctrlKey || event.metaKey) && key === "s") {
+      event.preventDefault?.();
+      void this.dispatch({
+        type: "save",
+        record: this.state.annotations.at(-1),
+        expected_revision: this.state.autosave.saved_revision ?? 0,
+      }).catch(() => {});
     } else if (key === "n") {
       event.preventDefault?.();
       this.dispatch({ type: "one-click", label: "normal" });
@@ -474,22 +620,72 @@ export class ReviewEditorController {
     this.root.replaceChildren?.();
     const wrapper = documentRef.createElement("section");
     wrapper.className = "review-editor-controls";
+    const heading = documentRef.createElement("h2");
+    heading.textContent = "Offline annotation editor";
+    wrapper.appendChild(heading);
     const modeLabel = documentRef.createElement("strong");
     modeLabel.textContent = `mode: ${this.state.mode}`;
     wrapper.appendChild(modeLabel);
     const modes = documentRef.createElement("div");
-    for (const mode of ANNOTATION_SPEEDS) modes.appendChild(createButton(documentRef, mode, () => this.dispatch({ type: "set-mode", mode })));
+    for (const mode of ANNOTATION_SPEEDS) {
+      modes.appendChild(createButton(documentRef, mode, () => this.dispatch({ type: "set-mode", mode })));
+    }
     wrapper.appendChild(modes);
     const triage = documentRef.createElement("div");
-    for (const label of Object.keys(TRIAGE_CLASSIFICATIONS)) triage.appendChild(createButton(documentRef, label, () => this.dispatch({ type: "one-click", label })));
+    for (const label of Object.keys(TRIAGE_CLASSIFICATIONS)) {
+      triage.appendChild(createButton(documentRef, `triage: ${label}`, () => this.dispatch({ type: "one-click", label })));
+    }
     wrapper.appendChild(triage);
+    const noteActions = documentRef.createElement("div");
+    noteActions.appendChild(createButton(documentRef, "Quick note: unclear", () => this.dispatch({ type: "quick-note", classification: "unclear" })));
+    noteActions.appendChild(createButton(documentRef, "Full note: unclear", () => this.dispatch({ type: "structured-note", classification: "unclear" })));
+    const latest = () => this.state.annotations.at(-1);
+    noteActions.appendChild(createButton(documentRef, "Save annotation", () => {
+      void this.dispatch({
+        type: "save",
+        record: latest(),
+        expected_revision: this.state.autosave.saved_revision ?? 0,
+      }).catch(() => {});
+    }));
+    wrapper.appendChild(noteActions);
     const overlays = documentRef.createElement("div");
-    for (const kind of OVERLAY_KINDS) overlays.appendChild(createButton(documentRef, `${kind}: ${this.state.overlayState[kind] ? "on" : "off"}`, () => this.dispatch({ type: "toggle-overlay", kind })));
+    for (const kind of OVERLAY_KINDS) {
+      overlays.appendChild(createButton(documentRef, `${kind}: ${this.state.overlayState[kind] ? "on" : "off"}`, () => this.dispatch({ type: "toggle-overlay", kind })));
+    }
     wrapper.appendChild(overlays);
     const history = documentRef.createElement("div");
     history.appendChild(createButton(documentRef, "Undo", () => this.dispatch({ type: "undo" })));
     history.appendChild(createButton(documentRef, "Redo", () => this.dispatch({ type: "redo" })));
     wrapper.appendChild(history);
+    const storyboardHeading = documentRef.createElement("h3");
+    storyboardHeading.textContent = "Storyboard edits";
+    wrapper.appendChild(storyboardHeading);
+    const storyboard = documentRef.createElement("div");
+    const intervals = Array.isArray(this.state.storyboard?.intervals) ? this.state.storyboard.intervals : [];
+    const order = Array.isArray(this.state.storyboard?.order) ? this.state.storyboard.order : intervals.map((item) => item.interval_id);
+    for (const intervalId of order) {
+      const interval = intervals.find((item) => item.interval_id === intervalId);
+      if (!interval) continue;
+      const row = documentRef.createElement("div");
+      row.className = "storyboard-row";
+      const label = documentRef.createElement("span");
+      label.textContent = `${interval.interval_id}: ${interval.start_s}–${interval.end_s}`;
+      row.appendChild(label);
+      const caption = documentRef.createElement("input");
+      caption.type = "text";
+      caption.value = String(interval.caption || this.state.storyboard.captions?.[intervalId] || "");
+      caption.addEventListener("change", () => this.dispatch({ type: "set-caption", interval_id: intervalId, caption: caption.value }));
+      row.appendChild(caption);
+      storyboard.appendChild(row);
+    }
+    storyboard.appendChild(createButton(documentRef, "Save storyboard", () => {
+      void this.dispatch({ type: "save-storyboard", expected_revision: this.state.autosave.saved_revision ?? 0 }).catch(() => {});
+    }));
+    wrapper.appendChild(storyboard);
+    const sourceStatus = documentRef.createElement("p");
+    const sources = sourceIdentity(this.model).sources || {};
+    sourceStatus.textContent = `sources: ${Object.keys(sources).length}; time: ${this.state.selectedTime}`;
+    wrapper.appendChild(sourceStatus);
     const status = documentRef.createElement("p");
     status.className = "autosave-status";
     status.textContent = `autosave: ${this.state.autosave.state}` + (this.state.autosave.error ? ` (${this.state.autosave.error})` : "");
@@ -500,6 +696,17 @@ export class ReviewEditorController {
 
 export function mountReviewEditor(model, root, options = {}) {
   return new ReviewEditorController(model, root, options);
+}
+
+const dataElement = typeof document === "undefined" ? null : document.getElementById("review-editor-data");
+const rootElement = typeof document === "undefined" ? null : document.getElementById("review-editor-root");
+if (dataElement && rootElement) {
+  try {
+    const model = JSON.parse(dataElement.textContent || "{}");
+    mountReviewEditor(model, rootElement);
+  } catch (error) {
+    rootElement.textContent = `Unable to load review editor model: ${error}`;
+  }
 }
 
 export default ReviewEditorController;

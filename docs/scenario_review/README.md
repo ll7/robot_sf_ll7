@@ -15,6 +15,10 @@ The synchronized SREV-16 scene/video/metric/event extension is documented in
 [`review_panels.md`](./review_panels.md) and runs with
 `python -m robot_sf.render.review_panels`.
 
+The SREV-17 offline annotation and storyboard editor is documented in
+[`review_editor.md`](./review_editor.md) and runs with
+`python -m robot_sf.render.review_editor`.
+
 ## Leaf fast-lane registration convention
 
 Scenario-review leaves that add a deterministic test file must also register

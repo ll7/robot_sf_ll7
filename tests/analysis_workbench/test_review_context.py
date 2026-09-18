@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -672,8 +673,10 @@ def test_canonical_owner_loader_uses_one_snapshot_after_source_replacement(
     )
     original_snapshot = review_context._snapshot_directory
 
-    def replace_after_snapshot(directory: Path, files: list[Path], snapshot_root: Path):
-        snapshot = original_snapshot(directory, files, snapshot_root)
+    def replace_after_snapshot(
+        directory: Path, files: list[Path], snapshot_root: Path, **kwargs: object
+    ):
+        snapshot = original_snapshot(directory, files, snapshot_root, **kwargs)
         source_path = directory / "episodes.jsonl"
         source_path.unlink()
         source_path.symlink_to(outside)
@@ -726,8 +729,8 @@ def test_canonical_snapshot_rejects_fifo_replacement_without_blocking(
     source = _canonical_source_ref(store)
     original_inventory = review_context._directory_files
 
-    def replace_after_inventory(directory: Path) -> list[Path]:
-        files = original_inventory(directory)
+    def replace_after_inventory(directory: Path, **kwargs: object) -> list[Path]:
+        files = original_inventory(directory, **kwargs)
         episodes_path = directory / "episodes.jsonl"
         episodes_path.unlink()
         os.mkfifo(episodes_path)
@@ -862,6 +865,92 @@ def test_output_materialization_never_publishes_partial_final(tmp_path: Path, mo
         review_context._write_json(target, {"schema_version": "test"})
     assert not target.exists()
     assert list(tmp_path.glob(".context-report.json.*.partial")) == []
+
+
+def test_output_materialization_rejects_temporary_inode_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shared API cannot publish a replaced temporary pathname."""
+    target = tmp_path / "context-report.json"
+    outside = tmp_path.parent / "srev06-temporary-race-target"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    original_publish = review_context._publish_output
+
+    def swap_temporary(
+        directory_fd: int,
+        temporary_name: str,
+        final_name: str,
+        output_directory,
+        published_names: set[str],
+        **kwargs: object,
+    ) -> None:
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        os.symlink(outside, temporary_name, dir_fd=directory_fd)
+        original_publish(
+            directory_fd,
+            temporary_name,
+            final_name,
+            output_directory,
+            published_names,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(review_context, "_publish_output", swap_temporary)
+    with pytest.raises(ReviewContractsValidationError):
+        review_context._write_json(target, {"schema_version": "test"})
+    assert not target.exists()
+    assert outside.read_text(encoding="utf-8") == "outside sentinel"
+    outside.unlink()
+
+
+def test_cleanup_swap_never_unlinks_replacement_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cleanup retires a raced name without unlinking its replacement."""
+    owned = tmp_path / "owned.partial"
+    owned.write_text("owned", encoding="utf-8")
+    outside = tmp_path / "external-sentinel"
+    outside.write_text("do not delete", encoding="utf-8")
+    original_rename = review_context._rename_noreplace
+    original_unlink = os.unlink
+    swapped = False
+
+    def swap_before_rename(
+        source_name: str,
+        destination_name: str,
+        *,
+        source_fd: int,
+        destination_fd: int,
+    ) -> None:
+        nonlocal swapped
+        if not swapped and source_name == owned.name:
+            original_unlink(owned)
+            owned.symlink_to(outside)
+            swapped = True
+        original_rename(
+            source_name,
+            destination_name,
+            source_fd=source_fd,
+            destination_fd=destination_fd,
+        )
+
+    def unlink_must_not_run(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cleanup must not use a name-based unlink")
+
+    monkeypatch.setattr(review_context, "_rename_noreplace", swap_before_rename)
+    monkeypatch.setattr(review_context.os, "unlink", unlink_must_not_run)
+    owned_stat = os.stat(owned, follow_symlinks=False)
+    directory_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        assert not review_context._unlink_owned_entry(
+            directory_fd,
+            owned.name,
+            (owned_stat.st_dev, owned_stat.st_ino),
+        )
+    finally:
+        os.close(directory_fd)
+    assert outside.read_text(encoding="utf-8") == "do not delete"
+    assert owned.is_symlink()
 
 
 def test_malformed_selection_is_not_an_empty_selection(tmp_path: Path) -> None:
@@ -1058,6 +1147,76 @@ def test_output_parent_replacement_during_publication_is_fail_closed(
         if output_link.is_symlink():
             output_link.unlink()
         outside.rmdir()
+
+
+def test_api_publication_rejects_parent_move_before_final_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parent moved after final identity admission cannot leave an outside report."""
+    _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-link-before-api"
+    original_retained = review_context._retained_output_identity
+    original_link = review_context.os.link
+    link_calls = 0
+    moved = False
+
+    def move_after_final_identity(*args: object, **kwargs: object) -> tuple[int, int]:
+        nonlocal moved
+        identity = original_retained(*args, **kwargs)
+        if not moved:
+            output = tmp_path / "out"
+            output.rename(outside)
+            output.symlink_to(outside, target_is_directory=True)
+            moved = True
+        return identity
+
+    def record_link(*args: object, **kwargs: object) -> object:
+        nonlocal link_calls
+        link_calls += 1
+        return original_link(*args, **kwargs)
+
+    monkeypatch.setattr(review_context, "_retained_output_identity", move_after_final_identity)
+    monkeypatch.setattr(review_context.os, "link", record_link)
+    try:
+        result = run(_request(tmp_path), base=tmp_path)
+        assert result.status == "failed"
+        assert result.artifacts == ()
+        assert link_calls == 0
+        assert not any(outside.iterdir())
+    finally:
+        output_link = tmp_path / "out"
+        if output_link.is_symlink():
+            output_link.unlink()
+        outside.rmdir()
+
+
+def test_api_publication_cleans_link_after_output_move_at_link_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A move immediately before link cannot leave a report outside the root."""
+    with tempfile.TemporaryDirectory(prefix="ba01-publication-", dir="/dev/shm") as name:
+        root = Path(name)
+        _stage(root)
+        outside = root.parent / f"{root.name}-outside"
+        original_link = review_context.os.link
+        moved = False
+
+        def move_before_link(*args: object, **kwargs: object) -> object:
+            nonlocal moved
+            if not moved:
+                (root / "out").rename(outside)
+                (root / "out").mkdir()
+                moved = True
+            return original_link(*args, **kwargs)
+
+        monkeypatch.setattr(review_context.os, "link", move_before_link)
+        result = run(_request(root), base=root)
+
+        assert result.status == "failed"
+        assert "output directory replaced during publication" in result.reason
+        assert not (outside / OUTPUT_REPORT_FILENAME).exists()
+        assert not any(outside.iterdir())
+        assert not any((root / "out").iterdir())
 
 
 def test_canonical_source_selection_never_silently_merges(tmp_path: Path) -> None:
@@ -1489,3 +1648,100 @@ def test_cli_main_invalid_arguments_in_process(
     parsed = component_result_from_dict(json.loads(capsys.readouterr().out))
     assert parsed.status == "failed"
     assert parsed.reason == "invalid_cli_arguments"
+
+
+def test_directory_inventory_rejects_admission_change(tmp_path: Path, monkeypatch) -> None:
+    """Inventory must fail closed when a regular entry cannot be admitted."""
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "episodes.jsonl").write_text("{}\n", encoding="utf-8")
+
+    def reject_admission(*_args: object, **_kwargs: object) -> object:
+        raise OSError("simulated inventory race")
+
+    monkeypatch.setattr(review_context, "_capture_descriptor_admission", reject_admission)
+    with pytest.raises(ReviewContractsValidationError, match="changed during inventory"):
+        review_context._directory_files(source, file_admissions={})
+
+
+def test_descriptor_backed_read_binds_expected_provenance(tmp_path: Path) -> None:
+    """Descriptor reads reject mismatched root, entry, and admission identities."""
+    source = tmp_path / "source"
+    nested = source / "nested"
+    nested.mkdir(parents=True)
+    payload = nested / "episodes.jsonl"
+    payload.write_text('{"episode_id": "ep-1"}\n', encoding="utf-8")
+    relative = ("nested", payload.name)
+    admission = review_context._capture_descriptor_admission(
+        relative,
+        source,
+        kind="fixture source",
+    )
+
+    assert (
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected=admission,
+        )
+        == payload.read_bytes()
+    )
+    with pytest.raises(ReviewContractsValidationError, match="replaced before read"):
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected=replace(admission, entry_inode=admission.entry_inode + 1),
+        )
+    with pytest.raises(ReviewContractsValidationError, match="root was replaced"):
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected_root_identity=(admission.root_device, admission.root_inode + 1),
+        )
+    with pytest.raises(ReviewContractsValidationError, match="replaced before read"):
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected_entry_identity=(admission.entry_device, admission.entry_inode + 1),
+        )
+
+
+def test_publication_reopens_admitted_output_descriptors(tmp_path: Path) -> None:
+    """Publication reopens both parent and reserved directory by retained identity."""
+    root = tmp_path / "output-root"
+    root.mkdir()
+    parent_guard = review_context._open_output_parent_guard(root, ("nested", "report.json"))
+    try:
+        current_parent = review_context._open_current_output_parent(parent_guard)
+        try:
+            parent_stat = os.fstat(current_parent)
+            assert (parent_stat.st_dev, parent_stat.st_ino) == (
+                parent_guard.parent_device,
+                parent_guard.parent_inode,
+            )
+        finally:
+            os.close(current_parent)
+    finally:
+        parent_guard.close()
+
+    reserved = review_context._reserve_output_directory("reserved", root)
+    try:
+        current_directory = review_context._open_current_output_directory(reserved)
+        try:
+            directory_stat = os.fstat(current_directory)
+            assert (directory_stat.st_dev, directory_stat.st_ino) == (
+                reserved.device,
+                reserved.inode,
+            )
+        finally:
+            os.close(current_directory)
+    finally:
+        review_context._release_empty_output(reserved)

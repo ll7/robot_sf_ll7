@@ -13,6 +13,8 @@ this component advertises without changing the shared contract owner.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import html
 import json
@@ -432,6 +434,46 @@ class _CanonicalIdentityError(ReviewContractsValidationError):
         super().__init__([detail])
 
 
+@dataclass(frozen=True, slots=True)
+class _DescriptorAdmission:
+    """Identity snapshot for one no-follow descriptor walk."""
+
+    ancestry: tuple[tuple[int, int], ...]
+    root_device: int
+    root_inode: int
+    entry_device: int
+    entry_inode: int
+    entry_is_directory: bool
+
+
+@dataclass(slots=True)
+class _OutputParentGuard:
+    """Retain the admitted root and parent identities for one output path."""
+
+    root: Path
+    parts: tuple[str, ...]
+    root_fd: int
+    parent_fd: int
+    root_device: int
+    root_inode: int
+    root_ancestry: tuple[tuple[int, int], ...]
+    parent_device: int
+    parent_inode: int
+
+    def close(self) -> None:
+        """Close retained descriptors without turning cleanup into a failure."""
+        for attribute in ("parent_fd", "root_fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor < 0:
+                continue
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            finally:
+                setattr(self, attribute, -1)
+
+
 @dataclass(slots=True)
 class _ReservedOutputDirectory:
     """Retain trusted descriptors for one reserved output directory."""
@@ -442,11 +484,20 @@ class _ReservedOutputDirectory:
     name: str
     device: int
     inode: int
+    root: Path
+    parts: tuple[str, ...]
+    root_fd: int
+    root_device: int
+    root_inode: int
+    root_ancestry: tuple[tuple[int, int], ...]
+    parent_device: int
+    parent_inode: int
     published_names: set[str] = field(default_factory=set)
+    published_identities: dict[str, tuple[int, int]] = field(default_factory=dict)
 
     def close(self) -> None:
         """Close retained descriptors without turning cleanup into a new failure."""
-        for attribute in ("directory_fd", "parent_fd"):
+        for attribute in ("directory_fd", "parent_fd", "root_fd"):
             descriptor = getattr(self, attribute)
             if descriptor < 0:
                 continue
@@ -803,7 +854,11 @@ def _read_regular_file_no_follow(path: Path, *, limit: int, kind: str) -> bytes:
         os.close(file_fd)
 
 
-def _directory_files(path: Path) -> list[Path]:
+def _directory_files(  # noqa: C901
+    path: Path,
+    *,
+    file_admissions: dict[Path, _DescriptorAdmission] | None = None,
+) -> list[Path]:
     """Inventory a contained source directory without admitting links/special files.
 
     Returns:
@@ -836,6 +891,21 @@ def _directory_files(path: Path) -> list[Path]:
                 pending.append(entry_path)
             elif stat.S_ISREG(mode):
                 files.append(entry_path)
+                if file_admissions is not None:
+                    relative = entry_path.relative_to(path)
+                    try:
+                        file_admissions[entry_path] = _capture_descriptor_admission(
+                            relative.parts,
+                            path,
+                            kind=f"source directory entry: {relative}",
+                        )
+                    except (OSError, ValueError) as error:
+                        raise ReviewContractsValidationError(
+                            [
+                                "source directory entry changed during inventory: "
+                                f"{type(error).__name__}"
+                            ]
+                        ) from error
                 total_bytes += entry.stat(follow_symlinks=False).st_size
                 if len(files) > _MAX_SOURCE_FILES:
                     raise ReviewContractsValidationError(
@@ -852,8 +922,137 @@ def _directory_files(path: Path) -> list[Path]:
     return sorted(files, key=lambda item: str(item.relative_to(path)))
 
 
-def _read_descriptor_backed_file(
-    relative_parts: tuple[str, ...], root: Path, *, limit: int, kind: str
+def _descriptor_directory_flags() -> int:
+    """Return flags for an anchored, no-follow directory descriptor."""
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+
+
+def _open_directory_path_no_follow(path: Path) -> tuple[int, tuple[tuple[int, int], ...]]:
+    """Open every component of an absolute directory path without following links.
+
+    Returns:
+        The descriptor for ``path`` and the device/inode chain from ``/`` to it.
+    """
+    absolute = Path(path)
+    if not absolute.is_absolute():
+        absolute = absolute.absolute()
+    parts = absolute.parts
+    if not parts or parts[0] != os.sep:
+        raise ReviewContractsValidationError(["directory path must be absolute"])
+    if ".." in parts:
+        raise ReviewContractsValidationError(["directory path traversal is rejected"])
+    current_fd = os.open(os.sep, _descriptor_directory_flags())
+    ancestry: list[tuple[int, int]] = []
+    try:
+        root_stat = os.fstat(current_fd)
+        if not stat.S_ISDIR(root_stat.st_mode):
+            raise ReviewContractsValidationError(["directory anchor is not a directory"])
+        ancestry.append((root_stat.st_dev, root_stat.st_ino))
+        for part in parts[1:]:
+            next_fd = os.open(part, _descriptor_directory_flags(), dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+            entry_stat = os.fstat(current_fd)
+            if not stat.S_ISDIR(entry_stat.st_mode):
+                raise ReviewContractsValidationError(["directory anchor is not a directory"])
+            ancestry.append((entry_stat.st_dev, entry_stat.st_ino))
+        return current_fd, tuple(ancestry)
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _capture_descriptor_admission(
+    relative_parts: tuple[str, ...], root: Path, *, kind: str
+) -> _DescriptorAdmission:
+    """Capture the ancestry and leaf identity for one admitted relative path.
+
+    Returns:
+        The descriptor-walk identity admitted before any file read.
+    """
+    if not relative_parts:
+        raise ReviewContractsValidationError([f"{kind} path is empty"])
+    root_fd, root_ancestry = _open_directory_path_no_follow(root)
+    current_fd = root_fd
+    try:
+        ancestry = list(root_ancestry)
+        for part in relative_parts[:-1]:
+            next_fd = os.open(part, _descriptor_directory_flags(), dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+            directory_stat = os.fstat(current_fd)
+            if not stat.S_ISDIR(directory_stat.st_mode):
+                raise ReviewContractsValidationError([f"{kind} parent is not a directory"])
+            ancestry.append((directory_stat.st_dev, directory_stat.st_ino))
+        entry_stat = os.stat(relative_parts[-1], dir_fd=current_fd, follow_symlinks=False)
+        if not (stat.S_ISREG(entry_stat.st_mode) or stat.S_ISDIR(entry_stat.st_mode)):
+            raise ReviewContractsValidationError([f"{kind} is not a regular file or directory"])
+        return _DescriptorAdmission(
+            ancestry=tuple(ancestry),
+            root_device=ancestry[-1][0],
+            root_inode=ancestry[-1][1],
+            entry_device=entry_stat.st_dev,
+            entry_inode=entry_stat.st_ino,
+            entry_is_directory=stat.S_ISDIR(entry_stat.st_mode),
+        )
+    finally:
+        os.close(current_fd)
+
+
+def _assert_descriptor_path_current(
+    relative_parts: tuple[str, ...],
+    root: Path,
+    *,
+    ancestry: tuple[tuple[int, int], ...],
+    entry_identity: tuple[int, int],
+    kind: str,
+) -> None:
+    """Verify that a descriptor-backed read still names the admitted path."""
+    root_fd, visible_root_ancestry = _open_directory_path_no_follow(root)
+    current_fd = root_fd
+    try:
+        expected_root_length = len(visible_root_ancestry)
+        if tuple(ancestry[:expected_root_length]) != visible_root_ancestry:
+            raise ReviewContractsValidationError([f"{kind} ancestry changed during read"])
+        visible_ancestry = list(visible_root_ancestry)
+        for part in relative_parts[:-1]:
+            next_fd = os.open(part, _descriptor_directory_flags(), dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+            directory_stat = os.fstat(current_fd)
+            if not stat.S_ISDIR(directory_stat.st_mode):
+                raise ReviewContractsValidationError([f"{kind} parent changed during read"])
+            visible_ancestry.append((directory_stat.st_dev, directory_stat.st_ino))
+        if tuple(ancestry) != tuple(visible_ancestry):
+            raise ReviewContractsValidationError([f"{kind} ancestry changed during read"])
+        visible_entry = os.stat(relative_parts[-1], dir_fd=current_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(visible_entry.st_mode)
+            or (visible_entry.st_dev, visible_entry.st_ino) != entry_identity
+        ):
+            raise ReviewContractsValidationError([f"{kind} entry changed during read"])
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"{kind} ancestry changed during read: {type(error).__name__}"]
+        ) from error
+    finally:
+        os.close(current_fd)
+
+
+def _read_descriptor_backed_file(  # noqa: C901
+    relative_parts: tuple[str, ...],
+    root: Path,
+    *,
+    limit: int,
+    kind: str,
+    expected: _DescriptorAdmission | None = None,
+    expected_root_identity: tuple[int, int] | None = None,
+    expected_entry_identity: tuple[int, int] | None = None,
 ) -> bytes:
     """Read one bounded regular file from a directory descriptor walk.
 
@@ -871,12 +1070,10 @@ def _read_descriptor_backed_file(
     non_blocking = getattr(os, "O_NONBLOCK", 0)
     close_on_exec = getattr(os, "O_CLOEXEC", 0)
     directory_flag = getattr(os, "O_DIRECTORY", 0)
-    root_fd = os.open(
-        root,
-        os.O_RDONLY | close_on_exec | directory_flag | no_follow,
-    )
+    root_fd, root_ancestry = _open_directory_path_no_follow(root)
     current_fd = root_fd
     file_fd = -1
+    opened_ancestry = list(root_ancestry)
     try:
         for part in relative_parts[:-1]:
             next_fd = os.open(
@@ -886,13 +1083,30 @@ def _read_descriptor_backed_file(
             )
             os.close(current_fd)
             current_fd = next_fd
+            directory_stat = os.fstat(current_fd)
+            if not stat.S_ISDIR(directory_stat.st_mode):
+                raise ReviewContractsValidationError([f"{kind} parent is not a directory"])
+            opened_ancestry.append((directory_stat.st_dev, directory_stat.st_ino))
         file_fd = os.open(
             relative_parts[-1],
             os.O_RDONLY | close_on_exec | no_follow | non_blocking,
             dir_fd=current_fd,
         )
-        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+        file_stat = os.fstat(file_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
             raise ReviewContractsValidationError([f"{kind} is not a regular file"])
+        entry_identity = (file_stat.st_dev, file_stat.st_ino)
+        if expected is not None and (
+            (expected.ancestry and tuple(opened_ancestry) != expected.ancestry)
+            or (opened_ancestry[-1] != (expected.root_device, expected.root_inode))
+            or entry_identity != (expected.entry_device, expected.entry_inode)
+            or expected.entry_is_directory
+        ):
+            raise ReviewContractsValidationError([f"{kind} was replaced before read"])
+        if expected_root_identity is not None and opened_ancestry[-1] != expected_root_identity:
+            raise ReviewContractsValidationError([f"{kind} root was replaced before read"])
+        if expected_entry_identity is not None and entry_identity != expected_entry_identity:
+            raise ReviewContractsValidationError([f"{kind} was replaced before read"])
         chunks: list[bytes] = []
         total = 0
         while True:
@@ -903,7 +1117,15 @@ def _read_descriptor_backed_file(
             if total > limit:
                 raise ReviewContractsValidationError([f"{kind} too large: maximum {limit} bytes"])
             chunks.append(chunk)
-        return b"".join(chunks)
+        raw = b"".join(chunks)
+        _assert_descriptor_path_current(
+            relative_parts,
+            root,
+            ancestry=tuple(opened_ancestry),
+            entry_identity=entry_identity,
+            kind=kind,
+        )
+        return raw
     finally:
         if file_fd >= 0:
             os.close(file_fd)
@@ -911,7 +1133,12 @@ def _read_descriptor_backed_file(
             os.close(current_fd)
 
 
-def _read_contained_bytes(path_value: str, base: Path) -> bytes:
+def _read_contained_bytes(
+    path_value: str,
+    base: Path,
+    *,
+    expected: _DescriptorAdmission | None = None,
+) -> bytes:
     """Read one regular file through no-follow directory descriptors.
 
     The descriptor walk binds each path component to a directory file
@@ -931,11 +1158,17 @@ def _read_contained_bytes(path_value: str, base: Path) -> bytes:
         base.resolve(strict=True),
         limit=_MAX_SOURCE_BYTES,
         kind=f"source uri: {_safe_detail(path_value)}",
+        expected=expected,
     )
 
 
 def _snapshot_directory(
-    directory: Path, files: list[Path], snapshot_root: Path
+    directory: Path,
+    files: list[Path],
+    snapshot_root: Path,
+    *,
+    expected: _DescriptorAdmission | None = None,
+    file_admissions: Mapping[Path, _DescriptorAdmission] | None = None,
 ) -> tuple[list[Path], str]:
     """Snapshot a canonical source once before handing it to an owner loader.
 
@@ -958,6 +1191,12 @@ def _snapshot_directory(
             directory,
             limit=_MAX_SOURCE_BYTES,
             kind=f"canonical source: {relative}",
+            expected=(file_admissions or {}).get(source_path),
+            expected_root_identity=(
+                (expected.entry_device, expected.entry_inode)
+                if expected is not None and expected.entry_is_directory
+                else None
+            ),
         )
         total_bytes += len(raw)
         if total_bytes > _MAX_SOURCE_BYTES:
@@ -987,14 +1226,39 @@ def _output_directory_flags() -> int:
     )
 
 
+def _output_root_identity(root: Path) -> tuple[int, int]:
+    """Return the admitted directory identity for one output root."""
+    resolved = root.resolve(strict=True)
+    try:
+        root_stat = os.stat(resolved, follow_symlinks=False)
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(["output base cannot be admitted safely"]) from error
+    if not stat.S_ISDIR(root_stat.st_mode):
+        raise ReviewContractsValidationError([f"output base is not a directory: {root}"])
+    return root_stat.st_dev, root_stat.st_ino
+
+
 def _output_directory_matches_entry(output: _ReservedOutputDirectory) -> bool:
     """Return whether the reserved name still names the retained directory."""
-    if output.parent_fd < 0 or output.directory_fd < 0:
+    if output.root_fd < 0 or output.parent_fd < 0 or output.directory_fd < 0:
         return False
     try:
+        _assert_output_parent_current(
+            _OutputParentGuard(
+                root=output.root,
+                parts=output.parts,
+                root_fd=output.root_fd,
+                parent_fd=output.parent_fd,
+                root_device=output.root_device,
+                root_inode=output.root_inode,
+                root_ancestry=output.root_ancestry,
+                parent_device=output.parent_device,
+                parent_inode=output.parent_inode,
+            )
+        )
         visible = os.stat(output.name, dir_fd=output.parent_fd, follow_symlinks=False)
         trusted = os.fstat(output.directory_fd)
-    except (OSError, ValueError):
+    except (OSError, ReviewContractsValidationError, ValueError):
         return False
     return (
         stat.S_ISDIR(visible.st_mode)
@@ -1019,9 +1283,7 @@ def _open_output_parent(root: Path, parts: tuple[str, ...]) -> int:
     """
     parent_fd = -1
     try:
-        parent_fd = os.open(root, _output_directory_flags())
-        if not stat.S_ISDIR(os.fstat(parent_fd).st_mode):
-            raise ReviewContractsValidationError([f"output base is not a directory: {root}"])
+        parent_fd, _root_ancestry = _open_directory_path_no_follow(root)
         for part in parts[:-1]:
             try:
                 os.mkdir(part, dir_fd=parent_fd)
@@ -1035,6 +1297,229 @@ def _open_output_parent(root: Path, parts: tuple[str, ...]) -> int:
         if parent_fd >= 0:
             os.close(parent_fd)
         raise
+
+
+def _open_output_parent_guard(
+    root: Path,
+    parts: tuple[str, ...],
+    *,
+    expected_root_identity: tuple[int, int] | None = None,
+) -> _OutputParentGuard:
+    """Open an output parent while retaining the root identity for publication checks.
+
+    Returns:
+        A descriptor-backed guard for the admitted root and parent.
+    """
+    root_fd = -1
+    parent_fd = -1
+    try:
+        root_fd, root_ancestry = _open_directory_path_no_follow(root)
+        root_stat = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_stat.st_mode):
+            raise ReviewContractsValidationError([f"output base is not a directory: {root}"])
+        if (
+            expected_root_identity is not None
+            and (
+                root_stat.st_dev,
+                root_stat.st_ino,
+            )
+            != expected_root_identity
+        ):
+            raise ReviewContractsValidationError(["output root was replaced before admission"])
+        parent_fd = _open_output_parent(root, parts)
+        parent_stat = os.fstat(parent_fd)
+        if not stat.S_ISDIR(parent_stat.st_mode):
+            raise ReviewContractsValidationError(["output parent is not a directory"])
+        guard = _OutputParentGuard(
+            root=root,
+            parts=parts,
+            root_fd=root_fd,
+            parent_fd=parent_fd,
+            root_device=root_stat.st_dev,
+            root_inode=root_stat.st_ino,
+            root_ancestry=root_ancestry,
+            parent_device=parent_stat.st_dev,
+            parent_inode=parent_stat.st_ino,
+        )
+        _assert_output_parent_current(guard)
+        root_fd = -1
+        parent_fd = -1
+        return guard
+    except BaseException:
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        if root_fd >= 0:
+            os.close(root_fd)
+        raise
+
+
+def _open_visible_output_parent(root_fd: int, parts: tuple[str, ...]) -> int:
+    """Walk an already-open root without creating or following components.
+
+    Returns:
+        The descriptor for the parent of the final output name.
+    """
+    current_fd = os.dup(root_fd)
+    try:
+        for part in parts[:-1]:
+            next_fd = os.open(part, _output_directory_flags(), dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _open_current_output_parent(guard: _OutputParentGuard) -> int:
+    """Open the admitted output parent afresh from the retained root anchor.
+
+    Returns:
+        A newly opened descriptor for the visible, identity-matched parent.
+    """
+    visible_root_fd = -1
+    parent_fd = -1
+    try:
+        visible_root_fd, visible_root_ancestry = _open_directory_path_no_follow(guard.root)
+        visible_root = os.fstat(visible_root_fd)
+        if (
+            not stat.S_ISDIR(visible_root.st_mode)
+            or (visible_root.st_dev, visible_root.st_ino) != (guard.root_device, guard.root_inode)
+            or visible_root_ancestry != guard.root_ancestry
+        ):
+            raise ReviewContractsValidationError(["output root was replaced during publication"])
+        parent_fd = _open_visible_output_parent(visible_root_fd, guard.parts)
+        parent_stat = os.fstat(parent_fd)
+        if not stat.S_ISDIR(parent_stat.st_mode) or (parent_stat.st_dev, parent_stat.st_ino) != (
+            guard.parent_device,
+            guard.parent_inode,
+        ):
+            raise ReviewContractsValidationError(["output parent was replaced during publication"])
+        retained_root = os.fstat(guard.root_fd)
+        if not stat.S_ISDIR(retained_root.st_mode) or (
+            retained_root.st_dev,
+            retained_root.st_ino,
+        ) != (guard.root_device, guard.root_inode):
+            raise ReviewContractsValidationError(["output root was replaced during publication"])
+        result = parent_fd
+        parent_fd = -1
+        return result
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output parent was replaced during publication: {type(error).__name__}"]
+        ) from error
+    finally:
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        if visible_root_fd >= 0:
+            os.close(visible_root_fd)
+
+
+def _open_current_output_directory(output: _ReservedOutputDirectory) -> int:
+    """Open the reserved output directory from its visible root path.
+
+    Returns:
+        A newly opened descriptor for the visible, identity-matched directory.
+    """
+    visible_root_fd = -1
+    parent_fd = -1
+    directory_fd = -1
+    try:
+        visible_root_fd, visible_root_ancestry = _open_directory_path_no_follow(output.root)
+        visible_root = os.fstat(visible_root_fd)
+        if (
+            not stat.S_ISDIR(visible_root.st_mode)
+            or (visible_root.st_dev, visible_root.st_ino) != (output.root_device, output.root_inode)
+            or visible_root_ancestry != output.root_ancestry
+        ):
+            raise ReviewContractsValidationError(["output root was replaced during publication"])
+        parent_fd = _open_visible_output_parent(visible_root_fd, output.parts)
+        parent_stat = os.fstat(parent_fd)
+        if not stat.S_ISDIR(parent_stat.st_mode) or (parent_stat.st_dev, parent_stat.st_ino) != (
+            output.parent_device,
+            output.parent_inode,
+        ):
+            raise ReviewContractsValidationError(["output parent was replaced during publication"])
+        directory_fd = os.open(output.name, _output_directory_flags(), dir_fd=parent_fd)
+        directory_stat = os.fstat(directory_fd)
+        if not stat.S_ISDIR(directory_stat.st_mode) or (
+            directory_stat.st_dev,
+            directory_stat.st_ino,
+        ) != (output.device, output.inode):
+            raise ReviewContractsValidationError(
+                ["output directory was replaced during publication"]
+            )
+        result = directory_fd
+        directory_fd = -1
+        return result
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output directory was replaced during publication: {type(error).__name__}"]
+        ) from error
+    finally:
+        if directory_fd >= 0:
+            os.close(directory_fd)
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        if visible_root_fd >= 0:
+            os.close(visible_root_fd)
+
+
+def _assert_output_parent_current(guard: _OutputParentGuard) -> None:
+    """Fail closed if an output parent or any admitted root component moved."""
+    if guard.root_fd < 0 or guard.parent_fd < 0:
+        raise ReviewContractsValidationError(["output parent descriptor is closed"])
+    try:
+        retained_root = os.fstat(guard.root_fd)
+        retained_parent = os.fstat(guard.parent_fd)
+        if (
+            not stat.S_ISDIR(retained_root.st_mode)
+            or retained_root.st_dev != guard.root_device
+            or retained_root.st_ino != guard.root_inode
+            or not stat.S_ISDIR(retained_parent.st_mode)
+            or retained_parent.st_dev != guard.parent_device
+            or retained_parent.st_ino != guard.parent_inode
+        ):
+            raise ReviewContractsValidationError(["output parent descriptor changed"])
+        visible_root_fd, visible_root_ancestry = _open_directory_path_no_follow(guard.root)
+        try:
+            visible_root = os.fstat(visible_root_fd)
+            if (
+                not stat.S_ISDIR(visible_root.st_mode)
+                or visible_root.st_dev != guard.root_device
+                or visible_root.st_ino != guard.root_inode
+                or visible_root_ancestry != guard.root_ancestry
+            ):
+                raise ReviewContractsValidationError(
+                    ["output root was replaced during publication"]
+                )
+            visible_parent_fd = -1
+            try:
+                visible_parent_fd = _open_visible_output_parent(visible_root_fd, guard.parts)
+                visible_parent = os.fstat(visible_parent_fd)
+                if (
+                    not stat.S_ISDIR(visible_parent.st_mode)
+                    or visible_parent.st_dev != guard.parent_device
+                    or visible_parent.st_ino != guard.parent_inode
+                ):
+                    raise ReviewContractsValidationError(
+                        ["output parent was replaced during publication"]
+                    )
+            finally:
+                if visible_parent_fd >= 0:
+                    os.close(visible_parent_fd)
+        finally:
+            os.close(visible_root_fd)
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output parent was replaced during publication: {type(error).__name__}"]
+        ) from error
 
 
 def _create_output_directory(
@@ -1066,7 +1551,12 @@ def _create_output_directory(
         raise
 
 
-def _reserve_output_directory(output_directory: str, base: Path) -> _ReservedOutputDirectory:
+def _reserve_output_directory(
+    output_directory: str,
+    base: Path,
+    *,
+    expected_root_identity: tuple[int, int] | None = None,
+) -> _ReservedOutputDirectory:
     """Reserve an output directory and retain descriptors for its publication parent.
 
     Returns:
@@ -1076,11 +1566,27 @@ def _reserve_output_directory(output_directory: str, base: Path) -> _ReservedOut
     root = base.resolve(strict=True)
     if not root.is_dir():
         raise ReviewContractsValidationError([f"output base is not a directory: {base}"])
-    parent_fd = -1
+    root_stat = os.stat(root, follow_symlinks=False)
+    if (
+        expected_root_identity is not None
+        and (
+            root_stat.st_dev,
+            root_stat.st_ino,
+        )
+        != expected_root_identity
+    ):
+        raise ReviewContractsValidationError(["output root was replaced before reservation"])
+    parent_guard: _OutputParentGuard | None = None
     output_fd = -1
     reserved: _ReservedOutputDirectory | None = None
     try:
-        parent_fd = _open_output_parent(root, parts)
+        parent_guard = _open_output_parent_guard(
+            root,
+            parts,
+            expected_root_identity=expected_root_identity,
+        )
+        _assert_output_parent_current(parent_guard)
+        parent_fd = parent_guard.parent_fd
         output_name = parts[-1]
         output_fd, output_stat = _create_output_directory(parent_fd, output_name, output_directory)
         reserved = _ReservedOutputDirectory(
@@ -1090,8 +1596,18 @@ def _reserve_output_directory(output_directory: str, base: Path) -> _ReservedOut
             name=output_name,
             device=output_stat.st_dev,
             inode=output_stat.st_ino,
+            root=parent_guard.root,
+            parts=parent_guard.parts,
+            root_fd=parent_guard.root_fd,
+            root_device=parent_guard.root_device,
+            root_inode=parent_guard.root_inode,
+            root_ancestry=parent_guard.root_ancestry,
+            parent_device=parent_guard.parent_device,
+            parent_inode=parent_guard.parent_inode,
         )
-        parent_fd = -1
+        parent_guard.root_fd = -1
+        parent_guard.parent_fd = -1
+        parent_guard = None
         output_fd = -1
         return reserved
     except ReviewContractsValidationError:
@@ -1107,8 +1623,241 @@ def _reserve_output_directory(output_directory: str, base: Path) -> _ReservedOut
         if reserved is None:
             if output_fd >= 0:
                 os.close(output_fd)
-            if parent_fd >= 0:
-                os.close(parent_fd)
+            if parent_guard is not None:
+                parent_guard.close()
+
+
+_RENAME_NOREPLACE = 1
+
+
+def _rename_noreplace(
+    source_name: str,
+    destination_name: str,
+    *,
+    source_fd: int,
+    destination_fd: int,
+) -> None:
+    """Atomically rename without replacing an existing destination name."""
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError as error:
+        raise OSError(errno.ENOTSUP, "renameat2 is unavailable") from error
+    renameat2.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        source_fd,
+        os.fsencode(source_name),
+        destination_fd,
+        os.fsencode(destination_name),
+        _RENAME_NOREPLACE,
+    )
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(
+            error_number,
+            os.strerror(error_number),
+            destination_name,
+        )
+
+
+def _create_private_quarantine(directory_fd: int) -> tuple[str, int]:
+    """Create a mode-0700 quarantine directory below a retained directory.
+
+    Returns:
+        The quarantine directory name and its open descriptor.
+    """
+    for _ in range(128):
+        quarantine_name = f".ba01-cleanup-{secrets.token_hex(16)}"
+        try:
+            os.mkdir(quarantine_name, 0o700, dir_fd=directory_fd)
+        except FileExistsError:
+            continue
+        try:
+            return (
+                quarantine_name,
+                os.open(
+                    quarantine_name,
+                    _descriptor_directory_flags(),
+                    dir_fd=directory_fd,
+                ),
+            )
+        except BaseException:
+            try:
+                os.rmdir(quarantine_name, dir_fd=directory_fd)
+            except OSError:
+                pass
+            raise
+    raise OSError(errno.EEXIST, "private cleanup quarantine allocation failed")
+
+
+def _restore_quarantined_entry(
+    quarantine_fd: int,
+    entry_name: str,
+    directory_fd: int,
+    original_name: str,
+) -> None:
+    """Best-effort restore after a quarantine identity mismatch."""
+    try:
+        _rename_noreplace(
+            entry_name,
+            original_name,
+            source_fd=quarantine_fd,
+            destination_fd=directory_fd,
+        )
+    except (FileExistsError, FileNotFoundError, OSError):
+        pass
+
+
+def _quarantined_entry_matches(
+    quarantine_fd: int,
+    entry_name: str,
+    identity: tuple[int, int],
+) -> bool:
+    """Return whether a quarantined entry is still our regular-file inode."""
+    entry = os.stat(entry_name, dir_fd=quarantine_fd, follow_symlinks=False)
+    return stat.S_ISREG(entry.st_mode) and (entry.st_dev, entry.st_ino) == identity
+
+
+def _unlink_owned_entry_same_filesystem(
+    directory_fd: int,
+    name: str,
+    identity: tuple[int, int],
+) -> bool:
+    """Retire an owned entry through a private quarantine on its filesystem.
+
+    The regular cleanup helper uses a process-private temporary directory, but
+    that directory may live on a different filesystem from an output root such
+    as ``/dev/shm``.  Publication cleanup needs a same-filesystem quarantine so
+    a raced output directory can still be cleaned by its retained descriptor.
+    The quarantine directory is mode ``0700`` and is removed after a second
+    identity check, so the final unlink remains conditional on our inode.
+
+    Returns:
+        ``True`` when the owned entry was removed; ``False`` otherwise.
+    """
+    if directory_fd < 0:
+        return False
+    quarantine_name: str
+    quarantine_fd: int
+    entry_name = f"entry-{secrets.token_hex(16)}"
+    try:
+        quarantine_name, quarantine_fd = _create_private_quarantine(directory_fd)
+    except OSError:
+        return False
+    try:
+        try:
+            _rename_noreplace(
+                name,
+                entry_name,
+                source_fd=directory_fd,
+                destination_fd=quarantine_fd,
+            )
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            if error.errno in {errno.ENOTSUP, errno.EXDEV, errno.EACCES, errno.EPERM}:
+                return False
+            raise
+        if not _quarantined_entry_matches(quarantine_fd, entry_name, identity):
+            _restore_quarantined_entry(quarantine_fd, entry_name, directory_fd, name)
+            return False
+        if not _quarantined_entry_matches(quarantine_fd, entry_name, identity):
+            _restore_quarantined_entry(quarantine_fd, entry_name, directory_fd, name)
+            return False
+        os.unlink(entry_name, dir_fd=quarantine_fd)
+        return True
+    except (OSError, ValueError):
+        return False
+    finally:
+        os.close(quarantine_fd)
+        try:
+            os.rmdir(quarantine_name, dir_fd=directory_fd)
+        except OSError:
+            pass
+
+
+def _unlink_owned_entry(  # noqa: C901
+    directory_fd: int,
+    name: str,
+    identity: tuple[int, int],
+    *,
+    same_filesystem: bool = False,
+) -> bool:
+    """Retire an owned name without ever unlinking a raced replacement.
+
+    POSIX has no unlink-by-inode operation.  A stat followed by unlink is
+    therefore inherently unsafe: a replacement can win the interval between
+    the two syscalls.  We instead atomically move the name, without replacing
+    a private quarantine name, and inspect the moved inode.  A mismatch is
+    restored with ``RENAME_NOREPLACE``; if restoration loses a race, both
+    entries are retained.  An owned inode is intentionally left in the
+    process-private quarantine as safe residue rather than being deleted by a
+    name-based operation.
+
+    Returns:
+        ``True`` when the original name was atomically retired, otherwise
+        ``False`` when the name was absent, unsupported, or not owned.
+    """
+    if same_filesystem:
+        return _unlink_owned_entry_same_filesystem(directory_fd, name, identity)
+    if directory_fd < 0:
+        return False
+    cleanup_path: Path | None = None
+    cleanup_fd = -1
+    try:
+        cleanup_path = Path(tempfile.mkdtemp(prefix="ba01-cleanup-"))
+        cleanup_fd = os.open(cleanup_path, _descriptor_directory_flags())
+        for _ in range(128):
+            quarantine_name = f"entry-{secrets.token_hex(16)}"
+            try:
+                _rename_noreplace(
+                    name,
+                    quarantine_name,
+                    source_fd=directory_fd,
+                    destination_fd=cleanup_fd,
+                )
+                break
+            except FileExistsError:
+                continue
+            except FileNotFoundError:
+                return False
+            except OSError as error:
+                if error.errno in {errno.ENOTSUP, errno.EXDEV, errno.EACCES, errno.EPERM}:
+                    return False
+                raise
+        else:
+            return False
+        try:
+            moved = os.stat(quarantine_name, dir_fd=cleanup_fd, follow_symlinks=False)
+        except (FileNotFoundError, OSError, ValueError):
+            return False
+        moved_identity = (moved.st_dev, moved.st_ino)
+        if not stat.S_ISREG(moved.st_mode) or moved_identity != identity:
+            try:
+                _rename_noreplace(
+                    quarantine_name,
+                    name,
+                    source_fd=cleanup_fd,
+                    destination_fd=directory_fd,
+                )
+            except (FileExistsError, FileNotFoundError, OSError):
+                pass
+            return False
+        # There is deliberately no unlink here.  The quarantine name is not
+        # reachable through the admitted output tree, and retaining it avoids
+        # an attacker-controlled replacement ever being deleted.
+        return True
+    except (OSError, ValueError):
+        return False
+    finally:
+        if cleanup_fd >= 0:
+            os.close(cleanup_fd)
 
 
 def _release_empty_output(output_directory: _ReservedOutputDirectory | None) -> None:
@@ -1118,11 +1867,16 @@ def _release_empty_output(output_directory: _ReservedOutputDirectory | None) -> 
     try:
         if output_directory.directory_fd >= 0:
             for name in tuple(output_directory.published_names):
-                try:
-                    os.unlink(name, dir_fd=output_directory.directory_fd)
-                except FileNotFoundError:
-                    pass
+                identity = output_directory.published_identities.get(name)
+                if identity is not None:
+                    _unlink_owned_entry(
+                        output_directory.directory_fd,
+                        name,
+                        identity,
+                        same_filesystem=True,
+                    )
             output_directory.published_names.clear()
+            output_directory.published_identities.clear()
         if output_directory.parent_fd >= 0 and _output_directory_matches_entry(output_directory):
             try:
                 os.rmdir(output_directory.name, dir_fd=output_directory.parent_fd)
@@ -1676,13 +2430,23 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
         provenance["integrity_status"] = "format_mismatch"
         return None
     try:
+        source_admission = _capture_descriptor_admission(
+            _path_parts(ref.uri, kind="source uri"),
+            root.resolve(strict=True),
+            kind=f"source {ref.artifact_id}",
+        )
         resolved = _resolve_source(ref.uri, root)
         canonical_manifest_schema: str | None = None
         if resolved.is_dir():
-            files = _directory_files(resolved)
+            file_admissions: dict[Path, _DescriptorAdmission] = {}
+            files = _directory_files(resolved, file_admissions=file_admissions)
             with tempfile.TemporaryDirectory(prefix="srev06-source-snapshot-") as snapshot_dir:
                 snapshot_files, observed_sha = _snapshot_directory(
-                    resolved, files, Path(snapshot_dir)
+                    resolved,
+                    files,
+                    Path(snapshot_dir),
+                    expected=source_admission,
+                    file_admissions=file_admissions,
                 )
                 if observed_sha.lower() != ref.sha256.lower():
                     _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
@@ -1705,7 +2469,7 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
             provenance["canonical_source"] = True
             provenance["canonical_manifest_schema"] = canonical_manifest_schema
         else:
-            raw = _read_contained_bytes(ref.uri, root)
+            raw = _read_contained_bytes(ref.uri, root, expected=source_admission)
             observed_sha = _sha256_bytes(raw)
             provenance["sha256_observed"] = observed_sha
             if observed_sha.lower() != ref.sha256.lower():
@@ -2433,22 +3197,130 @@ def _open_output_temporary(directory_fd: int, prefix: str) -> tuple[int, str]:
     raise ReviewContractsValidationError(["output temporary name allocation failed"])
 
 
+def _retained_output_identity(
+    directory_fd: int,
+    temporary_name: str,
+    temporary_fd: int,
+) -> tuple[int, int]:
+    """Validate and return the retained temporary regular-file identity.
+
+    Returns:
+        The device and inode pair for the retained temporary file.
+    """
+    try:
+        retained = (
+            os.fstat(temporary_fd)
+            if temporary_fd >= 0
+            else os.stat(
+                temporary_name,
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        )
+        visible = os.stat(
+            temporary_name,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output temporary entry changed during publication: {type(error).__name__}"]
+        ) from error
+    if (
+        not stat.S_ISREG(retained.st_mode)
+        or not stat.S_ISREG(visible.st_mode)
+        or (retained.st_dev, retained.st_ino) != (visible.st_dev, visible.st_ino)
+    ):
+        raise ReviewContractsValidationError(
+            ["output temporary entry is not the retained regular file"]
+        )
+    return retained.st_dev, retained.st_ino
+
+
+def _assert_published_output_identity(
+    directory_fd: int,
+    final_name: str,
+    identity: tuple[int, int],
+) -> None:
+    """Reject a published final entry that is not the retained regular file."""
+    try:
+        final = os.stat(final_name, dir_fd=directory_fd, follow_symlinks=False)
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output final entry changed during publication: {type(error).__name__}"]
+        ) from error
+    if not stat.S_ISREG(final.st_mode) or (final.st_dev, final.st_ino) != identity:
+        raise ReviewContractsValidationError(
+            ["output final entry is not the retained regular file"]
+        )
+
+
+def _assert_publication_current(
+    output_directory: _ReservedOutputDirectory | None,
+    parent_guard: _OutputParentGuard | None,
+) -> None:
+    """Apply the active root or parent identity guard before/after publication."""
+    if output_directory is not None:
+        _assert_output_directory_current(output_directory)
+    elif parent_guard is not None:
+        _assert_output_parent_current(parent_guard)
+
+
+def _finish_publication(
+    publication_fd: int,
+    temporary_name: str,
+    final_name: str,
+    retained_identity: tuple[int, int],
+    output_directory: _ReservedOutputDirectory | None,
+    parent_guard: _OutputParentGuard | None,
+) -> None:
+    """Validate, retire, and flush one descriptor-bound publication."""
+    _assert_published_output_identity(publication_fd, final_name, retained_identity)
+    if not _unlink_owned_entry(
+        publication_fd,
+        temporary_name,
+        retained_identity,
+        same_filesystem=True,
+    ):
+        raise ReviewContractsValidationError(["output temporary entry could not be retired safely"])
+    _assert_publication_current(output_directory, parent_guard)
+    os.fsync(publication_fd)
+    _assert_publication_current(output_directory, parent_guard)
+
+
 def _publish_output(
     directory_fd: int,
     temporary_name: str,
     final_name: str,
     output_directory: _ReservedOutputDirectory | None,
     published_names: set[str],
+    *,
+    temporary_fd: int = -1,
+    parent_guard: _OutputParentGuard | None = None,
 ) -> None:
-    """Publish one fsync'd temporary file without replacing an existing name."""
+    """Publish one fsync'd temporary file without replacing an existing name.
+
+    The caller's retained descriptor is both the identity-stable publication
+    authority and the cleanup anchor.  A post-link guard rejects a directory
+    move, and identity-conditional cleanup removes any failed publication from
+    that same descriptor even when the directory crossed a filesystem boundary.
+    """
+    publication_fd = output_directory.directory_fd if output_directory is not None else directory_fd
+    _assert_publication_current(output_directory, parent_guard)
+    retained_identity = _retained_output_identity(
+        publication_fd,
+        temporary_name,
+        temporary_fd,
+    )
+    _assert_publication_current(output_directory, parent_guard)
     try:
         # A hard-link publication is atomic on the same filesystem and
         # fails with EEXIST instead of replacing a final name or symlink.
         os.link(
             temporary_name,
             final_name,
-            src_dir_fd=directory_fd,
-            dst_dir_fd=directory_fd,
+            src_dir_fd=publication_fd,
+            dst_dir_fd=publication_fd,
             follow_symlinks=False,
         )
     except FileExistsError as error:
@@ -2461,21 +3333,31 @@ def _publish_output(
         ) from error
 
     published_names.add(final_name)
+    if output_directory is not None:
+        output_directory.published_identities[final_name] = retained_identity
     try:
-        os.unlink(temporary_name, dir_fd=directory_fd)
-        if output_directory is not None:
-            _assert_output_directory_current(output_directory)
-        os.fsync(directory_fd)
+        _finish_publication(
+            publication_fd,
+            temporary_name,
+            final_name,
+            retained_identity,
+            output_directory,
+            parent_guard,
+        )
     except BaseException:
-        try:
-            os.unlink(final_name, dir_fd=directory_fd)
-        except OSError:
-            pass
+        _unlink_owned_entry(
+            publication_fd,
+            final_name,
+            retained_identity,
+            same_filesystem=True,
+        )
         published_names.discard(final_name)
+        if output_directory is not None:
+            output_directory.published_identities.pop(final_name, None)
         raise
 
 
-def _atomic_materialize_no_replace(
+def _atomic_materialize_no_replace(  # noqa: C901
     path: Path,
     text: str,
     *,
@@ -2491,6 +3373,7 @@ def _atomic_materialize_no_replace(
     directory_fd = -1
     temporary_name: str | None = None
     temporary_fd = -1
+    retained_fd = -1
     published_names = output_directory.published_names if output_directory is not None else set()
     try:
         if output_directory is None:
@@ -2502,30 +3385,50 @@ def _atomic_materialize_no_replace(
         else:
             directory_fd = output_directory.directory_fd
             _assert_output_directory_current(output_directory)
+        if output_directory is not None:
+            _assert_output_directory_current(output_directory)
         temporary_fd, temporary_name = _open_output_temporary(directory_fd, path.name)
-        handle = os.fdopen(temporary_fd, "wb")
-        temporary_fd = -1
-        with handle:
+        retained_fd = os.dup(temporary_fd)
+        if output_directory is not None:
+            _assert_output_directory_current(output_directory)
+        with os.fdopen(temporary_fd, "wb") as handle:
+            temporary_fd = -1
+            if output_directory is not None:
+                _assert_output_directory_current(output_directory)
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
+        if output_directory is not None:
+            _assert_output_directory_current(output_directory)
         _publish_output(
             directory_fd,
             temporary_name,
             path.name,
             output_directory,
             published_names,
+            temporary_fd=retained_fd,
         )
+        if output_directory is not None:
+            _assert_output_directory_current(output_directory)
         temporary_name = None
         return _sha256_bytes(encoded)
     finally:
         if temporary_fd >= 0:
             os.close(temporary_fd)
-        if temporary_name is not None and directory_fd >= 0:
+        if temporary_name is not None and retained_fd >= 0 and directory_fd >= 0:
             try:
-                os.unlink(temporary_name, dir_fd=directory_fd)
-            except FileNotFoundError:
+                retained_stat = os.fstat(retained_fd)
+                if stat.S_ISREG(retained_stat.st_mode):
+                    _unlink_owned_entry(
+                        directory_fd,
+                        temporary_name,
+                        (retained_stat.st_dev, retained_stat.st_ino),
+                        same_filesystem=output_directory is not None,
+                    )
+            except (OSError, ValueError):
                 pass
+        if retained_fd >= 0:
+            os.close(retained_fd)
         if owns_directory_fd and directory_fd >= 0:
             os.close(directory_fd)
 
@@ -2601,6 +3504,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
     source_provenance: list[dict[str, Any]] = []
     output_dir: _ReservedOutputDirectory | None = None
     root = base if base is not None else Path.cwd()
+    expected_root_identity: tuple[int, int] | None = None
     base_provenance: dict[str, Any] = {
         "evidence_status": EVIDENCE_STATUS,
         "claim_boundary": CLAIM_BOUNDARY,
@@ -2608,6 +3512,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         "sources": source_provenance,
     }
     try:
+        expected_root_identity = _output_root_identity(root)
         _validate_bounded_document(request.config, label="request config")
         if len(request.sources) > _MAX_OUTPUT_SOURCES:
             _add_diagnostic(
@@ -2662,7 +3567,11 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 diagnostics=diagnostics,
                 provenance=base_provenance,
             )
-        output_dir = _reserve_output_directory(request.output_directory, root)
+        output_dir = _reserve_output_directory(
+            request.output_directory,
+            root,
+            expected_root_identity=expected_root_identity,
+        )
         campaign_ref = _canonical_ref(
             by_format[CAMPAIGN_RESULT_FORMAT],
             family=CAMPAIGN_RESULT_FORMAT,

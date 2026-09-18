@@ -6,6 +6,10 @@ visualization specs, component request/result envelopes with capability
 descriptors, and experiment recipes. Diagnostic tooling only — no
 scientific admission, benchmark results, or simulator/planner changes.
 
+The offline [Benchmark Auditor campaign scan](./audit_scan.md) accounts for
+recorded campaign rows and emits deterministic BA-03 detector signals without
+rerunning simulations.
+
 The contracts are consumed by offline components; the first consumer is the
 [SREV-15 review workbench](./review_contracts.md#review-workbench-srev-15)
 (`python -m robot_sf.render.review_workbench`), which renders a local,

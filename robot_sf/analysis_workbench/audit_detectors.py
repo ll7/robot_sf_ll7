@@ -82,6 +82,76 @@ DETECTOR_ALIASES = {
     "multivariate_outlier": "cohort_multivariate_outlier",
     "trajectory_outlier": "trajectory_shape_outlier",
 }
+_NON_ADMISSIBLE_EXECUTION_STATUSES = frozenset(
+    {
+        "fallback",
+        "degraded",
+        "failed",
+        "failure",
+        "partial",
+        "partial_failure",
+        "not_available",
+        "unavailable",
+        "unsupported",
+        "error",
+        "truncated",
+        "diagnostic_only",
+        "diagnostic_stub",
+        "skipped",
+        "cancelled",
+    }
+)
+_EXECUTION_STATUS_FIELDS = (
+    "row_status",
+    "status",
+    "availability_status",
+    "readiness_status",
+    "campaign_execution_status",
+    "execution_status",
+    "execution_mode",
+    "preflight_status",
+)
+_FALLBACK_COUNTER_FIELDS = (
+    "fallback_count",
+    "fallback_steps",
+    "fallback_actions",
+    "fallback_events",
+    "fallback_invocations",
+    "fallback_used",
+    "fallback_counter",
+    "fallback_counters",
+)
+_NATIVE_EXECUTION_STATUSES = frozenset(
+    {
+        "native",
+        "adapter",
+        "available",
+        "ready",
+        "complete",
+        "success",
+        "collision",
+        "ok",
+        "passed",
+        "pass",
+        "admitted",
+        "included",
+        "running",
+    }
+)
+_DESCRIPTIVE_STATUS_FIELDS = frozenset({"status", "execution_status"})
+_DESCRIPTIVE_STATUS_VALUES = frozenset(
+    {
+        "success",
+        "completed",
+        "collision",
+        "timeout",
+        "timed_out",
+        "horizon",
+        "horizon_reached",
+        "time_limit",
+        "max_steps",
+    }
+)
 
 
 def _canonical_detector_id(value: str) -> str:
@@ -185,6 +255,18 @@ def _contains_nonfinite(value: Any) -> bool:
                 continue
             visited.add(marker)
             pending.extend(current)
+    return False
+
+
+def _promised_missing(value: Any) -> bool:
+    """Return whether a promised telemetry value is absent, empty, or null."""
+
+    if value is None:
+        return True
+    if isinstance(value, (str, bytes)):
+        return not value.strip()
+    if isinstance(value, (Mapping, list, tuple)):
+        return not value
     return False
 
 
@@ -649,6 +731,102 @@ def _metrics(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return metrics
 
 
+def _counter_failure(value: Any, *, path: str) -> tuple[str, str] | None:
+    """Return a fail-closed disposition for a nested fallback counter."""
+
+    if isinstance(value, bool):
+        return ("unavailable", f"{path}_nonzero") if value else None
+    if isinstance(value, (int, float)):
+        if not math.isfinite(float(value)) or value < 0:
+            return "error", f"{path}_malformed"
+        return ("unavailable", f"{path}_nonzero") if value > 0 else None
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                return "error", f"{path}_malformed"
+            failure = _counter_failure(item, path=f"{path}.{key}")
+            if failure is not None:
+                return failure
+        return None
+    if isinstance(value, list):
+        return ("unavailable", f"{path}_nonzero") if value else None
+    return "error", f"{path}_malformed"
+
+
+def _admission_containers(row: Mapping[str, Any]) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    """Collect canonical status/counter containers for direct detector calls.
+
+    Returns:
+        Named row mappings whose status and fallback fields are authoritative.
+    """
+
+    containers: list[tuple[str, Mapping[str, Any]]] = [("row", row)]
+    for name in ("metrics", "operational_metrics"):
+        value = row.get(name)
+        if isinstance(value, Mapping):
+            containers.append((name, value))
+    metadata = row.get("algorithm_metadata")
+    if isinstance(metadata, Mapping):
+        containers.append(("algorithm_metadata", metadata))
+        trace = metadata.get("analysis_trace")
+        if isinstance(trace, Mapping):
+            containers.append(("analysis_trace", trace))
+    top_level_trace = row.get("analysis_trace")
+    if isinstance(top_level_trace, Mapping):
+        containers.append(("analysis_trace", top_level_trace))
+    return tuple(containers)
+
+
+def _admission_failure(  # noqa: C901, PLR0912
+    row: Mapping[str, Any], *, check_nonfinite: bool = True
+) -> tuple[str, str] | None:
+    """Return a fail-closed execution disposition for direct detector calls.
+
+    Returns:
+        ``(status, reason)`` when a row is unavailable or malformed, otherwise
+        ``None`` for a native, finite row.
+    """
+
+    metadata = row.get("algorithm_metadata")
+    if metadata is not None and not isinstance(metadata, Mapping):
+        return "error", "algorithm_metadata_malformed"
+    trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    if trace is not None and not isinstance(trace, Mapping):
+        return "error", "analysis_trace_malformed"
+    top_level_trace = row.get("analysis_trace")
+    if top_level_trace is not None and not isinstance(top_level_trace, Mapping):
+        return "error", "analysis_trace_malformed"
+    for name in ("metrics", "operational_metrics"):
+        value = row.get(name)
+        if value is not None and not isinstance(value, Mapping):
+            return "error", f"{name}_malformed"
+    for path, container in _admission_containers(row):
+        for key in _EXECUTION_STATUS_FIELDS:
+            if key not in container:
+                continue
+            value = container[key]
+            if not isinstance(value, str) or not value.strip():
+                return "error", f"{path}.{key}_malformed"
+            token = value.strip().lower().replace("-", "_").replace(" ", "_")
+            if token in _NON_ADMISSIBLE_EXECUTION_STATUSES:
+                return "unavailable", f"non_admissible_execution_status_{token}"
+            if token not in _NATIVE_EXECUTION_STATUSES:
+                # Canonical v2 reserves row_status for execution mode while
+                # status/execution_status may describe the terminal outcome.
+                if key in _DESCRIPTIVE_STATUS_FIELDS and token in _DESCRIPTIVE_STATUS_VALUES:
+                    continue
+                return "unavailable", f"unknown_execution_status_{token}"
+        for key in _FALLBACK_COUNTER_FIELDS:
+            if key not in container:
+                continue
+            failure = _counter_failure(container[key], path=f"{path}.{key}")
+            if failure is not None:
+                return failure
+    if check_nonfinite and _contains_nonfinite(row):
+        return "error", "row_contains_nonfinite_value"
+    return None
+
+
 def _outcome(row: Mapping[str, Any]) -> Mapping[str, Any]:  # noqa: C901, PLR0912
     value = row.get("outcome")
     if isinstance(value, Mapping):
@@ -657,7 +835,7 @@ def _outcome(row: Mapping[str, Any]) -> Mapping[str, Any]:  # noqa: C901, PLR091
         outcome = {"label": value}
     else:
         outcome = {}
-    metrics = row.get("metrics")
+    metrics = _metrics(row)
     if isinstance(metrics, Mapping):
         for key in ("success", "route_complete", "reached_goal", "completed"):
             if key in metrics:
@@ -687,23 +865,52 @@ def _outcome(row: Mapping[str, Any]) -> Mapping[str, Any]:  # noqa: C901, PLR091
     return outcome
 
 
-def _trace(row: Mapping[str, Any]) -> tuple[list[Mapping[str, Any]] | None, str | None]:
+def _trace(  # noqa: C901, PLR0912
+    row: Mapping[str, Any],
+) -> tuple[list[Mapping[str, Any]] | None, str | None]:
     """Find a trace without interpreting an arbitrary object as telemetry.
 
     Returns:
         Trace frames and an unavailable reason when no trace is present.
     """
 
-    candidates: list[Any] = [row.get("trace"), row.get("simulation_trace")]
     metadata = row.get("algorithm_metadata")
+    # ``analysis_trace`` is the canonical campaign-result-store.v2 trace.  It
+    # must win over compatibility projections: a flattened ``trace`` field
+    # may be stale or empty even when the admitted canonical trace is present.
+    candidates: list[Any] = []
     if isinstance(metadata, Mapping):
         candidates.extend(
             [
+                metadata.get("analysis_trace"),
                 metadata.get("simulation_step_trace"),
                 metadata.get("trace"),
                 metadata.get("simulation_trace"),
             ]
         )
+    candidates.extend([row.get("analysis_trace"), row.get("trace"), row.get("simulation_trace")])
+    coverage_values: list[Any] = [row.get("trace_coverage")]
+    for candidate in candidates:
+        if isinstance(candidate, Mapping):
+            coverage_values.append(candidate.get("trace_coverage"))
+    for coverage in coverage_values:
+        if not isinstance(coverage, Mapping):
+            continue
+        status = coverage.get("status")
+        if status is not None and not isinstance(status, str):
+            return None, "trace_coverage_malformed"
+        normalized = status.strip().lower().replace("-", "_") if isinstance(status, str) else ""
+        if normalized in {
+            "unavailable",
+            "not_available",
+            "partial",
+            "partial_failure",
+            "incomplete",
+            "failed",
+            "error",
+            "truncated",
+        }:
+            return None, "trace_coverage_unavailable"
     for candidate in candidates:
         if isinstance(candidate, list):
             frames = candidate
@@ -718,6 +925,8 @@ def _trace(row: Mapping[str, Any]) -> tuple[list[Mapping[str, Any]] | None, str 
         if isinstance(frames, list):
             if not all(isinstance(frame, Mapping) for frame in frames):
                 return None, "trace_frame_malformed"
+            if not frames:
+                return [], "trace_empty"
             return [frame for frame in frames if isinstance(frame, Mapping)], None
     return None, "trace_not_recorded"
 
@@ -762,12 +971,19 @@ def _trace_positions(
         raise DetectorError(reason or "trace_not_recorded")
     positions: list[tuple[float, float]] = []
     times: list[float] = []
+    previous_time: float | None = None
     for index, frame in enumerate(frames):
         position = _position(frame)
         if position is None:
             raise DetectorError(f"robot_position_missing_at_step_{index}")
+        if "time_s" not in frame:
+            raise DetectorError(f"trace_time_missing_at_step_{index}")
+        current_time = _time(frame, float(index))
+        if previous_time is not None and current_time <= previous_time:
+            raise DetectorError(f"trace_time_nonmonotonic_at_step_{index}")
         positions.append(position)
-        times.append(_time(frame, float(index)))
+        times.append(current_time)
+        previous_time = current_time
     if not positions:
         raise DetectorError("trace_empty")
     return positions, times, frames
@@ -963,7 +1179,9 @@ def _capabilities(row: Mapping[str, Any]) -> set[str]:
         )
     elif isinstance(declared, Sequence) and not isinstance(declared, (str, bytes)):
         result.update(item for item in declared if isinstance(item, str))
-    if isinstance(row.get("metrics"), Mapping):
+    if isinstance(row.get("metrics"), Mapping) or isinstance(
+        row.get("operational_metrics"), Mapping
+    ):
         result.add("metrics")
     if _trace(row)[0] is not None:
         result.add("trace")
@@ -1337,7 +1555,11 @@ def _trace_failure(
     config: Mapping[str, Any] | None = None,
 ) -> Signal:
     reason = str(error)
-    if reason in {"trace_not_recorded", "trace_empty"}:
+    if reason in {"trace_not_recorded", "trace_empty", "trace_coverage_unavailable"}:
+        return _unavailable(spec, row, reason, missing=("trace",), config=config)
+    if reason.startswith("robot_position_missing_at_step_") or reason.startswith(
+        "trace_time_missing_at_step_"
+    ):
         return _unavailable(spec, row, reason, missing=("trace",), config=config)
     return _detector_error(spec, row, reason, config=config)
 
@@ -1553,6 +1775,26 @@ def _initial_reset_anomaly(  # noqa: C901, PLR0912
                     config=config,
                 )
     initial = row.get("initial_state")
+    if initial is None:
+        # campaign-result-store.v2 carries reset geometry on the first
+        # canonical analysis-trace step when a separate initial_state block
+        # was not retained.  This is a direct projection, not an inferred
+        # radius or position.
+        canonical_frames, canonical_reason = _trace(row)
+        if canonical_frames:
+            first = canonical_frames[0]
+            initial = {
+                "robot": first.get("robot"),
+                "pedestrians": first.get("pedestrians", first.get("agents")),
+            }
+        elif canonical_reason not in {"trace_not_recorded", "trace_empty"}:
+            return _unavailable(
+                spec,
+                row,
+                canonical_reason or "initial_state_not_recorded",
+                missing=("initial_state",),
+                config=config,
+            )
     if isinstance(initial, Mapping):
         for key in ("collision", "collision_event", "spawn_overlap", "reset_mismatch"):
             if initial.get(key) is True:
@@ -1592,50 +1834,99 @@ def _initial_reset_anomaly(  # noqa: C901, PLR0912
                 missing=("initial_state.robot.position",),
                 config=config,
             )
+        if actors is None and not any(
+            initial.get(name) == 0 for name in ("actor_count", "pedestrian_count", "agent_count")
+        ):
+            return _unavailable(
+                spec,
+                row,
+                "initial_actor_state_unavailable",
+                missing=("initial_state.pedestrians",),
+                config=config,
+            )
         if actors is not None and not isinstance(actors, list):
             return _detector_error(spec, row, "initial_actor_state_malformed", config=config)
         if isinstance(robot, Mapping) and isinstance(actors, list):
             robot_pos = _optional_vector(robot.get("position"))
-            if robot_pos is not None:
-                robot_radius = _finite_or_none(robot.get("radius"))
-                if "radius" in robot and robot.get("radius") is not None and robot_radius is None:
+            if robot_pos is None:
+                return _unavailable(
+                    spec,
+                    row,
+                    "initial_robot_position_unavailable",
+                    missing=("initial_state.robot.position",),
+                    config=config,
+                )
+            robot_radius_value = robot.get("radius_m", robot.get("radius"))
+            robot_radius = _finite_or_none(robot_radius_value)
+            if robot_radius is None:
+                if robot_radius_value is not None:
                     return _detector_error(
                         spec, row, "initial_robot_radius_malformed", config=config
                     )
-                robot_radius = robot_radius or 0.0
-                for index, actor in enumerate(actors):
-                    if not isinstance(actor, Mapping):
-                        return _detector_error(
-                            spec, row, "initial_actor_state_malformed", config=config
-                        )
-                    actor_pos = _optional_vector(actor.get("position"))
-                    if actor_pos is None:
-                        continue
-                    actor_radius = _finite_or_none(actor.get("radius"))
-                    if (
-                        "radius" in actor
-                        and actor.get("radius") is not None
-                        and actor_radius is None
-                    ):
+                return _unavailable(
+                    spec,
+                    row,
+                    "initial_robot_radius_unavailable",
+                    missing=("initial_state.robot.radius_m",),
+                    config=config,
+                )
+            if robot_radius < 0.0:
+                return _detector_error(
+                    spec, row, "initial_robot_radius_out_of_range", config=config
+                )
+            for index, actor in enumerate(actors):
+                if not isinstance(actor, Mapping):
+                    return _detector_error(
+                        spec, row, "initial_actor_state_malformed", config=config
+                    )
+                actor_pos = _optional_vector(actor.get("position"))
+                if actor_pos is None:
+                    return _unavailable(
+                        spec,
+                        row,
+                        f"initial_actor_position_unavailable_{index}",
+                        missing=(f"initial_state.pedestrians[{index}].position",),
+                        config=config,
+                    )
+                actor_radius_value = actor.get("radius_m", actor.get("radius"))
+                actor_radius = _finite_or_none(actor_radius_value)
+                if actor_radius is None:
+                    if actor_radius_value is not None:
                         return _detector_error(
                             spec, row, "initial_actor_radius_malformed", config=config
                         )
-                    actor_radius = actor_radius or 0.0
-                    distance = math.hypot(robot_pos[0] - actor_pos[0], robot_pos[1] - actor_pos[1])
-                    if distance <= robot_radius + actor_radius + minimum_separation:
-                        return _make_signal(
-                            spec,
-                            row,
-                            "flagged",
-                            reason="spawn_overlap",
-                            measured={"actor_index": index, "separation_m": distance},
-                            threshold={
-                                "operator": "<=",
-                                "value": robot_radius + actor_radius,
-                                "unit": "m",
-                            },
-                            config=config,
-                        )
+                    return _unavailable(
+                        spec,
+                        row,
+                        f"initial_actor_radius_unavailable_{index}",
+                        missing=(f"initial_state.pedestrians[{index}].radius_m",),
+                        config=config,
+                    )
+                if actor_radius < 0.0:
+                    return _detector_error(
+                        spec, row, "initial_actor_radius_out_of_range", config=config
+                    )
+                distance = math.hypot(robot_pos[0] - actor_pos[0], robot_pos[1] - actor_pos[1])
+                threshold_value = robot_radius + actor_radius + minimum_separation
+                if distance <= threshold_value:
+                    return _make_signal(
+                        spec,
+                        row,
+                        "flagged",
+                        reason="spawn_overlap",
+                        measured={
+                            "actor_index": index,
+                            "separation_m": distance,
+                            "minimum_separation_m": minimum_separation,
+                        },
+                        threshold={
+                            "operator": "<=",
+                            "value": threshold_value,
+                            "minimum_separation_m": minimum_separation,
+                            "unit": "m",
+                        },
+                        config=config,
+                    )
         return _make_signal(spec, row, "clear", reason="initial_state_valid", config=config)
     return _unavailable(
         spec,
@@ -1646,7 +1937,7 @@ def _initial_reset_anomaly(  # noqa: C901, PLR0912
     )
 
 
-def _stuck_no_progress(
+def _stuck_no_progress(  # noqa: C901
     spec: DetectorSpec,
     row: Mapping[str, Any],
     cohort: Sequence[Mapping[str, Any]],
@@ -1661,9 +1952,9 @@ def _stuck_no_progress(
         row,
         "progress_m",
         "route_progress_m",
+        "route_progress",
         "goal_progress_m",
-        "path_length_m",
-        "path_length",
+        "goal_progress",
     )
     duration_value = _lookup(
         row,
@@ -1692,27 +1983,37 @@ def _stuck_no_progress(
         return _detector_error(spec, row, "progress_telemetry_malformed", config=config)
     frames: list[Mapping[str, Any]] | None = None
     interval = None
-    if progress is None or duration is None:
+    if duration is None:
         try:
-            positions, times, frames = _trace_positions(row)
-            progress = math.hypot(
-                positions[-1][0] - positions[0][0], positions[-1][1] - positions[0][1]
-            )
+            _positions, times, frames = _trace_positions(row)
             duration = times[-1] - times[0]
             interval = _trace_interval(frames)
-            if len(positions) > 1 and duration > 0:
-                speed = (
-                    sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in pairwise(positions))
-                    / duration
-                )
+            if speed is None and len(times) > 1 and duration > 0:
+                # This is a speed estimate from recorded motion, not route or
+                # goal progress.  Never substitute endpoint displacement for a
+                # promised progress metric.
+                positions = [_position(frame) for frame in frames]
+                if all(position is not None for position in positions):
+                    speed = (
+                        sum(
+                            math.hypot(right[0] - left[0], right[1] - left[1])
+                            for left, right in pairwise(positions)
+                        )
+                        / duration
+                    )
         except DetectorError as error:
             return _trace_failure(spec, row, error, config=config)
     if progress is None or duration is None:
+        missing: list[str] = []
+        if progress is None:
+            missing.append("progress_m")
+        if duration is None:
+            missing.append("duration_s")
         return _unavailable(
             spec,
             row,
             "progress_telemetry_unavailable",
-            missing=("progress_m", "duration_s"),
+            missing=tuple(missing),
             config=config,
         )
     if duration < 0.0 or (speed is not None and speed < 0.0):
@@ -1742,7 +2043,7 @@ def _stuck_no_progress(
     )
 
 
-def _oscillation(
+def _oscillation(  # noqa: C901
     spec: DetectorSpec,
     row: Mapping[str, Any],
     cohort: Sequence[Mapping[str, Any]],
@@ -1755,6 +2056,20 @@ def _oscillation(
     angular: list[float] = []
     headings: list[float] = []
     for frame in frames:
+        controls = frame.get("controls")
+        canonical_turn: Any = None
+        if isinstance(controls, Mapping):
+            for control_key in ("requested", "applied"):
+                control = controls.get(control_key)
+                if isinstance(control, Mapping):
+                    canonical_turn = control.get("turn_rate_rad_s")
+                    if canonical_turn is None:
+                        canonical_turn = control.get("angular_velocity")
+                    if canonical_turn is not None:
+                        break
+        if canonical_turn is not None:
+            angular.append(_finite(canonical_turn, name="controls.turn_rate_rad_s"))
+            continue
         planner = frame.get("planner")
         action = planner.get("selected_action") if isinstance(planner, Mapping) else None
         if not isinstance(action, Mapping):
@@ -1762,8 +2077,10 @@ def _oscillation(
         if isinstance(action, Mapping) and "angular_velocity" in action:
             angular.append(_finite(action["angular_velocity"], name="angular_velocity"))
         robot = frame.get("robot")
-        if isinstance(robot, Mapping) and "heading" in robot:
-            headings.append(_finite(robot["heading"], name="heading"))
+        if isinstance(robot, Mapping):
+            heading = robot.get("heading", robot.get("heading_rad"))
+            if heading is not None:
+                headings.append(_finite(heading, name="heading"))
     values = (
         angular
         if len(angular) >= 2
@@ -1811,6 +2128,115 @@ def _oscillation(
     )
 
 
+def _termination_exclusivity(  # noqa: C901, PLR0912
+    contract: Mapping[str, Any],
+) -> tuple[bool | None, bool | None, bool | None] | None:
+    """Read pairwise exclusivity from a typed campaign termination contract.
+
+    A row-level ``termination_contract`` is not authoritative merely because
+    it is an object.  The contract must identify its schema/version and carry
+    explicit boolean exclusivity semantics.  ``None`` means that the source
+    cannot establish the predicate and callers must return ``unavailable``.
+
+    Returns:
+        Pairwise ``(success/timeout, success/collision, collision/timeout)``
+        exclusivity, with ``None`` for a pair the contract does not define.
+    """
+
+    versions = [contract[name] for name in ("schema_version", "version") if name in contract]
+    if not versions:
+        return None
+    if any(not isinstance(value, str) or not value.strip() for value in versions):
+        raise DetectorError("termination_contract.schema_version_malformed")
+    if len({value.strip() for value in versions}) != 1:
+        raise DetectorError("termination_contract.schema_version_conflict")
+    exclusivity_marker = next(
+        (
+            name
+            for name in (
+                "mutually_exclusive",
+                "outcomes_mutually_exclusive",
+                "outcome_flags_mutually_exclusive",
+                "exclusive",
+            )
+            if name in contract
+        ),
+        None,
+    )
+    if exclusivity_marker is not None:
+        value = contract[exclusivity_marker]
+        if not isinstance(value, bool):
+            raise DetectorError(f"termination_contract.{exclusivity_marker}_malformed")
+        for marker in (
+            "mutually_exclusive",
+            "outcomes_mutually_exclusive",
+            "outcome_flags_mutually_exclusive",
+            "exclusive",
+        ):
+            if marker in contract and contract[marker] != value:
+                raise DetectorError("termination_contract.exclusivity_conflict")
+        if value:
+            return True, True, True
+        return False, False, False
+    exclusivity = contract.get("exclusivity")
+    if exclusivity is not None:
+        if not isinstance(exclusivity, Mapping):
+            raise DetectorError("termination_contract.exclusivity_malformed")
+        aliases = {
+            "success_timeout": (
+                "success_timeout",
+                "success_and_timeout",
+                "success_and_timeout_valid",
+            ),
+            "success_collision": (
+                "success_collision",
+                "success_and_collision",
+                "success_and_collision_valid",
+            ),
+            "collision_timeout": (
+                "collision_timeout",
+                "collision_and_timeout",
+                "collision_and_timeout_valid",
+            ),
+        }
+        values: list[bool | None] = []
+        for names in aliases.values():
+            present = [name for name in names if name in exclusivity]
+            if not present:
+                values.append(None)
+                continue
+            normalized_values: list[bool] = []
+            for name in present:
+                value = exclusivity[name]
+                if not isinstance(value, bool):
+                    raise DetectorError(f"termination_contract.exclusivity.{name}_malformed")
+                normalized_values.append(not value if name.endswith("_valid") else value)
+            if len(set(normalized_values)) > 1:
+                raise DetectorError("termination_contract.exclusivity_conflict")
+            values.append(normalized_values[0])
+        if not any(name in exclusivity for names in aliases.values() for name in names):
+            return None
+        return values[0], values[1], values[2]
+    explicit_names = (
+        "success_and_timeout_valid",
+        "success_and_collision_valid",
+        "collision_and_timeout_valid",
+    )
+    present = [name for name in explicit_names if name in contract]
+    if not present:
+        return None
+    values: list[bool | None] = []
+    for name in explicit_names:
+        if name not in contract:
+            values.append(None)
+            continue
+        value = contract[name]
+        if not isinstance(value, bool):
+            raise DetectorError(f"termination_contract.{name}_malformed")
+        values.append(not value)
+    return values[0], values[1], values[2]
+
+
 def _contradiction(  # noqa: C901, PLR0912
     spec: DetectorSpec,
     row: Mapping[str, Any],
@@ -1821,8 +2247,28 @@ def _contradiction(  # noqa: C901, PLR0912
     collision = _collision(row)
     timeout = _timeout(row)
     contract = row.get("termination_contract")
-    if contract is not None and not isinstance(contract, Mapping):
+    if contract is None:
+        return _unavailable(
+            spec,
+            row,
+            "termination_contract_unavailable",
+            missing=("termination_contract",),
+            config=config,
+        )
+    if not isinstance(contract, Mapping):
         return _detector_error(spec, row, "termination_contract_malformed", config=config)
+    try:
+        exclusivity = _termination_exclusivity(contract)
+    except DetectorError as error:
+        return _detector_error(spec, row, str(error), config=config)
+    if exclusivity is None:
+        return _unavailable(
+            spec,
+            row,
+            "termination_contract_exclusivity_unavailable",
+            missing=("termination_contract.exclusivity",),
+            config=config,
+        )
     outcome = _outcome(row)
     for key in (
         "success",
@@ -1845,20 +2291,30 @@ def _contradiction(  # noqa: C901, PLR0912
             spec, row, "outcome_telemetry_unavailable", missing=("outcome",), config=config
         )
     contradictions: list[str] = []
-    success_timeout_allowed = (
-        bool(contract.get("success_and_timeout_valid", False))
-        if isinstance(contract, Mapping)
-        else False
+    success_timeout_exclusive, success_collision_exclusive, collision_timeout_exclusive = (
+        exclusivity
     )
-    if success is True and timeout is True and not success_timeout_allowed:
+    unknown_pairs: list[str] = []
+    if success is True and timeout is True and success_timeout_exclusive is None:
+        unknown_pairs.append("success_timeout")
+    if success is True and collision is True and success_collision_exclusive is None:
+        unknown_pairs.append("success_collision")
+    if collision is True and timeout is True and collision_timeout_exclusive is None:
+        unknown_pairs.append("collision_timeout")
+    if unknown_pairs:
+        return _unavailable(
+            spec,
+            row,
+            "termination_contract_pair_exclusivity_unavailable",
+            missing=tuple(f"termination_contract.exclusivity.{item}" for item in unknown_pairs),
+            config=config,
+        )
+    if success is True and timeout is True and success_timeout_exclusive:
         contradictions.append("success_and_timeout")
-    collision_success_allowed = (
-        bool(contract.get("success_and_collision_valid", False))
-        if isinstance(contract, Mapping)
-        else False
-    )
-    if success is True and collision is True and not collision_success_allowed:
+    if success is True and collision is True and success_collision_exclusive:
         contradictions.append("success_and_collision")
+    if collision is True and timeout is True and collision_timeout_exclusive:
+        contradictions.append("collision_and_timeout")
     collision_count_value = _lookup(row, "collision_count", "collisions")
     if collision_count_value is None:
         for key in ("collision_count", "collisions"):
@@ -1903,14 +2359,22 @@ def _contradiction(  # noqa: C901, PLR0912
             "contradictions": contradictions,
         },
         threshold={
-            "termination_contract": "declared_or_default_exclusive",
+            "termination_contract": "typed_explicit_exclusivity",
+            "exclusivity": {
+                "success_timeout": success_timeout_exclusive,
+                "success_collision": success_collision_exclusive,
+                "collision_timeout": collision_timeout_exclusive,
+            },
             "collision_count_max_for_success": collision_count_max,
         },
         evidence=(
             {
-                "termination_contract": dict(contract)
-                if isinstance(contract, Mapping)
-                else {"assumption": "explicit success/collision fields are mutually exclusive"}
+                "termination_contract": dict(contract),
+                "exclusivity": {
+                    "success_timeout": success_timeout_exclusive,
+                    "success_collision": success_collision_exclusive,
+                    "collision_timeout": collision_timeout_exclusive,
+                },
             },
         ),
         config=config,
@@ -2002,6 +2466,12 @@ def _actions(  # noqa: C901
     pairs: list[tuple[Mapping[str, Any], Mapping[str, Any] | None]] = []
     if frames is not None:
         for frame in frames:
+            controls = frame.get("controls")
+            if isinstance(controls, Mapping):
+                desired = controls.get("requested")
+                applied = controls.get("applied")
+                if isinstance(desired, Mapping):
+                    pairs.append((desired, applied if isinstance(applied, Mapping) else None))
             planner = frame.get("planner")
             desired = planner.get("desired_action") if isinstance(planner, Mapping) else None
             if desired is None and isinstance(planner, Mapping):
@@ -2037,7 +2507,7 @@ def _actions(  # noqa: C901
     return pairs
 
 
-def _action_shape_error(row: Mapping[str, Any]) -> str | None:  # noqa: C901
+def _action_shape_error(row: Mapping[str, Any]) -> str | None:  # noqa: C901, PLR0912
     """Return a stable reason when a promised command stream is malformed."""
 
     for key in ("commands", "control"):
@@ -2069,6 +2539,14 @@ def _action_shape_error(row: Mapping[str, Any]) -> str | None:  # noqa: C901
     if reason == "trace_frame_malformed":
         return reason
     for frame in frames or ():
+        controls = frame.get("controls")
+        if controls is not None and not isinstance(controls, Mapping):
+            return "trace.controls_malformed"
+        if isinstance(controls, Mapping):
+            for control_key in ("requested", "applied"):
+                value = controls.get(control_key)
+                if value is not None and not isinstance(value, Mapping):
+                    return f"trace.controls.{control_key}_malformed"
         planner = frame.get("planner")
         if planner is not None and not isinstance(planner, Mapping):
             return "trace.planner_malformed"
@@ -2089,7 +2567,7 @@ def _action_shape_error(row: Mapping[str, Any]) -> str | None:  # noqa: C901
     return None
 
 
-def _actuator(  # noqa: C901
+def _actuator(  # noqa: C901, PLR0912
     spec: DetectorSpec,
     row: Mapping[str, Any],
     cohort: Sequence[Mapping[str, Any]],
@@ -2101,6 +2579,11 @@ def _actuator(  # noqa: C901
     _frames, trace_reason = _trace(row)
     if trace_reason == "trace_frame_malformed":
         return _detector_error(spec, row, trace_reason, config=config)
+    if _frames:
+        try:
+            _trace_positions(row)
+        except DetectorError as error:
+            return _trace_failure(spec, row, error, config=config)
     pairs = _actions(row)
     if not pairs:
         if row.get("requires_commands") is True:
@@ -2138,14 +2621,24 @@ def _actuator(  # noqa: C901
     relative = _configured_number(config, spec, "relative_tolerance", minimum=0.0)
     if tolerance is None or relative is None:
         return _detector_error(spec, row, "invalid_actuator_parameters", config=config)
+    action_aliases = {
+        "linear_velocity": ("linear_velocity", "linear_m_s"),
+        "angular_velocity": ("angular_velocity", "turn_rate_rad_s"),
+    }
     for index, (desired, applied) in enumerate(pairs):
-        for key in ("linear_velocity", "angular_velocity"):
-            if key not in desired:
+        for key, aliases in action_aliases.items():
+            desired_key = next((alias for alias in aliases if alias in desired), None)
+            if desired_key is None:
                 continue
-            desired_value = _finite(desired[key], name=f"desired.{key}")
-            if applied is not None and key in applied:
+            desired_value = _finite(desired[desired_key], name=f"desired.{desired_key}")
+            applied_key = (
+                next((alias for alias in aliases if alias in applied), None)
+                if applied is not None
+                else None
+            )
+            if applied_key is not None and applied is not None:
                 compared_samples += 1
-                applied_value = _finite(applied[key], name=f"applied.{key}")
+                applied_value = _finite(applied[applied_key], name=f"applied.{applied_key}")
                 delta = abs(desired_value - applied_value)
                 bound = tolerance + relative * abs(desired_value)
                 if delta > bound:
@@ -2183,13 +2676,20 @@ def _actuator(  # noqa: C901
     )
 
 
-def _telemetry(  # noqa: C901
+def _telemetry(  # noqa: C901, PLR0912
     spec: DetectorSpec,
     row: Mapping[str, Any],
     cohort: Sequence[Mapping[str, Any]],
     config: Mapping[str, Any],
 ) -> Signal:
-    trace_frames, _trace_reason = _trace(row)
+    trace_frames, trace_reason = _trace(row)
+    if trace_reason in {"trace_frame_malformed", "trace_coverage_malformed"}:
+        return _detector_error(spec, row, trace_reason, config=config)
+    if trace_frames:
+        try:
+            _trace_positions(row)
+        except DetectorError as error:
+            return _trace_failure(spec, row, error, config=config)
     trace_interval = _trace_interval(trace_frames) if trace_frames else None
     contract = row.get("telemetry_contract")
     required: list[str] = []
@@ -2228,10 +2728,16 @@ def _telemetry(  # noqa: C901
                 current = None
                 break
             current = current[part]
-        if current is None:
+        if _promised_missing(current):
             missing.append(field_name)
         elif _contains_nonfinite(current):
             nonfinite.append(field_name)
+    if nonfinite:
+        return _detector_error(
+            spec, row, "promised_telemetry_nonfinite", missing=tuple(nonfinite), config=config
+        )
+    if _contains_nonfinite(row):
+        return _detector_error(spec, row, "nonfinite_telemetry_payload", config=config)
     if missing:
         return _make_signal(
             spec,
@@ -2244,11 +2750,15 @@ def _telemetry(  # noqa: C901
             interval=trace_interval,
             config=config,
         )
-    if nonfinite:
-        return _detector_error(
-            spec, row, "promised_telemetry_nonfinite", missing=tuple(nonfinite), config=config
+    if trace_reason in {"trace_empty", "trace_coverage_unavailable"}:
+        return _unavailable(
+            spec,
+            row,
+            trace_reason,
+            missing=("trace",),
+            config=config,
         )
-    if not required and not _metrics(row) and _trace(row)[0] is None:
+    if not required and not _metrics(row) and not trace_frames:
         return _unavailable(
             spec, row, "optional_telemetry_not_recorded", missing=("telemetry",), config=config
         )
@@ -2595,8 +3105,10 @@ def _trajectory_features(row: Mapping[str, Any]) -> tuple[dict[str, float], Time
     headings: list[float] = []
     for frame in frames:
         robot = frame.get("robot")
-        if isinstance(robot, Mapping) and "heading" in robot:
-            headings.append(_finite(robot["heading"], name="heading"))
+        if isinstance(robot, Mapping):
+            heading = robot.get("heading", robot.get("heading_rad"))
+            if heading is not None:
+                headings.append(_finite(heading, name="heading"))
     turns = sum(
         1 for left, right in pairwise(headings) if abs(_wrapped_angle_delta(right, left)) >= 0.2
     )
@@ -2736,6 +3248,20 @@ def detect(  # noqa: C901
     if not isinstance(episode_id, str) or not episode_id.strip():
         # Keep the error a BA-03 record with a stable synthetic identity.
         row = {**dict(row), "episode_id": "invalid-episode"}
+    admission_failure = _admission_failure(
+        row, check_nonfinite=spec.detector_id != "telemetry_integrity"
+    )
+    if admission_failure is not None:
+        failure_status, failure_reason = admission_failure
+        if failure_status == "unavailable":
+            return _unavailable(
+                spec,
+                row,
+                failure_reason,
+                missing=("execution_status",),
+                config=config_mapping,
+            )
+        return _detector_error(spec, row, failure_reason, config=config_mapping)
     capabilities = _capabilities(row)
     missing = sorted(set(spec.required_capabilities) - capabilities)
     if missing:

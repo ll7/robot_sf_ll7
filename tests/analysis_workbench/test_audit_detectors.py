@@ -229,13 +229,30 @@ def test_custom_registry_selection_is_supported_and_aliases_are_deduplicated() -
         ),
         (
             "outcome_metric_contradiction",
-            lambda: {**_row(), "outcome": {"success": True, "timeout": True}},
-            lambda: {**_row(), "outcome": {"success": True, "collision": False, "timeout": False}},
+            lambda: {
+                **_row(),
+                "outcome": {"success": True, "timeout": True},
+                "termination_contract": {
+                    "schema_version": "termination-contract.v1",
+                    "mutually_exclusive": True,
+                },
+            },
+            lambda: {
+                **_row(),
+                "outcome": {"success": True, "collision": False, "timeout": False},
+                "termination_contract": {
+                    "schema_version": "termination-contract.v1",
+                    "mutually_exclusive": True,
+                },
+            },
             lambda: {"episode_id": "episode"},
             lambda: {
                 **_row(),
                 "outcome": {"success": True, "collision": True},
-                "termination_contract": {"success_and_collision_valid": True},
+                "termination_contract": {
+                    "schema_version": "termination-contract.v1",
+                    "success_and_collision_valid": True,
+                },
             },
         ),
         (
@@ -539,6 +556,135 @@ def test_nonfinite_promised_telemetry_is_an_error_and_not_a_clear_signal() -> No
     signal = _signal("telemetry_integrity", row)
     assert signal.status == "error"
     assert signal.reason_code == "promised_telemetry_nonfinite"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "row_status",
+        "status",
+        "availability_status",
+        "readiness_status",
+        "campaign_execution_status",
+    ],
+)
+def test_direct_detector_calls_fail_closed_for_non_native_status(field: str) -> None:
+    signal = _signal("extreme_measurements", {**_row(), field: "degraded"})
+    assert signal.status == "unavailable"
+    assert "non_admissible_execution_status" in signal.reason_code
+
+
+def test_direct_detector_ignores_descriptive_terminal_status_with_native_row_status() -> None:
+    signal = _signal(
+        "extreme_measurements",
+        {**_row(), "row_status": "native", "status": "collision"},
+    )
+    assert signal.status in {"clear", "flagged"}
+
+
+def test_canonical_analysis_trace_controls_feed_actuator_and_turn_detectors() -> None:
+    frames = []
+    for index, turn_rate in enumerate((1.0, -1.0, 1.0, -1.0, 1.0, -1.0)):
+        frames.append(
+            {
+                "step": index,
+                "time_s": float(index),
+                "robot": {"position": [0.0, 0.0], "heading": 0.0, "radius_m": 0.25},
+                "pedestrians": [],
+                "controls": {
+                    "requested": {"linear_m_s": 0.2, "turn_rate_rad_s": turn_rate},
+                    "applied": {"linear_m_s": 0.2, "turn_rate_rad_s": turn_rate},
+                },
+            }
+        )
+    row = {
+        "episode_id": "canonical-controls",
+        "algorithm_metadata": {
+            "analysis_trace": {"schema_version": "analysis-trace.v1", "steps": frames}
+        },
+    }
+    actuator = _signal("actuator_mismatch", row)
+    oscillation = _signal("oscillation_limit_cycle", row, config={"minimum_reversals": 3})
+    assert actuator.status == "clear"
+    assert oscillation.status == "flagged"
+
+
+def test_outcome_contradiction_requires_typed_exclusivity_contract() -> None:
+    row = {"episode_id": "outcome", "outcome": {"success": True, "timeout": True}}
+    assert _signal("outcome_metric_contradiction", row).status == "unavailable"
+    typed = {
+        **row,
+        "termination_contract": {
+            "schema_version": "termination-contract.v1",
+            "mutually_exclusive": True,
+        },
+    }
+    assert _signal("outcome_metric_contradiction", typed).status == "flagged"
+    malformed = {
+        **typed,
+        "termination_contract": {
+            "schema_version": "termination-contract.v1",
+            "mutually_exclusive": "yes",
+        },
+    }
+    malformed_signal = _signal("outcome_metric_contradiction", malformed)
+    assert malformed_signal.status == "error"
+
+
+def test_initial_geometry_uses_radius_m_and_retains_threshold_margin() -> None:
+    overlap = {
+        "episode_id": "geometry",
+        "initial_state": {
+            "robot": {"position": [0.0, 0.0], "radius_m": 0.5},
+            "pedestrians": [{"position": [0.75, 0.0], "radius_m": 0.25}],
+        },
+    }
+    signal = _signal("initial_reset_anomaly", overlap, config={"minimum_separation_m": 0.1})
+    assert signal.status == "flagged"
+    assert signal.measured["minimum_separation_m"] == 0.1
+    assert signal.threshold["minimum_separation_m"] == 0.1
+    missing_radius = {
+        **overlap,
+        "initial_state": {
+            "robot": {"position": [0.0, 0.0]},
+            "pedestrians": [],
+        },
+    }
+    assert _signal("initial_reset_anomaly", missing_radius).status == "unavailable"
+    incomplete_actor = {
+        **overlap,
+        "initial_state": {
+            "robot": {"position": [0.0, 0.0], "radius_m": 0.5},
+            "pedestrians": [{"position": [0.75, 0.0]}],
+        },
+    }
+    assert _signal("initial_reset_anomaly", incomplete_actor).status == "unavailable"
+
+
+def test_path_length_is_not_substituted_for_route_progress() -> None:
+    signal = _signal(
+        "stuck_no_progress",
+        {"episode_id": "path-length", "path_length": 0.0, "duration_s": 10.0},
+    )
+    assert signal.status == "unavailable"
+    assert signal.status != "flagged"
+
+
+def test_empty_and_truncated_trace_cannot_be_reported_clear() -> None:
+    empty = _signal(
+        "telemetry_integrity",
+        {"episode_id": "empty", "trace": {"frames": []}},
+    )
+    assert empty.status == "unavailable"
+    truncated = _signal(
+        "telemetry_integrity",
+        {
+            "episode_id": "truncated",
+            "trace_coverage": {"status": "unavailable"},
+            "trace": {"frames": [{"time_s": 0.0, "robot": {"position": [0.0, 0.0]}}]},
+        },
+    )
+    assert truncated.status == "unavailable"
 
 
 def test_detector_rejects_non_mapping_rows() -> None:

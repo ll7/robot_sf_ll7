@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,8 @@ from robot_sf.analysis_workbench.audit_scan import (
 )
 from robot_sf.analysis_workbench.audit_store import AuditStore
 from robot_sf.analysis_workbench.review_contracts import ComponentRequest
+from robot_sf.benchmark.analysis_trace import build_analysis_trace
+from robot_sf.benchmark.parquet_export import export_campaign_result_store_v2
 
 FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -241,6 +244,165 @@ def test_campaign_store_directory_is_bounded_and_unsupported_payload_is_visible(
     assert unsupported_report.provenance["source"]["execution_status"] == "unsupported"
 
 
+def test_canonical_v2_parquet_population_and_analysis_trace_are_admitted(tmp_path: Path) -> None:
+    """The canonical case-workbench loader supplies rows when no IDs are passed."""
+
+    pytest.importorskip("pyarrow")
+    trace = build_analysis_trace(
+        steps=[
+            {
+                "step": 0,
+                "time_s": 0.1,
+                "robot": {
+                    "position": [0.2, 0.0],
+                    "heading": 0.0,
+                    "velocity": [1.0, 0.0],
+                },
+                "pedestrians": [],
+                "controls": {
+                    "requested": {"linear_m_s": 0.2, "turn_rate_rad_s": 0.1},
+                    "applied": {"linear_m_s": 0.2, "turn_rate_rad_s": 0.1},
+                },
+            }
+        ],
+        initial_robot_position=[0.0, 0.0],
+        initial_robot_heading=0.0,
+        initial_pedestrians=[],
+        initial_robot_velocity=[0.0, 0.0],
+        initial_pedestrian_velocities=[],
+        initial_pedestrian_ids=[],
+        dt=0.1,
+        horizon=1,
+        robot_radius_m=0.25,
+        pedestrian_radius_m=0.25,
+        scenario={
+            "id": "canonical-scenario",
+            "seed": 17,
+            "map_file": "maps/svg_maps/classic_bottleneck.svg",
+        },
+        planner="canonical-planner",
+        planner_commit="a" * 7,
+        config_hash="canonical-config",
+        git_hash="b" * 7,
+        termination_reason="success",
+        safety_events=[],
+    )
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(
+        json.dumps(
+            {
+                "episode_id": " canonical-episode ",
+                "scenario_id": "canonical-scenario",
+                "seed": 17,
+                "algo": "canonical-planner",
+                "status": "success",
+                "row_status": "native",
+                "outcome": {"route_complete": True, "collision_event": False},
+                "algorithm_metadata": {"analysis_trace": trace},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = export_campaign_result_store_v2(source, tmp_path / "store", overwrite=True)
+    report = scan_campaign(result.output_dir, root=tmp_path)
+    assert [(item.episode_id, item.status) for item in report.inventory] == [
+        ("canonical-episode", "readable")
+    ]
+    assert report.counts["coverage"]["expected"] == 1
+    retained = report.inventory[0].row
+    assert retained is not None
+    canonical_trace = retained["algorithm_metadata"]["analysis_trace"]
+    assert canonical_trace["steps"][1]["controls"]["requested"]["linear_m_s"] == 0.2
+    actuator = next(
+        signal for signal in report.signals if signal.detector_id == "actuator_mismatch"
+    )
+    assert actuator.status == "clear"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "row_status",
+        "status",
+        "availability_status",
+        "readiness_status",
+        "campaign_execution_status",
+    ],
+)
+def test_canonical_status_surfaces_never_advertise_degraded_as_readable(field: str) -> None:
+    report = scan_campaign(
+        _campaign(_episode("blocked", **{field: "degraded"}), expected_episode_ids=["blocked"])
+    )
+    assert report.inventory[0].status == "unsupported"
+    assert report.counts["coverage"]["readable"] == 0
+
+
+def test_canonical_terminal_status_does_not_override_native_row_status() -> None:
+    report = scan_campaign(
+        _campaign(
+            _episode("collision", row_status="native", status="collision"),
+            expected_episode_ids=["collision"],
+        )
+    )
+    assert report.inventory[0].status == "readable"
+
+
+def test_nested_fallback_counter_and_malformed_status_fail_closed() -> None:
+    fallback = scan_campaign(
+        _campaign(
+            _episode(
+                "fallback",
+                algorithm_metadata={"status": "native", "fallback_counters": {"steps": 1}},
+            ),
+            expected_episode_ids=["fallback"],
+        )
+    )
+    assert fallback.inventory[0].status == "unsupported"
+    metric_fallback = scan_campaign(
+        _campaign(
+            _episode("metric-fallback", metrics={"fallback_steps": 1}),
+            expected_episode_ids=["metric-fallback"],
+        )
+    )
+    assert metric_fallback.inventory[0].status == "unsupported"
+    malformed = scan_campaign(
+        _campaign(_episode("malformed", availability_status=3), expected_episode_ids=["malformed"])
+    )
+    assert malformed.inventory[0].status == "invalid"
+
+
+def test_directory_special_file_is_rejected_before_digest(tmp_path: Path) -> None:
+    store = tmp_path / "special-store"
+    store.mkdir()
+    (store / "manifest.json").write_text(
+        json.dumps({"schema_version": "campaign-result-store.v2"}), encoding="utf-8"
+    )
+    os.mkfifo(store / "unexpected.fifo")
+    with pytest.raises(AuditScanError, match="special file"):
+        scan_campaign(store, root=tmp_path)
+
+
+def test_nonfinite_campaign_metadata_is_rejected_but_bad_jsonl_row_is_indexed(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(AuditScanError, match="non-finite"):
+        scan_campaign(_campaign(_episode("metadata"), metadata={"value": float("nan")}))
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(
+        json.dumps({"episode_id": "good", "metrics": {"value": 1.0}})
+        + "\n"
+        + '{"episode_id":"bad","metrics":{"value":NaN}}\n',
+        encoding="utf-8",
+    )
+    report = scan_campaign(source, root=tmp_path, config={"expected_episode_ids": ["good", "bad"]})
+    assert {item.episode_id: item.status for item in report.inventory} == {
+        "good": "readable",
+        "bad": "invalid",
+    }
+    assert report.counts["coverage"]["invalid"] == 1
+
+
 def test_unknown_file_format_is_indexed_as_unsupported(tmp_path: Path) -> None:
     source = tmp_path / "episodes.parquet"
     source.write_bytes(b"not-a-supported-reader")
@@ -294,6 +456,37 @@ def test_source_ref_mapping_rejects_non_string_fields() -> None:
                 "sha256": 123,
             },
         )
+
+
+def test_source_ref_schema_and_identity_bindings_fail_closed() -> None:
+    payload = _campaign(_episode("episode"), expected_episode_ids=["episode"])
+    with pytest.raises(AuditScanError, match="schema is required"):
+        scan_campaign(
+            payload,
+            source_ref={
+                "artifact_id": "campaign",
+                "uri": "campaign",
+                "format": "campaign-result",
+            },
+        )
+    with pytest.raises(AuditScanError, match="source_commit"):
+        scan_campaign(
+            payload,
+            source_ref={
+                "artifact_id": "campaign",
+                "uri": "campaign",
+                "format": "campaign-result",
+                "schema": "campaign-result.v1",
+                "source_commit": "b" * 40,
+            },
+        )
+    conflicting = _campaign(
+        _episode("episode"),
+        git_hash="b" * 40,
+        expected_episode_ids=["episode"],
+    )
+    with pytest.raises(AuditScanError, match="conflicting source_commit"):
+        scan_campaign(conflicting)
 
 
 def test_missing_capabilities_generate_selective_enrichment_without_execution() -> None:

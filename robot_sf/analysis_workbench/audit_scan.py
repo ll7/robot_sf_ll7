@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+import stat
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -42,9 +43,11 @@ from robot_sf.analysis_workbench.audit_detectors import (
     signal_status_counts,
     unavailable_signal,
 )
+from robot_sf.analysis_workbench.review_context import _read_regular_file_no_follow
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
     ComponentResult,
+    ReviewContractsValidationError,
     SourceRef,
     component_request_from_dict,
 )
@@ -63,7 +66,57 @@ STATUS_UNAVAILABLE = "unavailable"
 STATUS_FAILED = "failed"
 INVENTORY_STATUSES = ("readable", "missing", "duplicate", "invalid", "unsupported")
 EXECUTION_UNSUPPORTED = frozenset(
-    {"fallback", "degraded", "unavailable", "failed", "error", "unsupported"}
+    {
+        "fallback",
+        "degraded",
+        "unavailable",
+        "not_available",
+        "failed",
+        "failure",
+        "error",
+        "unsupported",
+        "partial",
+        "partial_failure",
+        "truncated",
+        "diagnostic_only",
+        "diagnostic_stub",
+        "skipped",
+        "cancelled",
+    }
+)
+_STATUS_SURFACE_FIELDS = (
+    "row_status",
+    "status",
+    "availability_status",
+    "readiness_status",
+    "campaign_execution_status",
+    "execution_status",
+    "execution_mode",
+    "preflight_status",
+)
+_FALLBACK_COUNTER_FIELDS = (
+    "fallback_count",
+    "fallback_steps",
+    "fallback_actions",
+    "fallback_events",
+    "fallback_invocations",
+    "fallback_used",
+    "fallback_counter",
+    "fallback_counters",
+)
+_DESCRIPTIVE_STATUS_FIELDS = frozenset({"status", "execution_status"})
+_DESCRIPTIVE_STATUS_VALUES = frozenset(
+    {
+        "success",
+        "completed",
+        "collision",
+        "timeout",
+        "timed_out",
+        "horizon",
+        "horizon_reached",
+        "time_limit",
+        "max_steps",
+    }
 )
 SUPPORTED_SOURCE_SCHEMAS = frozenset(
     {"campaign-result.v1", "campaign-result-store.v2", "episode-jsonl.v1", ""}
@@ -147,6 +200,171 @@ def _contains_nonfinite(value: Any) -> bool:
     return False
 
 
+def _status_token(value: Any, *, path: str) -> tuple[str | None, str | None]:
+    """Normalize one canonical status while retaining malformed input.
+
+    Returns:
+        A normalized status token and an error message when malformed.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        return None, f"{path} is malformed"
+    return value.strip().lower().replace("-", "_").replace(" ", "_"), None
+
+
+def _counter_status(  # noqa: C901
+    value: Any, *, path: str
+) -> tuple[str | None, str | None]:
+    """Classify a fallback counter without truthiness coercion.
+
+    Returns:
+        An unsupported/invalid state and a reason, or ``(None, None)``.
+    """
+
+    if isinstance(value, bool):
+        return ("unsupported", f"{path} indicates fallback") if value else (None, None)
+    if isinstance(value, (int, float)):
+        if not math.isfinite(float(value)) or value < 0:
+            return None, f"{path} is malformed"
+        return ("unsupported", f"{path} is non-zero") if value > 0 else (None, None)
+    if isinstance(value, Mapping):
+        found: list[tuple[str | None, str | None]] = []
+        for key, item in value.items():
+            if not isinstance(key, str):
+                return None, f"{path} contains a non-string field name"
+            found.append(_counter_status(item, path=f"{path}.{key}"))
+        for state, reason in found:
+            if reason is not None:
+                return state, reason
+        return None, None
+    if isinstance(value, list):
+        if value:
+            return "unsupported", f"{path} contains fallback entries"
+        return None, None
+    return None, f"{path} is malformed"
+
+
+def _execution_status(  # noqa: C901, PLR0912
+    value: Mapping[str, Any], *, path: str = "row"
+) -> tuple[str, str]:
+    """Inspect every canonical execution/readiness status surface.
+
+    The result is ``(state, reason)`` where state is ``native``,
+    ``unsupported`` or ``invalid``.  A blocked nested surface can never be
+    hidden by an outer ``row_status=native`` declaration.
+
+    Returns:
+        A state/reason pair for the admitted execution metadata.
+    """
+
+    surfaces: list[tuple[str, Any]] = []
+    for key in _STATUS_SURFACE_FIELDS:
+        if key in value:
+            surfaces.append((f"{path}.{key}", value[key]))
+    algorithm_metadata = value.get("algorithm_metadata")
+    if algorithm_metadata is not None:
+        if not isinstance(algorithm_metadata, Mapping):
+            return "invalid", f"{path}.algorithm_metadata is malformed"
+        for key in _STATUS_SURFACE_FIELDS:
+            if key in algorithm_metadata:
+                surfaces.append((f"{path}.algorithm_metadata.{key}", algorithm_metadata[key]))
+        analysis_trace = algorithm_metadata.get("analysis_trace")
+        if analysis_trace is not None:
+            if not isinstance(analysis_trace, Mapping):
+                return "invalid", f"{path}.algorithm_metadata.analysis_trace is malformed"
+            for key in _STATUS_SURFACE_FIELDS:
+                if key in analysis_trace:
+                    surfaces.append(
+                        (f"{path}.algorithm_metadata.analysis_trace.{key}", analysis_trace[key])
+                    )
+    for container_name in ("metrics", "operational_metrics"):
+        container = value.get(container_name)
+        if container is None:
+            continue
+        if not isinstance(container, Mapping):
+            return "invalid", f"{path}.{container_name} is malformed"
+        for key in _STATUS_SURFACE_FIELDS:
+            if key in container:
+                surfaces.append((f"{path}.{container_name}.{key}", container[key]))
+    top_level_trace = value.get("analysis_trace")
+    if top_level_trace is not None:
+        if not isinstance(top_level_trace, Mapping):
+            return "invalid", f"{path}.analysis_trace is malformed"
+        for key in _STATUS_SURFACE_FIELDS:
+            if key in top_level_trace:
+                surfaces.append((f"{path}.analysis_trace.{key}", top_level_trace[key]))
+    state = "native"
+    state_reason = ""
+    for surface_path, raw in surfaces:
+        token, error = _status_token(raw, path=surface_path)
+        if error is not None:
+            return "invalid", error
+        if token in EXECUTION_UNSUPPORTED:
+            return "unsupported", f"non-admissible execution status: {token}"
+        if token in {
+            "native",
+            "adapter",
+            "available",
+            "ready",
+            "complete",
+            "success",
+            "collision",
+            "ok",
+            "passed",
+            "pass",
+            "admitted",
+            "included",
+            "running",
+        }:
+            continue
+        # Canonical v2 reserves row_status for execution mode.  Its
+        # status/execution_status projection may describe the terminal outcome
+        # (for example ``collision`` or ``max_steps``) without changing the
+        # row's execution admissibility.
+        if (
+            surface_path.rsplit(".", 1)[-1] in _DESCRIPTIVE_STATUS_FIELDS
+            and token in _DESCRIPTIVE_STATUS_VALUES
+        ):
+            continue
+        # Unknown status labels are retained for diagnosis but are not allowed
+        # to advertise a native row.  This avoids silently trusting a future
+        # status vocabulary before BA-01 has been updated.
+        if surface_path.endswith(".row_status") or surface_path.endswith(
+            (".availability_status", ".readiness_status", ".campaign_execution_status")
+        ):
+            return "invalid", f"{surface_path} is an unknown status: {token}"
+        state = "unsupported"
+        state_reason = f"{surface_path} has an unrecognized status: {token}"
+    containers: list[tuple[str, Mapping[str, Any]]] = [(path, value)]
+    for container_name in ("metrics", "operational_metrics"):
+        container_value = value.get(container_name)
+        if container_value is not None:
+            if not isinstance(container_value, Mapping):
+                return "invalid", f"{path}.{container_name} is malformed"
+            containers.append((f"{path}.{container_name}", container_value))
+    if isinstance(algorithm_metadata, Mapping):
+        containers.append((f"{path}.algorithm_metadata", algorithm_metadata))
+        analysis_trace = algorithm_metadata.get("analysis_trace")
+        if isinstance(analysis_trace, Mapping):
+            containers.append((f"{path}.algorithm_metadata.analysis_trace", analysis_trace))
+    if isinstance(top_level_trace, Mapping):
+        containers.append((f"{path}.analysis_trace", top_level_trace))
+    for container_path, container in containers:
+        for key in _FALLBACK_COUNTER_FIELDS:
+            if key not in container:
+                continue
+            counter_state, counter_reason = _counter_status(
+                container[key], path=f"{container_path}.{key}"
+            )
+            if counter_reason is not None:
+                if counter_state == "unsupported":
+                    return "unsupported", counter_reason
+                return "invalid", counter_reason
+            if counter_state == "unsupported":
+                return "unsupported", counter_reason or f"{container_path}.{key} indicates fallback"
+    return state, state_reason
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -196,9 +414,13 @@ def _safe_path(value: str | Path, *, root: Path) -> Path:  # noqa: C901
         resolved.relative_to(root_resolved)
     except (OSError, RuntimeError, ValueError) as exc:
         raise AuditScanError("source path escapes admitted root") from exc
-    if not resolved.is_file() and not resolved.is_dir():
+    try:
+        mode = resolved.stat().st_mode
+    except OSError as exc:
+        raise AuditScanError("source is unavailable") from exc
+    if not stat.S_ISREG(mode) and not stat.S_ISDIR(mode):
         raise AuditScanError("source is missing or is not a regular file/directory")
-    if resolved.is_file() and resolved.stat().st_size > MAX_SOURCE_BYTES:
+    if stat.S_ISREG(mode) and resolved.stat().st_size > MAX_SOURCE_BYTES:
         raise AuditScanError(f"source exceeds {MAX_SOURCE_BYTES} bytes")
     return resolved
 
@@ -255,7 +477,7 @@ def _jsonl_rows(raw: bytes, *, label: str) -> list[tuple[Mapping[str, Any] | Non
     return rows
 
 
-def _source_ref_from_value(  # noqa: C901
+def _source_ref_from_value(  # noqa: C901, PLR0912
     source: SourceRef | Mapping[str, Any] | None,
     *,
     source_path: Path | None,
@@ -314,7 +536,27 @@ def _source_ref_from_value(  # noqa: C901
             )
         ref = SourceRef(**{key: source.get(key, "") for key in known})
     else:
-        payload_schema = payload.get("schema_version", "") if isinstance(payload, Mapping) else ""
+        payload_schema = _payload_schema(payload) if isinstance(payload, Mapping) else ""
+        payload_commit = (
+            _identity_aliases(
+                payload,
+                names=("source_commit", "git_hash", "commit_sha", "commit"),
+                label="source_commit",
+                include_episode_rows=True,
+            )
+            if isinstance(payload, Mapping)
+            else None
+        )
+        payload_config_identity = (
+            _identity_aliases(
+                payload,
+                names=("config_identity", "config_hash"),
+                label="config_identity",
+                include_episode_rows=True,
+            )
+            if isinstance(payload, Mapping)
+            else None
+        )
         source_format = "campaign-result"
         if source_path is not None:
             if source_path.is_dir():
@@ -323,27 +565,75 @@ def _source_ref_from_value(  # noqa: C901
                 source_format = "episode-jsonl"
             elif source_path.suffix.lower() not in {".json", ""}:
                 source_format = "unsupported"
+        if not payload_schema:
+            payload_schema = (
+                "campaign-result-store.v2"
+                if source_format == "campaign-result-store"
+                else "episode-jsonl.v1"
+                if source_format == "episode-jsonl"
+                else "campaign-result.v1"
+            )
         ref = SourceRef(
             artifact_id=source_path.name if source_path is not None else "in-memory-campaign",
             uri=source_path.name if source_path is not None else "in-memory-campaign",
             format=source_format,
             schema=str(payload_schema) if isinstance(payload_schema, str) else "",
             sha256=observed_digest,
-            source_commit=(
-                payload.get("source_commit") or payload.get("git_hash")
-                if isinstance(payload, Mapping)
-                else ""
-            )
-            or "",
-            config_identity=(
-                payload.get("config_identity") or payload.get("config_hash")
-                if isinstance(payload, Mapping)
-                else ""
-            )
-            or "",
+            source_commit=payload_commit or "",
+            config_identity=payload_config_identity or "",
         )
+    payload_schema = _payload_schema(payload) if isinstance(payload, Mapping) else ""
+    payload_commit = (
+        _identity_aliases(
+            payload,
+            names=("source_commit", "git_hash", "commit_sha", "commit"),
+            label="source_commit",
+            include_episode_rows=True,
+        )
+        if isinstance(payload, Mapping)
+        else None
+    )
+    payload_config_identity = (
+        _identity_aliases(
+            payload,
+            names=("config_identity", "config_hash"),
+            label="config_identity",
+            include_episode_rows=True,
+        )
+        if isinstance(payload, Mapping)
+        else None
+    )
     if not ref.uri.strip() or not ref.format.strip():
         raise AuditScanError("source reference URI and format are required")
+    if not ref.schema.strip():
+        raise AuditScanError("source reference schema is required")
+    if any(
+        isinstance(getattr(ref, key), str) and getattr(ref, key) and not getattr(ref, key).strip()
+        for key in ("source_commit", "config_identity")
+    ):
+        raise AuditScanError("source reference identity is malformed")
+    if payload_schema and ref.schema.strip() != payload_schema:
+        # The caller still receives an unsupported, fully accounted source;
+        # rows must never be treated as native under a conflicting schema.
+        ref = SourceRef(
+            artifact_id=ref.artifact_id,
+            uri=ref.uri,
+            format=ref.format,
+            schema=ref.schema.strip(),
+            sha256=ref.sha256,
+            source_commit=ref.source_commit,
+            config_identity=ref.config_identity,
+            units=ref.units,
+            coordinate_frame=ref.coordinate_frame,
+        )
+    if ref.source_commit and payload_commit and ref.source_commit.strip() != payload_commit:
+        raise AuditScanError("source reference source_commit conflicts with payload")
+    if (
+        ref.config_identity
+        and payload_config_identity
+        and ref.config_identity.strip() != payload_config_identity
+    ):
+        raise AuditScanError("source reference config_identity conflicts with payload")
     declared = ref.sha256.strip()
     if (
         not ref.artifact_id.strip()
@@ -376,13 +666,209 @@ def _source_ref_from_value(  # noqa: C901
         artifact_id=ref.artifact_id,
         uri=ref.uri,
         format=ref.format,
-        schema=ref.schema,
+        schema=ref.schema.strip(),
         sha256=declared.lower() if declared else observed_digest,
-        source_commit=ref.source_commit,
-        config_identity=ref.config_identity,
+        source_commit=ref.source_commit.strip() or payload_commit or "",
+        config_identity=ref.config_identity.strip() or payload_config_identity or "",
         units=ref.units,
         coordinate_frame=ref.coordinate_frame,
     )
+
+
+def _regular_directory_files(source_path: Path) -> list[Path]:
+    """Enumerate a source directory and reject every non-regular entry.
+
+    Returns:
+        Sorted regular files under ``source_path``.
+    """
+
+    try:
+        entries = sorted(source_path.rglob("*"))
+    except OSError as exc:
+        raise AuditScanError("source directory cannot be enumerated") from exc
+    files: list[Path] = []
+    for item in entries:
+        if item.is_symlink():
+            raise AuditScanError("source directory contains a symlink")
+        try:
+            mode = item.stat().st_mode
+        except OSError as exc:
+            raise AuditScanError("source directory contains an unreadable entry") from exc
+        if stat.S_ISDIR(mode):
+            continue
+        if not stat.S_ISREG(mode):
+            raise AuditScanError("source directory contains a special file")
+        files.append(item)
+    return files
+
+
+def _read_admitted_file(path: Path, *, label: str) -> bytes:
+    """Read a regular source file through the shared no-follow admission helper.
+
+    Returns:
+        The bounded file bytes.
+    """
+
+    try:
+        return _read_regular_file_no_follow(path, limit=MAX_SOURCE_BYTES, kind=label)
+    except (OSError, ReviewContractsValidationError) as exc:
+        raise AuditScanError(f"{label} is not a readable regular file") from exc
+
+
+def _canonical_store_rows(store_path: Path) -> tuple[list[tuple[Mapping[str, Any], int]], str]:
+    """Load a v2 store through the canonical case-workbench owner.
+
+    Returns:
+        Canonical rows with stable positions and the source execution state.
+    """
+
+    try:
+        from robot_sf.benchmark.case_workbench import (  # noqa: PLC0415
+            _load_records,
+            _v2_integrity_errors,
+        )
+
+        integrity_errors = _v2_integrity_errors(store_path)
+        if integrity_errors:
+            return [], "unsupported"
+        records = _load_records(store_path)
+    except Exception:  # noqa: BLE001
+        # A malformed or dependency-unavailable table is retained as an
+        # unsupported source, with expected IDs still accounted from its
+        # manifest.  No fallback reader is permitted here.
+        return [], "unsupported"
+    return [(dict(record), index) for index, record in enumerate(records, start=1)], "native"
+
+
+def _payload_schema(payload: Mapping[str, Any]) -> str:
+    """Return one non-conflicting schema declaration from a payload."""
+
+    values: list[tuple[str, Any]] = []
+    for key in ("schema_version", "schema"):
+        if key in payload:
+            values.append((key, payload[key]))
+    nonempty: list[tuple[str, str]] = []
+    for key, value in values:
+        if not isinstance(value, str) or not value.strip():
+            raise AuditScanError(f"campaign {key} is malformed")
+        nonempty.append((key, value.strip()))
+    if len({value for _key, value in nonempty}) > 1:
+        raise AuditScanError("campaign schema declarations conflict")
+    return nonempty[0][1] if nonempty else ""
+
+
+def _identity_aliases(  # noqa: C901
+    payload: Mapping[str, Any],
+    *,
+    names: Sequence[str],
+    label: str,
+    include_episode_rows: bool = False,
+) -> str | None:
+    """Collect one identity value and reject conflicting aliases.
+
+    Returns:
+        One normalized identity, or ``None`` when no declaration is present.
+    """
+
+    values: list[tuple[str, str]] = []
+
+    def collect(container: Any, prefix: str) -> None:
+        if not isinstance(container, Mapping):
+            return
+        for name in names:
+            if name not in container or container[name] in (None, ""):
+                continue
+            value = container[name]
+            if not isinstance(value, str) or not value.strip():
+                raise AuditScanError(f"{prefix}.{name} is malformed")
+            values.append((f"{prefix}.{name}", value.strip()))
+
+    def collect_record(record: Mapping[str, Any], prefix: str) -> None:
+        collect(record, prefix)
+        for nested_name in ("provenance", "result_provenance", "cell_context", "config"):
+            collect(record.get(nested_name), f"{prefix}.{nested_name}")
+        metadata = record.get("algorithm_metadata")
+        if isinstance(metadata, Mapping):
+            collect(metadata, f"{prefix}.algorithm_metadata")
+            collect(metadata.get("analysis_trace"), f"{prefix}.algorithm_metadata.analysis_trace")
+
+    collect_record(payload, label)
+    if include_episode_rows:
+        entries = payload.get("episodes")
+        if isinstance(entries, list):
+            for index, entry in enumerate(entries):
+                if isinstance(entry, Mapping):
+                    collect_record(entry, f"{label}.episodes[{index}]")
+    unique = {value for _name, value in values}
+    if len(unique) > 1:
+        names_text = ", ".join(name for name, _value in values)
+        raise AuditScanError(f"conflicting {label} aliases: {names_text}")
+    return next(iter(unique)) if unique else None
+
+
+def _row_binding_error(
+    row: Mapping[str, Any],
+    source_ref: SourceRef,
+    *,
+    expected_campaign_id: str | None = None,
+    expected_config_identity: str | None = None,
+) -> str | None:
+    """Check row provenance aliases against the admitted source identity.
+
+    Returns:
+        A conflict description, or ``None`` when the row is bound.
+    """
+
+    try:
+        row_campaign = _identity_aliases(
+            row,
+            names=("campaign_id", "study_id", "campaign"),
+            label="episode.campaign_id",
+        )
+        row_commit = _identity_aliases(
+            row,
+            names=("source_commit", "git_hash", "commit_sha", "commit"),
+            label="episode.source_commit",
+        )
+        row_config = _identity_aliases(
+            row,
+            names=("config_identity", "config_hash"),
+            label="episode.config_identity",
+        )
+    except AuditScanError as exc:
+        return str(exc)
+    if expected_campaign_id and row_campaign and expected_campaign_id.strip() != row_campaign:
+        return "episode campaign_id conflicts with campaign"
+    if source_ref.source_commit and row_commit and source_ref.source_commit != row_commit:
+        return "episode source_commit conflicts with admitted source"
+    if source_ref.config_identity and row_config and source_ref.config_identity != row_config:
+        return "episode config_identity conflicts with admitted source"
+    if expected_config_identity and row_config and expected_config_identity != row_config:
+        return "episode config_identity conflicts with requested config"
+    try:
+        _identity_aliases(
+            row,
+            names=("execution_id", "run_id"),
+            label="episode.execution_id",
+        )
+        _identity_aliases(
+            row,
+            names=("checkpoint_digest", "checkpoint_hash"),
+            label="episode.checkpoint_digest",
+        )
+        _identity_aliases(
+            row,
+            names=("environment_digest", "environment_hash"),
+            label="episode.environment_digest",
+        )
+        _identity_aliases(
+            row,
+            names=("config_digest",),
+            label="episode.config_digest",
+        )
+    except AuditScanError as exc:
+        return str(exc)
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,10 +1027,7 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
         try:
             source_path = _safe_path(source, root=root_path)
             if source_path.is_dir():
-                entries = sorted(source_path.rglob("*"))
-                if any(item.is_symlink() for item in entries):
-                    raise AuditScanError("source directory contains a symlink")
-                files = [item for item in entries if item.is_file()]
+                files = _regular_directory_files(source_path)
                 if len(files) > MAX_SOURCE_FILES:
                     raise AuditScanError(f"source directory exceeds {MAX_SOURCE_FILES} files")
                 total = sum(item.stat().st_size for item in files)
@@ -554,11 +1037,41 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                 manifest: dict[str, Any] = {}
                 if manifest_path.exists():
                     manifest_value = _strict_json(
-                        manifest_path.read_bytes(), label="campaign manifest"
+                        _read_admitted_file(manifest_path, label="campaign manifest"),
+                        label="campaign manifest",
                     )
                     if not isinstance(manifest_value, Mapping):
                         raise AuditScanError("campaign manifest must be an object")
                     manifest = dict(manifest_value)
+                    _strict_walk(manifest, path="campaign manifest")
+                canonical_store = source_path
+                nested_store = source_path / "campaign-result-store.v2"
+                if (
+                    not (canonical_store / "episodes.parquet").is_file()
+                    and nested_store.is_dir()
+                    and (nested_store / "episodes.parquet").is_file()
+                ):
+                    canonical_store = nested_store
+                    nested_manifest_path = canonical_store / "manifest.json"
+                    if nested_manifest_path.is_file():
+                        nested_manifest_value = _strict_json(
+                            _read_admitted_file(nested_manifest_path, label="campaign manifest"),
+                            label="campaign manifest",
+                        )
+                        if not isinstance(nested_manifest_value, Mapping):
+                            raise AuditScanError("campaign manifest must be an object")
+                        manifest = dict(nested_manifest_value)
+                canonical_rows: list[tuple[Mapping[str, Any], int]] = []
+                canonical_loaded = False
+                canonical_present = (canonical_store / "episodes.parquet").is_file()
+                if canonical_present:
+                    if manifest.get("schema_version") == "campaign-result-store.v2":
+                        canonical_loaded = True
+                        canonical_rows, canonical_status = _canonical_store_rows(canonical_store)
+                        if canonical_status != "native":
+                            source_status = canonical_status
+                    else:
+                        source_status = "unsupported"
                 row_path = next(
                     (
                         source_path / name
@@ -568,11 +1081,17 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                     None,
                 )
                 source_bytes = b"".join(
-                    str(item.relative_to(source_path)).encode("utf-8") + b"\0" + item.read_bytes()
+                    str(item.relative_to(source_path)).encode("utf-8")
+                    + b"\0"
+                    + _read_admitted_file(item, label=f"campaign source {item.name}")
                     for item in files
                 )
                 rows = (
-                    _jsonl_rows(row_path.read_bytes(), label="source")
+                    canonical_rows
+                    if canonical_present
+                    else _jsonl_rows(
+                        _read_admitted_file(row_path, label="campaign source"), label="source"
+                    )
                     if row_path is not None
                     else []
                 )
@@ -581,16 +1100,16 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                     "schema_version": manifest.get("schema_version", "campaign-result-store.v2"),
                     "episodes": (
                         [dict(item) for item, _line in rows if isinstance(item, Mapping)]
-                        if row_path is not None
+                        if row_path is not None or canonical_present
                         else manifest.get("episodes", [])
                         if isinstance(manifest.get("episodes"), list)
                         else []
                     ),
                 }
-                if row_path is None:
+                if row_path is None and not canonical_loaded:
                     source_status = "unsupported"
             else:
-                source_bytes = source_path.read_bytes()
+                source_bytes = _read_admitted_file(source_path, label="campaign source")
                 if source_path.suffix.lower() in {".jsonl", ".ndjson"}:
                     rows = _jsonl_rows(source_bytes, label="campaign source")
                     payload = {
@@ -666,21 +1185,47 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
         raise AuditScanError("source must be a local path, mapping, or row sequence")
     if "episodes" in payload and not isinstance(payload["episodes"], list):
         raise AuditScanError("campaign episodes must be an array")
+    metadata_payload = dict(payload)
+    if isinstance(metadata_payload.get("episodes"), list):
+        # Row-level non-finite values are retained as invalid inventory rows;
+        # campaign metadata and source identity are rejected immediately.
+        metadata_payload["episodes"] = []
+    _strict_walk(metadata_payload, path="campaign")
     if len(source_bytes) > MAX_SOURCE_BYTES:
         raise AuditScanError(f"source exceeds {MAX_SOURCE_BYTES} bytes")
     digest = _sha256(source_bytes)
     ref = _source_ref_from_value(
         source_ref, source_path=source_path, observed_digest=digest, payload=payload
     )
+    if source_path is not None and source_ref is not None:
+        root_path = Path(root) if root is not None else Path.cwd()
+        try:
+            expected_uri = source_path.relative_to(root_path.resolve(strict=True)).as_posix()
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise AuditScanError("source reference root binding is unavailable") from exc
+        if ref.uri != expected_uri:
+            raise AuditScanError("source reference URI does not bind the admitted path")
     if ref.format not in SUPPORTED_SOURCE_FORMATS or ref.schema not in SUPPORTED_SOURCE_SCHEMAS:
         source_status = "unsupported"
-    declared_execution = payload.get("execution_status")
-    if (
-        isinstance(declared_execution, str)
-        and declared_execution.strip().lower() in EXECUTION_UNSUPPORTED
-    ):
-        source_status = declared_execution.strip().lower()
-    return _LoadedCampaign(payload, tuple(rows), ref, digest, source_bytes, source_status)
+    declared_payload_schema = _payload_schema(payload)
+    _identity_aliases(
+        payload,
+        names=("campaign_id", "study_id", "campaign"),
+        label="campaign_id",
+        include_episode_rows=True,
+    )
+    if declared_payload_schema and ref.schema != declared_payload_schema:
+        source_status = "unsupported"
+    execution_state, execution_reason = _execution_status(payload, path="campaign")
+    if execution_state == "invalid":
+        source_status = "invalid"
+    elif execution_state == "unsupported" and source_status == "native":
+        source_status = "unsupported"
+    if execution_reason and source_status == "native":
+        source_status = "invalid"
+    return _LoadedCampaign(
+        payload, tuple(rows), ref, digest, source_bytes, source_status, execution_reason
+    )
 
 
 def _expected_ids(  # noqa: C901, PLR0912
@@ -785,8 +1330,25 @@ def _row_validation(  # noqa: C901, PLR0912
         value = row.get(key)
         if value is not None and (not isinstance(value, str) or not value.strip()):
             return episode_id, "invalid", f"{key} is malformed"
+    try:
+        _identity_aliases(
+            row,
+            names=("source_commit", "git_hash", "commit_sha", "commit"),
+            label=f"row[{line}].source_commit",
+        )
+        _identity_aliases(
+            row,
+            names=("config_identity", "config_hash"),
+            label=f"row[{line}].config_identity",
+        )
+    except AuditScanError as exc:
+        return episode_id, "invalid", str(exc)
     for key in ("seed",):
-        if key in row and (isinstance(row[key], bool) or not isinstance(row[key], (int, str))):
+        if (
+            key in row
+            and row[key] is not None
+            and (isinstance(row[key], bool) or not isinstance(row[key], (int, str)))
+        ):
             return episode_id, "invalid", f"{key} has unsupported type"
     for key in ("execution_id", "run_id"):
         if key in row and (not isinstance(row[key], str) or not row[key].strip()):
@@ -824,6 +1386,7 @@ def _row_validation(  # noqa: C901, PLR0912
             if key != "outcome" or not isinstance(row[key], str):
                 return episode_id, "invalid", f"{key} must be an object"
     for key in (
+        "analysis_trace",
         "trace",
         "simulation_trace",
         "events",
@@ -837,7 +1400,7 @@ def _row_validation(  # noqa: C901, PLR0912
         value = row.get(key)
         if value is not None and not isinstance(value, (Mapping, list)):
             return episode_id, "invalid", f"{key} must be an object or array"
-    for key in ("trace", "simulation_trace"):
+    for key in ("analysis_trace", "trace", "simulation_trace"):
         value = row.get(key)
         if isinstance(value, Mapping):
             frames = next(
@@ -851,12 +1414,32 @@ def _row_validation(  # noqa: C901, PLR0912
                 return episode_id, "invalid", f"{key}.frames must be an array of objects"
         elif isinstance(value, list) and not all(isinstance(frame, Mapping) for frame in value):
             return episode_id, "invalid", f"{key} must contain objects"
-    for key in ("execution_status", "row_status"):
-        if key in row and (not isinstance(row[key], str) or not row[key].strip()):
-            return episode_id, "invalid", f"{key} is malformed"
-    execution = str(row.get("execution_status", row.get("row_status", "native"))).strip().lower()
-    if execution in EXECUTION_UNSUPPORTED:
-        return episode_id, "unsupported", f"non-admissible execution status: {execution}"
+    algorithm_metadata = row.get("algorithm_metadata")
+    if algorithm_metadata is not None and not isinstance(algorithm_metadata, Mapping):
+        return episode_id, "invalid", "algorithm_metadata must be an object"
+    if isinstance(algorithm_metadata, Mapping):
+        analysis_trace = algorithm_metadata.get("analysis_trace")
+        if analysis_trace is not None and not isinstance(analysis_trace, Mapping):
+            return episode_id, "invalid", "algorithm_metadata.analysis_trace must be an object"
+        if isinstance(analysis_trace, Mapping):
+            frames = next(
+                (
+                    analysis_trace[name]
+                    for name in ("frames", "steps", "trajectory")
+                    if name in analysis_trace
+                ),
+                None,
+            )
+            if frames is not None and (
+                not isinstance(frames, list)
+                or not all(isinstance(frame, Mapping) for frame in frames)
+            ):
+                return episode_id, "invalid", "analysis_trace.steps must be an array of objects"
+    execution_state, execution_reason = _execution_status(row, path=f"row[{line}]")
+    if execution_state == "invalid":
+        return episode_id, "invalid", execution_reason
+    if execution_state == "unsupported":
+        return episode_id, "unsupported", execution_reason or "non-admissible execution status"
     return episode_id, "readable", ""
 
 
@@ -1293,6 +1876,33 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
     source_config = loaded.payload.get("config")
     if source_config is not None and not isinstance(source_config, Mapping):
         raise AuditScanError("campaign config must be a mapping")
+    source_config_identity = _identity_aliases(
+        loaded.payload,
+        names=("config_identity", "config_hash"),
+        label="campaign.config_identity",
+    )
+    requested_config_identity = _identity_aliases(
+        requested_config,
+        names=("config_identity", "config_hash"),
+        label="requested.config_identity",
+    )
+    if (
+        source_config_identity
+        and requested_config_identity
+        and source_config_identity != requested_config_identity
+    ):
+        raise AuditScanError("requested config identity conflicts with campaign")
+    requested_source_commit = _identity_aliases(
+        requested_config,
+        names=("source_commit", "git_hash", "commit_sha", "commit"),
+        label="requested.source_commit",
+    )
+    if (
+        loaded.source_ref.source_commit
+        and requested_source_commit
+        and loaded.source_ref.source_commit != requested_source_commit
+    ):
+        raise AuditScanError("requested source_commit conflicts with campaign")
     config_mapping = {
         **(dict(source_config) if isinstance(source_config, Mapping) else {}),
         **requested_config,
@@ -1320,12 +1930,44 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         source_digest=loaded.source_digest,
         config=config_mapping,
     )
+    source_campaign_identity = _identity_aliases(
+        loaded.payload,
+        names=("campaign_id", "study_id", "campaign"),
+        label="campaign_id",
+        include_episode_rows=True,
+    )
+    requested_campaign_identity = _identity_aliases(
+        requested_config,
+        names=("campaign_id", "study_id", "campaign"),
+        label="requested.campaign_id",
+    )
+    if (
+        source_campaign_identity
+        and requested_campaign_identity
+        and source_campaign_identity != requested_campaign_identity
+    ):
+        raise AuditScanError("requested campaign_id conflicts with campaign")
+    expected_campaign_identity = (
+        source_campaign_identity
+        or requested_campaign_identity
+        or str(audit.metadata.get("campaign_id") or "")
+    )
+    expected_config_identity = source_config_identity or requested_config_identity
     expected_ids = _expected_ids(loaded.payload, config_mapping)
     if len(expected_ids) > MAX_EPISODES:
         raise AuditScanError(f"expected episode count exceeds {MAX_EPISODES}")
     rows_by_id: dict[str, list[tuple[Mapping[str, Any] | None, int, str, str]]] = {}
     for row, line in loaded.rows:
         episode_id, status, reason = _row_validation(row, line=line)
+        if status == "readable" and row is not None:
+            binding_error = _row_binding_error(
+                row,
+                loaded.source_ref,
+                expected_campaign_id=expected_campaign_identity,
+                expected_config_identity=expected_config_identity,
+            )
+            if binding_error is not None:
+                status, reason = "invalid", binding_error
         rows_by_id.setdefault(episode_id, []).append((row, line, status, reason))
     all_ids = sorted(set(expected_ids) | set(rows_by_id))
     inventory: list[EpisodeInventory] = []
@@ -1339,6 +1981,19 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         # denominator; an explicitly empty expectation list has the same
         # fail-closed behavior.
         expected = episode_id in expected_ids
+        if loaded.source_status == "invalid":
+            inventory.append(
+                EpisodeInventory(
+                    episode_id,
+                    "invalid",
+                    expected,
+                    loaded.source_ref.artifact_id,
+                    matches[0][1] if matches else None,
+                    loaded.source_error or "source execution metadata is malformed",
+                    None,
+                )
+            )
+            continue
         if loaded.source_status == "unsupported":
             inventory.append(
                 EpisodeInventory(
@@ -1400,7 +2055,9 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
             )
             continue
         row_copy = dict(row)
-        row_copy.setdefault("episode_id", episode_id)
+        # Join keys are canonicalized once at admission and carried into
+        # every retained row, EpisodeRef, and Signal.
+        row_copy["episode_id"] = episode_id
         for canonical, aliases in (
             ("planner_id", ("planner", "algo", "algorithm")),
             ("scenario_id", ("scenario",)),
@@ -1975,9 +2632,12 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 "sha256": _sha256(registry_path.read_bytes()),
             },
         )
-        blocking = any(
-            report.counts["coverage"][status] > 0
-            for status in ("missing", "duplicate", "invalid", "unsupported")
+        blocking = (
+            any(
+                report.counts["coverage"][status] > 0
+                for status in ("missing", "duplicate", "invalid", "unsupported")
+            )
+            or report.counts["coverage"].get("unexpected_observed", 0) > 0
         )
         status = STATUS_PARTIAL if blocking else STATUS_COMPLETE
         return ComponentResult(

@@ -168,6 +168,63 @@ def test_optional_diagnosis_stream_is_independent(tmp_path: Path) -> None:
     assert (tmp_path / "out" / review_diagnostics.OUTPUT_REFERENCE_FILENAME).is_file()
 
 
+@pytest.mark.parametrize(
+    ("execution_status", "drop_digest", "expected_source_status", "expected_reason"),
+    [
+        ("fallback", False, "unavailable", "source_execution_fallback"),
+        ("degraded", False, "unavailable", "source_execution_degraded"),
+        ("failed", False, "unavailable", "source_execution_failed"),
+        ("unavailable", False, "unavailable", "source_execution_unavailable"),
+        ("partial", False, "partial", "source_execution_partial"),
+        ("incomplete", False, "partial", "source_execution_incomplete"),
+        (None, True, "partial", "source_integrity_unbound"),
+    ],
+)
+def test_unadmitted_diagnosis_source_is_unavailable_and_not_evidence(
+    tmp_path: Path,
+    execution_status: str | None,
+    drop_digest: bool,
+    expected_source_status: str,
+    expected_reason: str,
+) -> None:
+    _stage(tmp_path)
+    diagnosis_payload = json.loads((tmp_path / "diagnosis.json").read_text())
+    if execution_status is not None:
+        diagnosis_payload["execution_status"] = execution_status
+    (tmp_path / "diagnosis.json").write_text(json.dumps(diagnosis_payload))
+    diagnosis_source = _source_ref(tmp_path, "diagnosis", "diagnosis.json", "failure_diagnosis.v1")
+    if drop_digest:
+        diagnosis_source.pop("sha256")
+    request = _request(
+        tmp_path,
+        sources=[
+            _source_ref(tmp_path, "timeline", "timeline.json", "simulation-timeline.v1"),
+            diagnosis_source,
+        ],
+        config={"cursor_time_s": 0.5},
+    )
+
+    result = review_diagnostics.run(request, base=tmp_path)
+    model = json.loads((tmp_path / "out" / review_diagnostics.OUTPUT_MODEL_FILENAME).read_text())
+    diagnosis_inventory = next(
+        inventory for inventory in model["inventories"] if inventory["artifact_id"] == "diagnosis"
+    )
+    diagnosis_panel = model["panels"]["failure_diagnosis"]
+
+    assert result.status == "partial"
+    assert result.artifacts == ()
+    assert model["status"] == "partial"
+    assert diagnosis_inventory["status"] == expected_source_status
+    assert diagnosis_inventory["reason"] == expected_reason
+    assert diagnosis_panel["status"] == "unavailable"
+    assert diagnosis_panel["reason"] == expected_reason
+    assert diagnosis_panel["records"] == []
+    assert not any(
+        reference["kind"] == "failure_diagnosis" for reference in model["evidence_references"]
+    )
+    assert model["panels"]["planner"]["status"] == "available"
+
+
 def test_missing_control_dimensions_remain_unavailable_not_zero(tmp_path: Path) -> None:
     _stage(tmp_path)
     payload = json.loads((tmp_path / "timeline.json").read_text())
@@ -534,6 +591,57 @@ def test_corrupt_source_is_failed_and_diagnostic_only(tmp_path: Path) -> None:
     assert result.status == "failed"
     assert "source_corrupt" in result.reason
     assert result.artifacts == ()
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"schema_version":"analysis-trace.v1","schema_version":"analysis-trace.v1"}',
+        b'{"schema_version":NaN}',
+    ],
+)
+def test_non_strict_source_json_is_failed_closed(tmp_path: Path, raw: bytes) -> None:
+    (tmp_path / "invalid.json").write_bytes(raw)
+    request = _request(
+        tmp_path,
+        sources=[_source_ref(tmp_path, "invalid", "invalid.json", "analysis-trace.v1")],
+        output="invalid-out",
+    )
+
+    result = review_diagnostics.run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.artifacts == ()
+    assert result.reason == "source_corrupt: source is not strict UTF-8 JSON"
+
+
+@pytest.mark.parametrize("value", [True, "not-a-number", float("inf")])
+def test_cursor_time_requires_finite_numeric_value(tmp_path: Path, value: object) -> None:
+    _stage(tmp_path)
+    request = _request(tmp_path, config={"cursor_time_s": value})
+
+    with pytest.raises(ValueError, match="cursor_time_s must be finite numeric"):
+        review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+
+def test_output_writer_rejects_collisions_and_non_strict_json(tmp_path: Path) -> None:
+    output = review_diagnostics._open_directory(tmp_path)
+    try:
+        review_diagnostics._write_text(output, "artifact.txt", "first")
+        with pytest.raises(ValueError, match="output_collision: artifact already exists"):
+            review_diagnostics._write_text(output, "artifact.txt", "second")
+        with pytest.raises(ValueError, match="invalid_output: model is not strict JSON"):
+            review_diagnostics._write_json(output, "invalid.json", {"value": float("inf")})
+    finally:
+        output.close()
+
+
+def test_source_path_helpers_reject_empty_and_control_paths() -> None:
+    assert review_diagnostics._unsafe_path("")
+    assert review_diagnostics._unsafe_path("trace\n.json")
+    assert review_diagnostics._unsafe_path("C:\\trace.json")
+    with pytest.raises(ValueError, match="unsafe_source_path: empty relative path"):
+        review_diagnostics._path_parts(".")
 
 
 def test_missing_source_is_unavailable_not_success(tmp_path: Path) -> None:

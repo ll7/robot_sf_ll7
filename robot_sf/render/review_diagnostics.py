@@ -1451,7 +1451,11 @@ def _pedestrian_snapshot(  # noqa: C901
 def _diagnosis_rows(sources: Sequence[_LoadedSource]) -> list[dict[str, Any]]:  # noqa: C901
     rows: list[dict[str, Any]] = []
     for source in sources:
-        if source.kind != "failure_diagnosis" or not isinstance(source.payload, Mapping):
+        if (
+            source.kind != "failure_diagnosis"
+            or source.status != "available"
+            or not isinstance(source.payload, Mapping)
+        ):
             continue
         for index, row in enumerate(source.payload.get("records", [])[:MAX_RECORDS]):
             if isinstance(row, Mapping):
@@ -1822,6 +1826,14 @@ def _build_document(  # noqa: C901, PLR0915
                     )
                 )
 
+    diagnosis_sources = [source for source in sources if source.kind == "failure_diagnosis"]
+    diagnosis_source_reasons = sorted(
+        {
+            source.reason
+            for source in diagnosis_sources
+            if source.status != "available" and source.reason
+        }
+    )
     single_diagnosis = diagnoses[0] if len(diagnoses) == 1 else None
     diagnosis_missing_reasons = sorted(
         {
@@ -1833,7 +1845,8 @@ def _build_document(  # noqa: C901, PLR0915
     )
     if not diagnoses:
         diagnosis_missing_reasons.extend(
-            (
+            diagnosis_source_reasons
+            or (
                 "failure_diagnosis_not_recorded",
                 "source_artifact_not_recorded",
                 "source_time_not_recorded",
@@ -1842,6 +1855,13 @@ def _build_document(  # noqa: C901, PLR0915
                 "actor_not_selected",
             )
         )
+    diagnosis_reason = (
+        diagnosis_source_reasons[0]
+        if not diagnoses and diagnosis_source_reasons
+        else ""
+        if diagnoses
+        else "failure_diagnosis_not_recorded"
+    )
     diagnosis_panel = {
         "panel": "failure_diagnosis",
         "visible": bool(
@@ -1854,7 +1874,7 @@ def _build_document(  # noqa: C901, PLR0915
         ),
         "toggleable": True,
         "status": "available" if diagnoses else "unavailable",
-        "reason": "" if diagnoses else "failure_diagnosis_not_recorded",
+        "reason": diagnosis_reason,
         "records": diagnoses,
         "value_origin": "post_hoc" if diagnoses else "unavailable",
         "source_artifact_id": (

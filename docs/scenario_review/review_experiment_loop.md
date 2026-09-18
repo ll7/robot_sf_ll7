@@ -48,7 +48,9 @@ The loop records both `executions_consumed` and `reserved_executions`; a
 new candidate is not started unless two execution slots are available. When a
 previously started pair is incomplete, its reservation is reduced to exactly
 the remaining authorized control or treatment attempts, so widening an
-execution ceiling cannot rerun settled operations. A failed control-fidelity
+execution ceiling cannot rerun settled operations; the journal's aggregate
+`reserved_executions` is reconciled to that reduced reservation before the
+remaining side is dispatched. A failed control-fidelity
 check records the control and blocks treatment interpretation.
 Finite metrics alone do not establish intervention activation: both control and
 treatment must return explicit activation telemetry from the executor. If

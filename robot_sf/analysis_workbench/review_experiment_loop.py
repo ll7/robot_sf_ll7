@@ -1721,6 +1721,16 @@ class ExperimentLoop:
                 raise ExperimentLoopError("cannot resume: invalid reservation record")
             reservation_by_candidate[reservation_id] = reservation
 
+        # Validate the persisted aggregate against the reservation records as
+        # they were written before any recovery normalization.  A process can
+        # crash after settling control but before dispatching treatment: the
+        # candidate reservation is still the original full-pair amount while
+        # the durable operation history authorizes only the remaining side.
+        # Keep that crash window admissible, then replace the aggregate with
+        # the canonical post-normalization amount below before any dispatch.
+        persisted_reserved_executions = int(payload.get("reserved_executions", 0))
+        persisted_reservation_total = 0
+
         for candidate_id, candidate_state in payload["candidates"].items():
             candidate_operations = operation_ids_by_candidate[candidate_id]
             candidate_operation_ids = candidate_state.get("operation_ids", [])
@@ -1957,6 +1967,7 @@ class ExperimentLoop:
                     raise ExperimentLoopError(
                         "cannot resume: candidate reservation amount is invalid"
                     )
+                persisted_reservation_total += int(reservation["required_executions"])
                 expected_reservation = _remaining_pair_executions_for_operations(
                     [operation_by_id[item] for item in candidate_operations],
                     max_retries=int(current_budget["max_retries"]),
@@ -2015,8 +2026,13 @@ class ExperimentLoop:
             int(reservation_by_candidate[candidate_id]["required_executions"])
             for candidate_id in active_reservations
         )
-        if int(payload.get("reserved_executions", 0)) != expected_reserved_executions:
+        if persisted_reserved_executions != persisted_reservation_total:
             raise ExperimentLoopError("cannot resume: reservation accounting is inconsistent")
+        # ``reservation_by_candidate`` was normalized from the authoritative
+        # operation history above.  Persist the reconciled aggregate so the
+        # treatment-only continuation and its eventual release cannot retain
+        # the stale full-pair count from the crash window.
+        payload["reserved_executions"] = expected_reserved_executions
         if int(accounting["controls"]) != dispatched_by_kind["control"]:
             raise ExperimentLoopError("cannot resume: control accounting is inconsistent")
         if int(accounting["treatments"]) != dispatched_by_kind["treatment"]:

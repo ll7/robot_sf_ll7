@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from robot_sf.analysis_workbench import review_execute
+from robot_sf.analysis_workbench import review_execute, review_experiment_loop
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
     ComponentResult,
@@ -1244,6 +1244,51 @@ def test_crash_after_dispatch_recovers_by_operation_id_without_duplicate(tmp_pat
     assert resumed.status == "complete"
     assert [call["kind"] for call in recovering.calls] == ["treatment"]
     assert len({call["operation_id"] for call in crashing.calls}) == 1
+
+
+def test_crash_after_control_settlement_reconciles_pair_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A post-control crash resumes treatment without rerunning control."""
+
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    request = _request(recipe, output="control-settlement-crash")
+    original_control_fidelity = review_experiment_loop._control_fidelity
+
+    def crash_after_control_settlement(
+        result: dict[str, Any], *, motion_epsilon: float
+    ) -> tuple[bool, str]:
+        del result, motion_epsilon
+        raise KeyboardInterrupt("simulated crash after control settlement")
+
+    monkeypatch.setattr(
+        review_experiment_loop,
+        "_control_fidelity",
+        crash_after_control_settlement,
+    )
+    with pytest.raises(KeyboardInterrupt):
+        _run_injected(request, base=tmp_path, executor=FakeExecutor())
+
+    journal_path = tmp_path / "control-settlement-crash" / SESSION_JOURNAL_FILENAME
+    crashed_journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert crashed_journal["executions_consumed"] == 1
+    assert crashed_journal["reserved_executions"] == 2
+    assert crashed_journal["candidates"]["high"]["reservation"] == 2
+    assert [operation["kind"] for operation in crashed_journal["operations"]] == ["control"]
+    assert crashed_journal["operations"][0]["state"] == "completed"
+
+    monkeypatch.setattr(review_experiment_loop, "_control_fidelity", original_control_fidelity)
+    recovering = FakeExecutor()
+    resumed = _run_injected(request, base=tmp_path, executor=recovering, resume=True)
+
+    assert resumed.status == "complete", resumed.reason
+    assert [(call["kind"], call["attempt"]) for call in recovering.calls] == [("treatment", 1)]
+    resumed_journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert resumed_journal["executions_consumed"] == 2
+    assert resumed_journal["reserved_executions"] == 0
+    assert resumed_journal["accounting"]["controls"] == 1
+    assert resumed_journal["accounting"]["treatments"] == 1
+    assert resumed_journal["candidates"]["high"]["state"] == "complete"
 
 
 def test_crash_before_dispatch_fails_closed_without_replaying_operation(tmp_path: Path) -> None:

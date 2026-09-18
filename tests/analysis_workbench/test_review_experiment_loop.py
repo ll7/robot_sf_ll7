@@ -27,12 +27,29 @@ from robot_sf.analysis_workbench.review_experiment_loop import (
     ExperimentLoopError,
     LoopBudget,
     LoopPolicy,
+    _answerability_document,
+    _atomic_write_json,
+    _bounded_int,
+    _budget_from_config,
+    _candidate_order,
     _canonical_digest,
+    _control_fidelity,
+    _finite_float,
+    _has_valid_result_metrics,
     _is_negative_outcome,
+    _json_bytes,
+    _native_fidelity_attempts,
     _NativeExecutorAdapter,
     _operation_id,
+    _pair_telemetry,
     _request_identity,
+    _safe_text,
+    _status_from_result,
+    _validate_injected_source_proof,
+    _validate_input,
+    _validate_loop_budget,
     descriptor,
+    main,
     run,
 )
 
@@ -394,6 +411,366 @@ def test_read_only_and_unauthorised_policy_never_call_executor(tmp_path: Path) -
         == "autonomous_start_authorization_required"
     )
     assert fake.calls == []
+
+
+def test_strict_serialization_and_scalar_guards_fail_closed() -> None:
+    with pytest.raises(ExperimentLoopError, match="strict JSON"):
+        _canonical_digest({"not_json": float("nan")})
+    with pytest.raises(ExperimentLoopError, match="strict JSON"):
+        _json_bytes({"not_json": float("inf")})
+    with pytest.raises(ExperimentLoopError, match="non-empty"):
+        _safe_text("   ", field_name="session_id")
+    with pytest.raises(ExperimentLoopError, match="NUL"):
+        _safe_text("bad\x00value", field_name="session_id")
+    with pytest.raises(ExperimentLoopError, match="invalid Unicode"):
+        _safe_text("\ud800", field_name="session_id")
+    with pytest.raises(ExperimentLoopError, match="finite number"):
+        _finite_float(True, field_name="wall_timeout_s")
+    with pytest.raises(ExperimentLoopError, match="finite and >="):
+        _finite_float(float("nan"), field_name="wall_timeout_s")
+    with pytest.raises(ExperimentLoopError, match="finite and >="):
+        _finite_float(-1.0, field_name="wall_timeout_s")
+    with pytest.raises(ExperimentLoopError, match="must be an integer"):
+        _bounded_int(False, field_name="max_candidates", minimum=1, maximum=3)
+    with pytest.raises(ExperimentLoopError, match="within"):
+        _bounded_int(4, field_name="max_candidates", minimum=1, maximum=3)
+
+
+def test_atomic_json_persistence_rejects_symlink_and_cleans_failed_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_root = tmp_path / "real"
+    real_root.mkdir()
+    linked_root = tmp_path / "linked"
+    linked_root.symlink_to(real_root, target_is_directory=True)
+    with pytest.raises(OSError, match="symlink"):
+        _atomic_write_json(linked_root / "journal.json", {})
+
+    target = real_root / "target.json"
+    target.write_text("{}", encoding="utf-8")
+    temporary = real_root / ".target.json.tmp"
+    temporary.symlink_to(target)
+    with pytest.raises(OSError, match="symlink"):
+        _atomic_write_json(target, {})
+    temporary.unlink()
+
+    original_fdopen = review_experiment_loop.os.fdopen
+
+    def fail_fdopen(*args: Any, **kwargs: Any) -> Any:
+        del args, kwargs
+        raise RuntimeError("synthetic fdopen failure")
+
+    monkeypatch.setattr(review_experiment_loop.os, "fdopen", fail_fdopen)
+    with pytest.raises(RuntimeError, match="fdopen"):
+        _atomic_write_json(real_root / "failed.json", {})
+    monkeypatch.setattr(review_experiment_loop.os, "fdopen", original_fdopen)
+
+    original_open = review_experiment_loop.os.open
+
+    def fail_directory_open(path: Any, flags: int, *args: Any) -> int:
+        if Path(path) == real_root:
+            raise OSError("synthetic directory fsync failure")
+        return original_open(path, flags, *args)
+
+    monkeypatch.setattr(review_experiment_loop.os, "open", fail_directory_open)
+    _atomic_write_json(real_root / "no-directory-fsync.json", {})
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda proof: proof.clear(),
+        lambda proof: proof.update(status="rejected"),
+        lambda proof: proof.update(evidence_boundary="benchmark"),
+        lambda proof: proof.update(scientific_claim_allowed=True),
+        lambda proof: proof.update(dependent_family_status="shared"),
+        lambda proof: proof.update(request_digest="0" * 64),
+        lambda proof: proof.update(recipe_digest="0" * 64),
+        lambda proof: proof.update(source=[]),
+        lambda proof: proof.update(source_root=""),
+        lambda proof: proof["source"].update(uri=""),
+        lambda proof: proof["source"].update(sha256="bad"),
+        lambda proof: proof["source"].update(artifact_id=None),
+        lambda proof: proof["source"].update(sha256="0" * 64),
+    ],
+    ids=[
+        "non-mapping",
+        "status",
+        "boundary",
+        "scientific-claim",
+        "dependent-family",
+        "request-digest",
+        "recipe-digest",
+        "source-shape",
+        "source-root",
+        "source-uri",
+        "source-digest-shape",
+        "source-identity-shape",
+        "source-digest-mismatch",
+    ],
+)
+def test_injected_admission_proof_rejects_untrusted_shapes(tmp_path: Path, mutation: Any) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2))
+    proof = _source_proof(tmp_path, request)
+    mutation(proof)
+    assert (
+        _validate_injected_source_proof(
+            request,
+            request.config["recipe"],
+            proof,
+            base=tmp_path,
+        )
+        is None
+    )
+
+
+def test_injected_admission_proof_rejects_path_and_binding_mismatches(tmp_path: Path) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2))
+    proof = _source_proof(tmp_path, request)
+    proof["source"]["uri"] = "/etc/passwd"
+    assert (
+        _validate_injected_source_proof(request, request.config["recipe"], proof, base=tmp_path)
+        is None
+    )
+
+    proof = _source_proof(tmp_path, request)
+    proof["source"]["artifact_id"] = "unknown"
+    assert (
+        _validate_injected_source_proof(request, request.config["recipe"], proof, base=tmp_path)
+        is None
+    )
+
+    proof = _source_proof(tmp_path, request)
+    source_path = tmp_path / "admission-root" / "source.json"
+    source_path.unlink()
+    source_path.symlink_to(tmp_path / "outside.json")
+    (tmp_path / "outside.json").write_text("outside", encoding="utf-8")
+    assert (
+        _validate_injected_source_proof(request, request.config["recipe"], proof, base=tmp_path)
+        is None
+    )
+
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    recipe["source_identity"]["source_ref"] = {
+        "artifact_id": "different",
+        "uri": "source.json",
+        "format": "fixture.v1",
+    }
+    bound_request = _request(recipe)
+    bound_proof = _source_proof(tmp_path / "bound", bound_request)
+    assert (
+        _validate_injected_source_proof(bound_request, recipe, bound_proof, base=tmp_path) is None
+    )
+
+
+def test_candidate_and_budget_validation_rejects_unsafe_limits() -> None:
+    with pytest.raises(ExperimentLoopError, match="non-empty list"):
+        _candidate_order({"interventions": []})
+    with pytest.raises(ExperimentLoopError, match="must be a mapping"):
+        _candidate_order({"interventions": [None]})
+    with pytest.raises(ExperimentLoopError, match="duplicate"):
+        _candidate_order(
+            {
+                "interventions": [
+                    {"intervention_id": "same"},
+                    {"intervention_id": "same"},
+                ]
+            }
+        )
+    with pytest.raises(ExperimentLoopError, match="priority"):
+        _candidate_order({"interventions": [{"intervention_id": "bad", "priority": -1}]})
+
+    with pytest.raises(ExperimentLoopError, match="budget must be a mapping"):
+        _budget_from_config({}, {"budget": None})
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    recipe["budget"]["wall_timeout_s"] = 601
+    with pytest.raises(ExperimentLoopError, match="exceeds 600"):
+        _budget_from_config({}, recipe)
+    recipe = _recipe(max_candidates=1, max_executions=2)
+    with pytest.raises(ExperimentLoopError, match="max_candidates exceeds"):
+        _budget_from_config({"max_candidates": 2}, recipe)
+    with pytest.raises(ExperimentLoopError, match="max_executions exceeds"):
+        _budget_from_config({"max_executions": 3}, recipe)
+    with pytest.raises(ExperimentLoopError, match="wall_timeout_s exceeds"):
+        _budget_from_config({"wall_timeout_s": 601}, _recipe(max_candidates=1, max_executions=2))
+
+
+def test_validate_input_rejects_malformed_policy_and_answerability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def validate(config: Any) -> None:
+        request = ComponentRequest(
+            "invalid-request",
+            COMPONENT_ID,
+            (SourceRef("loop-source", "source.json", "fixture.v1"),),
+            "invalid",
+            config,
+        )
+        _validate_input(request, autonomous=True, read_only=False, resume=False)
+
+    with pytest.raises(ExperimentLoopError, match="config must be a mapping"):
+        validate([])
+    with pytest.raises(ExperimentLoopError, match="unknown keys"):
+        validate({"recipe": _recipe(max_candidates=1, max_executions=2), "unexpected": True})
+    with pytest.raises(ExperimentLoopError, match="config.recipe"):
+        validate({"recipe": None})
+    with pytest.raises(ExperimentLoopError, match="corrupt_recipe"):
+        validate({"recipe": {"schema_version": "experiment-recipe.v1"}})
+    base = {"recipe": _recipe(max_candidates=1, max_executions=2)}
+    for key, value, message in (
+        ("mode", "manual", "mode"),
+        ("autonomous", 1, "autonomous"),
+        ("read_only", 1, "read_only"),
+        ("cancel_requested", 1, "cancel_requested"),
+        ("session_id", "", "session_id"),
+        ("executor_config", [], "executor_config"),
+        ("answerability", [], "answerability"),
+    ):
+        config = {**base, key: value}
+        with pytest.raises(ExperimentLoopError, match=message):
+            validate(config)
+
+    def fail_answerability(_value: Any) -> Any:
+        raise ValueError("synthetic answerability failure")
+
+    monkeypatch.setattr(review_experiment_loop, "evaluate_answerability", fail_answerability)
+    with pytest.raises(ExperimentLoopError, match="invalid_answerability"):
+        validate({**base, "answerability": {}})
+
+
+def test_answerability_document_uses_evaluator_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Evaluated:
+        def as_dict(self) -> dict[str, str]:
+            return {"state": "diagnostic_only"}
+
+    monkeypatch.setattr(
+        review_experiment_loop, "evaluate_answerability", lambda _value: Evaluated()
+    )
+    assert _answerability_document({"answerability": "fixture"}) == {"state": "diagnostic_only"}
+
+
+def test_status_normalization_preserves_supported_executor_shapes() -> None:
+    component = ComponentResult("request", COMPONENT_ID, "complete")
+    assert _status_from_result(component)[0] == "ok"
+    assert _status_from_result(object())[0] == "failed"
+    assert _status_from_result({"result": {"status": "ok", "metrics": {"x": 1}}})[0] == "ok"
+    assert _status_from_result({"status": "terminal"})[1]["terminal"] is True
+    assert _status_from_result({"status": "canceled"})[0] == "cancelled"
+    assert _status_from_result({"status": "not_available"})[0] == "unavailable"
+    assert _status_from_result({"status": "timed_out"})[0] == "failed"
+    assert _status_from_result({"metrics": {"x": 1}})[0] == "ok"
+    assert _status_from_result({"detail": "missing status"})[0] == "failed"
+
+
+def test_pair_telemetry_and_fidelity_fail_closed_on_missing_or_invalid_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    control = {
+        "metrics": {"ped_displacement_m": 1.0, "robot_displacement_m": 1.0},
+        "activation": {"activated": True},
+    }
+    treatment = {
+        "metrics": {"ped_displacement_m": 1.0, "robot_displacement_m": 1.0},
+        "activation": {"activated": True},
+    }
+    measurement = {"name": "min_robot_ped_distance_m", "expected_direction": "increase"}
+    missing = _pair_telemetry(
+        control,
+        treatment,
+        factor="single_pedestrian_speed_offset",
+        measurement=measurement,
+        motion_epsilon=0.05,
+    )
+    assert missing["outcome"] == "inconclusive"
+    assert missing["reason"].startswith("measurement_missing:")
+
+    def fail_pair(*args: Any, **kwargs: Any) -> Any:
+        del args, kwargs
+        raise ValueError("synthetic pair failure")
+
+    monkeypatch.setattr(review_experiment_loop, "evaluate_counterfactual_pair", fail_pair)
+    control["metrics"]["min_robot_ped_distance_m"] = 1.0
+    treatment["metrics"]["min_robot_ped_distance_m"] = 1.2
+    unavailable = _pair_telemetry(
+        control,
+        treatment,
+        factor="single_pedestrian_speed_offset",
+        measurement=measurement,
+        motion_epsilon=0.05,
+    )
+    assert unavailable["outcome"] == "inconclusive"
+    assert unavailable["reason"].startswith("pair_evaluation_unavailable:")
+
+    class UnknownVerdict:
+        verdict = "unknown"
+        reason = "synthetic verdict"
+
+    monkeypatch.setattr(
+        review_experiment_loop, "evaluate_counterfactual_pair", lambda *a, **k: UnknownVerdict()
+    )
+    inconclusive = _pair_telemetry(
+        control,
+        treatment,
+        factor="single_pedestrian_speed_offset",
+        measurement=measurement,
+        motion_epsilon=0.05,
+    )
+    assert inconclusive["outcome"] == "inconclusive"
+
+    assert not _control_fidelity(
+        {"fidelity": {"status": "failed", "reason": "child check"}}, motion_epsilon=0.05
+    )[0]
+    assert not _control_fidelity({"control_fidelity": "invalid"}, motion_epsilon=0.05)[0]
+    assert not _control_fidelity({"metrics": {"ped_displacement_m": 0.0}}, motion_epsilon=0.05)[0]
+    assert _native_fidelity_attempts({"native_fidelity_attempts": True}) is None
+    assert not _has_valid_result_metrics({"status": "failed"})
+
+
+def test_direct_loop_budget_rejects_ceiling_and_process_mismatches() -> None:
+    budget = LoopBudget(max_candidates=1, max_executions=2, wall_timeout_s=600)
+    with pytest.raises(ExperimentLoopError, match="budget must be a mapping"):
+        _validate_loop_budget({"budget": None}, budget)
+    with pytest.raises(ExperimentLoopError, match="wall timeout exceeds"):
+        _validate_loop_budget(
+            {"budget": {"max_candidates": 1, "max_executions": 2, "wall_timeout_s": 600}},
+            LoopBudget(1, 2, 601),
+        )
+    with pytest.raises(ExperimentLoopError, match="only one local CPU"):
+        _validate_loop_budget(
+            {"budget": {"max_candidates": 1, "max_executions": 2, "wall_timeout_s": 600}},
+            LoopBudget(1, 2, 600, max_concurrent_local_cpu_processes=2),
+        )
+    with pytest.raises(ExperimentLoopError, match="exceeds recipe budget"):
+        _validate_loop_budget(
+            {"budget": {"max_candidates": 1, "max_executions": 2, "wall_timeout_s": 600}},
+            LoopBudget(2, 2, 600),
+        )
+
+
+def test_cli_read_only_and_malformed_input_are_truthful(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture_root = Path("tests/fixtures/scenario_review/review_experiment_loop")
+    result = main(
+        [
+            "--input",
+            str(fixture_root / "request.json"),
+            "--config",
+            str(fixture_root / "config.json"),
+            "--output",
+            "cli-read-only",
+            "--base",
+            str(tmp_path),
+            "--read-only",
+        ]
+    )
+    assert result == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "unavailable"
+
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("{", encoding="utf-8")
+    assert main(["--input", str(invalid), "--output", "invalid"]) == 1
+    assert "cannot be parsed safely" in capsys.readouterr().out
 
 
 def test_pair_reservation_prevents_partial_new_pair(tmp_path: Path) -> None:

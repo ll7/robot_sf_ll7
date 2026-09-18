@@ -1391,3 +1391,120 @@ def test_scan_rejects_unsupported_source_schema_without_dropping_rows() -> None:
     assert report.inventory[0].status == "unsupported"
     assert report.counts["coverage"]["unsupported"] == 1
     assert all(signal.status == "unavailable" for signal in report.signals)
+
+
+def test_scan_schema_and_execution_status_helpers_fail_closed(tmp_path: Path) -> None:
+    """Schema, status, and source-path adapters retain malformed input explicitly."""
+    with pytest.raises(AuditScanError, match="finite"):
+        audit_scan_module._finite(True, name="value")
+    with pytest.raises(AuditScanError, match="finite"):
+        audit_scan_module._finite(float("inf"), name="value")
+
+    recursive: dict[str, object] = {}
+    recursive["self"] = recursive
+    with pytest.raises(AuditScanError, match="recursive"):
+        audit_scan_module._strict_walk(recursive)
+    with pytest.raises(AuditScanError, match="non-string"):
+        audit_scan_module._strict_walk({1: "value"})
+    with pytest.raises(AuditScanError, match="unsupported"):
+        audit_scan_module._strict_walk({"value": object()})
+    with pytest.raises(AuditScanError, match="non-finite"):
+        audit_scan_module._strict_walk({"value": float("nan")})
+    with pytest.raises(AuditScanError, match="maximum"):
+        audit_scan_module._strict_walk(0, max_depth=-1)
+    assert audit_scan_module._contains_nonfinite({"nested": [1.0]}) is False
+    assert audit_scan_module._contains_nonfinite({"nested": [float("nan")]}) is True
+
+    assert audit_scan_module._counter_status(False, path="fallback") == (None, None)
+    assert audit_scan_module._counter_status(True, path="fallback")[0] == "unsupported"
+    assert audit_scan_module._counter_status(-1, path="fallback")[1] == "fallback is malformed"
+    assert audit_scan_module._counter_status({"steps": 0}, path="fallback") == (None, None)
+    assert audit_scan_module._counter_status({"steps": [1]}, path="fallback")[0] == "unsupported"
+    assert audit_scan_module._counter_status({1: 0}, path="fallback")[0] is None
+    assert audit_scan_module._counter_status("bad", path="fallback")[1] == "fallback is malformed"
+
+    assert audit_scan_module._execution_status({"status": "collision"}) == ("native", "")
+    assert audit_scan_module._execution_status({"status": "future-status"})[0] == "unsupported"
+    assert audit_scan_module._execution_status({"row_status": "future-status"})[0] == "invalid"
+    assert audit_scan_module._execution_status({"algorithm_metadata": 1})[0] == "invalid"
+    assert (
+        audit_scan_module._execution_status({"algorithm_metadata": {"analysis_trace": 1}})[0]
+        == "invalid"
+    )
+    assert audit_scan_module._execution_status({"metrics": []})[0] == "invalid"
+    assert (
+        audit_scan_module._execution_status({"fallback_counters": {"steps": 1}})[0] == "unsupported"
+    )
+    assert audit_scan_module._execution_status({"fallback_counters": {"steps": -1}})[0] == "invalid"
+
+    with pytest.raises(AuditScanError, match="conflict"):
+        audit_scan_module._payload_schema({"schema_version": "one", "schema": "two"})
+    with pytest.raises(AuditScanError, match="schema_version is malformed"):
+        audit_scan_module._payload_schema({"schema_version": 1})
+    observed = "a" * 64
+    with pytest.raises(AuditScanError, match="unknown fields"):
+        audit_scan_module._source_ref_from_value(
+            {
+                "artifact_id": "campaign",
+                "uri": "campaign.json",
+                "format": "campaign-result",
+                "extra": "x",
+            },
+            source_path=None,
+            observed_digest=observed,
+        )
+    with pytest.raises(AuditScanError, match="missing fields"):
+        audit_scan_module._source_ref_from_value(
+            {"artifact_id": "campaign", "uri": "campaign.json"},
+            source_path=None,
+            observed_digest=observed,
+        )
+    with pytest.raises(AuditScanError, match="digest"):
+        audit_scan_module._source_ref_from_value(
+            {
+                "artifact_id": "campaign",
+                "uri": "campaign.json",
+                "format": "campaign-result",
+                "schema": "campaign-result.v1",
+                "sha256": "b" * 64,
+            },
+            source_path=None,
+            observed_digest=observed,
+        )
+    source = audit_scan_module._source_ref_from_value(
+        None,
+        source_path=tmp_path / "episodes.jsonl",
+        observed_digest=observed,
+        payload=_campaign(_episode("episode")),
+    )
+    assert source.format == "episode-jsonl"
+    assert source.schema == "campaign-result.v1"
+
+
+def test_scan_path_and_jsonl_boundaries_preserve_input_accounting(tmp_path: Path) -> None:
+    """Path, strict-JSON, and JSONL boundaries reject unsafe or corrupt rows."""
+    with pytest.raises(AuditScanError, match="scheme"):
+        audit_scan_module._safe_path("https://example.invalid/input.json", root=tmp_path)
+    with pytest.raises(AuditScanError, match="traversal"):
+        audit_scan_module._safe_path("../input.json", root=tmp_path)
+    with pytest.raises(AuditScanError, match="strict JSON"):
+        audit_scan_module._strict_json(b'{"a": 1, "a": 2}', label="duplicate")
+    with pytest.raises(AuditScanError, match="strict JSON"):
+        audit_scan_module._strict_json(b"not-json", label="invalid")
+    permissive = audit_scan_module._strict_json(b'{"value": NaN}', label="row", validate=False)
+    assert permissive["value"] != permissive["value"]
+    rows = audit_scan_module._jsonl_rows(
+        b'{"episode_id":"good"}\nnot-json\n\n{"episode_id":"bad","value":NaN}\n',
+        label="episodes",
+    )
+    assert [line for _row, line in rows] == [1, 2, 4]
+    assert rows[1][0] is None
+    assert rows[2][0]["episode_id"] == "bad"
+
+    source = tmp_path / "source.json"
+    source.write_text("{}", encoding="utf-8")
+    assert audit_scan_module._safe_path(source.name, root=tmp_path) == source
+    link = tmp_path / "link.json"
+    link.symlink_to(source)
+    with pytest.raises(AuditScanError, match="symlink"):
+        audit_scan_module._safe_path(link.name, root=tmp_path)

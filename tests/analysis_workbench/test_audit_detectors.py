@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from robot_sf.analysis_workbench import audit_detectors as detectors
 from robot_sf.analysis_workbench.audit_contracts import (
     SIGNAL_STATUSES,
     record_to_dict,
@@ -690,3 +691,307 @@ def test_empty_and_truncated_trace_cannot_be_reported_clear() -> None:
 def test_detector_rejects_non_mapping_rows() -> None:
     with pytest.raises(DetectorError):
         detect("stuck_no_progress", [])
+
+
+def test_detector_validation_helpers_reject_untrusted_declarations() -> None:
+    """Detector declaration and configuration boundaries remain strict and deterministic."""
+    with pytest.raises(DetectorError):
+        detectors._finite(True, name="value")
+    with pytest.raises(DetectorError):
+        detectors._finite(float("nan"), name="value")
+
+    spec = DetectorSpec(
+        "validation_detector",
+        "validation",
+        "validation",
+        parameters={"number": 1.0, "integer": 2},
+    )
+    assert detectors._configured_number({}, spec, "number", minimum=2.0) is None
+    assert detectors._configured_number({"number": "bad"}, spec, "number") is None
+    assert detectors._configured_number({"number": 2.0}, spec, "number", minimum=2.0) == 2.0
+    assert (
+        detectors._configured_number(
+            {"number": 2.0}, spec, "number", minimum=2.0, strictly_greater=True
+        )
+        is None
+    )
+    assert detectors._configured_integer({"integer": 2.5}, spec, "integer") is None
+    assert detectors._configured_integer({"integer": 1}, spec, "integer", minimum=2) is None
+    assert detectors._configured_integer({}, spec, "integer", minimum=2) == 2
+
+    recursive_list: list[object] = []
+    recursive_list.append(recursive_list)
+    recursive_mapping: dict[str, object] = {}
+    recursive_mapping["self"] = recursive_mapping
+    assert detectors._contains_nonfinite(recursive_list) is False
+    assert detectors._contains_nonfinite(recursive_mapping) is False
+    assert detectors._promised_missing("") is True
+    assert detectors._promised_missing([]) is True
+    assert detectors._promised_missing(0) is False
+
+    with pytest.raises(DetectorError, match="mapping"):
+        detectors._closed([], name="closed")
+    with pytest.raises(DetectorError, match="strict JSON"):
+        detectors._closed({"value": float("inf")}, name="closed")
+    with pytest.raises(DetectorError, match="strict JSON"):
+        detectors._closed({1: "value"}, name="closed")
+    assert detectors._strings(None, name="strings") == ()
+    with pytest.raises(DetectorError, match="sequence"):
+        detectors._strings("abc", name="strings")
+    with pytest.raises(DetectorError, match="non-empty"):
+        detectors._strings(["ok", ""], name="strings")
+
+    with pytest.raises(DetectorError, match="advisory"):
+        DetectorSpec("bad", "family", "description", advisory="yes")  # type: ignore[arg-type]
+    with pytest.raises(DetectorError, match="units"):
+        DetectorSpec("bad", "family", "description", units={"meters": 1})  # type: ignore[arg-type]
+    with pytest.raises(DetectorError, match="version"):
+        DetectorRegistry(version="")
+    with pytest.raises(DetectorError, match="DetectorSpec"):
+        DetectorRegistry(detectors=(object(),))  # type: ignore[arg-type]
+    with pytest.raises(KeyError):
+        spec_registry = DetectorRegistry(detectors=(spec,))
+        spec_registry.get("missing")
+
+
+def test_detector_admission_and_outcome_surfaces_fail_closed() -> None:
+    """Nested status, fallback, and compatibility projections cannot be hidden."""
+    assert detectors._counter_failure(False, path="counter") is None
+    assert detectors._counter_failure(True, path="counter") == ("unavailable", "counter_nonzero")
+    assert detectors._counter_failure(-1, path="counter") == ("error", "counter_malformed")
+    assert detectors._counter_failure({"steps": 0}, path="counter") is None
+    assert detectors._counter_failure({"steps": ["fallback"]}, path="counter") == (
+        "unavailable",
+        "counter.steps_nonzero",
+    )
+    assert detectors._counter_failure({1: 0}, path="counter") == ("error", "counter_malformed")
+    assert detectors._counter_failure([], path="counter") is None
+    assert detectors._counter_failure("fallback", path="counter") == (
+        "error",
+        "counter_malformed",
+    )
+
+    assert detectors._admission_failure({"algorithm_metadata": 1}) == (
+        "error",
+        "algorithm_metadata_malformed",
+    )
+    assert detectors._admission_failure({"algorithm_metadata": {"analysis_trace": 1}}) == (
+        "error",
+        "analysis_trace_malformed",
+    )
+    assert detectors._admission_failure({"analysis_trace": []}) == (
+        "error",
+        "analysis_trace_malformed",
+    )
+    assert detectors._admission_failure({"metrics": []}) == ("error", "metrics_malformed")
+    assert detectors._admission_failure({"status": ""}) == ("error", "row.status_malformed")
+    assert detectors._admission_failure({"status": "future-status"}) == (
+        "unavailable",
+        "unknown_execution_status_future_status",
+    )
+    assert detectors._admission_failure({"status": "collision"}) is None
+    assert detectors._admission_failure({"metrics": {"fallback_steps": {"steps": 1}}}) == (
+        "unavailable",
+        "metrics.fallback_steps.steps_nonzero",
+    )
+    assert detectors._admission_failure({"value": float("inf")}) == (
+        "error",
+        "row_contains_nonfinite_value",
+    )
+    containers = detectors._admission_containers(
+        {"analysis_trace": {}, "algorithm_metadata": {"analysis_trace": {}}}
+    )
+    assert [name for name, _value in containers].count("analysis_trace") == 2
+
+    outcome = detectors._outcome(
+        {
+            "outcome": "success",
+            "metrics": {
+                "success": 1,
+                "collision": 0,
+                "timeout": 1,
+                "collisions": 2,
+                "collision_count": 3,
+            },
+        }
+    )
+    assert outcome["label"] == "success"
+    assert outcome["success"] is True
+    assert outcome["collision"] is False
+    assert outcome["timeout"] is True
+    assert outcome["collision_count"] == 2.0
+
+
+def test_detector_trace_geometry_and_boolean_adapters_are_explicit() -> None:
+    """Trace and geometry adapters distinguish absent, malformed, and invalid data."""
+    assert detectors._mapping({"key": "value"}) is not None
+    assert detectors._mapping(None) is None
+    assert detectors._first_mapping({"first": 1, "second": {"ok": True}}, "first", "second") == {
+        "ok": True
+    }
+    assert detectors._first_mapping({}, "first") is None
+    assert (
+        detectors._metrics({"operational_metrics": {"clearance_m": 1.0}, "clearance_m": 2.0})[
+            "clearance_m"
+        ]
+        == 1.0
+    )
+
+    with pytest.raises(DetectorError, match="two-coordinate"):
+        detectors._vector("bad", name="point")
+    assert detectors._optional_vector(None) is None
+    assert detectors._position({"robot": "bad"}) is None
+    assert detectors._position({"robot": {}}) is None
+    assert detectors._position({"robot": {"position": [1.0, 2.0]}}) == (1.0, 2.0)
+
+    malformed_coverage = {"trace_coverage": {"status": 3}, "trace": {"frames": []}}
+    assert detectors._trace(malformed_coverage) == (None, "trace_coverage_malformed")
+    assert detectors._trace({"trace": {"trajectory": [{"step": 1}]}})[1] is None
+    assert detectors._trace({"trace": {"frames": ["bad"]}}) == (None, "trace_frame_malformed")
+    with pytest.raises(DetectorError, match="robot_position_missing"):
+        detectors._trace_positions({"trace": {"frames": [{"time_s": 0.0, "robot": {}}]}})
+    with pytest.raises(DetectorError, match="trace_time_missing"):
+        detectors._trace_positions({"trace": {"frames": [{"robot": {"position": [0, 0]}}]}})
+    with pytest.raises(DetectorError, match="nonmonotonic"):
+        detectors._trace_positions(
+            {
+                "trace": {
+                    "frames": [
+                        {"time_s": 1.0, "robot": {"position": [0, 0]}},
+                        {"time_s": 1.0, "robot": {"position": [1, 0]}},
+                    ]
+                }
+            }
+        )
+    with pytest.raises(DetectorError, match="trace_empty"):
+        detectors._trace_positions({"trace": {"frames": []}})
+    assert detectors._trace_interval([]) is None
+    assert detectors._trace_interval([{"time_s": "bad"}]) is None
+
+    assert detectors._goal({"goal": {"x": 1.0, "y": 2.0}}) == ((1.0, 2.0), None)
+    assert detectors._goal({"goal": "waypoint-id"}) == (None, None)
+    assert detectors._goal_context(
+        {"active_waypoint": "waypoint-id", "visible_goal": {"x": 2.0, "y": 3.0}}
+    ) == {"visible_goal": (2.0, 3.0)}
+    assert detectors._binary(True) is True
+    assert detectors._binary(0) is False
+    assert detectors._binary(1.0) is True
+    assert detectors._binary(2) is None
+    assert detectors._binary(float("nan")) is None
+
+    assert detectors._timeout({"timeout": True}) is True
+    assert detectors._collision({"collision": False}) is False
+    assert detectors._success({"success": False}) is False
+    assert detectors._outcome_label({"outcome": {"collision": True}}) == "collision"
+    assert detectors._outcome_label({"outcome": {"success": False}}) == "failure"
+    assert detectors._outcome_label({}) is None
+    assert "commands" in detectors._capabilities({"commands": []})
+    assert "metrics" in detectors._capabilities({"metrics": {}})
+    assert detectors._identity(
+        {"scenario_params": {"planner": "planner-from-params"}}, "planner_id"
+    ) == ("planner-from-params")
+
+
+def test_statistical_detectors_cover_contract_edges_and_missing_features() -> None:
+    """Advisory and typed-outcome detectors report explicit unavailable/error states."""
+    assert detectors._termination_exclusivity({}) is None
+    with pytest.raises(DetectorError, match="schema_version_malformed"):
+        detectors._termination_exclusivity({"schema_version": ""})
+    with pytest.raises(DetectorError, match="schema_version_conflict"):
+        detectors._termination_exclusivity({"schema_version": "a", "version": "b"})
+    assert detectors._termination_exclusivity(
+        {"schema_version": "termination.v1", "mutually_exclusive": True}
+    ) == (True, True, True)
+    assert detectors._termination_exclusivity(
+        {"schema_version": "termination.v1", "exclusive": False}
+    ) == (False, False, False)
+    with pytest.raises(DetectorError, match="exclusivity_conflict"):
+        detectors._termination_exclusivity(
+            {
+                "schema_version": "termination.v1",
+                "mutually_exclusive": True,
+                "exclusive": False,
+            }
+        )
+    assert detectors._termination_exclusivity(
+        {
+            "schema_version": "termination.v1",
+            "exclusivity": {"success_and_timeout_valid": False},
+        }
+    ) == (True, None, None)
+    with pytest.raises(DetectorError, match="success_timeout_malformed"):
+        detectors._termination_exclusivity(
+            {"schema_version": "termination.v1", "exclusivity": {"success_timeout": 1}}
+        )
+    with pytest.raises(DetectorError, match="exclusivity_conflict"):
+        detectors._termination_exclusivity(
+            {
+                "schema_version": "termination.v1",
+                "exclusivity": {"success_timeout": True, "success_and_timeout": False},
+            }
+        )
+    with pytest.raises(DetectorError, match="success_and_timeout_valid_malformed"):
+        detectors._termination_exclusivity(
+            {"schema_version": "termination.v1", "success_and_timeout_valid": "no"}
+        )
+
+    contradiction = {"episode_id": "typed", "outcome": {"success": True}}
+    assert _signal("outcome_metric_contradiction", contradiction).status == "unavailable"
+    malformed = {
+        **contradiction,
+        "termination_contract": {"schema_version": "termination.v1", "mutually_exclusive": True},
+        "outcome": {"success": "yes"},
+    }
+    assert _signal("outcome_metric_contradiction", malformed).status == "error"
+    collision_count = {
+        **contradiction,
+        "termination_contract": {"schema_version": "termination.v1", "mutually_exclusive": True},
+        "collision_count": -1,
+    }
+    assert _signal("outcome_metric_contradiction", collision_count).status == "error"
+
+    seed = {**_row("seed"), "metrics": {}}
+    assert _signal("seed_outlier", seed, cohort=[seed]).status == "unavailable"
+    assert (
+        _signal(
+            "seed_outlier", _row("seed"), cohort=[_row("seed")], config={"minimum_cohort": 1}
+        ).status
+        == "error"
+    )
+    multi = {**_row("multi"), "metrics": {"clearance_m": 1.0}}
+    peers = [
+        {**multi, "episode_id": f"peer-{index}", "metrics": {"clearance_m": 1.0}}
+        for index in range(2)
+    ]
+    assert (
+        _signal(
+            "cohort_multivariate_outlier",
+            multi,
+            cohort=[multi, *peers],
+            config={"minimum_cohort": 2, "features": "bad"},
+        ).status
+        == "error"
+    )
+    assert (
+        _signal(
+            "cohort_multivariate_outlier",
+            multi,
+            cohort=[multi, *peers],
+            config={"minimum_cohort": 2, "features": ["missing"]},
+        ).status
+        == "unavailable"
+    )
+    assert detectors._robust_z(2.0, [1.0, 1.0]) == 1_000_000_000.0
+    assert detectors._robust_z(1.0, [0.0, 1.0, 2.0]) == pytest.approx(0.0)
+
+    trajectory = {**_row("trajectory"), "trace": _trace([(0.0, 0.0), (1.0, 0.0)])}
+    cohort = [trajectory, {**trajectory, "episode_id": "peer"}]
+    assert (
+        _signal(
+            "trajectory_shape_outlier", trajectory, cohort=cohort, config={"minimum_cohort": 1}
+        ).status
+        == "error"
+    )
+    assert (
+        _signal("trajectory_shape_outlier", trajectory, cohort=[trajectory]).status == "unavailable"
+    )

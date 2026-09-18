@@ -1648,3 +1648,100 @@ def test_cli_main_invalid_arguments_in_process(
     parsed = component_result_from_dict(json.loads(capsys.readouterr().out))
     assert parsed.status == "failed"
     assert parsed.reason == "invalid_cli_arguments"
+
+
+def test_directory_inventory_rejects_admission_change(tmp_path: Path, monkeypatch) -> None:
+    """Inventory must fail closed when a regular entry cannot be admitted."""
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "episodes.jsonl").write_text("{}\n", encoding="utf-8")
+
+    def reject_admission(*_args: object, **_kwargs: object) -> object:
+        raise OSError("simulated inventory race")
+
+    monkeypatch.setattr(review_context, "_capture_descriptor_admission", reject_admission)
+    with pytest.raises(ReviewContractsValidationError, match="changed during inventory"):
+        review_context._directory_files(source, file_admissions={})
+
+
+def test_descriptor_backed_read_binds_expected_provenance(tmp_path: Path) -> None:
+    """Descriptor reads reject mismatched root, entry, and admission identities."""
+    source = tmp_path / "source"
+    nested = source / "nested"
+    nested.mkdir(parents=True)
+    payload = nested / "episodes.jsonl"
+    payload.write_text('{"episode_id": "ep-1"}\n', encoding="utf-8")
+    relative = ("nested", payload.name)
+    admission = review_context._capture_descriptor_admission(
+        relative,
+        source,
+        kind="fixture source",
+    )
+
+    assert (
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected=admission,
+        )
+        == payload.read_bytes()
+    )
+    with pytest.raises(ReviewContractsValidationError, match="replaced before read"):
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected=replace(admission, entry_inode=admission.entry_inode + 1),
+        )
+    with pytest.raises(ReviewContractsValidationError, match="root was replaced"):
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected_root_identity=(admission.root_device, admission.root_inode + 1),
+        )
+    with pytest.raises(ReviewContractsValidationError, match="replaced before read"):
+        review_context._read_descriptor_backed_file(
+            relative,
+            source,
+            limit=1024,
+            kind="fixture source",
+            expected_entry_identity=(admission.entry_device, admission.entry_inode + 1),
+        )
+
+
+def test_publication_reopens_admitted_output_descriptors(tmp_path: Path) -> None:
+    """Publication reopens both parent and reserved directory by retained identity."""
+    root = tmp_path / "output-root"
+    root.mkdir()
+    parent_guard = review_context._open_output_parent_guard(root, ("nested", "report.json"))
+    try:
+        current_parent = review_context._open_current_output_parent(parent_guard)
+        try:
+            parent_stat = os.fstat(current_parent)
+            assert (parent_stat.st_dev, parent_stat.st_ino) == (
+                parent_guard.parent_device,
+                parent_guard.parent_inode,
+            )
+        finally:
+            os.close(current_parent)
+    finally:
+        parent_guard.close()
+
+    reserved = review_context._reserve_output_directory("reserved", root)
+    try:
+        current_directory = review_context._open_current_output_directory(reserved)
+        try:
+            directory_stat = os.fstat(current_directory)
+            assert (directory_stat.st_dev, directory_stat.st_ino) == (
+                reserved.device,
+                reserved.inode,
+            )
+        finally:
+            os.close(current_directory)
+    finally:
+        review_context._release_empty_output(reserved)

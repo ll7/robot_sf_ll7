@@ -91,6 +91,9 @@ def test_timeline_fixture_exposes_recorded_values_and_missing_reasons(tmp_path: 
     assert planner["costs"][0]["value"] == 1.2
     assert planner["constraints"]["collision_free"] is True
     controls = model["panels"]["controls"]
+    assert controls["status"] == "available"
+    assert controls["reason"] == ""
+    assert controls["missing_reason"] is None
     assert controls["commanded"]["value"]["linear_m_s"] == 0.5
     assert controls["executed"]["value"]["linear_m_s"] == 0.4
     assert controls["comparison"]["value"]["linear_m_s"] == pytest.approx(-0.1)
@@ -107,6 +110,15 @@ def test_timeline_fixture_exposes_recorded_values_and_missing_reasons(tmp_path: 
         assert model["panels"][panel_name]["context_revision"] == 4
         assert model["panels"][panel_name]["selection_revision"] == 4
     assert model["provenance"]["admission"] == "not_evaluated"
+    for panel_name in ("planner", "controls"):
+        assert model["panels"][panel_name]["selected_actor_id"] == "ped-1"
+    for kind in ("planner", "controls", "planner_candidate"):
+        references = [
+            reference for reference in model["evidence_references"] if reference["kind"] == kind
+        ]
+        assert references
+        assert all(reference["actor_id"] == "ped-1" for reference in references)
+        assert all(reference["evidence_status"] == "recorded" for reference in references)
 
 
 def test_analysis_trace_inventory_preserves_amv_commanded_and_applied_controls(
@@ -375,6 +387,35 @@ def test_missing_control_dimensions_remain_unavailable_not_zero(tmp_path: Path) 
     assert comparison["status"] == "unavailable"
     assert comparison["missing_reason"] == "commanded_or_executed_control_not_recorded"
     assert "turn_rate_rad_s" not in model["panels"]["controls"]["commanded"]["value"]
+
+
+def test_partial_control_dimensions_are_unavailable_with_reason(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    payload = json.loads((tmp_path / "timeline.json").read_text())
+    payload["frames"][0]["state"]["controls"] = {
+        "commanded": {"linear_m_s": 0.5},
+        "executed": {"linear_m_s": 0.4},
+    }
+    (tmp_path / "timeline.json").write_text(json.dumps(payload))
+    request = _request(tmp_path, config={"cursor_time_s": 0.0})
+
+    controls = review_diagnostics.build_diagnostic_model(request, base=tmp_path)["panels"][
+        "controls"
+    ]
+
+    assert controls["status"] == "partial"
+    assert controls["reason"] == "control_dimension_missing"
+    assert controls["missing_reason"] == "control_dimension_missing"
+    for source_name in ("commanded", "executed"):
+        source = controls[source_name]
+        assert source["status"] == "partial"
+        assert source["missing_dimensions"] == ["turn_rate_rad_s"]
+        assert source["missing_reason"] == "control_dimension_missing"
+    comparison = controls["comparison"]
+    assert comparison["status"] == "unavailable"
+    assert comparison["value"] is None
+    assert comparison["missing_dimensions"] == ["turn_rate_rad_s"]
+    assert comparison["missing_reason"] == "control_dimension_missing"
 
 
 def test_analysis_trace_without_units_is_unavailable_not_partial_controls(tmp_path: Path) -> None:

@@ -76,6 +76,7 @@ VALUE_ORIGINS = (
     "post_hoc",
     "unavailable",
 )
+CONTROL_DIMENSIONS = ("linear_m_s", "turn_rate_rad_s")
 INVENTORY_KINDS = {
     SIMULATION_TIMELINE_SCHEMA_VERSION: "simulation_timeline",
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION: "simulation_trace_export",
@@ -1268,7 +1269,7 @@ def _control_values(value: Any) -> dict[str, Any]:
     return output
 
 
-def _control_snapshot(sample: DiagnosticSample, units: Any) -> dict[str, Any]:
+def _control_snapshot(sample: DiagnosticSample, units: Any) -> dict[str, Any]:  # noqa: C901
     controls = sample.controls
     command_raw = _first_mapping(controls, ("commanded", "requested", "desired", "selected"))
     executed_raw = _first_mapping(
@@ -1283,21 +1284,52 @@ def _control_snapshot(sample: DiagnosticSample, units: Any) -> dict[str, Any]:
     executed = _control_values(executed_raw[1] if executed_raw else None)
     # Keep the original control record for reviewers; do not replace missing
     # dimensions with zero or with robot velocity.
+
+    def state(
+        values: Mapping[str, Any],
+        *,
+        value_origin: str,
+        source_field: str | None,
+        not_recorded_reason: str,
+    ) -> dict[str, Any]:
+        recorded_dimensions = [dimension for dimension in CONTROL_DIMENSIONS if dimension in values]
+        missing_dimensions = [
+            dimension for dimension in CONTROL_DIMENSIONS if dimension not in values
+        ]
+        if not recorded_dimensions:
+            status = "unavailable"
+            missing_reason = not_recorded_reason
+        elif missing_dimensions:
+            status = "partial"
+            missing_reason = "control_dimension_missing"
+        else:
+            status = "available"
+            missing_reason = None
+        return {
+            "status": status,
+            "value": values or None,
+            "units": values.get("units", units),
+            "value_origin": value_origin if recorded_dimensions else "unavailable",
+            "source_field": source_field,
+            "missing_dimensions": missing_dimensions,
+            "missing_reason": missing_reason,
+        }
+
     command_state = {
-        "status": "available" if command else "unavailable",
-        "value": command or None,
-        "units": command.get("units", units),
-        "value_origin": "planner_visible" if command else "unavailable",
-        "source_field": command_raw[0] if command_raw else None,
-        "missing_reason": "commanded_control_not_recorded" if not command else None,
+        **state(
+            command,
+            value_origin="planner_visible",
+            source_field=command_raw[0] if command_raw else None,
+            not_recorded_reason="commanded_control_not_recorded",
+        )
     }
     executed_state = {
-        "status": "available" if executed else "unavailable",
-        "value": executed or None,
-        "units": executed.get("units", units),
-        "value_origin": "simulator_ground_truth" if executed else "unavailable",
-        "source_field": executed_raw[0] if executed_raw else None,
-        "missing_reason": "executed_control_not_recorded" if not executed else None,
+        **state(
+            executed,
+            value_origin="simulator_ground_truth",
+            source_field=executed_raw[0] if executed_raw else None,
+            not_recorded_reason="executed_control_not_recorded",
+        )
     }
     comparison: dict[str, Any] = {
         "status": "unavailable",
@@ -1305,36 +1337,55 @@ def _control_snapshot(sample: DiagnosticSample, units: Any) -> dict[str, Any]:
         "units": command.get("units", units),
         "value_origin": "post_hoc",
         "missing_reason": "commanded_or_executed_control_not_recorded",
+        "missing_dimensions": list(CONTROL_DIMENSIONS),
     }
+    command_dimensions = {key for key in CONTROL_DIMENSIONS if key in command}
+    executed_dimensions = {key for key in CONTROL_DIMENSIONS if key in executed}
     command_units = _units_token(command.get("units", units))
     executed_units = _units_token(executed.get("units", units))
-    if command and executed and not command_units:
+    if command_dimensions and executed_dimensions and not command_units:
         comparison["missing_reason"] = "control_units_not_recorded"
-    elif command and executed and command_units == executed_units:
-        delta: dict[str, float] = {}
-        for key in ("linear_m_s", "turn_rate_rad_s"):
-            if key in command and key in executed:
+    elif command_dimensions and executed_dimensions and command_units == executed_units:
+        missing_dimensions = sorted(
+            set(CONTROL_DIMENSIONS) - command_dimensions.intersection(executed_dimensions)
+        )
+        comparison["missing_dimensions"] = missing_dimensions
+        if missing_dimensions:
+            comparison["missing_reason"] = "control_dimension_missing"
+        else:
+            delta: dict[str, float] = {}
+            for key in CONTROL_DIMENSIONS:
                 delta[key] = executed[key] - command[key]
-        if delta:
             comparison.update(
                 {
                     "status": "available",
                     "value": delta,
                     "missing_reason": None,
+                    "missing_dimensions": [],
                     "derived_from": ["commanded", "executed"],
                 }
             )
-        else:
-            comparison["missing_reason"] = "control_dimension_missing"
-    elif command and executed:
+    elif command_dimensions and executed_dimensions:
         comparison["missing_reason"] = "control_units_mismatch"
+        comparison["missing_dimensions"] = []
+    else:
+        comparison["missing_dimensions"] = sorted(
+            set(CONTROL_DIMENSIONS) - command_dimensions.intersection(executed_dimensions)
+        )
+    state_statuses = (command_state["status"], executed_state["status"])
+    if all(status == "available" for status in state_statuses):
+        status = "available"
+    elif any(status != "unavailable" for status in state_statuses):
+        status = "partial"
+    else:
+        status = "unavailable"
     return {
         "commanded": command_state,
         "executed": executed_state,
         "comparison": comparison,
-        "status": "available"
-        if command_state["status"] == "available" or executed_state["status"] == "available"
-        else "unavailable",
+        "status": status,
+        "reason": "" if status == "available" else comparison["missing_reason"],
+        "missing_reason": None if status == "available" else comparison["missing_reason"],
         "source_time_s": sample.time_s,
         "source_index": sample.source_index,
         "step": sample.step,
@@ -1776,6 +1827,7 @@ def _build_document(  # noqa: C901, PLR0915
         "toggleable": True,
         "context_revision": context.context_revision,
         "selection_revision": context.context_revision,
+        "selected_actor_id": selected_actor,
         "status": "unavailable",
         "reason": "trace_not_recorded" if primary is None else "source_time_unavailable",
         "source_artifact_id": primary.ref.artifact_id if primary else None,
@@ -1802,6 +1854,7 @@ def _build_document(  # noqa: C901, PLR0915
         "toggleable": True,
         "context_revision": context.context_revision,
         "selection_revision": context.context_revision,
+        "selected_actor_id": selected_actor,
         "status": "unavailable",
         "reason": "trace_not_recorded" if primary is None else "source_time_unavailable",
         "source_artifact_id": primary.ref.artifact_id if primary else None,
@@ -1895,6 +1948,7 @@ def _build_document(  # noqa: C901, PLR0915
                     context,
                     kind="planner",
                     pointer=selected.pointer + "/planner",
+                    actor_id=selected_actor,
                     units=primary.units,
                     value_origin="planner_visible",
                 )
@@ -1906,6 +1960,7 @@ def _build_document(  # noqa: C901, PLR0915
                     context,
                     kind="controls",
                     pointer=selected.pointer + "/controls",
+                    actor_id=selected_actor,
                     units=primary.units,
                     value_origin="post_hoc",
                 )
@@ -1936,6 +1991,7 @@ def _build_document(  # noqa: C901, PLR0915
                         context,
                         kind="planner_candidate",
                         pointer=f"{selected.pointer}/planner/candidates/{index}",
+                        actor_id=selected_actor,
                         units=primary.units,
                         value_origin="planner_visible",
                     )

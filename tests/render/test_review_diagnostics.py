@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -96,6 +97,9 @@ def test_timeline_fixture_exposes_recorded_values_and_missing_reasons(tmp_path: 
     assert pedestrians["actors"][0]["actor_id"] == "ped-1"
     assert pedestrians["actors"][0]["diagnostics"]["clearance_m"] == 1.9
     assert pedestrians["diagnostics_state"]["value_origin"] == "simulator_ground_truth"
+    diagnosis_panel = model["panels"]["failure_diagnosis"]
+    assert diagnosis_panel["status"] == "unavailable"
+    assert "source_time_not_recorded" in diagnosis_panel["missing_reasons"]
     assert model["selection_revision"] == 4
     assert all(reference["context_revision"] == 4 for reference in model["evidence_references"])
     assert model["provenance"]["admission"] == "not_evaluated"
@@ -131,7 +135,7 @@ def test_optional_diagnosis_stream_is_independent(tmp_path: Path) -> None:
             _source_ref(tmp_path, "timeline", "timeline.json", "simulation-timeline.v1"),
             _source_ref(tmp_path, "diagnosis", "diagnosis.json", "failure_diagnosis.v1"),
         ],
-        config={"cursor_time_s": 0.0},
+        config={"cursor_time_s": 0.5, "context_revision": 8},
     )
 
     result = review_diagnostics.run(request, base=tmp_path)
@@ -140,6 +144,27 @@ def test_optional_diagnosis_stream_is_independent(tmp_path: Path) -> None:
     assert result.status == "complete"
     assert model["panels"]["failure_diagnosis"]["status"] == "available"
     assert model["panels"]["planner"]["status"] == "available"
+    diagnosis_panel = model["panels"]["failure_diagnosis"]
+    record = diagnosis_panel["records"][0]
+    assert record["source_artifact_id"] == "diagnosis"
+    assert record["source_time_s"] == 0.0
+    assert record["actor_id"] == "ped-1"
+    assert record["context_revision"] == 8
+    assert "units_not_recorded" in record["missing_reasons"]
+    assert diagnosis_panel["source_artifact_id"] == "diagnosis"
+    assert diagnosis_panel["source_time_s"] == 0.0
+    assert diagnosis_panel["actor_id"] == "ped-1"
+    assert "units_not_recorded" in diagnosis_panel["missing_reasons"]
+    diagnosis_reference = next(
+        reference
+        for reference in model["evidence_references"]
+        if reference["kind"] == "failure_diagnosis"
+    )
+    assert diagnosis_reference["source_artifact_id"] == "diagnosis"
+    assert diagnosis_reference["source_time_s"] == 0.0
+    assert diagnosis_reference["actor_id"] == "ped-1"
+    assert diagnosis_reference["context_revision"] == 8
+    assert diagnosis_reference["missing_reason"] == "units_not_recorded"
     assert (tmp_path / "out" / review_diagnostics.OUTPUT_REFERENCE_FILENAME).is_file()
 
 
@@ -157,7 +182,7 @@ def test_missing_control_dimensions_remain_unavailable_not_zero(tmp_path: Path) 
     assert "turn_rate_rad_s" not in model["panels"]["controls"]["commanded"]["value"]
 
 
-def test_control_comparison_requires_recorded_units(tmp_path: Path) -> None:
+def test_analysis_trace_without_units_is_unavailable_not_partial_controls(tmp_path: Path) -> None:
     _stage(tmp_path)
     payload = json.loads((tmp_path / "analysis-trace.json").read_text())
     payload.pop("units")
@@ -168,9 +193,11 @@ def test_control_comparison_requires_recorded_units(tmp_path: Path) -> None:
         config={"actor_id": "ped-a"},
     )
     model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
-    comparison = model["panels"]["controls"]["comparison"]
-    assert comparison["status"] == "unavailable"
-    assert comparison["missing_reason"] == "control_units_not_recorded"
+    inventory = model["inventories"][0]
+    assert model["status"] == "failed"
+    assert inventory["status"] == "failed"
+    assert inventory["reason"].startswith("source_schema_invalid")
+    assert model["panels"]["controls"]["comparison"]["status"] == "unavailable"
 
 
 def test_selected_actor_disappearance_is_explicit(tmp_path: Path) -> None:
@@ -227,6 +254,241 @@ def test_symlink_source_and_output_collision_fail_closed(tmp_path: Path) -> None
     result = review_diagnostics.run(request, base=tmp_path)
     assert result.status == "failed"
     assert "unsafe_output_path" in result.reason
+
+
+def test_retained_source_root_fd_survives_root_rename_and_symlink_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stage(tmp_path)
+    outside = tmp_path.parent / "review-diagnostics-source-outside"
+    outside.mkdir()
+    original_root = tmp_path
+    moved_root = tmp_path.parent / "review-diagnostics-source-moved"
+    request = _request(tmp_path, output="out")
+    original_load_sources = review_diagnostics._load_sources
+
+    def move_root_then_load(
+        component_request: review_diagnostics.ComponentRequest,
+        root: Path,
+        *,
+        root_fd: int | None = None,
+    ) -> list[review_diagnostics._LoadedSource]:
+        os.rename(original_root, moved_root)
+        original_root.symlink_to(outside, target_is_directory=True)
+        return original_load_sources(component_request, root, root_fd=root_fd)
+
+    monkeypatch.setattr(review_diagnostics, "_load_sources", move_root_then_load)
+    result = review_diagnostics.run(request, base=original_root)
+
+    assert result.status == "complete"
+    assert not (outside / "out").exists()
+    assert (moved_root / "out" / review_diagnostics.OUTPUT_MODEL_FILENAME).is_file()
+
+
+def test_retained_output_fd_survives_root_replacement_without_outside_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stage(tmp_path)
+    outside = tmp_path.parent / "review-diagnostics-output-outside"
+    outside.mkdir()
+    original_root = tmp_path
+    moved_root = tmp_path.parent / "review-diagnostics-output-moved"
+    request = _request(tmp_path, output="nested/out")
+    original_build_document = review_diagnostics._build_document
+
+    def replace_root_before_write(
+        component_request: review_diagnostics.ComponentRequest,
+        sources: list[review_diagnostics._LoadedSource],
+        config: dict[str, object],
+    ) -> tuple[dict[str, object], list[dict[str, object]], str]:
+        os.rename(original_root, moved_root)
+        original_root.symlink_to(outside, target_is_directory=True)
+        return original_build_document(component_request, sources, config)
+
+    monkeypatch.setattr(review_diagnostics, "_build_document", replace_root_before_write)
+    result = review_diagnostics.run(request, base=original_root)
+
+    assert result.status == "complete"
+    assert not (outside / "nested").exists()
+    assert (moved_root / "nested" / "out" / review_diagnostics.OUTPUT_HTML_FILENAME).is_file()
+
+
+def test_retained_intermediate_source_fd_survives_rename_and_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stage(tmp_path)
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    shutil.copyfile(tmp_path / "timeline.json", nested / "timeline.json")
+    outside = tmp_path.parent / "review-diagnostics-intermediate-outside"
+    outside.mkdir()
+    moved_nested = tmp_path / "nested-moved"
+    request = _request(
+        tmp_path,
+        sources=[
+            _source_ref(tmp_path, "timeline", "nested/timeline.json", "simulation-timeline.v1")
+        ],
+    )
+    original_load_sources = review_diagnostics._load_sources
+    original_open = os.open
+    raced = False
+
+    def move_intermediate_after_open(
+        component_request: review_diagnostics.ComponentRequest,
+        root: Path,
+        *,
+        root_fd: int | None = None,
+    ) -> list[review_diagnostics._LoadedSource]:
+        nonlocal raced
+
+        def open_with_race(file: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal raced
+            descriptor = original_open(file, flags, *args, **kwargs)
+            if os.fsdecode(os.fspath(file)) == "nested" and not raced:
+                raced = True
+                os.rename(nested, moved_nested)
+                nested.symlink_to(outside, target_is_directory=True)
+            return descriptor
+
+        monkeypatch.setattr(review_diagnostics.os, "open", open_with_race)
+        monkeypatch.setattr(
+            review_diagnostics.os,
+            "supports_dir_fd",
+            {*review_diagnostics.os.supports_dir_fd, open_with_race},
+        )
+        try:
+            return original_load_sources(component_request, root, root_fd=root_fd)
+        finally:
+            monkeypatch.setattr(review_diagnostics.os, "open", original_open)
+
+    monkeypatch.setattr(review_diagnostics, "_load_sources", move_intermediate_after_open)
+    result = review_diagnostics.run(request, base=tmp_path)
+
+    assert raced
+    assert result.status == "complete"
+    assert not (outside / "timeline.json").exists()
+    assert (tmp_path / "out" / review_diagnostics.OUTPUT_MODEL_FILENAME).is_file()
+
+
+def test_retained_output_parent_fd_survives_parent_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stage(tmp_path)
+    outside = tmp_path.parent / "review-diagnostics-output-parent-outside"
+    outside.mkdir()
+    original_root = tmp_path
+    nested = original_root / "nested"
+    moved_nested = original_root / "nested-moved"
+    request = _request(tmp_path, output="nested/out")
+    original_build_document = review_diagnostics._build_document
+
+    def replace_parent_before_write(
+        component_request: review_diagnostics.ComponentRequest,
+        sources: list[review_diagnostics._LoadedSource],
+        config: dict[str, object],
+    ) -> tuple[dict[str, object], list[dict[str, object]], str]:
+        os.rename(nested, moved_nested)
+        nested.symlink_to(outside, target_is_directory=True)
+        return original_build_document(component_request, sources, config)
+
+    monkeypatch.setattr(review_diagnostics, "_build_document", replace_parent_before_write)
+    result = review_diagnostics.run(request, base=original_root)
+
+    assert result.status == "complete"
+    assert not (outside / "out").exists()
+    assert (moved_nested / "out" / review_diagnostics.OUTPUT_REFERENCE_FILENAME).is_file()
+
+
+def test_output_component_boundary_symlink_cannot_escape_descriptor_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stage(tmp_path)
+    outside = tmp_path.parent / "review-diagnostics-component-outside"
+    outside.mkdir()
+    request = _request(tmp_path, output="out")
+    original_copy = review_diagnostics._copy_web_component
+
+    def symlink_component_boundary(output_dir: review_diagnostics._DirectoryHandle) -> str:
+        (output_dir.path / "components").symlink_to(outside, target_is_directory=True)
+        return original_copy(output_dir)
+
+    monkeypatch.setattr(review_diagnostics, "_copy_web_component", symlink_component_boundary)
+    result = review_diagnostics.run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert not (outside / "review_diagnostics" / "review_diagnostics.js").exists()
+
+
+def test_missing_source_sha_is_non_complete_even_when_payload_is_valid(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    request = _request(
+        tmp_path,
+        sources=[
+            {
+                "artifact_id": "timeline",
+                "uri": "timeline.json",
+                "format": "simulation-timeline.v1",
+                "schema": "simulation-timeline.v1",
+            }
+        ],
+    )
+
+    result = review_diagnostics.run(request, base=tmp_path)
+    model = json.loads((tmp_path / "out" / review_diagnostics.OUTPUT_MODEL_FILENAME).read_text())
+
+    assert result.status == "partial"
+    assert not result.artifacts
+    assert model["inventories"][0]["integrity"] == "unbound"
+    assert model["inventories"][0]["reason"] == "source_integrity_unbound"
+
+
+def test_analysis_trace_requires_complete_owner_coverage(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    payload = json.loads((tmp_path / "analysis-trace.json").read_text())
+    payload.pop("artifact_sha256")
+    (tmp_path / "analysis-trace.json").write_text(json.dumps(payload))
+    request = _request(
+        tmp_path,
+        sources=[_source_ref(tmp_path, "analysis", "analysis-trace.json", "analysis-trace.v1")],
+        config={"actor_id": "ped-a"},
+    )
+
+    model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+    assert model["status"] == "failed"
+    assert model["inventories"][0]["status"] == "failed"
+    assert "source_schema_invalid" in model["inventories"][0]["reason"]
+    assert "artifact_hash" in model["inventories"][0]["reason"]
+
+
+def test_descriptor_helpers_fail_closed_for_root_and_output_boundaries(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    assert review_diagnostics._read_under(tmp_path, "timeline.json").startswith(b"{")
+
+    root_handle = review_diagnostics._open_directory(tmp_path)
+    try:
+        (tmp_path / "directory").mkdir()
+        with pytest.raises(ValueError, match="source_not_regular_file"):
+            review_diagnostics._read_under(tmp_path, "directory", root_fd=root_handle.fd)
+        with pytest.raises(ValueError, match="invalid output component"):
+            review_diagnostics._ensure_directory(root_handle, ("nested/file",))
+        with pytest.raises(ValueError, match="artifact name"):
+            review_diagnostics._write_text(root_handle, "nested/file.txt", "x")
+    finally:
+        root_handle.close()
+        root_handle.close()
+
+    missing_root = tmp_path / "missing-root"
+    with pytest.raises(ValueError, match="source_root_missing"):
+        review_diagnostics._open_directory(missing_root)
+    root_file = tmp_path / "root-file"
+    root_file.write_text("x")
+    with pytest.raises(ValueError, match="source_root_not_directory"):
+        review_diagnostics._open_directory(root_file)
+    root_link = tmp_path / "root-link"
+    root_link.symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(ValueError, match="source_root_not_directory|unsafe_source_path"):
+        review_diagnostics._open_directory(root_link)
 
 
 def test_unit_mismatch_is_unavailable(tmp_path: Path) -> None:

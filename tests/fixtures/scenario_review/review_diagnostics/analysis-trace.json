@@ -10,9 +10,9 @@
   "planner": "analysis-fixture-planner",
   "planner_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "scenario_id": "analysis-corridor",
-  "map_file": null,
+  "map_file": "fixture-map.svg",
   "scenario_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "map_digest": null,
+  "map_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "config_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "config_hash": "fixture-config",
   "git_hash": "cccccccccccccccccccccccccccccccccccccccc",
@@ -26,9 +26,10 @@
         "selected_action": {"linear_velocity": 0.25, "angular_velocity": -0.1},
         "amv": {"requested_linear_m_s": 0.25, "requested_angular_rad_s": -0.1, "applied_linear_m_s": 0.2, "applied_angular_rad_s": -0.1}
       },
-      "robot": {"actor_id": "robot", "position": [1.0, 0.0], "velocity": [0.2, 0.0]},
-      "pedestrians": [{"actor_id": "ped-a", "position": [2.0, 0.0], "velocity": [0.0, 0.0]}],
+      "robot": {"actor_id": "robot", "position": [1.0, 0.0], "velocity": [0.2, 0.0], "heading": 0.0, "radius_m": 0.3},
+      "pedestrians": [{"actor_id": "ped-a", "position": [2.0, 0.0], "velocity": [0.0, 0.0], "radius_m": 0.25}],
       "controls": {"requested": {"linear_m_s": 0.25, "turn_rate_rad_s": -0.1}, "applied": {"linear_m_s": 0.2, "turn_rate_rad_s": -0.1}}
     }
-  ]
+  ],
+  "artifact_sha256": "feb63b4af51fdb9a5508c7bb7df60eee46b8144a70ebc582131e398e7555126c"
 }

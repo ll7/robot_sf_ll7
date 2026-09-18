@@ -60,6 +60,14 @@ output collisions, and invalid JSON fail closed. The browser module renders
 text with DOM text nodes and makes no network requests, so recorded strings are
 not interpreted as markup or executable code.
 
+Source admission requires a declared SHA-256 that matches the bytes read. A
+valid source without that binding is retained for diagnostic inspection with an
+explicit `source_integrity_unbound` reason, but it cannot produce a complete
+result. `analysis-trace.v1` is additionally checked through its owning
+`trace_coverage` contract: identity, timing, finite actor state, controls,
+units, coordinate frame, provenance, and the canonical artifact digest must all
+be complete before the inventory is admitted.
+
 The checked-in fixtures under
 `tests/fixtures/scenario_review/review_diagnostics/` cover both timeline and
 analysis-trace inventories, optional diagnosis, missing values, actor

@@ -54,8 +54,35 @@ export class ReviewDiagnosticsController {
 
   setContextRevision(nextRevision) {
     if (!Number.isInteger(nextRevision) || nextRevision < this.revision) return false;
+    if (nextRevision === this.revision) return true;
+    const references = Array.isArray(this.model.evidence_references)
+      ? this.model.evidence_references
+      : [];
+    this.model.evidence_references = references.map((reference, index) => {
+      const missingReasons = Array.isArray(reference?.missing_reasons)
+        ? [...reference.missing_reasons]
+        : [];
+      if (!missingReasons.includes("context_revision_changed")) {
+        missingReasons.push("context_revision_changed");
+      }
+      return {
+        ...reference,
+        reference_id: `${String(reference?.source_artifact_id || "source")}:`
+          + `${String(reference?.kind || "evidence")}:`
+          + `${String(reference?.json_pointer || index)}:rev-${nextRevision}`,
+        context_revision: nextRevision,
+        selection_revision: nextRevision,
+        evidence_status: "stale_context",
+        stale: true,
+        missing_reason: "context_revision_changed",
+        missing_reasons: missingReasons,
+      };
+    });
     this.revision = nextRevision;
-    if (this.model.context) this.model.context.context_revision = nextRevision;
+    if (this.model.context) {
+      this.model.context.context_revision = nextRevision;
+      if (this.model.context.cursor) this.model.context.cursor.context_revision = nextRevision;
+    }
     this.model.selection_revision = nextRevision;
     this.render();
     return true;

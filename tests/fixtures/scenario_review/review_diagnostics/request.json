@@ -3,8 +3,8 @@
   "request_id": "srev18-fixture",
   "component_id": "srev18-review-diagnostics",
   "sources": [
-    {"artifact_id": "timeline", "uri": "timeline.json", "format": "simulation-timeline.v1"},
-    {"artifact_id": "diagnosis", "uri": "diagnosis.json", "format": "failure_diagnosis.v1"}
+    {"artifact_id": "timeline", "uri": "timeline.json", "format": "simulation-timeline.v1", "sha256": "a79ff8ac13f14932e4f3c4fff0c578a2fca79ce5d24f40dec010a284a8149dbf"},
+    {"artifact_id": "diagnosis", "uri": "diagnosis.json", "format": "failure_diagnosis.v1", "sha256": "e17f300680a4a334d78363a5112a5ac393dd74e3d3b07403a6664644c67ca688"}
   ],
   "output_directory": "out",
   "config": {

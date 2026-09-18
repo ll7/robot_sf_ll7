@@ -18,6 +18,7 @@ silently rebinding them.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
@@ -46,6 +47,7 @@ from robot_sf.analysis_workbench.review_contracts import (
 )
 from robot_sf.analysis_workbench.simulation_timeline import validate_simulation_timeline
 from robot_sf.analysis_workbench.simulation_trace_export import simulation_trace_export_from_dict
+from robot_sf.benchmark.analysis_trace import trace_coverage
 from robot_sf.benchmark.failure_diagnosis import validate_failure_diagnosis_payload
 from robot_sf.render.review_panels import ReviewContext, SourceTimeCursor
 
@@ -181,6 +183,21 @@ class _LoadedSource:
     source_error: str | None = None
 
 
+@dataclass
+class _DirectoryHandle:
+    """Descriptor-rooted directory identity used for all source/output I/O."""
+
+    path: Path
+    fd: int
+
+    def close(self) -> None:
+        """Close the owned descriptor once, ignoring already-closed handles."""
+
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
+
+
 class _InputError(ValueError):
     """Bounded component input error with a stable leading reason code."""
 
@@ -251,105 +268,158 @@ def _unsafe_path(value: Any) -> bool:
     )
 
 
-def _path_parts(value: str) -> tuple[str, ...]:
+def _path_parts(value: str, *, kind: str = "source") -> tuple[str, ...]:
     if _unsafe_path(value):
-        raise _InputError("unsafe_source_path: absolute, traversal, or control path rejected")
+        raise _InputError(f"unsafe_{kind}_path: absolute, traversal, or control path rejected")
     parts = tuple(part for part in Path(value).parts if part not in {"", "."})
     if not parts:
-        raise _InputError("unsafe_source_path: empty relative path")
+        raise _InputError(f"unsafe_{kind}_path: empty relative path")
     return parts
 
 
-def _read_under(root: Path, uri: str) -> bytes:  # noqa: C901
-    """Read a regular relative file using descriptor-relative no-follow opens.
+def _absolute_path(path: Path) -> Path:
+    """Return an absolute lexical path without resolving any symlink."""
+
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _open_directory(
+    root: Path,
+    *,
+    error_prefix: str = "source",
+    missing_reason: str | None = None,
+) -> _DirectoryHandle:
+    """Open a directory by components, retaining its identity across renames.
 
     Returns:
-        Exact source bytes read from the protected regular-file descriptor.
+        An owned descriptor handle for the directory.
+    """
+
+    if (
+        not hasattr(os, "O_NOFOLLOW")
+        or not hasattr(os, "O_DIRECTORY")
+        or os.open not in os.supports_dir_fd
+        or os.mkdir not in os.supports_dir_fd
+    ):
+        raise _InputError("source_protection_unavailable")
+    path = _absolute_path(root)
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
+    descriptor: int | None = None
+    succeeded = False
+    try:
+        descriptor = os.open(os.sep, flags)
+        for part in path.parts[1:]:
+            next_descriptor = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        succeeded = True
+        return _DirectoryHandle(path, descriptor)
+    except FileNotFoundError as error:
+        raise _InputError(missing_reason or f"{error_prefix}_root_missing") from error
+    except NotADirectoryError as error:
+        raise _InputError(f"{error_prefix}_root_not_directory") from error
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise _InputError(f"unsafe_{error_prefix}_path: symlink component rejected") from error
+        raise _InputError(f"{error_prefix}_root_unreadable") from error
+    finally:
+        if descriptor is not None and not succeeded:
+            os.close(descriptor)
+
+
+def _dup_directory_fd(root: Path, root_fd: int | None) -> tuple[int, Path]:
+    """Duplicate a caller-owned root descriptor, or open one safely.
+
+    Returns:
+        A duplicated descriptor and its lexical display path.
+    """
+
+    if root_fd is None:
+        handle = _open_directory(root)
+        try:
+            return os.dup(handle.fd), handle.path
+        finally:
+            handle.close()
+    try:
+        metadata = os.fstat(root_fd)
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise _InputError("source_root_not_directory")
+        return os.dup(root_fd), _absolute_path(root)
+    except _InputError:
+        raise
+    except OSError as error:
+        raise _InputError("source_root_unreadable") from error
+
+
+def _read_under(  # noqa: C901
+    root: Path, uri: str, *, root_fd: int | None = None
+) -> bytes:
+    """Read a regular relative file through a retained descriptor root.
+
+    Returns:
+        The exact bytes read from the protected regular file.
     """
 
     parts = _path_parts(uri)
-    try:
-        root_path = root.resolve(strict=True)
-    except OSError as error:
-        raise _InputError("source_root_missing") from error
-    if not root_path.is_dir():
-        raise _InputError("source_root_not_directory")
     if (
         not hasattr(os, "O_NOFOLLOW")
         or not hasattr(os, "O_DIRECTORY")
         or os.open not in os.supports_dir_fd
     ):
         raise _InputError("source_protection_unavailable")
+    descriptor, _root_path = _dup_directory_fd(root, root_fd)
     flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
     directory_flags = flags | os.O_DIRECTORY
-    descriptor: int | None = None
+    source_fd: int | None = None
     try:
-        descriptor = os.open(root_path, directory_flags)
         for part in parts[:-1]:
             next_descriptor = os.open(part, directory_flags, dir_fd=descriptor)
             os.close(descriptor)
             descriptor = next_descriptor
         source_fd = os.open(parts[-1], flags | os.O_NONBLOCK, dir_fd=descriptor)
-        try:
-            metadata = os.fstat(source_fd)
-            if not stat.S_ISREG(metadata.st_mode):
-                raise _InputError("source_not_regular_file")
-            if metadata.st_size > MAX_SOURCE_BYTES:
-                raise _InputError("resource_limit: source bytes")
-            with os.fdopen(source_fd, "rb") as handle:
-                source_fd = -1
-                payload = handle.read(MAX_SOURCE_BYTES + 1)
-            if len(payload) > MAX_SOURCE_BYTES:
-                raise _InputError("resource_limit: source bytes")
-            return payload
-        finally:
-            if source_fd >= 0:
-                os.close(source_fd)
+        metadata = os.fstat(source_fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise _InputError("source_not_regular_file")
+        if metadata.st_size > MAX_SOURCE_BYTES:
+            raise _InputError("resource_limit: source bytes")
+        with os.fdopen(source_fd, "rb") as handle:
+            source_fd = None
+            payload = handle.read(MAX_SOURCE_BYTES + 1)
+        if len(payload) > MAX_SOURCE_BYTES:
+            raise _InputError("resource_limit: source bytes")
+        return payload
     except _InputError:
         raise
     except FileNotFoundError as error:
         raise _InputError("source_missing") from error
-    except (OSError, ValueError) as error:
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise _InputError("unsafe_source_path: symlink component rejected") from error
         raise _InputError("source_unreadable") from error
     finally:
-        if descriptor is not None:
-            os.close(descriptor)
+        if source_fd is not None:
+            os.close(source_fd)
+        os.close(descriptor)
 
 
-def _resolve_under(root: Path, value: str, *, kind: str) -> Path:
-    parts = _path_parts(value)
-    try:
-        resolved_root = root.resolve(strict=True)
-        candidate = (resolved_root.joinpath(*parts)).resolve(strict=False)
-        candidate.relative_to(resolved_root)
-    except (_InputError, OSError, ValueError) as error:
-        if isinstance(error, _InputError):
-            raise _InputError(f"unsafe_{kind}_path: {error}") from error
-        raise _InputError(f"unsafe_{kind}_path: path escapes base") from error
-    # Reject symlinked ancestors even when the resolved target happens to stay
-    # below the root; source identity must not change between path checks.
-    current = resolved_root
-    for part in parts[:-1]:
-        current = current / part
-        if current.is_symlink():
-            raise _InputError(f"unsafe_{kind}_path: symlink component rejected")
-    return candidate
+def _reserve_output(root: Path, value: str, *, root_fd: int | None = None) -> _DirectoryHandle:
+    """Reserve a fresh output directory and retain its descriptor identity.
 
+    Returns:
+        An owned descriptor handle for the new output directory.
+    """
 
-def _reserve_output(root: Path, value: str) -> Path:
-    parts = _path_parts(value)
-    try:
-        resolved_root = root.resolve(strict=True)
-    except OSError as error:
-        raise _InputError("unsafe_output_path: output root is unavailable") from error
-    if not resolved_root.is_dir():
-        raise _InputError("unsafe_output_path: output root is not a directory")
-    if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
+    parts = _path_parts(value, kind="output")
+    if (
+        not hasattr(os, "O_NOFOLLOW")
+        or not hasattr(os, "O_DIRECTORY")
+        or os.open not in os.supports_dir_fd
+        or os.mkdir not in os.supports_dir_fd
+    ):
         raise _InputError("source_protection_unavailable")
+    descriptor, root_path = _dup_directory_fd(root, root_fd)
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
-    descriptor: int | None = None
     try:
-        descriptor = os.open(resolved_root, directory_flags)
         for part in parts[:-1]:
             try:
                 next_descriptor = os.open(part, directory_flags, dir_fd=descriptor)
@@ -359,33 +429,34 @@ def _reserve_output(root: Path, value: str) -> Path:
             os.close(descriptor)
             descriptor = next_descriptor
         os.mkdir(parts[-1], mode=0o700, dir_fd=descriptor)
+        output_fd = os.open(parts[-1], directory_flags, dir_fd=descriptor)
+        return _DirectoryHandle(root_path.joinpath(*parts), output_fd)
     except FileExistsError as error:
         raise _InputError("output_collision: output directory already exists") from error
     except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise _InputError("unsafe_output_path: symlink component rejected") from error
         raise _InputError("unsafe_output_path: output directory cannot be protected") from error
     finally:
-        if descriptor is not None:
-            os.close(descriptor)
-    path = resolved_root.joinpath(*parts)
-    return path
+        os.close(descriptor)
 
 
-def _ensure_directory(root: Path, parts: Sequence[str]) -> Path:
-    """Open/create fixed output subdirectories without following symlinks.
+def _ensure_directory(root: _DirectoryHandle, parts: Sequence[str]) -> _DirectoryHandle:
+    """Open/create fixed output subdirectories from a retained descriptor.
 
     Returns:
-        The path represented by ``root`` and ``parts``.
+        An owned descriptor handle for the requested subdirectory.
     """
 
-    if not parts:
-        return root
     if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
         raise _InputError("source_protection_unavailable")
     flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
-    descriptor: int | None = None
+    descriptor = os.dup(root.fd)
+    path = root.path
     try:
-        descriptor = os.open(root, flags)
         for part in parts:
+            if not part or part in {".", ".."} or Path(part).name != part:
+                raise _InputError("unsafe_output_path: invalid output component")
             try:
                 next_descriptor = os.open(part, flags, dir_fd=descriptor)
             except FileNotFoundError:
@@ -393,25 +464,41 @@ def _ensure_directory(root: Path, parts: Sequence[str]) -> Path:
                 next_descriptor = os.open(part, flags, dir_fd=descriptor)
             os.close(descriptor)
             descriptor = next_descriptor
+            path = path / part
+        return _DirectoryHandle(path, descriptor)
+    except _InputError:
+        os.close(descriptor)
+        raise
     except OSError as error:
+        os.close(descriptor)
+        if error.errno == errno.ELOOP:
+            raise _InputError("unsafe_output_path: symlink component rejected") from error
         raise _InputError("unsafe_output_path: output subdirectory cannot be protected") from error
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-    return root.joinpath(*parts)
 
 
-def _write_text(path: Path, text: str) -> str:
+def _write_text(directory: _DirectoryHandle, name: str, text: str) -> str:
     payload = text.encode("utf-8")
     if len(payload) > MAX_OUTPUT_BYTES:
         raise _InputError("resource_limit: output bytes")
-    temporary = path.with_name(f".{path.name}.tmp")
+    name_parts = _path_parts(name, kind="output")
+    if len(name_parts) != 1 or name_parts[0] != name:
+        raise _InputError("unsafe_output_path: artifact name must be one relative component")
+    temporary = f".{name}.tmp"
+    if (
+        not hasattr(os, "O_NOFOLLOW")
+        or os.open not in os.supports_dir_fd
+        or os.link not in os.supports_dir_fd
+        or os.unlink not in os.supports_dir_fd
+        or os.link not in os.supports_follow_symlinks
+    ):
+        raise _InputError("source_protection_unavailable")
     descriptor: int | None = None
     try:
         descriptor = os.open(
             temporary,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
             0o600,
+            dir_fd=directory.fd,
         )
         with os.fdopen(descriptor, "wb") as handle:
             descriptor = None
@@ -419,7 +506,13 @@ def _write_text(path: Path, text: str) -> str:
             handle.flush()
             os.fsync(handle.fileno())
         try:
-            os.link(temporary, path, follow_symlinks=False)
+            os.link(
+                temporary,
+                name,
+                src_dir_fd=directory.fd,
+                dst_dir_fd=directory.fd,
+                follow_symlinks=False,
+            )
         except FileExistsError as error:
             raise _InputError("output_collision: artifact already exists") from error
         return hashlib.sha256(payload).hexdigest()
@@ -431,12 +524,14 @@ def _write_text(path: Path, text: str) -> str:
         if descriptor is not None:
             os.close(descriptor)
         try:
-            temporary.unlink(missing_ok=True)
+            os.unlink(temporary, dir_fd=directory.fd)
+        except FileNotFoundError:
+            pass
         except OSError:
             pass
 
 
-def _write_json(path: Path, payload: Any) -> str:
+def _write_json(directory: _DirectoryHandle, name: str, payload: Any) -> str:
     try:
         text = (
             json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False)
@@ -444,20 +539,23 @@ def _write_json(path: Path, payload: Any) -> str:
         )
     except (TypeError, ValueError) as error:
         raise _InputError("invalid_output: model is not strict JSON") from error
-    return _write_text(path, text)
+    return _write_text(directory, name, text)
 
 
-def _copy_web_component(output_dir: Path) -> Path:
-    destination = (
-        _ensure_directory(output_dir, ("components", "review_diagnostics"))
-        / "review_diagnostics.js"
-    )
+def _copy_web_component(output_dir: _DirectoryHandle) -> str:
+    destination = _ensure_directory(output_dir, ("components", "review_diagnostics"))
     asset = resources.files("robot_sf.render.web_assets").joinpath(
         "components", "review_diagnostics", "review_diagnostics.js"
     )
-    with resources.as_file(asset) as asset_path:
-        _write_text(destination, asset_path.read_text(encoding="utf-8"))
-    return destination
+    try:
+        with resources.as_file(asset) as asset_path:
+            return _write_text(
+                destination,
+                "review_diagnostics.js",
+                asset_path.read_text(encoding="utf-8"),
+            )
+    finally:
+        destination.close()
 
 
 def _format_token(ref: SourceRef, payload: Any = None) -> str:
@@ -530,8 +628,19 @@ def _validate_source_payload(kind: str, payload: Mapping[str, Any]) -> None:
         elif kind == "simulation_trace_export":
             simulation_trace_export_from_dict(payload)
         elif kind == "analysis_trace":
-            if not isinstance(payload.get("steps"), list):
-                raise _InputError("source_schema_invalid: analysis trace steps must be an array")
+            coverage = trace_coverage(
+                {
+                    "scenario_id": payload.get("scenario_id"),
+                    "algo": payload.get("planner"),
+                    "algorithm_metadata": {"analysis_trace": dict(payload)},
+                }
+            )
+            if coverage.get("status") != "complete":
+                reasons = ",".join(str(item) for item in coverage.get("reasons", ()))
+                raise _InputError(
+                    "source_schema_invalid: analysis trace coverage incomplete"
+                    + (f" ({reasons})" if reasons else "")
+                )
         elif kind == "failure_diagnosis":
             validate_failure_diagnosis_payload(payload)
     except (TypeError, ValueError) as error:
@@ -780,9 +889,11 @@ def _normalize_frames(source: _LoadedSource) -> None:
         source.status, source.reason = "partial", "source_rows_skipped"
 
 
-def _load_source(ref: SourceRef, root: Path) -> _LoadedSource:  # noqa: C901
+def _load_source(  # noqa: C901
+    ref: SourceRef, root: Path, *, root_fd: int | None = None
+) -> _LoadedSource:
     try:
-        raw = _read_under(root, ref.uri)
+        raw = _read_under(root, ref.uri, root_fd=root_fd)
         digest = hashlib.sha256(raw).hexdigest()
         integrity = (
             "unbound"
@@ -858,6 +969,9 @@ def _load_source(ref: SourceRef, root: Path) -> _LoadedSource:  # noqa: C901
             else None
         ),
     )
+    if integrity == "unbound":
+        source.status, source.reason = STATUS_PARTIAL, "source_integrity_unbound"
+        source.source_error = source.reason
     if not _units_compatible(ref.units, source.units):
         source.status, source.reason = STATUS_UNAVAILABLE, "unit_source_mismatch"
         source.source_error = source.reason
@@ -898,7 +1012,9 @@ def _load_source(ref: SourceRef, root: Path) -> _LoadedSource:  # noqa: C901
     return source
 
 
-def _load_sources(request: ComponentRequest, root: Path) -> list[_LoadedSource]:
+def _load_sources(
+    request: ComponentRequest, root: Path, *, root_fd: int | None = None
+) -> list[_LoadedSource]:
     if len(request.sources) > MAX_SOURCES:
         raise _InputError(f"resource_limit: sources exceed {MAX_SOURCES}")
     seen: set[str] = set()
@@ -907,7 +1023,7 @@ def _load_sources(request: ComponentRequest, root: Path) -> list[_LoadedSource]:
         if ref.artifact_id in seen:
             raise _InputError(f"invalid_input: duplicate source artifact id {ref.artifact_id}")
         seen.add(ref.artifact_id)
-        result.append(_load_source(ref, root))
+        result.append(_load_source(ref, root, root_fd=root_fd))
     return result
 
 
@@ -1332,18 +1448,61 @@ def _pedestrian_snapshot(  # noqa: C901
     }
 
 
-def _diagnosis_rows(sources: Sequence[_LoadedSource]) -> list[dict[str, Any]]:
+def _diagnosis_rows(sources: Sequence[_LoadedSource]) -> list[dict[str, Any]]:  # noqa: C901
     rows: list[dict[str, Any]] = []
     for source in sources:
         if source.kind != "failure_diagnosis" or not isinstance(source.payload, Mapping):
             continue
         for index, row in enumerate(source.payload.get("records", [])[:MAX_RECORDS]):
             if isinstance(row, Mapping):
+                source_time = _optional_finite(row.get("onset_time_s"))
+                actor_id: str | None = None
+                predicate = row.get("source_predicate")
+                if isinstance(predicate, Mapping):
+                    actors = predicate.get("involved_actors")
+                    if isinstance(actors, list) and actors and actors[0] is not None:
+                        actor_id = str(actors[0])
+                evidence_items = row.get("causal_evidence")
+                if actor_id is None and isinstance(evidence_items, list):
+                    for evidence in evidence_items:
+                        if not isinstance(evidence, Mapping):
+                            continue
+                        actors = evidence.get("involved_actors")
+                        if isinstance(actors, list) and actors and actors[0] is not None:
+                            actor_id = str(actors[0])
+                            break
+                missing_reasons = []
+                if source_time is None:
+                    missing_reasons.append("source_time_not_recorded")
+                if source.units is None:
+                    missing_reasons.append("units_not_recorded")
+                if source.coordinate_frame is None:
+                    missing_reasons.append("coordinate_frame_not_recorded")
+                if actor_id is None:
+                    missing_reasons.append("actor_not_selected")
                 rows.append(
                     {
                         "source": source.ref.artifact_id,
                         "source_index": index,
                         "value": deepcopy(dict(row)),
+                        "source_artifact_id": source.ref.artifact_id,
+                        "source_identity": deepcopy(source.identity),
+                        "source_ref": {
+                            "artifact_id": source.ref.artifact_id,
+                            "uri": source.ref.uri,
+                            "format": source.ref.format,
+                            "schema": source.schema_version or source.ref.schema,
+                            "sha256": source.digest,
+                            "units": _units_token(source.units),
+                            "coordinate_frame": source.coordinate_frame
+                            or source.ref.coordinate_frame,
+                        },
+                        "source_time_s": source_time,
+                        "time_s": source_time,
+                        "actor_id": actor_id,
+                        "units": deepcopy(source.units),
+                        "coordinate_frame": source.coordinate_frame,
+                        "missing_reasons": missing_reasons,
                     }
                 )
     return rows
@@ -1373,7 +1532,10 @@ def _source_document(source: _LoadedSource, resolution: float | None = None) -> 
     }
 
 
-def _reference(
+_UNSET_SOURCE_TIME = object()
+
+
+def _reference(  # noqa: PLR0913
     source: _LoadedSource,
     sample: DiagnosticSample | None,
     context: ReviewContext,
@@ -1382,6 +1544,7 @@ def _reference(
     pointer: str,
     actor_id: str | None = None,
     units: Any = None,
+    source_time_s: float | object | None = _UNSET_SOURCE_TIME,
     value_origin: str,
 ) -> dict[str, Any]:
     source_revision = source.identity.get("source_commit") or source.digest or ""
@@ -1390,7 +1553,22 @@ def _reference(
         or source.identity.get("episode_id")
         or source.ref.artifact_id
     )
-    source_time = sample.time_s if sample is not None else context.cursor.time_s
+    source_time = (
+        sample.time_s
+        if sample is not None
+        else context.cursor.time_s
+        if source_time_s is _UNSET_SOURCE_TIME
+        else source_time_s
+    )
+    missing_reasons: list[str] = []
+    if source_time is None:
+        missing_reasons.append("source_time_not_recorded")
+    if actor_id is None:
+        missing_reasons.append("actor_not_selected")
+    if units is None and source.units is None:
+        missing_reasons.append("units_not_recorded")
+    if source.coordinate_frame is None and source.ref.coordinate_frame is None:
+        missing_reasons.append("coordinate_frame_not_recorded")
     reference_id = f"{source.ref.artifact_id}:{kind}:{sample.source_index if sample else 'none'}:{pointer}:{context.context_revision}"
     return {
         "reference_id": reference_id,
@@ -1423,6 +1601,8 @@ def _reference(
         "interval_id": context.interval_id,
         "value_origin": value_origin,
         "evidence_status": "recorded",
+        "missing_reason": missing_reasons[0] if missing_reasons else None,
+        "missing_reasons": missing_reasons,
         "admission": "not_evaluated",
     }
 
@@ -1642,6 +1822,26 @@ def _build_document(  # noqa: C901, PLR0915
                     )
                 )
 
+    single_diagnosis = diagnoses[0] if len(diagnoses) == 1 else None
+    diagnosis_missing_reasons = sorted(
+        {
+            reason
+            for item in diagnoses
+            for reason in item.get("missing_reasons", [])
+            if isinstance(reason, str)
+        }
+    )
+    if not diagnoses:
+        diagnosis_missing_reasons.extend(
+            (
+                "failure_diagnosis_not_recorded",
+                "source_artifact_not_recorded",
+                "source_time_not_recorded",
+                "units_not_recorded",
+                "coordinate_frame_not_recorded",
+                "actor_not_selected",
+            )
+        )
     diagnosis_panel = {
         "panel": "failure_diagnosis",
         "visible": bool(
@@ -1657,8 +1857,42 @@ def _build_document(  # noqa: C901, PLR0915
         "reason": "" if diagnoses else "failure_diagnosis_not_recorded",
         "records": diagnoses,
         "value_origin": "post_hoc" if diagnoses else "unavailable",
+        "source_artifact_id": (
+            single_diagnosis.get("source_artifact_id") if single_diagnosis else None
+        ),
+        "source_identity": (
+            deepcopy(single_diagnosis.get("source_identity")) if single_diagnosis else None
+        ),
+        "source_time_s": single_diagnosis.get("source_time_s") if single_diagnosis else None,
+        "actor_id": single_diagnosis.get("actor_id") if single_diagnosis else None,
+        "units": deepcopy(single_diagnosis.get("units")) if single_diagnosis else None,
+        "coordinate_frame": (
+            single_diagnosis.get("coordinate_frame") if single_diagnosis else None
+        ),
+        "missing_reasons": diagnosis_missing_reasons,
+        "context_revision": context.context_revision,
+        "selection_revision": context.context_revision,
+        "source_artifacts": [
+            {
+                "artifact_id": source.ref.artifact_id,
+                "source_identity": deepcopy(source.identity),
+                "source_ref": {
+                    "artifact_id": source.ref.artifact_id,
+                    "uri": source.ref.uri,
+                    "format": source.ref.format,
+                    "schema": source.schema_version or source.ref.schema,
+                    "sha256": source.digest,
+                },
+                "units": deepcopy(source.units),
+                "coordinate_frame": source.coordinate_frame,
+            }
+            for source in sources
+            if source.kind == "failure_diagnosis"
+        ],
     }
     for item in diagnoses:
+        item["context_revision"] = context.context_revision
+        item["selection_revision"] = context.context_revision
         source = next(
             (candidate for candidate in sources if candidate.ref.artifact_id == item["source"]),
             None,
@@ -1672,6 +1906,8 @@ def _build_document(  # noqa: C901, PLR0915
                     kind="failure_diagnosis",
                     pointer=f"/records/{item['source_index']}",
                     units=source.units,
+                    actor_id=item.get("actor_id"),
+                    source_time_s=item.get("source_time_s"),
                     value_origin="post_hoc",
                 )
             )
@@ -1798,10 +2034,14 @@ def build_diagnostic_model(
 
     if not isinstance(request, ComponentRequest):
         raise TypeError("request must be a ComponentRequest")
-    root = (base or Path.cwd()).resolve()
-    sources = _load_sources(request, root)
-    document, _diagnostics, _status = _build_document(request, sources, request.config)
-    return document
+    root = _absolute_path(base or Path.cwd())
+    root_handle = _open_directory(root)
+    try:
+        sources = _load_sources(request, root, root_fd=root_handle.fd)
+        document, _diagnostics, _status = _build_document(request, sources, request.config)
+        return document
+    finally:
+        root_handle.close()
 
 
 build_model = build_diagnostic_model
@@ -1920,11 +2160,13 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 STATUS_FAILED,
                 reason=f"incompatible_component_version: request needs {minimum}, component is {COMPONENT_VERSION}",
             )
-    root = (base or Path.cwd()).resolve()
-    output_dir: Path | None = None
+    root = _absolute_path(base or Path.cwd())
+    root_handle: _DirectoryHandle | None = None
+    output_dir: _DirectoryHandle | None = None
     try:
-        sources = _load_sources(request, root)
-        output_dir = _reserve_output(root, request.output_directory)
+        root_handle = _open_directory(root)
+        sources = _load_sources(request, root, root_fd=root_handle.fd)
+        output_dir = _reserve_output(root, request.output_directory, root_fd=root_handle.fd)
         document, diagnostics, status = _build_document(request, sources, request.config)
         result_reason = ""
         if status != STATUS_COMPLETE:
@@ -1937,7 +2179,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 "diagnostic_panels_not_complete",
             )
         emitted: list[dict[str, Any]] = []
-        model_digest = _write_json(output_dir / OUTPUT_MODEL_FILENAME, document)
+        model_digest = _write_json(output_dir, OUTPUT_MODEL_FILENAME, document)
         emitted.append(
             {
                 "artifact_id": OUTPUT_MODEL_FILENAME,
@@ -1954,7 +2196,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "references": document["evidence_references"],
             "limitations": document["provenance"]["unsupported_claims"],
         }
-        reference_digest = _write_json(output_dir / OUTPUT_REFERENCE_FILENAME, reference_document)
+        reference_digest = _write_json(output_dir, OUTPUT_REFERENCE_FILENAME, reference_document)
         emitted.append(
             {
                 "artifact_id": OUTPUT_REFERENCE_FILENAME,
@@ -1962,7 +2204,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 "sha256": reference_digest,
             }
         )
-        html_digest = _write_text(output_dir / OUTPUT_HTML_FILENAME, _render_html(document))
+        html_digest = _write_text(output_dir, OUTPUT_HTML_FILENAME, _render_html(document))
         emitted.append(
             {
                 "artifact_id": OUTPUT_HTML_FILENAME,
@@ -1970,13 +2212,13 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 "sha256": html_digest,
             }
         )
-        component_path = _copy_web_component(output_dir)
+        component_digest = _copy_web_component(output_dir)
         component_artifact = "components/review_diagnostics/review_diagnostics.js"
         emitted.append(
             {
                 "artifact_id": component_artifact,
                 "uri": str(Path(request.output_directory) / component_artifact),
-                "sha256": hashlib.sha256(component_path.read_bytes()).hexdigest(),
+                "sha256": component_digest,
             }
         )
         capability_document = {
@@ -1990,9 +2232,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             ],
             "diagnostics": diagnostics,
         }
-        capability_digest = _write_json(
-            output_dir / OUTPUT_CAPABILITY_FILENAME, capability_document
-        )
+        capability_digest = _write_json(output_dir, OUTPUT_CAPABILITY_FILENAME, capability_document)
         emitted.append(
             {
                 "artifact_id": OUTPUT_CAPABILITY_FILENAME,
@@ -2023,13 +2263,12 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         ValueError,
         OverflowError,
     ) as error:
-        if output_dir is not None:
-            try:
-                if not any(output_dir.iterdir()):
-                    output_dir.rmdir()
-            except OSError:
-                pass
         return _result(request, STATUS_FAILED, reason=_reason(error, "failed"))
+    finally:
+        if output_dir is not None:
+            output_dir.close()
+        if root_handle is not None:
+            root_handle.close()
 
 
 def _strict_cli_json(path: str) -> Any:

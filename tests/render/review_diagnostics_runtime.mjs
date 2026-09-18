@@ -63,6 +63,29 @@ if (!controller.toggle("planner", 3) || controller.toggles.planner !== false) {
 if (controller.toggle("planner", 2)) throw new Error("stale toggle accepted");
 if (evidenceAt(model, "planner").length !== 1) throw new Error("evidence lookup failed");
 if (controller.snapshot().context_revision !== 3) throw new Error("revision mismatch");
+const revisionController = new ReviewDiagnosticsController({
+  ...model,
+  context: { context_revision: 3, cursor: { context_revision: 3 } },
+  evidence_references: [
+    { kind: "planner", source_artifact_id: "trace", json_pointer: "/steps/0", context_revision: 3 },
+    { kind: "controls", source_artifact_id: "trace", json_pointer: "/steps/0/controls", context_revision: 3 },
+  ],
+});
+if (!revisionController.setContextRevision(4)) throw new Error("context revision update failed");
+const revised = revisionController.snapshot();
+if (revised.context_revision !== 4) throw new Error("context revision was not applied");
+if (revisionController.model.context.cursor.context_revision !== 4) {
+  throw new Error("cursor revision was not applied");
+}
+if (revised.evidence_references.length !== 2 || revised.evidence_references.some((reference) => (
+  reference.context_revision !== 4
+  || reference.selection_revision !== 4
+  || reference.evidence_status !== "stale_context"
+  || reference.missing_reason !== "context_revision_changed"
+  || !reference.reference_id.endsWith(":rev-4")
+))) {
+  throw new Error("evidence references were not invalidated and rebuilt");
+}
 
 const root = new FakeElement("main", fakeDocument);
 const rendered = new ReviewDiagnosticsController(model, root);

@@ -6,6 +6,10 @@ visualization specs, component request/result envelopes with capability
 descriptors, and experiment recipes. Diagnostic tooling only — no
 scientific admission, benchmark results, or simulator/planner changes.
 
+The offline [Benchmark Auditor campaign scan](./audit_scan.md) accounts for
+recorded campaign rows and emits deterministic BA-03 detector signals without
+rerunning simulations.
+
 The contracts are consumed by offline components; the first consumer is the
 [SREV-15 review workbench](./review_contracts.md#review-workbench-srev-15)
 (`python -m robot_sf.render.review_workbench`), which renders a local,
@@ -14,6 +18,10 @@ network-free artifact/provenance view plus a presentation plan.
 The synchronized SREV-16 scene/video/metric/event extension is documented in
 [`review_panels.md`](./review_panels.md) and runs with
 `python -m robot_sf.render.review_panels`.
+
+The SREV-17 offline annotation and storyboard editor is documented in
+[`review_editor.md`](./review_editor.md) and runs with
+`python -m robot_sf.render.review_editor`.
 
 The optional Scenario Review (SREV-18) recorded planner, control, pedestrian, and failure
 diagnostic extension is documented in

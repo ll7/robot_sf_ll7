@@ -419,6 +419,10 @@ _FAST_FILES = {
     "test_audit_findings_similarity.py",
     "test_audit_store.py",
     "test_audit_store_cli.py",
+    # BA-01 campaign accounting and detector-family tests are deterministic
+    # offline contracts; keep changed coverage in the exact-head fast lane.
+    "test_audit_scan.py",
+    "test_audit_detectors.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",
@@ -478,6 +482,9 @@ _FAST_FILES = {
     # Offline recorded planner/pedestrian diagnostic contracts are deterministic
     # SREV-18 coverage for the diagnostics renderer component (issue #9288).
     "test_review_diagnostics.py",
+    # Offline review-editor annotation, source-binding, and persistence tests
+    # are deterministic coverage for SREV-17 (issue #9287).
+    "test_review_editor.py",
     # Operational-quantities tests are deterministic synthetic arithmetic
     # coverage for the changed benchmark producer (issue #9350).
     "test_operational_quantities.py",

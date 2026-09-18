@@ -480,6 +480,74 @@ def test_previous_packet_replay_is_idempotent_and_collision_safe() -> None:
         queue.pin(first.packet.primary.episode_id, operation_id="previous-op")
 
 
+def test_skip_and_defer_replay_recover_target_after_current_packet_is_cleared(
+    tmp_path: Path,
+) -> None:
+    candidate = _candidate("manual-replay")
+    state_path = tmp_path / "manual-replay-state.json"
+
+    queue = AuditQueue((candidate,), state_path=state_path)
+    selected = queue.select_next()
+    assert selected is not None
+    skip = queue.skip(operation_id="skip-replay")
+    assert queue.current_packet is None
+    revision = queue.state_revision
+
+    replay = queue.skip(operation_id="skip-replay")
+    assert replay.action_id == skip.action_id
+    assert replay.target_id == candidate.episode_id
+    assert queue.state_revision == revision
+    with pytest.raises(QueueOperationConflictError):
+        queue.skip(actor_id="different-actor", operation_id="skip-replay")
+
+    queue = AuditQueue((candidate,), state_path=state_path)
+    selected = queue.select_next()
+    assert selected is not None
+    defer = queue.defer(operation_id="defer-replay")
+    assert queue.current_packet is None
+    revision = queue.state_revision
+
+    replay = queue.defer(operation_id="defer-replay")
+    assert replay.action_id == defer.action_id
+    assert replay.target_id == candidate.episode_id
+    assert queue.state_revision == revision
+    with pytest.raises(QueueOperationConflictError):
+        queue.defer(actor_id="different-actor", operation_id="defer-replay")
+
+
+def test_target_omitted_review_replay_recovers_target_and_detects_collision(tmp_path: Path) -> None:
+    candidate = _candidate("review-replay")
+    state_path = tmp_path / "review-replay-state.json"
+    queue = AuditQueue((candidate,), state_path=state_path)
+    selected = queue.select_next()
+    assert selected is not None
+    first = queue.record_review(
+        outcome="pass",
+        notes="accepted",
+        annotation_ids=("annotation-a",),
+        operation_id="review-replay",
+    )
+    queue.skip(operation_id="clear-current")
+    assert queue.current_packet is None
+
+    resumed = AuditQueue((candidate,), state_path=state_path)
+    replay = resumed.record_review(
+        outcome="pass",
+        notes="accepted",
+        annotation_ids=("annotation-a",),
+        operation_id="review-replay",
+    )
+    assert replay.review_id == first.review_id
+    assert replay.episode_id == candidate.episode_id
+    with pytest.raises(QueueOperationConflictError):
+        resumed.record_review(
+            outcome="fail",
+            notes="accepted",
+            annotation_ids=("annotation-a",),
+            operation_id="review-replay",
+        )
+
+
 def test_stale_scan_and_finding_updates_are_visible_on_resume() -> None:
     candidate = _candidate("episode")
     finding = Finding(

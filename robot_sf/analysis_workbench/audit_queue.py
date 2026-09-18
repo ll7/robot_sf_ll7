@@ -2050,6 +2050,7 @@ class QueueState:
     control_draws: int = 0
     control_schedule_cursor: int = 0
     operations: Mapping[str, str] = field(default_factory=dict)
+    operation_targets: Mapping[str, str] = field(default_factory=dict)
     policy_identity: str = ""
     candidate_first_seen: Mapping[str, int] = field(default_factory=dict)
     packet_content_identities: Mapping[str, str] = field(default_factory=dict)
@@ -2072,6 +2073,8 @@ class QueueState:
             raise QueueStateError("state.packet_payloads must be a mapping")
         if not isinstance(self.operations, Mapping):
             raise QueueStateError("state.operations must be a mapping")
+        if not isinstance(self.operation_targets, Mapping):
+            raise QueueStateError("state.operation_targets must be a mapping")
         object.__setattr__(
             self,
             "previous_packet_ids",
@@ -2221,6 +2224,16 @@ class QueueState:
                 }
             ),
         )
+        operation_targets: dict[str, str] = {}
+        for key, value in self.operation_targets.items():
+            operation_id = _text(key, name="state.operation_targets key")
+            target = _text(value, name=f"state.operation_targets.{operation_id}")
+            if operation_id not in self.operations:
+                raise QueueStateError(
+                    f"state.operation_targets references unknown operation: {operation_id}"
+                )
+            operation_targets[operation_id] = target
+        object.__setattr__(self, "operation_targets", _freeze(operation_targets))
 
     @staticmethod
     def _counts(value: Mapping[str, int], name: str) -> dict[str, int]:
@@ -2260,6 +2273,7 @@ class QueueState:
             "control_draws": self.control_draws,
             "control_schedule_cursor": self.control_schedule_cursor,
             "operations": dict(self.operations),
+            "operation_targets": dict(self.operation_targets),
         }
 
     @classmethod
@@ -2291,6 +2305,7 @@ class QueueState:
             control_draws=payload.get("control_draws", 0),
             control_schedule_cursor=payload.get("control_schedule_cursor", 0),
             operations=payload.get("operations", {}),
+            operation_targets=payload.get("operation_targets", {}),
         )
 
 
@@ -3623,7 +3638,7 @@ class AuditQueue:
             context = replace(context, missingness=missingness, stale_inputs=self._stale_inputs)
         return SelectionResult(packet=packet, context=context)
 
-    def _manual_mutation(  # noqa: C901, PLR0912
+    def _manual_mutation(  # noqa: C901, PLR0912, PLR0915
         self,
         action_type: str,
         target_id: str,
@@ -3639,9 +3654,14 @@ class AuditQueue:
             raise QueueInputError("queue action target_id must be a string")
         if actor_id is not None:
             _text(actor_id, name="queue action actor_id")
+        if operation_id is not None:
+            _text(operation_id, name="queue action operation_id")
         current_packet_id = self.state.current_packet_id
-        target_was_current = not target_id or target_id == current_packet_id
-        target = target_id or current_packet_id
+        stored_target = (
+            self.state.operation_targets.get(operation_id, "") if operation_id is not None else ""
+        )
+        target_was_current = not target_id and not stored_target
+        target = target_id or stored_target or current_packet_id
         if target.startswith("review-packet-"):
             packet = self.state.packet_payloads.get(target)
             target = str(packet.get("primary", {}).get("episode_id", target)) if packet else target
@@ -3696,6 +3716,9 @@ class AuditQueue:
         operations = dict(self.state.operations)
         operations[operation_id] = _sha256({"packet_id": target, "selection_id": digest})
         state_kwargs["operations"] = operations
+        operation_targets = dict(self.state.operation_targets)
+        operation_targets[operation_id] = target
+        state_kwargs["operation_targets"] = operation_targets
         if action_type == "pin":
             state_kwargs["pinned_ids"] = tuple(dict.fromkeys((*self.state.pinned_ids, target)))
         elif action_type == "unpin":
@@ -3877,10 +3900,19 @@ class AuditQueue:
     ) -> ReviewRecord:
         """Persist explicit review credit; selection itself never calls this."""
 
+        if operation_id is not None:
+            _text(operation_id, name="review.operation_id")
+        stored_target = (
+            self.state.operation_targets.get(f"{operation_id}:action", "")
+            if operation_id is not None
+            else ""
+        )
         target = episode_id
         if target and not isinstance(target, str):
             raise QueueInputError("review target episode_id must be a string")
-        if not target and self.state.current_packet_id:
+        if not target and stored_target:
+            target = stored_target
+        elif not target and self.state.current_packet_id:
             packet = self.current_packet
             target = packet.primary.episode_id if packet else ""
         if not target:
@@ -3994,12 +4026,15 @@ class AuditQueue:
         )
         operations = dict(self.state.operations)
         operations[review_action_operation] = review_operation_digest
+        operation_targets = dict(self.state.operation_targets)
+        operation_targets[review_action_operation] = target
         self.state = replace(
             self.state,
             state_revision=self.state.state_revision + 1,
             input_revision=self.dataset.input_revision,
             input_identity=self.dataset.identity,
             operations=operations,
+            operation_targets=operation_targets,
         )
         self._persist_state()
         return review

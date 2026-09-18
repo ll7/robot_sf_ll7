@@ -38,6 +38,30 @@ if (process.argv[2]) {
     });
     assert.equal(pythonController.snapshot().autosave.saved_revision, bundle.stored.revision);
   }
+  const foreignRecordId = "storyboard-foreign";
+  await assert.rejects(
+    pythonController.saveStoryboard({
+      record_id: foreignRecordId,
+      transaction: {
+        atomic: true,
+        prepare: async () => ({ proposal: "foreign" }),
+        commit: async () => ({ revision: 1 }),
+      },
+    }),
+    /canonical storyboard record_id/,
+  );
+  let foreignLoadCalled = false;
+  await assert.rejects(
+    pythonController.reload({
+      record_id: foreignRecordId,
+      load: async () => {
+        foreignLoadCalled = true;
+        return bundle.stored;
+      },
+    }),
+    /canonical storyboard record_id/,
+  );
+  assert.equal(foreignLoadCalled, false);
   console.log("review_editor_python_model_runtime: ok");
   process.exit(0);
 }
@@ -94,6 +118,35 @@ assert.equal(
 );
 assert.equal(sourceRevision(model), canonicalSourceRevision);
 const controller = new ReviewEditorController(model, root);
+const foreignRecordId = "storyboard-foreign";
+assert.equal(storyboardRecordId({ ...model, storyboard_record_id: foreignRecordId }), controller.storyboardRecordId);
+assert.throws(
+  () => new ReviewEditorController({ ...model, storyboard_record_id: foreignRecordId }),
+  /canonical storyboard record_id/,
+);
+await assert.rejects(
+  controller.saveStoryboard({
+    record_id: foreignRecordId,
+    transaction: {
+      atomic: true,
+      prepare: async () => ({ proposal: "foreign" }),
+      commit: async () => ({ revision: 1 }),
+    },
+  }),
+  /canonical storyboard record_id/,
+);
+let foreignLoadCalled = false;
+await assert.rejects(
+  controller.reload({
+    record_id: foreignRecordId,
+    load: async () => {
+      foreignLoadCalled = true;
+      return {};
+    },
+  }),
+  /canonical storyboard record_id/,
+);
+assert.equal(foreignLoadCalled, false);
 controller.dispatch({ type: "one-click", label: "bug" });
 assert.equal(controller.snapshot().annotations.length, 1);
 assert.equal(controller.snapshot().annotations[0].suspected_cause, undefined);

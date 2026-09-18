@@ -241,11 +241,13 @@ function storyboardRecordId(model) {
   const identityToken = typeof identity === "string"
     ? identity
     : sha256Hex(stableStringify(identity));
-  return String(
-    model?.storyboard_record_id
-      || model?.storyboard?.record_id
-      || `storyboard-${sha256Hex(identityToken)}`,
-  );
+  return `storyboard-${sha256Hex(identityToken)}`;
+}
+
+function assertCanonicalStoryboardRecordId(recordId, canonicalRecordId, label) {
+  if (String(recordId) !== canonicalRecordId) {
+    throw new Error(`${label} must match canonical storyboard record_id`);
+  }
 }
 
 function sourceEntry(model) {
@@ -466,7 +468,16 @@ export class ReviewEditorController {
       autosave: { state: "saved", operation_id: "", expected_revision: null, saved_revision: null, selection_revision: 0, error: "", conflict: null },
       typing: false,
     };
-    this.storyboardRecordId = String(this.options.storyboard_record_id || storyboardRecordId(this.model));
+    this.storyboardRecordId = storyboardRecordId(this.model);
+    for (const [label, declaredId] of [
+      ["option storyboard_record_id", this.options.storyboard_record_id],
+      ["model storyboard_record_id", this.model.storyboard_record_id],
+      ["storyboard record_id", this.model.storyboard?.record_id],
+    ]) {
+      if (declaredId !== undefined && declaredId !== null) {
+        assertCanonicalStoryboardRecordId(declaredId, this.storyboardRecordId, label);
+      }
+    }
     this.state.autosave.selection_revision = this.state.selectionRevision;
     this._keydown = (event) => this._onKeydown(event);
     if (root) this.mount(root);
@@ -827,9 +838,10 @@ export class ReviewEditorController {
   }
 
   async saveStoryboard(options = {}) {
-    const transaction = this._transaction(options, true);
     const operationId = options.operation_id || newId("operation");
-    const recordId = String(options.record_id || this.storyboardRecordId);
+    const recordId = String(options.record_id ?? this.storyboardRecordId);
+    assertCanonicalStoryboardRecordId(recordId, this.storyboardRecordId, "storyboard record_id");
+    const transaction = this._transaction(options, true);
     const expectedRevision = this._expectedRevision({ record_id: recordId }, options.expected_revision);
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
       throw new Error("expected_revision is required for every durable save");
@@ -905,7 +917,9 @@ export class ReviewEditorController {
   async reload(options = {}) {
     const load = options.load || this.options.load;
     if (typeof load !== "function") throw new Error("a BA-03/BA-05 load callback is required");
-    const expectedRecordId = String(options.record_id || options.storyboard_id || this.storyboardRecordId);
+    const requestedRecordId = options.record_id ?? options.storyboard_id ?? this.storyboardRecordId;
+    const expectedRecordId = String(requestedRecordId);
+    assertCanonicalStoryboardRecordId(expectedRecordId, this.storyboardRecordId, "storyboard record_id");
     const reloadContext = this._saveContext();
     const loaded = await load(expectedRecordId);
     this._assertSaveContext(reloadContext);

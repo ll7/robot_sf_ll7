@@ -432,6 +432,7 @@ def test_python_generated_model_can_save_storyboard_in_browser_runtime(tmp_path:
     model = _model(tmp_path)
     with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
         session = review_editor.ReviewEditorSession(model, adapter=adapter)
+        assert model["storyboard_record_id"] == session.storyboard_record_id()
         session.save_storyboard(operation_id="python-browser-reload", expected_revision=0)
         stored = adapter.get(session.storyboard_record_id(), include_deleted=True)
         assert stored is not None and stored.record is not None

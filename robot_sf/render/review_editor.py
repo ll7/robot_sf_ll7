@@ -2062,6 +2062,8 @@ class ReviewEditorSession:
                     bound_selection_revision = value
             elif isinstance(record, ReviewRecord):
                 bound_selection_revision = record.source_revision
+            if bound_selection_revision is None:
+                bound_selection_revision = self.selection_revision
         self._check_selection(bound_selection_revision)
         if self.adapter is None:
             raise ReviewEditorError("a BA-03/BA-05 persistence adapter is required for save")

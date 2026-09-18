@@ -6,12 +6,15 @@ import hashlib
 import json
 import shutil
 import subprocess
+import threading
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import (
+    ActionRecord,
     Reference,
 )
 from robot_sf.analysis_workbench.audit_store import AuditConflictError, CommitResult
@@ -205,6 +208,17 @@ def test_source_origin_resolution_and_schema_are_fail_closed(tmp_path: Path) -> 
         )
     with pytest.raises(review_editor.ReviewEditorError, match="schema_version is required"):
         review_editor.StoryboardEditor.from_mapping({"intervals": [], "order": [], "captions": {}})
+    complete_storyboard = {
+        "schema_version": review_editor.STORYBOARD_SCHEMA_VERSION,
+        "intervals": [],
+        "order": [],
+        "captions": {},
+    }
+    for missing in ("intervals", "order", "captions"):
+        incomplete = dict(complete_storyboard)
+        incomplete.pop(missing)
+        with pytest.raises(review_editor.ReviewEditorError, match="fields are required"):
+            review_editor.StoryboardEditor.from_mapping(incomplete)
     with pytest.raises(review_editor.InvalidIntervalError, match="before source origin"):
         review_editor.create_reference(model, (0.0, 0.0), timestamp_s=9.9)
     with pytest.raises(review_editor.InvalidIntervalError, match="after source terminal"):
@@ -263,6 +277,149 @@ def test_stale_selection_and_failed_service_save_preserve_local_edit(tmp_path: P
         failed.save_annotation(local, operation_id="failed-save")
     assert failed.autosave_status.state == "error"
     assert failed.pending_record == local
+
+
+def test_blocking_adapter_serializes_selection_and_durable_save(tmp_path: Path) -> None:
+    model = _model(tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+    selector_started = threading.Event()
+    selector_finished = threading.Event()
+
+    class BlockingAdapter:
+        def get(self, _record_id: str, *, include_deleted: bool = False):
+            del include_deleted
+
+        def save(self, record, **_kwargs):
+            entered.set()
+            assert release.wait(timeout=2.0)
+            return CommitResult("blocked", record.annotation_id, "annotation", 1, 1)
+
+    session = review_editor.ReviewEditorSession(model, adapter=BlockingAdapter())
+    annotation = session.create_quick("unclear", observed_behavior="captured")
+    errors: list[BaseException] = []
+
+    def persist() -> None:
+        try:
+            session.save_annotation(annotation, operation_id="blocked-save", expected_revision=0)
+        except BaseException as error:  # pragma: no cover - diagnostic propagation
+            errors.append(error)
+
+    writer = threading.Thread(target=persist)
+    writer.start()
+    assert entered.wait(timeout=2.0)
+
+    def seek() -> None:
+        selector_started.set()
+        session.select(time_s=11.0)
+        selector_finished.set()
+
+    selector = threading.Thread(target=seek)
+    selector.start()
+    assert selector_started.wait(timeout=2.0)
+    assert not selector_finished.wait(timeout=0.1)
+    release.set()
+    writer.join(timeout=2.0)
+    selector.join(timeout=2.0)
+    assert not errors
+    assert not writer.is_alive() and not selector.is_alive()
+    assert selector_finished.is_set()
+    assert session.autosave_status.state == "saved"
+    assert session.autosave_status.selection_revision == session.selection_revision - 1
+
+
+def test_verified_provenance_requires_matching_nonempty_identity_and_revision() -> None:
+    ref = review_editor.SourceRef(
+        artifact_id="scene",
+        uri="scene.json",
+        format="scene/json",
+        schema="scene.v1",
+        sha256="a" * 64,
+        source_commit="commit-1",
+        config_identity="config-1",
+    )
+    model = {"context": {"episode_id": "ep"}}
+    verified = review_editor.make_quick_annotation(
+        model,
+        "unclear",
+        source_refs={"scene": ref},
+        source_digests={"scene": "a" * 64},
+    )
+    assert verified.provenance_status == "verified"
+    assert verified.source_identity == "a" * 64
+    assert verified.source_revision == "commit-1"
+    unavailable = review_editor.make_quick_annotation(
+        model,
+        "unclear",
+        source_refs={"scene": replace(ref, source_commit="")},
+        source_digests={"scene": "a" * 64},
+    )
+    assert unavailable.provenance_status == "unavailable"
+    first_session = review_editor.ReviewEditorSession(
+        model, source_refs={"scene": ref}, source_digests={"scene": "a" * 64}
+    )
+    changed_session = review_editor.ReviewEditorSession(
+        model,
+        source_refs={"scene": replace(ref, schema="scene.v2")},
+        source_digests={"scene": "a" * 64},
+    )
+    config_session = review_editor.ReviewEditorSession(
+        model,
+        source_refs={"scene": replace(ref, config_identity="config-2")},
+        source_digests={"scene": "a" * 64},
+    )
+    assert first_session._source_identity_token() != changed_session._source_identity_token()
+    assert first_session._source_revision_token() != changed_session._source_revision_token()
+    assert first_session._source_identity_token() != config_session._source_identity_token()
+    assert first_session._source_revision_token() != config_session._source_revision_token()
+    rebound = review_editor._rebind_annotation_provenance(
+        {
+            "provenance_status": "verified",
+            "source_ref": {"artifact_id": "scene"},
+            "source_identity": "foreign",
+            "source_revision": "commit-1",
+        },
+        {"scene": ref},
+        {"scene": "a" * 64},
+    )
+    assert rebound["provenance_status"] == "stale"
+
+
+def test_storyboard_reload_rejects_tombstones_revisions_types_and_missing_provenance(
+    tmp_path: Path,
+) -> None:
+    model = {"context": {"episode_id": "ep", "execution_id": "run"}}
+    with review_editor.AuditStoreAdapter(tmp_path / "store") as adapter:
+        session = review_editor.ReviewEditorSession(model, adapter=adapter)
+        session.save_storyboard(operation_id="reload-contract", expected_revision=0)
+        stored = adapter.get(session.storyboard_record_id(), include_deleted=True)
+        assert stored is not None and isinstance(stored.record, ActionRecord)
+
+        cases = (
+            (replace(stored, deleted=True), "tombstone"),
+            (replace(stored, revision=-1), "revision"),
+            (replace(stored, record_type="annotation"), "record type"),
+            (
+                replace(stored, record=replace(stored.record, action_type="annotation")),
+                "identity",
+            ),
+        )
+        details = dict(stored.record.details)
+        details.pop("source_revision")
+        cases += ((replace(stored, record=replace(stored.record, details=details)), "provenance"),)
+
+        class FixedAdapter:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self, _record_id: str, *, include_deleted: bool = False):
+                del include_deleted
+                return self.value
+
+        for value, message in cases:
+            candidate = review_editor.ReviewEditorSession(model, adapter=FixedAdapter(value))
+            with pytest.raises(review_editor.ReviewEditorError, match=message):
+                candidate.reload_storyboard()
 
 
 def test_full_coverage_excludes_triage_intervals_and_agents(tmp_path: Path) -> None:

@@ -29,6 +29,7 @@ import json
 import math
 import os
 import stat
+import threading
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
@@ -607,10 +608,28 @@ def _source_identity(
             "sha256": source_digests.get(artifact_id) or ref.sha256,
             "declared_sha256": ref.sha256,
             "source_commit": ref.source_commit,
+            "schema": ref.schema,
+            "config_identity": ref.config_identity,
             "units": ref.units,
             "coordinate_frame": ref.coordinate_frame,
         }
     return result
+
+
+def _source_revision_payload(
+    source_refs: Mapping[str, SourceRef], source_digests: Mapping[str, str]
+) -> dict[str, dict[str, str]]:
+    """Return every source field that can change a persisted storyboard binding."""
+
+    return {
+        artifact_id: {
+            "sha256": source_digests.get(artifact_id, ref.sha256),
+            "source_commit": ref.source_commit,
+            "schema": ref.schema,
+            "config_identity": ref.config_identity,
+        }
+        for artifact_id, ref in sorted(source_refs.items())
+    }
 
 
 def _context_value(model: Mapping[str, Any], name: str, default: Any = None) -> Any:
@@ -757,18 +776,34 @@ def _annotation_source_fields(
         source_digests = {**model_digests, **source_digests}
     ref = _source_ref_for(source_refs, source_id)
     digest = source_digests.get(ref.artifact_id, "") if ref is not None else ""
-    source_identity = digest or (ref.artifact_id if ref else "")
-    source_revision: int | str = ref.source_commit if ref and ref.source_commit else 0
-    if ref is None or not digest or not ref.sha256:
+    source_identity = digest if digest else ""
+    source_revision = ref.source_commit if ref is not None else ""
+    if ref is None or not digest or not ref.sha256 or not source_identity:
         provenance = "unavailable"
     elif ref.sha256 and digest.lower() != ref.sha256.lower():
         # Preserve the changed byte identity while making the attachment
         # explicitly stale.  The editor never silently rebinds old points.
         provenance = "stale"
+    elif not isinstance(source_revision, str) or not source_revision.strip():
+        provenance = "unavailable"
     else:
         provenance = "verified"
+    # BA-03 upgrades an ``unavailable`` annotation to verified when its source
+    # hash is present but no source reference is attached.  A source with no
+    # revision is intentionally not a verified binding, so omit that partial
+    # reference rather than letting the downstream constructor guess.
+    annotation_ref = (
+        None
+        if provenance == "unavailable"
+        and ref is not None
+        and digest
+        and ref.sha256
+        and digest.lower() == ref.sha256.lower()
+        and not ref.source_commit
+        else ref
+    )
     return {
-        "source_ref": ref,
+        "source_ref": annotation_ref,
         "source_identity": source_identity,
         "source_revision": source_revision,
         "provenance_status": provenance,
@@ -1549,6 +1584,7 @@ class StoryboardState:
     source_identity: str = ""
     duration_s: float | None = None
     origin_s: float = 0.0
+    source_revision: str = ""
 
     def __post_init__(self) -> None:
         entries: list[dict[str, Any]] = []
@@ -1567,7 +1603,7 @@ class StoryboardState:
             entry["caption"] = str(entry.get("caption", self.captions.get(interval_id, "")))
             entries.append(entry)
             identifiers.append(interval_id)
-        order = tuple(str(item) for item in self.order) if self.order else tuple(identifiers)
+        order = tuple(str(item) for item in self.order)
         if set(order) != set(identifiers) or len(order) != len(identifiers):
             raise ReviewEditorError("storyboard order must contain every interval exactly once")
         captions = {
@@ -1586,9 +1622,15 @@ class StoryboardState:
         duration_s: float | None = None,
         source_identity: str = "",
         origin_s: float = 0.0,
+        source_revision: str = "",
     ) -> StoryboardState:
         if value is None:
-            return cls(duration_s=duration_s, source_identity=source_identity, origin_s=origin_s)
+            return cls(
+                duration_s=duration_s,
+                source_identity=source_identity,
+                origin_s=origin_s,
+                source_revision=source_revision,
+            )
         if not isinstance(value, Mapping):
             raise ReviewEditorError("storyboard must be an object")
         version = value.get("schema_version")
@@ -1596,26 +1638,35 @@ class StoryboardState:
             if version is None:
                 raise ReviewEditorError("storyboard schema_version is required")
             raise ReviewEditorError(f"unsupported storyboard schema_version: {version!r}")
-        raw_intervals = value.get(
-            "intervals", value.get("clips", value.get("source_intervals", []))
-        )
+        required_fields = ("intervals", "order", "captions")
+        missing = [field_name for field_name in required_fields if field_name not in value]
+        if missing:
+            raise ReviewEditorError("storyboard fields are required: " + ", ".join(missing))
+        raw_intervals = value["intervals"]
         if not isinstance(raw_intervals, Sequence) or isinstance(raw_intervals, (str, bytes)):
             raise ReviewEditorError("storyboard intervals must be a list")
         if any(not isinstance(item, Mapping) for item in raw_intervals):
             raise ReviewEditorError("storyboard intervals must contain objects")
-        order = value.get("order", value.get("clip_order", []))
+        order = value["order"]
         if not isinstance(order, Sequence) or isinstance(order, (str, bytes)):
             raise ReviewEditorError("storyboard order must be a list")
-        captions = value.get("captions", {})
+        captions = value["captions"]
         if not isinstance(captions, Mapping):
             raise ReviewEditorError("storyboard captions must be a mapping")
+        raw_source_identity = value.get("source_identity", "")
+        raw_source_revision = value.get("source_revision", "")
+        if not isinstance(raw_source_identity, str):
+            raise ReviewEditorError("storyboard source_identity must be text")
+        if not isinstance(raw_source_revision, str):
+            raise ReviewEditorError("storyboard source_revision must be text")
         return cls(
             tuple(dict(item) for item in raw_intervals),
             tuple(str(item) for item in order),
             dict(captions),
-            source_identity or str(value.get("source_identity", "")),
+            source_identity or raw_source_identity,
             duration_s if duration_s is not None else value.get("duration_s"),
             _finite(value.get("origin_s", origin_s), name="origin_s"),
+            source_revision or raw_source_revision,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1624,6 +1675,7 @@ class StoryboardState:
             "source_identity": self.source_identity,
             "duration_s": self.duration_s,
             "origin_s": self.origin_s,
+            "source_revision": self.source_revision,
             "intervals": [dict(item) for item in self.intervals],
             "order": list(self.order),
             "captions": dict(self.captions),
@@ -1640,6 +1692,7 @@ class StoryboardEditor:
         duration_s: float | None = None,
         source_identity: str = "",
         origin_s: float = 0.0,
+        source_revision: str = "",
     ):
         self._state = (
             storyboard
@@ -1649,6 +1702,7 @@ class StoryboardEditor:
                 duration_s=duration_s,
                 source_identity=source_identity,
                 origin_s=origin_s,
+                source_revision=source_revision,
             )
         )
         self._undo: list[StoryboardState] = []
@@ -1662,6 +1716,7 @@ class StoryboardEditor:
         duration_s: float | None = None,
         source_identity: str = "",
         origin_s: float = 0.0,
+        source_revision: str = "",
     ) -> StoryboardEditor:
         """Build an editor from a versioned or compatible storyboard mapping."""
 
@@ -1671,6 +1726,7 @@ class StoryboardEditor:
                 duration_s=duration_s,
                 source_identity=source_identity,
                 origin_s=origin_s,
+                source_revision=source_revision,
             )
         )
 
@@ -1712,6 +1768,7 @@ class StoryboardEditor:
                 self._state.source_identity,
                 self._state.duration_s,
                 self._state.origin_s,
+                self._state.source_revision,
             )
         )
 
@@ -1733,6 +1790,7 @@ class StoryboardEditor:
                         self._state.source_identity,
                         self._state.duration_s,
                         self._state.origin_s,
+                        self._state.source_revision,
                     )
                 )
         raise ReviewEditorError(f"unknown storyboard interval: {interval_id}")
@@ -1752,6 +1810,7 @@ class StoryboardEditor:
                 self._state.source_identity,
                 self._state.duration_s,
                 self._state.origin_s,
+                self._state.source_revision,
             )
         )
 
@@ -1764,6 +1823,7 @@ class StoryboardEditor:
                 self._state.source_identity,
                 self._state.duration_s,
                 self._state.origin_s,
+                self._state.source_revision,
             )
         )
 
@@ -1782,6 +1842,7 @@ class StoryboardEditor:
                 self._state.source_identity,
                 self._state.duration_s,
                 self._state.origin_s,
+                self._state.source_revision,
             )
         )
 
@@ -1850,6 +1911,7 @@ class ReviewEditorSession:
         actor_id: str = "",
         storyboard: StoryboardEditor | None = None,
     ):
+        self._state_lock = threading.Lock()
         self.model = json.loads(canonical_json(model))
         model_refs, model_digests = _source_bindings_from_model(self.model)
         self.source_refs = dict(model_refs if source_refs is None else source_refs)
@@ -1878,6 +1940,7 @@ class ReviewEditorSession:
                     duration_s=duration,
                     origin_s=origin,
                     source_identity=self._source_identity_token(),
+                    source_revision=self._source_revision_token(),
                 )
             )
         self.autosave_status = AutosaveStatus(
@@ -1890,13 +1953,7 @@ class ReviewEditorSession:
         return hashlib.sha256(canonical_json(identity).encode()).hexdigest()
 
     def _source_revision_token(self) -> str:
-        revisions = {
-            artifact_id: {
-                "sha256": self.source_digests.get(artifact_id, ref.sha256),
-                "source_commit": ref.source_commit,
-            }
-            for artifact_id, ref in sorted(self.source_refs.items())
-        }
+        revisions = _source_revision_payload(self.source_refs, self.source_digests)
         return hashlib.sha256(canonical_json(revisions).encode()).hexdigest()
 
     def select(
@@ -1906,25 +1963,30 @@ class ReviewEditorSession:
         interval_id: str | None = None,
         episode_id: str | None = None,
     ) -> int:
-        context = (
-            dict(self.model.get("context", {}))
-            if isinstance(self.model.get("context"), Mapping)
-            else {}
-        )
-        if time_s is not None:
-            _finite(time_s, name="time_s")
-            context["cursor"] = {
-                **(context.get("cursor", {}) if isinstance(context.get("cursor"), Mapping) else {}),
-                "time_s": float(time_s),
-            }
-        if interval_id is not None:
-            context["interval_id"] = interval_id
-        if episode_id is not None:
-            context["episode_id"] = episode_id
-        self.selection_revision += 1
-        context["context_revision"] = self.selection_revision
-        self.model["context"] = context
-        return self.selection_revision
+        with self._state_lock:
+            context = (
+                dict(self.model.get("context", {}))
+                if isinstance(self.model.get("context"), Mapping)
+                else {}
+            )
+            if time_s is not None:
+                _finite(time_s, name="time_s")
+                context["cursor"] = {
+                    **(
+                        context.get("cursor", {})
+                        if isinstance(context.get("cursor"), Mapping)
+                        else {}
+                    ),
+                    "time_s": float(time_s),
+                }
+            if interval_id is not None:
+                context["interval_id"] = interval_id
+            if episode_id is not None:
+                context["episode_id"] = episode_id
+            self.selection_revision += 1
+            context["context_revision"] = self.selection_revision
+            self.model["context"] = context
+            return self.selection_revision
 
     def _check_selection(self, expected_selection_revision: int | None) -> None:
         if (
@@ -1964,6 +2026,26 @@ class ReviewEditorSession:
         )
 
     def _save(
+        self,
+        record: Any,
+        *,
+        operation_id: str | None,
+        expected_revision: int | None,
+        expected_selection_revision: int | None,
+    ) -> CommitResult:
+        # Selection changes and the adapter's compare-and-swap form one
+        # critical section.  This lock intentionally spans a blocking adapter
+        # call: a different thread cannot advance the captured context after
+        # the preflight check but before the durable write.
+        with self._state_lock:
+            return self._save_locked(
+                record,
+                operation_id=operation_id,
+                expected_revision=expected_revision,
+                expected_selection_revision=expected_selection_revision,
+            )
+
+    def _save_locked(
         self,
         record: Any,
         *,
@@ -2149,8 +2231,18 @@ class ReviewEditorSession:
         if self.adapter is None:
             raise ReviewEditorError("a persistence adapter is required for reload")
         stored = self.adapter.get(self.storyboard_record_id(), include_deleted=True)
-        if stored is None or not isinstance(stored.record, ActionRecord):
+        if stored is None:
             return self.storyboard
+        if stored.deleted or stored.record is None:
+            raise ReviewEditorError("stored storyboard tombstone is not reloadable")
+        if (
+            not isinstance(stored.revision, int)
+            or isinstance(stored.revision, bool)
+            or stored.revision < 0
+        ):
+            raise ReviewEditorError("stored storyboard record revision is invalid")
+        if stored.record_type != "action_record" or not isinstance(stored.record, ActionRecord):
+            raise ReviewEditorError("stored storyboard record type is invalid")
         record = stored.record
         if (
             record.action_type != "storyboard_edit"
@@ -2159,12 +2251,22 @@ class ReviewEditorSession:
             raise ReviewEditorError(
                 "stored storyboard record identity does not match current source"
             )
+        if record.status != "committed":
+            raise ReviewEditorError("stored storyboard action status is not committed")
+        if record.target_id != self._source_identity_token():
+            raise ReviewEditorError("stored storyboard target identity is stale")
         details = record.details
         if (
             not isinstance(details, Mapping)
             or details.get("schema_version") != STORYBOARD_SCHEMA_VERSION
         ):
             raise ReviewEditorError("stored storyboard schema_version is invalid")
+        required_details = ("record_id", "source_identity", "source_revision", "storyboard")
+        missing_details = [name for name in required_details if name not in details]
+        if missing_details:
+            raise ReviewEditorError(
+                "stored storyboard provenance is incomplete: " + ", ".join(missing_details)
+            )
         if details.get("record_id") != self.storyboard_record_id():
             raise ReviewEditorError("stored storyboard record_id does not match current source")
         if details.get("source_identity") != self._source_identity_token():
@@ -2179,12 +2281,17 @@ class ReviewEditorSession:
             raise ReviewEditorError("stored storyboard schema_version is invalid")
         if payload.get("source_identity") != self._source_identity_token():
             raise ReviewEditorError("stored storyboard source identity is stale")
+        if "source_revision" not in payload:
+            raise ReviewEditorError("stored storyboard source revision is required")
+        if payload.get("source_revision") != self._source_revision_token():
+            raise ReviewEditorError("stored storyboard source revision is stale")
         time_origin, time_terminal = _time_bounds(self.model)
         self.storyboard = StoryboardEditor.from_mapping(
             payload,
             duration_s=time_terminal,
             origin_s=time_origin or 0.0,
             source_identity=self._source_identity_token(),
+            source_revision=self._source_revision_token(),
         )
         self.pending_record = None
         self.autosave_status = AutosaveStatus(
@@ -2236,6 +2343,7 @@ def _normalize_storyboard(
     *,
     duration_s: float | None,
     source_identity: str,
+    source_revision: str = "",
     origin_s: float = 0.0,
 ) -> dict[str, Any]:
     return StoryboardState.from_mapping(
@@ -2243,6 +2351,7 @@ def _normalize_storyboard(
         duration_s=duration_s,
         origin_s=origin_s,
         source_identity=source_identity,
+        source_revision=source_revision,
     ).to_dict()
 
 
@@ -2328,7 +2437,8 @@ def _rebind_annotation_provenance(
     if not artifact_id and len(source_refs) == 1:
         artifact_id = next(iter(source_refs))
     ref = source_refs.get(artifact_id)
-    identity = str(item.get("source_identity", ""))
+    raw_identity = item.get("source_identity")
+    identity = raw_identity if isinstance(raw_identity, str) else ""
     if ref is None and identity:
         ref = next(
             (
@@ -2351,16 +2461,17 @@ def _rebind_annotation_provenance(
     if not artifact_id:
         artifact_id = ref.artifact_id
     digest = source_digests.get(artifact_id, "")
-    revision = item.get("source_revision", "")
+    raw_revision = item.get("source_revision")
+    revision = raw_revision if isinstance(raw_revision, str) else ""
     stale_reason = ""
     unavailable_reason = ""
-    if not digest or not ref.sha256:
+    if not digest or not ref.sha256 or not ref.source_commit:
         unavailable_reason = "annotation source bytes are unavailable"
     elif ref.sha256.lower() != digest.lower():
         stale_reason = "source bytes do not match declared source hash"
-    elif identity and identity not in {artifact_id, digest, ref.sha256}:
+    elif not identity or identity != digest:
         stale_reason = "annotation source identity does not match current source"
-    elif ref.source_commit and revision not in {ref.source_commit, 0, "", None}:
+    elif not revision or revision != ref.source_commit:
         stale_reason = "annotation source revision does not match current source"
     if unavailable_reason and item.get("provenance_status") == "verified":
         result["provenance_status"] = "unavailable"
@@ -2380,6 +2491,10 @@ def _build_model(
     diagnostics: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     identity = _source_identity(panel_model, source_refs, source_digests)
+    source_identity_token = hashlib.sha256(canonical_json(identity).encode()).hexdigest()
+    source_revision_token = hashlib.sha256(
+        canonical_json(_source_revision_payload(source_refs, source_digests)).encode()
+    ).hexdigest()
     origin, duration = _derive_time_bounds(panel_model)
     storyboard_value = panel_model.get("storyboard")
     if storyboard_value is None:
@@ -2388,7 +2503,8 @@ def _build_model(
         storyboard_value if isinstance(storyboard_value, Mapping) else None,
         duration_s=duration,
         origin_s=origin or 0.0,
-        source_identity=hashlib.sha256(canonical_json(identity).encode()).hexdigest(),
+        source_identity=source_identity_token,
+        source_revision=source_revision_token,
     )
     annotations = request.config.get("annotations", panel_model.get("annotations", []))
     if not isinstance(annotations, Sequence) or isinstance(annotations, (str, bytes)):

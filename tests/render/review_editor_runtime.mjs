@@ -79,11 +79,16 @@ const pending = new Promise((resolve) => { release = resolve; });
 const savedRow = controller.snapshot().annotations.at(-1);
 const savePromise = controller.save(savedRow, {
   expected_revision: 0,
-  save: async (_record, transaction) => {
-    await pending;
-    transaction.before_commit();
-    committed = true;
-    return { revision: 1 };
+  transaction: {
+    atomic: true,
+    prepare: async (_record) => {
+      await pending;
+      return { proposal: "annotation" };
+    },
+    commit: async () => {
+      committed = true;
+      return { revision: 1 };
+    },
   },
 });
 controller.dispatch({ type: "select-time", time_s: 1.75 });
@@ -91,6 +96,17 @@ release();
 await assert.rejects(savePromise, /stale selection revision/);
 assert.equal(committed, false);
 assert.equal(controller.snapshot().autosave.state, "error");
+await assert.rejects(
+  controller.save(savedRow, {
+    expected_revision: 0,
+    save: async () => {
+      committed = true;
+      return { revision: 1 };
+    },
+  }),
+  /atomic transaction/,
+);
+assert.equal(committed, false);
 const sourceController = new ReviewEditorController(model);
 let releaseSource;
 let sourceCommitted = false;
@@ -101,24 +117,75 @@ const sourceSave = sourceController.save(sourceController.snapshot().annotations
   source_revision: "run-1",
 }, {
   expected_revision: 0,
-  save: async (_record, transaction) => {
-    await pendingSource;
-    transaction.before_commit();
-    sourceCommitted = true;
-    return { revision: 1 };
+  transaction: {
+    atomic: true,
+    prepare: async () => {
+      await pendingSource;
+      return { proposal: "source" };
+    },
+    commit: async () => {
+      sourceCommitted = true;
+      return { revision: 1 };
+    },
   },
 });
 sourceController.model.source_identity.sources.panel.sha256 = "b".repeat(64);
 releaseSource();
 await assert.rejects(sourceSave, /stale source identity/);
 assert.equal(sourceCommitted, false);
+let releaseCommit;
+let commitEntered;
+const pendingCommit = new Promise((resolve) => { releaseCommit = resolve; });
+const commitGate = new Promise((resolve) => { commitEntered = resolve; });
+const atomicController = new ReviewEditorController(model);
+atomicController.dispatch({ type: "one-click", label: "normal" });
+const atomicRecord = atomicController.snapshot().annotations.at(-1);
+let atomicCommitted = false;
+const atomicSave = atomicController.save(atomicRecord, {
+  expected_revision: 0,
+  transaction: {
+    atomic: true,
+    prepare: async (record) => ({ record }),
+    commit: async (proposal, token) => {
+      commitEntered();
+      await pendingCommit;
+      if (token.selection_revision !== atomicController.snapshot().selection_revision) {
+        throw new Error("stale selection revision");
+      }
+      atomicCommitted = true;
+      return { revision: 1, proposal };
+    },
+  },
+});
+await commitGate;
+atomicController.dispatch({ type: "select-time", time_s: 1.25 });
+releaseCommit();
+await assert.rejects(atomicSave, /stale selection revision/);
+assert.equal(atomicCommitted, false);
+const foreignRecord = {
+  ...atomicRecord,
+  source_identity: "foreign-source",
+  metadata: { ...atomicRecord.metadata, selection_revision: atomicController.state.selectionRevision },
+};
+await assert.rejects(
+  atomicController.save(foreignRecord, {
+    expected_revision: 0,
+    transaction: { atomic: true, prepare: async (record) => ({ record }), commit: async () => ({ revision: 1 }) },
+  }),
+  /source identity/,
+);
 const commands = overlayCommands(model, [{ reference_id: "a", coordinate_frame: "image", point: [10, 20] }, { reference_id: "b", coordinate_frame: "image", point: [20, 20] }], { distances: true });
 assert.equal(commands.some((item) => item.kind === "distance"), false);
 const reloadRecord = (overrides = {}) => ({
   revision: 4,
   record: {
+    record_id: controller.storyboardRecordId,
     action_id: controller.storyboardRecordId,
+    record_type: "storyboard_edit",
+    action_type: "storyboard_edit",
     target_id: "source-token",
+    source_identity: model.source_identity,
+    source_revision: controller.snapshot().storyboard.source_revision,
     details: {
       schema_version: "review-storyboard-edit.v1",
       record_id: controller.storyboardRecordId,
@@ -136,11 +203,41 @@ const reloadRecord = (overrides = {}) => ({
 });
 await assert.rejects(
   controller.reload({ record_id: controller.storyboardRecordId, load: async () => ({ revision: 4, record: { action_id: controller.storyboardRecordId, details: {} } }) }),
-  /schema_version/,
+  /record\/action type/,
 );
 await assert.rejects(
   controller.reload({ record_id: controller.storyboardRecordId, load: async () => reloadRecord({ source_identity: "other" }) }),
   /source identity/,
+);
+await assert.rejects(
+  controller.reload({ record_id: controller.storyboardRecordId, load: async () => ({ ...reloadRecord(), deleted: true }) }),
+  /tombstone/,
+);
+await assert.rejects(
+  controller.reload({ record_id: controller.storyboardRecordId, load: async () => ({ ...reloadRecord(), revision: -1 }) }),
+  /revision/,
+);
+await assert.rejects(
+  controller.reload({
+    record_id: controller.storyboardRecordId,
+    load: async () => {
+      const value = reloadRecord();
+      delete value.record.source_revision;
+      return value;
+    },
+  }),
+  /top-level source identity and revision/,
+);
+await assert.rejects(
+  controller.reload({
+    record_id: controller.storyboardRecordId,
+    load: async () => {
+      const value = reloadRecord();
+      delete value.record.details.storyboard.order;
+      return value;
+    },
+  }),
+  /storyboard intervals, order, and captions are required/,
 );
 await assert.rejects(
   controller.reload({
@@ -161,11 +258,16 @@ let storyboardCommitted = false;
 const pendingStoryboard = new Promise((resolve) => { releaseStoryboard = resolve; });
 const storyboardSave = controller.saveStoryboard({
   expected_revision: 0,
-  save: async (_record, transaction) => {
-    await pendingStoryboard;
-    transaction.before_commit();
-    storyboardCommitted = true;
-    return { revision: 1 };
+  transaction: {
+    atomic: true,
+    prepare: async () => {
+      await pendingStoryboard;
+      return { proposal: "storyboard" };
+    },
+    commit: async () => {
+      storyboardCommitted = true;
+      return { revision: 1 };
+    },
   },
 });
 controller.dispatch({ type: "select-time", time_s: 1.5 });
@@ -177,8 +279,13 @@ await controller.reload({
   load: async (recordId) => ({
     revision: 4,
     record: {
+      record_id: recordId,
       action_id: recordId,
+      record_type: "storyboard_edit",
+      action_type: "storyboard_edit",
       target_id: "source-token",
+      source_identity: model.source_identity,
+      source_revision: controller.snapshot().storyboard.source_revision,
       details: {
         schema_version: "review-storyboard-edit.v1",
         record_id: recordId,

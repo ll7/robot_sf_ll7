@@ -2,11 +2,13 @@
  *
  * The controller owns transient browser state only.  It never uses
  * browser key/value storage, appends to an audit file, imports a network asset, or guesses
- * a world coordinate from screen pixels.  Durable records are sent to the
- * injected BA-03/BA-05-compatible save callback with an operation ID,
- * expected revision, and immutable source/selection context. The callback
- * must invoke `before_commit` immediately before its adapter write; the guard
- * rejects delayed stale selections.
+ * a world coordinate from screen pixels.  Durable records are sent through
+ * an injected atomic transaction with an operation ID, expected revision,
+ * and immutable source/selection context. The transaction must expose
+ * `atomic: true`, a non-durable `prepare` method, and a durable
+ * compare-and-swap `commit` method. Direct save callbacks are rejected
+ * because a controller-side guard cannot make an arbitrary delayed callback
+ * atomic.
  */
 
 export const EDITOR_MODEL_SCHEMA_VERSION = "review-editor.v1";
@@ -141,8 +143,13 @@ function sourceRevision(model) {
   const revisions = Object.fromEntries(Object.entries(sources).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [
     key,
     item && typeof item === "object"
-      ? { sha256: item.sha256 || item.declared_sha256 || "", source_commit: item.source_commit || "" }
-      : { sha256: "", source_commit: "" },
+      ? {
+        sha256: item.sha256 || item.declared_sha256 || "",
+        source_commit: item.source_commit || "",
+        schema: item.schema || "",
+        config_identity: item.config_identity || "",
+      }
+      : { sha256: "", source_commit: "", schema: "", config_identity: "" },
   ]));
   return stableStringify({ revisions, context: context(model).source_revision || "" });
 }
@@ -207,6 +214,16 @@ function isTextEntry(target) {
 
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function frozenClone(value) {
+  const copy = clone(value);
+  const freeze = (item) => {
+    if (!item || typeof item !== "object" || Object.isFrozen(item)) return item;
+    Object.values(item).forEach(freeze);
+    return Object.freeze(item);
+  };
+  return freeze(copy);
 }
 
 function annotation(model, mode, classification, extra = {}) {
@@ -572,24 +589,62 @@ export class ReviewEditorController {
     if (record?.provenance_status && record.provenance_status !== "verified") {
       throw new Error("cannot durably save an unavailable or stale annotation");
     }
-    if (record?.source_identity && typeof record.source_identity === "object" && !sameJson(record.source_identity, captured.source_identity)) {
-      throw new Error("record source identity does not match current source");
+    if (Object.prototype.hasOwnProperty.call(record || {}, "source_identity")) {
+      const value = record.source_identity;
+      const sourceEntries = captured.source_identity?.sources
+        && typeof captured.source_identity.sources === "object"
+        ? Object.values(captured.source_identity.sources)
+        : [];
+      const declaredIdentities = sourceEntries.flatMap((item) => (
+        item && typeof item === "object"
+          ? [item.sha256, item.declared_sha256].filter(Boolean).map(String)
+          : []
+      ));
+      const matches = typeof value === "string"
+        ? value.length > 0 && declaredIdentities.includes(value)
+        : value && typeof value === "object" && sameJson(value, captured.source_identity);
+      if (!matches) throw new Error("record source identity does not match current source");
     }
-    if (record?.source_revision !== undefined) {
+    if (record?.provenance_status === "verified"
+      && (!Object.prototype.hasOwnProperty.call(record, "source_identity")
+        || !Object.prototype.hasOwnProperty.call(record, "source_revision"))) {
+      throw new Error("verified record source identity and revision are required");
+    }
+    if (Object.prototype.hasOwnProperty.call(record || {}, "source_revision")) {
       const sourceEntries = captured.source_identity?.sources && typeof captured.source_identity.sources === "object"
         ? Object.values(captured.source_identity.sources)
         : [];
       const declaredRevisions = sourceEntries.flatMap((item) => item && typeof item === "object" && item.source_commit ? [String(item.source_commit)] : []);
-      if (String(record.source_revision) !== String(captured.source_revision) && !declaredRevisions.includes(String(record.source_revision))) {
+      const revision = record.source_revision;
+      if (typeof revision !== "string" || !revision
+        || (revision !== captured.source_revision && !declaredRevisions.includes(revision))) {
         throw new Error("record source revision does not match current source");
       }
     }
   }
 
+  _transaction(options = {}, storyboard = false) {
+    const transaction = options.transaction
+      || (storyboard ? options.storyboard_transaction : options.annotation_transaction)
+      || this.options.transaction
+      || (storyboard ? this.options.storyboardTransaction : this.options.annotationTransaction);
+    if (
+      !transaction
+      || typeof transaction !== "object"
+      || transaction.atomic !== true
+      || typeof transaction.prepare !== "function"
+      || typeof transaction.commit !== "function"
+    ) {
+      throw new Error(
+        "an atomic transaction with prepare/commit compare-and-swap primitives is required",
+      );
+    }
+    return transaction;
+  }
+
   async save(record, options = {}) {
     if (!record) throw new Error("record is required for save");
-    const save = options.save || this.options.save;
-    if (typeof save !== "function") throw new Error("a BA-03/BA-05 save callback is required");
+    const transaction = this._transaction(options);
     const operationId = options.operation_id || newId("operation");
     const recordRevision = Number.isInteger(record?.revision)
       ? record.revision
@@ -609,12 +664,17 @@ export class ReviewEditorController {
       throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${saveContext.selection_revision}`);
     }
     this._recordContext(record, saveContext);
-    let guardCalled = false;
-    const beforeCommit = () => {
-      this._assertSaveContext(saveContext);
-      guardCalled = true;
-      return true;
-    };
+    const token = frozenClone({
+      operation_id: operationId,
+      expected_revision: expectedRevision,
+      selection_revision: saveContext.selection_revision,
+      source_identity: saveContext.source_identity,
+      source_revision: saveContext.source_revision,
+      context: saveContext.context,
+      record_id: String(record.annotation_id || record.review_id || record.action_id || ""),
+      actor_kind: options.actor_kind || this.options.actor_kind || "human",
+      actor_id: options.actor_id || this.options.actor_id || "",
+    });
     this.state.autosave = {
       state: "pending",
       operation_id: operationId,
@@ -626,21 +686,15 @@ export class ReviewEditorController {
     };
     this._render();
     try {
-      const receipt = await save(clone(record), {
-        operation_id: operationId,
-        expected_revision: expectedRevision,
-        selection_revision: saveContext.selection_revision,
-        source_identity: clone(saveContext.source_identity),
-        source_revision: saveContext.source_revision,
-        context: clone(saveContext.context),
-        before_commit: beforeCommit,
-        assert_current: beforeCommit,
-        actor_kind: options.actor_kind || this.options.actor_kind || "human",
-        actor_id: options.actor_id || this.options.actor_id || "",
-      });
-      if (!guardCalled) {
-        throw new Error("save callback must call before_commit immediately before durable commit");
+      // prepare is explicitly non-durable.  Revalidation immediately before
+      // commit closes the delayed-prepare race; the atomic adapter owns the
+      // final CAS while the durable write is in flight.
+      const proposal = await transaction.prepare(clone(record), token);
+      if (proposal === undefined) {
+        throw new Error("atomic transaction prepare must return an uncommitted proposal");
       }
+      this._assertSaveContext(saveContext);
+      const receipt = await transaction.commit(proposal, token);
       this.state.autosave = {
         state: "saved",
         operation_id: operationId,
@@ -668,8 +722,7 @@ export class ReviewEditorController {
   }
 
   async saveStoryboard(options = {}) {
-    const save = options.save_storyboard || options.save || this.options.saveStoryboard || this.options.save;
-    if (typeof save !== "function") throw new Error("a BA-03/BA-05 storyboard save callback is required");
+    const transaction = this._transaction(options, true);
     const operationId = options.operation_id || newId("operation");
     const expectedRevision = options.expected_revision ?? this.state.autosave.saved_revision;
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
@@ -680,12 +733,6 @@ export class ReviewEditorController {
     if (expectedSelectionRevision !== saveContext.selection_revision) {
       throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${saveContext.selection_revision}`);
     }
-    const beforeCommit = () => {
-      this._assertSaveContext(saveContext);
-      guardCalled = true;
-      return true;
-    };
-    let guardCalled = false;
     const recordId = String(options.record_id || this.storyboardRecordId);
     const storyboard = normalizeStoryboard(this.state.storyboard, this.model);
     if (!sameJson(storyboard.source_identity, storyboardSourceIdentity(this.model)) || storyboard.source_revision !== sourceRevision(this.model)) {
@@ -695,6 +742,7 @@ export class ReviewEditorController {
       record_id: recordId,
       action_id: recordId,
       record_type: "storyboard_edit",
+      action_type: "storyboard_edit",
       target_id: storyboardSourceIdentity(this.model),
       source_identity: clone(saveContext.source_identity),
       source_revision: saveContext.source_revision,
@@ -706,28 +754,29 @@ export class ReviewEditorController {
         storyboard,
       },
     };
+    const token = frozenClone({
+      operation_id: operationId,
+      expected_revision: expectedRevision,
+      selection_revision: saveContext.selection_revision,
+      source_identity: saveContext.source_identity,
+      source_revision: saveContext.source_revision,
+      context: saveContext.context,
+      record_id: recordId,
+      actor_kind: options.actor_kind || this.options.actor_kind || "human",
+      actor_id: options.actor_id || this.options.actor_id || "",
+    });
     this.state.autosave = {
       state: "pending", operation_id: operationId, expected_revision: expectedRevision,
       saved_revision: null, selection_revision: saveContext.selection_revision, error: "", conflict: null,
     };
     this._render();
     try {
-      const receipt = await save(record, {
-        operation_id: operationId,
-        expected_revision: expectedRevision,
-        selection_revision: saveContext.selection_revision,
-        source_identity: clone(saveContext.source_identity),
-        source_revision: saveContext.source_revision,
-        context: clone(saveContext.context),
-        before_commit: beforeCommit,
-        assert_current: beforeCommit,
-        record_id: recordId,
-        actor_kind: options.actor_kind || this.options.actor_kind || "human",
-        actor_id: options.actor_id || this.options.actor_id || "",
-      });
-      if (!guardCalled) {
-        throw new Error("save callback must call before_commit immediately before durable commit");
+      const proposal = await transaction.prepare(clone(record), token);
+      if (proposal === undefined) {
+        throw new Error("atomic transaction prepare must return an uncommitted proposal");
       }
+      this._assertSaveContext(saveContext);
+      const receipt = await transaction.commit(proposal, token);
       this.state.autosave = {
         state: "saved", operation_id: operationId, expected_revision: expectedRevision,
         saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
@@ -753,9 +802,22 @@ export class ReviewEditorController {
     const reloadContext = this._saveContext();
     const loaded = await load(expectedRecordId);
     this._assertSaveContext(reloadContext);
+    if (loaded?.deleted === true || loaded?.tombstone === true) {
+      throw new Error("loaded storyboard tombstone is not reloadable");
+    }
     const record = loaded?.record && typeof loaded.record === "object" ? loaded.record : loaded;
-    const actualRecordId = record?.record_id || record?.action_id || loaded?.record_id || loaded?.action_id;
-    if (String(actualRecordId || "") !== expectedRecordId) throw new Error("loaded storyboard record identity does not match requested record");
+    if (!record || typeof record !== "object" || record.deleted === true || record.tombstone === true) {
+      throw new Error("loaded storyboard tombstone or record is invalid");
+    }
+    if (record.record_type !== "storyboard_edit" || record.action_type !== "storyboard_edit") {
+      throw new Error("loaded storyboard record/action type is invalid");
+    }
+    if (loaded?.record_type !== undefined && loaded.record_type !== "storyboard_edit") {
+      throw new Error("loaded storyboard record type is invalid");
+    }
+    if (record.record_id !== expectedRecordId || record.action_id !== expectedRecordId) {
+      throw new Error("loaded storyboard record identity does not match requested record");
+    }
     const revision = loaded?.revision ?? loaded?.record_revision ?? record?.revision;
     if (!Number.isInteger(revision) || revision < 0) throw new Error("loaded storyboard record revision is required");
     const details = record?.details || loaded?.details;
@@ -769,8 +831,12 @@ export class ReviewEditorController {
     if (details.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
     if (details.record_id !== expectedRecordId) throw new Error("loaded storyboard record_id is invalid");
     if (!sameJson(record?.target_id, expectedSourceIdentity)) throw new Error("loaded storyboard target identity is stale");
-    if (record?.source_identity !== undefined && !sameJson(record.source_identity, sourceIdentity(this.model))) throw new Error("loaded storyboard source identity is stale");
-    if (record?.source_revision !== undefined && record.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
+    if (!Object.prototype.hasOwnProperty.call(record, "source_identity")
+      || !Object.prototype.hasOwnProperty.call(record, "source_revision")) {
+      throw new Error("loaded storyboard top-level source identity and revision are required");
+    }
+    if (!sameJson(record.source_identity, sourceIdentity(this.model))) throw new Error("loaded storyboard source identity is stale");
+    if (record.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
     const payload = details.storyboard;
     if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "schema_version") || !Object.prototype.hasOwnProperty.call(payload, "source_identity") || !Object.prototype.hasOwnProperty.call(payload, "source_revision")) {
       throw new Error("loaded storyboard schema, source identity, and source revision are required");

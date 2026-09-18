@@ -55,14 +55,19 @@ does not invent a second store. `ReviewEditorSession` reports `pending`,
 and includes the remote record and selection revision in `SaveConflict`; it is
 never a silent overwrite. Storyboard edits use an auditable BA-03
 `ActionRecord` carrying the versioned storyboard, with the same CAS contract.
-Browser annotation/storyboard saves use injected service callbacks and never
-`localStorage`; the callback receives an immutable source/context snapshot plus
-`before_commit`/`assert_current`. The adapter must call that guard immediately
-before its durable write; a delayed callback that observes a changed selection,
-source identity, source revision, or context is rejected before it can commit.
-Reload accepts only the explicit `review-storyboard-edit.v1` schema, matching
-record/source identities and revisions, a nonnegative record revision, and
-source-bounded intervals.
+The headless session serializes selection changes with the adapter call, so a
+blocked synchronous write cannot commit a record after another thread changes
+the captured selection.
+Browser annotation/storyboard saves use injected atomic transactions and never
+`localStorage`. A transaction must advertise `atomic: true`, return an
+uncommitted proposal from `prepare(record, token)`, and implement a durable
+compare-and-swap `commit(proposal, token)` using the immutable operation,
+expected-revision, selection, source-identity, source-revision, and context
+token. Direct callbacks are rejected: a delayed or buggy callback cannot gain a
+durable write capability from the controller. Reload accepts only the explicit
+`review-storyboard-edit.v1` schema, matching record/action/source identities and
+revisions, a nonnegative non-tombstone record revision, and source-bounded
+intervals.
 
 `StoryboardEditor` validates source intervals, preserves captions and order,
 supports undo/redo, and writes only to a caller-declared export destination.

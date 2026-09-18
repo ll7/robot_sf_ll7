@@ -7,13 +7,14 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import (
     Reference,
 )
-from robot_sf.analysis_workbench.audit_store import AuditConflictError
+from robot_sf.analysis_workbench.audit_store import AuditConflictError, CommitResult
 from robot_sf.analysis_workbench.review_contracts import component_request_from_dict
 from robot_sf.render import review_editor
 
@@ -202,6 +203,12 @@ def test_source_origin_resolution_and_schema_are_fail_closed(tmp_path: Path) -> 
                 "captions": {},
             }
         )
+    with pytest.raises(review_editor.ReviewEditorError, match="schema_version is required"):
+        review_editor.StoryboardEditor.from_mapping({"intervals": [], "order": [], "captions": {}})
+    with pytest.raises(review_editor.InvalidIntervalError, match="before source origin"):
+        review_editor.create_reference(model, (0.0, 0.0), timestamp_s=9.9)
+    with pytest.raises(review_editor.InvalidIntervalError, match="after source terminal"):
+        review_editor.create_reference(model, (0.0, 0.0), timestamp_s=12.1)
 
     panel = tmp_path / "panel.json"
     panel.write_text('{"schema_version":"review-panels.v0"}', encoding="utf-8")
@@ -336,7 +343,200 @@ def test_untrusted_config_and_storyboard_exports_reject_symlinks(tmp_path: Path)
         review_editor.StoryboardEditor().save(export, overwrite=True)
 
 
+def test_snapping_uses_srev16_status_missingness_and_earlier_ties() -> None:
+    model = {
+        "context": {"cursor": {"time_s": 10.5}},
+        "time": {"origin_s": 10.0, "terminal_s": 11.0},
+        "streams": {
+            "scene": {
+                "status": "available",
+                "resolution_s": 0.5,
+                "samples": [
+                    {"time_s": 10.0, "value": {"robot": {"id": "r", "position": [1, 2]}}},
+                    {"time_s": 11.0, "value": {"robot": {"id": "r", "position": [9, 9]}}},
+                ],
+            }
+        },
+        "metrics": {
+            "clearance": {
+                "stream": {
+                    "status": "available",
+                    "resolution_s": 0.5,
+                    "samples": [
+                        {"time_s": 10.0, "value": 1.0, "missing": True},
+                        {"time_s": 11.0, "value": 2.0},
+                    ],
+                }
+            }
+        },
+    }
+    actor = review_editor.snap_reference(model, "actor", target_id="r")
+    assert actor.point == (1.0, 2.0)
+    with pytest.raises(review_editor.ReviewEditorError, match="sample_missing"):
+        review_editor.snap_reference(
+            {
+                **model,
+                "streams": {
+                    "scene": {
+                        "status": "available",
+                        "resolution_s": 0.5,
+                        "samples": [
+                            {
+                                "time_s": 10.0,
+                                "value": {"robot": {"id": "r", "position": [1, 2]}},
+                                "missing_reason": "gap",
+                            },
+                            {"time_s": 11.0, "value": {"robot": {"id": "r", "position": [9, 9]}}},
+                        ],
+                    }
+                },
+            },
+            "actor",
+            target_id="r",
+        )
+    with pytest.raises(review_editor.ReviewEditorError, match="sample_missing"):
+        review_editor.snap_reference(model, "metric", target_id="clearance")
+    unavailable = {
+        **model,
+        "streams": {"scene": {"status": "unavailable", "reason": "capture_missing"}},
+    }
+    with pytest.raises(review_editor.ReviewEditorError, match="capture_missing"):
+        review_editor.snap_reference(unavailable, "actor", target_id="r")
+
+
+def test_verified_annotation_without_a_resolvable_binding_is_unavailable() -> None:
+    result = review_editor._rebind_annotation_provenance(
+        {"provenance_status": "verified", "source_identity": "missing-source"}, {}, {}
+    )
+    assert result["provenance_status"] == "unavailable"
+    assert "binding" in result["provenance_reason"]
+
+
 def test_node_browser_controller_honours_typing_shortcut_suppression() -> None:
     script = Path(__file__).resolve().parent / "review_editor_runtime.mjs"
     completed = subprocess.run(["node", str(script)], check=True, capture_output=True, text=True)
     assert "review_editor_runtime: ok" in completed.stdout
+
+
+def test_ba05_service_adapter_forwards_save_and_commit_variants() -> None:
+    record = SimpleNamespace(record_id="row-1")
+    receipt = CommitResult("op", "row-1", "annotation", 1, 1)
+
+    class SaveService:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def get(self, record_id: str, **kwargs):
+            self.calls.append(("get", record_id, kwargs))
+
+        def save(self, saved, **kwargs):
+            self.calls.append(("save", saved, kwargs))
+            return receipt
+
+    service = SaveService()
+    adapter = review_editor.ServicePersistenceAdapter(service)
+    assert adapter.get("row-1") is None
+    assert adapter.get_revision("row-1") == 0
+    assert (
+        adapter.save(
+            record,
+            operation_id="op",
+            expected_revision=0,
+            actor="human",
+            actor_id="h1",
+        )
+        == receipt
+    )
+    assert service.calls[-1][2]["expected_revision"] == 0
+
+    class CommitService:
+        def load(self, _record_id: str, **_kwargs):
+            return SimpleNamespace(revision=4)
+
+        def commit(self, records, **_kwargs):
+            assert records == [record]
+            return receipt
+
+    commit_adapter = review_editor.ServicePersistenceAdapter(CommitService())
+    assert commit_adapter.get_revision("row-1") == 4
+    assert (
+        commit_adapter.save(
+            record,
+            operation_id="op",
+            expected_revision=0,
+            actor="human",
+        )
+        == receipt
+    )
+
+    with pytest.raises(review_editor.ReviewEditorError, match="requires get/load"):
+        review_editor.ServicePersistenceAdapter(object()).get("row-1")
+    with pytest.raises(review_editor.ReviewEditorError, match="requires save/commit"):
+        review_editor.ServicePersistenceAdapter(
+            SimpleNamespace(get=lambda *_args, **_kwargs: None)
+        ).save(record, operation_id="op", expected_revision=0, actor="human")
+    with pytest.raises(review_editor.ReviewEditorError, match="commit receipt"):
+        review_editor.ServicePersistenceAdapter(
+            SimpleNamespace(save=lambda *_args, **_kwargs: object())
+        ).save(record, operation_id="op", expected_revision=0, actor="human")
+
+
+def test_reference_targets_overlay_flags_and_storyboard_boundaries(tmp_path: Path) -> None:
+    model = _model(tmp_path)
+    waypoint = review_editor.snap_reference(model, "waypoint", target_id="wp-1")
+    map_object = review_editor.snap_reference(model, "map", target_id="wall-1")
+    event = review_editor.snap_reference(model, "event", target_id="near-miss-17")
+    metric = review_editor.snap_reference(model, "metric", target_id="clearance")
+    assert waypoint.waypoint_id == "wp-1"
+    assert map_object.object_id == "wall-1"
+    assert event.event_id == "near-miss-17"
+    assert metric.metric_id == "clearance"
+
+    commands = review_editor.build_overlay_commands(
+        model,
+        [waypoint, event],
+        overlays={"numbered": True, "highlights": True, "arrows": True, "rings": True},
+    )
+    assert {item["kind"] for item in commands} >= {"numbered", "ring"}
+
+    editor = review_editor.StoryboardEditor(duration_s=12.0)
+    editor.add_interval("a", 1.0, 2.0)
+    editor.update_interval("a", 2.0, 3.0)
+    editor.set_caption("a", "updated")
+    with pytest.raises(review_editor.ReviewEditorError, match="duplicate"):
+        editor.add_interval("a", 4.0, 5.0)
+    with pytest.raises(review_editor.ReviewEditorError, match="unknown storyboard interval"):
+        editor.update_interval("missing", 1.0, 2.0)
+    with pytest.raises(review_editor.ReviewEditorError, match="unknown storyboard interval"):
+        editor.set_caption("missing", "nope")
+    with pytest.raises(review_editor.ReviewEditorError, match="unknown storyboard interval"):
+        editor.remove("missing")
+    editor.remove("a")
+    assert editor.undo().intervals
+    assert editor.redo().intervals == ()
+    destination = editor.save(tmp_path / "overwrite.json")
+    editor.save(destination, overwrite=True)
+
+
+def test_input_contract_rejects_invalid_values_and_malformed_model_bindings() -> None:
+    with pytest.raises(review_editor.ReviewEditorError, match="finite"):
+        review_editor.validate_interval({"start_s": float("nan")})
+    with pytest.raises(review_editor.ReviewEditorError, match="exactly two"):
+        review_editor.create_reference({}, (1.0,))
+    with pytest.raises(review_editor.ReviewEditorError, match="optional text"):
+        review_editor.make_quick_annotation({}, "unclear", observed_behavior=1)  # type: ignore[arg-type]
+    with pytest.raises(review_editor.ReviewEditorError, match="author_kind"):
+        review_editor.make_full_annotation({}, "unclear", author_kind="robot")
+    with pytest.raises(review_editor.ReviewEditorError, match="measured_evidence"):
+        review_editor.make_full_annotation({}, "unclear", measured_evidence=(1,))  # type: ignore[arg-type]
+
+    model = {
+        "source_identity": {
+            "sources": {
+                "bad": 3,
+                "missing": {"artifact_id": "missing", "uri": "", "format": "scene"},
+            }
+        }
+    }
+    refs, digests = review_editor._source_bindings_from_model(model)
+    assert refs == {} and digests == {}

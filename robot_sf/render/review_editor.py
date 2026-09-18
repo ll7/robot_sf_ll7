@@ -68,6 +68,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_request_from_dict,
     component_result_from_dict,
 )
+from robot_sf.render.review_panels import NearestSample, nearest_sample
 
 COMPONENT_ID = "srev17-review-editor"
 COMPONENT_VERSION = "1.0.0"
@@ -981,10 +982,12 @@ def make_full_annotation(
     )
     if selected_interval is not None:
         selected_interval = _validate_model_interval(model, selected_interval)
-    normalized_evidence = tuple(dict(item) for item in measured_evidence)
-    for item in normalized_evidence:
+    normalized_evidence_items: list[dict[str, Any]] = []
+    for item in measured_evidence:
         if not isinstance(item, Mapping):
             raise ReviewEditorError("measured_evidence entries must be mappings")
+        normalized_evidence_items.append(dict(item))
+    normalized_evidence = tuple(normalized_evidence_items)
     return Annotation(
         annotation_id=annotation_id or f"annotation-{uuid.uuid4().hex}",
         episode_id=_episode_id(model),
@@ -1067,30 +1070,52 @@ def coverage_summary(records: Sequence[Any]) -> dict[str, Any]:
     }
 
 
-def _sample_at(model: Mapping[str, Any], time_s: float) -> Mapping[str, Any] | None:
+def _normalize_stream(stream: Mapping[str, Any]) -> dict[str, Any]:
+    """Apply SREV-16 missing-row aliases before nearest-sample selection."""
+
+    normalized = dict(stream)
+    rows = []
+    for row in stream.get("samples", []):
+        if not isinstance(row, Mapping):
+            rows.append(row)
+            continue
+        copied = dict(row)
+        copied["missing"] = bool(
+            row.get("missing")
+            or row.get("available") is False
+            or ("value" in row and row.get("value") is None)
+            or row.get("missing_reason")
+        )
+        rows.append(copied)
+    normalized["samples"] = rows
+    return normalized
+
+
+def _nearest_stream_sample(stream: Mapping[str, Any], time_s: float) -> NearestSample:
+    return nearest_sample(_normalize_stream(stream), time_s)
+
+
+def _stream_sample(model: Mapping[str, Any], stream_name: str, time_s: float) -> NearestSample:
+    """Use the SREV-16 nearest-sample contract for every snap consumer."""
+
     streams = model.get("streams")
-    stream = streams.get("scene") if isinstance(streams, Mapping) else None
-    samples = stream.get("samples", []) if isinstance(stream, Mapping) else []
-    candidates = [
-        item
-        for item in samples
-        if isinstance(item, Mapping) and isinstance(item.get("time_s"), (int, float))
-    ]
-    if not candidates:
+    stream = streams.get(stream_name) if isinstance(streams, Mapping) else None
+    if not isinstance(stream, Mapping):
+        stream = {"status": "unavailable", "reason": f"{stream_name}_stream_missing"}
+    return _nearest_stream_sample(stream, time_s)
+
+
+def _sample_at(model: Mapping[str, Any], time_s: float) -> Mapping[str, Any] | None:
+    """Return an available scene sample under the SREV-16 alignment rules."""
+
+    selected = _stream_sample(model, "scene", time_s)
+    if selected.status != "available" or not isinstance(selected.value, Mapping):
         return None
-    selected = min(
-        candidates, key=lambda item: (abs(float(item["time_s"]) - time_s), float(item["time_s"]))
-    )
-    resolution = stream.get("resolution_s") if isinstance(stream, Mapping) else None
-    if isinstance(resolution, (int, float)) and not isinstance(resolution, bool):
-        if math.isfinite(float(resolution)) and float(resolution) >= 0:
-            if abs(float(selected["time_s"]) - time_s) > float(resolution):
-                return None
-    return selected
+    return selected.value
 
 
 def _actor_point(sample: Mapping[str, Any] | None, actor_id: str) -> tuple[float, float] | None:
-    value = sample.get("value", {}) if isinstance(sample, Mapping) else {}
+    value = sample.get("value", sample) if isinstance(sample, Mapping) else {}
     if not isinstance(value, Mapping):
         return None
     robot = value.get("robot")
@@ -1142,6 +1167,18 @@ def _units_for(model: Mapping[str, Any], source: SourceRef | None) -> str:
         if isinstance(value, str) and value:
             return value
     return ""
+
+
+def _validate_reference_timestamp(model: Mapping[str, Any], timestamp_s: float) -> float:
+    """Require a reference timestamp to lie within declared source bounds."""
+
+    timestamp = _finite(timestamp_s, name="timestamp_s")
+    origin, terminal = _time_bounds(model)
+    if origin is not None and timestamp < origin:
+        raise InvalidIntervalError("reference timestamp is before source origin")
+    if terminal is not None and timestamp > terminal:
+        raise InvalidIntervalError("reference timestamp is after source terminal")
+    return timestamp
 
 
 def create_reference(
@@ -1196,14 +1233,16 @@ def create_reference(
                 raise ReviewEditorError("world reference requires a calibration marked verified")
     if coordinate_frame == "image" and source_value is None:
         raise ReviewEditorError("image reference requires a media source identity")
+    timestamp = _validate_reference_timestamp(
+        model,
+        _current_time(model) if timestamp_s is None else timestamp_s,
+    )
     return Reference(
         reference_id=reference_id or f"reference-{uuid.uuid4().hex}",
         coordinate_frame=coordinate_frame,
         point=point_value,
         source=source_value,
-        timestamp_s=_current_time(model)
-        if timestamp_s is None
-        else _finite(timestamp_s, name="timestamp_s"),
+        timestamp_s=timestamp,
         source_revision=source_revision,
         calibration=calibration,
         source_point=None if source_point is None else _point(source_point, name="source_point"),
@@ -1239,9 +1278,14 @@ def snap_reference(
     if target == "actor":
         if not target_id:
             target_id = str(_context_value(model, "actor_id", "robot"))
-        point = _actor_point(_sample_at(model, timestamp), target_id)
+        sample_result = _stream_sample(model, "scene", timestamp)
+        point = _actor_point(
+            sample_result.value if sample_result.status == "available" else None,
+            target_id,
+        )
         if point is None:
-            raise ReviewEditorError(f"recorded actor geometry unavailable: {target_id}")
+            reason = sample_result.reason or "sample_unavailable"
+            raise ReviewEditorError(f"recorded actor geometry unavailable: {target_id} ({reason})")
         return create_reference(
             model,
             point,
@@ -1316,7 +1360,8 @@ def snap_reference(
             if isinstance(actor_ids, Sequence) and not isinstance(actor_ids, (str, bytes))
             else []
         )
-        sample = _sample_at(model, event_time)
+        sample_result = _stream_sample(model, "scene", event_time)
+        sample = sample_result.value if sample_result.status == "available" else None
         actor_id = ""
         point = None
         for candidate in actor_candidates:
@@ -1327,7 +1372,8 @@ def snap_reference(
         if point is None:
             point = _maybe_point(event.get("point", event.get("position")))
         if point is None:
-            raise ReviewEditorError(f"recorded event geometry unavailable: {target_id}")
+            reason = sample_result.reason or "sample_unavailable"
+            raise ReviewEditorError(f"recorded event geometry unavailable: {target_id} ({reason})")
         return create_reference(
             model,
             point,
@@ -1344,33 +1390,25 @@ def snap_reference(
     metrics = model.get("metrics", {})
     metric = metrics.get(target_id) if isinstance(metrics, Mapping) else None
     stream = metric.get("stream", metric) if isinstance(metric, Mapping) else None
-    samples = stream.get("samples", []) if isinstance(stream, Mapping) else []
-    sample = min(
-        (
-            item
-            for item in samples
-            if isinstance(item, Mapping) and isinstance(item.get("time_s"), (int, float))
-        ),
-        key=lambda item: abs(float(item["time_s"]) - timestamp),
-        default=None,
+    sample_result = _nearest_stream_sample(
+        {"status": "unavailable", "reason": "metric_stream_missing"}
+        if not isinstance(stream, Mapping)
+        else stream,
+        timestamp,
     )
-    if sample is None:
-        raise ReviewEditorError(f"recorded metric sample unavailable: {target_id}")
-    resolution = stream.get("resolution_s") if isinstance(stream, Mapping) else None
-    if isinstance(resolution, (int, float)) and not isinstance(resolution, bool):
-        if math.isfinite(float(resolution)) and float(resolution) >= 0:
-            if abs(float(sample["time_s"]) - timestamp) > float(resolution):
-                raise ReviewEditorError(f"recorded metric sample unavailable: {target_id}")
-    raw_value = sample.get("value")
+    if sample_result.status != "available" or sample_result.sample_time_s is None:
+        reason = sample_result.reason or "sample_unavailable"
+        raise ReviewEditorError(f"recorded metric sample unavailable: {target_id} ({reason})")
+    raw_value = sample_result.value
     if isinstance(raw_value, Mapping):
         raw_value = raw_value.get("value")
     value = _finite(raw_value, name="metric value")
     return create_reference(
         model,
-        (float(sample["time_s"]), value),
+        (float(sample_result.sample_time_s), value),
         reference_id=reference_id,
         coordinate_frame="image",
-        timestamp_s=float(sample["time_s"]),
+        timestamp_s=float(sample_result.sample_time_s),
         source=source_value,
         source_revision=source_revision,
         metric_id=target_id,
@@ -1551,8 +1589,12 @@ class StoryboardState:
     ) -> StoryboardState:
         if value is None:
             return cls(duration_s=duration_s, source_identity=source_identity, origin_s=origin_s)
+        if not isinstance(value, Mapping):
+            raise ReviewEditorError("storyboard must be an object")
         version = value.get("schema_version")
-        if version is not None and version != STORYBOARD_SCHEMA_VERSION:
+        if version != STORYBOARD_SCHEMA_VERSION:
+            if version is None:
+                raise ReviewEditorError("storyboard schema_version is required")
             raise ReviewEditorError(f"unsupported storyboard schema_version: {version!r}")
         raw_intervals = value.get(
             "intervals", value.get("clips", value.get("source_intervals", []))
@@ -1847,6 +1889,16 @@ class ReviewEditorSession:
         identity = _source_identity(self.model, self.source_refs, self.source_digests)
         return hashlib.sha256(canonical_json(identity).encode()).hexdigest()
 
+    def _source_revision_token(self) -> str:
+        revisions = {
+            artifact_id: {
+                "sha256": self.source_digests.get(artifact_id, ref.sha256),
+                "source_commit": ref.source_commit,
+            }
+            for artifact_id, ref in sorted(self.source_refs.items())
+        }
+        return hashlib.sha256(canonical_json(revisions).encode()).hexdigest()
+
     def select(
         self,
         *,
@@ -2076,7 +2128,13 @@ class ReviewEditorSession:
             actor_kind=self.actor_kind,
             actor_id=self.actor_id,
             target_id=self._source_identity_token(),
-            details={"schema_version": STORYBOARD_SCHEMA_VERSION, "storyboard": storyboard},
+            details={
+                "schema_version": STORYBOARD_SCHEMA_VERSION,
+                "record_id": self.storyboard_record_id(),
+                "source_identity": self._source_identity_token(),
+                "source_revision": self._source_revision_token(),
+                "storyboard": storyboard,
+            },
         )
         return self._save(
             record,
@@ -2093,10 +2151,41 @@ class ReviewEditorSession:
         stored = self.adapter.get(self.storyboard_record_id(), include_deleted=True)
         if stored is None or not isinstance(stored.record, ActionRecord):
             return self.storyboard
-        payload = stored.record.details.get("storyboard")
-        if not isinstance(payload, Mapping):
-            raise ReviewEditorError("stored storyboard edit is malformed")
-        self.storyboard = StoryboardEditor.from_mapping(payload)
+        record = stored.record
+        if (
+            record.action_type != "storyboard_edit"
+            or record.action_id != self.storyboard_record_id()
+        ):
+            raise ReviewEditorError(
+                "stored storyboard record identity does not match current source"
+            )
+        details = record.details
+        if (
+            not isinstance(details, Mapping)
+            or details.get("schema_version") != STORYBOARD_SCHEMA_VERSION
+        ):
+            raise ReviewEditorError("stored storyboard schema_version is invalid")
+        if details.get("record_id") != self.storyboard_record_id():
+            raise ReviewEditorError("stored storyboard record_id does not match current source")
+        if details.get("source_identity") != self._source_identity_token():
+            raise ReviewEditorError("stored storyboard source identity is stale")
+        if details.get("source_revision") != self._source_revision_token():
+            raise ReviewEditorError("stored storyboard source revision is stale")
+        payload = details.get("storyboard")
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("schema_version") != STORYBOARD_SCHEMA_VERSION
+        ):
+            raise ReviewEditorError("stored storyboard schema_version is invalid")
+        if payload.get("source_identity") != self._source_identity_token():
+            raise ReviewEditorError("stored storyboard source identity is stale")
+        time_origin, time_terminal = _time_bounds(self.model)
+        self.storyboard = StoryboardEditor.from_mapping(
+            payload,
+            duration_s=time_terminal,
+            origin_s=time_origin or 0.0,
+            source_identity=self._source_identity_token(),
+        )
         self.pending_record = None
         self.autosave_status = AutosaveStatus(
             "saved",
@@ -2239,19 +2328,44 @@ def _rebind_annotation_provenance(
     if not artifact_id and len(source_refs) == 1:
         artifact_id = next(iter(source_refs))
     ref = source_refs.get(artifact_id)
-    if ref is None:
-        return result
-    digest = source_digests.get(artifact_id, "")
     identity = str(item.get("source_identity", ""))
+    if ref is None and identity:
+        ref = next(
+            (
+                candidate
+                for candidate_id, candidate in source_refs.items()
+                if identity
+                in {
+                    candidate_id,
+                    candidate.sha256,
+                    source_digests.get(candidate_id, ""),
+                }
+            ),
+            None,
+        )
+    if ref is None:
+        if item.get("provenance_status") == "verified":
+            result["provenance_status"] = "unavailable"
+            result["provenance_reason"] = "annotation source binding is unavailable"
+        return result
+    if not artifact_id:
+        artifact_id = ref.artifact_id
+    digest = source_digests.get(artifact_id, "")
     revision = item.get("source_revision", "")
     stale_reason = ""
-    if ref.sha256 and digest and ref.sha256.lower() != digest.lower():
+    unavailable_reason = ""
+    if not digest or not ref.sha256:
+        unavailable_reason = "annotation source bytes are unavailable"
+    elif ref.sha256.lower() != digest.lower():
         stale_reason = "source bytes do not match declared source hash"
     elif identity and identity not in {artifact_id, digest, ref.sha256}:
         stale_reason = "annotation source identity does not match current source"
     elif ref.source_commit and revision not in {ref.source_commit, 0, "", None}:
         stale_reason = "annotation source revision does not match current source"
-    if stale_reason:
+    if unavailable_reason and item.get("provenance_status") == "verified":
+        result["provenance_status"] = "unavailable"
+        result["provenance_reason"] = unavailable_reason
+    elif stale_reason:
         result["provenance_status"] = "stale"
         result["provenance_reason"] = stale_reason
     return result

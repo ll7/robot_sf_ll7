@@ -34,6 +34,7 @@
   "events": [{"event_id": "near-miss-17", "start_s": 10.4, "end_s": 10.8, "actor_ids": ["robot", "ped-0"]}],
   "metrics": {"clearance": {"metric_id": "clearance", "unit": "m", "stream": {"samples": [{"time_s": 10.5, "value": 0.4}]}}},
   "storyboard": {
+    "schema_version": "review-storyboard-edit.v1",
     "intervals": [{"interval_id": "near-miss-17", "start_s": 10.4, "end_s": 10.8, "caption": "near miss"}],
     "order": ["near-miss-17"],
     "captions": {"near-miss-17": "near miss"}

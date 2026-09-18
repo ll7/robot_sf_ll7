@@ -3,11 +3,14 @@
  * The controller owns transient browser state only.  It never uses
  * browser key/value storage, appends to an audit file, imports a network asset, or guesses
  * a world coordinate from screen pixels.  Durable records are sent to the
- * injected BA-03/BA-05-compatible save callback with an operation ID and
- * expected revision.
+ * injected BA-03/BA-05-compatible save callback with an operation ID,
+ * expected revision, and immutable source/selection context. The callback
+ * must invoke `before_commit` immediately before its adapter write; the guard
+ * rejects delayed stale selections.
  */
 
 export const EDITOR_MODEL_SCHEMA_VERSION = "review-editor.v1";
+export const STORYBOARD_SCHEMA_VERSION = "review-storyboard-edit.v1";
 export const ANNOTATION_SPEEDS = ["one_click", "quick", "full"];
 export const TRIAGE_CLASSIFICATIONS = Object.freeze({
   normal: "normal",
@@ -32,6 +35,25 @@ function finite(value, fallback = null) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+}
+
+function sameJson(left, right) {
+  return stableStringify(left) === stableStringify(right);
+}
+
+function hashToken(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 function intervalValue(value, fallback = null) {
   if (!value || typeof value !== "object") return fallback;
   const start = finite(value.start_s ?? value.start, fallback);
@@ -42,9 +64,60 @@ function intervalValue(value, fallback = null) {
 
 function validSourceInterval(model, start, end) {
   if (start === null || end === null || end < start) return false;
-  const duration = finite(model?.time?.terminal_s);
+  const duration = finite(model?.time?.terminal_s ?? model?.time?.end_s);
   const origin = finite(model?.time?.origin_s ?? model?.time?.start_s, 0);
   return start >= origin && (duration === null || end <= duration);
+}
+
+function normalizeStoryboard(value, model) {
+  if (value === null || value === undefined) {
+    return {
+      schema_version: STORYBOARD_SCHEMA_VERSION,
+      source_identity: storyboardSourceIdentity(model),
+      source_revision: sourceRevision(model),
+      intervals: [],
+      order: [],
+      captions: {},
+    };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("storyboard must be an object");
+  }
+  if (value.schema_version !== STORYBOARD_SCHEMA_VERSION) {
+    throw new Error(value.schema_version === undefined
+      ? "storyboard schema_version is required"
+      : `unsupported storyboard schema_version: ${value.schema_version}`);
+  }
+  if (!Array.isArray(value.intervals) || !Array.isArray(value.order) || !value.captions || typeof value.captions !== "object" || Array.isArray(value.captions)) {
+    throw new Error("storyboard intervals, order, and captions are required");
+  }
+  const intervals = value.intervals.map((item) => {
+    if (!item || typeof item !== "object") throw new Error("storyboard intervals must contain objects");
+    const intervalId = String(item.interval_id || item.id || "");
+    const start = finite(item.start_s);
+    const end = finite(item.end_s, start);
+    if (!intervalId || !validSourceInterval(model, start, end)) throw new Error("invalid storyboard interval");
+    return {
+      ...clone(item),
+      interval_id: intervalId,
+      start_s: start,
+      end_s: end,
+      caption: String(item.caption || value.captions[intervalId] || ""),
+    };
+  });
+  const ids = intervals.map((item) => item.interval_id);
+  const order = value.order.map(String);
+  if (new Set(ids).size !== ids.length || order.length !== ids.length || new Set(order).size !== ids.length || order.some((id) => !ids.includes(id))) {
+    throw new Error("storyboard order must contain every interval exactly once");
+  }
+  return {
+    schema_version: STORYBOARD_SCHEMA_VERSION,
+    source_identity: value.source_identity === undefined ? storyboardSourceIdentity(model) : clone(value.source_identity),
+    source_revision: value.source_revision || sourceRevision(model),
+    intervals,
+    order,
+    captions: Object.fromEntries(ids.map((id) => [id, String(value.captions[id] ?? (intervals.find((item) => item.interval_id === id)?.caption || ""))])),
+  };
 }
 
 function context(model) {
@@ -60,6 +133,33 @@ function sourceIdentity(model) {
   return model?.source_identity && typeof model.source_identity === "object"
     ? model.source_identity
     : {};
+}
+
+function sourceRevision(model) {
+  const identity = sourceIdentity(model);
+  const sources = identity.sources && typeof identity.sources === "object" ? identity.sources : {};
+  const revisions = Object.fromEntries(Object.entries(sources).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [
+    key,
+    item && typeof item === "object"
+      ? { sha256: item.sha256 || item.declared_sha256 || "", source_commit: item.source_commit || "" }
+      : { sha256: "", source_commit: "" },
+  ]));
+  return stableStringify({ revisions, context: context(model).source_revision || "" });
+}
+
+function storyboardSourceIdentity(model) {
+  const declared = model?.storyboard?.source_identity;
+  if (typeof declared === "string" && declared) return declared;
+  if (declared && typeof declared === "object") return clone(declared);
+  return clone(sourceIdentity(model));
+}
+
+function storyboardRecordId(model) {
+  return String(
+    model?.storyboard_record_id
+      || model?.storyboard?.record_id
+      || `storyboard-${hashToken(stableStringify(storyboardSourceIdentity(model)))}`,
+  );
 }
 
 function sourceEntry(model) {
@@ -255,7 +355,7 @@ export class ReviewEditorController {
       selectedInterval: context(this.model).interval_id || null,
       selectionRevision: Number(context(this.model).selection_revision || context(this.model).context_revision || 0),
       annotations: Array.isArray(this.model.annotations) ? clone(this.model.annotations) : [],
-      storyboard: clone(this.model.storyboard || { intervals: [], order: [], captions: {} }),
+      storyboard: normalizeStoryboard(this.model.storyboard, this.model),
       overlayState: {
         ...(this.model.overlay_state || {}),
         numbered: this.model.overlay_state?.numbered ?? true,
@@ -269,6 +369,7 @@ export class ReviewEditorController {
       autosave: { state: "saved", operation_id: "", expected_revision: null, saved_revision: null, selection_revision: 0, error: "", conflict: null },
       typing: false,
     };
+    this.storyboardRecordId = String(this.options.storyboard_record_id || storyboardRecordId(this.model));
     this.state.autosave.selection_revision = this.state.selectionRevision;
     this._keydown = (event) => this._onKeydown(event);
     if (root) this.mount(root);
@@ -441,6 +542,50 @@ export class ReviewEditorController {
     };
   }
 
+  _saveContext() {
+    return {
+      selection_revision: this.state.selectionRevision,
+      selected_time_s: this.state.selectedTime,
+      selected_interval: this.state.selectedInterval,
+      source_identity: clone(sourceIdentity(this.model)),
+      source_revision: sourceRevision(this.model),
+      context: clone(context(this.model)),
+    };
+  }
+
+  _assertSaveContext(captured) {
+    if (this.state.selectionRevision !== captured.selection_revision) {
+      throw new Error(`stale selection revision: expected ${captured.selection_revision}, current ${this.state.selectionRevision}`);
+    }
+    if (this.state.selectedTime !== captured.selected_time_s || this.state.selectedInterval !== captured.selected_interval) {
+      throw new Error("stale selection context");
+    }
+    if (!sameJson(sourceIdentity(this.model), captured.source_identity) || sourceRevision(this.model) !== captured.source_revision) {
+      throw new Error("stale source identity or revision");
+    }
+    if (!sameJson(context(this.model), captured.context)) {
+      throw new Error("stale review context");
+    }
+  }
+
+  _recordContext(record, captured) {
+    if (record?.provenance_status && record.provenance_status !== "verified") {
+      throw new Error("cannot durably save an unavailable or stale annotation");
+    }
+    if (record?.source_identity && typeof record.source_identity === "object" && !sameJson(record.source_identity, captured.source_identity)) {
+      throw new Error("record source identity does not match current source");
+    }
+    if (record?.source_revision !== undefined) {
+      const sourceEntries = captured.source_identity?.sources && typeof captured.source_identity.sources === "object"
+        ? Object.values(captured.source_identity.sources)
+        : [];
+      const declaredRevisions = sourceEntries.flatMap((item) => item && typeof item === "object" && item.source_commit ? [String(item.source_commit)] : []);
+      if (String(record.source_revision) !== String(captured.source_revision) && !declaredRevisions.includes(String(record.source_revision))) {
+        throw new Error("record source revision does not match current source");
+      }
+    }
+  }
+
   async save(record, options = {}) {
     if (!record) throw new Error("record is required for save");
     const save = options.save || this.options.save;
@@ -459,16 +604,23 @@ export class ReviewEditorController {
     const expectedSelectionRevision = options.expected_selection_revision ?? (
       Number.isInteger(recordSelectionRevision) ? recordSelectionRevision : this.state.selectionRevision
     );
-    if (expectedSelectionRevision !== this.state.selectionRevision) {
-      throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${this.state.selectionRevision}`);
+    const saveContext = this._saveContext();
+    if (expectedSelectionRevision !== saveContext.selection_revision) {
+      throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${saveContext.selection_revision}`);
     }
-    const saveSelectionRevision = this.state.selectionRevision;
+    this._recordContext(record, saveContext);
+    let guardCalled = false;
+    const beforeCommit = () => {
+      this._assertSaveContext(saveContext);
+      guardCalled = true;
+      return true;
+    };
     this.state.autosave = {
       state: "pending",
       operation_id: operationId,
       expected_revision: expectedRevision,
       saved_revision: null,
-      selection_revision: saveSelectionRevision,
+      selection_revision: saveContext.selection_revision,
       error: "",
       conflict: null,
     };
@@ -477,19 +629,24 @@ export class ReviewEditorController {
       const receipt = await save(clone(record), {
         operation_id: operationId,
         expected_revision: expectedRevision,
-        selection_revision: saveSelectionRevision,
+        selection_revision: saveContext.selection_revision,
+        source_identity: clone(saveContext.source_identity),
+        source_revision: saveContext.source_revision,
+        context: clone(saveContext.context),
+        before_commit: beforeCommit,
+        assert_current: beforeCommit,
         actor_kind: options.actor_kind || this.options.actor_kind || "human",
         actor_id: options.actor_id || this.options.actor_id || "",
       });
-      if (this.state.selectionRevision !== saveSelectionRevision) {
-        throw new Error(`stale selection revision after save: expected ${saveSelectionRevision}, current ${this.state.selectionRevision}`);
+      if (!guardCalled) {
+        throw new Error("save callback must call before_commit immediately before durable commit");
       }
       this.state.autosave = {
         state: "saved",
         operation_id: operationId,
         expected_revision: expectedRevision,
         saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
-        selection_revision: saveSelectionRevision,
+        selection_revision: saveContext.selection_revision,
         error: "",
         conflict: null,
       };
@@ -501,7 +658,7 @@ export class ReviewEditorController {
         operation_id: operationId,
         expected_revision: expectedRevision,
         saved_revision: null,
-        selection_revision: saveSelectionRevision,
+        selection_revision: saveContext.selection_revision,
         error: String(error?.message || error),
         conflict: clone(error?.conflict || error?.details?.conflict || null),
       };
@@ -518,44 +675,70 @@ export class ReviewEditorController {
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
       throw new Error("expected_revision is required for every durable save");
     }
-    const expectedSelectionRevision = options.expected_selection_revision ?? this.state.selectionRevision;
-    if (expectedSelectionRevision !== this.state.selectionRevision) {
-      throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${this.state.selectionRevision}`);
+    const saveContext = this._saveContext();
+    const expectedSelectionRevision = options.expected_selection_revision ?? saveContext.selection_revision;
+    if (expectedSelectionRevision !== saveContext.selection_revision) {
+      throw new Error(`stale selection revision: expected ${expectedSelectionRevision}, current ${saveContext.selection_revision}`);
     }
-    const saveSelectionRevision = this.state.selectionRevision;
+    const beforeCommit = () => {
+      this._assertSaveContext(saveContext);
+      guardCalled = true;
+      return true;
+    };
+    let guardCalled = false;
+    const recordId = String(options.record_id || this.storyboardRecordId);
+    const storyboard = normalizeStoryboard(this.state.storyboard, this.model);
+    if (!sameJson(storyboard.source_identity, storyboardSourceIdentity(this.model)) || storyboard.source_revision !== sourceRevision(this.model)) {
+      throw new Error("storyboard source identity or revision is stale");
+    }
     const record = {
+      record_id: recordId,
+      action_id: recordId,
       record_type: "storyboard_edit",
-      schema_version: "review-storyboard-edit.v1",
-      source_identity: clone(sourceIdentity(this.model)),
-      storyboard: clone(this.state.storyboard),
+      target_id: storyboardSourceIdentity(this.model),
+      source_identity: clone(saveContext.source_identity),
+      source_revision: saveContext.source_revision,
+      details: {
+        schema_version: STORYBOARD_SCHEMA_VERSION,
+        record_id: recordId,
+        source_identity: clone(storyboardSourceIdentity(this.model)),
+        source_revision: saveContext.source_revision,
+        storyboard,
+      },
     };
     this.state.autosave = {
       state: "pending", operation_id: operationId, expected_revision: expectedRevision,
-      saved_revision: null, selection_revision: saveSelectionRevision, error: "", conflict: null,
+      saved_revision: null, selection_revision: saveContext.selection_revision, error: "", conflict: null,
     };
     this._render();
     try {
       const receipt = await save(record, {
         operation_id: operationId,
         expected_revision: expectedRevision,
-        selection_revision: saveSelectionRevision,
+        selection_revision: saveContext.selection_revision,
+        source_identity: clone(saveContext.source_identity),
+        source_revision: saveContext.source_revision,
+        context: clone(saveContext.context),
+        before_commit: beforeCommit,
+        assert_current: beforeCommit,
+        record_id: recordId,
         actor_kind: options.actor_kind || this.options.actor_kind || "human",
         actor_id: options.actor_id || this.options.actor_id || "",
       });
-      if (this.state.selectionRevision !== saveSelectionRevision) {
-        throw new Error(`stale selection revision after save: expected ${saveSelectionRevision}, current ${this.state.selectionRevision}`);
+      if (!guardCalled) {
+        throw new Error("save callback must call before_commit immediately before durable commit");
       }
       this.state.autosave = {
         state: "saved", operation_id: operationId, expected_revision: expectedRevision,
         saved_revision: receipt?.revision ?? receipt?.record_revision ?? null,
-        selection_revision: saveSelectionRevision, error: "", conflict: null,
+        selection_revision: saveContext.selection_revision, error: "", conflict: null,
       };
       this._render();
       return receipt;
     } catch (error) {
       this.state.autosave = {
         state: "error", operation_id: operationId, expected_revision: expectedRevision,
-        saved_revision: null, selection_revision: saveSelectionRevision,
+        saved_revision: null, selection_revision: saveContext.selection_revision,
         error: String(error?.message || error), conflict: clone(error?.conflict || error?.details?.conflict || null),
       };
       this._render();
@@ -566,16 +749,45 @@ export class ReviewEditorController {
   async reload(options = {}) {
     const load = options.load || this.options.load;
     if (typeof load !== "function") throw new Error("a BA-03/BA-05 load callback is required");
-    const loaded = await load(options.record_id || options.storyboard_id || "");
-    const payload = loaded?.record?.details?.storyboard || loaded?.details?.storyboard || loaded?.storyboard;
-    if (!payload || typeof payload !== "object") throw new Error("loaded storyboard record is malformed");
-    this.state.storyboard = clone(payload);
+    const expectedRecordId = String(options.record_id || options.storyboard_id || this.storyboardRecordId);
+    const reloadContext = this._saveContext();
+    const loaded = await load(expectedRecordId);
+    this._assertSaveContext(reloadContext);
+    const record = loaded?.record && typeof loaded.record === "object" ? loaded.record : loaded;
+    const actualRecordId = record?.record_id || record?.action_id || loaded?.record_id || loaded?.action_id;
+    if (String(actualRecordId || "") !== expectedRecordId) throw new Error("loaded storyboard record identity does not match requested record");
+    const revision = loaded?.revision ?? loaded?.record_revision ?? record?.revision;
+    if (!Number.isInteger(revision) || revision < 0) throw new Error("loaded storyboard record revision is required");
+    const details = record?.details || loaded?.details;
+    if (!details || typeof details !== "object" || details.schema_version !== STORYBOARD_SCHEMA_VERSION) {
+      throw new Error("loaded storyboard schema_version is invalid");
+    }
+    const expectedSourceIdentity = storyboardSourceIdentity(this.model);
+    const loadedSourceIdentity = details.source_identity;
+    if (!sameJson(loadedSourceIdentity, expectedSourceIdentity)) throw new Error("loaded storyboard source identity is stale");
+    const expectedSourceRevision = sourceRevision(this.model);
+    if (details.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
+    if (details.record_id !== expectedRecordId) throw new Error("loaded storyboard record_id is invalid");
+    if (!sameJson(record?.target_id, expectedSourceIdentity)) throw new Error("loaded storyboard target identity is stale");
+    if (record?.source_identity !== undefined && !sameJson(record.source_identity, sourceIdentity(this.model))) throw new Error("loaded storyboard source identity is stale");
+    if (record?.source_revision !== undefined && record.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
+    const payload = details.storyboard;
+    if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "schema_version") || !Object.prototype.hasOwnProperty.call(payload, "source_identity") || !Object.prototype.hasOwnProperty.call(payload, "source_revision")) {
+      throw new Error("loaded storyboard schema, source identity, and source revision are required");
+    }
+    if (!sameJson(payload.source_identity, expectedSourceIdentity) || payload.source_revision !== expectedSourceRevision) {
+      throw new Error("loaded storyboard source identity or revision is stale");
+    }
+    const normalized = normalizeStoryboard(payload, this.model);
+    if (!sameJson(normalized.source_identity, expectedSourceIdentity)) throw new Error("loaded storyboard source identity is stale");
+    if (normalized.source_revision !== expectedSourceRevision) throw new Error("loaded storyboard source revision is stale");
+    this.state.storyboard = normalized;
     this.state.autosave = {
       state: "saved",
       operation_id: "",
-      expected_revision: loaded?.revision ?? loaded?.record_revision ?? 0,
-      saved_revision: loaded?.revision ?? loaded?.record_revision ?? 0,
-      selection_revision: this.state.selectionRevision,
+      expected_revision: revision,
+      saved_revision: revision,
+      selection_revision: reloadContext.selection_revision,
       error: "",
       conflict: null,
     };

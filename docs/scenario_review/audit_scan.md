@@ -80,5 +80,6 @@ python -m robot_sf.analysis_workbench.audit_scan \
 The command emits machine-readable JSON and uses exit code `2` for malformed,
 unsafe, unavailable, or colliding inputs/outputs. Output files are created
 exclusively; an existing report is never replaced. Use `--detector ID` more
-than once for selective detector execution, `--config CONFIG.json` for
-explicit overrides, and `--descriptor` for the offline component contract.
+than once for selective detector execution, pass a JSON configuration file to
+`--config` for explicit overrides, and use `--descriptor` for the offline
+component contract.

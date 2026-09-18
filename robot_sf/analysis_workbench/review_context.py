@@ -458,6 +458,33 @@ class _ReservedOutputDirectory:
                 setattr(self, attribute, -1)
 
 
+@dataclass(slots=True)
+class _OutputParentGuard:
+    """Retain the admitted root and parent identities for one output path."""
+
+    root: Path
+    parts: tuple[str, ...]
+    root_fd: int
+    parent_fd: int
+    root_device: int
+    root_inode: int
+    parent_device: int
+    parent_inode: int
+
+    def close(self) -> None:
+        """Close retained descriptors without turning cleanup into a failure."""
+        for attribute in ("parent_fd", "root_fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor < 0:
+                continue
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            finally:
+                setattr(self, attribute, -1)
+
+
 @dataclass
 class _Episode:
     """One admitted episode at the canonical episode grain."""
@@ -1035,6 +1062,114 @@ def _open_output_parent(root: Path, parts: tuple[str, ...]) -> int:
         if parent_fd >= 0:
             os.close(parent_fd)
         raise
+
+
+def _open_output_parent_guard(root: Path, parts: tuple[str, ...]) -> _OutputParentGuard:
+    """Open an output parent while retaining the root identity for publication checks.
+
+    Returns:
+        A descriptor-backed guard for the admitted root and parent.
+    """
+    root_fd = -1
+    parent_fd = -1
+    try:
+        root_fd = os.open(root, _output_directory_flags())
+        root_stat = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_stat.st_mode):
+            raise ReviewContractsValidationError([f"output base is not a directory: {root}"])
+        parent_fd = _open_output_parent(root, parts)
+        parent_stat = os.fstat(parent_fd)
+        if not stat.S_ISDIR(parent_stat.st_mode):
+            raise ReviewContractsValidationError(["output parent is not a directory"])
+        guard = _OutputParentGuard(
+            root=root,
+            parts=parts,
+            root_fd=root_fd,
+            parent_fd=parent_fd,
+            root_device=root_stat.st_dev,
+            root_inode=root_stat.st_ino,
+            parent_device=parent_stat.st_dev,
+            parent_inode=parent_stat.st_ino,
+        )
+        root_fd = -1
+        parent_fd = -1
+        return guard
+    except BaseException:
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        if root_fd >= 0:
+            os.close(root_fd)
+        raise
+
+
+def _open_visible_output_parent(root_fd: int, parts: tuple[str, ...]) -> int:
+    """Walk an already-open root without creating or following components.
+
+    Returns:
+        The descriptor for the parent of the final output name.
+    """
+    current_fd = os.dup(root_fd)
+    try:
+        for part in parts[:-1]:
+            next_fd = os.open(part, _output_directory_flags(), dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _assert_output_parent_current(guard: _OutputParentGuard) -> None:
+    """Fail closed if an output parent or any admitted root component moved."""
+    if guard.root_fd < 0 or guard.parent_fd < 0:
+        raise ReviewContractsValidationError(["output parent descriptor is closed"])
+    try:
+        retained_root = os.fstat(guard.root_fd)
+        retained_parent = os.fstat(guard.parent_fd)
+        if (
+            not stat.S_ISDIR(retained_root.st_mode)
+            or retained_root.st_dev != guard.root_device
+            or retained_root.st_ino != guard.root_inode
+            or not stat.S_ISDIR(retained_parent.st_mode)
+            or retained_parent.st_dev != guard.parent_device
+            or retained_parent.st_ino != guard.parent_inode
+        ):
+            raise ReviewContractsValidationError(["output parent descriptor changed"])
+        visible_root_fd = os.open(guard.root, _output_directory_flags())
+        try:
+            visible_root = os.fstat(visible_root_fd)
+            if (
+                not stat.S_ISDIR(visible_root.st_mode)
+                or visible_root.st_dev != guard.root_device
+                or visible_root.st_ino != guard.root_inode
+            ):
+                raise ReviewContractsValidationError(
+                    ["output root was replaced during publication"]
+                )
+            visible_parent_fd = -1
+            try:
+                visible_parent_fd = _open_visible_output_parent(visible_root_fd, guard.parts)
+                visible_parent = os.fstat(visible_parent_fd)
+                if (
+                    not stat.S_ISDIR(visible_parent.st_mode)
+                    or visible_parent.st_dev != guard.parent_device
+                    or visible_parent.st_ino != guard.parent_inode
+                ):
+                    raise ReviewContractsValidationError(
+                        ["output parent was replaced during publication"]
+                    )
+            finally:
+                if visible_parent_fd >= 0:
+                    os.close(visible_parent_fd)
+        finally:
+            os.close(visible_root_fd)
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output parent was replaced during publication: {type(error).__name__}"]
+        ) from error
 
 
 def _create_output_directory(
@@ -2433,14 +2568,78 @@ def _open_output_temporary(directory_fd: int, prefix: str) -> tuple[int, str]:
     raise ReviewContractsValidationError(["output temporary name allocation failed"])
 
 
+def _retained_output_identity(
+    directory_fd: int,
+    temporary_name: str,
+    temporary_fd: int,
+) -> tuple[int, int]:
+    """Validate and return the retained temporary regular-file identity.
+
+    Returns:
+        The device and inode pair for the retained temporary file.
+    """
+    try:
+        retained = (
+            os.fstat(temporary_fd)
+            if temporary_fd >= 0
+            else os.stat(
+                temporary_name,
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        )
+        visible = os.stat(
+            temporary_name,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output temporary entry changed during publication: {type(error).__name__}"]
+        ) from error
+    if (
+        not stat.S_ISREG(retained.st_mode)
+        or not stat.S_ISREG(visible.st_mode)
+        or (retained.st_dev, retained.st_ino) != (visible.st_dev, visible.st_ino)
+    ):
+        raise ReviewContractsValidationError(
+            ["output temporary entry is not the retained regular file"]
+        )
+    return retained.st_dev, retained.st_ino
+
+
+def _assert_published_output_identity(
+    directory_fd: int,
+    final_name: str,
+    identity: tuple[int, int],
+) -> None:
+    """Reject a published final entry that is not the retained regular file."""
+    try:
+        final = os.stat(final_name, dir_fd=directory_fd, follow_symlinks=False)
+    except (OSError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output final entry changed during publication: {type(error).__name__}"]
+        ) from error
+    if not stat.S_ISREG(final.st_mode) or (final.st_dev, final.st_ino) != identity:
+        raise ReviewContractsValidationError(
+            ["output final entry is not the retained regular file"]
+        )
+
+
 def _publish_output(
     directory_fd: int,
     temporary_name: str,
     final_name: str,
     output_directory: _ReservedOutputDirectory | None,
     published_names: set[str],
+    *,
+    temporary_fd: int = -1,
+    parent_guard: _OutputParentGuard | None = None,
 ) -> None:
     """Publish one fsync'd temporary file without replacing an existing name."""
+    if parent_guard is not None:
+        _assert_output_parent_current(parent_guard)
+    retained_identity = _retained_output_identity(directory_fd, temporary_name, temporary_fd)
     try:
         # A hard-link publication is atomic on the same filesystem and
         # fails with EEXIST instead of replacing a final name or symlink.
@@ -2462,9 +2661,12 @@ def _publish_output(
 
     published_names.add(final_name)
     try:
+        _assert_published_output_identity(directory_fd, final_name, retained_identity)
         os.unlink(temporary_name, dir_fd=directory_fd)
         if output_directory is not None:
             _assert_output_directory_current(output_directory)
+        if parent_guard is not None:
+            _assert_output_parent_current(parent_guard)
         os.fsync(directory_fd)
     except BaseException:
         try:
@@ -2491,6 +2693,7 @@ def _atomic_materialize_no_replace(
     directory_fd = -1
     temporary_name: str | None = None
     temporary_fd = -1
+    retained_fd = -1
     published_names = output_directory.published_names if output_directory is not None else set()
     try:
         if output_directory is None:
@@ -2503,6 +2706,7 @@ def _atomic_materialize_no_replace(
             directory_fd = output_directory.directory_fd
             _assert_output_directory_current(output_directory)
         temporary_fd, temporary_name = _open_output_temporary(directory_fd, path.name)
+        retained_fd = os.dup(temporary_fd)
         handle = os.fdopen(temporary_fd, "wb")
         temporary_fd = -1
         with handle:
@@ -2515,12 +2719,15 @@ def _atomic_materialize_no_replace(
             path.name,
             output_directory,
             published_names,
+            temporary_fd=retained_fd,
         )
         temporary_name = None
         return _sha256_bytes(encoded)
     finally:
         if temporary_fd >= 0:
             os.close(temporary_fd)
+        if retained_fd >= 0:
+            os.close(retained_fd)
         if temporary_name is not None and directory_fd >= 0:
             try:
                 os.unlink(temporary_name, dir_fd=directory_fd)

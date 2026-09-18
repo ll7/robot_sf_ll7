@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.analysis_workbench import audit_scan as audit_scan_module
+from robot_sf.analysis_workbench import review_context
 from robot_sf.analysis_workbench.audit_contracts import SourceRef, record_to_dict
 from robot_sf.analysis_workbench.audit_detectors import detect
 from robot_sf.analysis_workbench.audit_scan import (
@@ -694,6 +695,61 @@ def test_component_publication_rejects_output_directory_symlink_race(
     assert not (outside / AUDIT_REGISTRY_FILENAME).exists()
 
 
+def test_component_publication_rejects_temporary_inode_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A replaced temporary pathname cannot become a published report."""
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    outside = tmp_path.parent / "ba01-temporary-race-target"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    original_publish = review_context._publish_output
+
+    def swap_temporary(
+        directory_fd: int,
+        temporary_name: str,
+        final_name: str,
+        output_directory,
+        published_names: set[str],
+        **kwargs: object,
+    ) -> None:
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        os.symlink(outside, temporary_name, dir_fd=directory_fd)
+        original_publish(
+            directory_fd,
+            temporary_name,
+            final_name,
+            output_directory,
+            published_names,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(review_context, "_publish_output", swap_temporary)
+    result = run(
+        ComponentRequest(
+            request_id="temporary-race",
+            component_id="ba01-audit-scan",
+            sources=(
+                SourceRef(
+                    artifact_id="campaign",
+                    uri="campaign.json",
+                    format="campaign-result",
+                    schema="campaign-result.v1",
+                    sha256=source_digest,
+                ),
+            ),
+            output_directory="audit-output",
+            config={"expected_episode_ids": ["episode"]},
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "failed"
+    assert outside.read_text(encoding="utf-8") == "outside sentinel"
+    assert not (tmp_path / "audit-output" / AUDIT_REPORT_FILENAME).exists()
+    outside.unlink()
+
+
 def test_component_request_rejects_unsupported_required_capability(tmp_path: Path) -> None:
     request = ComponentRequest(
         request_id="request-capability",
@@ -752,6 +808,88 @@ def test_cli_output_rejects_parent_symlink_race(tmp_path: Path, monkeypatch, cap
     assert code == 2
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
     assert not (outside / "report.json").exists()
+
+
+def test_cli_output_rejects_temporary_inode_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """A replaced CLI temporary pathname cannot become the final report."""
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    outside = tmp_path.parent / "ba01-cli-temporary-race-target"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    original_publish = audit_scan_module._publish_output
+
+    def swap_temporary(
+        directory_fd: int,
+        temporary_name: str,
+        final_name: str,
+        output_directory,
+        published_names: set[str],
+        **kwargs: object,
+    ) -> None:
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        os.symlink(outside, temporary_name, dir_fd=directory_fd)
+        original_publish(
+            directory_fd,
+            temporary_name,
+            final_name,
+            output_directory,
+            published_names,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(audit_scan_module, "_publish_output", swap_temporary)
+    code = main(
+        [
+            "--input",
+            "campaign.json",
+            "--base",
+            str(tmp_path),
+            "--output",
+            "report.json",
+        ]
+    )
+    assert code == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    assert outside.read_text(encoding="utf-8") == "outside sentinel"
+    assert not (tmp_path / "report.json").exists()
+    outside.unlink()
+
+
+def test_cli_output_rejects_parent_move_then_symlink_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """A parent moved outside the root is never used through its retained fd."""
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    outside = tmp_path.parent / "ba01-cli-parent-race-target"
+    original_open_parent = review_context._open_output_parent
+
+    def move_parent(root: Path, parts: tuple[str, ...]):
+        parent_fd = original_open_parent(root, parts)
+        parent = root / parts[0]
+        parent.rename(outside)
+        parent.symlink_to(outside, target_is_directory=True)
+        return parent_fd
+
+    monkeypatch.setattr(review_context, "_open_output_parent", move_parent)
+    code = main(
+        [
+            "--input",
+            "campaign.json",
+            "--base",
+            str(tmp_path),
+            "--output",
+            "nested/report.json",
+        ]
+    )
+    assert code == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    assert not (outside / "report.json").exists()
+    assert (tmp_path / "nested").is_symlink()
+    (tmp_path / "nested").unlink()
+    outside.rmdir()
 
 
 def test_cli_config_rejects_symlink_swap_after_path_admission(

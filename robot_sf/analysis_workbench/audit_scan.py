@@ -46,8 +46,9 @@ from robot_sf.analysis_workbench.audit_detectors import (
 )
 from robot_sf.analysis_workbench.review_context import (
     _assert_output_directory_current,
+    _assert_output_parent_current,
     _atomic_materialize_no_replace,
-    _open_output_parent,
+    _open_output_parent_guard,
     _open_output_temporary,
     _publish_output,
     _read_descriptor_backed_file,
@@ -2951,31 +2952,45 @@ def _write_cli_output(value: str, serialized: str, *, root: Path) -> str:
     if not relative.parts:
         raise AuditScanError("output path must name a file")
     encoded = serialized.encode("utf-8")
-    parent_fd = -1
+    parent_guard = None
     temporary_fd = -1
+    retained_fd = -1
     temporary_name: str | None = None
     try:
-        parent_fd = _open_output_parent(resolved_root, relative.parts)
+        parent_guard = _open_output_parent_guard(resolved_root, relative.parts)
+        _assert_output_parent_current(parent_guard)
+        parent_fd = parent_guard.parent_fd
         temporary_fd, temporary_name = _open_output_temporary(parent_fd, relative.name)
+        retained_fd = os.dup(temporary_fd)
         handle = os.fdopen(temporary_fd, "wb")
         temporary_fd = -1
         with handle:
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
-        _publish_output(parent_fd, temporary_name, relative.name, None, set())
+        _publish_output(
+            parent_fd,
+            temporary_name,
+            relative.name,
+            None,
+            set(),
+            temporary_fd=retained_fd,
+            parent_guard=parent_guard,
+        )
         temporary_name = None
         return _sha256(encoded)
     finally:
         if temporary_fd >= 0:
             os.close(temporary_fd)
-        if temporary_name is not None and parent_fd >= 0:
+        if retained_fd >= 0:
+            os.close(retained_fd)
+        if temporary_name is not None and parent_guard is not None:
             try:
-                os.unlink(temporary_name, dir_fd=parent_fd)
+                os.unlink(temporary_name, dir_fd=parent_guard.parent_fd)
             except FileNotFoundError:
                 pass
-        if parent_fd >= 0:
-            os.close(parent_fd)
+        if parent_guard is not None:
+            parent_guard.close()
 
 
 if __name__ == "__main__":

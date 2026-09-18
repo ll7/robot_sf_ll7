@@ -864,6 +864,42 @@ def test_output_materialization_never_publishes_partial_final(tmp_path: Path, mo
     assert list(tmp_path.glob(".context-report.json.*.partial")) == []
 
 
+def test_output_materialization_rejects_temporary_inode_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shared API cannot publish a replaced temporary pathname."""
+    target = tmp_path / "context-report.json"
+    outside = tmp_path.parent / "srev06-temporary-race-target"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    original_publish = review_context._publish_output
+
+    def swap_temporary(
+        directory_fd: int,
+        temporary_name: str,
+        final_name: str,
+        output_directory,
+        published_names: set[str],
+        **kwargs: object,
+    ) -> None:
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        os.symlink(outside, temporary_name, dir_fd=directory_fd)
+        original_publish(
+            directory_fd,
+            temporary_name,
+            final_name,
+            output_directory,
+            published_names,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(review_context, "_publish_output", swap_temporary)
+    with pytest.raises(ReviewContractsValidationError):
+        review_context._write_json(target, {"schema_version": "test"})
+    assert not target.exists()
+    assert outside.read_text(encoding="utf-8") == "outside sentinel"
+    outside.unlink()
+
+
 def test_malformed_selection_is_not_an_empty_selection(tmp_path: Path) -> None:
     _stage(
         tmp_path,

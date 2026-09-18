@@ -672,8 +672,10 @@ def test_canonical_owner_loader_uses_one_snapshot_after_source_replacement(
     )
     original_snapshot = review_context._snapshot_directory
 
-    def replace_after_snapshot(directory: Path, files: list[Path], snapshot_root: Path):
-        snapshot = original_snapshot(directory, files, snapshot_root)
+    def replace_after_snapshot(
+        directory: Path, files: list[Path], snapshot_root: Path, **kwargs: object
+    ):
+        snapshot = original_snapshot(directory, files, snapshot_root, **kwargs)
         source_path = directory / "episodes.jsonl"
         source_path.unlink()
         source_path.symlink_to(outside)
@@ -726,8 +728,8 @@ def test_canonical_snapshot_rejects_fifo_replacement_without_blocking(
     source = _canonical_source_ref(store)
     original_inventory = review_context._directory_files
 
-    def replace_after_inventory(directory: Path) -> list[Path]:
-        files = original_inventory(directory)
+    def replace_after_inventory(directory: Path, **kwargs: object) -> list[Path]:
+        files = original_inventory(directory, **kwargs)
         episodes_path = directory / "episodes.jsonl"
         episodes_path.unlink()
         os.mkfifo(episodes_path)
@@ -898,6 +900,56 @@ def test_output_materialization_rejects_temporary_inode_swap(
     assert not target.exists()
     assert outside.read_text(encoding="utf-8") == "outside sentinel"
     outside.unlink()
+
+
+def test_cleanup_swap_never_unlinks_replacement_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cleanup retires a raced name without unlinking its replacement."""
+    owned = tmp_path / "owned.partial"
+    owned.write_text("owned", encoding="utf-8")
+    outside = tmp_path / "external-sentinel"
+    outside.write_text("do not delete", encoding="utf-8")
+    original_rename = review_context._rename_noreplace
+    original_unlink = os.unlink
+    swapped = False
+
+    def swap_before_rename(
+        source_name: str,
+        destination_name: str,
+        *,
+        source_fd: int,
+        destination_fd: int,
+    ) -> None:
+        nonlocal swapped
+        if not swapped and source_name == owned.name:
+            original_unlink(owned)
+            owned.symlink_to(outside)
+            swapped = True
+        original_rename(
+            source_name,
+            destination_name,
+            source_fd=source_fd,
+            destination_fd=destination_fd,
+        )
+
+    def unlink_must_not_run(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cleanup must not use a name-based unlink")
+
+    monkeypatch.setattr(review_context, "_rename_noreplace", swap_before_rename)
+    monkeypatch.setattr(review_context.os, "unlink", unlink_must_not_run)
+    owned_stat = os.stat(owned, follow_symlinks=False)
+    directory_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        assert not review_context._unlink_owned_entry(
+            directory_fd,
+            owned.name,
+            (owned_stat.st_dev, owned_stat.st_ino),
+        )
+    finally:
+        os.close(directory_fd)
+    assert outside.read_text(encoding="utf-8") == "do not delete"
+    assert owned.is_symlink()
 
 
 def test_malformed_selection_is_not_an_empty_selection(tmp_path: Path) -> None:
@@ -1088,6 +1140,47 @@ def test_output_parent_replacement_during_publication_is_fail_closed(
         assert result.status == "failed"
         assert "output directory replaced during publication" in result.reason
         assert result.artifacts == ()
+        assert not any(outside.iterdir())
+    finally:
+        output_link = tmp_path / "out"
+        if output_link.is_symlink():
+            output_link.unlink()
+        outside.rmdir()
+
+
+def test_api_publication_rejects_parent_move_before_final_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parent moved after final identity admission cannot leave an outside report."""
+    _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-link-before-api"
+    original_retained = review_context._retained_output_identity
+    original_link = review_context.os.link
+    link_calls = 0
+    moved = False
+
+    def move_after_final_identity(*args: object, **kwargs: object) -> tuple[int, int]:
+        nonlocal moved
+        identity = original_retained(*args, **kwargs)
+        if not moved:
+            output = tmp_path / "out"
+            output.rename(outside)
+            output.symlink_to(outside, target_is_directory=True)
+            moved = True
+        return identity
+
+    def record_link(*args: object, **kwargs: object) -> object:
+        nonlocal link_calls
+        link_calls += 1
+        return original_link(*args, **kwargs)
+
+    monkeypatch.setattr(review_context, "_retained_output_identity", move_after_final_identity)
+    monkeypatch.setattr(review_context.os, "link", record_link)
+    try:
+        result = run(_request(tmp_path), base=tmp_path)
+        assert result.status == "failed"
+        assert result.artifacts == ()
+        assert link_calls == 0
         assert not any(outside.iterdir())
     finally:
         output_link = tmp_path / "out"

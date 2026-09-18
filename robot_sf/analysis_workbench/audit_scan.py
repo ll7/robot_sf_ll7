@@ -48,6 +48,8 @@ from robot_sf.analysis_workbench.review_context import (
     _assert_output_directory_current,
     _assert_output_parent_current,
     _atomic_materialize_no_replace,
+    _capture_descriptor_admission,
+    _DescriptorAdmission,
     _open_output_parent_guard,
     _open_output_temporary,
     _output_root_identity,
@@ -438,6 +440,30 @@ def _safe_path(value: str | Path, *, root: Path) -> Path:  # noqa: C901
     if stat.S_ISREG(mode) and resolved.stat().st_size > MAX_SOURCE_BYTES:
         raise AuditScanError(f"source exceeds {MAX_SOURCE_BYTES} bytes")
     return resolved
+
+
+def _capture_admitted_path(value: str | Path, *, root: Path, kind: str) -> _DescriptorAdmission:
+    """Capture the no-follow identity of a path before lexical admission can race.
+
+    Returns:
+        The descriptor-walk identity admitted before the path is resolved.
+    """
+    root_resolved = root.resolve(strict=True)
+    candidate = Path(str(value))
+    try:
+        relative = candidate.relative_to(root_resolved) if candidate.is_absolute() else candidate
+    except ValueError as error:
+        raise AuditScanError(f"{kind} escapes admitted root") from error
+    if not relative.parts or ".." in relative.parts:
+        raise AuditScanError(f"{kind} path is unsafe")
+    try:
+        return _capture_descriptor_admission(
+            tuple(relative.parts),
+            root_resolved,
+            kind=kind,
+        )
+    except (OSError, ReviewContractsValidationError, ValueError) as error:
+        raise AuditScanError(f"{kind} was replaced or is not safely admitted") from error
 
 
 def _strict_json(raw: bytes, *, label: str, validate: bool = True) -> Any:
@@ -1113,6 +1139,11 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
     elif isinstance(source, (str, Path)):
         root_path = Path(root) if root is not None else Path.cwd()
         try:
+            source_admission = _capture_admitted_path(
+                source,
+                root=root_path,
+                kind="campaign source",
+            )
             source_path = _safe_path(source, root=root_path)
             if source_path.is_dir():
                 files = _regular_directory_files(source_path)
@@ -1130,8 +1161,20 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                         prefix="ba01-source-snapshot-"
                     ) as snapshot_dir:
                         snapshot_root = Path(snapshot_dir)
+                        file_admissions = {
+                            item: _capture_admitted_path(
+                                item.relative_to(source_path),
+                                root=source_path,
+                                kind=f"campaign source entry {item.name}",
+                            )
+                            for item in files
+                        }
                         snapshot_files, snapshot_digest = _snapshot_directory(
-                            source_path, files, snapshot_root
+                            source_path,
+                            files,
+                            snapshot_root,
+                            expected=source_admission,
+                            file_admissions=file_admissions,
                         )
                         source_bytes = b"".join(
                             str(item.relative_to(snapshot_root)).encode("utf-8")
@@ -1230,6 +1273,7 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                         resolved_root,
                         limit=MAX_SOURCE_BYTES,
                         kind="campaign source",
+                        expected=source_admission,
                     )
                 except (OSError, ReviewContractsValidationError, ValueError) as exc:
                     raise AuditScanError(
@@ -2844,6 +2888,7 @@ def _read_cli_json_snapshot(
     root: Path,
     max_bytes: int = MAX_SOURCE_BYTES,
     validate: bool = True,
+    allow_jsonl: bool = False,
 ) -> tuple[Path, bytes, Any]:
     """Read one CLI JSON input and retain its admitted path and exact bytes.
 
@@ -2851,8 +2896,9 @@ def _read_cli_json_snapshot(
         The admitted path, exact bytes, and parsed JSON value.
     """
 
-    target = _safe_path(path, root=root)
     resolved_root = root.resolve(strict=True)
+    admitted = _capture_admitted_path(path, root=resolved_root, kind=f"CLI input {path}")
+    target = _safe_path(path, root=root)
     try:
         relative = target.relative_to(resolved_root)
         raw = _read_descriptor_backed_file(
@@ -2860,10 +2906,19 @@ def _read_cli_json_snapshot(
             resolved_root,
             limit=max_bytes,
             kind=f"CLI input {path}",
+            expected=admitted,
         )
     except (OSError, ReviewContractsValidationError) as exc:
         raise AuditScanError("CLI input was replaced or is not a readable regular file") from exc
-    return target, raw, _strict_json(raw, label=path, validate=validate)
+    if allow_jsonl and target.suffix.lower() in {".jsonl", ".ndjson"}:
+        rows = _jsonl_rows(raw, label=path)
+        payload = {
+            "schema_version": "episode-jsonl.v1",
+            "episodes": [dict(item) for item, _line in rows if item is not None],
+        }
+    else:
+        payload = _strict_json(raw, label=path, validate=validate)
+    return target, raw, payload
 
 
 def _read_cli_json(
@@ -2907,7 +2962,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901
+def main(argv: list[str] | None = None) -> int:
     """Execute a bounded CLI and print strict machine-readable JSON.
 
     Returns:
@@ -2922,16 +2977,13 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         if args.input is None:
             raise AuditScanError("--input is required unless --descriptor is requested")
         base = Path(args.base) if args.base is not None else Path.cwd()
-        input_path = _safe_path(args.input, root=base)
-        input_payload: Any = None
-        input_snapshot: _AdmittedSource | None = None
-        if input_path.suffix.lower() not in {".jsonl", ".ndjson"}:
-            admitted_path, admitted_raw, input_payload = _read_cli_json_snapshot(
-                args.input,
-                root=base,
-                validate=False,
-            )
-            input_snapshot = _AdmittedSource(admitted_path, input_payload, admitted_raw)
+        admitted_path, admitted_raw, input_payload = _read_cli_json_snapshot(
+            args.input,
+            root=base,
+            validate=False,
+            allow_jsonl=True,
+        )
+        input_snapshot = _AdmittedSource(admitted_path, input_payload, admitted_raw)
         config: dict[str, Any] = {}
         if isinstance(input_payload, Mapping) and isinstance(input_payload.get("config"), Mapping):
             config.update(input_payload["config"])
@@ -2959,7 +3011,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             ):
                 source_ref = input_payload["source_ref"]
             report = scan_campaign(
-                input_snapshot if input_snapshot is not None else args.input,
+                input_snapshot,
                 root=base,
                 source_ref=source_ref,
                 config=config,

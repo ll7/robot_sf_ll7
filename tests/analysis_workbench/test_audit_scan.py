@@ -1142,6 +1142,47 @@ def test_cli_output_rejects_parent_move_after_final_identity_check(
     outside.rmdir()
 
 
+def test_cli_publication_rejects_parent_move_before_final_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A CLI parent moved after temp admission cannot receive a final artifact."""
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    outside = tmp_path.parent / "ba01-cli-before-link-target"
+    original_retained = review_context._retained_output_identity
+    original_link = review_context.os.link
+    link_calls = 0
+    moved = False
+
+    def move_after_final_identity(*args: object, **kwargs: object) -> tuple[int, int]:
+        nonlocal moved
+        identity = original_retained(*args, **kwargs)
+        if not moved:
+            nested.rename(outside)
+            nested.symlink_to(outside, target_is_directory=True)
+            moved = True
+        return identity
+
+    def record_link(*args: object, **kwargs: object) -> object:
+        nonlocal link_calls
+        link_calls += 1
+        return original_link(*args, **kwargs)
+
+    monkeypatch.setattr(review_context, "_retained_output_identity", move_after_final_identity)
+    monkeypatch.setattr(review_context.os, "link", record_link)
+    try:
+        with pytest.raises(review_context.ReviewContractsValidationError):
+            audit_scan_module._write_cli_output("nested/report.json", "payload\n", root=tmp_path)
+        assert link_calls == 0
+        assert not (outside / "report.json").exists()
+        assert not any(outside.iterdir())
+    finally:
+        output_link = tmp_path / "nested"
+        if output_link.is_symlink():
+            output_link.unlink()
+        outside.rmdir()
+
+
 def test_cli_config_rejects_symlink_swap_after_path_admission(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
@@ -1203,6 +1244,98 @@ def test_regular_source_parent_symlink_race_is_rejected(
     monkeypatch.setattr(audit_scan_module, "_safe_path", swap_after_admission)
     with pytest.raises(AuditScanError, match="replaced"):
         scan_campaign("nested/campaign.json", root=root)
+
+
+def test_descriptor_read_rejects_root_move_after_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retained source root FD cannot admit bytes after its directory moves."""
+    root = tmp_path / "root"
+    root.mkdir()
+    source = root / "campaign.json"
+    source.write_text("original", encoding="utf-8")
+    moved = tmp_path / "moved-source-root"
+    original_open = review_context.os.open
+    moved_once = False
+
+    def move_after_root_open(path, flags, *args, **kwargs):
+        nonlocal moved_once
+        directory_fd = kwargs.get("dir_fd")
+        if not moved_once and directory_fd is not None:
+            try:
+                anchored = Path(os.readlink(f"/proc/self/fd/{directory_fd}"))
+            except OSError:
+                anchored = None
+            if anchored == root:
+                root.rename(moved)
+                root.mkdir()
+                (root / "campaign.json").write_text("replacement", encoding="utf-8")
+                moved_once = True
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(review_context.os, "open", move_after_root_open)
+    with pytest.raises(review_context.ReviewContractsValidationError, match="ancestry"):
+        review_context._read_descriptor_backed_file(
+            ("campaign.json",),
+            root,
+            limit=1024,
+            kind="campaign source",
+        )
+    assert (moved / "campaign.json").read_text(encoding="utf-8") == "original"
+
+
+def test_cli_config_rejects_root_move_after_descriptor_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """CLI config bytes are rejected if the admitted root moves after open."""
+    root = tmp_path / "root"
+    root.mkdir()
+    source = _campaign(_episode("episode"))
+    (root / "campaign.json").write_text(json.dumps(source), encoding="utf-8")
+    (root / "config.json").write_text(json.dumps({"tail_steps": 2}), encoding="utf-8")
+    moved = tmp_path / "moved-cli-root"
+    original_capture = audit_scan_module._capture_admitted_path
+    original_open = review_context.os.open
+    armed = False
+    moved_once = False
+
+    def arm_after_config_capture(*args, **kwargs):
+        nonlocal armed
+        admission = original_capture(*args, **kwargs)
+        if kwargs.get("kind", "").endswith("config.json"):
+            armed = True
+        return admission
+
+    def move_after_root_open(path, flags, *args, **kwargs):
+        nonlocal moved_once
+        directory_fd = kwargs.get("dir_fd")
+        if armed and not moved_once and directory_fd is not None:
+            try:
+                anchored = Path(os.readlink(f"/proc/self/fd/{directory_fd}"))
+            except OSError:
+                anchored = None
+            if anchored == root:
+                root.rename(moved)
+                root.mkdir()
+                (root / "config.json").write_text(json.dumps({"tail_steps": 99}), encoding="utf-8")
+                moved_once = True
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(audit_scan_module, "_capture_admitted_path", arm_after_config_capture)
+    monkeypatch.setattr(review_context.os, "open", move_after_root_open)
+    code = main(
+        [
+            "--input",
+            "campaign.json",
+            "--base",
+            str(root),
+            "--config",
+            "config.json",
+        ]
+    )
+    assert code == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    assert (moved / "config.json").read_text(encoding="utf-8") == '{"tail_steps": 2}'
 
 
 def test_cli_scans_exact_admitted_input_snapshot(

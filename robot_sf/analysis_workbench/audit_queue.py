@@ -802,26 +802,34 @@ def _identity_matches_episode(identity: Mapping[str, Any], episode: EpisodeRef) 
     return compared
 
 
+def _candidate_explicit_report_episode_ids(candidate: QueueCandidate) -> frozenset[str]:
+    """Return report/inventory aliases declared for one candidate."""
+
+    if not isinstance(candidate.metadata, Mapping):
+        return frozenset()
+    return frozenset(
+        value.strip()
+        for field_name in _REPORT_EPISODE_ID_FIELDS
+        for value in (candidate.metadata.get(field_name),)
+        if isinstance(value, str) and value.strip()
+    )
+
+
 def _candidate_report_episode_ids(candidate: QueueCandidate) -> frozenset[str]:
-    """Return explicit raw-report aliases accepted for one candidate."""
+    """Return canonical and explicit raw-report aliases for one candidate."""
 
     episode = (
         candidate.episode
         if isinstance(candidate.episode, EpisodeRef)
         else _episode_from_mapping(candidate.episode)
     )
-    aliases = {episode.execution_id}
-    for field_name in _REPORT_EPISODE_ID_FIELDS:
-        value = (
-            candidate.metadata.get(field_name) if isinstance(candidate.metadata, Mapping) else None
-        )
-        if isinstance(value, str) and value.strip():
-            aliases.add(value.strip())
+    aliases = {episode.execution_id, episode.episode_id}
+    aliases.update(_candidate_explicit_report_episode_ids(candidate))
     return frozenset(aliases)
 
 
-def _signal_matches_candidate(signal: Signal, candidate: QueueCandidate) -> bool:
-    """Return whether a non-empty signal ID identifies ``candidate``."""
+def _signal_identity_matches_candidate(signal: Signal, candidate: QueueCandidate) -> bool:
+    """Return whether all source identities in ``signal`` bind ``candidate``."""
 
     episode = (
         candidate.episode
@@ -829,14 +837,24 @@ def _signal_matches_candidate(signal: Signal, candidate: QueueCandidate) -> bool
         else _episode_from_mapping(candidate.episode)
     )
     identities = _signal_source_identities(signal)
-    if identities and not all(
+    return not identities or all(
         _identity_matches_episode(identity, episode) for identity in identities
-    ):
+    )
+
+
+def _signal_matches_candidate(signal: Signal, candidate: QueueCandidate) -> bool:
+    """Return whether a non-empty signal ID identifies ``candidate``."""
+
+    identities = _signal_source_identities(signal)
+    if not _signal_identity_matches_candidate(signal, candidate):
         return False
-    return signal.episode_id in {
-        episode.episode_id,
-        *_candidate_report_episode_ids(candidate),
-    } or bool(identities)
+    if signal.episode_id in _candidate_report_episode_ids(candidate):
+        return True
+    # An identity-only local signal is safe only when this candidate has no
+    # explicit report alias that contradicts its non-empty episode ID.  The
+    # global path additionally intersects raw-alias and identity candidate
+    # sets, so a known alias on another candidate cannot cross-bind here.
+    return bool(identities) and not _candidate_explicit_report_episode_ids(candidate)
 
 
 def _adapt_signal_to_candidate(signal: Signal, candidate: QueueCandidate) -> Signal:
@@ -875,9 +893,38 @@ def _adapt_global_signal(
 
     if not signal.episode_id:
         return signal, ()
-    matches = tuple(
+    raw_alias_matches = tuple(
         candidate for candidate in candidates if _signal_matches_candidate(signal, candidate)
     )
+    identities = _signal_source_identities(signal)
+    if identities:
+        identity_matches = tuple(
+            candidate
+            for candidate in candidates
+            if _signal_identity_matches_candidate(signal, candidate)
+        )
+        raw_id_matches = {
+            candidate.episode_id
+            for candidate in candidates
+            if signal.episode_id in _candidate_report_episode_ids(candidate)
+        }
+        if raw_id_matches:
+            matches = tuple(
+                candidate
+                for candidate in identity_matches
+                if candidate.episode_id in raw_id_matches
+            )
+        else:
+            # No candidate advertises this raw ID, so rely on the source
+            # identity only when the identity candidate has no conflicting
+            # explicit report alias of its own.
+            matches = tuple(
+                candidate
+                for candidate in identity_matches
+                if not _candidate_explicit_report_episode_ids(candidate)
+            )
+    else:
+        matches = raw_alias_matches
     if len(matches) != 1:
         return None, matches
     return replace(signal, episode_id=matches[0].episode_id), matches

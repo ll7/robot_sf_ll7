@@ -341,6 +341,52 @@ def test_unmatched_global_signal_is_accounted_and_unavailable() -> None:
     assert dataset.accounting["unmatched_global_signal_episode_ids"] == ("missing-report-row",)
 
 
+def test_conflicting_local_raw_alias_and_source_identity_fails_closed() -> None:
+    candidate = QueueCandidate(
+        _episode("exec-a"),
+        metadata={"raw_episode_id": "raw-a"},
+    )
+    signal = Signal(
+        signal_id="cross-bind-local",
+        detector_id="config",
+        episode_id="raw-b",
+        status="flagged",
+        evidence=({"kind": "source_identity", "identity": {"execution_id": "exec-a"}},),
+        measured={"severity": 1.0},
+    )
+
+    with pytest.raises(QueueInputError, match="does not match candidate EpisodeRef"):
+        QueueCandidate(candidate.episode, metadata=candidate.metadata, signals=(signal,))
+
+
+def test_conflicting_global_raw_alias_and_source_identity_is_unavailable() -> None:
+    candidate_a = QueueCandidate(
+        _episode("exec-a"),
+        metadata={"raw_episode_id": "raw-a"},
+    )
+    candidate_b = QueueCandidate(
+        _episode("exec-b"),
+        metadata={"raw_episode_id": "raw-b"},
+    )
+    signal = Signal(
+        signal_id="cross-bind-global",
+        detector_id="config",
+        episode_id="raw-b",
+        status="flagged",
+        evidence=({"kind": "source_identity", "identity": {"execution_id": "exec-a"}},),
+        measured={"severity": 1.0},
+    )
+
+    dataset = QueueDataset((candidate_a, candidate_b), signals=(signal,))
+
+    assert dataset.signals_for(candidate_a.episode_id) == ()
+    assert dataset.signals_for(candidate_b.episode_id) == ()
+    assert "ba-01-signals:unavailable" in dataset.missingness
+    assert "ba-01-signals:unmatched" in dataset.missingness
+    assert dataset.accounting["unmatched_global_signal_ids"] == ("cross-bind-global",)
+    assert dataset.accounting["unmatched_global_signal_episode_ids"] == ("raw-b",)
+
+
 def test_active_explanation_exposes_coverage_hypothesis_novelty_and_redundancy() -> None:
     reviewed = _candidate(
         "reviewed",

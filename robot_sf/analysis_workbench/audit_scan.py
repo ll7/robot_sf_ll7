@@ -17,6 +17,7 @@ import math
 import os
 import re
 import stat
+import tempfile
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -43,7 +44,10 @@ from robot_sf.analysis_workbench.audit_detectors import (
     signal_status_counts,
     unavailable_signal,
 )
-from robot_sf.analysis_workbench.review_context import _read_regular_file_no_follow
+from robot_sf.analysis_workbench.review_context import (
+    _read_regular_file_no_follow,
+    _snapshot_directory,
+)
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
     ComponentResult,
@@ -209,7 +213,7 @@ def _status_token(value: Any, *, path: str) -> tuple[str | None, str | None]:
 
     if not isinstance(value, str) or not value.strip():
         return None, f"{path} is malformed"
-    return value.strip().lower().replace("-", "_").replace(" ", "_"), None
+    return re.sub(r"[-_\s]+", "_", value.strip().lower()), None
 
 
 def _counter_status(  # noqa: C901
@@ -806,6 +810,41 @@ def _identity_aliases(  # noqa: C901
     return next(iter(unique)) if unique else None
 
 
+def _row_source_digest_error(row: Mapping[str, Any], source_ref: SourceRef) -> str | None:
+    """Validate any row-level source digest declaration against admitted bytes.
+
+    Returns:
+        A bounded binding error, or ``None`` when the row has no conflict.
+    """
+
+    source_digest_values: list[str] = []
+    source_digest_containers: list[tuple[str, Any]] = [("episode", row)]
+    for name in ("provenance", "result_provenance", "cell_context", "config"):
+        source_digest_containers.append((f"episode.{name}", row.get(name)))
+    metadata = row.get("algorithm_metadata")
+    source_digest_containers.append(("episode.algorithm_metadata", metadata))
+    if isinstance(metadata, Mapping):
+        source_digest_containers.append(
+            ("episode.algorithm_metadata.analysis_trace", metadata.get("analysis_trace"))
+        )
+    for path, container in source_digest_containers:
+        if not isinstance(container, Mapping) or "source_digest" not in container:
+            continue
+        value = container["source_digest"]
+        if not isinstance(value, str) or not value.strip():
+            return f"{path}.source_digest is malformed"
+        source_digest_values.append(value.strip())
+    if len(set(source_digest_values)) > 1:
+        return "episode source_digest aliases conflict"
+    if source_digest_values:
+        value = source_digest_values[0]
+        if _DIGEST_RE.fullmatch(value) is None:
+            return "episode source_digest is not a hexadecimal digest"
+        if value.lower() != source_ref.sha256.lower():
+            return "episode source_digest conflicts with admitted source"
+    return None
+
+
 def _row_binding_error(
     row: Mapping[str, Any],
     source_ref: SourceRef,
@@ -818,6 +857,10 @@ def _row_binding_error(
     Returns:
         A conflict description, or ``None`` when the row is bound.
     """
+
+    digest_error = _row_source_digest_error(row, source_ref)
+    if digest_error is not None:
+        return digest_error
 
     try:
         row_campaign = _identity_aliases(
@@ -1033,81 +1076,106 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                 total = sum(item.stat().st_size for item in files)
                 if total > MAX_SOURCE_BYTES:
                     raise AuditScanError(f"source directory exceeds {MAX_SOURCE_BYTES} bytes")
-                manifest_path = source_path / "manifest.json"
-                manifest: dict[str, Any] = {}
-                if manifest_path.exists():
-                    manifest_value = _strict_json(
-                        _read_admitted_file(manifest_path, label="campaign manifest"),
-                        label="campaign manifest",
-                    )
-                    if not isinstance(manifest_value, Mapping):
-                        raise AuditScanError("campaign manifest must be an object")
-                    manifest = dict(manifest_value)
-                    _strict_walk(manifest, path="campaign manifest")
-                canonical_store = source_path
-                nested_store = source_path / "campaign-result-store.v2"
-                if (
-                    not (canonical_store / "episodes.parquet").is_file()
-                    and nested_store.is_dir()
-                    and (nested_store / "episodes.parquet").is_file()
-                ):
-                    canonical_store = nested_store
-                    nested_manifest_path = canonical_store / "manifest.json"
-                    if nested_manifest_path.is_file():
-                        nested_manifest_value = _strict_json(
-                            _read_admitted_file(nested_manifest_path, label="campaign manifest"),
-                            label="campaign manifest",
+                # Bind the digest, manifest, owner loader, and rows to one
+                # descriptor-backed snapshot.  Reopening ``source_path``
+                # after integrity validation would allow a replaced parquet
+                # file to be admitted under the original digest.
+                try:
+                    with tempfile.TemporaryDirectory(
+                        prefix="ba01-source-snapshot-"
+                    ) as snapshot_dir:
+                        snapshot_root = Path(snapshot_dir)
+                        snapshot_files, snapshot_digest = _snapshot_directory(
+                            source_path, files, snapshot_root
                         )
-                        if not isinstance(nested_manifest_value, Mapping):
-                            raise AuditScanError("campaign manifest must be an object")
-                        manifest = dict(nested_manifest_value)
-                canonical_rows: list[tuple[Mapping[str, Any], int]] = []
-                canonical_loaded = False
-                canonical_present = (canonical_store / "episodes.parquet").is_file()
-                if canonical_present:
-                    if manifest.get("schema_version") == "campaign-result-store.v2":
-                        canonical_loaded = True
-                        canonical_rows, canonical_status = _canonical_store_rows(canonical_store)
-                        if canonical_status != "native":
-                            source_status = canonical_status
-                    else:
-                        source_status = "unsupported"
-                row_path = next(
-                    (
-                        source_path / name
-                        for name in ("episodes.jsonl", "records.jsonl")
-                        if (source_path / name).is_file()
-                    ),
-                    None,
-                )
-                source_bytes = b"".join(
-                    str(item.relative_to(source_path)).encode("utf-8")
-                    + b"\0"
-                    + _read_admitted_file(item, label=f"campaign source {item.name}")
-                    for item in files
-                )
-                rows = (
-                    canonical_rows
-                    if canonical_present
-                    else _jsonl_rows(
-                        _read_admitted_file(row_path, label="campaign source"), label="source"
-                    )
-                    if row_path is not None
-                    else []
-                )
-                payload = {
-                    **manifest,
-                    "schema_version": manifest.get("schema_version", "campaign-result-store.v2"),
-                    "episodes": (
-                        [dict(item) for item, _line in rows if isinstance(item, Mapping)]
-                        if row_path is not None or canonical_present
-                        else manifest.get("episodes", [])
-                        if isinstance(manifest.get("episodes"), list)
-                        else []
-                    ),
-                }
-                if row_path is None and not canonical_loaded:
-                    source_status = "unsupported"
+                        source_bytes = b"".join(
+                            str(item.relative_to(snapshot_root)).encode("utf-8")
+                            + b"\0"
+                            + _read_admitted_file(item, label=f"campaign source {item.name}")
+                            for item in snapshot_files
+                        )
+                        if _sha256(source_bytes) != snapshot_digest:
+                            raise AuditScanError(
+                                "source snapshot digest computation is inconsistent"
+                            )
+                        manifest_path = snapshot_root / "manifest.json"
+                        manifest: dict[str, Any] = {}
+                        if manifest_path.is_file():
+                            manifest_value = _strict_json(
+                                _read_admitted_file(manifest_path, label="campaign manifest"),
+                                label="campaign manifest",
+                            )
+                            if not isinstance(manifest_value, Mapping):
+                                raise AuditScanError("campaign manifest must be an object")
+                            manifest = dict(manifest_value)
+                            _strict_walk(manifest, path="campaign manifest")
+                        canonical_store = snapshot_root
+                        nested_store = snapshot_root / "campaign-result-store.v2"
+                        if (
+                            not (canonical_store / "episodes.parquet").is_file()
+                            and nested_store.is_dir()
+                            and (nested_store / "episodes.parquet").is_file()
+                        ):
+                            canonical_store = nested_store
+                            nested_manifest_path = canonical_store / "manifest.json"
+                            if nested_manifest_path.is_file():
+                                nested_manifest_value = _strict_json(
+                                    _read_admitted_file(
+                                        nested_manifest_path, label="campaign manifest"
+                                    ),
+                                    label="campaign manifest",
+                                )
+                                if not isinstance(nested_manifest_value, Mapping):
+                                    raise AuditScanError("campaign manifest must be an object")
+                                manifest = dict(nested_manifest_value)
+                        canonical_rows: list[tuple[Mapping[str, Any], int]] = []
+                        canonical_loaded = False
+                        canonical_present = (canonical_store / "episodes.parquet").is_file()
+                        if canonical_present:
+                            if manifest.get("schema_version") == "campaign-result-store.v2":
+                                canonical_loaded = True
+                                canonical_rows, canonical_status = _canonical_store_rows(
+                                    canonical_store
+                                )
+                                if canonical_status != "native":
+                                    source_status = canonical_status
+                            else:
+                                source_status = "unsupported"
+                        row_path = next(
+                            (
+                                snapshot_root / name
+                                for name in ("episodes.jsonl", "records.jsonl")
+                                if (snapshot_root / name).is_file()
+                            ),
+                            None,
+                        )
+                        rows = (
+                            canonical_rows
+                            if canonical_present
+                            else _jsonl_rows(
+                                _read_admitted_file(row_path, label="campaign source"),
+                                label="source",
+                            )
+                            if row_path is not None
+                            else []
+                        )
+                        payload = {
+                            **manifest,
+                            "schema_version": manifest.get(
+                                "schema_version", "campaign-result-store.v2"
+                            ),
+                            "episodes": (
+                                [dict(item) for item, _line in rows if isinstance(item, Mapping)]
+                                if row_path is not None or canonical_present
+                                else manifest.get("episodes", [])
+                                if isinstance(manifest.get("episodes"), list)
+                                else []
+                            ),
+                        }
+                        if row_path is None and not canonical_loaded:
+                            source_status = "unsupported"
+                except ReviewContractsValidationError as exc:
+                    raise AuditScanError("campaign source snapshot is invalid") from exc
             else:
                 source_bytes = _read_admitted_file(source_path, label="campaign source")
                 if source_path.suffix.lower() in {".jsonl", ".ndjson"}:
@@ -2547,6 +2615,42 @@ def _reject_component_request(request: ComponentRequest) -> ComponentResult | No
     return None
 
 
+def _component_scan_status(report: AuditScanReport) -> tuple[str, str]:
+    """Classify a report without treating partial evidence as completion.
+
+    Returns:
+        The BA-03 component status and a semicolon-delimited reason.
+    """
+
+    coverage = report.counts["coverage"]
+    input_blocking = (
+        any(coverage[status] > 0 for status in ("missing", "duplicate", "invalid", "unsupported"))
+        or coverage.get("unexpected_observed", 0) > 0
+    )
+    detector_error = report.counts["detectors"].get("error", 0) > 0
+    source_execution = report.provenance.get("source", {}).get("execution_status")
+    source_token = (
+        _status_token(source_execution, path="source.execution_status")[0]
+        if isinstance(source_execution, str)
+        else None
+    )
+    source_blocking = source_token not in {"native", "adapter"}
+    reasons: list[str] = []
+    if detector_error:
+        reasons.append("detector_evaluation_contains_errors")
+    if source_blocking:
+        reasons.append("source_execution_is_not_native")
+    if input_blocking:
+        reasons.append("input_accounting_contains_non_readable_rows")
+    if detector_error:
+        status = STATUS_FAILED
+    elif source_blocking or input_blocking:
+        status = STATUS_PARTIAL
+    else:
+        status = STATUS_COMPLETE
+    return status, ";".join(reasons)
+
+
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
     """Run the BA-01 component request and return a BA-03 result envelope.
 
@@ -2632,21 +2736,14 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 "sha256": _sha256(registry_path.read_bytes()),
             },
         )
-        blocking = (
-            any(
-                report.counts["coverage"][status] > 0
-                for status in ("missing", "duplicate", "invalid", "unsupported")
-            )
-            or report.counts["coverage"].get("unexpected_observed", 0) > 0
-        )
-        status = STATUS_PARTIAL if blocking else STATUS_COMPLETE
+        status, reason = _component_scan_status(report)
         return ComponentResult(
             request.request_id,
             COMPONENT_ID,
             status,
             artifacts=artifacts if status == STATUS_COMPLETE else (),
             provenance=report.provenance,
-            reason="input_accounting_contains_non_readable_rows" if blocking else "",
+            reason=reason,
         )
     except (AuditScanError, AuditContractError, OSError, TypeError, ValueError) as exc:
         return ComponentResult(

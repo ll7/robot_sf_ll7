@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -154,6 +155,16 @@ _DESCRIPTIVE_STATUS_VALUES = frozenset(
 )
 
 
+def _status_token(value: str) -> str:
+    """Normalize prose/canonical status spellings to one comparison token.
+
+    Returns:
+        A lower-case token with runs of separators collapsed to underscores.
+    """
+
+    return re.sub(r"[-_\s]+", "_", value.strip().lower())
+
+
 def _canonical_detector_id(value: str) -> str:
     """Normalize documented family spellings to one stable detector ID.
 
@@ -161,7 +172,7 @@ def _canonical_detector_id(value: str) -> str:
         Canonical lower-case detector identifier.
     """
 
-    token = value.strip().lower().replace("-", "_").replace(" ", "_")
+    token = _status_token(value)
     return DETECTOR_ALIASES.get(token, token)
 
 
@@ -807,7 +818,7 @@ def _admission_failure(  # noqa: C901, PLR0912
             value = container[key]
             if not isinstance(value, str) or not value.strip():
                 return "error", f"{path}.{key}_malformed"
-            token = value.strip().lower().replace("-", "_").replace(" ", "_")
+            token = _status_token(value)
             if token in _NON_ADMISSIBLE_EXECUTION_STATUSES:
                 return "unavailable", f"non_admissible_execution_status_{token}"
             if token not in _NATIVE_EXECUTION_STATUSES:
@@ -899,7 +910,7 @@ def _trace(  # noqa: C901, PLR0912
         status = coverage.get("status")
         if status is not None and not isinstance(status, str):
             return None, "trace_coverage_malformed"
-        normalized = status.strip().lower().replace("-", "_") if isinstance(status, str) else ""
+        normalized = _status_token(status) if isinstance(status, str) else ""
         if normalized in {
             "unavailable",
             "not_available",
@@ -1101,7 +1112,7 @@ def _timeout(row: Mapping[str, Any]) -> bool | None:
             return _bool(row[key])
     label = outcome.get("label") or outcome.get("status") or row.get("termination_reason")
     if isinstance(label, str):
-        normalized = label.strip().lower().replace("-", "_")
+        normalized = _status_token(label)
         if normalized in {
             "timeout",
             "timed_out",
@@ -1124,7 +1135,7 @@ def _collision(row: Mapping[str, Any]) -> bool | None:
         if key in row:
             return _bool(row[key])
     label = outcome.get("label") or outcome.get("status") or row.get("termination_reason")
-    return label.strip().lower() in {"collision", "collided"} if isinstance(label, str) else None
+    return _status_token(label) in {"collision", "collided"} if isinstance(label, str) else None
 
 
 def _success(row: Mapping[str, Any]) -> bool | None:
@@ -1136,7 +1147,7 @@ def _success(row: Mapping[str, Any]) -> bool | None:
             return _bool(row[key])
     label = outcome.get("label") or outcome.get("status") or row.get("termination_reason")
     return (
-        label.strip().lower()
+        _status_token(label)
         in {"success", "completed", "complete", "goal_reached", "goal_reached_success"}
         if isinstance(label, str)
         else None
@@ -1158,7 +1169,7 @@ def _outcome_label(row: Mapping[str, Any]) -> str | None:
     for key in ("label", "status"):
         value = outcome.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip().lower().replace("-", "_")
+            return _status_token(value)
     if _collision(row) is True:
         return "collision"
     if _timeout(row) is True:
@@ -1944,10 +1955,6 @@ def _stuck_no_progress(  # noqa: C901
     config: Mapping[str, Any],
 ) -> Signal:
     expected_wait = row.get("expected_waiting") is True or row.get("expected_yielding") is True
-    if expected_wait:
-        return _make_signal(
-            spec, row, "clear", reason="expected_waiting_or_yielding", config=config
-        )
     progress_value = _lookup(
         row,
         "progress_m",
@@ -1981,6 +1988,13 @@ def _stuck_no_progress(  # noqa: C901
         or (speed_value is not None and speed is None)
     ):
         return _detector_error(spec, row, "progress_telemetry_malformed", config=config)
+    # Validate promised telemetry before honoring the control-state exception.
+    # A row cannot hide malformed progress by declaring that it was waiting or
+    # yielding; missing optional telemetry remains a valid expected-wait case.
+    if expected_wait:
+        return _make_signal(
+            spec, row, "clear", reason="expected_waiting_or_yielding", config=config
+        )
     frames: list[Mapping[str, Any]] | None = None
     interval = None
     if duration is None:

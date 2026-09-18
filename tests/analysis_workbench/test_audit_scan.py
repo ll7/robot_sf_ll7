@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import SourceRef, record_to_dict
+from robot_sf.analysis_workbench.audit_detectors import detect
 from robot_sf.analysis_workbench.audit_scan import (
     AUDIT_REGISTRY_FILENAME,
     AUDIT_REPORT_FILENAME,
@@ -21,6 +22,7 @@ from robot_sf.analysis_workbench.audit_scan import (
 )
 from robot_sf.analysis_workbench.audit_store import AuditStore
 from robot_sf.analysis_workbench.review_contracts import ComponentRequest
+from robot_sf.benchmark import case_workbench
 from robot_sf.benchmark.analysis_trace import build_analysis_trace
 from robot_sf.benchmark.parquet_export import export_campaign_result_store_v2
 
@@ -370,6 +372,112 @@ def test_nested_fallback_counter_and_malformed_status_fail_closed() -> None:
         _campaign(_episode("malformed", availability_status=3), expected_episode_ids=["malformed"])
     )
     assert malformed.inventory[0].status == "invalid"
+
+
+def test_prose_not_available_status_is_not_readable() -> None:
+    report = scan_campaign(
+        _campaign(
+            _episode("not-available", row_status="not available"),
+            expected_episode_ids=["not-available"],
+        )
+    )
+    assert report.inventory[0].status == "unsupported"
+    signal = report.signals[0]
+    assert signal.status == "unavailable"
+    direct = detect("stuck_no_progress", {"episode_id": "direct", "status": "not available"})
+    assert direct.status == "unavailable"
+
+
+def test_progress_contract_error_is_preserved_when_waiting() -> None:
+    signal = detect(
+        "stuck_no_progress",
+        {"episode_id": "waiting", "expected_waiting": True, "progress_m": "malformed"},
+    )
+    assert signal.status == "error"
+    assert signal.reason_code == "progress_telemetry_malformed"
+
+
+def test_row_source_digest_mismatch_is_invalid_and_not_exposed_by_signal() -> None:
+    report = scan_campaign(
+        _campaign(
+            _episode("untrusted", source_digest="0" * 64),
+            expected_episode_ids=["untrusted"],
+        )
+    )
+    assert report.inventory[0].status == "invalid"
+    assert "source_digest" in report.inventory[0].reason
+    signal_payloads = [
+        json.dumps(record_to_dict(signal), sort_keys=True) for signal in report.signals
+    ]
+    assert all("0" * 64 not in payload for payload in signal_payloads)
+
+
+def test_zero_inventory_unsupported_store_is_not_complete(tmp_path: Path) -> None:
+    store = tmp_path / "unsupported-empty"
+    store.mkdir()
+    (store / "manifest.json").write_text(
+        json.dumps({"schema_version": "campaign-result-store.v2"}), encoding="utf-8"
+    )
+    (store / "episodes.parquet").write_bytes(b"invalid-parquet")
+    result = run(
+        ComponentRequest(
+            request_id="unsupported-empty",
+            component_id="ba01-audit-scan",
+            sources=(
+                SourceRef(
+                    artifact_id="unsupported-empty",
+                    uri="unsupported-empty",
+                    format="campaign-result-store",
+                    schema="campaign-result-store.v2",
+                ),
+            ),
+            output_directory="audit-output",
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "source_execution" in result.reason
+
+
+def test_canonical_parquet_rows_are_bound_to_the_validated_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A replacement after validation cannot change admitted owner rows."""
+
+    pytest.importorskip("pyarrow")
+    original_source = tmp_path / "original.jsonl"
+    canonical_provenance = {
+        "campaign_id": "campaign",
+        "source_commit": "a" * 40,
+        "config_identity": "config-a",
+    }
+    original_source.write_text(
+        json.dumps(_episode("original", provenance=canonical_provenance)) + "\n", encoding="utf-8"
+    )
+    original_store = export_campaign_result_store_v2(
+        original_source, tmp_path / "original-store", overwrite=True
+    ).output_dir
+    external_source = tmp_path / "external.jsonl"
+    external_source.write_text(
+        json.dumps(_episode("external", provenance=canonical_provenance)) + "\n", encoding="utf-8"
+    )
+    external_store = export_campaign_result_store_v2(
+        external_source, tmp_path / "external-store", overwrite=True
+    ).output_dir
+    external_parquet = (external_store / "episodes.parquet").read_bytes()
+    original_parquet = original_store / "episodes.parquet"
+    owner_integrity = case_workbench._v2_integrity_errors
+
+    def swap_after_integrity(path: Path) -> list[str]:
+        errors = owner_integrity(path)
+        original_parquet.write_bytes(external_parquet)
+        return errors
+
+    monkeypatch.setattr(case_workbench, "_v2_integrity_errors", swap_after_integrity)
+    report = scan_campaign(original_store, root=tmp_path)
+    assert [item.episode_id for item in report.inventory] == ["original"]
+    assert all(item.episode_id != "external" for item in report.inventory)
+    assert report.provenance["source"]["sha256_observed"] == report.audit.source_digest
 
 
 def test_directory_special_file_is_rejected_before_digest(tmp_path: Path) -> None:

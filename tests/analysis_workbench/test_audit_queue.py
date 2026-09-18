@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from robot_sf.analysis_workbench.audit_queue import (
     ActivePolicy,
     AuditQueue,
     CoverageDeficit,
+    QueueCandidate,
     QueueConflictError,
     QueueDataset,
     QueueInputError,
@@ -37,6 +39,7 @@ from robot_sf.analysis_workbench.audit_queue import (
     _packet_content_identity,
     load_queue_input,
 )
+from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.analysis_workbench.audit_store import AuditStore
 
 
@@ -271,6 +274,71 @@ def test_typed_global_ba01_signals_drive_band_and_score() -> None:
     assert result.explanation.priority_band == "benchmark_config_defect"
     assert result.explanation.components["signal_strength"] == 0.75
     assert "ba-01-signals:unavailable" not in ranked.dataset.missingness
+
+
+def test_ba01_raw_report_signal_adapts_to_canonical_episode_ref() -> None:
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "analysis_workbench"
+        / "audit_campaign_v1"
+        / "campaign.json"
+    )
+    report = scan_campaign(fixture, root=fixture.parents[4])
+    episode = next(
+        item for item in report.episode_refs if item.execution_id == "fixture-exec-readable"
+    )
+    raw_signal = next(item for item in report.signals if item.episode_id == "fixture-readable")
+    flagged_signal = replace(
+        raw_signal,
+        status="flagged",
+        reason_code="benchmark/config defect",
+        measured={"severity": 1.0},
+    )
+
+    candidate = QueueCandidate(episode, signals=(flagged_signal,))
+    dataset = QueueDataset((candidate,))
+
+    assert candidate.episode_id == (
+        "episode-cc4f25be943008dbbf28c9f388147be2b888b102ec15e6f84e9412d4ae98d2db"
+    )
+    assert candidate.signals[0].episode_id == candidate.episode_id
+    assert dataset.signals_for(candidate.episode_id)[0].episode_id == candidate.episode_id
+    result = AuditQueue(dataset, policy=QueuePolicy.fixed()).rank_candidates()[0]
+    assert result.explanation.priority_band == "benchmark_config_defect"
+    assert result.explanation.components["signal_strength"] == 1.0
+
+
+def test_local_signal_with_unrelated_episode_id_fails_closed() -> None:
+    candidate = _candidate("local-signal-id")
+    signal = Signal(
+        signal_id="wrong-local-episode",
+        detector_id="config",
+        episode_id="different-report-row",
+        status="flagged",
+    )
+
+    with pytest.raises(QueueInputError, match="does not match candidate EpisodeRef"):
+        QueueCandidate(candidate.episode, signals=(signal,))
+
+
+def test_unmatched_global_signal_is_accounted_and_unavailable() -> None:
+    candidate = _candidate("matched-row")
+    signal = Signal(
+        signal_id="unmatched-global-signal",
+        detector_id="config",
+        episode_id="missing-report-row",
+        status="flagged",
+    )
+
+    dataset = QueueDataset((candidate,), signals=(signal,))
+
+    assert dataset.signals_for(candidate.episode_id) == ()
+    assert "ba-01-signals:unavailable" in dataset.missingness
+    assert "ba-01-signals:unmatched" in dataset.missingness
+    assert dataset.accounting["unmatched_global_signal_count"] == 1
+    assert dataset.accounting["unmatched_global_signal_ids"] == ("unmatched-global-signal",)
+    assert dataset.accounting["unmatched_global_signal_episode_ids"] == ("missing-report-row",)
 
 
 def test_active_explanation_exposes_coverage_hypothesis_novelty_and_redundancy() -> None:

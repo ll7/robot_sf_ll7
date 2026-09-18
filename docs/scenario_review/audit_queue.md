@@ -117,6 +117,15 @@ must carry the exact `audit-queue-input.v1` schema version.  A changed
 scan/finding/input/policy-semantic revision is surfaced as stale on resume;
 prior selection history is retained and must not be silently rebound.
 
+BA-01 report rows may use a readable source episode label while BA-02
+`EpisodeRef` uses its digest-bound generated ID.  At queue admission, a signal
+is adapted only when its source-identity evidence or an explicit candidate
+report-ID alias resolves to exactly one candidate; the adapted signal retains
+its original signal ID.  A local signal with an unresolved non-empty episode ID
+is rejected.  An unmatched global signal is retained for provenance but cannot
+affect ranking; BA-02 records `ba-01-signals:unavailable` plus deterministic
+unmatched-signal accounting instead of silently dropping it.
+
 ## Actions and review credit
 
 `pin`, `skip`, `defer`, `previous_packet`, `resume`, and `more_evidence` are

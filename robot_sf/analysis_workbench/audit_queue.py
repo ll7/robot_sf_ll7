@@ -730,6 +730,159 @@ def _episode_from_mapping(value: Mapping[str, Any]) -> EpisodeRef:
         raise QueueInputError(f"invalid episode identity: {exc}") from exc
 
 
+_EPISODE_IDENTITY_FIELDS = (
+    "campaign_digest",
+    "source_digest",
+    "execution_id",
+    "planner_id",
+    "scenario_id",
+    "seed",
+    "attempt",
+    "config_digest",
+    "checkpoint_digest",
+    "environment_digest",
+)
+_REPORT_EPISODE_ID_FIELDS = (
+    "raw_episode_id",
+    "report_episode_id",
+    "source_episode_id",
+    "raw_report_id",
+    "source_report_id",
+)
+
+
+def _signal_source_identities(signal: Signal) -> tuple[Mapping[str, Any], ...]:
+    """Return source-identity evidence that can bind a BA-01 signal.
+
+    BA-01 detector rows are keyed by the source report's episode label, while
+    ``EpisodeRef`` deliberately uses a digest-bound ID.  Detector evidence
+    carries the execution identity used to build that ``EpisodeRef``; keeping
+    the extraction here makes the join explicit and leaves the source signal
+    payload otherwise unchanged.
+    """
+
+    identities: list[Mapping[str, Any]] = []
+    for evidence in signal.evidence:
+        if not isinstance(evidence, Mapping):
+            continue
+        identity = evidence.get("identity")
+        if evidence.get("kind") == "source_identity" and isinstance(identity, Mapping):
+            identities.append(identity)
+        direct = evidence.get("source_identity")
+        if isinstance(direct, Mapping):
+            identities.append(direct)
+    return tuple(identities)
+
+
+def _identity_matches_episode(identity: Mapping[str, Any], episode: EpisodeRef) -> bool:
+    """Check a source-identity receipt against one canonical ``EpisodeRef``.
+
+    An execution ID is required because campaign/source/config values alone
+    can describe more than one episode.  Unknown or source-only aliases (for
+    example a human campaign label in ``campaign_id``) are intentionally not
+    compared to digest-bound fields.
+    """
+
+    if not isinstance(identity.get("execution_id"), str) or not identity["execution_id"].strip():
+        return False
+    compared = False
+    for field_name in _EPISODE_IDENTITY_FIELDS:
+        if field_name not in identity:
+            continue
+        value = identity[field_name]
+        expected = getattr(episode, field_name)
+        if field_name.endswith("_digest"):
+            if not isinstance(value, str) or not isinstance(expected, str):
+                return False
+            if value.lower() != expected.lower():
+                return False
+        elif value != expected:
+            return False
+        compared = True
+    return compared
+
+
+def _candidate_report_episode_ids(candidate: QueueCandidate) -> frozenset[str]:
+    """Return explicit raw-report aliases accepted for one candidate."""
+
+    episode = (
+        candidate.episode
+        if isinstance(candidate.episode, EpisodeRef)
+        else _episode_from_mapping(candidate.episode)
+    )
+    aliases = {episode.execution_id}
+    for field_name in _REPORT_EPISODE_ID_FIELDS:
+        value = (
+            candidate.metadata.get(field_name) if isinstance(candidate.metadata, Mapping) else None
+        )
+        if isinstance(value, str) and value.strip():
+            aliases.add(value.strip())
+    return frozenset(aliases)
+
+
+def _signal_matches_candidate(signal: Signal, candidate: QueueCandidate) -> bool:
+    """Return whether a non-empty signal ID identifies ``candidate``."""
+
+    episode = (
+        candidate.episode
+        if isinstance(candidate.episode, EpisodeRef)
+        else _episode_from_mapping(candidate.episode)
+    )
+    identities = _signal_source_identities(signal)
+    if identities and not all(
+        _identity_matches_episode(identity, episode) for identity in identities
+    ):
+        return False
+    return signal.episode_id in {
+        episode.episode_id,
+        *_candidate_report_episode_ids(candidate),
+    } or bool(identities)
+
+
+def _adapt_signal_to_candidate(signal: Signal, candidate: QueueCandidate) -> Signal:
+    """Bind a raw-report signal to a candidate's canonical episode ID.
+
+    Empty signal episode IDs are intentionally global and remain empty.  A
+    non-empty ID must either be canonical already or resolve through the
+    explicit report/execution identity adapter; otherwise local admission
+    fails closed instead of allowing a signal to influence the wrong row.
+    """
+
+    episode = (
+        candidate.episode
+        if isinstance(candidate.episode, EpisodeRef)
+        else _episode_from_mapping(candidate.episode)
+    )
+    if not signal.episode_id or signal.episode_id == episode.episode_id:
+        return signal
+    if not _signal_matches_candidate(signal, candidate):
+        raise QueueInputError(
+            "signal episode_id does not match candidate EpisodeRef: "
+            f"{signal.episode_id!r} != {episode.episode_id!r}"
+        )
+    return replace(signal, episode_id=episode.episode_id)
+
+
+def _adapt_global_signal(
+    signal: Signal, candidates: Sequence[QueueCandidate]
+) -> tuple[Signal | None, tuple[QueueCandidate, ...]]:
+    """Adapt one global signal and return its unique candidate matches.
+
+    ``None`` is returned for a non-empty signal ID that cannot be associated
+    with exactly one candidate.  The caller retains that source signal for
+    provenance and records explicit BA-01 unavailable/accounting state.
+    """
+
+    if not signal.episode_id:
+        return signal, ()
+    matches = tuple(
+        candidate for candidate in candidates if _signal_matches_candidate(signal, candidate)
+    )
+    if len(matches) != 1:
+        return None, matches
+    return replace(signal, episode_id=matches[0].episode_id), matches
+
+
 @dataclass(frozen=True, slots=True)
 class QueueCandidate:
     """One queue candidate and its optional detector/trace context."""
@@ -742,7 +895,7 @@ class QueueCandidate:
     stratum_id: str = ""
     outcome: str = ""
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         episode = (
             self.episode
             if isinstance(self.episode, EpisodeRef)
@@ -754,6 +907,12 @@ class QueueCandidate:
             try:
                 item = signal if isinstance(signal, Signal) else signal_from_dict(signal)
             except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+                raise QueueInputError(
+                    f"invalid signal at candidate {episode.episode_id}[{index}]: {exc}"
+                ) from exc
+            try:
+                item = _adapt_signal_to_candidate(item, self)
+            except QueueInputError as exc:
                 raise QueueInputError(
                     f"invalid signal at candidate {episode.episode_id}[{index}]: {exc}"
                 ) from exc
@@ -833,6 +992,7 @@ class QueueCandidate:
             "contradictory_evidence",
             "finding_ids",
             "review_scope",
+            *_REPORT_EPISODE_ID_FIELDS,
         ):
             if key in payload and key not in metadata:
                 metadata[key] = payload[key]
@@ -988,6 +1148,7 @@ class QueueDataset:
             candidates.append(item)
         global_signals: list[Signal] = []
         global_signal_ids: set[str] = set()
+        unmatched_global_signals: list[Signal] = []
         for index, signal in enumerate(_sequence(self.signals, name="queue.signals")):
             try:
                 item = signal if isinstance(signal, Signal) else signal_from_dict(signal)
@@ -996,7 +1157,12 @@ class QueueDataset:
             if item.signal_id in global_signal_ids:
                 raise QueueInputError(f"duplicate global signal_id: {item.signal_id}")
             global_signal_ids.add(item.signal_id)
-            global_signals.append(item)
+            adapted, _ = _adapt_global_signal(item, candidates)
+            if adapted is None:
+                unmatched_global_signals.append(item)
+                global_signals.append(item)
+                continue
+            global_signals.append(adapted)
         signal_by_id = {signal.signal_id: signal for signal in global_signals}
         for candidate in candidates:
             for signal in candidate.signals:
@@ -1159,6 +1325,25 @@ class QueueDataset:
                 f"candidate:{candidate.episode_id}:source-identity-mismatch"
                 for candidate in candidates
                 if candidate.episode.source_digest != source_digest
+            )
+        if unmatched_global_signals:
+            unmatched_ids = tuple(sorted({signal.signal_id for signal in unmatched_global_signals}))
+            unmatched_episode_ids = tuple(
+                sorted(
+                    {signal.episode_id for signal in unmatched_global_signals if signal.episode_id}
+                )
+            )
+            accounting["unmatched_global_signal_count"] = len(unmatched_global_signals)
+            accounting["unmatched_global_signal_ids"] = list(unmatched_ids)
+            accounting["unmatched_global_signal_episode_ids"] = list(unmatched_episode_ids)
+            # Keep the short aggregate key alongside the detailed accounting
+            # so consumers that only track BA-01 denominator counters cannot
+            # mistake an unmatched source signal for a complete scan.
+            accounting["unmatched_global_signals"] = len(unmatched_global_signals)
+            missingness.append("ba-01-signals:unavailable")
+            missingness.append("ba-01-signals:unmatched")
+            missingness.extend(
+                f"ba-01-signals:unmatched:{episode_id}" for episode_id in unmatched_episode_ids
             )
         if not global_signals and not any(candidate.signals for candidate in candidates):
             missingness.append("ba-01-signals:unavailable")

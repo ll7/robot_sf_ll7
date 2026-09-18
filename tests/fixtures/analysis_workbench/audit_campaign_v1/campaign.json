@@ -1,0 +1,52 @@
+{
+  "campaign_id": "audit-fixture-campaign",
+  "config_identity": "audit-fixture-config",
+  "expected_episode_ids": [
+    "fixture-readable",
+    "fixture-missing",
+    "fixture-duplicate",
+    "fixture-invalid",
+    "fixture-unsupported"
+  ],
+  "execution_status": "native",
+  "schema_version": "campaign-result.v1",
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "episodes": [
+    {
+      "campaign_id": "audit-fixture-campaign",
+      "config_identity": "audit-fixture-config",
+      "config": {"config_id": "fixture-config"},
+      "episode_id": "fixture-readable",
+      "execution_id": "fixture-exec-readable",
+      "metrics": {"clearance_m": 1.0, "speed_m_s": 0.5},
+      "outcome": {"label": "success"},
+      "planner_id": "fixture-planner",
+      "provenance": {
+        "campaign_id": "audit-fixture-campaign",
+        "config_identity": "audit-fixture-config",
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "scenario_id": "fixture-scenario",
+      "seed": 7
+    },
+    {
+      "episode_id": "fixture-duplicate",
+      "metrics": {"clearance_m": 1.0},
+      "outcome": {"label": "success"}
+    },
+    {
+      "episode_id": "fixture-duplicate",
+      "metrics": {"clearance_m": 1.0},
+      "outcome": {"label": "success"}
+    },
+    {
+      "episode_id": "fixture-invalid",
+      "metrics": ["not-an-object"]
+    },
+    {
+      "episode_id": "fixture-unsupported",
+      "execution_status": "fallback",
+      "metrics": {"clearance_m": 1.0}
+    }
+  ]
+}

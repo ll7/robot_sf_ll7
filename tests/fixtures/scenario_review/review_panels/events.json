@@ -1,0 +1,25 @@
+{
+  "schema_version": "event-index.v1",
+  "source_identity": {"episode_id": "episode-17", "execution_id": "exec-17"},
+  "intervals": [
+    {
+      "interval_id": "near-miss-17",
+      "event_id": "near-miss-17",
+      "event_type": "near_miss",
+      "start_s": 10.4,
+      "end_s": 10.8,
+      "actor_ids": ["robot", "ped-0"],
+      "category": "interaction",
+      "metric_value": 0.4
+    },
+    {
+      "interval_id": "collision-17",
+      "event_id": "collision-17",
+      "event_type": "collision",
+      "start_s": 12.0,
+      "end_s": 12.0,
+      "actor_ids": ["robot"],
+      "category": "outcome"
+    }
+  ]
+}

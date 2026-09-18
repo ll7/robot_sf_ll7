@@ -229,10 +229,28 @@ def test_unadmitted_diagnosis_source_is_unavailable_and_not_evidence(
     assert model["panels"]["planner"]["status"] == "available"
 
 
-def test_unadmitted_analysis_trace_does_not_populate_panels_or_evidence(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("execution_status", "normalized_status"),
+    [
+        (" fallback ", "fallback"),
+        ("degraded", "degraded"),
+        ("failed", "failed"),
+        ("unavailable", "unavailable"),
+        ("not-started", "not_started"),
+        ("not_authorized", "not_authorized"),
+        ("declared not executed", "declared_not_executed"),
+        ("cancelled", "cancelled"),
+        ("missing", "missing"),
+        ("invalid", "invalid"),
+        ("diagnostic_only", "diagnostic_only"),
+    ],
+)
+def test_unadmitted_analysis_trace_does_not_populate_panels_or_evidence(
+    tmp_path: Path, execution_status: str, normalized_status: str
+) -> None:
     _stage(tmp_path)
     payload = json.loads((tmp_path / "analysis-trace.json").read_text())
-    payload["execution_status"] = " fallback "
+    payload["execution_status"] = execution_status
     payload["artifact_sha256"] = trace_artifact_sha256(payload)
     (tmp_path / "analysis-trace.json").write_text(json.dumps(payload))
     request = _request(
@@ -246,7 +264,7 @@ def test_unadmitted_analysis_trace_does_not_populate_panels_or_evidence(tmp_path
     inventory = model["inventories"][0]
     assert model["status"] == "unavailable"
     assert inventory["status"] == "unavailable"
-    assert inventory["reason"] == "source_execution_fallback"
+    assert inventory["reason"] == f"source_execution_{normalized_status}"
     assert model["evidence_references"] == []
     assert model["panels"]["planner"]["status"] == "unavailable"
     assert model["panels"]["planner"]["candidates"] == []
@@ -254,6 +272,64 @@ def test_unadmitted_analysis_trace_does_not_populate_panels_or_evidence(tmp_path
     assert model["panels"]["controls"]["commanded"]["status"] == "unavailable"
     assert model["panels"]["pedestrians"]["status"] == "unavailable"
     assert model["panels"]["pedestrians"]["actors"] == []
+
+
+@pytest.mark.parametrize("nested_location", ["source_trace", "source_trace.source"])
+def test_nested_timeline_status_does_not_populate_panels_or_evidence(
+    tmp_path: Path, nested_location: str
+) -> None:
+    _stage(tmp_path)
+    payload = json.loads((tmp_path / "timeline.json").read_text())
+    target: dict[str, object] = payload["source_trace"]
+    if nested_location == "source_trace.source":
+        target = target["source"]
+    target["execution-status"] = " FALLBACK "
+    (tmp_path / "timeline.json").write_text(json.dumps(payload))
+    request = _request(
+        tmp_path,
+        config={"cursor_time_s": 0.0, "actor_id": "ped-1"},
+        sources=[_source_ref(tmp_path, "timeline", "timeline.json", "simulation-timeline.v1")],
+    )
+
+    model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+    assert model["status"] == "unavailable"
+    assert model["inventories"][0]["status"] == "unavailable"
+    assert model["inventories"][0]["reason"] == "source_execution_fallback"
+    assert model["evidence_references"] == []
+    assert all(
+        model["panels"][name]["status"] == "unavailable"
+        for name in ("planner", "controls", "pedestrians")
+    )
+
+
+def test_unadmitted_diagnosis_record_does_not_populate_panel_or_evidence(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    payload = json.loads((tmp_path / "diagnosis.json").read_text())
+    payload["records"][0]["execution_status"] = " fallback "
+    (tmp_path / "diagnosis.json").write_text(json.dumps(payload))
+    request = _request(
+        tmp_path,
+        sources=[
+            _source_ref(tmp_path, "timeline", "timeline.json", "simulation-timeline.v1"),
+            _source_ref(tmp_path, "diagnosis", "diagnosis.json", "failure_diagnosis.v1"),
+        ],
+        config={"cursor_time_s": 0.5},
+    )
+
+    model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+    diagnosis_inventory = next(
+        inventory for inventory in model["inventories"] if inventory["artifact_id"] == "diagnosis"
+    )
+    assert model["status"] == "partial"
+    assert diagnosis_inventory["status"] == "unavailable"
+    assert diagnosis_inventory["reason"] == "source_execution_fallback"
+    assert model["panels"]["failure_diagnosis"]["status"] == "unavailable"
+    assert model["panels"]["failure_diagnosis"]["records"] == []
+    assert not any(
+        reference["kind"] == "failure_diagnosis" for reference in model["evidence_references"]
+    )
 
 
 def test_out_of_range_cursor_does_not_hold_terminal_sample(tmp_path: Path) -> None:
@@ -328,6 +404,14 @@ def test_selected_actor_disappearance_is_explicit(tmp_path: Path) -> None:
     assert panel["status"] == "unavailable"
     assert panel["reason"] == "actor_disappeared"
     assert panel["missing_reason"] == "selected_actor_not_present_at_source_time"
+    pedestrian_reference = next(
+        reference
+        for reference in model["evidence_references"]
+        if reference["kind"] == "pedestrians"
+    )
+    assert pedestrian_reference["evidence_status"] == "unavailable"
+    assert pedestrian_reference["missing_reason"] == "selected_actor_not_present_at_source_time"
+    assert "selected_actor_not_present_at_source_time" in pedestrian_reference["missing_reasons"]
 
 
 @pytest.mark.parametrize("uri", ["/tmp/trace.json", "../trace.json", "trace\\evil.json"])

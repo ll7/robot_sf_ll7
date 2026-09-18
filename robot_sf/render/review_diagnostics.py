@@ -23,6 +23,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import stat
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -751,18 +752,113 @@ def _coordinate_compatible(declared: str, observed: Any) -> bool:
     return not declared or (observed is not None and declared == str(observed))
 
 
-def _source_status(payload: Any) -> tuple[str, str]:
+_SOURCE_STATUS_KEYS = frozenset({"execution_status", "row_status", "status"})
+_NON_ADMISSIBLE_STATUS_TOKENS = frozenset(
+    {
+        "fallback",
+        "degraded",
+        "failed",
+        "unavailable",
+        "not_available",
+        "partial",
+        "incomplete",
+        "not_started",
+        "not_authorized",
+        "declared_not_executed",
+        "not_executed",
+        "not_run",
+        "cancelled",
+        "canceled",
+        "missing",
+        "invalid",
+        "diagnostic_only",
+        "not_admitted",
+        "skipped",
+        "blocked",
+        "pending",
+        "in_progress",
+        "error",
+        "corrupt",
+        "unverified",
+        "unknown",
+    }
+)
+_PARTIAL_STATUS_TOKENS = frozenset({"partial", "incomplete"})
+_ADMISSIBLE_STATUS_TOKENS = frozenset(
+    {
+        "native",
+        "adapter",
+        "available",
+        "complete",
+        "completed",
+        "success",
+        "succeeded",
+        "ok",
+        "recorded",
+        "valid",
+        "ready",
+        "admitted",
+        "supplied",
+    }
+)
+
+
+def _status_token(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    return normalized or None
+
+
+def _source_status(payload: Any) -> tuple[str, str]:  # noqa: C901
+    """Admit only explicitly native/adapter source statuses.
+
+    Status fields may occur on producer envelopes, nested source provenance,
+    or individual rows.  Walk the complete JSON-shaped payload so a fallback
+    cannot remain hidden in a timeline wrapper or an evidence record.  An
+    unknown or malformed explicit status is unavailable rather than guessed
+    successful; payloads without a status field retain the legacy admission.
+
+    Returns:
+        A normalized source status and stable reason code.
+    """
+
     if not isinstance(payload, Mapping):
-        return "unavailable", "source_shape_invalid"
-    for key in ("execution_status", "row_status", "status"):
-        value = payload.get(key)
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"fallback", "degraded", "failed", "unavailable"}:
-                return "unavailable", f"source_execution_{normalized}"
-            if normalized in {"partial", "incomplete"}:
-                return "partial", f"source_execution_{normalized}"
-    return "available", ""
+        return STATUS_UNAVAILABLE, "source_shape_invalid"
+    non_admissible: list[str] = []
+    partial: list[str] = []
+    invalid = False
+    pending: list[Any] = [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, Mapping):
+            for key, candidate in value.items():
+                normalized_key = _status_token(key)
+                if normalized_key in _SOURCE_STATUS_KEYS:
+                    token = _status_token(candidate)
+                    if token in _NON_ADMISSIBLE_STATUS_TOKENS:
+                        non_admissible.append(token)
+                    elif token in _PARTIAL_STATUS_TOKENS:
+                        partial.append(token)
+                    elif token not in _ADMISSIBLE_STATUS_TOKENS:
+                        invalid = True
+                if isinstance(candidate, (Mapping, list)):
+                    pending.append(candidate)
+        elif isinstance(value, list):
+            pending.extend(
+                candidate for candidate in value if isinstance(candidate, (Mapping, list))
+            )
+    if non_admissible:
+        token = non_admissible[0]
+        return (
+            STATUS_PARTIAL if token in _PARTIAL_STATUS_TOKENS else STATUS_UNAVAILABLE,
+            f"source_execution_{token}",
+        )
+    if partial:
+        return STATUS_PARTIAL, f"source_execution_{partial[0]}"
+    if invalid:
+        return STATUS_UNAVAILABLE, "source_execution_status_invalid"
+    return STATUS_AVAILABLE, ""
 
 
 def _row_collection(payload: Mapping[str, Any], kind: str) -> tuple[list[Any], str]:
@@ -1560,6 +1656,7 @@ def _reference(  # noqa: PLR0913
     units: Any = None,
     source_time_s: float | object | None = _UNSET_SOURCE_TIME,
     value_origin: str,
+    additional_missing_reasons: Sequence[str] = (),
 ) -> dict[str, Any]:
     source_revision = source.identity.get("source_commit") or source.digest or ""
     identity = (
@@ -1574,7 +1671,7 @@ def _reference(  # noqa: PLR0913
         if source_time_s is _UNSET_SOURCE_TIME
         else source_time_s
     )
-    missing_reasons: list[str] = []
+    missing_reasons = [reason for reason in additional_missing_reasons if isinstance(reason, str)]
     if source_time is None:
         missing_reasons.append("source_time_not_recorded")
     if actor_id is None:
@@ -1614,7 +1711,7 @@ def _reference(  # noqa: PLR0913
         "selection_revision": context.context_revision,
         "interval_id": context.interval_id,
         "value_origin": value_origin,
-        "evidence_status": "recorded",
+        "evidence_status": "unavailable" if missing_reasons else "recorded",
         "missing_reason": missing_reasons[0] if missing_reasons else None,
         "missing_reasons": missing_reasons,
         "admission": "not_evaluated",
@@ -1823,6 +1920,12 @@ def _build_document(  # noqa: C901, PLR0915
                     units=primary.units,
                     actor_id=selected_actor,
                     value_origin="simulator_ground_truth",
+                    additional_missing_reasons=(
+                        [pedestrian_panel["missing_reason"]]
+                        if pedestrian_panel.get("reason") == "actor_disappeared"
+                        and isinstance(pedestrian_panel.get("missing_reason"), str)
+                        else []
+                    ),
                 )
             )
             for index, _candidate in enumerate(planner_panel.get("candidates", [])):

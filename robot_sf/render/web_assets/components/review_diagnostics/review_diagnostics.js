@@ -58,7 +58,7 @@ export class ReviewDiagnosticsController {
     const references = Array.isArray(this.model.evidence_references)
       ? this.model.evidence_references
       : [];
-    this.model.evidence_references = references.map((reference, index) => {
+    const revisedReferences = references.map((reference, index) => {
       const missingReasons = Array.isArray(reference?.missing_reasons)
         ? [...reference.missing_reasons]
         : [];
@@ -78,12 +78,33 @@ export class ReviewDiagnosticsController {
         missing_reasons: missingReasons,
       };
     });
+    const panels = this.model?.panels;
+    const revisedPanels = panels && typeof panels === "object" && !Array.isArray(panels)
+      ? Object.fromEntries(Object.entries(panels).map(([name, panel]) => [
+        name,
+        panel && typeof panel === "object"
+          ? { ...panel, context_revision: nextRevision, selection_revision: nextRevision }
+          : panel,
+      ]))
+      : panels;
+    const context = this.model?.context;
+    const revisedContext = context && typeof context === "object"
+      ? {
+        ...context,
+        context_revision: nextRevision,
+        cursor: context.cursor && typeof context.cursor === "object"
+          ? { ...context.cursor, context_revision: nextRevision }
+          : context.cursor,
+      }
+      : context;
+    this.model = {
+      ...this.model,
+      evidence_references: revisedReferences,
+      panels: revisedPanels,
+      context: revisedContext,
+      selection_revision: nextRevision,
+    };
     this.revision = nextRevision;
-    if (this.model.context) {
-      this.model.context.context_revision = nextRevision;
-      if (this.model.context.cursor) this.model.context.cursor.context_revision = nextRevision;
-    }
-    this.model.selection_revision = nextRevision;
     this.render();
     return true;
   }

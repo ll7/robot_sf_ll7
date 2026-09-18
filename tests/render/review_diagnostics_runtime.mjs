@@ -66,6 +66,12 @@ if (controller.snapshot().context_revision !== 3) throw new Error("revision mism
 const revisionController = new ReviewDiagnosticsController({
   ...model,
   context: { context_revision: 3, cursor: { context_revision: 3 } },
+  panels: {
+    planner: { status: "available", context_revision: 3, selection_revision: 3 },
+    controls: { status: "available", context_revision: 3, selection_revision: 3 },
+    pedestrians: { status: "available", context_revision: 3, selection_revision: 3 },
+    failure_diagnosis: { status: "unavailable", context_revision: 3, selection_revision: 3 },
+  },
   evidence_references: [
     { kind: "planner", source_artifact_id: "trace", json_pointer: "/steps/0", context_revision: 3 },
     { kind: "controls", source_artifact_id: "trace", json_pointer: "/steps/0/controls", context_revision: 3 },
@@ -76,6 +82,11 @@ const revised = revisionController.snapshot();
 if (revised.context_revision !== 4) throw new Error("context revision was not applied");
 if (revisionController.model.context.cursor.context_revision !== 4) {
   throw new Error("cursor revision was not applied");
+}
+if (Object.values(revisionController.model.panels).some((panel) => (
+  panel.context_revision !== 4 || panel.selection_revision !== 4
+))) {
+  throw new Error("panel revisions were not applied");
 }
 if (revised.evidence_references.length !== 2 || revised.evidence_references.some((reference) => (
   reference.context_revision !== 4

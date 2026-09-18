@@ -17,6 +17,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_descriptor_from_dict,
     component_request_from_dict,
 )
+from robot_sf.benchmark.analysis_trace import trace_artifact_sha256
 from robot_sf.render import review_diagnostics
 
 FIXTURE_ROOT = (
@@ -102,6 +103,9 @@ def test_timeline_fixture_exposes_recorded_values_and_missing_reasons(tmp_path: 
     assert "source_time_not_recorded" in diagnosis_panel["missing_reasons"]
     assert model["selection_revision"] == 4
     assert all(reference["context_revision"] == 4 for reference in model["evidence_references"])
+    for panel_name in ("planner", "controls", "pedestrians"):
+        assert model["panels"][panel_name]["context_revision"] == 4
+        assert model["panels"][panel_name]["selection_revision"] == 4
     assert model["provenance"]["admission"] == "not_evaluated"
 
 
@@ -223,6 +227,64 @@ def test_unadmitted_diagnosis_source_is_unavailable_and_not_evidence(
         reference["kind"] == "failure_diagnosis" for reference in model["evidence_references"]
     )
     assert model["panels"]["planner"]["status"] == "available"
+
+
+def test_unadmitted_analysis_trace_does_not_populate_panels_or_evidence(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    payload = json.loads((tmp_path / "analysis-trace.json").read_text())
+    payload["execution_status"] = " fallback "
+    payload["artifact_sha256"] = trace_artifact_sha256(payload)
+    (tmp_path / "analysis-trace.json").write_text(json.dumps(payload))
+    request = _request(
+        tmp_path,
+        sources=[_source_ref(tmp_path, "analysis", "analysis-trace.json", "analysis-trace.v1")],
+        config={"actor_id": "ped-a", "context_revision": 3},
+    )
+
+    model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+    inventory = model["inventories"][0]
+    assert model["status"] == "unavailable"
+    assert inventory["status"] == "unavailable"
+    assert inventory["reason"] == "source_execution_fallback"
+    assert model["evidence_references"] == []
+    assert model["panels"]["planner"]["status"] == "unavailable"
+    assert model["panels"]["planner"]["candidates"] == []
+    assert model["panels"]["controls"]["status"] == "unavailable"
+    assert model["panels"]["controls"]["commanded"]["status"] == "unavailable"
+    assert model["panels"]["pedestrians"]["status"] == "unavailable"
+    assert model["panels"]["pedestrians"]["actors"] == []
+
+
+def test_out_of_range_cursor_does_not_hold_terminal_sample(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    request = _request(tmp_path, config={"cursor_time_s": 100.0, "context_revision": 9})
+
+    model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+    assert model["time"]["cursor"]["time_s"] == 100.0
+    assert model["time"]["terminal_s"] < 100.0
+    assert model["evidence_references"] == []
+    for panel_name in ("planner", "controls", "pedestrians"):
+        panel = model["panels"][panel_name]
+        assert panel["status"] == "unavailable"
+        assert panel["reason"] == "outside_declared_resolution"
+        assert panel["source_index"] is None
+
+
+def test_non_finite_source_number_is_rejected_before_build_output(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    timeline_path = tmp_path / "timeline.json"
+    raw = timeline_path.read_text().replace('"position": [0.0, 0.0]', '"position": [1e999, 0.0]')
+    timeline_path.write_text(raw)
+    request = _request(tmp_path)
+
+    model = review_diagnostics.build_diagnostic_model(request, base=tmp_path)
+
+    assert model["status"] == "failed"
+    assert model["inventories"][0]["status"] == "failed"
+    assert model["inventories"][0]["reason"] == "source_corrupt: source is not strict UTF-8 JSON"
+    json.dumps(model, allow_nan=False)
 
 
 def test_missing_control_dimensions_remain_unavailable_not_zero(tmp_path: Path) -> None:

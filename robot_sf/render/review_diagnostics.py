@@ -62,6 +62,7 @@ SIMULATION_TRACE_EXPORT_SCHEMA_VERSION = "simulation_trace_export.v1"
 ANALYSIS_TRACE_RECORD_SCHEMA_VERSION = "analysis-trace.v1"
 FAILURE_DIAGNOSIS_SCHEMA_VERSION = "failure_diagnosis.v1"
 
+STATUS_AVAILABLE = "available"
 STATUS_COMPLETE = "complete"
 STATUS_PARTIAL = "partial"
 STATUS_UNAVAILABLE = "unavailable"
@@ -231,6 +232,12 @@ def _strict_loads(raw: bytes) -> Any:
     if len(raw) > MAX_JSON_BYTES:
         raise _InputError("resource_limit: source JSON is too large")
 
+    def parse_finite_float(value: str) -> float:
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError(f"non-finite JSON number: {value}")
+        return number
+
     def reject_constant(value: str) -> None:
         raise ValueError(f"non-finite JSON constant: {value}")
 
@@ -246,6 +253,7 @@ def _strict_loads(raw: bytes) -> Any:
         return json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=reject_duplicates,
+            parse_float=parse_finite_float,
             parse_constant=reject_constant,
         )
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
@@ -749,7 +757,7 @@ def _source_status(payload: Any) -> tuple[str, str]:
     for key in ("execution_status", "row_status", "status"):
         value = payload.get(key)
         if isinstance(value, str):
-            normalized = value.lower()
+            normalized = value.strip().lower()
             if normalized in {"fallback", "degraded", "failed", "unavailable"}:
                 return "unavailable", f"source_execution_{normalized}"
             if normalized in {"partial", "incomplete"}:
@@ -1049,6 +1057,8 @@ def _nearest(
         return None, "source_time_unavailable", None
     selected = min(samples, key=lambda sample: (abs(sample.time_s - target), sample.time_s))
     error = abs(selected.time_s - target)
+    if target < samples[0].time_s or target > samples[-1].time_s:
+        return selected, "outside_declared_resolution", error
     if error > resolution + 1e-12:
         return selected, "outside_declared_resolution", error
     return selected, "", error
@@ -1640,6 +1650,7 @@ def _build_document(  # noqa: C901, PLR0915
         source
         for source in sources
         if source.kind in {"simulation_timeline", "simulation_trace_export", "analysis_trace"}
+        and source.status == STATUS_AVAILABLE
         and source.samples
     ]
     diagnoses = _diagnosis_rows(sources)
@@ -1652,11 +1663,6 @@ def _build_document(  # noqa: C901, PLR0915
         interval_id = str(interval_id)
     cursor_value = config.get("cursor_time_s", config.get("initial_time_s", source_start))
     cursor_time = _finite(cursor_value, "cursor_time_s")
-    cursor_time = (
-        min(max(cursor_time, source_start), source_end)
-        if source_end >= source_start
-        else cursor_time
-    )
     context = _context_from_sources(sources, config, cursor_time, interval_id)
     selected_actor = context.actor_id
 
@@ -1671,6 +1677,8 @@ def _build_document(  # noqa: C901, PLR0915
             )
         ),
         "toggleable": True,
+        "context_revision": context.context_revision,
+        "selection_revision": context.context_revision,
         "status": "unavailable",
         "reason": "trace_not_recorded" if primary is None else "source_time_unavailable",
         "source_artifact_id": primary.ref.artifact_id if primary else None,
@@ -1695,6 +1703,8 @@ def _build_document(  # noqa: C901, PLR0915
             )
         ),
         "toggleable": True,
+        "context_revision": context.context_revision,
+        "selection_revision": context.context_revision,
         "status": "unavailable",
         "reason": "trace_not_recorded" if primary is None else "source_time_unavailable",
         "source_artifact_id": primary.ref.artifact_id if primary else None,
@@ -1718,6 +1728,8 @@ def _build_document(  # noqa: C901, PLR0915
             )
         ),
         "toggleable": True,
+        "context_revision": context.context_revision,
+        "selection_revision": context.context_revision,
         "status": "unavailable",
         "reason": "trace_not_recorded" if primary is None else "source_time_unavailable",
         "source_artifact_id": primary.ref.artifact_id if primary else None,
@@ -1965,7 +1977,11 @@ def _build_document(  # noqa: C901, PLR0915
         status = (
             STATUS_FAILED
             if any(source.status == STATUS_FAILED for source in sources)
-            else STATUS_UNAVAILABLE
+            else (
+                STATUS_PARTIAL
+                if any(source.status == STATUS_PARTIAL for source in sources)
+                else STATUS_UNAVAILABLE
+            )
         )
     if missing_required and not traces:
         status = STATUS_UNAVAILABLE

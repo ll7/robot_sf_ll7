@@ -62,6 +62,8 @@ for source scope, reports, and explicit coverage commands.
   retire linked worktrees safely.
 - [Local CI and PR readiness](./dev/local_ci.md) — dependency profiles, shared environments,
   scratch capacity, focused tests, and final readiness.
+- [Standalone script contract](./dev/standalone_script_contract.md) — plain-Python scripts that
+  must not import repository packages, with the exemption list reuse authors must consult.
 - [Agent workflow entrypoints](./ai/agent_workflow_entrypoints.md) — canonical `uv run` and
   validation commands.
 - [Batch-first issue workflow](./context/issue_713_batch_first_issue_workflow.md) — issue and

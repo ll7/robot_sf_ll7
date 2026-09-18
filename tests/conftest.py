@@ -413,6 +413,12 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Benchmark Auditor record and journal tests are deterministic schema,
+    # provenance, and persistence contracts for BA-03 (issue #9484).
+    "test_audit_contracts.py",
+    "test_audit_findings_similarity.py",
+    "test_audit_store.py",
+    "test_audit_store_cli.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",
@@ -466,6 +472,9 @@ _FAST_FILES = {
     # Paired-effect metric-contract tests are deterministic schema, provenance,
     # and materialization coverage for the native counterfactual producer.
     "test_paired_effect_metric_contract.py",
+    # Offline synchronized review-panel contract and runtime-model tests are
+    # deterministic coverage for the SREV-16 renderer component.
+    "test_review_panels.py",
     # Operational-quantities tests are deterministic synthetic arithmetic
     # coverage for the changed benchmark producer (issue #9350).
     "test_operational_quantities.py",

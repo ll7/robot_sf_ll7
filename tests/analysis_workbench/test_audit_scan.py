@@ -667,9 +667,9 @@ def test_component_publication_rejects_output_directory_symlink_race(
     outside.mkdir()
     original_reserve = audit_scan_module._reserve_output_directory
 
-    def swap_before_reservation(output_directory: str, base: Path):
+    def swap_before_reservation(output_directory: str, base: Path, **kwargs: object):
         (base / "audit-output").symlink_to(outside, target_is_directory=True)
-        return original_reserve(output_directory, base)
+        return original_reserve(output_directory, base, **kwargs)
 
     monkeypatch.setattr(audit_scan_module, "_reserve_output_directory", swap_before_reservation)
     result = run(
@@ -748,6 +748,189 @@ def test_component_publication_rejects_temporary_inode_swap(
     assert outside.read_text(encoding="utf-8") == "outside sentinel"
     assert not (tmp_path / "audit-output" / AUDIT_REPORT_FILENAME).exists()
     outside.unlink()
+
+
+def test_component_publication_rejects_parent_move_after_fd_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The API must not create output through a parent moved outside the root."""
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    outside = tmp_path.parent / "ba01-api-parent-race-target"
+    original_assert = review_context._assert_output_parent_current
+    moved = False
+
+    def move_after_parent_open(guard) -> None:
+        nonlocal moved
+        original_assert(guard)
+        if not moved:
+            moved = True
+            parent = guard.root / guard.parts[0]
+            parent.rename(outside)
+            parent.symlink_to(outside, target_is_directory=True)
+
+    monkeypatch.setattr(review_context, "_assert_output_parent_current", move_after_parent_open)
+    result = run(
+        ComponentRequest(
+            request_id="api-parent-race",
+            component_id="ba01-audit-scan",
+            sources=(
+                SourceRef(
+                    artifact_id="campaign",
+                    uri="campaign.json",
+                    format="campaign-result",
+                    schema="campaign-result.v1",
+                    sha256=source_digest,
+                ),
+            ),
+            output_directory="nested/audit-output",
+            config={"expected_episode_ids": ["episode"]},
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "failed"
+    assert not (outside / "audit-output" / AUDIT_REPORT_FILENAME).exists()
+    assert not (outside / "audit-output" / AUDIT_REGISTRY_FILENAME).exists()
+    assert (tmp_path / "nested").is_symlink()
+    (tmp_path / "nested").unlink()
+    outside.rmdir()
+
+
+@pytest.mark.parametrize("entrypoint", ("api", "cli"))
+def test_output_root_replacement_after_path_admission_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entrypoint: str
+) -> None:
+    """A replacement root inode cannot become the publication authority."""
+    root = tmp_path / "root"
+    root.mkdir()
+    moved = tmp_path / "moved-root"
+    source = root / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    original_safe_path = audit_scan_module._safe_path_for_output
+    replaced = False
+
+    def replace_root(value: str, *, root: Path):
+        nonlocal replaced
+        target = original_safe_path(value, root=root)
+        if not replaced:
+            replaced = True
+            root.rename(moved)
+            root.mkdir()
+        return target
+
+    monkeypatch.setattr(audit_scan_module, "_safe_path_for_output", replace_root)
+    if entrypoint == "api":
+        source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        result = run(
+            ComponentRequest(
+                request_id="root-replacement",
+                component_id="ba01-audit-scan",
+                sources=(
+                    SourceRef(
+                        artifact_id="campaign",
+                        uri="campaign.json",
+                        format="campaign-result",
+                        schema="campaign-result.v1",
+                        sha256=source_digest,
+                    ),
+                ),
+                output_directory="audit-output",
+                config={"expected_episode_ids": ["episode"]},
+            ),
+            base=root,
+        )
+        assert result.status == "failed"
+    else:
+        with pytest.raises(review_context.ReviewContractsValidationError):
+            audit_scan_module._write_cli_output("report.json", "payload\n", root=root)
+    assert not (root / "audit-output" / AUDIT_REPORT_FILENAME).exists()
+    assert not (root / "report.json").exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO support is platform-specific")
+@pytest.mark.parametrize("entrypoint", ("api", "cli"))
+@pytest.mark.parametrize("replacement", ("symlink", "fifo", "external"))
+def test_temporary_replacement_never_deletes_external_inode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entrypoint: str,
+    replacement: str,
+) -> None:
+    """API and CLI cleanup must leave every replacement inode untouched."""
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    victim = tmp_path.parent / f"ba01-{entrypoint}-{replacement}-victim"
+    victim_fd = -1
+    if replacement in {"symlink", "external"}:
+        victim.write_text("outside sentinel", encoding="utf-8")
+        if replacement == "external":
+            victim_fd = os.open(victim, os.O_RDONLY)
+
+    original_publish = (
+        review_context._publish_output if entrypoint == "api" else audit_scan_module._publish_output
+    )
+
+    def swap_temporary(
+        directory_fd: int,
+        temporary_name: str,
+        final_name: str,
+        output_directory,
+        published_names: set[str],
+        **kwargs: object,
+    ) -> None:
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        if replacement == "symlink":
+            os.symlink(victim, temporary_name, dir_fd=directory_fd)
+        elif replacement == "fifo":
+            os.mkfifo(temporary_name, 0o600, dir_fd=directory_fd)
+        else:
+            os.rename(victim, temporary_name, dst_dir_fd=directory_fd)
+        original_publish(
+            directory_fd,
+            temporary_name,
+            final_name,
+            output_directory,
+            published_names,
+            **kwargs,
+        )
+
+    if entrypoint == "api":
+        monkeypatch.setattr(review_context, "_publish_output", swap_temporary)
+        result = run(
+            ComponentRequest(
+                request_id=f"temporary-{entrypoint}-{replacement}",
+                component_id="ba01-audit-scan",
+                sources=(
+                    SourceRef(
+                        artifact_id="campaign",
+                        uri="campaign.json",
+                        format="campaign-result",
+                        schema="campaign-result.v1",
+                        sha256=source_digest,
+                    ),
+                ),
+                output_directory="audit-output",
+                config={"expected_episode_ids": ["episode"]},
+            ),
+            base=tmp_path,
+        )
+        assert result.status == "failed"
+        report = tmp_path / "audit-output" / AUDIT_REPORT_FILENAME
+    else:
+        monkeypatch.setattr(audit_scan_module, "_publish_output", swap_temporary)
+        with pytest.raises(review_context.ReviewContractsValidationError):
+            audit_scan_module._write_cli_output("report.json", "payload\n", root=tmp_path)
+        report = tmp_path / "report.json"
+
+    assert not report.exists()
+    if replacement == "external":
+        assert os.fstat(victim_fd).st_nlink == 1
+    if victim.exists() or victim.is_symlink():
+        victim.unlink()
+    if victim_fd >= 0:
+        os.close(victim_fd)
 
 
 def test_component_request_rejects_unsupported_required_capability(tmp_path: Path) -> None:
@@ -892,6 +1075,73 @@ def test_cli_output_rejects_parent_move_then_symlink_race(
     outside.rmdir()
 
 
+def test_cli_parent_move_after_initial_guard_does_not_open_temp_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parent moved after the first guard cannot reach temporary creation."""
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    outside = tmp_path.parent / "ba01-cli-initial-parent-race-target"
+    original_assert = review_context._assert_output_parent_current
+    original_open_temporary = review_context._open_output_temporary
+    calls = 0
+    temporary_targets: list[str] = []
+
+    def move_after_initial_guard(guard) -> None:
+        nonlocal calls
+        original_assert(guard)
+        calls += 1
+        if calls == 2:
+            nested.rename(outside)
+            nested.symlink_to(outside, target_is_directory=True)
+
+    def record_temporary_target(directory_fd: int, prefix: str):
+        temporary_targets.append(os.readlink(f"/proc/self/fd/{directory_fd}"))
+        return original_open_temporary(directory_fd, prefix)
+
+    monkeypatch.setattr(review_context, "_assert_output_parent_current", move_after_initial_guard)
+    monkeypatch.setattr(
+        audit_scan_module, "_assert_output_parent_current", move_after_initial_guard
+    )
+    monkeypatch.setattr(review_context, "_open_output_temporary", record_temporary_target)
+    monkeypatch.setattr(audit_scan_module, "_open_output_temporary", record_temporary_target)
+    with pytest.raises(review_context.ReviewContractsValidationError):
+        audit_scan_module._write_cli_output("nested/report.json", "payload\n", root=tmp_path)
+    assert temporary_targets == []
+    assert not (outside / "report.json").exists()
+    assert nested.is_symlink()
+    nested.unlink()
+    outside.rmdir()
+
+
+def test_cli_output_rejects_parent_move_after_final_identity_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parent moved after final identity validation cannot publish successfully."""
+    outside = tmp_path.parent / "ba01-cli-final-parent-race-target"
+    original_assert = review_context._assert_output_parent_current
+    moved = False
+
+    def move_after_final_check(guard) -> None:
+        nonlocal moved
+        original_assert(guard)
+        final = guard.root.joinpath(*guard.parts)
+        if not moved and final.is_file():
+            moved = True
+            parent = guard.root / guard.parts[0]
+            parent.rename(outside)
+            parent.symlink_to(outside, target_is_directory=True)
+
+    monkeypatch.setattr(review_context, "_assert_output_parent_current", move_after_final_check)
+    monkeypatch.setattr(audit_scan_module, "_assert_output_parent_current", move_after_final_check)
+    with pytest.raises(review_context.ReviewContractsValidationError):
+        audit_scan_module._write_cli_output("nested/report.json", "payload\n", root=tmp_path)
+    assert not (outside / "report.json").exists()
+    assert (tmp_path / "nested").is_symlink()
+    (tmp_path / "nested").unlink()
+    outside.rmdir()
+
+
 def test_cli_config_rejects_symlink_swap_after_path_admission(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
@@ -923,6 +1173,76 @@ def test_cli_config_rejects_symlink_swap_after_path_admission(
     )
     assert code == 2
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+def test_regular_source_parent_symlink_race_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regular-file sources use no-follow descriptor walks for every component."""
+    root = tmp_path / "root"
+    root.mkdir()
+    nested = root / "nested"
+    nested.mkdir()
+    outside = tmp_path / "moved-source"
+    old_payload = _campaign(_episode("old"), expected_episode_ids=["old"])
+    new_payload = _campaign(_episode("outside"), expected_episode_ids=["outside"])
+    (nested / "campaign.json").write_text(json.dumps(old_payload), encoding="utf-8")
+    original_safe_path = audit_scan_module._safe_path
+    moved = False
+
+    def swap_after_admission(value: str | Path, *, root: Path):
+        nonlocal moved
+        target = original_safe_path(value, root=root)
+        if not moved:
+            moved = True
+            (root / "nested").rename(outside)
+            (outside / "campaign.json").write_text(json.dumps(new_payload), encoding="utf-8")
+            (root / "nested").symlink_to(outside, target_is_directory=True)
+        return target
+
+    monkeypatch.setattr(audit_scan_module, "_safe_path", swap_after_admission)
+    with pytest.raises(AuditScanError, match="replaced"):
+        scan_campaign("nested/campaign.json", root=root)
+
+
+def test_cli_scans_exact_admitted_input_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """Input config and source bytes remain one immutable CLI admission."""
+    source = tmp_path / "campaign.json"
+    old_payload = _campaign(
+        _episode("old"),
+        expected_episode_ids=["old"],
+        config={"tail_steps": 2},
+    )
+    new_payload = _campaign(
+        _episode("new"),
+        expected_episode_ids=["new"],
+        config={"tail_steps": 99},
+    )
+    old_raw = json.dumps(old_payload).encode("utf-8")
+    new_raw = json.dumps(new_payload).encode("utf-8")
+    source.write_bytes(old_raw)
+    original_snapshot = audit_scan_module._read_cli_json_snapshot
+    replaced = False
+
+    def replace_after_snapshot(*args, **kwargs):
+        nonlocal replaced
+        target, raw, payload = original_snapshot(*args, **kwargs)
+        if not replaced:
+            replaced = True
+            source.write_bytes(new_raw)
+        return target, raw, payload
+
+    monkeypatch.setattr(audit_scan_module, "_read_cli_json_snapshot", replace_after_snapshot)
+    assert main(["--input", "campaign.json", "--base", str(tmp_path)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    coverage = report["counts"]["coverage"]
+    assert coverage["expected"] == 1
+    assert coverage["readable"] == 1
+    assert coverage["missing"] == 0
+    assert coverage["unexpected_observed"] == 0
+    assert report["provenance"]["source"]["sha256_observed"] == hashlib.sha256(old_raw).hexdigest()
 
 
 def test_scan_rejects_unsupported_source_schema_without_dropping_rows() -> None:

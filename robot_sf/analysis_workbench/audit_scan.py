@@ -50,12 +50,14 @@ from robot_sf.analysis_workbench.review_context import (
     _atomic_materialize_no_replace,
     _open_output_parent_guard,
     _open_output_temporary,
+    _output_root_identity,
     _publish_output,
     _read_descriptor_backed_file,
     _read_regular_file_no_follow,
     _release_empty_output,
     _reserve_output_directory,
     _snapshot_directory,
+    _unlink_owned_entry,
 )
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
@@ -1048,6 +1050,15 @@ class AuditScanReport:
 
 
 @dataclass(frozen=True, slots=True)
+class _AdmittedSource:
+    """Bind parsed CLI input to the exact bytes admitted from one path."""
+
+    path: Path
+    payload: Any
+    raw: bytes
+
+
+@dataclass(frozen=True, slots=True)
 class _LoadedCampaign:
     payload: dict[str, Any]
     rows: tuple[tuple[Mapping[str, Any] | None, int], ...]
@@ -1059,7 +1070,7 @@ class _LoadedCampaign:
 
 
 def _load_source(  # noqa: C901, PLR0912, PLR0915
-    source: str | Path | Mapping[str, Any] | Sequence[Mapping[str, Any]],
+    source: _AdmittedSource | str | Path | Mapping[str, Any] | Sequence[Mapping[str, Any]],
     *,
     root: str | Path | None = None,
     source_ref: SourceRef | Mapping[str, Any] | None = None,
@@ -1074,7 +1085,32 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
     source_bytes: bytes
     payload: dict[str, Any]
     source_status = "native"
-    if isinstance(source, (str, Path)):
+    if isinstance(source, _AdmittedSource):
+        source_path = source.path
+        source_bytes = source.raw
+        admitted = source.payload
+        if isinstance(admitted, Mapping):
+            payload = dict(admitted)
+            rows = (
+                [
+                    (item if isinstance(item, Mapping) else None, index)
+                    for index, item in enumerate(payload.get("episodes", []), start=1)
+                ]
+                if isinstance(payload.get("episodes"), list)
+                else []
+            )
+        elif isinstance(admitted, Sequence) and not isinstance(admitted, (str, bytes, bytearray)):
+            rows = [
+                (item if isinstance(item, Mapping) else None, index)
+                for index, item in enumerate(admitted, start=1)
+            ]
+            payload = {
+                "schema_version": "episode-jsonl.v1",
+                "episodes": [dict(item) if isinstance(item, Mapping) else item for item, _ in rows],
+            }
+        else:
+            raise AuditScanError("admitted campaign input must be an object or row array")
+    elif isinstance(source, (str, Path)):
         root_path = Path(root) if root is not None else Path.cwd()
         try:
             source_path = _safe_path(source, root=root_path)
@@ -1186,7 +1222,19 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                 except ReviewContractsValidationError as exc:
                     raise AuditScanError("campaign source snapshot is invalid") from exc
             else:
-                source_bytes = _read_admitted_file(source_path, label="campaign source")
+                try:
+                    resolved_root = root_path.resolve(strict=True)
+                    relative = source_path.relative_to(resolved_root)
+                    source_bytes = _read_descriptor_backed_file(
+                        relative.parts,
+                        resolved_root,
+                        limit=MAX_SOURCE_BYTES,
+                        kind="campaign source",
+                    )
+                except (OSError, ReviewContractsValidationError, ValueError) as exc:
+                    raise AuditScanError(
+                        "campaign source was replaced or is not a readable regular file"
+                    ) from exc
                 if source_path.suffix.lower() in {".jsonl", ".ndjson"}:
                     rows = _jsonl_rows(source_bytes, label="campaign source")
                     payload = {
@@ -1925,7 +1973,7 @@ def _make_inventory_signal(
 
 
 def scan_campaign(  # noqa: C901, PLR0912, PLR0915
-    source: str | Path | Mapping[str, Any] | Sequence[Mapping[str, Any]],
+    source: _AdmittedSource | str | Path | Mapping[str, Any] | Sequence[Mapping[str, Any]],
     *,
     root: str | Path | None = None,
     source_ref: SourceRef | Mapping[str, Any] | None = None,
@@ -2724,11 +2772,16 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         # Keep the public output-path contract check separate from publication:
         # the descriptor-relative reservation below is the authority that
         # remains safe if this path is replaced between the two operations.
+        expected_root_identity = _output_root_identity(output_root)
         _safe_path_for_output(str(output_directory / AUDIT_REPORT_FILENAME), root=output_root)
         _safe_path_for_output(str(output_directory / AUDIT_REGISTRY_FILENAME), root=output_root)
         reserved_output = None
         try:
-            reserved_output = _reserve_output_directory(str(output_directory), output_root)
+            reserved_output = _reserve_output_directory(
+                str(output_directory),
+                output_root,
+                expected_root_identity=expected_root_identity,
+            )
             report_text = (
                 json.dumps(report.to_dict(), sort_keys=True, indent=2, allow_nan=False) + "\n"
             )
@@ -2785,17 +2838,17 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         )
 
 
-def _read_cli_json(
+def _read_cli_json_snapshot(
     path: str,
     *,
     root: Path,
     max_bytes: int = MAX_SOURCE_BYTES,
     validate: bool = True,
-) -> Any:
-    """Read one CLI JSON input under the admitted root.
+) -> tuple[Path, bytes, Any]:
+    """Read one CLI JSON input and retain its admitted path and exact bytes.
 
     Returns:
-        The parsed JSON value.
+        The admitted path, exact bytes, and parsed JSON value.
     """
 
     target = _safe_path(path, root=root)
@@ -2810,7 +2863,28 @@ def _read_cli_json(
         )
     except (OSError, ReviewContractsValidationError) as exc:
         raise AuditScanError("CLI input was replaced or is not a readable regular file") from exc
-    return _strict_json(raw, label=path, validate=validate)
+    return target, raw, _strict_json(raw, label=path, validate=validate)
+
+
+def _read_cli_json(
+    path: str,
+    *,
+    root: Path,
+    max_bytes: int = MAX_SOURCE_BYTES,
+    validate: bool = True,
+) -> Any:
+    """Read one CLI JSON input under the admitted root.
+
+    Returns:
+        The parsed JSON value.
+    """
+    _target, _raw, payload = _read_cli_json_snapshot(
+        path,
+        root=root,
+        max_bytes=max_bytes,
+        validate=validate,
+    )
+    return payload
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -2850,8 +2924,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         base = Path(args.base) if args.base is not None else Path.cwd()
         input_path = _safe_path(args.input, root=base)
         input_payload: Any = None
+        input_snapshot: _AdmittedSource | None = None
         if input_path.suffix.lower() not in {".jsonl", ".ndjson"}:
-            input_payload = _read_cli_json(args.input, root=base, validate=False)
+            admitted_path, admitted_raw, input_payload = _read_cli_json_snapshot(
+                args.input,
+                root=base,
+                validate=False,
+            )
+            input_snapshot = _AdmittedSource(admitted_path, input_payload, admitted_raw)
         config: dict[str, Any] = {}
         if isinstance(input_payload, Mapping) and isinstance(input_payload.get("config"), Mapping):
             config.update(input_payload["config"])
@@ -2879,7 +2959,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             ):
                 source_ref = input_payload["source_ref"]
             report = scan_campaign(
-                args.input,
+                input_snapshot if input_snapshot is not None else args.input,
                 root=base,
                 source_ref=source_ref,
                 config=config,
@@ -2943,6 +3023,7 @@ def _write_cli_output(value: str, serialized: str, *, root: Path) -> str:
         The SHA-256 digest of the published UTF-8 bytes.
     """
 
+    expected_root_identity = _output_root_identity(root)
     target = _safe_path_for_output(value, root=root)
     resolved_root = root.resolve(strict=True)
     try:
@@ -2957,17 +3038,24 @@ def _write_cli_output(value: str, serialized: str, *, root: Path) -> str:
     retained_fd = -1
     temporary_name: str | None = None
     try:
-        parent_guard = _open_output_parent_guard(resolved_root, relative.parts)
+        parent_guard = _open_output_parent_guard(
+            resolved_root,
+            relative.parts,
+            expected_root_identity=expected_root_identity,
+        )
+        _assert_output_parent_current(parent_guard)
         _assert_output_parent_current(parent_guard)
         parent_fd = parent_guard.parent_fd
         temporary_fd, temporary_name = _open_output_temporary(parent_fd, relative.name)
         retained_fd = os.dup(temporary_fd)
-        handle = os.fdopen(temporary_fd, "wb")
-        temporary_fd = -1
-        with handle:
+        _assert_output_parent_current(parent_guard)
+        with os.fdopen(temporary_fd, "wb") as handle:
+            temporary_fd = -1
+            _assert_output_parent_current(parent_guard)
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
+        _assert_output_parent_current(parent_guard)
         _publish_output(
             parent_fd,
             temporary_name,
@@ -2977,18 +3065,25 @@ def _write_cli_output(value: str, serialized: str, *, root: Path) -> str:
             temporary_fd=retained_fd,
             parent_guard=parent_guard,
         )
+        _assert_output_parent_current(parent_guard)
         temporary_name = None
         return _sha256(encoded)
     finally:
         if temporary_fd >= 0:
             os.close(temporary_fd)
+        if temporary_name is not None and retained_fd >= 0 and parent_guard is not None:
+            try:
+                retained_stat = os.fstat(retained_fd)
+                if stat.S_ISREG(retained_stat.st_mode):
+                    _unlink_owned_entry(
+                        parent_guard.parent_fd,
+                        temporary_name,
+                        (retained_stat.st_dev, retained_stat.st_ino),
+                    )
+            except (OSError, ValueError):
+                pass
         if retained_fd >= 0:
             os.close(retained_fd)
-        if temporary_name is not None and parent_guard is not None:
-            try:
-                os.unlink(temporary_name, dir_fd=parent_guard.parent_fd)
-            except FileNotFoundError:
-                pass
         if parent_guard is not None:
             parent_guard.close()
 

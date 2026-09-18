@@ -1,0 +1,41 @@
+{
+  "schema_version": "review-panels.v1",
+  "source_identity": {
+    "campaign_id": "fixture-campaign",
+    "execution_id": "execution-17",
+    "episode_id": "episode-17",
+    "scenario_id": "corridor",
+    "planner_id": "fixture-planner",
+    "coordinate_frame": "world",
+    "units": "m"
+  },
+  "context": {
+    "episode_id": "episode-17",
+    "execution_id": "execution-17",
+    "cursor": {"time_s": 10.5, "context_revision": 3},
+    "context_revision": 3
+  },
+  "time": {"origin_s": 10.0, "terminal_s": 12.0, "cursor": {"time_s": 10.5}},
+  "streams": {
+    "scene": {
+      "status": "available",
+      "resolution_s": 0.5,
+      "samples": [
+        {"time_s": 10.0, "value": {"robot": {"actor_id": "robot", "position": [0.0, 0.0]}, "pedestrians": [{"actor_id": "ped-0", "position": [2.0, 1.0]}]}},
+        {"time_s": 10.5, "value": {"robot": {"actor_id": "robot", "position": [0.5, 0.0]}, "pedestrians": [{"actor_id": "ped-0", "position": [1.8, 1.0]}]}}
+      ]
+    }
+  },
+  "scene_surface": {
+    "waypoints": [{"id": "wp-1", "point": [1.0, 0.0]}],
+    "objects": [{"id": "wall-1", "point": [1.0, 1.0]}]
+  },
+  "goal_geometry": {"goal_point": [4.0, 1.0]},
+  "events": [{"event_id": "near-miss-17", "start_s": 10.4, "end_s": 10.8, "actor_ids": ["robot", "ped-0"]}],
+  "metrics": {"clearance": {"metric_id": "clearance", "unit": "m", "stream": {"samples": [{"time_s": 10.5, "value": 0.4}]}}},
+  "storyboard": {
+    "intervals": [{"interval_id": "near-miss-17", "start_s": 10.4, "end_s": 10.8, "caption": "near miss"}],
+    "order": ["near-miss-17"],
+    "captions": {"near-miss-17": "near miss"}
+  }
+}

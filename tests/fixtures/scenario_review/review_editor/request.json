@@ -1,0 +1,14 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev17-fixture",
+  "component_id": "srev17-review-editor",
+  "sources": [
+    {"artifact_id": "panel", "uri": "tests/fixtures/scenario_review/review_editor/panel-model.json", "format": "review-panels.v1"}
+  ],
+  "output_directory": "output/scenario_review/srev-17-smoke",
+  "config": {
+    "overlays": {"numbered": true, "highlights": true, "arrows": false, "rings": false, "distances": false},
+    "storyboard": {"intervals": [{"interval_id": "near-miss-17", "start_s": 10.4, "end_s": 10.8, "caption": "near miss"}], "order": ["near-miss-17"], "captions": {"near-miss-17": "near miss"}}
+  },
+  "required_capabilities": ["review-editor", "source-bound-annotations"]
+}

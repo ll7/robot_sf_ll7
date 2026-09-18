@@ -452,6 +452,91 @@ def test_resume_extends_pair_budget_without_resetting_consumed_attempts(tmp_path
     assert journal["executions_consumed"] == 4
 
 
+def test_execution_budget_limited_retry_resumes_without_terminal_failure(
+    tmp_path: Path,
+) -> None:
+    recipe = _recipe(
+        [
+            {
+                "intervention_id": "budget-retry",
+                "factor": "single_pedestrian_speed_offset",
+                "priority": 1,
+            }
+        ],
+        max_candidates=1,
+        max_executions=4,
+    )
+
+    class RetryThenSuccess(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            if kind == "control" and attempt == 1:
+                result["status"] = "failed"
+                result["retryable"] = True
+                result["reason"] = "transient"
+            return result
+
+    first_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "budget-retry",
+        {"recipe": recipe, "max_executions": 2, "max_retries": 1},
+    )
+    first_executor = RetryThenSuccess()
+    first = _run_injected(first_request, base=tmp_path, executor=first_executor)
+    assert first.status == "partial"
+    assert first.reason == "execution_budget_exhausted"
+    assert [call["attempt"] for call in first_executor.calls] == [1, 2]
+    journal_path = tmp_path / "budget-retry" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert journal["candidates"]["budget-retry"]["state"] == "incomplete"
+    assert journal["candidates"]["budget-retry"]["incomplete_reason"] == (
+        "execution_budget_exhausted"
+    )
+    assert journal["outcomes"] == []
+    assert journal["stop_reason"] == "execution_budget_exhausted"
+    assert journal["executions_consumed"] == 2
+    assert journal["accounting"] == {
+        "controls": 2,
+        "treatments": 0,
+        "failures": 1,
+        "retries": 1,
+        "fidelity_attempts": 1,
+    }
+
+    resumed_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "budget-retry",
+        {"recipe": recipe, "max_executions": 4, "max_retries": 1},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "complete", resumed.reason
+    assert [(call["kind"], call["attempt"]) for call in resumed_executor.calls] == [
+        ("treatment", 1)
+    ]
+    resumed_journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert resumed_journal["executions_consumed"] == 3
+    assert len(resumed_journal["operations"]) == 3
+    assert resumed_journal["candidates"]["budget-retry"]["state"] == "complete"
+    assert len(resumed_journal["outcomes"]) == 1
+
+
 def test_resume_widens_exhausted_candidate_ceiling_without_restarting_prefix(
     tmp_path: Path,
 ) -> None:
@@ -549,6 +634,73 @@ def test_resume_widens_retry_ceiling_for_retryable_failed_outcome(tmp_path: Path
     assert journal["accounting"]["retries"] == 1
     assert journal["accounting"]["failures"] == 1
     assert journal["executions_consumed"] == 3
+
+
+def test_resume_does_not_reopen_when_final_retry_attempt_is_permanent(
+    tmp_path: Path,
+) -> None:
+    recipe = _recipe(
+        [
+            {
+                "intervention_id": "retry-final",
+                "factor": "single_pedestrian_speed_offset",
+                "priority": 1,
+            }
+        ],
+        max_candidates=1,
+        max_executions=4,
+    )
+    first_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "retry-final",
+        {"recipe": recipe, "max_retries": 1},
+    )
+
+    class RetryThenPermanent(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            del candidate, spec
+            self.calls.append({"operation_id": operation_id, "kind": kind, "attempt": attempt})
+            if kind == "control" and attempt == 1:
+                return {"status": "failed", "retryable": True, "reason": "transient"}
+            return {"status": "failed", "reason": "permanent"}
+
+    first_executor = RetryThenPermanent()
+    first = _run_injected(first_request, base=tmp_path, executor=first_executor)
+    assert first.status == "failed"
+    assert first.reason == "candidate_execution_failed"
+    assert [call["attempt"] for call in first_executor.calls] == [1, 2]
+
+    resumed_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "retry-final",
+        {"recipe": recipe, "max_retries": 2},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "failed"
+    assert resumed.reason == "candidate_execution_failed"
+    assert resumed_executor.calls == []
+    journal = json.loads(
+        (tmp_path / "retry-final" / SESSION_JOURNAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert journal["candidates"]["retry-final"]["state"] == "failed"
+    assert len(journal["outcomes"]) == 1
 
 
 def test_retry_and_fidelity_attempts_are_accounted(tmp_path: Path) -> None:
@@ -825,6 +977,47 @@ def test_sparse_metrics_without_explicit_activation_are_unavailable(
     assert "activation_missing" in outcome["reason"]
     assert "activation" not in outcome
     assert report["negative_outcomes"] == [outcome]
+
+
+def test_resume_rejects_measured_activation_forged_on_noncomplete_outcome(
+    tmp_path: Path,
+) -> None:
+    class SparseActivation(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            result.pop("mechanism_activated")
+            return result
+
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="activation-forged")
+    _run_injected(request, base=tmp_path, executor=SparseActivation())
+    journal_path = tmp_path / "activation-forged" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["outcomes"][0]["activation"] = {
+        "control": True,
+        "treatment": True,
+        "measured": True,
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "non-complete outcome activation" in resumed.reason
+    report = json.loads(
+        (tmp_path / "activation-forged" / "experiment-loop-report.json").read_text(encoding="utf-8")
+    )
+    assert "activation" not in report["outcomes"][0]
 
 
 def test_resume_does_not_reopen_cancellation_when_ceiling_widens(tmp_path: Path) -> None:

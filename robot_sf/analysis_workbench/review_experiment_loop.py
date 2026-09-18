@@ -109,6 +109,7 @@ DEPENDENT_FAMILY_STATUS = "standalone_fixture_only"
 OUTCOMES = tuple(outcome for outcome in RECORDED_OUTCOMES if outcome != "contradictory")
 NEGATIVE_OUTCOME_STATUSES = ("failed", "unavailable", "cancelled")
 TERMINAL_CANDIDATE_STATES = frozenset({"complete", "failed", "unavailable", "cancelled"})
+INCOMPLETE_CANDIDATE_STATE = "incomplete"
 SUPPORTED_STOP_RULES = frozenset(
     {
         "exhausted_candidates",
@@ -1417,6 +1418,7 @@ class ExperimentLoop:
                 "failed",
                 "unavailable",
                 "cancelled",
+                INCOMPLETE_CANDIDATE_STATE,
             }:
                 raise ExperimentLoopError("cannot resume: invalid candidate state")
             operation_ids_for_candidate = candidate_state.get("operation_ids", [])
@@ -1597,6 +1599,12 @@ class ExperimentLoop:
                 raise ExperimentLoopError(
                     "cannot resume: non-complete outcome negative flag is invalid"
                 )
+            if outcome.get("status") in NEGATIVE_OUTCOME_STATUSES and any(
+                key in outcome for key in ("activation", "control_activated", "treatment_activated")
+            ):
+                raise ExperimentLoopError(
+                    "cannot resume: non-complete outcome activation is invalid"
+                )
             outcome_operation_ids = outcome.get("operation_ids", [])
             if not isinstance(outcome_operation_ids, list) or not all(
                 isinstance(item, str) for item in outcome_operation_ids
@@ -1665,6 +1673,20 @@ class ExperimentLoop:
                         )
                     ):
                         raise ExperimentLoopError("cannot resume: pending candidate has operations")
+                elif candidate_state_name == INCOMPLETE_CANDIDATE_STATE:
+                    if (
+                        journal_status not in {"running", "partial"}
+                        or candidate_state.get("incomplete_reason") != "execution_budget_exhausted"
+                        or not candidate_operations
+                        or any(
+                            operation_by_id[item].get("state")
+                            not in {"completed", "failed", "cancelled", "unavailable"}
+                            for item in candidate_operations
+                        )
+                    ):
+                        raise ExperimentLoopError(
+                            "cannot resume: incomplete candidate state is inconsistent"
+                        )
             elif candidate_state_name != candidate_outcome.get("status"):
                 raise ExperimentLoopError("cannot resume: candidate state/outcome mismatch")
             if (
@@ -1846,7 +1868,12 @@ class ExperimentLoop:
                     raise ExperimentLoopError(
                         "cannot resume: terminal candidate retains reservation"
                     )
-            if candidate_outcome is None and not is_reserved and reservation is not None:
+            if (
+                candidate_outcome is None
+                and not is_reserved
+                and reservation is not None
+                and candidate_state_name != INCOMPLETE_CANDIDATE_STATE
+            ):
                 raise ExperimentLoopError(
                     "cannot resume: pending candidate has released reservation"
                 )
@@ -2021,11 +2048,16 @@ class ExperimentLoop:
                 if candidate_state.get("state") != "failed":
                     continue
                 candidate_operations = operation_ids_by_candidate.get(candidate_id, [])
-                if any(
-                    _is_retryable_failed_operation(operation_by_id[operation_id])
-                    and int(operation_by_id[operation_id].get("attempt", 0))
+                if not candidate_operations:
+                    continue
+                # Only the final durable attempt can explain the retained
+                # failed candidate outcome.  A historical retryable failure
+                # followed by a permanent failure must remain terminal.
+                final_operation = operation_by_id[candidate_operations[-1]]
+                if (
+                    _is_retryable_failed_operation(final_operation)
+                    and int(final_operation.get("attempt", 0))
                     <= int(current_budget["max_retries"]) + 1
-                    for operation_id in candidate_operations
                 ):
                     retryable_failed_candidates.add(candidate_id)
 
@@ -2351,12 +2383,12 @@ class ExperimentLoop:
                     )
                 if int(self._journal["executions_consumed"]) >= self.budget.max_executions:
                     return (
-                        "failed",
+                        "budget_exhausted",
                         {
                             "status": "failed",
                             "reason": "execution_budget_exhausted: retry cannot be dispatched",
                         },
-                        operation_id,
+                        "",
                     )
                 operation = {
                     "operation_id": operation_id,
@@ -2460,6 +2492,8 @@ class ExperimentLoop:
         # terminal result.
         if status in NEGATIVE_OUTCOME_STATUSES:
             normalized_outcome["negative"] = True
+            for key in ("activation", "control_activated", "treatment_activated"):
+                normalized_outcome.pop(key, None)
         elif status == "complete" and "outcome" in normalized_outcome:
             normalized_outcome["negative"] = normalized_outcome.get("outcome") != "survived"
         # Candidate operation IDs include every durable retry attempt.  The
@@ -2477,6 +2511,62 @@ class ExperimentLoop:
         state["state"] = str(normalized_outcome.get("status", "failed"))
         self._release_reservation(candidate_id)
         self._persist()
+
+    @staticmethod
+    def _canonical_report_outcome(outcome: Mapping[str, Any]) -> dict[str, Any]:
+        """Export an outcome without trusting mutable convenience fields.
+
+        Returns:
+            A report-safe copy with canonical negative classification and no
+            activation claim on a non-complete outcome.
+        """
+
+        normalized = dict(outcome)
+        status = normalized.get("status")
+        if status in NEGATIVE_OUTCOME_STATUSES:
+            normalized["negative"] = True
+            for key in ("activation", "control_activated", "treatment_activated"):
+                normalized.pop(key, None)
+        elif status == "complete" and "outcome" in normalized:
+            normalized["negative"] = normalized.get("outcome") != "survived"
+        return normalized
+
+    def _record_incomplete(
+        self,
+        candidate_id: str,
+        candidate: Mapping[str, Any],
+        *,
+        reason: str,
+        operation_ids: list[str],
+        control: Mapping[str, Any] | None = None,
+        treatment: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist a budget-limited candidate without inventing a failure.
+
+        Returns:
+            A transient inconclusive marker used to settle the session as
+            execution-budget-limited without adding a terminal outcome.
+        """
+
+        state = self._candidate_state(candidate_id)
+        state["state"] = INCOMPLETE_CANDIDATE_STATE
+        state["incomplete_reason"] = "execution_budget_exhausted"
+        self._release_reservation(candidate_id)
+        self._persist()
+        outcome = {
+            "intervention_id": candidate_id,
+            "priority": int(candidate["priority"]),
+            "factor": str(candidate.get("factor", "")),
+            "status": INCOMPLETE_CANDIDATE_STATE,
+            "outcome": "inconclusive",
+            "reason": reason,
+            "operation_ids": operation_ids,
+        }
+        if control is not None:
+            outcome["control"] = dict(control)
+        if treatment is not None:
+            outcome["treatment"] = dict(treatment)
+        return outcome
 
     def _execute_candidate(self, candidate: Mapping[str, Any]) -> dict[str, Any]:
         candidate_id = str(candidate["intervention_id"])
@@ -2507,6 +2597,14 @@ class ExperimentLoop:
             candidate, "control", self._pair_spec(candidate, "control")
         )
         operation_ids = [control_operation] if control_operation else []
+        if control_state == "budget_exhausted":
+            return self._record_incomplete(
+                candidate_id,
+                candidate,
+                reason=_reason(control, "execution budget exhausted before control retry"),
+                operation_ids=operation_ids,
+                control=control,
+            )
         if control_state in {"cancelled", "unavailable", "failed"}:
             outcome = {
                 "intervention_id": candidate_id,
@@ -2594,6 +2692,15 @@ class ExperimentLoop:
         )
         if treatment_operation:
             operation_ids.append(treatment_operation)
+        if treatment_state == "budget_exhausted":
+            return self._record_incomplete(
+                candidate_id,
+                candidate,
+                reason=_reason(treatment, "execution budget exhausted before treatment"),
+                operation_ids=operation_ids,
+                control=control,
+                treatment=treatment,
+            )
         if treatment_state in {"cancelled", "unavailable", "failed"}:
             outcome = {
                 "intervention_id": candidate_id,
@@ -2801,6 +2908,10 @@ class ExperimentLoop:
                     self._journal["status"] = "partial"
                     self._journal["stop_reason"] = "wall_timeout"
                     break
+                if outcome.get("status") == INCOMPLETE_CANDIDATE_STATE:
+                    self._journal["status"] = "partial"
+                    self._journal["stop_reason"] = "execution_budget_exhausted"
+                    break
                 if outcome.get("status") == "cancelled":
                     self._journal["status"] = "cancelled"
                     self._journal["stop_reason"] = str(
@@ -2838,7 +2949,9 @@ class ExperimentLoop:
         return self._result(str(self._journal["status"]), str(self._journal["stop_reason"]))
 
     def _report_payload(self) -> dict[str, Any]:
-        outcomes = [dict(item) for item in self._journal.get("outcomes", [])]
+        outcomes = [
+            self._canonical_report_outcome(item) for item in self._journal.get("outcomes", [])
+        ]
         return {
             "schema_version": LOOP_REPORT_SCHEMA_VERSION,
             "component_id": COMPONENT_ID,

@@ -56,7 +56,13 @@ control check as well as the loop-level check; a child control-fidelity failure
 therefore remains accounted even though no treatment is dispatched.
 The wall deadline is checked before dispatch and again between control and
 treatment, so treatment is never newly dispatched after the control budget is
-exhausted. Evaluated or inconclusive candidates are never silently retried.
+exhausted. If the execution ceiling blocks a retry or the second half of a
+reserved pair, the candidate remains `incomplete` and the session remains
+`partial` with `execution_budget_exhausted`; widening only that ceiling resumes
+the missing operation without recording a terminal candidate failure or
+redispatching settled attempts. Evaluated or inconclusive candidates are never
+silently retried. Non-complete outcomes cannot claim measured activation; any
+such assertion is rejected on resume and omitted from exported reports.
 
 ## CLI
 
@@ -103,8 +109,10 @@ settlement.
 Reopening is narrow and explicit: an `exhausted_candidates` session is resumed
 only when a widened candidate ceiling admits new deterministic-prefix
 candidates; a `candidate_execution_failed` session is resumed only when a
-widened retry ceiling exposes a retained failed, retryable operation. Existing
-execution and elapsed accounting is retained in both cases. Cancellation,
+widened retry ceiling exposes its retained final failed operation as retryable.
+Historical retryable attempts do not reopen a candidate whose final attempt is
+permanent. Existing execution and elapsed accounting is retained in both cases.
+Cancellation,
 recipe-terminal, unsupported/unavailable, source-admission, and other
 non-retryable terminal reasons remain closed on resume, even when a caller
 widens a ceiling.

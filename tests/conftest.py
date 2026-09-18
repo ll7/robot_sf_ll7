@@ -415,6 +415,9 @@ _FAST_FILE_PREFIXES = (
 _FAST_FILES = {
     # Benchmark Auditor record and journal tests are deterministic schema,
     # provenance, and persistence contracts for BA-03 (issue #9484).
+    # Benchmark Auditor release-bound coverage tests are deterministic
+    # denominator, protocol, and receipt contracts for BA-04 (issue #9487).
+    "test_audit_coverage.py",
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
     "test_audit_store.py",

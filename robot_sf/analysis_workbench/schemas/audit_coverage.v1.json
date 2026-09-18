@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/audit_coverage.v1.json",
+  "$title": "Robot SF Benchmark Audit Coverage v1",
+  "description": "Release-bound operational coverage accounting. It is not a statistical confidence certificate or benchmark-validity verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "identity",
+    "protocol",
+    "counts",
+    "strata",
+    "deficits",
+    "exceptions",
+    "findings",
+    "materialization",
+    "diagnostics",
+    "limitations",
+    "report_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": "audit-coverage.v1"},
+    "status": {
+      "enum": [
+        "incomplete",
+        "complete_with_declared_exceptions",
+        "complete_under_protocol"
+      ]
+    },
+    "identity": {"type": "object"},
+    "protocol": {"type": "object"},
+    "counts": {"type": "object"},
+    "strata": {"type": "array", "items": {"type": "object"}},
+    "deficits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "stratum_id",
+          "observed",
+          "target",
+          "source_revision",
+          "protocol_revision",
+          "reason",
+          "status",
+          "source_id",
+          "protocol_id"
+        ],
+        "properties": {
+          "schema_version": {"const": "coverage-deficit.v1"},
+          "stratum_id": {"type": "string", "minLength": 1},
+          "observed": {"type": "integer", "minimum": 0},
+          "target": {"type": "integer", "minimum": 0},
+          "source_revision": {"type": "string", "minLength": 1},
+          "protocol_revision": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "status": {"enum": ["under_review", "unavailable", "error", "met", "waived"]},
+          "source_id": {"type": "string", "minLength": 1},
+          "protocol_id": {"type": "string", "minLength": 1},
+          "dimensions": {"type": "object"},
+          "denominator": {"type": "integer", "minimum": 0},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "exceptions": {"type": "array", "items": {"type": "object"}},
+    "findings": {"type": "object"},
+    "materialization": {"type": "object"},
+    "diagnostics": {"type": "object"},
+    "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "report_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

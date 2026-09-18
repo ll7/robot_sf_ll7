@@ -23,6 +23,11 @@ The SREV-17 offline annotation and storyboard editor is documented in
 [`review_editor.md`](./review_editor.md) and runs with
 `python -m robot_sf.render.review_editor`.
 
+The Benchmark Auditor release-bound coverage evaluator is documented in
+[`audit_coverage.md`](./audit_coverage.md). It consumes BA-01 scan results and
+BA-03 review receipts, emits BA-02-compatible coverage deficits, and reports
+operational health without making benchmark-validity or statistical claims.
+
 ## Leaf fast-lane registration convention
 
 Scenario-review leaves that add a deterministic test file must also register

@@ -1,0 +1,24 @@
+{
+  "expected_rows": [
+    {
+      "episode_id": "episode-success",
+      "planner_id": "ppo",
+      "scenario_group": "corridor",
+      "outcome": "success"
+    },
+    {
+      "episode_id": "episode-timeout",
+      "planner_id": "ppo",
+      "scenario_group": "corridor",
+      "outcome": "timeout"
+    }
+  ],
+  "detector_attempts": [
+    {
+      "episode_id": "episode-success",
+      "detector_id": "telemetry",
+      "status": "unavailable",
+      "reason_code": "trace_missing"
+    }
+  ]
+}

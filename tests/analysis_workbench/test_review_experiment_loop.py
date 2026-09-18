@@ -537,6 +537,84 @@ def test_execution_budget_limited_retry_resumes_without_terminal_failure(
     assert len(resumed_journal["outcomes"]) == 1
 
 
+def test_resume_partial_pair_reserves_only_remaining_retry_slot(tmp_path: Path) -> None:
+    recipe = _recipe(
+        [
+            {
+                "intervention_id": "partial-pair",
+                "factor": "single_pedestrian_speed_offset",
+                "priority": 1,
+            }
+        ],
+        max_candidates=1,
+        max_executions=4,
+    )
+
+    class RetryEachSideOnce(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            if attempt == 1:
+                result.update(status="failed", retryable=True, reason=f"{kind} transient")
+            return result
+
+    first_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "partial-pair",
+        {"recipe": recipe, "max_executions": 3, "max_retries": 1},
+    )
+    first_executor = RetryEachSideOnce()
+    first = _run_injected(first_request, base=tmp_path, executor=first_executor)
+    assert first.status == "partial"
+    assert first.reason == "execution_budget_exhausted"
+    assert [(call["kind"], call["attempt"]) for call in first_executor.calls] == [
+        ("control", 1),
+        ("control", 2),
+        ("treatment", 1),
+    ]
+    journal_path = tmp_path / "partial-pair" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert journal["candidates"]["partial-pair"]["state"] == "incomplete"
+    assert journal["executions_consumed"] == 3
+    assert journal["reserved_executions"] == 0
+
+    resumed_request = ComponentRequest(
+        "loop-request",
+        COMPONENT_ID,
+        (SourceRef("loop-source", "source.json", "fixture.v1"),),
+        "partial-pair",
+        {"recipe": recipe, "max_executions": 4, "max_retries": 1},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "complete", resumed.reason
+    assert [(call["kind"], call["attempt"]) for call in resumed_executor.calls] == [
+        ("treatment", 2)
+    ]
+    resumed_journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert resumed_journal["executions_consumed"] == 4
+    assert resumed_journal["accounting"] == {
+        "controls": 2,
+        "treatments": 2,
+        "failures": 2,
+        "retries": 2,
+        "fidelity_attempts": 1,
+    }
+
+
 def test_resume_widens_exhausted_candidate_ceiling_without_restarting_prefix(
     tmp_path: Path,
 ) -> None:
@@ -1757,6 +1835,60 @@ def test_native_crash_resume_recovers_nested_pair_before_cancellation(
     assert child_calls == ["nested", "nested"]
 
 
+def test_native_crash_before_report_reconciles_both_child_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request, admission = _native_fixture_request("native-ledger-pair")
+    child_calls: list[str] = []
+
+    def crash_before_report(
+        child_request: ComponentRequest, *, base: Path, **kwargs: Any
+    ) -> ComponentResult:
+        child_calls.append("nested")
+        _write_valid_native_pair(child_request, base, kwargs["admission_config"])
+        ledger_path = base / "executor" / "attempt-ledger.json"
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        ledger["candidate_reports"] = []
+        ledger["traces"] = []
+        ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+        (base / "executor" / "execute-report.json").unlink()
+        raise KeyboardInterrupt("crash before candidate report")
+
+    monkeypatch.setattr(
+        "robot_sf.analysis_workbench.review_experiment_loop.review_execute.run",
+        crash_before_report,
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run(request, base=tmp_path, autonomous=True, admission_config=admission)
+
+    resumed = run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        admission_config=admission,
+        cancel=lambda: True,
+    )
+    assert resumed.status == "cancelled"
+    assert child_calls == ["nested"]
+    journal = json.loads(
+        (tmp_path / "native-ledger-pair" / SESSION_JOURNAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert [operation["kind"] for operation in journal["operations"]] == [
+        "control",
+        "treatment",
+    ]
+    assert {operation["state"] for operation in journal["operations"]} == {"completed"}
+    assert journal["executions_consumed"] == 2
+    assert journal["accounting"] == {
+        "controls": 1,
+        "treatments": 1,
+        "failures": 0,
+        "retries": 0,
+        "fidelity_attempts": 2,
+    }
+
+
 def test_native_recovery_rejects_unbound_nested_artifacts_before_child_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1879,6 +2011,30 @@ def test_native_report_without_activation_does_not_infer_from_metrics(tmp_path: 
     assert "activation telemetry" in result["reason"]
 
 
+def test_resume_rejects_reordered_self_consistent_operation_list(tmp_path: Path) -> None:
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="operation-order")
+    first = _run_injected(request, base=tmp_path, executor=FakeExecutor())
+    assert first.status == "complete"
+    journal_path = tmp_path / "operation-order" / SESSION_JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["operations"].reverse()
+    for sequence, operation in enumerate(journal["operations"]):
+        operation["sequence"] = sequence
+    candidate = journal["candidates"]["high"]
+    candidate["operation_ids"] = [operation["operation_id"] for operation in journal["operations"]]
+    journal["outcomes"][0]["operation_ids"] = list(candidate["operation_ids"])
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    resumed = _run_injected(
+        request,
+        base=tmp_path,
+        resume=True,
+        executor=FakeExecutor(),
+    )
+    assert resumed.status == "failed"
+    assert "treatment operation lacks prior control sequence" in resumed.reason
+
+
 def test_wall_deadline_between_control_and_treatment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1912,6 +2068,64 @@ def test_wall_deadline_between_control_and_treatment(
     assert result.status == "partial"
     assert result.reason == "wall_timeout"
     assert [call["kind"] for call in executor.calls] == ["control"]
+
+
+def test_wall_deadline_resume_dispatches_remaining_treatment_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_monotonic = time.monotonic
+    clock = {"jump": 0.0}
+    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+
+    class SlowControl(FakeExecutor):
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ):
+            if kind == "control":
+                clock["jump"] = 1.0
+            return super().execute(operation_id, candidate, kind, spec, attempt)
+
+    request = _request(_recipe(max_candidates=1, max_executions=2), output="wall-resume")
+    first_request = ComponentRequest(
+        request.request_id,
+        request.component_id,
+        request.sources,
+        request.output_directory,
+        {**request.config, "wall_timeout_s": 0.5},
+    )
+    first_executor = SlowControl()
+    first = _run_injected(first_request, base=tmp_path, executor=first_executor)
+    assert first.status == "partial"
+    assert first.reason == "wall_timeout"
+    assert [call["kind"] for call in first_executor.calls] == ["control"]
+
+    resumed_request = ComponentRequest(
+        request.request_id,
+        request.component_id,
+        request.sources,
+        request.output_directory,
+        {**request.config, "wall_timeout_s": 2.0},
+    )
+    resumed_executor = FakeExecutor()
+    resumed = _run_injected(
+        resumed_request,
+        base=tmp_path,
+        resume=True,
+        executor=resumed_executor,
+    )
+    assert resumed.status == "complete", resumed.reason
+    assert [call["kind"] for call in resumed_executor.calls] == ["treatment"]
+    journal = json.loads(
+        (tmp_path / "wall-resume" / SESSION_JOURNAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert journal["executions_consumed"] == 2
+    assert journal["accounting"]["controls"] == 1
+    assert journal["accounting"]["treatments"] == 1
 
 
 def test_post_result_cancellation_precedes_recipe_terminal_marker(tmp_path: Path) -> None:

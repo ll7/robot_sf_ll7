@@ -45,8 +45,11 @@ elapsed seconds, one local central processing unit (CPU) process, and no implici
 caller may narrow these values but may not widen the SREV ceilings. Controls,
 treatments, failures, retries, and fidelity attempts consume execution budget.
 The loop records both `executions_consumed` and `reserved_executions`; a
-candidate is not started unless two execution slots are available. A failed
-control-fidelity check records the control and blocks treatment interpretation.
+new candidate is not started unless two execution slots are available. When a
+previously started pair is incomplete, its reservation is reduced to exactly
+the remaining authorized control or treatment attempts, so widening an
+execution ceiling cannot rerun settled operations. A failed control-fidelity
+check records the control and blocks treatment interpretation.
 Finite metrics alone do not establish intervention activation: both control and
 treatment must return explicit activation telemetry from the executor. If
 either side omits that contract, the pair is retained as an unavailable,
@@ -129,9 +132,13 @@ IDs containing `:retry:` are not parsed or stripped. A journal state of
 the exact supported child report/attempt-ledger schemas, request/recipe/config
 digests, admitted source proof, candidate prefix, and current child dispatch,
 then asks the child executor to validate its own ledger before using a retained
-pair. A stale or self-consistent but unbound nested artifact cannot complete an
-outer operation. Without a result, a dispatching operation is retained as a
-failed unknown operation rather than blindly run a second time. Resume validates
+pair. A complete, source-bound child attempt ledger may reconcile already
+executed control and treatment operations after a crash before the child
+report; missing activation/report data still yields an operationally
+inconclusive result rather than a measured claim. A stale or self-consistent
+but unbound nested artifact cannot complete an outer operation. Without a
+result, a dispatching operation is retained as a failed unknown operation
+rather than blindly run a second time. Resume validates
 status/state/outcome, complete control+treatment result shape, operation,
 reservation, and consumed-execution invariants before accepting any terminal
 journal. For a complete pair, the survived/falsified/inconclusive verdict,
@@ -149,6 +156,11 @@ flag. These checks detect inconsistent or stale local state; they do not turn a
 mutable diagnostic journal into cryptographic proof of execution. Tampered
 source proof, recipe, candidate order, identity, or journal accounting returns
 a failed resume result.
+
+Each operation also carries a monotonic `sequence` identifying its durable
+dispatch order. Resume rejects reordered operation lists, treatment records
+before their control, control records after treatment, and non-increasing
+retry order; the payload tail is never treated as an implicit final attempt.
 
 Answerability is recomputed from the request/config contract for every
 invocation. The report never copies a mutable journal assertion: a request with

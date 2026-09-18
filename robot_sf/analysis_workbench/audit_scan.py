@@ -45,7 +45,15 @@ from robot_sf.analysis_workbench.audit_detectors import (
     unavailable_signal,
 )
 from robot_sf.analysis_workbench.review_context import (
+    _assert_output_directory_current,
+    _atomic_materialize_no_replace,
+    _open_output_parent,
+    _open_output_temporary,
+    _publish_output,
+    _read_descriptor_backed_file,
     _read_regular_file_no_follow,
+    _release_empty_output,
+    _reserve_output_directory,
     _snapshot_directory,
 )
 from robot_sf.analysis_workbench.review_contracts import (
@@ -2712,30 +2720,52 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             or "\\" in str(output_directory)
         ):
             raise AuditScanError("output directory escapes base")
-        report_path = _safe_path_for_output(
-            str(output_directory / AUDIT_REPORT_FILENAME), root=output_root
-        )
-        registry_path = _safe_path_for_output(
-            str(output_directory / AUDIT_REGISTRY_FILENAME), root=output_root
-        )
-        target = output_root / output_directory
-        if target.exists():
-            raise AuditScanError("output directory already exists")
-        target.mkdir(parents=True, exist_ok=True)
-        _write_exclusive_json(report_path, report.to_dict())
-        _write_exclusive_json(registry_path, report.detector_registry.to_dict())
-        artifacts = (
-            {
-                "artifact_id": AUDIT_REPORT_FILENAME,
-                "uri": str(output_directory / AUDIT_REPORT_FILENAME),
-                "sha256": _sha256(report_path.read_bytes()),
-            },
-            {
-                "artifact_id": AUDIT_REGISTRY_FILENAME,
-                "uri": str(output_directory / AUDIT_REGISTRY_FILENAME),
-                "sha256": _sha256(registry_path.read_bytes()),
-            },
-        )
+        # Keep the public output-path contract check separate from publication:
+        # the descriptor-relative reservation below is the authority that
+        # remains safe if this path is replaced between the two operations.
+        _safe_path_for_output(str(output_directory / AUDIT_REPORT_FILENAME), root=output_root)
+        _safe_path_for_output(str(output_directory / AUDIT_REGISTRY_FILENAME), root=output_root)
+        reserved_output = None
+        try:
+            reserved_output = _reserve_output_directory(str(output_directory), output_root)
+            report_text = (
+                json.dumps(report.to_dict(), sort_keys=True, indent=2, allow_nan=False) + "\n"
+            )
+            registry_text = (
+                json.dumps(
+                    report.detector_registry.to_dict(), sort_keys=True, indent=2, allow_nan=False
+                )
+                + "\n"
+            )
+            report_digest = _atomic_materialize_no_replace(
+                reserved_output.path / AUDIT_REPORT_FILENAME,
+                report_text,
+                output_directory=reserved_output,
+            )
+            registry_digest = _atomic_materialize_no_replace(
+                reserved_output.path / AUDIT_REGISTRY_FILENAME,
+                registry_text,
+                output_directory=reserved_output,
+            )
+            _assert_output_directory_current(reserved_output)
+            artifacts = (
+                {
+                    "artifact_id": AUDIT_REPORT_FILENAME,
+                    "uri": str(output_directory / AUDIT_REPORT_FILENAME),
+                    "sha256": report_digest,
+                },
+                {
+                    "artifact_id": AUDIT_REGISTRY_FILENAME,
+                    "uri": str(output_directory / AUDIT_REGISTRY_FILENAME),
+                    "sha256": registry_digest,
+                },
+            )
+        except BaseException:
+            _release_empty_output(reserved_output)
+            raise
+        finally:
+            if reserved_output is not None:
+                reserved_output.close()
         status, reason = _component_scan_status(report)
         return ComponentResult(
             request.request_id,
@@ -2768,9 +2798,18 @@ def _read_cli_json(
     """
 
     target = _safe_path(path, root=root)
-    if target.stat().st_size > max_bytes:
-        raise AuditScanError(f"CLI input exceeds {max_bytes} bytes")
-    return _strict_json(target.read_bytes(), label=path, validate=validate)
+    resolved_root = root.resolve(strict=True)
+    try:
+        relative = target.relative_to(resolved_root)
+        raw = _read_descriptor_backed_file(
+            relative.parts,
+            resolved_root,
+            limit=max_bytes,
+            kind=f"CLI input {path}",
+        )
+    except (OSError, ReviewContractsValidationError) as exc:
+        raise AuditScanError("CLI input was replaced or is not a readable regular file") from exc
+    return _strict_json(raw, label=path, validate=validate)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -2849,12 +2888,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             document = report.to_dict()
         serialized = json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\n"
         if args.output is not None:
-            target = _safe_path_for_output(args.output, root=base)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-            descriptor_fd = os.open(target, flags, 0o600)
-            with os.fdopen(descriptor_fd, "w", encoding="utf-8") as handle:
-                handle.write(serialized)
+            _write_cli_output(args.output, serialized, root=base)
         print(serialized, end="")  # noqa: T201
         return 0
     except (
@@ -2901,18 +2935,47 @@ def _safe_path_for_output(value: str, *, root: Path) -> Path:
     return target
 
 
-def _write_exclusive_json(path: Path, payload: Any) -> None:
-    """Write one strict JSON artifact without replacing an existing file."""
+def _write_cli_output(value: str, serialized: str, *, root: Path) -> str:
+    """Publish CLI output through a retained descriptor-relative parent.
 
-    serialized = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    Returns:
+        The SHA-256 digest of the published UTF-8 bytes.
+    """
+
+    target = _safe_path_for_output(value, root=root)
+    resolved_root = root.resolve(strict=True)
     try:
-        descriptor_fd = os.open(path, flags, 0o600)
-    except FileExistsError as exc:
-        raise AuditScanError("output artifact already exists") from exc
-    with os.fdopen(descriptor_fd, "w", encoding="utf-8") as handle:
-        handle.write(serialized)
+        relative = target.relative_to(resolved_root)
+    except ValueError as exc:
+        raise AuditScanError("output path escapes admitted root") from exc
+    if not relative.parts:
+        raise AuditScanError("output path must name a file")
+    encoded = serialized.encode("utf-8")
+    parent_fd = -1
+    temporary_fd = -1
+    temporary_name: str | None = None
+    try:
+        parent_fd = _open_output_parent(resolved_root, relative.parts)
+        temporary_fd, temporary_name = _open_output_temporary(parent_fd, relative.name)
+        handle = os.fdopen(temporary_fd, "wb")
+        temporary_fd = -1
+        with handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _publish_output(parent_fd, temporary_name, relative.name, None, set())
+        temporary_name = None
+        return _sha256(encoded)
+    finally:
+        if temporary_fd >= 0:
+            os.close(temporary_fd)
+        if temporary_name is not None and parent_fd >= 0:
+            try:
+                os.unlink(temporary_name, dir_fd=parent_fd)
+            except FileNotFoundError:
+                pass
+        if parent_fd >= 0:
+            os.close(parent_fd)
 
 
 if __name__ == "__main__":

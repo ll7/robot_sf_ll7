@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.analysis_workbench import audit_scan as audit_scan_module
 from robot_sf.analysis_workbench.audit_contracts import SourceRef, record_to_dict
 from robot_sf.analysis_workbench.audit_detectors import detect
 from robot_sf.analysis_workbench.audit_scan import (
@@ -655,6 +656,44 @@ def test_component_run_writes_report_and_registry(tmp_path: Path) -> None:
     assert record_to_dict(scan_campaign(_campaign(_episode("episode"))).audit)
 
 
+def test_component_publication_rejects_output_directory_symlink_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    outside = tmp_path.parent / "ba01-output-race-target"
+    outside.mkdir()
+    original_reserve = audit_scan_module._reserve_output_directory
+
+    def swap_before_reservation(output_directory: str, base: Path):
+        (base / "audit-output").symlink_to(outside, target_is_directory=True)
+        return original_reserve(output_directory, base)
+
+    monkeypatch.setattr(audit_scan_module, "_reserve_output_directory", swap_before_reservation)
+    result = run(
+        ComponentRequest(
+            request_id="output-race",
+            component_id="ba01-audit-scan",
+            sources=(
+                SourceRef(
+                    artifact_id="campaign",
+                    uri="campaign.json",
+                    format="campaign-result",
+                    schema="campaign-result.v1",
+                    sha256=source_digest,
+                ),
+            ),
+            output_directory="audit-output",
+            config={"expected_episode_ids": ["episode"]},
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "failed"
+    assert not (outside / AUDIT_REPORT_FILENAME).exists()
+    assert not (outside / AUDIT_REGISTRY_FILENAME).exists()
+
+
 def test_component_request_rejects_unsupported_required_capability(tmp_path: Path) -> None:
     request = ComponentRequest(
         request_id="request-capability",
@@ -683,6 +722,68 @@ def test_cli_emits_machine_readable_report_and_refuses_existing_output(
     assert (
         main(["--input", "campaign.json", "--base", str(tmp_path), "--output", "report.json"]) == 2
     )
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+def test_cli_output_rejects_parent_symlink_race(tmp_path: Path, monkeypatch, capsys) -> None:
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    outside = tmp_path.parent / "ba01-cli-output-race-target"
+    outside.mkdir()
+    original_safe_path = audit_scan_module._safe_path_for_output
+
+    def swap_after_validation(value: str, root: Path):
+        target = original_safe_path(value, root=root)
+        if value == "nested/report.json":
+            (root / "nested").symlink_to(outside, target_is_directory=True)
+        return target
+
+    monkeypatch.setattr(audit_scan_module, "_safe_path_for_output", swap_after_validation)
+    code = main(
+        [
+            "--input",
+            "campaign.json",
+            "--base",
+            str(tmp_path),
+            "--output",
+            "nested/report.json",
+        ]
+    )
+    assert code == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    assert not (outside / "report.json").exists()
+
+
+def test_cli_config_rejects_symlink_swap_after_path_admission(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    source = tmp_path / "campaign.json"
+    source.write_text(json.dumps(_campaign(_episode("episode"))), encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"tail_steps": 2}), encoding="utf-8")
+    outside = tmp_path.parent / "ba01-cli-config-race.json"
+    outside.write_text(json.dumps({"tail_steps": 99}), encoding="utf-8")
+    original_safe_path = audit_scan_module._safe_path
+
+    def swap_after_admission(value: str | Path, root: Path):
+        target = original_safe_path(value, root=root)
+        if str(value) == "config.json":
+            config.unlink()
+            config.symlink_to(outside)
+        return target
+
+    monkeypatch.setattr(audit_scan_module, "_safe_path", swap_after_admission)
+    code = main(
+        [
+            "--input",
+            "campaign.json",
+            "--base",
+            str(tmp_path),
+            "--config",
+            "config.json",
+        ]
+    )
+    assert code == 2
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
 
 

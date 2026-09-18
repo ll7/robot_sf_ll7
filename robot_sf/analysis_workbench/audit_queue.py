@@ -78,6 +78,7 @@ except ImportError:  # pragma: no cover - minimal installations may omit benchma
 QUEUE_SCHEMA_VERSION = "audit-queue.v1"
 QUEUE_INPUT_SCHEMA_VERSION = "audit-queue-input.v1"
 QUEUE_SELECTION_SCHEMA_VERSION = "audit-queue-selection.v1"
+QUEUE_PENDING_SCHEMA_VERSION = "audit-queue-pending.v1"
 QUEUE_POLICY_FIXED = "fixed"
 QUEUE_POLICY_ACTIVE = "active"
 DEFAULT_POLICY_VERSION = "audit-queue.active.v1"
@@ -488,6 +489,16 @@ def _review_content_identity(review: ReviewRecord) -> str:
             "notes": review.notes,
         }
     )
+
+
+def _action_content_identity(action: ActionRecord) -> str:
+    """Hash action material while excluding generated record/timestamp fields."""
+
+    payload = record_to_dict(action)
+    payload.pop("record_id", None)
+    payload.pop("action_id", None)
+    payload.pop("created_at", None)
+    return _sha256(payload)
 
 
 def _finding_digest(findings: Sequence[Finding]) -> str:
@@ -2051,6 +2062,7 @@ class QueueState:
     control_schedule_cursor: int = 0
     operations: Mapping[str, str] = field(default_factory=dict)
     operation_targets: Mapping[str, str] = field(default_factory=dict)
+    operation_record_ids: Mapping[str, str] = field(default_factory=dict)
     policy_identity: str = ""
     candidate_first_seen: Mapping[str, int] = field(default_factory=dict)
     packet_content_identities: Mapping[str, str] = field(default_factory=dict)
@@ -2234,6 +2246,18 @@ class QueueState:
                 )
             operation_targets[operation_id] = target
         object.__setattr__(self, "operation_targets", _freeze(operation_targets))
+        if not isinstance(self.operation_record_ids, Mapping):
+            raise QueueStateError("state.operation_record_ids must be a mapping")
+        operation_record_ids: dict[str, str] = {}
+        for key, value in self.operation_record_ids.items():
+            operation_id = _text(key, name="state.operation_record_ids key")
+            record_id = _text(value, name=f"state.operation_record_ids.{operation_id}")
+            if operation_id not in self.operations:
+                raise QueueStateError(
+                    f"state.operation_record_ids references unknown operation: {operation_id}"
+                )
+            operation_record_ids[operation_id] = record_id
+        object.__setattr__(self, "operation_record_ids", _freeze(operation_record_ids))
 
     @staticmethod
     def _counts(value: Mapping[str, int], name: str) -> dict[str, int]:
@@ -2274,6 +2298,7 @@ class QueueState:
             "control_schedule_cursor": self.control_schedule_cursor,
             "operations": dict(self.operations),
             "operation_targets": dict(self.operation_targets),
+            "operation_record_ids": dict(self.operation_record_ids),
         }
 
     @classmethod
@@ -2306,6 +2331,7 @@ class QueueState:
             control_schedule_cursor=payload.get("control_schedule_cursor", 0),
             operations=payload.get("operations", {}),
             operation_targets=payload.get("operation_targets", {}),
+            operation_record_ids=payload.get("operation_record_ids", {}),
         )
 
 
@@ -2366,6 +2392,11 @@ class AuditQueue:
         self.store = store
         self.actor_id = _text(actor_id, name="actor_id")
         self.state_path = Path(state_path) if state_path is not None else None
+        self._pending_path = (
+            self.state_path.with_name(f"{self.state_path.name}.pending")
+            if self.state_path is not None
+            else None
+        )
         self._persisted_revision = 0
         self._stale_inputs: tuple[str, ...] = ()
         self.state = QueueState(
@@ -2377,6 +2408,9 @@ class AuditQueue:
         )
         if self.state_path is not None and self.state_path.exists():
             self._load_state_from_disk()
+        elif self._pending_path is not None and self._pending_path.exists():
+            self._recover_pending_without_state()
+            self._ensure_candidate_first_seen()
         else:
             self._ensure_candidate_first_seen()
 
@@ -2451,16 +2485,20 @@ class AuditQueue:
 
     def _load_state_from_disk(self) -> None:
         assert self.state_path is not None
-        if self.state_path.is_symlink():
-            raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
-        try:
-            payload = _read_json(self.state_path)
-            state = QueueState.from_mapping(payload)
-            if state.rng_state:
-                self._rng.setstate(_decode_rng(state.rng_state))
-        except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
-            raise QueueStateError(f"cannot resume queue state {self.state_path}: {exc}") from exc
-        self.state = state
+        with _state_lock(self.state_path):
+            if self.state_path.is_symlink():
+                raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
+            try:
+                payload = _read_json(self.state_path)
+                state = QueueState.from_mapping(payload)
+                if state.rng_state:
+                    self._rng.setstate(_decode_rng(state.rng_state))
+            except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
+                raise QueueStateError(
+                    f"cannot resume queue state {self.state_path}: {exc}"
+                ) from exc
+            self.state = state
+            self._reconcile_pending_locked(state.state_revision)
         self._ensure_candidate_first_seen(default_index=0)
         self._persisted_revision = state.state_revision
         self._stale_inputs = self._compare_input_identity(state)
@@ -3321,41 +3359,95 @@ class AuditQueue:
             actor_id=self.actor_id,
         )
 
-    def _persist_state(self, *, expected_revision: int | None = None) -> None:
-        if self.state_path is None:
-            return
-        path = self.state_path
+    def _build_action(
+        self,
+        action_type: str,
+        target_id: str,
+        details: Mapping[str, Any],
+        *,
+        actor_kind: str,
+        actor_id: str | None,
+        operation_id: str,
+    ) -> ActionRecord:
+        action_digest = _sha256(
+            {
+                "operation_id": operation_id,
+                "action_type": action_type,
+                "target_id": target_id,
+                "details": dict(details),
+                "actor_kind": actor_kind,
+                "actor_id": actor_id or self.actor_id,
+            }
+        )
+        return ActionRecord(
+            action_id="action-" + action_digest,
+            action_type=action_type,
+            actor_kind=actor_kind,
+            actor_id=actor_id or self.actor_id,
+            target_id=target_id,
+            details=dict(details),
+        )
+
+    def _persist_action(self, action: ActionRecord, *, operation_id: str) -> ActionRecord:
+        if self.store is None:
+            return action
+        existing = self.store.get(action.action_id, include_deleted=True)
+        if existing is not None:
+            if existing.deleted or not isinstance(existing.record, ActionRecord):
+                raise QueueConflictError(
+                    f"action ID collision with a different durable record: {action.action_id}"
+                )
+            if (
+                _action_content_identity(existing.record) != _action_content_identity(action)
+                or existing.operation_id != operation_id
+            ):
+                raise QueueConflictError(
+                    f"action ID collision with a different durable action: {action.action_id}"
+                )
+            return existing.record
+        self.store.save(
+            action,
+            operation_id=operation_id,
+            expected_revision=0,
+            actor=action.actor_kind,
+            actor_id=action.actor_id,
+        )
+        return action
+
+    def _persist_review(self, review: ReviewRecord, *, operation_id: str) -> ReviewRecord:
+        if self.store is None:
+            return review
+        existing = self.store.get(review.review_id, include_deleted=True)
+        if existing is not None:
+            if existing.deleted or not isinstance(existing.record, ReviewRecord):
+                raise QueueConflictError(
+                    f"review ID collision with a different durable record: {review.review_id}"
+                )
+            if (
+                _review_content_identity(existing.record) != _review_content_identity(review)
+                or existing.operation_id != operation_id
+            ):
+                raise QueueConflictError(
+                    f"review ID collision with a different durable review: {review.review_id}"
+                )
+            return existing.record
+        self.store.save(
+            review,
+            operation_id=operation_id,
+            expected_revision=0,
+            actor=review.author_kind,
+            actor_id=review.author_id,
+        )
+        return review
+
+    def _atomic_json_replace(self, path: Path, value: Mapping[str, Any], *, name: str) -> None:
+        """Durably replace one queue-owned JSON sidecar under its stable lock."""
+
         if path.is_symlink():
-            raise QueueStateError(f"queue state path must not be a symlink: {path}")
+            raise QueueStateError(f"{name} path must not be a symlink: {path}")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            raise QueueStateError(
-                f"cannot prepare queue state directory {path.parent}: {exc}"
-            ) from exc
-        expected = self._persisted_revision if expected_revision is None else expected_revision
-        with _state_lock(path):
-            if path.exists():
-                try:
-                    current = QueueState.from_mapping(_read_json(path)).state_revision
-                except (
-                    OSError,
-                    QueueInputError,
-                    QueueStateError,
-                    KeyError,
-                    TypeError,
-                    ValueError,
-                ) as exc:
-                    raise QueueStateError(f"cannot compare queue state {path}: {exc}") from exc
-                if current != expected:
-                    raise QueueConflictError(
-                        f"queue state revision conflict: expected {expected}, current {current}"
-                    )
-            elif expected not in {0, self._persisted_revision}:
-                raise QueueConflictError(
-                    f"queue state does not exist at expected revision {expected}"
-                )
-            payload = _canonical(self.state.to_dict()) + "\n"
+            payload = _canonical(value) + "\n"
             fd, temporary = tempfile.mkstemp(
                 prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent), text=True
             )
@@ -3365,13 +3457,281 @@ class AuditQueue:
                     handle.flush()
                     os.fsync(handle.fileno())
                 os.replace(temporary, path)
-                self._persisted_revision = self.state.state_revision
+                try:
+                    directory = os.open(path.parent, os.O_RDONLY)
+                except OSError:
+                    directory = None
+                if directory is not None:
+                    try:
+                        os.fsync(directory)
+                    finally:
+                        os.close(directory)
             except OSError as exc:
                 try:
                     os.unlink(temporary)
                 except OSError:
                     pass
-                raise QueueStateError(f"cannot persist queue state: {exc}") from exc
+                raise QueueStateError(f"cannot persist {name}: {exc}") from exc
+        except OSError as exc:
+            raise QueueStateError(f"cannot prepare {name} directory {path.parent}: {exc}") from exc
+
+    def _state_revision_locked(self, path: Path) -> int:
+        if not path.exists():
+            return 0
+        try:
+            return QueueState.from_mapping(_read_json(path)).state_revision
+        except (
+            OSError,
+            QueueInputError,
+            QueueStateError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise QueueStateError(f"cannot compare queue state {path}: {exc}") from exc
+
+    def _check_state_revision_locked(self, expected: int) -> None:
+        assert self.state_path is not None
+        path = self.state_path
+        if path.is_symlink():
+            raise QueueStateError(f"queue state path must not be a symlink: {path}")
+        if path.exists():
+            current = self._state_revision_locked(path)
+            if current != expected:
+                raise QueueConflictError(
+                    f"queue state revision conflict: expected {expected}, current {current}"
+                )
+        elif expected not in {0, self._persisted_revision}:
+            raise QueueConflictError(f"queue state does not exist at expected revision {expected}")
+
+    def _persist_state_locked(self, expected: int) -> None:
+        assert self.state_path is not None
+        self._check_state_revision_locked(expected)
+        self._atomic_json_replace(self.state_path, self.state.to_dict(), name="queue state")
+        self._persisted_revision = self.state.state_revision
+
+    def _persist_state(
+        self, *, expected_revision: int | None = None, _lock_held: bool = False
+    ) -> None:
+        if self.state_path is None:
+            return
+        path = self.state_path
+        expected = self._persisted_revision if expected_revision is None else expected_revision
+        if _lock_held:
+            self._persist_state_locked(expected)
+            return
+        with _state_lock(path):
+            self._persist_state_locked(expected)
+
+    @contextmanager
+    def _mutation_lock(self):
+        """Serialize queue CAS preflight and all store side effects."""
+
+        if self.state_path is None:
+            yield None
+            return
+        path = self.state_path
+        with _state_lock(path):
+            expected = self._persisted_revision
+            self._check_state_revision_locked(expected)
+            if self._pending_path is not None and self._pending_path.exists():
+                raise QueueStateError(
+                    f"pending queue mutation requires recovery: {self._pending_path}"
+                )
+            yield expected
+
+    def _pending_entry(
+        self,
+        record: Any,
+        *,
+        operation_id: str,
+        actor_kind: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        payload = record_to_dict(record)
+        return {
+            "record_id": payload.get("record_id", ""),
+            "record": payload,
+            "operation_id": operation_id,
+            "actor_kind": actor_kind,
+            "actor_id": actor_id,
+        }
+
+    def _write_pending_locked(
+        self,
+        *,
+        expected_revision: int | None,
+        records: Sequence[Mapping[str, Any]],
+    ) -> None:
+        if self.state_path is None or self.store is None or not records:
+            return
+        assert self._pending_path is not None
+        expected = self._persisted_revision if expected_revision is None else expected_revision
+        body = {
+            "schema_version": QUEUE_PENDING_SCHEMA_VERSION,
+            "expected_state_revision": expected,
+            "final_state_revision": expected + 1,
+            "records": [dict(item) for item in records],
+        }
+        payload = {**body, "digest": _sha256(body)}
+        self._atomic_json_replace(self._pending_path, payload, name="queue pending mutation")
+
+    def _clear_pending_locked(self) -> None:
+        if self._pending_path is None or not self._pending_path.exists():
+            return
+        if self._pending_path.is_symlink():
+            raise QueueStateError(
+                f"queue pending mutation path must not be a symlink: {self._pending_path}"
+            )
+        try:
+            self._pending_path.unlink()
+            directory = os.open(self._pending_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except OSError as exc:
+            raise QueueStateError(
+                f"cannot clear queue pending mutation {self._pending_path}: {exc}"
+            ) from exc
+
+    def _finish_mutation(self, expected_revision: int | None) -> None:
+        if self.state_path is None:
+            return
+        assert expected_revision is not None
+        self._persist_state(expected_revision=expected_revision, _lock_held=True)
+        self._clear_pending_locked()
+
+    def _pending_records(self, payload: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+        payload = _mapping(payload, name="pending queue mutation")
+        expected_keys = {
+            "schema_version",
+            "expected_state_revision",
+            "final_state_revision",
+            "records",
+            "digest",
+        }
+        if (
+            set(payload) != expected_keys
+            or payload.get("schema_version") != QUEUE_PENDING_SCHEMA_VERSION
+        ):
+            raise QueueStateError("pending queue mutation schema is unsupported")
+        body = {key: payload[key] for key in expected_keys - {"digest"}}
+        if payload.get("digest") != _sha256(body):
+            raise QueueStateError("pending queue mutation digest mismatch")
+        expected = _nonnegative_int(
+            payload.get("expected_state_revision"), name="pending.expected_state_revision"
+        )
+        final = _nonnegative_int(
+            payload.get("final_state_revision"), name="pending.final_state_revision"
+        )
+        if final != expected + 1:
+            raise QueueStateError("pending queue mutation revision is inconsistent")
+        raw_records = payload.get("records")
+        if (
+            not isinstance(raw_records, Sequence)
+            or isinstance(raw_records, (str, bytes))
+            or not raw_records
+        ):
+            raise QueueStateError("pending queue mutation records are required")
+        records: list[dict[str, Any]] = []
+        for index, raw in enumerate(raw_records):
+            try:
+                record = _mapping(raw, name=f"pending.records[{index}]")
+                if set(record) != {"record_id", "record", "operation_id", "actor_kind", "actor_id"}:
+                    raise QueueStateError(f"pending record {index} contains unknown fields")
+                record_id = _text(record["record_id"], name=f"pending.records[{index}].record_id")
+                record_payload = _mapping(record["record"], name=f"pending.records[{index}].record")
+                typed = record_from_dict(record_payload)
+                if record_payload.get("record_id") != record_id:
+                    raise QueueStateError(f"pending record {index} identity does not match payload")
+                _text(record["operation_id"], name=f"pending.records[{index}].operation_id")
+                _text(record["actor_kind"], name=f"pending.records[{index}].actor_kind")
+                _text(
+                    record["actor_id"], name=f"pending.records[{index}].actor_id", allow_empty=True
+                )
+            except (AuditContractError, KeyError, TypeError, ValueError) as exc:
+                raise QueueStateError(f"invalid pending record {index}: {exc}") from exc
+            record["record"] = record_to_dict(typed)
+            records.append(record)
+        return tuple(records)
+
+    def _pending_record_is_durable(self, pending: Mapping[str, Any]) -> bool:
+        if self.store is None:
+            raise QueueStateError("pending queue mutation requires its audit store")
+        record_id = pending["record_id"]
+        expected = record_from_dict(pending["record"])
+        try:
+            stored = self.store.get(record_id, include_deleted=True)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            raise QueueStateError(
+                f"cannot reconcile pending audit record {record_id}: {exc}"
+            ) from exc
+        if stored is None:
+            return False
+        if isinstance(expected, ActionRecord) and isinstance(stored.record, ActionRecord):
+            material_match = _action_content_identity(stored.record) == _action_content_identity(
+                expected
+            )
+        elif isinstance(expected, ReviewRecord) and isinstance(stored.record, ReviewRecord):
+            material_match = _review_content_identity(stored.record) == _review_content_identity(
+                expected
+            )
+        else:
+            material_match = stored.record == expected
+        if stored.deleted or not material_match or stored.operation_id != pending["operation_id"]:
+            raise QueueStateError(f"pending audit record collision: {record_id}")
+        return True
+
+    def _reconcile_pending_locked(self, current_revision: int) -> None:
+        if self._pending_path is None or not self._pending_path.exists():
+            return
+        if self._pending_path.is_symlink():
+            raise QueueStateError(
+                f"queue pending mutation path must not be a symlink: {self._pending_path}"
+            )
+        try:
+            pending_payload = _read_json(self._pending_path)
+        except (OSError, QueueInputError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"cannot read pending queue mutation: {exc}") from exc
+        try:
+            pending = self._pending_records(pending_payload)
+        except (QueueInputError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"invalid pending queue mutation: {exc}") from exc
+        expected = pending_payload["expected_state_revision"]
+        final = pending_payload["final_state_revision"]
+        durable = tuple(self._pending_record_is_durable(item) for item in pending)
+        if current_revision == final and all(durable):
+            self._clear_pending_locked()
+            return
+        if current_revision == expected and not any(durable):
+            self._clear_pending_locked()
+            return
+        raise QueueStateError(
+            "pending queue mutation cannot be reconciled without a complete state commit"
+        )
+
+    def _recover_pending_without_state(self) -> None:
+        assert self.state_path is not None and self._pending_path is not None
+        with _state_lock(self.state_path):
+            if self._pending_path.is_symlink():
+                raise QueueStateError(
+                    f"queue pending mutation path must not be a symlink: {self._pending_path}"
+                )
+            try:
+                pending_payload = _read_json(self._pending_path)
+            except (OSError, QueueInputError, TypeError, ValueError) as exc:
+                raise QueueStateError(f"cannot read pending queue mutation: {exc}") from exc
+            try:
+                pending = self._pending_records(pending_payload)
+            except (QueueInputError, TypeError, ValueError) as exc:
+                raise QueueStateError(f"invalid pending queue mutation: {exc}") from exc
+            durable = tuple(self._pending_record_is_durable(item) for item in pending)
+            if any(durable):
+                raise QueueStateError(
+                    "pending queue mutation has durable records but no committed queue state"
+                )
+            self._clear_pending_locked()
 
     def save_state(self, *, expected_revision: int | None = None) -> int:
         """Persist lossless JSON state with compare-and-swap semantics."""
@@ -3391,36 +3751,15 @@ class AuditQueue:
         actor_id: str | None = None,
         operation_id: str,
     ) -> ActionRecord:
-        action_digest = _sha256(
-            {
-                "operation_id": operation_id,
-                "action_type": action_type,
-                "target_id": target_id,
-                "details": dict(details),
-                "actor_kind": actor_kind,
-                "actor_id": actor_id or self.actor_id,
-            }
-        )
-        action = ActionRecord(
-            action_id="action-" + action_digest,
-            action_type=action_type,
+        action = self._build_action(
+            action_type,
+            target_id,
+            details,
             actor_kind=actor_kind,
-            actor_id=actor_id or self.actor_id,
-            target_id=target_id,
-            details=dict(details),
+            actor_id=actor_id,
+            operation_id=operation_id,
         )
-        if self.store is not None:
-            existing = self.store.get(action.action_id)
-            if existing is not None and isinstance(existing.record, ActionRecord):
-                return existing.record
-            self.store.save(
-                action,
-                operation_id=operation_id,
-                expected_revision=0,
-                actor=actor_kind,
-                actor_id=actor_id or self.actor_id,
-            )
-        return action
+        return self._persist_action(action, operation_id=operation_id)
 
     def _advance_state(
         self,
@@ -3429,6 +3768,8 @@ class AuditQueue:
         packet: ReviewPacket,
         packet_identity: Mapping[str, Any],
         operation_id: str,
+        persist: bool = True,
+        expected_revision: int | None = None,
     ) -> None:
         previous = list(self.state.previous_packet_ids)
         if self.state.current_packet_id:
@@ -3473,7 +3814,10 @@ class AuditQueue:
             control_schedule_cursor=cursor,
             operations=operations,
         )
-        self._persist_state()
+        if persist:
+            self._persist_state(
+                expected_revision=expected_revision, _lock_held=expected_revision is not None
+            )
 
     def select_next(self, *, force_current: bool = False) -> SelectionResult | None:
         """Select and persist the next packet; no ``ReviewRecord`` is created."""
@@ -3576,25 +3920,54 @@ class AuditQueue:
             stale_inputs=self._stale_inputs,
         )
         operation_id = f"queue-select-{self.state.selection_index}-{packet.packet_id}"
-        self._persist_packet(packet, operation_id=f"{operation_id}:packet")
-        self._record_action(
+        action_operation_id = f"{operation_id}:action"
+        action_details = {
+            "packet_id": packet.packet_id,
+            "selection_id": context.selection_id,
+            "human_review_granted": False,
+            "selection_kind": selection_kind,
+        }
+        action = self._build_action(
             "queue_select",
             candidate.episode_id,
-            {
-                "packet_id": packet.packet_id,
-                "selection_id": context.selection_id,
-                "human_review_granted": False,
-                "selection_kind": selection_kind,
-            },
+            action_details,
             actor_kind="agent",
-            operation_id=f"{operation_id}:action",
+            actor_id=None,
+            operation_id=action_operation_id,
         )
-        self._advance_state(
-            context=context,
-            packet=packet,
-            packet_identity=packet_identity,
-            operation_id=operation_id,
+        pending_records = (
+            (
+                self._pending_entry(
+                    packet,
+                    operation_id=f"{operation_id}:packet",
+                    actor_kind="agent",
+                    actor_id=self.actor_id,
+                ),
+                self._pending_entry(
+                    action,
+                    operation_id=action_operation_id,
+                    actor_kind="agent",
+                    actor_id=self.actor_id,
+                ),
+            )
+            if self.store is not None
+            else ()
         )
+        with self._mutation_lock() as expected_revision:
+            self._write_pending_locked(
+                expected_revision=expected_revision,
+                records=pending_records,
+            )
+            self._persist_packet(packet, operation_id=f"{operation_id}:packet")
+            self._persist_action(action, operation_id=action_operation_id)
+            self._advance_state(
+                context=context,
+                packet=packet,
+                packet_identity=packet_identity,
+                operation_id=operation_id,
+                persist=False,
+            )
+            self._finish_mutation(expected_revision)
         return SelectionResult(packet=packet, context=context, explanation=explanation)
 
     next = select_next
@@ -3696,15 +4069,16 @@ class AuditQueue:
                 raise QueueOperationConflictError(
                     f"operation ID {operation_id!r} was reused for a different queue action"
                 )
-            return self._record_action(
-                action_type,
-                target,
-                details,
-                actor_kind=actor_kind,
-                actor_id=actor_id,
-                operation_id=operation_id,
-            )
-        action = self._record_action(
+            with self._mutation_lock():
+                return self._record_action(
+                    action_type,
+                    target,
+                    details,
+                    actor_kind=actor_kind,
+                    actor_id=actor_id,
+                    operation_id=operation_id,
+                )
+        action = self._build_action(
             action_type,
             target,
             details,
@@ -3744,8 +4118,26 @@ class AuditQueue:
             }
             requests[target] = tuple(dict.fromkeys((*requests.get(target, ()), request)))
             state_kwargs["more_evidence_requests"] = requests
-        self.state = replace(self.state, **state_kwargs)
-        self._persist_state()
+        pending_records = (
+            (
+                self._pending_entry(
+                    action,
+                    operation_id=operation_id,
+                    actor_kind=action.actor_kind,
+                    actor_id=action.actor_id,
+                ),
+            )
+            if self.store is not None
+            else ()
+        )
+        with self._mutation_lock() as expected_revision:
+            self._write_pending_locked(
+                expected_revision=expected_revision,
+                records=pending_records,
+            )
+            action = self._persist_action(action, operation_id=operation_id)
+            self.state = replace(self.state, **state_kwargs)
+            self._finish_mutation(expected_revision)
         return action
 
     def pin(
@@ -3863,7 +4255,7 @@ class AuditQueue:
                     f"operation ID {operation_id!r} was reused for a different previous action"
                 )
             return SelectionResult(packet=packet, context=context)
-        self._record_action(
+        action = self._build_action(
             "previous_packet",
             context.primary_episode_id,
             {"packet_id": prior_id},
@@ -3873,19 +4265,37 @@ class AuditQueue:
         )
         operations = dict(self.state.operations)
         operations[operation_id] = operation_digest
-        self.state = replace(
-            self.state,
-            state_revision=self.state.state_revision + 1,
-            current_packet_id=prior_id,
-            previous_packet_ids=tuple(history),
-            operations=operations,
+        pending_records = (
+            (
+                self._pending_entry(
+                    action,
+                    operation_id=operation_id,
+                    actor_kind=action.actor_kind,
+                    actor_id=action.actor_id,
+                ),
+            )
+            if self.store is not None
+            else ()
         )
-        self._persist_state()
+        with self._mutation_lock() as expected_revision:
+            self._write_pending_locked(
+                expected_revision=expected_revision,
+                records=pending_records,
+            )
+            self._persist_action(action, operation_id=operation_id)
+            self.state = replace(
+                self.state,
+                state_revision=self.state.state_revision + 1,
+                current_packet_id=prior_id,
+                previous_packet_ids=tuple(history),
+                operations=operations,
+            )
+            self._finish_mutation(expected_revision)
         return SelectionResult(packet=packet, context=context)
 
     previous = previous_packet
 
-    def record_review(  # noqa: C901, PLR0912, PLR0913
+    def record_review(  # noqa: C901, PLR0912, PLR0913, PLR0915
         self,
         episode_id: str = "",
         *,
@@ -3933,6 +4343,10 @@ class AuditQueue:
                 }
             )
         _text(operation_id, name="review.operation_id")
+        review_action_operation = f"{operation_id}:action"
+        stored_review_id = self.state.operation_record_ids.get(review_action_operation, "")
+        if review_id is None and stored_review_id:
+            review_id = stored_review_id
         review_id = review_id or "review-" + _sha256(
             {
                 "episode_id": target,
@@ -3956,7 +4370,6 @@ class AuditQueue:
             )
         except (AuditContractError, TypeError, ValueError) as exc:
             raise QueueInputError(f"invalid review record: {exc}") from exc
-        review_action_operation = f"{operation_id}:action"
         review_operation_digest = _review_content_identity(review)
         existing_operation = self.state.operations.get(review_action_operation)
         if existing_operation is not None:
@@ -3964,6 +4377,34 @@ class AuditQueue:
                 raise QueueOperationConflictError(
                     f"operation ID {review_action_operation!r} was reused for a different review"
                 )
+        pending_records: tuple[Mapping[str, Any], ...] = ()
+        with self._mutation_lock() as expected_revision:
+            existing_durable: ReviewRecord | None = None
+            durable_review_operation_id = operation_id
+            if self.store is not None:
+                existing = self.store.get(review.review_id, include_deleted=True)
+                if existing is not None:
+                    if existing.deleted or not isinstance(existing.record, ReviewRecord):
+                        raise QueueConflictError(
+                            "review ID collision with a different durable record: "
+                            f"{review.review_id}"
+                        )
+                    if (
+                        _review_content_identity(existing.record) != review_operation_digest
+                        or existing.operation_id != operation_id
+                    ):
+                        raise QueueConflictError(
+                            "review ID collision with a different durable review: "
+                            f"{review.review_id}"
+                        )
+                    existing_durable = existing.record
+                    review = existing.record
+                    durable_review_operation_id = existing.operation_id
+                elif existing_operation is not None:
+                    raise QueueStateError(
+                        "record_review operation is committed in queue state but missing "
+                        f"from the audit store: {review.review_id}"
+                    )
             existing_dataset_review = next(
                 (
                     item
@@ -3977,67 +4418,80 @@ class AuditQueue:
                     raise QueueConflictError(
                         f"review ID collision with a different durable review: {review.review_id}"
                     )
+                if existing_durable is None:
+                    review = existing_dataset_review
+            if existing_operation is not None:
+                if self.store is None and existing_dataset_review is None:
+                    self.dataset = replace(
+                        self.dataset, review_records=(*self.dataset.review_records, review)
+                    )
+                    return review
+                if existing_durable is not None:
+                    if existing_dataset_review is None:
+                        self.dataset = replace(
+                            self.dataset, review_records=(*self.dataset.review_records, review)
+                        )
+                    return review
                 return existing_dataset_review
-        if self.store is not None:
-            existing = self.store.get(review.review_id, include_deleted=True)
-            if existing is not None:
-                if existing.deleted or not isinstance(existing.record, ReviewRecord):
-                    raise QueueConflictError(
-                        f"review ID collision with a different durable record: {review.review_id}"
-                    )
-                if _review_content_identity(existing.record) != review_operation_digest:
-                    raise QueueConflictError(
-                        f"review ID collision with a different durable review: {review.review_id}"
-                    )
-                review = existing.record
-            else:
-                self.store.save(
-                    review,
-                    operation_id=operation_id,
-                    expected_revision=0,
-                    actor=author_kind,
-                    actor_id=author_id,
-                )
-        existing_dataset_review = next(
-            (item for item in self.dataset.review_records if item.review_id == review.review_id),
-            None,
-        )
-        if existing_dataset_review is not None:
-            if _review_content_identity(existing_dataset_review) != review_operation_digest:
-                raise QueueConflictError(
-                    f"review ID collision with a different durable review: {review.review_id}"
-                )
-            review = existing_dataset_review
-        if existing_dataset_review is None:
-            self.dataset = replace(
-                self.dataset, review_records=(*self.dataset.review_records, review)
-            )
-        self._record_action(
-            "record_review",
-            target,
-            {
+            action_details = {
                 "review_id": review.review_id,
                 "scope": scope,
                 "human_review_granted": author_kind == "human",
-            },
-            actor_kind=author_kind,
-            actor_id=author_id or self.actor_id,
-            operation_id=review_action_operation,
-        )
-        operations = dict(self.state.operations)
-        operations[review_action_operation] = review_operation_digest
-        operation_targets = dict(self.state.operation_targets)
-        operation_targets[review_action_operation] = target
-        self.state = replace(
-            self.state,
-            state_revision=self.state.state_revision + 1,
-            input_revision=self.dataset.input_revision,
-            input_identity=self.dataset.identity,
-            operations=operations,
-            operation_targets=operation_targets,
-        )
-        self._persist_state()
-        return review
+            }
+            action_operation_id = review_action_operation
+            action = self._build_action(
+                "record_review",
+                target,
+                action_details,
+                actor_kind=author_kind,
+                actor_id=author_id or self.actor_id,
+                operation_id=action_operation_id,
+            )
+            pending_records = (
+                (
+                    self._pending_entry(
+                        review,
+                        operation_id=durable_review_operation_id,
+                        actor_kind=review.author_kind,
+                        actor_id=review.author_id,
+                    ),
+                    self._pending_entry(
+                        action,
+                        operation_id=action_operation_id,
+                        actor_kind=action.actor_kind,
+                        actor_id=action.actor_id,
+                    ),
+                )
+                if self.store is not None
+                else ()
+            )
+            self._write_pending_locked(
+                expected_revision=expected_revision,
+                records=pending_records,
+            )
+            self._persist_review(review, operation_id=operation_id)
+            action = self._persist_action(action, operation_id=action_operation_id)
+            if existing_dataset_review is None:
+                self.dataset = replace(
+                    self.dataset, review_records=(*self.dataset.review_records, review)
+                )
+            operations = dict(self.state.operations)
+            operations[review_action_operation] = review_operation_digest
+            operation_targets = dict(self.state.operation_targets)
+            operation_targets[review_action_operation] = target
+            operation_record_ids = dict(self.state.operation_record_ids)
+            operation_record_ids[review_action_operation] = review.review_id
+            self.state = replace(
+                self.state,
+                state_revision=self.state.state_revision + 1,
+                input_revision=self.dataset.input_revision,
+                input_identity=self.dataset.identity,
+                operations=operations,
+                operation_targets=operation_targets,
+                operation_record_ids=operation_record_ids,
+            )
+            self._finish_mutation(expected_revision)
+            return review
 
     review = record_review
 

@@ -179,6 +179,60 @@ def _select_from_worker(state_path: str, start_event, result_queue) -> None:
         result_queue.put("ok")
 
 
+def _manual_store_mutation_worker(
+    state_path: str,
+    store_path: str,
+    start_event,
+    ready_queue,
+    result_queue,
+    operation_id: str,
+) -> None:
+    """Run one synchronized durable manual action in a separate process."""
+
+    try:
+        with AuditStore(store_path) as store:
+            queue = AuditQueue(
+                (_candidate("concurrent-manual"),),
+                store=store,
+                state_path=state_path,
+            )
+            ready_queue.put(operation_id)
+            start_event.wait(timeout=10)
+            action = queue.skip(operation_id=operation_id)
+            result_queue.put((operation_id, "ok", action.action_id))
+    except Exception as exc:  # pragma: no cover - asserted by the parent result envelope.
+        result_queue.put((operation_id, "error", type(exc).__name__, str(exc)))
+
+
+def _review_store_mutation_worker(
+    state_path: str,
+    store_path: str,
+    start_event,
+    ready_queue,
+    result_queue,
+    operation_id: str,
+) -> None:
+    """Run one synchronized durable review mutation in a separate process."""
+
+    try:
+        with AuditStore(store_path) as store:
+            queue = AuditQueue(
+                (_candidate("concurrent-review"),),
+                store=store,
+                state_path=state_path,
+            )
+            ready_queue.put(operation_id)
+            start_event.wait(timeout=10)
+            review = queue.record_review(
+                outcome="pass",
+                notes="concurrent",
+                operation_id=operation_id,
+            )
+            result_queue.put((operation_id, "ok", review.review_id))
+    except Exception as exc:  # pragma: no cover - asserted by the parent result envelope.
+        result_queue.put((operation_id, "error", type(exc).__name__, str(exc)))
+
+
 def test_fixed_priority_bands_are_lexicographic_before_weights() -> None:
     benchmark = _candidate(
         "benchmark",
@@ -788,6 +842,17 @@ def test_review_idempotency_binds_full_durable_review_material(tmp_path: Path) -
                 review_id="review-fixed",
                 operation_id="review-operation-2",
             )
+        with pytest.raises(QueueConflictError):
+            AuditQueue((candidate,), store=store).record_review(
+                candidate.episode_id,
+                scope="full_episode",
+                outcome="pass",
+                author_id="reviewer",
+                notes="accepted",
+                annotation_ids=("annotation-a",),
+                review_id="review-fixed",
+                operation_id="review-operation-3",
+            )
         forged = ReviewRecord(
             review_id=first.review_id,
             episode_id=candidate.episode_id,
@@ -810,6 +875,174 @@ def test_review_idempotency_binds_full_durable_review_material(tmp_path: Path) -
                 review_id="review-fixed",
                 operation_id="review-operation",
             )
+
+
+def test_durable_review_replay_after_reload_returns_authoritative_record(tmp_path: Path) -> None:
+    candidate = _candidate("durable-review-replay")
+    state_path = tmp_path / "durable-review-state.json"
+    with AuditStore(tmp_path / "audit") as store:
+        queue = AuditQueue((candidate,), store=store, state_path=state_path)
+        assert queue.select_next() is not None
+        first = queue.record_review(
+            outcome="pass",
+            notes="durable",
+            annotation_ids=("annotation-a",),
+            operation_id="durable-review-operation",
+        )
+        queue.skip(operation_id="clear-durable-review")
+        revision = queue.state_revision
+
+    with AuditStore(tmp_path / "audit") as store:
+        resumed = AuditQueue((candidate,), store=store, state_path=state_path)
+        replay = resumed.record_review(
+            outcome="pass",
+            notes="durable",
+            annotation_ids=("annotation-a",),
+            operation_id="durable-review-operation",
+        )
+        assert replay == first
+        assert replay.created_at == first.created_at
+        assert resumed.state_revision == revision
+        with pytest.raises(QueueOperationConflictError):
+            resumed.record_review(
+                outcome="fail",
+                notes="durable",
+                annotation_ids=("annotation-a",),
+                operation_id="durable-review-operation",
+            )
+
+
+def test_concurrent_manual_loser_has_no_orphan_store_action(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("fork")
+    state_path = str(tmp_path / "manual-concurrent-state.json")
+    store_path = str(tmp_path / "manual-concurrent-audit")
+    candidate = _candidate("concurrent-manual")
+    with AuditStore(store_path) as store:
+        queue = AuditQueue((candidate,), store=store, state_path=state_path)
+        assert queue.select_next() is not None
+
+    start_event = context.Event()
+    ready_queue = context.Queue()
+    result_queue = context.Queue()
+    operation_ids = ("manual-concurrent-a", "manual-concurrent-b")
+    workers = [
+        context.Process(
+            target=_manual_store_mutation_worker,
+            args=(state_path, store_path, start_event, ready_queue, result_queue, operation_id),
+        )
+        for operation_id in operation_ids
+    ]
+    for worker in workers:
+        worker.start()
+    assert {ready_queue.get(timeout=10) for _ in workers} == set(operation_ids)
+    start_event.set()
+    results = [result_queue.get(timeout=10) for _ in workers]
+    for worker in workers:
+        worker.join(timeout=10)
+    assert sorted(item[1] for item in results) == ["error", "ok"]
+    assert all(worker.exitcode == 0 for worker in workers)
+    winner = next(item[0] for item in results if item[1] == "ok")
+    loser = next(item[0] for item in results if item[1] == "error")
+    assert next(item[2] for item in results if item[0] == loser) == "QueueConflictError"
+
+    with AuditStore(store_path) as store:
+        actions = store.list_records(record_type="action_record")
+        operation_ids_in_store = {item.operation_id for item in actions}
+        assert winner in operation_ids_in_store
+        assert loser not in operation_ids_in_store
+        resumed = AuditQueue((candidate,), store=store, state_path=state_path)
+        revision = resumed.state_revision
+        assert resumed.skip(operation_id=winner).target_id == candidate.episode_id
+        assert resumed.state_revision == revision
+
+
+def test_concurrent_review_loser_has_no_orphan_store_records(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("fork")
+    state_path = str(tmp_path / "review-concurrent-state.json")
+    store_path = str(tmp_path / "review-concurrent-audit")
+    candidate = _candidate("concurrent-review")
+    with AuditStore(store_path) as store:
+        queue = AuditQueue((candidate,), store=store, state_path=state_path)
+        assert queue.select_next() is not None
+
+    start_event = context.Event()
+    ready_queue = context.Queue()
+    result_queue = context.Queue()
+    operation_ids = ("review-concurrent-a", "review-concurrent-b")
+    workers = [
+        context.Process(
+            target=_review_store_mutation_worker,
+            args=(state_path, store_path, start_event, ready_queue, result_queue, operation_id),
+        )
+        for operation_id in operation_ids
+    ]
+    for worker in workers:
+        worker.start()
+    assert {ready_queue.get(timeout=10) for _ in workers} == set(operation_ids)
+    start_event.set()
+    results = [result_queue.get(timeout=10) for _ in workers]
+    for worker in workers:
+        worker.join(timeout=10)
+    assert sorted(item[1] for item in results) == ["error", "ok"]
+    assert all(worker.exitcode == 0 for worker in workers)
+    winner = next(item[0] for item in results if item[1] == "ok")
+    loser = next(item[0] for item in results if item[1] == "error")
+
+    with AuditStore(store_path) as store:
+        records = store.list_records()
+        operation_ids_in_store = {item.operation_id for item in records}
+        assert winner in operation_ids_in_store
+        assert f"{winner}:action" in operation_ids_in_store
+        assert loser not in operation_ids_in_store
+        assert f"{loser}:action" not in operation_ids_in_store
+
+
+def test_pending_mutation_reconciles_after_state_commit_before_cleanup(
+    tmp_path: Path, monkeypatch
+) -> None:
+    state_path = tmp_path / "pending-state.json"
+    store_path = tmp_path / "pending-audit"
+    candidate = _candidate("pending-reconcile")
+    with AuditStore(store_path) as store:
+        queue = AuditQueue((candidate,), store=store, state_path=state_path)
+
+        def fail_cleanup() -> None:
+            raise QueueStateError("injected pending cleanup failure")
+
+        monkeypatch.setattr(queue, "_clear_pending_locked", fail_cleanup)
+        with pytest.raises(QueueStateError, match="pending cleanup"):
+            queue.select_next()
+        pending_path = Path(f"{state_path}.pending")
+        assert state_path.is_file()
+        assert pending_path.is_file()
+
+    with AuditStore(store_path) as store:
+        resumed = AuditQueue((candidate,), store=store, state_path=state_path)
+        assert resumed.current_packet is not None
+        assert not Path(f"{state_path}.pending").exists()
+
+
+def test_pending_mutation_with_store_side_effect_but_no_state_fails_closed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    state_path = tmp_path / "pending-orphan-state.json"
+    store_path = tmp_path / "pending-orphan-audit"
+    candidate = _candidate("pending-orphan")
+    with AuditStore(store_path) as store:
+        queue = AuditQueue((candidate,), store=store, state_path=state_path)
+
+        def fail_state(_expected: int) -> None:
+            raise QueueStateError("injected state write failure")
+
+        monkeypatch.setattr(queue, "_persist_state_locked", fail_state)
+        with pytest.raises(QueueStateError, match="state write failure"):
+            queue.select_next()
+        assert Path(f"{state_path}.pending").is_file()
+        assert not state_path.exists()
+
+    with AuditStore(store_path) as store:
+        with pytest.raises(QueueStateError, match="durable records but no committed queue state"):
+            AuditQueue((candidate,), store=store, state_path=state_path)
 
 
 def test_policy_state_and_context_containers_are_deeply_immutable() -> None:

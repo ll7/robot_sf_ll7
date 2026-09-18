@@ -130,6 +130,20 @@ coverage credit.  Replaying an operation is idempotent;
 reusing it with a different payload or saving against a stale queue revision
 fails closed.
 
+When a store and state path are both supplied, the stable sibling state lock
+spans the revision preflight, packet/action/review store writes, and atomic
+state replacement.  A stale concurrent writer therefore fails before it can
+leave an orphan action or review in the store.  A short-lived pending sidecar
+(`state.json.pending`) records the durable record identities and material fields
+across the crash window.  Reload reconciles a fully committed state and clears the sidecar;
+partial or uncommitted durable records fail closed instead of being presented
+as committed queue actions.
+
+Review operation bindings retain the durable review ID.  After reload, an
+operation replay queries the authoritative `AuditStore` and returns the stored
+receipt—including its original timestamp—without advancing queue state.  A
+missing authoritative receipt or changed material is an explicit conflict.
+
 BA-03 remains the annotation backup/restore owner.  Use its canonical
 `AuditStore.export`/`AuditStore.restore` for annotation history; queue state is
 an additional local JSON snapshot and does not replace the audit journal.

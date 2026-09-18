@@ -331,6 +331,15 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_references=("#9384",),
     ),
     (
+        "robot_sf/analysis_workbench/review_experiment_loop.py",
+        "run",
+        "native_config is not None and normalized_admission is not None",
+    ): _review(
+        "Native executor construction follows a successful admission preflight that sets both values; this assertion narrows the validated internal pair before adapter construction.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9296",),
+    ),
+    (
         "robot_sf/analysis_workbench/review_ai.py",
         "_redact_config",
         "isinstance(cleaned, dict)",

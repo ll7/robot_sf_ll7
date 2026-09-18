@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -1187,6 +1188,35 @@ def test_api_publication_rejects_parent_move_before_final_link(
         if output_link.is_symlink():
             output_link.unlink()
         outside.rmdir()
+
+
+def test_api_publication_cleans_link_after_output_move_at_link_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A move immediately before link cannot leave a report outside the root."""
+    with tempfile.TemporaryDirectory(prefix="ba01-publication-", dir="/dev/shm") as name:
+        root = Path(name)
+        _stage(root)
+        outside = root.parent / f"{root.name}-outside"
+        original_link = review_context.os.link
+        moved = False
+
+        def move_before_link(*args: object, **kwargs: object) -> object:
+            nonlocal moved
+            if not moved:
+                (root / "out").rename(outside)
+                (root / "out").mkdir()
+                moved = True
+            return original_link(*args, **kwargs)
+
+        monkeypatch.setattr(review_context.os, "link", move_before_link)
+        result = run(_request(root), base=root)
+
+        assert result.status == "failed"
+        assert "output directory replaced during publication" in result.reason
+        assert not (outside / OUTPUT_REPORT_FILENAME).exists()
+        assert not any(outside.iterdir())
+        assert not any((root / "out").iterdir())
 
 
 def test_canonical_source_selection_never_silently_merges(tmp_path: Path) -> None:

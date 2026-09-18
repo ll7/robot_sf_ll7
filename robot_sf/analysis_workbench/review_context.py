@@ -1666,10 +1666,128 @@ def _rename_noreplace(
         )
 
 
+def _create_private_quarantine(directory_fd: int) -> tuple[str, int]:
+    """Create a mode-0700 quarantine directory below a retained directory.
+
+    Returns:
+        The quarantine directory name and its open descriptor.
+    """
+    for _ in range(128):
+        quarantine_name = f".ba01-cleanup-{secrets.token_hex(16)}"
+        try:
+            os.mkdir(quarantine_name, 0o700, dir_fd=directory_fd)
+        except FileExistsError:
+            continue
+        try:
+            return (
+                quarantine_name,
+                os.open(
+                    quarantine_name,
+                    _descriptor_directory_flags(),
+                    dir_fd=directory_fd,
+                ),
+            )
+        except BaseException:
+            try:
+                os.rmdir(quarantine_name, dir_fd=directory_fd)
+            except OSError:
+                pass
+            raise
+    raise OSError(errno.EEXIST, "private cleanup quarantine allocation failed")
+
+
+def _restore_quarantined_entry(
+    quarantine_fd: int,
+    entry_name: str,
+    directory_fd: int,
+    original_name: str,
+) -> None:
+    """Best-effort restore after a quarantine identity mismatch."""
+    try:
+        _rename_noreplace(
+            entry_name,
+            original_name,
+            source_fd=quarantine_fd,
+            destination_fd=directory_fd,
+        )
+    except (FileExistsError, FileNotFoundError, OSError):
+        pass
+
+
+def _quarantined_entry_matches(
+    quarantine_fd: int,
+    entry_name: str,
+    identity: tuple[int, int],
+) -> bool:
+    """Return whether a quarantined entry is still our regular-file inode."""
+    entry = os.stat(entry_name, dir_fd=quarantine_fd, follow_symlinks=False)
+    return stat.S_ISREG(entry.st_mode) and (entry.st_dev, entry.st_ino) == identity
+
+
+def _unlink_owned_entry_same_filesystem(
+    directory_fd: int,
+    name: str,
+    identity: tuple[int, int],
+) -> bool:
+    """Retire an owned entry through a private quarantine on its filesystem.
+
+    The regular cleanup helper uses a process-private temporary directory, but
+    that directory may live on a different filesystem from an output root such
+    as ``/dev/shm``.  Publication cleanup needs a same-filesystem quarantine so
+    a raced output directory can still be cleaned by its retained descriptor.
+    The quarantine directory is mode ``0700`` and is removed after a second
+    identity check, so the final unlink remains conditional on our inode.
+
+    Returns:
+        ``True`` when the owned entry was removed; ``False`` otherwise.
+    """
+    if directory_fd < 0:
+        return False
+    quarantine_name: str
+    quarantine_fd: int
+    entry_name = f"entry-{secrets.token_hex(16)}"
+    try:
+        quarantine_name, quarantine_fd = _create_private_quarantine(directory_fd)
+    except OSError:
+        return False
+    try:
+        try:
+            _rename_noreplace(
+                name,
+                entry_name,
+                source_fd=directory_fd,
+                destination_fd=quarantine_fd,
+            )
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            if error.errno in {errno.ENOTSUP, errno.EXDEV, errno.EACCES, errno.EPERM}:
+                return False
+            raise
+        if not _quarantined_entry_matches(quarantine_fd, entry_name, identity):
+            _restore_quarantined_entry(quarantine_fd, entry_name, directory_fd, name)
+            return False
+        if not _quarantined_entry_matches(quarantine_fd, entry_name, identity):
+            _restore_quarantined_entry(quarantine_fd, entry_name, directory_fd, name)
+            return False
+        os.unlink(entry_name, dir_fd=quarantine_fd)
+        return True
+    except (OSError, ValueError):
+        return False
+    finally:
+        os.close(quarantine_fd)
+        try:
+            os.rmdir(quarantine_name, dir_fd=directory_fd)
+        except OSError:
+            pass
+
+
 def _unlink_owned_entry(  # noqa: C901
     directory_fd: int,
     name: str,
     identity: tuple[int, int],
+    *,
+    same_filesystem: bool = False,
 ) -> bool:
     """Retire an owned name without ever unlinking a raced replacement.
 
@@ -1686,6 +1804,8 @@ def _unlink_owned_entry(  # noqa: C901
         ``True`` when the original name was atomically retired, otherwise
         ``False`` when the name was absent, unsupported, or not owned.
     """
+    if same_filesystem:
+        return _unlink_owned_entry_same_filesystem(directory_fd, name, identity)
     if directory_fd < 0:
         return False
     cleanup_path: Path | None = None
@@ -1749,7 +1869,12 @@ def _release_empty_output(output_directory: _ReservedOutputDirectory | None) -> 
             for name in tuple(output_directory.published_names):
                 identity = output_directory.published_identities.get(name)
                 if identity is not None:
-                    _unlink_owned_entry(output_directory.directory_fd, name, identity)
+                    _unlink_owned_entry(
+                        output_directory.directory_fd,
+                        name,
+                        identity,
+                        same_filesystem=True,
+                    )
             output_directory.published_names.clear()
             output_directory.published_identities.clear()
         if output_directory.parent_fd >= 0 and _output_directory_matches_entry(output_directory):
@@ -3130,7 +3255,40 @@ def _assert_published_output_identity(
         )
 
 
-def _publish_output(  # noqa: C901, PLR0912
+def _assert_publication_current(
+    output_directory: _ReservedOutputDirectory | None,
+    parent_guard: _OutputParentGuard | None,
+) -> None:
+    """Apply the active root or parent identity guard before/after publication."""
+    if output_directory is not None:
+        _assert_output_directory_current(output_directory)
+    elif parent_guard is not None:
+        _assert_output_parent_current(parent_guard)
+
+
+def _finish_publication(
+    publication_fd: int,
+    temporary_name: str,
+    final_name: str,
+    retained_identity: tuple[int, int],
+    output_directory: _ReservedOutputDirectory | None,
+    parent_guard: _OutputParentGuard | None,
+) -> None:
+    """Validate, retire, and flush one descriptor-bound publication."""
+    _assert_published_output_identity(publication_fd, final_name, retained_identity)
+    if not _unlink_owned_entry(
+        publication_fd,
+        temporary_name,
+        retained_identity,
+        same_filesystem=True,
+    ):
+        raise ReviewContractsValidationError(["output temporary entry could not be retired safely"])
+    _assert_publication_current(output_directory, parent_guard)
+    os.fsync(publication_fd)
+    _assert_publication_current(output_directory, parent_guard)
+
+
+def _publish_output(
     directory_fd: int,
     temporary_name: str,
     final_name: str,
@@ -3142,38 +3300,20 @@ def _publish_output(  # noqa: C901, PLR0912
 ) -> None:
     """Publish one fsync'd temporary file without replacing an existing name.
 
-    The caller's retained descriptor is an admission anchor, not the final
-    publication authority.  Reopen the visible parent from that anchor after
-    the last guard so a parent moved and replaced during the preceding checks
-    cannot turn the next link operation into a write through a moved fd.
+    The caller's retained descriptor is both the identity-stable publication
+    authority and the cleanup anchor.  A post-link guard rejects a directory
+    move, and identity-conditional cleanup removes any failed publication from
+    that same descriptor even when the directory crossed a filesystem boundary.
     """
-    publication_fd = directory_fd
-    publication_fd_owned = False
-    retained_identity: tuple[int, int] | None = None
+    publication_fd = output_directory.directory_fd if output_directory is not None else directory_fd
+    _assert_publication_current(output_directory, parent_guard)
+    retained_identity = _retained_output_identity(
+        publication_fd,
+        temporary_name,
+        temporary_fd,
+    )
+    _assert_publication_current(output_directory, parent_guard)
     try:
-        if output_directory is not None:
-            _assert_output_directory_current(output_directory)
-            publication_fd = _open_current_output_directory(output_directory)
-            publication_fd_owned = True
-        elif parent_guard is not None:
-            _assert_output_parent_current(parent_guard)
-            publication_fd = _open_current_output_parent(parent_guard)
-            publication_fd_owned = True
-        retained_identity = _retained_output_identity(
-            publication_fd,
-            temporary_name,
-            temporary_fd,
-        )
-        if output_directory is not None:
-            _assert_output_directory_current(output_directory)
-            os.close(publication_fd)
-            publication_fd = -1
-            publication_fd = _open_current_output_directory(output_directory)
-        elif parent_guard is not None:
-            _assert_output_parent_current(parent_guard)
-            os.close(publication_fd)
-            publication_fd = -1
-            publication_fd = _open_current_output_parent(parent_guard)
         # A hard-link publication is atomic on the same filesystem and
         # fails with EEXIST instead of replacing a final name or symlink.
         os.link(
@@ -3196,36 +3336,25 @@ def _publish_output(  # noqa: C901, PLR0912
     if output_directory is not None:
         output_directory.published_identities[final_name] = retained_identity
     try:
-        _assert_published_output_identity(publication_fd, final_name, retained_identity)
-        if not _unlink_owned_entry(publication_fd, temporary_name, retained_identity):
-            raise ReviewContractsValidationError(
-                ["output temporary entry could not be retired safely"]
-            )
-        if output_directory is not None:
-            _assert_output_directory_current(output_directory)
-        if parent_guard is not None:
-            _assert_output_parent_current(parent_guard)
-        if output_directory is not None:
-            _assert_output_directory_current(output_directory)
-        if parent_guard is not None:
-            _assert_output_parent_current(parent_guard)
-        os.fsync(publication_fd)
-        # Recheck after the final fsync guard so a move injected immediately
-        # after that guard cannot return a successful publication.
-        if output_directory is not None:
-            _assert_output_directory_current(output_directory)
-        if parent_guard is not None:
-            _assert_output_parent_current(parent_guard)
+        _finish_publication(
+            publication_fd,
+            temporary_name,
+            final_name,
+            retained_identity,
+            output_directory,
+            parent_guard,
+        )
     except BaseException:
-        if retained_identity is not None:
-            _unlink_owned_entry(publication_fd, final_name, retained_identity)
+        _unlink_owned_entry(
+            publication_fd,
+            final_name,
+            retained_identity,
+            same_filesystem=True,
+        )
         published_names.discard(final_name)
         if output_directory is not None:
             output_directory.published_identities.pop(final_name, None)
         raise
-    finally:
-        if publication_fd_owned and publication_fd >= 0:
-            os.close(publication_fd)
 
 
 def _atomic_materialize_no_replace(  # noqa: C901
@@ -3294,6 +3423,7 @@ def _atomic_materialize_no_replace(  # noqa: C901
                         directory_fd,
                         temporary_name,
                         (retained_stat.st_dev, retained_stat.st_ino),
+                        same_filesystem=output_directory is not None,
                     )
             except (OSError, ValueError):
                 pass

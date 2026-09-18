@@ -476,6 +476,9 @@ _FAST_FILES = {
     # Paired-effect metric-contract tests are deterministic schema, provenance,
     # and materialization coverage for the native counterfactual producer.
     "test_paired_effect_metric_contract.py",
+    # Offline synchronized review-panel contract and runtime-model tests are
+    # deterministic coverage for the SREV-16 renderer component.
+    "test_review_panels.py",
     # Operational-quantities tests are deterministic synthetic arithmetic
     # coverage for the changed benchmark producer (issue #9350).
     "test_operational_quantities.py",
@@ -968,6 +971,9 @@ _FAST_FILES = {
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).
     "test_review_execute.py",
+    # SREV-24 loop tests are deterministic journal, budget, and recovery
+    # contracts; keep their changed coverage in fast shards (issue #9296).
+    "test_review_experiment_loop.py",
     # SREV-02 review-import tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9271).
     "test_review_import.py",

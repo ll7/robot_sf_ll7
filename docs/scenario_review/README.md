@@ -15,6 +15,10 @@ The contracts are consumed by offline components; the first consumer is the
 (`python -m robot_sf.render.review_workbench`), which renders a local,
 network-free artifact/provenance view plus a presentation plan.
 
+The synchronized SREV-16 scene/video/metric/event extension is documented in
+[`review_panels.md`](./review_panels.md) and runs with
+`python -m robot_sf.render.review_panels`.
+
 ## Leaf fast-lane registration convention
 
 Scenario-review leaves that add a deterministic test file must also register

@@ -97,6 +97,14 @@ episode × registry schedule are recorded as errors and never count as clear or
 flagged evidence. If the registry is unavailable, the report remains
 incomplete with an explicit missing-registry deficit.
 
+The versioned report retains the typed readable-episode × detector schedule and
+attempts, ordinary-control candidate/reviewed IDs, materialization rows, and
+finding representative/context-control IDs. Validation recomputes each gate
+from those episode-level records before admitting a complete status; aggregate
+counts or booleans alone cannot be promoted by deleting a deficit. These
+records provide internal consistency evidence only: the report digest remains
+an unkeyed integrity token, not authenticated evaluator provenance.
+
 When a source or scan revision is active, a BA-03 `ReviewRecord.source_revision`
 must carry the active revision token. Reviews with unavailable or stale
 revision provenance remain visible but cannot enter the human denominator.

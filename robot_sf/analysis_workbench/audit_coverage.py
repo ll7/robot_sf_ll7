@@ -728,6 +728,7 @@ class AuditHealthReport:
     findings: Mapping[str, Any] = field(default_factory=dict)
     materialization: Mapping[str, Any] = field(default_factory=dict)
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
+    evidence: Mapping[str, Any] = field(default_factory=dict)
     limitations: tuple[str, ...] = ()
     report_digest: str = ""
 
@@ -745,6 +746,7 @@ class AuditHealthReport:
             ("findings", self.findings),
             ("materialization", self.materialization),
             ("diagnostics", self.diagnostics),
+            ("evidence", self.evidence),
         ):
             if not isinstance(value, Mapping):
                 raise AuditCoverageError(f"report.{name} must be a mapping")
@@ -761,6 +763,7 @@ class AuditHealthReport:
         object.__setattr__(self, "findings", _freeze_json(self.findings))
         object.__setattr__(self, "materialization", _freeze_json(self.materialization))
         object.__setattr__(self, "diagnostics", _freeze_json(self.diagnostics))
+        object.__setattr__(self, "evidence", _freeze_json(self.evidence))
         object.__setattr__(
             self,
             "limitations",
@@ -852,6 +855,8 @@ class AuditHealthReport:
             "diagnostics": _thaw_json(self.diagnostics),
             "limitations": list(self.limitations),
         }
+        if self.evidence:
+            result["evidence"] = _thaw_json(self.evidence)
         if include_digest:
             result["report_digest"] = self.report_digest
         return result
@@ -928,6 +933,7 @@ class AuditHealthReport:
             findings=payload["findings"],
             materialization=payload["materialization"],
             diagnostics=payload["diagnostics"],
+            evidence=payload.get("evidence", {}),
             limitations=tuple(payload["limitations"]),
             report_digest=payload["report_digest"],
         )
@@ -1239,6 +1245,20 @@ def _normalize_signals(  # noqa: C901
         if existing is None or severity[item.status] > severity[existing.status]:
             collapsed[key] = item
     return tuple(collapsed[key] for key in sorted(collapsed))
+
+
+def _detector_schedule(
+    scan: Any, rows: Sequence[ExpectedEpisode], detector_registry: Any
+) -> tuple[dict[str, str], ...]:
+    """Return the typed readable-episode x detector schedule evidence."""
+
+    detector_ids = _detector_ids(scan, detector_registry)
+    readable_ids = sorted(row.episode_id for row in rows if row.readable)
+    return tuple(
+        {"episode_id": episode_id, "detector_id": detector_id}
+        for episode_id in readable_ids
+        for detector_id in detector_ids
+    )
 
 
 def _review_values(
@@ -1720,7 +1740,7 @@ def _materialization_summary(value: Any) -> tuple[dict[str, int], list[Mapping[s
         values = ()
     statuses = Counter()
     rows: list[Mapping[str, Any]] = []
-    for item in values:
+    for index, item in enumerate(values, start=1):
         raw = _mapping(item, name="materialization[]")
         status = (
             _token(raw.get("status") or raw.get("fidelity"), default="unavailable")
@@ -1734,7 +1754,15 @@ def _materialization_summary(value: Any) -> tuple[dict[str, int], list[Mapping[s
         elif status not in {"unverifiable", "unavailable"}:
             status = "unavailable"
         statuses[status] += 1
-        rows.append({**raw, "status": status})
+        rows.append(
+            {
+                "episode_id": _token(
+                    raw.get("episode_id") or raw.get("row_id"),
+                    default=f"materialization-{index}",
+                ),
+                "status": status,
+            }
+        )
     return (
         {
             "total": sum(statuses.values()),
@@ -2073,10 +2101,19 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if row.readable and row.ordinary_control:
             control_groups[(row.planner_id, row.scenario_group)].append(row)
     control_gaps: list[dict[str, Any]] = []
+    control_evidence: list[dict[str, Any]] = []
     control_reviewed = 0
     for (planner, group), members in sorted(control_groups.items()):
         reviewed = sorted({row.episode_id for row in members} & full_human_ids)
         control_reviewed += min(len(reviewed), active_protocol.ordinary_control_review_target)
+        control_evidence.append(
+            {
+                "planner_id": planner,
+                "scenario_group": group,
+                "candidate_episode_ids": sorted(row.episode_id for row in members),
+                "reviewed_episode_ids": reviewed,
+            }
+        )
         if len(reviewed) < active_protocol.ordinary_control_review_target:
             control_gaps.append(
                 {
@@ -2202,6 +2239,14 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "diagnostics": diagnostic_summary,
         "status": status,
     }
+    evidence = {
+        "readable_episode_ids": sorted(readable_ids),
+        "detector_schedule": list(_detector_schedule(source_scan, rows, detector_registry)),
+        "detector_attempts": [item.to_dict() for item in attempts],
+        "ordinary_control_groups": control_evidence,
+        "materialization_rows": [dict(item) for item in materialization_rows],
+        "finding_reviews": [dict(item) for item in finding_summary["rows"]],
+    }
     limitations = (
         "Operational coverage accounting is not a statistical confidence bound.",
         "Coverage does not prove benchmark validity, absence of bugs, or causal explanations.",
@@ -2219,6 +2264,7 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
         findings=finding_summary,
         materialization=materialization_counts,
         diagnostics=diagnostic_summary,
+        evidence=evidence,
         limitations=limitations,
     )
 
@@ -2560,6 +2606,240 @@ def _validate_report_accounting(payload: Mapping[str, Any], protocol: AuditProto
         raise AuditCoverageError("strata reviewed IDs do not match full_human_ids")
 
 
+def _validate_detector_evidence(  # noqa: C901, PLR0912
+    payload: Mapping[str, Any], evidence: Mapping[str, Any], protocol: AuditProtocol
+) -> None:
+    """Validate the typed detector schedule and attempt evidence."""
+
+    coverage = payload["counts"]["coverage"]
+    detectors = payload["counts"]["detectors"]
+    readable_ids = tuple(evidence["readable_episode_ids"])
+    if len(readable_ids) != len(set(readable_ids)):
+        raise AuditCoverageError("detector evidence contains duplicate readable episode IDs")
+    if len(readable_ids) != coverage["readable"]:
+        raise AuditCoverageError("detector readable episode evidence does not match inventory")
+    readable_set = set(readable_ids)
+
+    schedule_keys: list[tuple[str, str]] = []
+    for item in evidence["detector_schedule"]:
+        key = (item["episode_id"], item["detector_id"])
+        if key in schedule_keys:
+            raise AuditCoverageError("detector schedule contains duplicate episode attempts")
+        if item["episode_id"] not in readable_set:
+            raise AuditCoverageError("detector schedule contains an unreadable episode")
+        schedule_keys.append(key)
+    schedule = set(schedule_keys)
+    if schedule and {episode_id for episode_id, _ in schedule} != readable_set:
+        raise AuditCoverageError("detector schedule does not cover readable episodes")
+    if (
+        payload["status"] != STATUS_INCOMPLETE
+        and protocol.require_detector_attempts
+        and readable_set
+        and not schedule
+    ):
+        raise AuditCoverageError("complete report lacks typed detector schedule evidence")
+
+    attempts: list[DetectorAttempt] = []
+    attempt_keys: set[tuple[str, str]] = set()
+    for item in evidence["detector_attempts"]:
+        try:
+            attempt = DetectorAttempt(
+                episode_id=item["episode_id"],
+                detector_id=item["detector_id"],
+                status=item["status"],
+                detector_version=item["detector_version"],
+                reason_code=item["reason_code"],
+                message=item["message"],
+                attempt_id=item["attempt_id"],
+            )
+        except (AuditCoverageError, KeyError, TypeError, ValueError) as exc:
+            raise AuditCoverageError("detector evidence contains an invalid typed attempt") from exc
+        key = (attempt.episode_id, attempt.detector_id)
+        if key in attempt_keys:
+            raise AuditCoverageError("detector evidence contains duplicate attempts")
+        attempt_keys.add(key)
+        attempts.append(attempt)
+    if not schedule.issubset(attempt_keys):
+        raise AuditCoverageError("detector evidence is missing a scheduled attempt")
+    if any(
+        (item.episode_id, item.detector_id) not in schedule and item.status in {"clear", "flagged"}
+        for item in attempts
+    ):
+        raise AuditCoverageError("detector evidence has evaluable unscheduled attempts")
+
+    observed = Counter(item.status for item in attempts)
+    expected_totals = {
+        "scheduled": len(attempts),
+        "evaluable": observed["flagged"] + observed["clear"],
+        "flagged": observed["flagged"],
+        "clear": observed["clear"],
+        "unavailable": observed["unavailable"],
+        "error": observed["error"],
+    }
+    if any(detectors[key] != value for key, value in expected_totals.items()):
+        raise AuditCoverageError("detector totals do not match typed attempt evidence")
+    detector_ids = {item.detector_id for item in attempts} | {
+        detector_id for _, detector_id in schedule
+    }
+    by_detector = detectors["by_detector"]
+    if not detector_ids.issubset(by_detector):
+        raise AuditCoverageError("detector evidence is missing a detector aggregate")
+    for detector_id in detector_ids:
+        detector_counts = Counter(
+            item.status for item in attempts if item.detector_id == detector_id
+        )
+        expected = {
+            "scheduled": sum(detector_counts.values()),
+            "evaluable": detector_counts["flagged"] + detector_counts["clear"],
+            "flagged": detector_counts["flagged"],
+            "clear": detector_counts["clear"],
+            "unavailable": detector_counts["unavailable"],
+            "error": detector_counts["error"],
+        }
+        if by_detector[detector_id] != expected:
+            raise AuditCoverageError("detector aggregate does not match typed attempt evidence")
+
+
+def _validate_control_evidence(  # noqa: C901
+    payload: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> None:
+    """Validate candidate and reviewed IDs for each ordinary-control group."""
+
+    reviews = payload["counts"]["reviews"]
+    full_human_ids = set(reviews["full_human_ids"])
+    readable_ids = set(evidence["readable_episode_ids"])
+    groups = evidence["ordinary_control_groups"]
+    target = payload["protocol"]["ordinary_control_review_target"]
+    seen_groups: set[tuple[str, str]] = set()
+    expected_gaps: list[dict[str, Any]] = []
+    candidate_count = 0
+    reviewed_count = 0
+    for group in groups:
+        group_key = (group["planner_id"], group["scenario_group"])
+        if group_key in seen_groups:
+            raise AuditCoverageError("ordinary-control evidence contains duplicate groups")
+        seen_groups.add(group_key)
+        candidates = tuple(group["candidate_episode_ids"])
+        reviewed = tuple(group["reviewed_episode_ids"])
+        if len(candidates) != len(set(candidates)):
+            raise AuditCoverageError("ordinary-control candidates contain duplicates")
+        if len(reviewed) != len(set(reviewed)):
+            raise AuditCoverageError("ordinary-control reviewed IDs contain duplicates")
+        if not set(candidates).issubset(readable_ids):
+            raise AuditCoverageError("ordinary-control candidate is not a readable episode")
+        if not set(reviewed).issubset(set(candidates)):
+            raise AuditCoverageError("ordinary-control review is outside its candidates")
+        if not set(reviewed).issubset(full_human_ids):
+            raise AuditCoverageError("ordinary-control review is not a typed human review")
+        candidate_count += len(candidates)
+        reviewed_count += min(len(reviewed), target)
+        if len(reviewed) < target:
+            expected_gaps.append(
+                {
+                    "planner_id": group["planner_id"],
+                    "scenario_group": group["scenario_group"],
+                    "candidate_ids": list(candidates),
+                }
+            )
+    expected_gaps.sort(key=lambda item: (item["planner_id"], item["scenario_group"]))
+    if reviews["ordinary_control_candidates"] != candidate_count:
+        raise AuditCoverageError("ordinary-control candidate count does not match evidence")
+    if reviews["ordinary_control_groups"] != len(groups):
+        raise AuditCoverageError("ordinary-control group count does not match evidence")
+    if reviews["ordinary_control_required"] != len(groups) * target:
+        raise AuditCoverageError("ordinary-control requirement does not match evidence")
+    if reviews["ordinary_control_reviewed"] != reviewed_count:
+        raise AuditCoverageError("ordinary-control reviewed count does not match evidence")
+    if not _canonical_equal(reviews["ordinary_control_gap_groups"], expected_gaps):
+        raise AuditCoverageError("ordinary-control gaps do not match candidate/review evidence")
+
+
+def _validate_materialization_evidence(
+    payload: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> None:
+    """Validate aggregate materialization counts against per-row evidence."""
+
+    rows = evidence["materialization_rows"]
+    episode_ids = [item["episode_id"] for item in rows]
+    if len(episode_ids) != len(set(episode_ids)):
+        raise AuditCoverageError("materialization evidence contains duplicate episode IDs")
+    statuses = Counter(item["status"] for item in rows)
+    expected = {
+        "total": len(rows),
+        "verified": statuses["verified"],
+        "diverged": statuses["diverged"],
+        "unverifiable": statuses["unverifiable"],
+        "unavailable": statuses["unavailable"],
+    }
+    if payload["materialization"] != expected:
+        raise AuditCoverageError("materialization counts do not match per-row evidence")
+
+
+def _validate_finding_evidence(  # noqa: C901
+    payload: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> None:
+    """Validate finding representatives and context controls against reviews."""
+
+    findings = payload["findings"]
+    if not _canonical_equal(findings["rows"], evidence["finding_reviews"]):
+        raise AuditCoverageError("finding review evidence does not match finding rows")
+    full_human_ids = set(payload["counts"]["reviews"]["full_human_ids"])
+    readable_ids = set(evidence["readable_episode_ids"])
+    representative_count = 0
+    control_count = 0
+    for finding in findings["rows"]:
+        candidates = tuple(finding["candidate_members"])
+        controls = tuple(finding["control_episode_ids"])
+        if len(candidates) != len(set(candidates)):
+            raise AuditCoverageError("finding candidates contain duplicates")
+        if len(controls) != len(set(controls)):
+            raise AuditCoverageError("finding controls contain duplicates")
+        if not set(candidates).issubset(readable_ids) or not set(controls).issubset(readable_ids):
+            raise AuditCoverageError("finding evidence references an unreadable episode")
+        representative = finding["representative_episode_id"]
+        if representative and representative not in set(candidates):
+            raise AuditCoverageError("finding representative is not a candidate episode")
+        expected_representative_reviewed = bool(representative and representative in full_human_ids)
+        if finding["representative_reviewed"] != expected_representative_reviewed:
+            raise AuditCoverageError("finding representative is not a typed human review")
+        expected_control_reviewed = bool(set(controls) & full_human_ids)
+        if finding["control_reviewed"] != expected_control_reviewed:
+            raise AuditCoverageError("finding context control is not a typed human review")
+        representative_count += int(expected_representative_reviewed)
+        control_count += int(expected_control_reviewed)
+    if findings["representatives_reviewed"] != representative_count:
+        raise AuditCoverageError("finding representative count does not match review IDs")
+    if findings["context_controls_reviewed"] != control_count:
+        raise AuditCoverageError("finding context-control count does not match review IDs")
+
+
+def _validate_episode_evidence(payload: Mapping[str, Any], protocol: AuditProtocol) -> None:
+    """Validate retained episode-level evidence behind completion gates."""
+
+    evidence = payload.get("evidence")
+    if not evidence:
+        if payload["status"] != STATUS_INCOMPLETE:
+            raise AuditCoverageError("complete report lacks retained episode evidence")
+        return
+    required = {
+        "readable_episode_ids",
+        "detector_schedule",
+        "detector_attempts",
+        "ordinary_control_groups",
+        "materialization_rows",
+        "finding_reviews",
+    }
+    missing = required - set(evidence)
+    if missing:
+        raise AuditCoverageError(
+            "episode evidence is missing fields: " + ", ".join(sorted(missing))
+        )
+    _validate_detector_evidence(payload, evidence, protocol)
+    _validate_control_evidence(payload, evidence)
+    _validate_materialization_evidence(payload, evidence)
+    _validate_finding_evidence(payload, evidence)
+
+
 def _validate_complete_matrix(  # noqa: C901, PLR0912
     payload: Mapping[str, Any], protocol: AuditProtocol, *, allow_exceptions: bool
 ) -> None:
@@ -2765,6 +3045,7 @@ def _validate_report_semantics(  # noqa: C901, PLR0912, PLR0915
     if review_counts["full_human_strata"] != sum(item["status"] == "met" for item in strata):
         raise AuditCoverageError("review full_human_strata does not match strata")
     _validate_report_accounting(payload, protocol)
+    _validate_episode_evidence(payload, protocol)
 
     detectors = counts["detectors"]
     by_detector = detectors["by_detector"]

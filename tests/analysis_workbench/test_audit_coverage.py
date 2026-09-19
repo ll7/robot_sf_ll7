@@ -702,6 +702,250 @@ def test_recomputed_complete_report_rejects_impossible_accounting_equations() ->
             complete.from_dict(candidate)
 
 
+def test_complete_report_requires_typed_detector_schedule_and_attempts() -> None:
+    report = evaluate_coverage(
+        [{"episode_id": "e", "planner_id": "p", "scenario_group": "g"}],
+        review_records=[_review("review-e", "e")],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_INCOMPLETE
+    payload = report.to_dict()
+    payload["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["detectors"] = {
+        "scheduled": 1,
+        "evaluable": 1,
+        "flagged": 0,
+        "clear": 1,
+        "unavailable": 0,
+        "error": 0,
+        "by_detector": {
+            "telemetry": {
+                "scheduled": 1,
+                "evaluable": 1,
+                "flagged": 0,
+                "clear": 1,
+                "unavailable": 0,
+                "error": 0,
+            }
+        },
+    }
+    payload["deficits"] = []
+    payload["exceptions"] = []
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+def test_complete_report_requires_reviewed_ordinary_control_candidates() -> None:
+    rows = [
+        {
+            "episode_id": "control",
+            "planner_id": "p",
+            "scenario_group": "g",
+            "ordinary_control": True,
+        },
+        {"episode_id": "reviewed", "planner_id": "p", "scenario_group": "g"},
+    ]
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=[
+            {"episode_id": "control", "detector_id": "telemetry", "status": "clear"},
+            {"episode_id": "reviewed", "detector_id": "telemetry", "status": "clear"},
+        ],
+        review_records=[_review("reviewed-receipt", "reviewed")],
+        detector_registry=_registry(),
+        identity=_identity(),
+    )
+    assert report.status == STATUS_INCOMPLETE
+    payload = report.to_dict()
+    payload["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    for review_counts in (payload["counts"]["reviews"], payload["counts"]["review"]):
+        review_counts["ordinary_control_reviewed"] = 1
+        review_counts["ordinary_control_gap_groups"] = []
+    payload["deficits"] = []
+    payload["exceptions"] = []
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+def test_complete_report_requires_materialization_rows_for_aggregate_counts() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        materialization=[{"episode_id": "episode-success", "status": "diverged"}],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_INCOMPLETE
+    payload = report.to_dict()
+    verified = {"total": 1, "verified": 1, "diverged": 0, "unverifiable": 0, "unavailable": 0}
+    payload["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["materialization"] = verified
+    payload["materialization"] = verified
+    payload["deficits"] = []
+    payload["exceptions"] = []
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+def test_complete_report_requires_finding_representative_typed_review() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews[:1],
+        findings=[
+            {
+                "finding_id": "high-finding",
+                "priority": "high",
+                "candidate_members": ["episode-collision"],
+                "representative_episode_id": "episode-collision",
+            }
+        ],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_INCOMPLETE
+    payload = report.to_dict()
+    payload["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["findings"]["rows"][0]["representative_reviewed"] = True
+    payload["counts"]["findings"]["representatives_reviewed"] = 1
+    payload["deficits"] = []
+    payload["exceptions"] = []
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda item: item["evidence"]["readable_episode_ids"].append("duplicate"),
+        lambda item: item["evidence"]["detector_schedule"].append(
+            dict(item["evidence"]["detector_schedule"][0])
+        ),
+        lambda item: item["evidence"]["detector_schedule"].append(
+            {"episode_id": "unreadable", "detector_id": "telemetry"}
+        ),
+        lambda item: item["evidence"]["detector_attempts"].pop(),
+        lambda item: item["evidence"]["detector_attempts"][0].update(
+            {"status": "error", "reason_code": "", "message": ""}
+        ),
+        lambda item: item["evidence"]["detector_attempts"].append(
+            dict(item["evidence"]["detector_attempts"][0])
+        ),
+        lambda item: item["evidence"]["detector_attempts"].append(
+            {
+                "episode_id": "episode-success",
+                "detector_id": "other",
+                "status": "clear",
+                "detector_version": "",
+                "reason_code": "",
+                "message": "",
+                "attempt_id": "other-attempt",
+            }
+        ),
+        lambda item: item["counts"]["detectors"].update({"error": 1}),
+        lambda item: item["counts"]["detectors"]["by_detector"].pop("telemetry"),
+        lambda item: item["counts"]["detectors"]["by_detector"]["telemetry"].update({"clear": 0}),
+        lambda item: item["evidence"]["ordinary_control_groups"][0]["candidate_episode_ids"].append(
+            "episode-success"
+        ),
+        lambda item: item["evidence"]["ordinary_control_groups"].append(
+            deepcopy(item["evidence"]["ordinary_control_groups"][0])
+        ),
+        lambda item: item["evidence"]["ordinary_control_groups"][0].update(
+            {"reviewed_episode_ids": ["episode-collision"]}
+        ),
+    ),
+)
+def test_episode_evidence_rejects_detector_and_control_tampering(mutate) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    payload = report.to_dict()
+    mutate(payload)
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda item: item["evidence"].update(
+            {
+                "materialization_rows": [
+                    {"episode_id": "same", "status": "verified"},
+                    {"episode_id": "same", "status": "verified"},
+                ]
+            }
+        ),
+        lambda item: (
+            item["findings"]["rows"][0].update({"representative_episode_id": "other"}),
+            item["evidence"]["finding_reviews"][0].update({"representative_episode_id": "other"}),
+        ),
+        lambda item: (
+            item["findings"]["rows"][0].update({"representative_reviewed": False}),
+            item["evidence"]["finding_reviews"][0].update({"representative_reviewed": False}),
+        ),
+        lambda item: (
+            item["findings"]["rows"][0].update({"control_reviewed": False}),
+            item["evidence"]["finding_reviews"][0].update({"control_reviewed": False}),
+        ),
+    ),
+)
+def test_episode_evidence_rejects_materialization_and_finding_tampering(mutate) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        findings=[
+            {
+                "finding_id": "high-finding",
+                "priority": "high",
+                "candidate_members": ["episode-success"],
+                "representative_episode_id": "episode-success",
+                "different_context_episode_id": "episode-collision",
+            }
+        ],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_COMPLETE_UNDER_PROTOCOL
+    payload = report.to_dict()
+    mutate(payload)
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
 def test_exceptions_must_be_nonempty_and_match_one_waived_deficit() -> None:
     rows, attempts, reviews = _complete_inputs()
     complete = evaluate_coverage(

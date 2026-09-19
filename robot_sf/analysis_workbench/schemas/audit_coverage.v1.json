@@ -25,6 +25,7 @@
     "exceptions": {"type": "array", "items": {"$ref": "#/$defs/exception"}},
     "findings": {"$ref": "#/$defs/findings"},
     "materialization": {"$ref": "#/$defs/materialization"},
+    "evidence": {"$ref": "#/$defs/evidence"},
     "diagnostics": {
       "type": "object",
       "additionalProperties": {"type": "integer", "minimum": 0}
@@ -150,6 +151,55 @@
           "type": "object",
           "additionalProperties": {"$ref": "#/$defs/detector_totals"}
         }
+      }
+    },
+    "detector_schedule_entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "detector_id"],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "detector_attempt": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "episode_id", "detector_id", "status", "detector_version",
+        "reason_code", "message", "attempt_id"
+      ],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["flagged", "clear", "unavailable", "error"]},
+        "detector_version": {"type": "string"},
+        "reason_code": {"type": "string"},
+        "message": {"type": "string"},
+        "attempt_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "ordinary_control_evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "planner_id", "scenario_group", "candidate_episode_ids",
+        "reviewed_episode_ids"
+      ],
+      "properties": {
+        "planner_id": {"type": "string", "minLength": 1},
+        "scenario_group": {"type": "string", "minLength": 1},
+        "candidate_episode_ids": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        },
+        "reviewed_episode_ids": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "materialization_row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "status"],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["verified", "diverged", "unverifiable", "unavailable"]}
       }
     },
     "reviews": {
@@ -323,6 +373,33 @@
         "context_controls_reviewed": {"type": "integer", "minimum": 0},
         "unresolved_critical_integrity": {"type": "integer", "minimum": 0},
         "rows": {"type": "array", "items": {"$ref": "#/$defs/finding_row"}}
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "readable_episode_ids", "detector_schedule", "detector_attempts",
+        "ordinary_control_groups", "materialization_rows", "finding_reviews"
+      ],
+      "properties": {
+        "readable_episode_ids": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        },
+        "detector_schedule": {
+          "type": "array", "items": {"$ref": "#/$defs/detector_schedule_entry"}
+        },
+        "detector_attempts": {
+          "type": "array", "items": {"$ref": "#/$defs/detector_attempt"}
+        },
+        "ordinary_control_groups": {
+          "type": "array", "items": {"$ref": "#/$defs/ordinary_control_evidence"}
+        },
+        "materialization_rows": {
+          "type": "array", "items": {"$ref": "#/$defs/materialization_row"}
+        },
+        "finding_reviews": {
+          "type": "array", "items": {"$ref": "#/$defs/finding_row"}
+        }
       }
     }
   }

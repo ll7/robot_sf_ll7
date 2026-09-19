@@ -169,6 +169,88 @@ def test_small_helpers_reject_unsafe_json_paths_and_versions(tmp_path: Path) -> 
     assert not review_sessions._version_compatible({"required_component_version": "2.0.0"})[0]
 
 
+def test_lifecycle_anchor_is_monotonic_and_state_path_is_contained(tmp_path: Path) -> None:
+    request = _request(tmp_path, output="lifecycle-anchor")
+    session_id = "manual-lifecycle-session"
+    state = review_sessions._LifecycleState(2, "a" * 32, "complete")
+    assert (
+        review_sessions._remember_lifecycle_state(
+            tmp_path,
+            request,
+            state,
+            session_id=session_id,
+            require_existing=True,
+        )
+        == "journal_lifecycle_anchor_unavailable: current process anchor is missing"
+    )
+    assert (
+        review_sessions._remember_lifecycle_state(tmp_path, request, state, session_id=session_id)
+        is None
+    )
+    assert (
+        review_sessions._remember_lifecycle_state(
+            tmp_path,
+            request,
+            review_sessions._LifecycleState(1, "b" * 32, "complete"),
+            session_id=session_id,
+        )
+        == "journal_lifecycle_replay: lifecycle generation is stale"
+    )
+    assert (
+        review_sessions._remember_lifecycle_state(
+            tmp_path,
+            request,
+            review_sessions._LifecycleState(2, "b" * 32, "complete"),
+            session_id=session_id,
+        )
+        == "journal_lifecycle_replay: lifecycle revision is stale"
+    )
+    assert (
+        review_sessions._remember_lifecycle_state(
+            tmp_path,
+            request,
+            review_sessions._LifecycleState(2, "a" * 32, "running"),
+            session_id=session_id,
+        )
+        == "journal_lifecycle_replay: settled lifecycle cannot return to running"
+    )
+    assert (
+        review_sessions._remember_lifecycle_state(
+            tmp_path,
+            request,
+            review_sessions._LifecycleState(2, "a" * 32, "running"),
+            session_id=session_id,
+            allow_reopen=True,
+        )
+        is None
+    )
+    committed = review_sessions._new_lifecycle_state(
+        tmp_path, request, session_id=session_id, commit=True
+    )
+    assert review_sessions._current_lifecycle_state(tmp_path, request, session_id) == committed
+    newer = review_sessions._LifecycleState(committed.generation + 1, "c" * 32, "failed")
+    review_sessions._set_lifecycle_status(
+        tmp_path, request, newer, session_id=session_id, status="failed"
+    )
+    assert review_sessions._current_lifecycle_state(tmp_path, request, session_id) == newer
+    review_sessions._set_lifecycle_status(
+        tmp_path,
+        request,
+        review_sessions._LifecycleState(newer.generation, newer.revision, "complete"),
+        session_id=session_id,
+        status="complete",
+    )
+    assert review_sessions._current_lifecycle_state(tmp_path, request, session_id).status == (
+        "complete"
+    )
+    with pytest.raises(review_sessions.ReviewSessionError, match="unavailable"):
+        review_sessions._lifecycle_state_path(tmp_path / "missing", request, session_id)
+    linked_base = tmp_path / "linked-base"
+    linked_base.symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(review_sessions.ReviewSessionError, match="not regular"):
+        review_sessions._lifecycle_state_path(linked_base, request, session_id)
+
+
 def test_persisted_native_admission_is_only_a_revalidation_candidate() -> None:
     keys = (
         "schema_version",
@@ -696,6 +778,14 @@ def test_integrity_seal_failures_are_bounded_and_non_secret(tmp_path: Path) -> N
     assert malformed_digest["status"] == "failed"
     assert "sha256" in malformed_digest["reason"]
 
+    seal = json.loads(original)
+    seal["lifecycle_generation"] = "forged"
+    seal_path.write_text(json.dumps(seal), encoding="utf-8")
+    malformed_lifecycle = review_sessions.progress(request, base=tmp_path)
+    assert malformed_lifecycle["status"] == "failed"
+    assert "lifecycle" in malformed_lifecycle["reason"]
+    assert review_sessions.result_navigation(request, base=tmp_path)["status"] == "unavailable"
+
     seal_path.unlink()
     seal_path.symlink_to(output / review_sessions.JOURNAL_FILENAME)
     symlinked = review_sessions.progress(request, base=tmp_path)
@@ -796,6 +886,67 @@ def test_concurrent_start_preserves_active_owner_for_stop(tmp_path: Path) -> Non
     assert session.progress()["status"] == "cancelled"
 
 
+def test_running_lease_tamper_is_bounded_while_owner_can_settle(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    executor = SlowExecutor()
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    worker = threading.Thread(target=session.start)
+    worker.start()
+    assert executor.started.wait(timeout=2)
+    session_id = review_sessions._control_context(request)["session_id"]
+    lease_path = review_sessions._lifecycle_state_path(tmp_path, request, str(session_id))
+    lease = json.loads(lease_path.read_text(encoding="utf-8"))
+    lease["hmac_sha256"] = "0" * 64
+    lease_path.write_text(json.dumps(lease), encoding="utf-8")
+    forged = session.progress()
+    assert forged["status"] == "failed"
+    assert "lifecycle_lease" in forged["reason"]
+    stopped = session.stop()
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert stopped.status == "cancelled"
+
+
+def test_running_lease_shape_tamper_is_bounded(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    executor = SlowExecutor()
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    worker = threading.Thread(target=session.start)
+    worker.start()
+    assert executor.started.wait(timeout=2)
+    session_id = review_sessions._control_context(request)["session_id"]
+    lease_path = review_sessions._lifecycle_state_path(tmp_path, request, str(session_id))
+    original = json.loads(lease_path.read_text(encoding="utf-8"))
+
+    missing_field = dict(original)
+    missing_field.pop("status")
+    lease_path.write_text(json.dumps(missing_field), encoding="utf-8")
+    assert "lease fields are malformed" in session.progress()["reason"]
+
+    malformed_mac = dict(original, hmac_sha256="")
+    lease_path.write_text(json.dumps(malformed_mac), encoding="utf-8")
+    assert "MAC is malformed" in session.progress()["reason"]
+
+    malformed_identity = dict(original, lifecycle_generation="forged")
+    lease_path.write_text(json.dumps(malformed_identity), encoding="utf-8")
+    assert "lifecycle identity is malformed" in session.progress()["reason"]
+
+    stopped = session.stop()
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert stopped.status == "cancelled"
+
+
 def test_start_and_stop_race_serializes_the_inactive_owner_branch(tmp_path: Path) -> None:
     request = _request(tmp_path)
     executor = SlowExecutor(delay_s=0.05)
@@ -835,6 +986,33 @@ def test_start_and_stop_race_serializes_the_inactive_owner_branch(tmp_path: Path
         assert stops[0].status == "complete"
     else:
         assert "session_owner_active" in starts[0].reason or stops[0].status == "cancelled"
+
+
+def test_distinct_controllers_do_not_replace_fresh_lifecycle_lease(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    barrier = threading.Barrier(3)
+    results: list[Any] = []
+
+    def start() -> None:
+        controller = review_sessions.ReviewSession(
+            request,
+            base=tmp_path,
+            executor=FakeExecutor(),
+            source_admission=_proof(tmp_path, request),
+        )
+        barrier.wait()
+        results.append(controller.start())
+
+    first = threading.Thread(target=start)
+    second = threading.Thread(target=start)
+    first.start()
+    second.start()
+    barrier.wait()
+    first.join(timeout=3)
+    second.join(timeout=3)
+    assert not first.is_alive() and not second.is_alive()
+    assert sorted(item.status for item in results) == ["complete", "failed"]
+    assert review_sessions.progress(request, base=tmp_path)["status"] == "complete"
 
 
 def test_cross_controller_stop_reports_existing_owner_contract(tmp_path: Path) -> None:
@@ -1004,12 +1182,195 @@ def test_tampered_report_is_not_navigable(tmp_path: Path) -> None:
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["outcomes"][0]["status"] = "forged"
     report_path.write_text(json.dumps(report), encoding="utf-8")
+    progress = review_sessions.progress(request, base=tmp_path)
+    assert progress["status"] == "failed"
+    assert "integrity_seal" in progress["reason"]
     navigation = review_sessions.result_navigation(request, base=tmp_path)
     assert navigation["status"] == "unavailable"
     assert any(
         marker in navigation["reason"]
         for marker in ("report_identity_mismatch", "journal_integrity_seal_invalid")
     )
+
+
+def test_cancelled_journal_cannot_be_reopened_without_running_lease(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    first_executor = FakeExecutor()
+    cancelled = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=first_executor,
+        source_admission=_proof(tmp_path, request),
+        cancel=lambda: True,
+    )
+    assert cancelled.status == "cancelled"
+    output = tmp_path / request.output_directory
+    journal_path = output / review_sessions.JOURNAL_FILENAME
+    report_path = output / review_sessions.REPORT_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    journal["status"] = "running"
+    journal["stop_reason"] = ""
+    report["status"] = "running"
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    resumed_executor = FakeExecutor()
+    resumed = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        executor=resumed_executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    assert resumed.status == "failed"
+    assert "lifecycle_lease" in resumed.reason
+    assert resumed_executor.calls == []
+    assert review_sessions.progress(request, base=tmp_path)["status"] == "failed"
+
+
+def test_crash_running_lease_reconnects_through_srev24_recovery(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    proof = _proof(tmp_path, request)
+
+    class CrashAfterDispatch(FakeExecutor):
+        def __init__(self) -> None:
+            super().__init__()
+            self.crash = True
+
+        def execute(
+            self,
+            operation_id: str,
+            candidate: dict[str, Any],
+            kind: str,
+            spec: dict[str, Any],
+            attempt: int,
+        ) -> dict[str, Any]:
+            result = super().execute(operation_id, candidate, kind, spec, attempt)
+            if self.crash:
+                self.crash = False
+                raise KeyboardInterrupt("simulated wrapper crash")
+            return result
+
+    executor = CrashAfterDispatch()
+    with pytest.raises(KeyboardInterrupt):
+        review_sessions.run(
+            request,
+            base=tmp_path,
+            autonomous=True,
+            executor=executor,
+            source_admission=proof,
+        )
+    running = review_sessions.progress(request, base=tmp_path)
+    assert running["status"] == "running"
+    resumed = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        executor=executor,
+        source_admission=proof,
+    )
+    assert resumed.status == "complete", resumed.reason
+    assert review_sessions.progress(request, base=tmp_path)["status"] == "complete"
+
+
+def test_settled_anchor_rejects_replayed_running_lease(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    proof = _proof(tmp_path, request)
+    executor = SlowExecutor()
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=proof,
+    )
+    worker = threading.Thread(target=session.start)
+    worker.start()
+    assert executor.started.wait(timeout=2)
+    session_id = review_sessions._control_context(request)["session_id"]
+    lease_path = review_sessions._lifecycle_state_path(tmp_path, request, str(session_id))
+    saved_lease = lease_path.read_bytes()
+    stopped = session.stop()
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert stopped.status == "cancelled"
+
+    output = tmp_path / request.output_directory
+    journal_path = output / review_sessions.JOURNAL_FILENAME
+    report_path = output / review_sessions.REPORT_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    journal["status"] = "running"
+    journal["stop_reason"] = ""
+    report["status"] = "running"
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    lease_path.parent.mkdir(parents=True, exist_ok=True)
+    lease_path.write_bytes(saved_lease)
+    resumed_executor = FakeExecutor()
+    resumed = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        executor=resumed_executor,
+        source_admission=proof,
+    )
+    assert resumed.status == "failed"
+    assert "lifecycle_replay" in resumed.reason
+    assert resumed_executor.calls == []
+
+
+def test_lifecycle_anchor_rejects_complete_rollback_after_new_cancellation(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    proof = _proof(tmp_path, request)
+    completed = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=proof,
+    )
+    assert completed.status == "complete"
+    output = tmp_path / request.output_directory
+    saved = tmp_path / "saved-complete"
+    shutil.copytree(output, saved)
+    shutil.rmtree(output)
+
+    cancelled = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=proof,
+        cancel=lambda: True,
+    )
+    assert cancelled.status == "cancelled"
+    shutil.rmtree(output)
+    shutil.copytree(saved, output)
+
+    replayed_progress = review_sessions.progress(request, base=tmp_path)
+    replayed_navigation = review_sessions.result_navigation(request, base=tmp_path)
+    assert replayed_progress["status"] == "failed"
+    assert "lifecycle_replay" in replayed_progress["reason"]
+    assert replayed_navigation["status"] == "unavailable"
+    replay_executor = FakeExecutor()
+    replayed_resume = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        resume=True,
+        executor=replay_executor,
+        source_admission=proof,
+    )
+    assert replayed_resume.status == "failed"
+    assert "lifecycle_replay" in replayed_resume.reason
+    assert replay_executor.calls == []
 
 
 def test_semantic_journal_and_nested_admission_tampering_fail_closed(tmp_path: Path) -> None:

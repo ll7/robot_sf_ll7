@@ -72,17 +72,32 @@ different controller cannot cancel a live owner; it receives the delegated
 `progress()` and `result_navigation()` only read the durable journal or report
 and never acquire a dispatch lock. Read APIs revalidate journal/report
 identity against the selected request, recipe, source bytes, and session
-context before exposing it; stale or tampered state is reported as diagnostic
-failure/unavailable rather than adopted as current progress.
+context before exposing it. A mutable `running` journal is readable or
+recoverable only while its token-keyed lifecycle lease is valid; a settled
+journal/report pair is readable only with its token-keyed integrity seal.
+Stale or tampered state is reported as diagnostic failure/unavailable rather
+than adopted as current progress.
 
 Because the output directory is writable by its owner, semantic consistency or
-an unkeyed SHA-256 cannot authenticate a rewritten complete result. A complete
-start therefore requires a caller-supplied loopback `session_token`. The
-wrapper writes `review-session-integrity.v1.json`, an HMAC over the exact
-journal/report bytes and their diagnostic identity; the token is never
-persisted. Reconnect/resume/read calls must provide the same token, while a
-missing or rotated token and a changed journal/report fail closed. This is a
+an unkeyed SHA-256 cannot authenticate a rewritten result. Every settled state
+therefore requires a caller-supplied `session_token`; the wrapper writes
+`review-session-integrity.v1.json`, an HMAC over the exact journal/report bytes,
+their status, and their diagnostic identity. While SREV-24 owns a mutable
+running journal, the wrapper keeps a separate HMAC lifecycle lease so a
+crash-safe resume can still use SREV-24's operation-ID recovery. The token is
+never persisted. Reconnect/resume/read calls must provide the same token, while
+a missing or rotated token and a changed journal/report fail closed. This is a
 diagnostic integrity boundary, not scientific evidence.
+
+The lifecycle revision is also held in a process-local monotonic anchor. This
+rejects an old valid complete triplet replayed after a newer cancellation in
+the same process. Owner-writable files cannot provide an anti-rollback root
+across process restarts: a restarted process may inspect an authenticated
+complete snapshot diagnostically, but that snapshot cannot authorize a new
+resume or control operation without the current lifecycle anchor. A durable
+external monotonic store would be required for stronger cross-process
+rollback protection; this component does not pretend that a plain digest
+provides it.
 
 The optional `session_context` request mapping carries the selected
 `campaign_id`, `episode_id`, `source_revision`, `selection_revision`, and
@@ -96,8 +111,9 @@ Complete output contains the delegated
 `review-session.v1.json`, `review-session.v1.html`, the local browser module,
 and the token-keyed integrity seal. Partial, failed, unavailable, and
 cancelled results carry no complete artifacts, while the delegated
-journal/report remain available for diagnosis and an explicit resume when
-SREV-24 permits it. Native SREV-24 admission records retain their launcher
+journal/report and settled-state seal remain available for diagnosis and an
+explicit resume when SREV-24 permits it. Native SREV-24 admission records
+retain their launcher
 receipt/root/preservation shape; when a native complete session is read or
 resumed, pass the launcher admission companion again for fresh receipt/root
 validation. Injected fixture proofs use their separate measured shape and must
@@ -146,4 +162,6 @@ immutable. Paths are relative and contained under the caller's base; output
 collisions, traversal, symlinks, malformed/non-finite JSON, incompatible
 versions, missing capabilities, and stale admission state are rejected or
 reported unavailable. The SREV-24 journal is the crash-safe recovery
-authority; this adapter does not copy or reinterpret its accounting.
+authority; this adapter does not copy or reinterpret its accounting. The
+short-lived lifecycle lease is kept in a contained, hidden state directory
+under the same base and is removed after each settled state.

@@ -16,7 +16,7 @@ benchmark or scientific evidence.
 # The controller deliberately keeps its preview/dispatch/control boundary in
 # one auditable module.  Splitting it into speculative adapters would make it
 # easier to accidentally bypass SREV-24's journal owner.
-# ruff: noqa: C901, D102, D107, DOC201, PLR0912, PLR0913, T201
+# ruff: noqa: C901, D102, D107, DOC201, PLR0912, PLR0913, PLR0915, T201
 
 from __future__ import annotations
 
@@ -68,6 +68,8 @@ JOURNAL_FILENAME = loop.SESSION_JOURNAL_FILENAME
 REPORT_FILENAME = loop.LOOP_REPORT_FILENAME
 INTEGRITY_FILENAME = "review-session-integrity.v1.json"
 INTEGRITY_SCHEMA_VERSION = "review-session-integrity.v1"
+LIFECYCLE_STATE_DIRECTORY = ".review-session-state"
+LIFECYCLE_LEASE_SCHEMA_VERSION = "review-session-lease.v1"
 ASSET_FILENAME = "review_sessions.js"
 EVIDENCE_BOUNDARY = "diagnostic_only"
 DEPENDENT_FAMILY_STATUS = "standalone_fixture_only"
@@ -148,6 +150,19 @@ _MAX_JSON_DEPTH = 64
 _MAX_JSON_INTEGER_DIGITS = 100
 _MAX_TOKEN_CHARS = 256
 _LOOP_CONFIG_KEYS = frozenset(loop._ALLOWED_CONFIG_KEYS)
+
+
+@dataclass(frozen=True, slots=True)
+class _LifecycleState:
+    """Authenticated generation shared by one delegated execution lifecycle."""
+
+    generation: int
+    revision: str
+    status: str
+
+
+_LIFECYCLE_LOCK = threading.Lock()
+_LIFECYCLE_ANCHORS: dict[tuple[str, str, str], _LifecycleState] = {}
 
 _DESCRIPTOR_DOCUMENT = {
     "schema_version": DESCRIPTOR_SCHEMA_VERSION,
@@ -732,12 +747,291 @@ def _session_token(request: ComponentRequest) -> str | None:
     return None
 
 
+def _lifecycle_key(base: Path, request: ComponentRequest, session_id: str) -> tuple[str, str, str]:
+    """Identify one request/output lifecycle without persisting its secret."""
+
+    try:
+        root = base.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ReviewSessionError("lifecycle state base is unavailable") from error
+    return (str(root), request.output_directory, session_id)
+
+
+def _lifecycle_state_path(base: Path, request: ComponentRequest, session_id: str) -> Path:
+    """Return the contained lease path used before an output directory exists."""
+
+    key_digest = _canonical_digest(
+        {
+            "output_directory": request.output_directory,
+            "session_id": session_id,
+        }
+    )[:32]
+    try:
+        root = base.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ReviewSessionError("lifecycle state base is unavailable") from error
+    if base.is_symlink() or not root.is_dir():
+        raise ReviewSessionError("lifecycle state base is not regular")
+    return root / LIFECYCLE_STATE_DIRECTORY / f"{key_digest}.lease.json"
+
+
+def _remember_lifecycle_state(
+    base: Path,
+    request: ComponentRequest,
+    state: _LifecycleState,
+    *,
+    session_id: str,
+    require_existing: bool = False,
+    allow_reopen: bool = False,
+) -> str | None:
+    """Bind or compare one seal/lease revision to the process-local anchor.
+
+    The anchor is deliberately process-local.  A caller-writable output tree
+    cannot provide a durable anti-rollback root by itself; callers reconnecting
+    in a new process may inspect authenticated diagnostic output, but complete
+    output cannot authorize a new control/resume operation without this anchor.
+    """
+
+    key = _lifecycle_key(base, request, session_id)
+    with _LIFECYCLE_LOCK:
+        prior = _LIFECYCLE_ANCHORS.get(key)
+        if prior is None:
+            if require_existing:
+                return "journal_lifecycle_anchor_unavailable: current process anchor is missing"
+            _LIFECYCLE_ANCHORS[key] = state
+            return None
+        if state.generation < prior.generation:
+            return "journal_lifecycle_replay: lifecycle generation is stale"
+        if state.generation == prior.generation and state.revision != prior.revision:
+            return "journal_lifecycle_replay: lifecycle revision is stale"
+        if (
+            state.generation == prior.generation
+            and state.status == "running"
+            and prior.status != "running"
+            and not allow_reopen
+        ):
+            return "journal_lifecycle_replay: settled lifecycle cannot return to running"
+        _LIFECYCLE_ANCHORS[key] = state
+    return None
+
+
+def _current_lifecycle_state(
+    base: Path, request: ComponentRequest, session_id: str
+) -> _LifecycleState | None:
+    key = _lifecycle_key(base, request, session_id)
+    with _LIFECYCLE_LOCK:
+        return _LIFECYCLE_ANCHORS.get(key)
+
+
+def _new_lifecycle_state(
+    base: Path,
+    request: ComponentRequest,
+    *,
+    session_id: str,
+    commit: bool = True,
+) -> _LifecycleState:
+    key = _lifecycle_key(base, request, session_id)
+    with _LIFECYCLE_LOCK:
+        prior = _LIFECYCLE_ANCHORS.get(key)
+        generation = prior.generation + 1 if prior is not None else 1
+        state = _LifecycleState(generation, secrets.token_hex(16), "running")
+        if commit:
+            _LIFECYCLE_ANCHORS[key] = state
+        return state
+
+
+def _set_lifecycle_status(
+    base: Path,
+    request: ComponentRequest,
+    state: _LifecycleState,
+    *,
+    session_id: str,
+    status: str,
+) -> None:
+    key = _lifecycle_key(base, request, session_id)
+    with _LIFECYCLE_LOCK:
+        current = _LIFECYCLE_ANCHORS.get(key)
+        if current is None or current.generation < state.generation:
+            _LIFECYCLE_ANCHORS[key] = _LifecycleState(state.generation, state.revision, status)
+        elif current.revision == state.revision:
+            _LIFECYCLE_ANCHORS[key] = _LifecycleState(current.generation, current.revision, status)
+
+
+def _lease_body(
+    request: ComponentRequest,
+    *,
+    state: _LifecycleState,
+    session_id: str,
+    request_digest: str,
+    recipe_digest: str,
+    source_admission: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": LIFECYCLE_LEASE_SCHEMA_VERSION,
+        "component_id": COMPONENT_ID,
+        "status": "running",
+        "lifecycle_generation": state.generation,
+        "lifecycle_revision": state.revision,
+        "session_id": session_id,
+        "request_id": request.request_id,
+        "output_directory": request.output_directory,
+        "request_digest": request_digest,
+        "recipe_digest": recipe_digest,
+        "source_admission_digest": _canonical_digest(dict(source_admission)),
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+    }
+
+
+def _write_lifecycle_lease(
+    base: Path,
+    request: ComponentRequest,
+    *,
+    state: _LifecycleState,
+    session_id: str,
+    request_digest: str,
+    recipe_digest: str,
+    source_admission: Mapping[str, Any],
+    overwrite: bool = True,
+) -> str:
+    """Create the stable HMAC lease that authorizes mutable crash recovery."""
+
+    token = _session_token(request)
+    if token is None:
+        raise ReviewSessionError("integrity_seal_required: session token is required")
+    body = _lease_body(
+        request,
+        state=state,
+        session_id=session_id,
+        request_digest=request_digest,
+        recipe_digest=recipe_digest,
+        source_admission=source_admission,
+    )
+    mac = hmac.new(token.encode("utf-8"), _json_bytes(body), hashlib.sha256).hexdigest()
+    return _atomic_new_file(
+        _lifecycle_state_path(base, request, session_id),
+        _json_bytes({**body, "hmac_sha256": mac}),
+        overwrite=overwrite,
+    )
+
+
+def _remove_lifecycle_lease(base: Path, request: ComponentRequest, session_id: str) -> None:
+    path = _lifecycle_state_path(base, request, session_id)
+    if path.is_symlink():
+        raise ReviewSessionError("output_integrity: lifecycle lease must not be a symlink")
+    if path.exists():
+        if not path.is_file():
+            raise ReviewSessionError("output_integrity: lifecycle lease is not a regular file")
+        path.unlink()
+
+
+def _read_lifecycle_lease(
+    base: Path,
+    request: ComponentRequest,
+    journal: Mapping[str, Any],
+    *,
+    require_anchor: bool,
+) -> tuple[_LifecycleState | None, str | None]:
+    """Validate the mutable-running lease and return its lifecycle state."""
+
+    session_id = journal.get("session_id")
+    if not isinstance(session_id, str) or not session_id:
+        return None, "journal_malformed: session id is invalid"
+    try:
+        lease_path = _lifecycle_state_path(base, request, session_id)
+        if lease_path.parent.is_symlink():
+            raise ReviewSessionError(
+                "output_integrity: lifecycle state directory must not be a symlink"
+            )
+        lease = _read_json(_regular_output_file(lease_path.parent, lease_path.name))
+    except (
+        ReviewSessionError,
+        OSError,
+        TypeError,
+        ValueError,
+        RecursionError,
+        OverflowError,
+    ) as error:
+        return None, f"journal_lifecycle_lease_invalid: {error}"
+    if not isinstance(lease, Mapping):
+        return None, "journal_lifecycle_lease_invalid: lease is not an object"
+    mac = lease.get("hmac_sha256")
+    body = {key: value for key, value in lease.items() if key != "hmac_sha256"}
+    expected_fields = {
+        "schema_version",
+        "component_id",
+        "status",
+        "lifecycle_generation",
+        "lifecycle_revision",
+        "session_id",
+        "request_id",
+        "output_directory",
+        "request_digest",
+        "recipe_digest",
+        "source_admission_digest",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+    }
+    if set(body) != expected_fields:
+        return None, "journal_lifecycle_lease_invalid: lease fields are malformed"
+    if not isinstance(mac, str) or len(mac) != _SHA256_LENGTH:
+        return None, "journal_lifecycle_lease_invalid: MAC is malformed"
+    generation = body.get("lifecycle_generation")
+    revision = body.get("lifecycle_revision")
+    if (
+        not isinstance(generation, int)
+        or isinstance(generation, bool)
+        or generation < 1
+        or not isinstance(revision, str)
+        or len(revision) != 32
+        or any(character not in "0123456789abcdef" for character in revision.lower())
+    ):
+        return None, "journal_lifecycle_lease_invalid: lifecycle identity is malformed"
+    expected_request_digest = journal.get("request_digest")
+    expected_recipe_digest = journal.get("recipe_digest")
+    expected_source_digest = _canonical_digest(dict(journal.get("source_admission", {})))
+    for key, expected in (
+        ("schema_version", LIFECYCLE_LEASE_SCHEMA_VERSION),
+        ("component_id", COMPONENT_ID),
+        ("status", "running"),
+        ("session_id", session_id),
+        ("request_id", request.request_id),
+        ("output_directory", request.output_directory),
+        ("request_digest", expected_request_digest),
+        ("recipe_digest", expected_recipe_digest),
+        ("source_admission_digest", expected_source_digest),
+        ("evidence_boundary", EVIDENCE_BOUNDARY),
+        ("scientific_claim_allowed", False),
+        ("dependent_family_status", DEPENDENT_FAMILY_STATUS),
+    ):
+        if body.get(key) != expected:
+            return None, f"journal_lifecycle_lease_invalid: {key} mismatch"
+    token = _session_token(request)
+    if token is None:
+        return None, "journal_integrity_seal_missing: session_token is required"
+    expected_mac = hmac.new(token.encode("utf-8"), _json_bytes(body), hashlib.sha256).hexdigest()
+    if not secrets.compare_digest(mac, expected_mac):
+        return None, "journal_lifecycle_lease_invalid: MAC mismatch"
+    state = _LifecycleState(generation, revision, "running")
+    anchor_error = _remember_lifecycle_state(
+        base,
+        request,
+        state,
+        session_id=session_id,
+        require_existing=require_anchor,
+    )
+    return (None, anchor_error) if anchor_error is not None else (state, None)
+
+
 def _integrity_seal_body(
     request: ComponentRequest,
     journal: Mapping[str, Any],
     *,
     journal_sha256: str,
     report_sha256: str,
+    lifecycle: _LifecycleState,
 ) -> dict[str, Any]:
     """Return the non-secret fields authenticated by the caller token."""
 
@@ -751,6 +1045,9 @@ def _integrity_seal_body(
         "recipe_digest": journal.get("recipe_digest"),
         "journal_sha256": journal_sha256,
         "report_sha256": report_sha256,
+        "lifecycle_generation": lifecycle.generation,
+        "lifecycle_revision": lifecycle.revision,
+        "lifecycle_status": journal.get("status"),
         "evidence_boundary": EVIDENCE_BOUNDARY,
         "scientific_claim_allowed": False,
         "dependent_family_status": DEPENDENT_FAMILY_STATUS,
@@ -758,7 +1055,11 @@ def _integrity_seal_body(
 
 
 def _write_integrity_seal(
-    output: Path, request: ComponentRequest, journal: Mapping[str, Any]
+    output: Path,
+    request: ComponentRequest,
+    journal: Mapping[str, Any],
+    *,
+    lifecycle: _LifecycleState,
 ) -> str:
     """Persist a token-keyed MAC without persisting the token itself."""
 
@@ -776,6 +1077,7 @@ def _write_integrity_seal(
         journal,
         journal_sha256=hashlib.sha256(journal_bytes).hexdigest(),
         report_sha256=hashlib.sha256(report_bytes).hexdigest(),
+        lifecycle=lifecycle,
     )
     mac = hmac.new(token.encode("utf-8"), _json_bytes(body), hashlib.sha256).hexdigest()
     return _atomic_new_file(
@@ -786,13 +1088,16 @@ def _write_integrity_seal(
 
 
 def _integrity_seal_error(
+    base: Path,
     output: Path,
     request: ComponentRequest,
     journal: Mapping[str, Any],
     *,
     check_report: bool,
+    require_anchor: bool = False,
+    observe_anchor: bool = True,
 ) -> str | None:
-    """Verify the durable complete-read MAC and current journal/report bytes."""
+    """Verify a settled lifecycle MAC and current journal/report bytes."""
 
     token = _session_token(request)
     if token is None:
@@ -824,6 +1129,9 @@ def _integrity_seal_error(
         "recipe_digest",
         "journal_sha256",
         "report_sha256",
+        "lifecycle_generation",
+        "lifecycle_revision",
+        "lifecycle_status",
         "evidence_boundary",
         "scientific_claim_allowed",
         "dependent_family_status",
@@ -831,11 +1139,22 @@ def _integrity_seal_error(
         return "journal_integrity_seal_invalid: seal fields are malformed"
     if body.get("schema_version") != INTEGRITY_SCHEMA_VERSION:
         return "journal_integrity_seal_invalid: schema mismatch"
+    raw_generation = body.get("lifecycle_generation")
+    generation_for_body = (
+        raw_generation
+        if isinstance(raw_generation, int) and not isinstance(raw_generation, bool)
+        else 0
+    )
     expected = _integrity_seal_body(
         request,
         journal,
         journal_sha256=str(body.get("journal_sha256", "")),
         report_sha256=str(body.get("report_sha256", "")),
+        lifecycle=_LifecycleState(
+            generation_for_body,
+            str(body.get("lifecycle_revision", "")),
+            str(body.get("lifecycle_status", "")),
+        ),
     )
     for key in (
         "component_id",
@@ -847,6 +1166,7 @@ def _integrity_seal_error(
         "evidence_boundary",
         "scientific_claim_allowed",
         "dependent_family_status",
+        "lifecycle_status",
     ):
         if body.get(key) != expected.get(key):
             return f"journal_integrity_seal_invalid: {key} mismatch"
@@ -858,6 +1178,18 @@ def _integrity_seal_error(
             or any(character not in "0123456789abcdef" for character in value.lower())
         ):
             return f"journal_integrity_seal_invalid: {key} is malformed"
+    generation = body.get("lifecycle_generation")
+    revision = body.get("lifecycle_revision")
+    if (
+        not isinstance(generation, int)
+        or isinstance(generation, bool)
+        or generation < 1
+        or not isinstance(revision, str)
+        or len(revision) != 32
+        or any(character not in "0123456789abcdef" for character in revision.lower())
+        or body.get("lifecycle_status") != journal.get("status")
+    ):
+        return "journal_integrity_seal_invalid: lifecycle identity is malformed"
     expected_mac = hmac.new(token.encode("utf-8"), _json_bytes(body), hashlib.sha256).hexdigest()
     if not secrets.compare_digest(mac, expected_mac):
         return "journal_integrity_seal_invalid: MAC mismatch"
@@ -871,6 +1203,24 @@ def _integrity_seal_error(
                 return "journal_integrity_seal_invalid: report bytes changed"
     except (ReviewSessionError, OSError, ValueError, TypeError) as error:
         return f"journal_integrity_seal_invalid: {error}"
+    lifecycle_state = _LifecycleState(generation, revision, str(body["lifecycle_status"]))
+    session_id = str(journal.get("session_id", ""))
+    if (
+        not observe_anchor
+        and not require_anchor
+        and _current_lifecycle_state(base, request, session_id) is None
+    ):
+        lifecycle_error = None
+    else:
+        lifecycle_error = _remember_lifecycle_state(
+            base,
+            request,
+            lifecycle_state,
+            session_id=session_id,
+            require_existing=require_anchor,
+        )
+    if lifecycle_error is not None:
+        return lifecycle_error
     return None
 
 
@@ -1163,12 +1513,13 @@ def _srev24_journal_semantic_error(
     return None
 
 
-def _journal_integrity_error(  # noqa: PLR0915
+def _journal_integrity_error(
     base: Path,
     request: ComponentRequest,
     journal: Mapping[str, Any],
     *,
     admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
+    allow_native_admission_recovery: bool = False,
 ) -> str | None:
     """Validate the read-only journal boundary using SREV-24's identity rules."""
 
@@ -1223,24 +1574,26 @@ def _journal_integrity_error(  # noqa: PLR0915
         return source_error
     if _admission_shape(source_admission) == "native":
         if admission_config is None:
-            return "journal_source_admission_unavailable: native launcher admission is required"
-        try:
-            fresh_document, _normalized_admission, admission_error = (
-                loop._preflight_native_admission(
-                    child,
-                    recipe=validated.recipe,
-                    executor_config=loop._native_executor_config(validated),
-                    admission_config=admission_config,
+            if not allow_native_admission_recovery:
+                return "journal_source_admission_unavailable: native launcher admission is required"
+        else:
+            try:
+                fresh_document, _normalized_admission, admission_error = (
+                    loop._preflight_native_admission(
+                        child,
+                        recipe=validated.recipe,
+                        executor_config=loop._native_executor_config(validated),
+                        admission_config=admission_config,
+                    )
                 )
-            )
-        except (loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
-            return f"journal_source_admission_unavailable: {error}"
-        if admission_error or fresh_document is None:
-            return "journal_source_admission_unavailable: " + (
-                admission_error or "fresh launcher admission is unavailable"
-            )
-        if dict(fresh_document) != dict(source_admission):
-            return "journal_source_admission_tampered: native receipt or root changed"
+            except (loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
+                return f"journal_source_admission_unavailable: {error}"
+            if admission_error or fresh_document is None:
+                return "journal_source_admission_unavailable: " + (
+                    admission_error or "fresh launcher admission is unavailable"
+                )
+            if dict(fresh_document) != dict(source_admission):
+                return "journal_source_admission_tampered: native receipt or root changed"
     budget = journal.get("budget")
     if not isinstance(budget, Mapping):
         return "journal_malformed: budget is not an object"
@@ -1416,6 +1769,8 @@ def _read_journal(
     request: ComponentRequest,
     *,
     admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
+    require_complete_anchor: bool = False,
+    allow_native_admission_recovery: bool = False,
 ) -> dict[str, Any] | None:
     if admission_config is None:
         configured_admission = request.config.get("admission_config")
@@ -1442,7 +1797,11 @@ def _read_journal(
         return {"_read_error": "journal is not an object"}
     try:
         integrity_error = _journal_integrity_error(
-            base, request, payload, admission_config=admission_config
+            base,
+            request,
+            payload,
+            admission_config=admission_config,
+            allow_native_admission_recovery=allow_native_admission_recovery,
         )
     except (
         ReviewSessionError,
@@ -1455,10 +1814,37 @@ def _read_journal(
         return {"_read_error": f"journal_malformed: {error}"}
     if integrity_error is not None:
         return {"_read_error": integrity_error}
-    if payload.get("status") == "complete":
+    if payload.get("status") == "running":
+        try:
+            _lifecycle_state, lease_error = _read_lifecycle_lease(
+                base,
+                request,
+                payload,
+                require_anchor=False,
+            )
+        except (
+            ReviewSessionError,
+            OSError,
+            ValueError,
+            TypeError,
+            RecursionError,
+            OverflowError,
+        ) as error:
+            lease_error = str(error)
+        if lease_error is not None:
+            return {"_read_error": lease_error}
+    else:
         try:
             output = _resolve_output(base, request.output_directory, create=False)
-            seal_error = _integrity_seal_error(output, request, payload, check_report=False)
+            seal_error = _integrity_seal_error(
+                base,
+                output,
+                request,
+                payload,
+                check_report=True,
+                require_anchor=require_complete_anchor and payload.get("status") == "complete",
+                observe_anchor=payload.get("status") != "complete",
+            )
         except (
             ReviewSessionError,
             OSError,
@@ -1600,7 +1986,14 @@ def result_navigation(
     if not isinstance(report, Mapping):
         return {"status": "failed", "reason": "result report is not an object"}
     if journal.get("status") == "complete":
-        seal_error = _integrity_seal_error(output, normalized, journal, check_report=True)
+        seal_error = _integrity_seal_error(
+            root,
+            output,
+            normalized,
+            journal,
+            check_report=True,
+            observe_anchor=False,
+        )
         if seal_error is not None:
             return {"status": "unavailable", "reason": f"result_unavailable: {seal_error}"}
     try:
@@ -1974,6 +2367,9 @@ def run(
             "failed",
             reason="integrity_seal_required: a non-empty session_token is required before dispatch",
         )
+    lifecycle_state: _LifecycleState | None = None
+    persisted_journal: dict[str, Any] | None = None
+    lease_source_admission: Mapping[str, Any] | None = None
     try:
         child_request = _loop_request(normalized)
         validated = loop._validate_input(
@@ -1986,6 +2382,90 @@ def run(
             source_admission or normalized.config.get("source_admission"),
             base=root,
         )
+        request_digest = loop._canonical_digest(loop._request_identity(child_request))
+        recipe_digest = loop.experiment_recipe_canonical_digest(validated.recipe)
+        lease_source_admission = child_proof
+        if executor is None:
+            native_config = loop._native_executor_config(validated)
+            native_proof, _normalized_admission, native_error = loop._preflight_native_admission(
+                child_request,
+                recipe=validated.recipe,
+                executor_config=native_config,
+                admission_config=admission_config,
+            )
+            if native_error is not None or native_proof is None:
+                return _result(
+                    normalized,
+                    "unavailable",
+                    reason=native_error or "source_admission: no admitted proof",
+                )
+            lease_source_admission = native_proof
+        if resume:
+            persisted_journal = _read_journal(
+                root,
+                normalized,
+                admission_config=admission_config,
+                require_complete_anchor=True,
+            )
+            if persisted_journal is not None and "_read_error" in persisted_journal:
+                return _result(
+                    normalized,
+                    "failed",
+                    reason=str(persisted_journal["_read_error"]),
+                )
+        output_state = _output_state(root, normalized)
+        if persisted_journal is not None:
+            lifecycle_state = _current_lifecycle_state(
+                root, normalized, str(persisted_journal.get("session_id", validated.session_id))
+            )
+        elif output_state.get("status") == "available":
+            lifecycle_state = _new_lifecycle_state(
+                root,
+                normalized,
+                session_id=str(validated.session_id),
+                commit=False,
+            )
+        if lifecycle_state is not None and persisted_journal is not None:
+            if persisted_journal.get("status") == "complete":
+                # A complete durable result is terminal.  It may be returned
+                # by SREV-24, but it must never be used to authorize a new
+                # dispatch after a process restart without the current anchor.
+                pass
+            else:
+                if not isinstance(lease_source_admission, Mapping):
+                    lease_source_admission = persisted_journal.get("source_admission", {})
+                _write_lifecycle_lease(
+                    root,
+                    normalized,
+                    state=lifecycle_state,
+                    session_id=str(validated.session_id),
+                    request_digest=request_digest,
+                    recipe_digest=recipe_digest,
+                    source_admission=dict(lease_source_admission),
+                )
+        elif lifecycle_state is not None:
+            if not isinstance(lease_source_admission, Mapping):
+                lease_source_admission = {}
+            _write_lifecycle_lease(
+                root,
+                normalized,
+                state=lifecycle_state,
+                session_id=str(validated.session_id),
+                request_digest=request_digest,
+                recipe_digest=recipe_digest,
+                source_admission=dict(lease_source_admission),
+                overwrite=False,
+            )
+        if lifecycle_state is not None:
+            lifecycle_error = _remember_lifecycle_state(
+                root,
+                normalized,
+                lifecycle_state,
+                session_id=str(validated.session_id),
+                allow_reopen=True,
+            )
+            if lifecycle_error is not None:
+                raise ReviewSessionError(lifecycle_error)
         child_result = loop.run(
             child_request,
             base=root,
@@ -2008,20 +2488,66 @@ def run(
         "scientific_claim_allowed": False,
         "dependent_family_status": DEPENDENT_FAMILY_STATUS,
     }
-    if child_result.status != "complete":
-        return _result(
-            normalized,
-            child_result.status,
-            reason=child_result.reason,
-            diagnostics=child_result.diagnostics,
-            provenance=provenance,
-        )
+    seal_digest: str | None = None
     try:
-        output = _resolve_output(root, normalized.output_directory, create=False)
-        journal_payload = _read_json(_regular_output_file(output, JOURNAL_FILENAME))
-        if not isinstance(journal_payload, Mapping):
-            raise ReviewSessionError("journal_integrity_failed: journal is not an object")
-        seal_digest = _write_integrity_seal(output, normalized, journal_payload)
+        if lifecycle_state is not None:
+            try:
+                output = _resolve_output(root, normalized.output_directory, create=False)
+            except ReviewSessionError:
+                if child_result.status != "complete":
+                    _remove_lifecycle_lease(root, normalized, str(validated.session_id))
+                    return _result(
+                        normalized,
+                        child_result.status,
+                        reason=child_result.reason,
+                        diagnostics=child_result.diagnostics,
+                        provenance=provenance,
+                    )
+                raise
+            try:
+                journal_path = _regular_output_file(output, JOURNAL_FILENAME)
+                report_path = _regular_output_file(output, REPORT_FILENAME)
+            except ReviewSessionError:
+                # Another controller may own a live SREV-24 lock and still be
+                # writing its report.  Preserve that owner/lease result rather
+                # than manufacturing a terminal wrapper state.
+                if child_result.status != "complete":
+                    return _result(
+                        normalized,
+                        child_result.status,
+                        reason=child_result.reason,
+                        diagnostics=child_result.diagnostics,
+                        provenance=provenance,
+                    )
+                raise
+            journal_payload = _read_json(journal_path)
+            if not isinstance(journal_payload, Mapping):
+                raise ReviewSessionError("journal_integrity_failed: journal is not an object")
+            del report_path
+            seal_digest = _write_integrity_seal(
+                output,
+                normalized,
+                journal_payload,
+                lifecycle=lifecycle_state,
+            )
+            _set_lifecycle_status(
+                root,
+                normalized,
+                lifecycle_state,
+                session_id=str(journal_payload.get("session_id", "")),
+                status=str(journal_payload.get("status", child_result.status)),
+            )
+            _remove_lifecycle_lease(root, normalized, str(journal_payload.get("session_id", "")))
+        if child_result.status != "complete":
+            return _result(
+                normalized,
+                child_result.status,
+                reason=child_result.reason,
+                diagnostics=child_result.diagnostics,
+                provenance=provenance,
+            )
+        if seal_digest is None:
+            raise ReviewSessionError("journal_integrity_failed: lifecycle seal is unavailable")
         durable_journal = _read_journal(root, normalized, admission_config=admission_config)
         if durable_journal is None or "_read_error" in durable_journal:
             raise ReviewSessionError(
@@ -2502,7 +3028,12 @@ def main(argv: list[str] | None = None) -> int:
                 expected_request_digest=str(context["request_digest"]),
                 expected_recipe_digest=str(context["recipe_digest"]),
             )
-            persisted = _read_journal(root, request, admission_config=admission)
+            persisted = _read_journal(
+                root,
+                request,
+                admission_config=admission,
+                allow_native_admission_recovery=admission is None,
+            )
             if persisted is None or "_read_error" in persisted:
                 raise ControlAuthorizationError(
                     "session journal is unavailable for control authentication"
@@ -2516,6 +3047,11 @@ def main(argv: list[str] | None = None) -> int:
                         "source_admission_required: durable native admission is unavailable "
                         "for this session",
                         payload,
+                    )
+                persisted = _read_journal(root, request, admission_config=admission)
+                if persisted is None or "_read_error" in persisted:
+                    raise ControlAuthorizationError(
+                        "session journal failed fresh admission validation"
                     )
         except (ControlAuthorizationError, ReviewSessionError, loop.ExperimentLoopError) as error:
             return _cli_failure(f"control_authorization_failed: {error}", payload)

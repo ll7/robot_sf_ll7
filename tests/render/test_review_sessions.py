@@ -6,11 +6,13 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import pytest
@@ -1275,6 +1277,142 @@ def test_crash_running_lease_reconnects_through_srev24_recovery(tmp_path: Path) 
     )
     assert resumed.status == "complete", resumed.reason
     assert review_sessions.progress(request, base=tmp_path)["status"] == "complete"
+
+
+def test_running_lease_replay_fails_closed_in_a_fresh_process(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    proof = _proof(tmp_path, request)
+    output = tmp_path / request.output_directory
+    saved_output = tmp_path / "saved-running"
+    saved_lease = tmp_path / "saved-running.lease.json"
+    captured = False
+
+    def capture_running_then_cancel() -> bool:
+        nonlocal captured
+        lease_path = review_sessions._lifecycle_state_path(
+            tmp_path, request, str(review_sessions._control_context(request)["session_id"])
+        )
+        journal_path = output / review_sessions.JOURNAL_FILENAME
+        if not captured and journal_path.is_file() and lease_path.is_file():
+            shutil.copytree(output, saved_output)
+            saved_lease.write_bytes(lease_path.read_bytes())
+            captured = True
+        return captured
+
+    first = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=proof,
+        cancel=capture_running_then_cancel,
+    )
+    assert first.status == "cancelled"
+    assert captured
+
+    shutil.rmtree(output)
+    newer = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=proof,
+        cancel=lambda: True,
+    )
+    assert newer.status == "cancelled"
+    shutil.rmtree(output)
+    shutil.copytree(saved_output, output)
+    (output / loop.SESSION_LOCK_FILENAME).unlink(missing_ok=True)
+    session_id = str(review_sessions._control_context(request)["session_id"])
+    lease_path = review_sessions._lifecycle_state_path(tmp_path, request, session_id)
+    lease_path.parent.mkdir(parents=True, exist_ok=True)
+    lease_path.write_bytes(saved_lease.read_bytes())
+
+    request_path = tmp_path / "replay-request.json"
+    proof_path = tmp_path / "replay-proof.json"
+    calls_path = tmp_path / "replay-calls.txt"
+    request_document = {"schema_version": "component-request.v1", **asdict(request)}
+    request_path.write_text(json.dumps(request_document), encoding="utf-8")
+    proof_path.write_text(json.dumps(proof), encoding="utf-8")
+    child_script = dedent(
+        """
+        import json
+        import sys
+        from pathlib import Path
+
+        from robot_sf.analysis_workbench.review_contracts import component_request_from_dict
+        from robot_sf.render import review_sessions
+
+        base = Path(sys.argv[1])
+        request = component_request_from_dict(json.loads(Path(sys.argv[2]).read_text()))
+        proof = json.loads(Path(sys.argv[3]).read_text())
+        calls_path = Path(sys.argv[4])
+
+        class CountingExecutor:
+            def __init__(self):
+                self.results = {}
+
+            def execute(self, operation_id, candidate, kind, spec, attempt):
+                del candidate, kind, spec, attempt
+                calls_path.write_text("dispatched", encoding="utf-8")
+                result = {
+                    "status": "ok",
+                    "metrics": {
+                        "ped_displacement_m": 1.0,
+                        "robot_displacement_m": 1.0,
+                        "ped_mean_speed_m_s": 1.0,
+                        "min_robot_ped_distance_m": 1.0,
+                        "robot_goal_reached": 1,
+                        "ped_motion_onset_step": 1,
+                    },
+                    "mechanism_activated": True,
+                }
+                self.results[operation_id] = result
+                return result
+
+            def result_for(self, operation_id):
+                return self.results.get(operation_id)
+
+        progress = review_sessions.progress(request, base=base)
+        result = review_sessions.run(
+            request,
+            base=base,
+            autonomous=True,
+            resume=True,
+            executor=CountingExecutor(),
+            source_admission=proof,
+        )
+        print(json.dumps({
+            "progress_status": progress.get("status"),
+            "progress_reason": progress.get("reason", ""),
+            "result_status": result.status,
+            "result_reason": result.reason,
+            "calls": calls_path.exists(),
+        }, sort_keys=True))
+        """
+    )
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            child_script,
+            str(tmp_path),
+            str(request_path),
+            str(proof_path),
+            str(calls_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert child.returncode == 0, child.stderr
+    child_payload = json.loads(child.stdout.strip().splitlines()[-1])
+    assert child_payload["progress_status"] == "failed"
+    assert "journal_lifecycle_anchor_unavailable" in child_payload["progress_reason"]
+    assert child_payload["result_status"] == "failed"
+    assert "journal_lifecycle_anchor_unavailable" in child_payload["result_reason"]
+    assert child_payload["calls"] is False
 
 
 def test_settled_anchor_rejects_replayed_running_lease(tmp_path: Path) -> None:

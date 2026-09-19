@@ -1820,7 +1820,11 @@ def _read_journal(
                 base,
                 request,
                 payload,
-                require_anchor=False,
+                # A durable running lease is a recovery hint, not an
+                # independently trusted owner.  Only the process that
+                # established the lifecycle anchor may reconnect and resume;
+                # a restarted process must fail closed before dispatch.
+                require_anchor=True,
             )
         except (
             ReviewSessionError,

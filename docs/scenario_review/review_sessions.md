@@ -73,10 +73,11 @@ different controller cannot cancel a live owner; it receives the delegated
 and never acquire a dispatch lock. Read APIs revalidate journal/report
 identity against the selected request, recipe, source bytes, and session
 context before exposing it. A mutable `running` journal is readable or
-recoverable only while its token-keyed lifecycle lease is valid; a settled
-journal/report pair is readable only with its token-keyed integrity seal.
-Stale or tampered state is reported as diagnostic failure/unavailable rather
-than adopted as current progress.
+recoverable only while its token-keyed lifecycle lease and current
+process-local lifecycle anchor are valid; a settled journal/report pair is
+readable only with its token-keyed integrity seal. A durable running lease is
+not an owner credential by itself. Stale or tampered state is reported as
+diagnostic failure/unavailable rather than adopted as current progress.
 
 Because the output directory is writable by its owner, semantic consistency or
 an unkeyed SHA-256 cannot authenticate a rewritten result. Every settled state
@@ -84,20 +85,24 @@ therefore requires a caller-supplied `session_token`; the wrapper writes
 `review-session-integrity.v1.json`, an HMAC over the exact journal/report bytes,
 their status, and their diagnostic identity. While SREV-24 owns a mutable
 running journal, the wrapper keeps a separate HMAC lifecycle lease so a
-crash-safe resume can still use SREV-24's operation-ID recovery. The token is
-never persisted. Reconnect/resume/read calls must provide the same token, while
-a missing or rotated token and a changed journal/report fail closed. This is a
-diagnostic integrity boundary, not scientific evidence.
+same-process crash-safe resume can still use SREV-24's operation-ID recovery.
+The token is never persisted. Reconnect/resume/read calls must provide the same
+token, while a missing or rotated token and a changed journal/report fail
+closed. A process restart cannot adopt a saved running lease without an
+independent trusted owner/monotonic store, so running progress and resume fail
+closed after restart. This is a diagnostic integrity boundary, not scientific
+evidence.
 
 The lifecycle revision is also held in a process-local monotonic anchor. This
 rejects an old valid complete triplet replayed after a newer cancellation in
 the same process. Owner-writable files cannot provide an anti-rollback root
 across process restarts: a restarted process may inspect an authenticated
 complete snapshot diagnostically, but that snapshot cannot authorize a new
-resume or control operation without the current lifecycle anchor. A durable
-external monotonic store would be required for stronger cross-process
-rollback protection; this component does not pretend that a plain digest
-provides it.
+resume or control operation without the current lifecycle anchor. It also
+cannot adopt a saved running lease as a new owner. A durable external
+monotonic store or owner service would be required for stronger cross-process
+rollback protection or crash recovery; this component does not pretend that a
+plain digest provides either.
 
 The optional `session_context` request mapping carries the selected
 `campaign_id`, `episode_id`, `source_revision`, `selection_revision`, and

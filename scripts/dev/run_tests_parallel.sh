@@ -377,6 +377,22 @@ if [[ "$coverage_enabled" == "1" ]]; then
   else
     cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")
   fi
+  # Validation scripts are excluded from the aggregate source list, but changed
+  # checker scripts must be measured by the same canonical PR coverage artifact.
+  # Keep this diff-driven so unrelated scripts do not expand routine coverage.
+  changed_script_base_ref="${BASE_REF:-origin/main}"
+  if git rev-parse --verify --quiet "${changed_script_base_ref}^{commit}" >/dev/null 2>&1; then
+    while IFS= read -r changed_script_path; do
+      [[ -z "$changed_script_path" ]] && continue
+      if [[ -f "$changed_script_path" && "$changed_script_path" == *.py ]]; then
+        changed_script_module="${changed_script_path%.py}"
+        changed_script_module="${changed_script_module//\//.}"
+        cmd+=("--cov=$changed_script_module")
+      fi
+    done < <(
+      git diff --name-only --diff-filter=ACMR "${changed_script_base_ref}...HEAD" -- scripts
+    )
+  fi
 fi
 
 if [[ "$lane_mode" != "all" ]]; then

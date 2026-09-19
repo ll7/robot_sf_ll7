@@ -1438,7 +1438,11 @@ def _run_check(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed report sta
     """
     repo_root = _repo_root()
     coverage_path = _resolve_coverage_path(args.coverage, repo_root)
-    include_patterns = args.include or ["robot_sf/*.py", "robot_sf/**/*.py"]
+    include_patterns = args.include or [
+        "robot_sf/*.py",
+        "robot_sf/**/*.py",
+        "scripts/**/*.py",
+    ]
     exclude_patterns = args.exclude or []
 
     try:

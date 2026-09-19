@@ -105,6 +105,13 @@ counts or booleans alone cannot be promoted by deleting a deficit. These
 records provide internal consistency evidence only: the report digest remains
 an unkeyed integrity token, not authenticated evaluator provenance.
 
+Materialization rows must name an episode from the readable expected inventory.
+Foreign episode IDs and anonymous rows are retained as unavailable/unbound
+evidence with an explicit deficit, so they cannot satisfy completion. Rows are
+canonically ordered by episode identity and status; no positional synthetic ID
+is created. The same binding applies when materialization is supplied through a
+typed source-scan summary.
+
 When a source or scan revision is active, a BA-03 `ReviewRecord.source_revision`
 must carry the active revision token. Reviews with unavailable or stale
 revision provenance remain visible but cannot enter the human denominator.

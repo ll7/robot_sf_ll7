@@ -198,7 +198,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["episode_id", "status"],
       "properties": {
-        "episode_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string"},
         "status": {"enum": ["verified", "diverged", "unverifiable", "unavailable"]}
       }
     },

@@ -1740,7 +1740,7 @@ def _materialization_summary(value: Any) -> tuple[dict[str, int], list[Mapping[s
         values = ()
     statuses = Counter()
     rows: list[Mapping[str, Any]] = []
-    for index, item in enumerate(values, start=1):
+    for item in values:
         raw = _mapping(item, name="materialization[]")
         status = (
             _token(raw.get("status") or raw.get("fidelity"), default="unavailable")
@@ -1756,13 +1756,11 @@ def _materialization_summary(value: Any) -> tuple[dict[str, int], list[Mapping[s
         statuses[status] += 1
         rows.append(
             {
-                "episode_id": _token(
-                    raw.get("episode_id") or raw.get("row_id"),
-                    default=f"materialization-{index}",
-                ),
+                "episode_id": _token(raw.get("episode_id"), default=""),
                 "status": status,
             }
         )
+    rows.sort(key=lambda item: (item["episode_id"], item["status"]))
     return (
         {
             "total": sum(statuses.values()),
@@ -1773,6 +1771,45 @@ def _materialization_summary(value: Any) -> tuple[dict[str, int], list[Mapping[s
         },
         rows,
     )
+
+
+def _materialization_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Recompute materialization aggregates from normalized retained rows.
+
+    Returns:
+        Aggregate status counts.
+    """
+
+    statuses = Counter(item["status"] for item in rows)
+    return {
+        "total": len(rows),
+        "verified": statuses["verified"],
+        "diverged": statuses["diverged"],
+        "unverifiable": statuses["unverifiable"],
+        "unavailable": statuses["unavailable"],
+    }
+
+
+def _bind_materialization_rows(
+    rows: Sequence[Mapping[str, Any]], readable_ids: set[str]
+) -> tuple[dict[str, str], ...]:
+    """Bind materialization rows to readable episodes without synthetic IDs.
+
+    Returns:
+        Canonically ordered retained rows with unbound rows marked unavailable.
+    """
+
+    bound: list[dict[str, str]] = []
+    for item in rows:
+        episode_id = item["episode_id"]
+        status = item["status"]
+        if not episode_id:
+            status = "unavailable"
+        elif episode_id not in readable_ids:
+            status = "unavailable"
+        bound.append({"episode_id": episode_id, "status": status})
+    bound.sort(key=lambda item: (item["episode_id"], item["status"]))
+    return tuple(bound)
 
 
 def _identity_from_scan(  # noqa: C901
@@ -2165,14 +2202,36 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
         materialization_counts, materialization_rows = _materialization_summary(
             _scan_mapping(source_scan).get("materialization")
         )
+    materialization_rows = _bind_materialization_rows(materialization_rows, readable_ids)
+    materialization_counts = _materialization_counts(materialization_rows)
     for item in materialization_rows:
-        if item["status"] in {"diverged", "unverifiable"}:
+        episode_id = item["episode_id"]
+        if not episode_id or episode_id not in readable_ids:
             deficits.append(
                 _build_deficit(
                     active_identity,
                     dimensions={
                         "requirement": "materialization_fidelity",
-                        "episode_id": _token(item.get("episode_id"), default="unknown"),
+                        "episode_id": episode_id or "unbound",
+                    },
+                    observed=0,
+                    target=1,
+                    reason=(
+                        "materialization_unbound"
+                        if not episode_id
+                        else "materialization_foreign_episode"
+                    ),
+                    status=DEFICIT_UNAVAILABLE if not episode_id else DEFICIT_ERROR,
+                    denominator=1,
+                )
+            )
+        elif item["status"] in {"diverged", "unverifiable"}:
+            deficits.append(
+                _build_deficit(
+                    active_identity,
+                    dimensions={
+                        "requirement": "materialization_fidelity",
+                        "episode_id": episode_id,
                     },
                     observed=0,
                     target=1,
@@ -2760,9 +2819,29 @@ def _validate_materialization_evidence(
     """Validate aggregate materialization counts against per-row evidence."""
 
     rows = evidence["materialization_rows"]
+    readable_ids = set(evidence["readable_episode_ids"])
     episode_ids = [item["episode_id"] for item in rows]
     if len(episode_ids) != len(set(episode_ids)):
         raise AuditCoverageError("materialization evidence contains duplicate episode IDs")
+    unbound = [
+        item for item in rows if not item["episode_id"] or item["episode_id"] not in readable_ids
+    ]
+    if unbound and payload["status"] != STATUS_INCOMPLETE:
+        raise AuditCoverageError("complete report contains unbound materialization evidence")
+    for item in unbound:
+        episode_id = item["episode_id"] or "unbound"
+        reason = (
+            "materialization_unbound"
+            if not item["episode_id"]
+            else "materialization_foreign_episode"
+        )
+        if not any(
+            deficit["status"] != DEFICIT_WAIVED
+            and deficit["reason"] == reason
+            and deficit["dimensions"].get("episode_id") == episode_id
+            for deficit in payload["deficits"]
+        ):
+            raise AuditCoverageError("unbound materialization evidence lacks a matching deficit")
     statuses = Counter(item["status"] for item in rows)
     expected = {
         "total": len(rows),

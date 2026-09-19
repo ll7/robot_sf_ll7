@@ -260,6 +260,110 @@ def test_declared_exception_is_visible_but_can_complete_with_exception() -> None
     assert report.exceptions[0]["reason"]
 
 
+@pytest.mark.parametrize(
+    ("materialization", "reason", "episode_id", "status"),
+    (
+        (
+            [{"episode_id": "foreign", "status": "verified"}],
+            "materialization_foreign_episode",
+            "foreign",
+            "unavailable",
+        ),
+        ([{"status": "verified"}], "materialization_unbound", "", "unavailable"),
+    ),
+)
+def test_materialization_must_bind_to_readable_episode_ids(
+    materialization, reason, episode_id, status
+) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        materialization=materialization,
+        identity=_identity(),
+    )
+    assert report.status == STATUS_INCOMPLETE
+    assert report.evidence["materialization_rows"] == (
+        {"episode_id": episode_id, "status": status},
+    )
+    assert any(item.reason == reason for item in report.deficits)
+    validate_audit_coverage(report.to_dict())
+    assert report.from_dict(report.to_dict()).status == STATUS_INCOMPLETE
+
+
+def test_source_scan_materialization_also_binds_to_readable_episode_ids() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    source_scan = {
+        "inventory": rows,
+        "signals": attempts,
+        "detector_registry": _registry(),
+        "materialization": [{"episode_id": "foreign", "status": "verified"}],
+    }
+    report = evaluate_coverage(source_scan, review_records=reviews, identity=_identity())
+    assert report.status == STATUS_INCOMPLETE
+    assert any(item.reason == "materialization_foreign_episode" for item in report.deficits)
+    validate_audit_coverage(report.to_dict())
+    assert report.from_dict(report.to_dict()).status == STATUS_INCOMPLETE
+
+
+def test_complete_report_rejects_forged_foreign_materialization_in_both_validators() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        materialization=[{"episode_id": "episode-success", "status": "verified"}],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_COMPLETE_UNDER_PROTOCOL
+    payload = report.to_dict()
+    payload["evidence"]["materialization_rows"][0]["episode_id"] = "foreign"
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+def test_materialization_permutations_have_canonical_report_identity_and_renderers() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    first = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        materialization=[
+            {"episode_id": "episode-success", "status": "verified"},
+            {"episode_id": "episode-collision", "status": "diverged"},
+        ],
+        identity=_identity(),
+    )
+    second = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        materialization=[
+            {"episode_id": "episode-collision", "status": "diverged"},
+            {"episode_id": "episode-success", "status": "verified"},
+        ],
+        identity=_identity(),
+    )
+    assert first.status == STATUS_INCOMPLETE
+    assert second.status == STATUS_INCOMPLETE
+    assert first.report_digest == second.report_digest
+    assert first.to_json() == second.to_json()
+    assert first.to_markdown() == second.to_markdown()
+    assert first.to_html() == second.to_html()
+    assert list(first.evidence["materialization_rows"]) == [
+        {"episode_id": "episode-collision", "status": "diverged"},
+        {"episode_id": "episode-success", "status": "verified"},
+    ]
+
+
 def test_high_priority_finding_and_unresolved_integrity_remain_visible() -> None:
     rows, attempts, reviews = _complete_inputs()
     report = evaluate_coverage(

@@ -23,6 +23,13 @@ The SREV-17 offline annotation and storyboard editor is documented in
 [`review_editor.md`](./review_editor.md) and runs with
 `python -m robot_sf.render.review_editor`.
 
+The optional Scenario Review (SREV-18) recorded planner, control, pedestrian, and failure
+diagnostic extension is documented in
+[`review_diagnostics.md`](./review_diagnostics.md) and runs with
+`python -m robot_sf.render.review_diagnostics`. It consumes retained trace
+rows only; it does not instrument a planner, run a simulator, or make a
+benchmark/scientific claim.
+
 ## Leaf fast-lane registration convention
 
 Scenario-review leaves that add a deterministic test file must also register

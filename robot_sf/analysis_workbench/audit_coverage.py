@@ -77,6 +77,11 @@ _HIGH_PRIORITY_VALUES = frozenset({"high", "critical", "priority", "high_priorit
 _RESOLVED_FINDING_STATUSES = frozenset({"resolved", "refuted", "waived", "closed"})
 _EXCEPTION_STATUSES = frozenset({"waived", "exception", "declared"})
 _EXCEPTION_FIELDS = frozenset({"requirement", "reason", "status", "stratum_id"})
+_MATERIALIZATION_FAILURES = {
+    "diverged": ("materialization_mismatch", DEFICIT_ERROR),
+    "unverifiable": ("materialization_unverifiable", DEFICIT_UNAVAILABLE),
+    "unavailable": ("materialization_unavailable", DEFICIT_UNAVAILABLE),
+}
 
 
 class AuditCoverageError(ValueError):
@@ -2225,7 +2230,8 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     denominator=1,
                 )
             )
-        elif item["status"] in {"diverged", "unverifiable"}:
+        elif item["status"] in _MATERIALIZATION_FAILURES:
+            reason, deficit_status = _MATERIALIZATION_FAILURES[item["status"]]
             deficits.append(
                 _build_deficit(
                     active_identity,
@@ -2235,11 +2241,13 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     },
                     observed=0,
                     target=1,
-                    reason="materialization_mismatch"
-                    if item["status"] == "diverged"
-                    else "materialization_unverifiable",
-                    status=DEFICIT_ERROR if item["status"] == "diverged" else DEFICIT_UNAVAILABLE,
+                    reason=reason,
+                    status=deficit_status,
                 )
+            )
+        elif item["status"] != "verified":
+            raise AuditCoverageError(
+                f"materialization row has unsupported normalized status: {item['status']}"
             )
     diagnostic_summary = _diagnostic_summary(source_scan, diagnostics)
     if not _prior_receipt_matches(
@@ -2813,6 +2821,34 @@ def _validate_control_evidence(  # noqa: C901
         raise AuditCoverageError("ordinary-control gaps do not match candidate/review evidence")
 
 
+def _validate_bound_materialization_rows(
+    payload: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    readable_ids: set[str],
+) -> None:
+    """Require a matching visible deficit for every bound non-verified row."""
+
+    for item in rows:
+        if not item["episode_id"] or item["episode_id"] not in readable_ids:
+            continue
+        if item["status"] == "verified":
+            continue
+        failure = _MATERIALIZATION_FAILURES.get(item["status"])
+        if failure is None:
+            raise AuditCoverageError(
+                "materialization evidence contains an unsupported normalized status"
+            )
+        reason, _ = failure
+        if not any(
+            deficit["reason"] == reason
+            and deficit["dimensions"].get("episode_id") == item["episode_id"]
+            for deficit in payload["deficits"]
+        ):
+            raise AuditCoverageError(
+                "bound non-verified materialization evidence lacks a matching deficit"
+            )
+
+
 def _validate_materialization_evidence(
     payload: Mapping[str, Any], evidence: Mapping[str, Any]
 ) -> None:
@@ -2842,6 +2878,7 @@ def _validate_materialization_evidence(
             for deficit in payload["deficits"]
         ):
             raise AuditCoverageError("unbound materialization evidence lacks a matching deficit")
+    _validate_bound_materialization_rows(payload, rows, readable_ids)
     statuses = Counter(item["status"] for item in rows)
     expected = {
         "total": len(rows),
@@ -3030,6 +3067,10 @@ def _validate_complete_matrix(  # noqa: C901, PLR0912
     require_gap(
         materialization["unverifiable"] > 0,
         "materialization_unverifiable",
+    )
+    require_gap(
+        materialization["unavailable"] > 0,
+        "materialization_unavailable",
     )
 
     finding_counts = payload["findings"]

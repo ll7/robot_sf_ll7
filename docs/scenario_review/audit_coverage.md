@@ -111,6 +111,11 @@ evidence with an explicit deficit, so they cannot satisfy completion. Rows are
 canonically ordered by episode identity and status; no positional synthetic ID
 is created. The same binding applies when materialization is supplied through a
 typed source-scan summary.
+Only a bound row with the normalized `verified` status can satisfy the
+materialization gate. Bound `diverged`, `unverifiable`, `unavailable`, unknown,
+or missing statuses remain visible as typed deficits; they require a matching
+declared exception for `complete_with_declared_exceptions`. Malformed rows are
+rejected rather than treated as successful evidence.
 
 When a source or scan revision is active, a BA-03 `ReviewRecord.source_revision`
 must carry the active revision token. Reviews with unavailable or stale

@@ -260,6 +260,196 @@ def test_declared_exception_is_visible_but_can_complete_with_exception() -> None
     assert report.exceptions[0]["reason"]
 
 
+@pytest.mark.parametrize("via_source_scan", (False, True), ids=("direct", "source-scan"))
+@pytest.mark.parametrize(
+    ("label", "status_value", "has_status", "expected_status", "expected_reason"),
+    (
+        (
+            "verified",
+            "verified",
+            True,
+            STATUS_COMPLETE_UNDER_PROTOCOL,
+            None,
+        ),
+        ("diverged", "diverged", True, STATUS_INCOMPLETE, "materialization_mismatch"),
+        (
+            "unverifiable",
+            "unverifiable",
+            True,
+            STATUS_INCOMPLETE,
+            "materialization_unverifiable",
+        ),
+        (
+            "unavailable",
+            "unavailable",
+            True,
+            STATUS_INCOMPLETE,
+            "materialization_unavailable",
+        ),
+        ("unknown", "unknown", True, STATUS_INCOMPLETE, "materialization_unavailable"),
+        ("null", None, True, STATUS_INCOMPLETE, "materialization_unavailable"),
+        (
+            "malformed-status",
+            {"unexpected": "shape"},
+            True,
+            STATUS_INCOMPLETE,
+            "materialization_unavailable",
+        ),
+        ("missing-status", None, False, STATUS_INCOMPLETE, "materialization_unavailable"),
+    ),
+)
+def test_materialization_status_truth_table_is_fail_closed(
+    via_source_scan, label, status_value, has_status, expected_status, expected_reason
+) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    materialization_row = {"episode_id": "episode-success"}
+    if has_status:
+        materialization_row["status"] = status_value
+    materialization = [materialization_row]
+    if via_source_scan:
+        source_scan = {
+            "inventory": rows,
+            "signals": attempts,
+            "detector_registry": _registry(),
+            "materialization": materialization,
+        }
+        report = evaluate_coverage(source_scan, review_records=reviews, identity=_identity())
+    else:
+        report = evaluate_coverage(
+            rows,
+            detector_attempts=attempts,
+            detector_registry=_registry(),
+            review_records=reviews,
+            materialization=materialization,
+            identity=_identity(),
+        )
+    assert report.status == expected_status, label
+    if expected_reason is None:
+        assert report.deficits == ()
+    else:
+        matching = [item for item in report.deficits if item.reason == expected_reason]
+        assert len(matching) == 1
+        assert matching[0].dimensions["episode_id"] == "episode-success"
+    validate_audit_coverage(report.to_dict())
+    assert report.from_dict(report.to_dict()).status == expected_status
+
+
+@pytest.mark.parametrize("via_source_scan", (False, True), ids=("direct", "source-scan"))
+def test_malformed_materialization_row_fails_closed(via_source_scan) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    materialization = [None]
+    if via_source_scan:
+        source_scan = {
+            "inventory": rows,
+            "signals": attempts,
+            "detector_registry": _registry(),
+            "materialization": materialization,
+        }
+        with pytest.raises(AuditCoverageError):
+            evaluate_coverage(source_scan, review_records=reviews, identity=_identity())
+    else:
+        with pytest.raises(AuditCoverageError):
+            evaluate_coverage(
+                rows,
+                detector_attempts=attempts,
+                detector_registry=_registry(),
+                review_records=reviews,
+                materialization=materialization,
+                identity=_identity(),
+            )
+
+
+@pytest.mark.parametrize("via_source_scan", (False, True), ids=("direct", "source-scan"))
+def test_bound_unavailable_materialization_requires_explicit_exception(via_source_scan) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    materialization = [{"episode_id": "episode-success", "status": "unavailable"}]
+    kwargs = {
+        "review_records": reviews,
+        "identity": _identity(),
+        "exceptions": {"materialization_unavailable": "release asset unavailable offline"},
+    }
+    if via_source_scan:
+        scan = {
+            "inventory": rows,
+            "signals": attempts,
+            "detector_registry": _registry(),
+            "materialization": materialization,
+        }
+        report = evaluate_coverage(scan, **kwargs)
+    else:
+        report = evaluate_coverage(
+            rows,
+            detector_attempts=attempts,
+            detector_registry=_registry(),
+            materialization=materialization,
+            **kwargs,
+        )
+    assert report.status == STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS
+    assert [item.reason for item in report.deficits] == ["materialization_unavailable"]
+    assert report.deficits[0].status == "waived"
+    validate_audit_coverage(report.to_dict())
+    assert report.from_dict(report.to_dict()).status == STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS
+
+
+def test_complete_report_rejects_forged_bound_unavailable_materialization() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        materialization=[{"episode_id": "episode-success", "status": "verified"}],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_COMPLETE_UNDER_PROTOCOL
+    payload = report.to_dict()
+    payload["evidence"]["materialization_rows"][0]["status"] = "unavailable"
+    unavailable = {
+        "total": 1,
+        "verified": 0,
+        "diverged": 0,
+        "unverifiable": 0,
+        "unavailable": 1,
+    }
+    payload["materialization"] = unavailable
+    payload["counts"]["materialization"] = unavailable
+    candidate = _redigest(payload)
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(candidate)
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(candidate)
+
+
+@pytest.mark.parametrize("via_source_scan", (False, True), ids=("direct", "source-scan"))
+def test_duplicate_materialization_episode_rows_fail_closed(via_source_scan) -> None:
+    rows, attempts, reviews = _complete_inputs()
+    materialization = [
+        {"episode_id": "episode-success", "status": "verified"},
+        {"episode_id": "episode-success", "status": "unavailable"},
+    ]
+    with pytest.raises(AuditCoverageError):
+        if via_source_scan:
+            evaluate_coverage(
+                {
+                    "inventory": rows,
+                    "signals": attempts,
+                    "detector_registry": _registry(),
+                    "materialization": materialization,
+                },
+                review_records=reviews,
+                identity=_identity(),
+            )
+        else:
+            evaluate_coverage(
+                rows,
+                detector_attempts=attempts,
+                detector_registry=_registry(),
+                review_records=reviews,
+                materialization=materialization,
+                identity=_identity(),
+            )
+
+
 @pytest.mark.parametrize(
     ("materialization", "reason", "episode_id", "status"),
     (

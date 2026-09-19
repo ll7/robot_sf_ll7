@@ -250,6 +250,36 @@ def test_ppo_dict_obs_backfill_respects_nonzero_lower_bound() -> None:
     np.testing.assert_allclose(model.last_obs["pedestrians_radius"], [0.5])
 
 
+def test_ppo_dict_obs_rejects_values_outside_model_space() -> None:
+    """Perturbed observations cannot bypass finite model-declared Box bounds."""
+    model = _FakePPOModel(
+        gym_spaces.Dict(
+            {
+                "robot_position": _bounded_box((2,), low=-5.0, high=5.0),
+            }
+        )
+    )
+    planner = _planner_with_model(model)
+
+    with pytest.raises(ValueError, match="robot_position.*outside"):
+        planner.step({"robot_position": np.array([6.0, 0.0], dtype=np.float32)})
+
+
+def test_ppo_flat_box_obs_rejects_values_outside_model_space() -> None:
+    """Flat Box checkpoints also fail closed on out-of-range injected values."""
+    model = _FakePPOModel(gym_spaces.Dict({"x": _box((1,))}))
+    model.observation_space = _bounded_box((2,), low=-1.0, high=1.0)
+    planner = _planner_with_model(model)
+    planner._runtime_observation_space = gym_spaces.Dict(
+        {"x": _bounded_box((2,), low=-10.0, high=10.0)}
+    )
+
+    with pytest.raises(ValueError, match="outside.*model-declared"):
+        planner._build_model_obs_flat_box(
+            {"x": np.array([2.0, 0.0], dtype=np.float32)}, model.observation_space
+        )
+
+
 def test_align_model_obs_dict_default_for_space_is_in_bounds() -> None:
     """`_default_for_space` returns in-bounds defaults for nested and bounded spaces (#3704)."""
     planner = _planner_with_model(_FakePPOModel(gym_spaces.Dict({"x": _box((1,))})))

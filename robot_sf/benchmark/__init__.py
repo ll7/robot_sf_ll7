@@ -31,6 +31,14 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
         load_benchmark_protocol,
         validate_benchmark_protocol_payload,
     )
+    from robot_sf.benchmark.calf_legnav_comparator import (
+        CALF_LEGNAV_CLAIM_BOUNDARY,
+        CALF_LEGNAV_COMPARATOR_SCHEMA_VERSION,
+        CALF_LEGNAV_SOURCE_TITLE,
+        CALF_LEGNAV_SOURCE_URL,
+        build_calf_legnav_comparator_report,
+        canonical_config_digest,
+    )
     from robot_sf.benchmark.case_dossier_figure import (
         CASE_DOSSIER_INPUT_SCHEMA_VERSION,
         CASE_DOSSIER_MANIFEST_SCHEMA_VERSION,
@@ -161,6 +169,13 @@ _LAZY: dict[str, str] = {
     "ClaimRules": "benchmark_protocol",
     "load_benchmark_protocol": "benchmark_protocol",
     "validate_benchmark_protocol_payload": "benchmark_protocol",
+    # calf_legnav_comparator
+    "CALF_LEGNAV_CLAIM_BOUNDARY": "calf_legnav_comparator",
+    "CALF_LEGNAV_COMPARATOR_SCHEMA_VERSION": "calf_legnav_comparator",
+    "CALF_LEGNAV_SOURCE_TITLE": "calf_legnav_comparator",
+    "CALF_LEGNAV_SOURCE_URL": "calf_legnav_comparator",
+    "build_calf_legnav_comparator_report": "calf_legnav_comparator",
+    "canonical_config_digest": "calf_legnav_comparator",
     # case_dossier_figure
     "CASE_DOSSIER_INPUT_SCHEMA_VERSION": "case_dossier_figure",
     "CASE_DOSSIER_MANIFEST_SCHEMA_VERSION": "case_dossier_figure",
@@ -265,6 +280,10 @@ _LAZY: dict[str, str] = {
 
 __all__ = [
     "AMMV_BENCHMARK_PROTOCOL_PATH",
+    "CALF_LEGNAV_CLAIM_BOUNDARY",
+    "CALF_LEGNAV_COMPARATOR_SCHEMA_VERSION",
+    "CALF_LEGNAV_SOURCE_TITLE",
+    "CALF_LEGNAV_SOURCE_URL",
     "CANONICAL_METRICS",
     "CANONICAL_METRIC_LAYERS",
     "CASE_DOSSIER_INPUT_SCHEMA_VERSION",
@@ -320,11 +339,13 @@ __all__ = [
     "TrackedAgentsForecastAdapter",
     "build_and_validate_packet",
     "build_assurance_fragment",
+    "build_calf_legnav_comparator_report",
     "build_constant_velocity_forecast_batch",
     "build_forecast_calibration_report",
     "build_forecast_conformal_pilot_report",
     "build_forecast_transferability_stress_matrix",
     "build_metric_layer_summary",
+    "canonical_config_digest",
     "classify_scenario_failure_cause",
     "compute_packet_digest",
     "compute_post_review_digest",

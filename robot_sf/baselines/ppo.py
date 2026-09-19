@@ -137,6 +137,7 @@ class PPOPlanner:
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
+        self._resolved_model_path: Path | None = None
         self._status = "ok"
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
@@ -164,6 +165,7 @@ class PPOPlanner:
 
     def _load_model(self) -> None:
         """Load the PPO model from disk or enter fallback mode."""
+        self._resolved_model_path = None
         if self.config.model_id is None:
             validate_no_local_model_path_value(
                 self.config.model_path,
@@ -223,6 +225,7 @@ class PPOPlanner:
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
+            self._resolved_model_path = mp
             self._status = "ok"
             self._fallback_reason = None
         except (RuntimeError, ValueError, OSError) as e:
@@ -268,6 +271,7 @@ class PPOPlanner:
         """Update the planner's configuration."""
         self.config = self._parse_config(config)
         self._model = None
+        self._resolved_model_path = None
         self._initialized = False
         if not self._defer_model_loading:
             self._ensure_model_loaded()
@@ -296,17 +300,47 @@ class PPOPlanner:
 
     # --- API -----------------------------------------------------------
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
-        """Compute a planner action for the given observation.
+        """Compute a projected planner action for the given observation.
 
         Args:
             obs: SocNav-style observation or Observation instance.
 
         Returns:
-            Action dict in either velocity or unicycle format.
+            Action dict in either velocity or unicycle format, projected into
+                the configured runtime bounds.
+        """
+        return self._step(obs, project=True)
+
+    def step_raw(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
+        """Compute the model-space action before runtime projection.
+
+        The returned mapping uses the same stable keys as :meth:`step`, but
+        preserves the raw model values so benchmark adapters can validate the
+        policy contract before clipping or rescaling. Goal-directed fallback
+        actions remain bounded because they are not model outputs.
+
+        Args:
+            obs: SocNav-style observation or Observation instance.
+
+        Returns:
+            Raw model action dict in either velocity or unicycle format.
+        """
+        return self._step(obs, project=False)
+
+    def _step(
+        self,
+        obs: Observation | dict[str, Any],
+        *,
+        project: bool,
+    ) -> dict[str, float]:
+        """Run one prediction while selecting raw or projected action output.
+
+        Returns:
+            Action dict in the configured action space.
         """
         self._ensure_model_loaded()
         if is_observation_mapping(obs) and self._uses_dict_observation():
-            return self._step_dict_obs(obs)
+            return self._step_dict_obs(obs, project=project)
 
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
@@ -319,11 +353,11 @@ class PPOPlanner:
                 action_vec = self._predict_action(model_obs)
                 if action_vec is None:
                     raise RuntimeError("PPO model unavailable or prediction failed")
-                return self._action_vec_to_dict_from_array(action_vec)
+                return self._action_vec_to_dict_from_array(action_vec, project=project)
             action_vec = self._predict_action(obs)
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
-            return self._action_vec_to_dict(action_vec, obs)
+            return self._action_vec_to_dict(action_vec, obs, project=project)
         except (RuntimeError, ValueError, OSError):
             # Fallback for robustness on common prediction errors
             if self.config.fallback_to_goal:
@@ -338,7 +372,7 @@ class PPOPlanner:
         """Return whether planner is configured for native dict observations."""
         return str(self.config.obs_mode).strip().lower() in {"dict", "native_dict", "multi_input"}
 
-    def _step_dict_obs(self, obs: dict[str, Any]) -> dict[str, float]:
+    def _step_dict_obs(self, obs: dict[str, Any], *, project: bool) -> dict[str, float]:
         """Predict an action from flattened dict observations expected by MultiInput PPO.
 
         Returns:
@@ -349,7 +383,7 @@ class PPOPlanner:
             action_vec = self._predict_action(model_obs)
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
-            return self._action_vec_to_dict_from_array(action_vec)
+            return self._action_vec_to_dict_from_array(action_vec, project=project)
         except (RuntimeError, ValueError, OSError):
             if self.config.fallback_to_goal:
                 if self._status != "fallback":
@@ -601,6 +635,7 @@ class PPOPlanner:
                         f"expected {target_shape}",
                     )
                 arr = arr.reshape(target_shape)
+            self._validate_model_observation_value(key, arr, sub_space)
             converted[key] = arr
         if backfilled:
             logger.debug(
@@ -609,6 +644,19 @@ class PPOPlanner:
                 ", ".join(backfilled[:6]),
             )
         return converted
+
+    @staticmethod
+    def _validate_model_observation_value(key: str, value: Any, sub_space: Any) -> None:
+        """Reject a supplied observation value outside its declared model space."""
+        contains = getattr(sub_space, "contains", None)
+        if not callable(contains):
+            return
+        try:
+            in_bounds = bool(contains(value))
+        except (TypeError, ValueError):
+            in_bounds = False
+        if not in_bounds:
+            raise ValueError(f"Observation key '{key}' is outside the model-declared space")
 
     @classmethod
     def _default_for_space(cls, sub_space: Any) -> Any:
@@ -724,6 +772,7 @@ class PPOPlanner:
                     f"got shape {tuple(flat_obs.shape)}, expected {target_shape}."
                 )
             flat_obs = flat_obs.reshape(target_shape)
+        self._validate_model_observation_value("<flat>", flat_obs, model_space)
         return flat_obs
 
     def _predictive_feature_payload(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
@@ -834,8 +883,16 @@ class PPOPlanner:
         vec = np.concatenate([rel_goal, rv, ped_flat]).astype(float)
         return vec
 
-    def _action_vec_to_dict_from_array(self, act: np.ndarray) -> dict[str, float]:
-        """Convert a raw action vector to the configured action dictionary.
+    def _action_vec_to_dict_from_array(
+        self,
+        act: np.ndarray,
+        *,
+        project: bool = True,
+    ) -> dict[str, float]:
+        """Convert an action vector to the configured action dictionary.
+
+        ``project=False`` preserves the model output for callers that need to
+        validate policy-space bounds before runtime conversion.
 
         Returns:
             Action dict in either velocity or unicycle format.
@@ -844,27 +901,35 @@ class PPOPlanner:
             # Expect [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0
             w = float(act[1]) if act.size >= 2 else 0.0
-            v = max(0.0, min(v, self.config.v_max))
-            w = max(-self.config.omega_max, min(w, self.config.omega_max))
+            if project:
+                v = max(0.0, min(v, self.config.v_max))
+                w = max(-self.config.omega_max, min(w, self.config.omega_max))
             return {"v": v, "omega": w}
         # Default velocity space: expect [vx, vy]
         vx = float(act[0]) if act.size >= 1 else 0.0
         vy = float(act[1]) if act.size >= 2 else 0.0
         # Optional clamp to v_max
-        spd = float(np.hypot(vx, vy))
-        if spd > self.config.v_max and spd > self.EPS:
-            scale = self.config.v_max / (spd + self.EPS)
-            vx *= scale
-            vy *= scale
+        if project:
+            spd = float(np.hypot(vx, vy))
+            if spd > self.config.v_max and spd > self.EPS:
+                scale = self.config.v_max / (spd + self.EPS)
+                vx *= scale
+                vy *= scale
         return {"vx": vx, "vy": vy}
 
-    def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
+    def _action_vec_to_dict(
+        self,
+        act: np.ndarray,
+        _obs: Observation,
+        *,
+        project: bool = True,
+    ) -> dict[str, float]:
         """Convert raw action vector to configured action dict for Observation mode.
 
         Returns:
             Action dict in configured output space.
         """
-        return self._action_vec_to_dict_from_array(act)
+        return self._action_vec_to_dict_from_array(act, project=project)
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
         """Return a simple goal-seeking action when PPO is unavailable.

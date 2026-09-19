@@ -76,6 +76,11 @@ The release/source/protocol identity is included in the completion receipt;
 source, detector policy, or protocol. Missing identity components are visible as
 an error deficit rather than silently completing.
 
+Completion receipts use the closed `audit-completion-receipt.v1` envelope: all
+identity fields and a 64-character report digest are required. The digest is an
+unkeyed integrity check, not a signature or proof of trusted report production;
+admission code must retain and validate the referenced report as well.
+
 BA-01 `AuditScanReport` inventory and `Signal` values are accepted directly.
 For the authoritative human denominator, pass BA-03 typed `ReviewRecord`
 values. A compact mapping earns credit only when it is a complete BA-03 record
@@ -97,14 +102,18 @@ must carry the active revision token. Reviews with unavailable or stale
 revision provenance remain visible but cannot enter the human denominator.
 
 Missing, unavailable, invalid, duplicate, unsupported, and error states remain
-in the report. A declared exception is retained as a `CoverageDeficit` with
-`status="waived"`; it changes the result only to
-`complete_with_declared_exceptions`. No exception is inferred from a timestamp
-or the existence of an artifact.
+in the report. A declared exception is a closed, non-empty
+requirement/reason/status envelope and is retained as exactly one matching
+`CoverageDeficit` with `status="waived"`; unmatched or duplicate declarations
+are discarded during evaluation and cannot produce an exception-bearing
+completion status. No exception is inferred from a timestamp or the existence
+of an artifact.
 
 ## Outputs and downstream handoff
 
-`AuditHealthReport.to_dict()` and `to_json()` emit `audit-coverage.v1`.
+`AuditHealthReport.to_dict()` and `to_json()` emit `audit-coverage.v1`; exports
+are deep copies, so mutating a nested returned mapping cannot change the frozen
+report or leave its digest stale.
 `AuditHealthReport.from_dict()` and `validate_audit_coverage()` require the
 complete nested schema, finite JSON values, matching identity/protocol/report
 digests, and status/deficit consistency; a payload cannot change its status to

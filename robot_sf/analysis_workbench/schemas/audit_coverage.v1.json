@@ -22,7 +22,7 @@
     "counts": {"$ref": "#/$defs/counts"},
     "strata": {"type": "array", "items": {"$ref": "#/$defs/stratum"}},
     "deficits": {"type": "array", "items": {"$ref": "#/$defs/deficit"}},
-    "exceptions": {"type": "array", "items": {"type": "object"}},
+    "exceptions": {"type": "array", "items": {"$ref": "#/$defs/exception"}},
     "findings": {"$ref": "#/$defs/findings"},
     "materialization": {"$ref": "#/$defs/materialization"},
     "diagnostics": {
@@ -85,7 +85,9 @@
         "ordinary_candidate_fields": {
           "type": "array", "items": {"type": "string", "minLength": 1}
         },
-        "declared_exceptions": {"type": "array", "items": {"type": "object"}},
+        "declared_exceptions": {
+          "type": "array", "items": {"$ref": "#/$defs/exception"}
+        },
         "metadata": {"type": "object"},
         "protocol_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
@@ -106,6 +108,17 @@
         "unsupported": {"type": "integer", "minimum": 0},
         "unexpected": {"type": "integer", "minimum": 0},
         "replay_or_duplicate_rows": {"type": "integer", "minimum": 0}
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirement", "reason", "status"],
+      "properties": {
+        "requirement": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "status": {"enum": ["waived", "exception", "declared"]},
+        "stratum_id": {"type": "string", "minLength": 1}
       }
     },
     "detector_totals": {
@@ -147,7 +160,7 @@
         "duplicate_or_replayed", "stale_or_mismatched", "untyped_or_invalid",
         "full_human_ids", "human_ids", "agent_ids", "full_human_strata",
         "observed_strata", "ordinary_control_candidates", "ordinary_control_reviewed",
-        "ordinary_control_gap_groups"
+        "ordinary_control_groups", "ordinary_control_required", "ordinary_control_gap_groups"
       ],
       "properties": {
         "human_reviewed": {"type": "integer", "minimum": 0},
@@ -166,6 +179,8 @@
         "observed_strata": {"type": "integer", "minimum": 0},
         "ordinary_control_candidates": {"type": "integer", "minimum": 0},
         "ordinary_control_reviewed": {"type": "integer", "minimum": 0},
+        "ordinary_control_groups": {"type": "integer", "minimum": 0},
+        "ordinary_control_required": {"type": "integer", "minimum": 0},
         "ordinary_control_gap_groups": {"type": "array", "items": {"type": "object"}}
       }
     },
@@ -277,7 +292,7 @@
       "required": [
         "finding_id", "candidate_members", "confirmed_members", "high_priority",
         "integrity", "status", "representative_episode_id", "representative_reviewed",
-        "control_episode_ids"
+        "control_episode_ids", "control_reviewed"
       ],
       "properties": {
         "finding_id": {"type": "string", "minLength": 1},
@@ -288,7 +303,8 @@
         "status": {"type": "string", "minLength": 1},
         "representative_episode_id": {"type": "string"},
         "representative_reviewed": {"type": "boolean"},
-        "control_episode_ids": {"type": "array", "items": {"type": "string"}}
+        "control_episode_ids": {"type": "array", "items": {"type": "string"}},
+        "control_reviewed": {"type": "boolean"}
       }
     },
     "findings": {

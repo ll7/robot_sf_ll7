@@ -643,6 +643,140 @@ def test_report_semantics_reject_all_derived_and_status_tampering() -> None:
     reject_incomplete(lambda item: item["deficits"][0].update({"source_id": "different"}))
 
 
+def test_recomputed_complete_report_cannot_hide_unmet_strata_or_controls() -> None:
+    incomplete = evaluate_coverage(
+        [
+            {
+                "episode_id": "unreviewed",
+                "planner_id": "planner",
+                "scenario_group": "corridor",
+                "outcome": "success",
+                "ordinary_control": True,
+            }
+        ],
+        detector_attempts=[
+            {"episode_id": "unreviewed", "detector_id": "telemetry", "status": "clear"}
+        ],
+        detector_registry=_registry(),
+        identity=_identity(),
+    )
+    assert incomplete.status == STATUS_INCOMPLETE
+    payload = incomplete.to_dict()
+    payload["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["counts"]["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    payload["deficits"] = []
+    payload["exceptions"] = []
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(_redigest(payload))
+    with pytest.raises(AuditCoverageError):
+        incomplete.from_dict(payload)
+
+
+def test_exceptions_must_be_nonempty_and_match_one_waived_deficit() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    complete = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    unmatched = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+        exceptions={"bogus_requirement": "nothing to waive"},
+    )
+    assert unmatched.status == STATUS_COMPLETE_UNDER_PROTOCOL
+    assert unmatched.exceptions == ()
+
+    for exceptions in (
+        [{}],
+        [{"requirement": "bogus", "reason": "nothing to waive", "status": "waived"}],
+        [{"requirement": "bogus", "reason": "", "status": "waived"}],
+    ):
+        payload = complete.to_dict()
+        payload["status"] = STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS
+        payload["counts"]["status"] = STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS
+        payload["deficits"] = []
+        payload["exceptions"] = exceptions
+        with pytest.raises(AuditCoverageError):
+            validate_audit_coverage(_redigest(payload))
+
+    with pytest.raises(AuditCoverageError):
+        evaluate_coverage(
+            rows,
+            detector_attempts=attempts,
+            detector_registry=_registry(),
+            review_records=reviews,
+            identity=_identity(),
+            exceptions={"bogus_requirement": ""},
+        )
+
+    waived = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+        materialization=[{"episode_id": "episode-success", "status": "diverged"}],
+        exceptions={"materialization_mismatch": "offline"},
+    )
+    duplicate = waived.to_dict()
+    duplicate["exceptions"].append(dict(duplicate["exceptions"][0]))
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(_redigest(duplicate))
+
+
+def test_completion_helpers_reject_minimal_unkeyed_receipts() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    forged = {"status": STATUS_COMPLETE_UNDER_PROTOCOL, "identity_digest": report.identity.digest}
+    assert not receipt_matches_identity(forged, report.identity)
+    assert not is_completion_current(forged, report.identity)
+    assert receipt_matches_identity(report.completion_receipt, report.identity)
+    assert is_completion_current(report.completion_receipt, report.identity)
+
+
+def test_report_exports_do_not_alias_nested_state_or_stale_digest() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    before = report.to_json()
+    exported = report.to_dict()
+    exported["counts"]["coverage"]["expected"] = 999
+    exported["findings"]["rows"].append(
+        {
+            "finding_id": "forged",
+            "candidate_members": [],
+            "confirmed_members": [],
+            "high_priority": False,
+            "integrity": False,
+            "status": "proposed",
+            "representative_episode_id": "",
+            "representative_reviewed": False,
+            "control_episode_ids": [],
+            "control_reviewed": False,
+        }
+    )
+    exported["protocol"]["metadata"]["forged"] = True
+    assert report.to_json() == before
+    validate_audit_coverage(report.to_dict())
+
+
 def test_unexpected_detector_attempt_cannot_replace_missing_registry_accounting() -> None:
     report = evaluate_coverage(
         [{"episode_id": "expected", "planner_id": "p", "scenario_group": "g"}],

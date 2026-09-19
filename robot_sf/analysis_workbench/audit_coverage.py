@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -74,6 +75,8 @@ _ORDINARY_CONTROL_FIELDS = (
 )
 _HIGH_PRIORITY_VALUES = frozenset({"high", "critical", "priority", "high_priority"})
 _RESOLVED_FINDING_STATUSES = frozenset({"resolved", "refuted", "waived", "closed"})
+_EXCEPTION_STATUSES = frozenset({"waived", "exception", "declared"})
+_EXCEPTION_FIELDS = frozenset({"requirement", "reason", "status", "stratum_id"})
 
 
 class AuditCoverageError(ValueError):
@@ -113,6 +116,30 @@ def _strict_json(value: Any, *, path: str = "$") -> None:
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         for index, item in enumerate(value):
             _strict_json(item, path=f"{path}[{index}]")
+
+
+def _freeze_json(value: Any) -> Any:
+    """Recursively freeze JSON-like report state before storing it.
+
+    Returns:
+        An immutable mapping/sequence tree for the supplied value.
+    """
+
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+def _thaw_json(value: Any) -> Any:
+    """Return a fresh mutable JSON-like copy for a report export."""
+
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw_json(item) for item in value]
+    return value
 
 
 def _digest(value: Any) -> str:
@@ -198,6 +225,36 @@ def _sequence(value: Any) -> tuple[Any, ...]:
     return (value,)
 
 
+def _exception_entry(value: Any, *, name: str) -> dict[str, Any]:
+    """Normalize one closed, non-empty declared-exception envelope.
+
+    Returns:
+        A canonical exception mapping.
+    """
+
+    raw = _mapping(value, name=name)
+    if any(not isinstance(key, str) for key in raw):
+        raise AuditCoverageError(f"{name} must use string field names")
+    unknown = set(raw) - _EXCEPTION_FIELDS - {"rationale", "reason_code"}
+    if unknown:
+        raise AuditCoverageError(f"{name} contains unknown fields: {', '.join(sorted(unknown))}")
+    requirement = _text(
+        raw.get("requirement") or raw.get("reason_code"),
+        name=f"{name}.requirement",
+    )
+    reason = _text(
+        raw.get("reason") or raw.get("rationale"),
+        name=f"{name}.reason",
+    )
+    status = _token(raw.get("status"), default="waived").lower()
+    if status not in _EXCEPTION_STATUSES:
+        raise AuditCoverageError(f"{name}.status must be one of {sorted(_EXCEPTION_STATUSES)}")
+    result = {"requirement": requirement, "reason": reason, "status": status}
+    if raw.get("stratum_id") is not None:
+        result["stratum_id"] = _text(raw["stratum_id"], name=f"{name}.stratum_id")
+    return result
+
+
 @dataclass(frozen=True, slots=True)
 class AuditProtocol:
     """Configurable operational coverage targets for ``audit-protocol.v1``."""
@@ -241,7 +298,7 @@ class AuditProtocol:
             for item in self.ordinary_candidate_fields
         )
         exceptions = tuple(
-            _mapping(item, name="protocol.declared_exceptions[]")
+            _exception_entry(item, name="protocol.declared_exceptions[]")
             for item in self.declared_exceptions
         )
         metadata = _mapping(self.metadata, name="protocol.metadata") if self.metadata else {}
@@ -249,8 +306,8 @@ class AuditProtocol:
         _strict_json(metadata, path="protocol.metadata")
         object.__setattr__(self, "scenario_group_fields", group_fields)
         object.__setattr__(self, "ordinary_candidate_fields", control_fields)
-        object.__setattr__(self, "declared_exceptions", exceptions)
-        object.__setattr__(self, "metadata", metadata)
+        object.__setattr__(self, "declared_exceptions", _freeze_json(exceptions))
+        object.__setattr__(self, "metadata", _freeze_json(metadata))
 
     @classmethod
     def default(cls) -> AuditProtocol:
@@ -308,8 +365,8 @@ class AuditProtocol:
             "require_integrity_disposition": self.require_integrity_disposition,
             "scenario_group_fields": list(self.scenario_group_fields),
             "ordinary_candidate_fields": list(self.ordinary_candidate_fields),
-            "declared_exceptions": [dict(item) for item in self.declared_exceptions],
-            "metadata": dict(self.metadata),
+            "declared_exceptions": _thaw_json(self.declared_exceptions),
+            "metadata": _thaw_json(self.metadata),
         }
         if include_digest:
             result["protocol_digest"] = self.digest
@@ -691,8 +748,18 @@ class AuditHealthReport:
             if not isinstance(value, Mapping):
                 raise AuditCoverageError(f"report.{name} must be a mapping")
             _strict_json(value, path=f"report.{name}")
-        object.__setattr__(self, "strata", tuple(dict(item) for item in self.strata))
-        object.__setattr__(self, "exceptions", tuple(dict(item) for item in self.exceptions))
+        strata = tuple(dict(item) for item in self.strata)
+        exceptions = tuple(
+            _exception_entry(item, name="report.exceptions[]") for item in self.exceptions
+        )
+        _strict_json(strata, path="report.strata")
+        _strict_json(exceptions, path="report.exceptions")
+        object.__setattr__(self, "counts", _freeze_json(self.counts))
+        object.__setattr__(self, "strata", _freeze_json(strata))
+        object.__setattr__(self, "exceptions", _freeze_json(exceptions))
+        object.__setattr__(self, "findings", _freeze_json(self.findings))
+        object.__setattr__(self, "materialization", _freeze_json(self.materialization))
+        object.__setattr__(self, "diagnostics", _freeze_json(self.diagnostics))
         object.__setattr__(
             self,
             "limitations",
@@ -700,8 +767,6 @@ class AuditHealthReport:
         )
         if any(not isinstance(item, CoverageDeficit) for item in self.deficits):
             raise AuditCoverageError("report.deficits must contain CoverageDeficit values")
-        _strict_json(self.strata, path="report.strata")
-        _strict_json(self.exceptions, path="report.exceptions")
         if self.identity.protocol_version != self.protocol.version:
             raise AuditCoverageError("report identity protocol_version does not match protocol")
         if self.identity.protocol_digest != self.protocol.digest:
@@ -723,6 +788,7 @@ class AuditHealthReport:
         if self.report_digest and self.report_digest != digest:
             raise AuditCoverageError("report_digest does not match report contents")
         object.__setattr__(self, "report_digest", digest)
+        _validate_report_semantics(self._payload(include_digest=True))
 
     @property
     def identity_digest(self) -> str:
@@ -756,6 +822,11 @@ class AuditHealthReport:
             "release_digest": self.identity.release_digest,
             "protocol_version": self.identity.protocol_version,
             "protocol_digest": self.identity.protocol_digest,
+            "detector_registry_digest": self.identity.detector_registry_digest,
+            "detector_config_digest": self.identity.detector_config_digest,
+            "source_revision": self.identity.source_revision,
+            "scan_revision": self.identity.scan_revision,
+            "review_revision": self.identity.review_revision,
             "coverage_receipt_revision": self.identity.coverage_receipt_revision,
         }
 
@@ -771,13 +842,13 @@ class AuditHealthReport:
             "status": self.status,
             "identity": self.identity.to_dict(),
             "protocol": self.protocol.to_dict(),
-            "counts": dict(self.counts),
-            "strata": [dict(item) for item in self.strata],
+            "counts": _thaw_json(self.counts),
+            "strata": _thaw_json(self.strata),
             "deficits": [item.to_dict() for item in self.deficits],
-            "exceptions": [dict(item) for item in self.exceptions],
-            "findings": dict(self.findings),
-            "materialization": dict(self.materialization),
-            "diagnostics": dict(self.diagnostics),
+            "exceptions": _thaw_json(self.exceptions),
+            "findings": _thaw_json(self.findings),
+            "materialization": _thaw_json(self.materialization),
+            "diagnostics": _thaw_json(self.diagnostics),
             "limitations": list(self.limitations),
         }
         if include_digest:
@@ -1391,42 +1462,47 @@ def _stratum_id(dimensions: Mapping[str, Any]) -> str:
 def _exception_entries(
     protocol: AuditProtocol, values: Sequence[Any] | Mapping[str, Any] | None
 ) -> tuple[dict[str, Any], ...]:
-    entries: list[dict[str, Any]] = [dict(item) for item in protocol.declared_exceptions]
+    entries: list[dict[str, Any]] = [
+        _exception_entry(item, name="protocol.declared_exceptions[]")
+        for item in protocol.declared_exceptions
+    ]
     if isinstance(values, Mapping):
         entries.extend(
-            {"requirement": key, "reason": value, "status": "waived"}
+            _exception_entry(
+                {"requirement": key, "reason": value, "status": "waived"},
+                name="exceptions[]",
+            )
             for key, value in values.items()
         )
     else:
-        entries.extend(_mapping(item, name="exceptions[]") for item in _sequence(values))
-    normalized: list[dict[str, Any]] = []
-    for item in entries:
-        reason = _token(item.get("reason") or item.get("rationale"), default="")
-        status = _token(item.get("status"), default="waived").lower()
-        normalized.append({**item, "reason": reason, "status": status})
-    return tuple(sorted(normalized, key=canonical_json))
+        entries.extend(_exception_entry(item, name="exceptions[]") for item in _sequence(values))
+    return tuple(sorted(entries, key=canonical_json))
+
+
+def _exception_matches(deficit: CoverageDeficit, exception: Mapping[str, Any]) -> bool:
+    """Return whether one closed exception names one specific deficit."""
+
+    requirement = exception.get("requirement")
+    requirement_values = {
+        deficit.reason,
+        deficit.stratum_id,
+        deficit.dimensions.get("requirement"),
+        "*",
+    }
+    if requirement not in requirement_values:
+        return False
+    stratum = exception.get("stratum_id")
+    return stratum in {None, "*", deficit.stratum_id}
 
 
 def _exception_for(
     deficit: CoverageDeficit, exceptions: Sequence[Mapping[str, Any]]
 ) -> Mapping[str, Any] | None:
     for item in exceptions:
-        if item.get("status") not in {"waived", "exception", "declared"} or not item.get("reason"):
+        if item.get("status") not in _EXCEPTION_STATUSES:
             continue
-        requirement = item.get("requirement") or item.get("reason_code") or item.get("reason")
-        stratum = item.get("stratum_id")
-        if requirement not in {deficit.reason, deficit.stratum_id, "*", None} and stratum not in {
-            None,
-            deficit.stratum_id,
-            "*",
-        }:
-            continue
-        if stratum not in {None, deficit.stratum_id, "*"} and requirement not in {
-            "*",
-            deficit.reason,
-        }:
-            continue
-        return item
+        if _exception_matches(deficit, item):
+            return item
     return None
 
 
@@ -1568,6 +1644,7 @@ def _finding_summary(  # noqa: C901
         control_ids = tuple(
             sorted({str(item) for item in _sequence(controls_raw) if str(item) in readable_ids})
         )
+        control_reviewed = False
         if control_ids:
             control_reviewed = any(item in full_human_ids for item in control_ids)
             if control_reviewed:
@@ -1615,6 +1692,7 @@ def _finding_summary(  # noqa: C901
                 "representative_episode_id": representative,
                 "representative_reviewed": representative_reviewed,
                 "control_episode_ids": list(control_ids),
+                "control_reviewed": bool(control_ids and control_reviewed),
             }
         )
     finding_rows.sort(key=lambda item: (item["finding_id"], canonical_json(item)))
@@ -1753,11 +1831,7 @@ def _identity_from_scan(  # noqa: C901
 def _prior_receipt_matches(receipt: Any, identity: AuditIdentity) -> bool:
     if receipt is None:
         return True
-    raw = _mapping(receipt, name="prior_receipt")
-    declared = raw.get("identity_digest")
-    if not isinstance(declared, str):
-        return False
-    return declared == identity.digest
+    return receipt_matches_identity(receipt, identity)
 
 
 def _diagnostic_summary(
@@ -2030,6 +2104,10 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "full_human_strata": sum(1 for row in strata if row["status"] == "met"),
             "observed_strata": len(strata),
             "ordinary_control_candidates": sum(len(item) for item in control_groups.values()),
+            "ordinary_control_groups": len(control_groups),
+            "ordinary_control_required": (
+                len(control_groups) * active_protocol.ordinary_control_review_target
+            ),
             "ordinary_control_reviewed": control_reviewed,
             "ordinary_control_gap_groups": control_gaps,
         }
@@ -2081,13 +2159,29 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
             )
         )
     final_deficits: list[CoverageDeficit] = []
-    applied_exceptions: list[dict[str, Any]] = list(exceptions_normalized)
+    applied_exception_indexes: set[int] = set()
     for deficit in sorted(deficits, key=lambda item: (item.stratum_id, item.reason, item.status)):
-        exception = _exception_for(deficit, exceptions_normalized)
-        if exception is not None:
+        exception_match = next(
+            (
+                (index, item)
+                for index, item in enumerate(exceptions_normalized)
+                if index not in applied_exception_indexes
+                and item.get("status") in _EXCEPTION_STATUSES
+                and _exception_matches(deficit, item)
+            ),
+            None,
+        )
+        if exception_match is not None:
+            exception_index, _ = exception_match
+            applied_exception_indexes.add(exception_index)
             final_deficits.append(replace(deficit, status=DEFICIT_WAIVED))
         else:
             final_deficits.append(deficit)
+    applied_exceptions = [
+        item
+        for index, item in enumerate(exceptions_normalized)
+        if index in applied_exception_indexes
+    ]
     unwaived = [item for item in final_deficits if item.status != DEFICIT_WAIVED]
     status = STATUS_INCOMPLETE
     if not unwaived:
@@ -2135,12 +2229,16 @@ build_audit_health_report = evaluate_coverage
 def receipt_matches_identity(
     receipt: Mapping[str, Any] | AuditHealthReport, identity: AuditIdentity | Mapping[str, Any]
 ) -> bool:
-    """Return whether a completion receipt belongs to the exact identity."""
+    """Return whether a complete-shape receipt belongs to the exact identity.
+
+    The digest is an unkeyed integrity token, not a signature or proof that the
+    referenced report was produced by a trusted evaluator.  Callers needing
+    admission evidence must retain and validate the report itself as well.
+    """
 
     active_identity = _coerce_identity(identity)
-    if isinstance(receipt, AuditHealthReport):
-        return receipt.identity_digest == active_identity.digest
-    return isinstance(receipt, Mapping) and receipt.get("identity_digest") == active_identity.digest
+    candidate = receipt.completion_receipt if isinstance(receipt, AuditHealthReport) else receipt
+    return _valid_completion_receipt(candidate, active_identity)
 
 
 def is_completion_current(
@@ -2152,17 +2250,71 @@ def is_completion_current(
         ``True`` only when a completed receipt belongs to the exact identity.
     """
 
+    active_identity = _coerce_identity(identity)
     if isinstance(receipt, AuditHealthReport):
-        return receipt.complete and receipt_matches_identity(receipt, identity)
+        return receipt.complete and _valid_completion_receipt(
+            receipt.completion_receipt, active_identity, require_complete=True
+        )
+    return _valid_completion_receipt(receipt, active_identity, require_complete=True)
+
+
+_RECEIPT_IDENTITY_FIELDS = (
+    "campaign_digest",
+    "source_digest",
+    "release_digest",
+    "protocol_version",
+    "protocol_digest",
+    "detector_registry_digest",
+    "detector_config_digest",
+    "source_revision",
+    "scan_revision",
+    "review_revision",
+    "coverage_receipt_revision",
+)
+_RECEIPT_FIELDS = frozenset(
+    {"schema_version", "status", "identity_digest", "report_digest"} | set(_RECEIPT_IDENTITY_FIELDS)
+)
+
+
+def _is_hex_digest(value: Any) -> bool:
     return (
-        isinstance(receipt, Mapping)
-        and receipt.get("status")
-        in {
-            STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS,
-            STATUS_COMPLETE_UNDER_PROTOCOL,
-        }
-        and receipt_matches_identity(receipt, identity)
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
     )
+
+
+def _valid_completion_receipt(
+    receipt: Any,
+    identity: AuditIdentity,
+    *,
+    require_complete: bool = False,
+) -> bool:
+    """Validate the closed v1 receipt envelope and identity directions.
+
+    Returns:
+        Whether the receipt has the required shape and identity values.
+    """
+
+    if not isinstance(receipt, Mapping) or set(receipt) != _RECEIPT_FIELDS:
+        return False
+    if receipt.get("schema_version") != "audit-completion-receipt.v1":
+        return False
+    status = receipt.get("status")
+    if status not in AUDIT_STATUSES:
+        return False
+    if require_complete and status not in {
+        STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS,
+        STATUS_COMPLETE_UNDER_PROTOCOL,
+    }:
+        return False
+    if not _is_hex_digest(receipt.get("identity_digest")):
+        return False
+    if not _is_hex_digest(receipt.get("report_digest")):
+        return False
+    if receipt.get("identity_digest") != identity.digest:
+        return False
+    return all(receipt.get(field) == getattr(identity, field) for field in _RECEIPT_IDENTITY_FIELDS)
 
 
 def _report_document_for_renderer(report: AuditHealthReport) -> dict[str, Any]:
@@ -2285,6 +2437,199 @@ def _canonical_equal(left: Any, right: Any) -> bool:
     return canonical_json(left) == canonical_json(right)
 
 
+def _serialized_exception_matches(deficit: Mapping[str, Any], exception: Mapping[str, Any]) -> bool:
+    """Apply the evaluator's one-deficit exception matching rule to JSON.
+
+    Returns:
+        Whether the exception identifies the serialized deficit.
+    """
+
+    requirement = exception.get("requirement")
+    dimensions = deficit.get("dimensions", {})
+    requirement_values = {
+        deficit.get("reason"),
+        deficit.get("stratum_id"),
+        dimensions.get("requirement") if isinstance(dimensions, Mapping) else None,
+        "*",
+    }
+    if requirement not in requirement_values:
+        return False
+    return exception.get("stratum_id") in {None, "*", deficit.get("stratum_id")}
+
+
+def _validate_exception_links(
+    deficits: Sequence[Mapping[str, Any]], exceptions: Sequence[Mapping[str, Any]]
+) -> None:
+    """Require a one-to-one link between exceptions and waived deficits."""
+
+    waived_indexes = {
+        index for index, deficit in enumerate(deficits) if deficit.get("status") == DEFICIT_WAIVED
+    }
+    matched_indexes: set[int] = set()
+    for exception in exceptions:
+        matches = [
+            index
+            for index, deficit in enumerate(deficits)
+            if index in waived_indexes and _serialized_exception_matches(deficit, exception)
+        ]
+        if len(matches) != 1:
+            raise AuditCoverageError(
+                "each declared exception must match exactly one waived deficit"
+            )
+        if matches[0] in matched_indexes:
+            raise AuditCoverageError("multiple declared exceptions match one waived deficit")
+        matched_indexes.add(matches[0])
+    if matched_indexes != waived_indexes:
+        raise AuditCoverageError("each waived deficit requires one declared exception")
+
+
+def _validate_complete_matrix(  # noqa: C901, PLR0912
+    payload: Mapping[str, Any], protocol: AuditProtocol, *, allow_exceptions: bool
+) -> None:
+    """Validate the derived evidence matrix behind a complete status."""
+
+    counts = payload["counts"]
+    coverage = counts["coverage"]
+    deficits = payload["deficits"]
+
+    def covered(reason: str, dimensions: Mapping[str, Any] | None = None) -> bool:
+        if not allow_exceptions:
+            return False
+        expected = {str(key): str(value) for key, value in (dimensions or {}).items()}
+        return any(
+            item.get("status") == DEFICIT_WAIVED
+            and item.get("reason") == reason
+            and all(
+                str(item.get("dimensions", {}).get(key)) == value for key, value in expected.items()
+            )
+            for item in deficits
+        )
+
+    def require_gap(
+        condition: bool,
+        reason: str,
+        dimensions: Mapping[str, Any] | None = None,
+    ) -> None:
+        if condition and not covered(reason, dimensions):
+            raise AuditCoverageError(f"complete report has unaccounted {reason}")
+
+    if protocol.account_all_expected_rows:
+        for row_status in ("missing", "duplicate", "invalid", "unsupported"):
+            require_gap(
+                coverage[row_status] > 0,
+                f"expected_rows_{row_status}",
+                {"requirement": "expected_rows", "row_status": row_status},
+            )
+        require_gap(
+            coverage["expected"] == 0,
+            "empty_expected_rows",
+            {"requirement": "expected_rows"},
+        )
+
+    reviews = counts["reviews"]
+    strata = payload["strata"]
+    if reviews["full_human_strata"] != sum(item["status"] == "met" for item in strata):
+        raise AuditCoverageError("review full_human_strata does not match strata")
+    for stratum in strata:
+        if stratum["target"] != protocol.full_human_review_target:
+            raise AuditCoverageError("stratum review target does not match protocol")
+        unmet = stratum["status"] != "met" or (stratum["full_human_reviewed"] < stratum["target"])
+        require_gap(
+            unmet,
+            "missing_full_human_review",
+            {
+                "requirement": "full_human_review",
+                "planner_id": stratum["planner_id"],
+                "scenario_group": stratum["scenario_group"],
+                "outcome": stratum["outcome"],
+            },
+        )
+
+    groups = reviews["ordinary_control_groups"]
+    target = protocol.ordinary_control_review_target
+    required = groups * target
+    if reviews["ordinary_control_required"] != required:
+        raise AuditCoverageError("ordinary control requirement is inconsistent")
+    if groups > reviews["ordinary_control_candidates"]:
+        raise AuditCoverageError("ordinary control groups exceed candidates")
+    if reviews["ordinary_control_reviewed"] > required:
+        raise AuditCoverageError("ordinary control reviews exceed the target")
+    gaps = reviews["ordinary_control_gap_groups"]
+    if target == 0 and gaps:
+        raise AuditCoverageError("ordinary control gaps exist despite a zero target")
+    if reviews["ordinary_control_reviewed"] < required and not gaps:
+        raise AuditCoverageError("ordinary control review count is below target")
+    for gap in gaps:
+        require_gap(
+            True,
+            "missing_ordinary_control_review",
+            {
+                "requirement": "ordinary_control",
+                "planner_id": gap.get("planner_id"),
+                "scenario_group": gap.get("scenario_group"),
+            },
+        )
+
+    detectors = counts["detectors"]
+    if protocol.require_detector_attempts:
+        require_gap(
+            coverage["readable"] > 0 and not detectors["by_detector"],
+            "missing_detector_registry_or_attempts",
+            {"requirement": "detector_attempts"},
+        )
+        for signal_status in ("unavailable", "error"):
+            require_gap(
+                detectors[signal_status] > 0,
+                f"detector_attempt_{signal_status}",
+                {"requirement": "detector_attempts", "result_status": signal_status},
+            )
+        if detectors["evaluable"] != detectors["scheduled"] and not allow_exceptions:
+            raise AuditCoverageError("complete report contains non-evaluable detector attempts")
+
+    materialization = payload["materialization"]
+    require_gap(
+        materialization["diverged"] > 0,
+        "materialization_mismatch",
+    )
+    require_gap(
+        materialization["unverifiable"] > 0,
+        "materialization_unverifiable",
+    )
+
+    finding_counts = payload["findings"]
+    if protocol.require_integrity_disposition:
+        require_gap(
+            finding_counts["unresolved_critical_integrity"] > 0,
+            "unresolved_critical_integrity_finding",
+        )
+    finding_rows = finding_counts["rows"]
+    if finding_counts["representatives_reviewed"] != sum(
+        bool(item["representative_reviewed"]) for item in finding_rows
+    ):
+        raise AuditCoverageError("finding representative count is inconsistent")
+    if finding_counts["context_controls_reviewed"] != sum(
+        bool(item["control_reviewed"]) for item in finding_rows
+    ):
+        raise AuditCoverageError("finding context-control count is inconsistent")
+    for finding in finding_rows:
+        if finding["high_priority"] and protocol.anomaly_representative_target:
+            require_gap(
+                not finding["representative_reviewed"],
+                "missing_finding_representative",
+                {"requirement": "finding_representative", "finding_id": finding["finding_id"]},
+            )
+        if (
+            finding["high_priority"]
+            and finding["control_episode_ids"]
+            and protocol.anomaly_context_control_target
+        ):
+            require_gap(
+                not finding["control_reviewed"],
+                "missing_finding_context_control",
+                {"requirement": "finding_context_control", "finding_id": finding["finding_id"]},
+            )
+
+
 def _validate_report_semantics(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any],
 ) -> None:
@@ -2375,6 +2720,16 @@ def _validate_report_semantics(  # noqa: C901, PLR0912, PLR0915
         )
     if status == STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS and not payload["exceptions"]:
         raise AuditCoverageError("complete_with_declared_exceptions requires exceptions")
+    _validate_exception_links(deficits, payload["exceptions"])
+    if status in {
+        STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS,
+        STATUS_COMPLETE_UNDER_PROTOCOL,
+    }:
+        _validate_complete_matrix(
+            payload,
+            protocol,
+            allow_exceptions=status == STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS,
+        )
 
     for deficit in deficits:
         for key in (

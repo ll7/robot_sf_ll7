@@ -41,9 +41,7 @@ report = evaluate_coverage(
             "outcome": "success",
         }
     ],
-    detector_attempts=[
-        {"episode_id": "episode-1", "detector_id": "telemetry", "status": "clear"}
-    ],
+    detector_attempts=[{"episode_id": "episode-1", "detector_id": "telemetry", "status": "clear"}],
     detector_registry=detector_registry,
     protocol=protocol,
     review_records=[

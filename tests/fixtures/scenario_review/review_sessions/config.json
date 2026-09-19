@@ -1,0 +1,52 @@
+{
+  "recipe": {
+    "schema_version": "experiment-recipe.v1",
+    "recipe_id": "srev28-fixture",
+    "hypothesis": "A diagnostic speed offset changes the retained fixture metric.",
+    "source_identity": {
+      "scenario_id": "srev28-tiny-fixture",
+      "kind": "fixture",
+      "origin": "synthetic-constructed",
+      "evidence_boundary": "diagnostic_only",
+      "scientific_claim_allowed": false,
+      "dependent_family_status": "standalone_fixture_only",
+      "source_ref": {
+        "artifact_id": "recipe-srev28-fixture",
+        "uri": "recipe.json",
+        "format": "experiment-recipe.v1"
+      }
+    },
+    "interventions": [
+      {
+        "intervention_id": "speed-up",
+        "factor": "single_pedestrian_speed_offset",
+        "priority": 1
+      }
+    ],
+    "control_conditions": {
+      "ped_speed_m_s": 1.0
+    },
+    "measurements": [
+      {
+        "name": "min_robot_ped_distance_m",
+        "units": "metres",
+        "expected_direction": "increase"
+      }
+    ],
+    "budget": {
+      "max_candidates": 1,
+      "max_executions": 2,
+      "wall_timeout_s": 30
+    },
+    "stop_rules": [
+      "exhausted_candidates",
+      "execution_budget_exhausted",
+      "wall_timeout",
+      "control_fidelity_failure_blocks_treatment"
+    ],
+    "preservation_destination": "external:srev28-fixture"
+  },
+  "max_candidates": 1,
+  "max_executions": 2,
+  "wall_timeout_s": 30
+}

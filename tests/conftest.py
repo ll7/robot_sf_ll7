@@ -433,6 +433,9 @@ _FAST_FILES = {
     # Shared-world contract tests are deterministic simulator-backed coverage
     # for the changed multi-robot modules (issue #9344).
     "test_shared_world.py",
+    # SREV-28 review-session preview, lifecycle, and offline-browser contracts
+    # are deterministic and provide exact-head changed coverage (issue #9299).
+    "test_review_sessions.py",
     # Native replay adapter and engine tests are deterministic fixture contracts
     # for the exact-head changed-coverage gate (issue #5442).
     "test_simulator_counterfactual_adapter_issue_5442.py",

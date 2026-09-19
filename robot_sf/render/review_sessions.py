@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import html
 import json
+import math
 import os
 import platform
 import secrets
@@ -82,15 +83,32 @@ OPTIONAL_CAPABILITIES = tuple(sorted(SUPPORTED_CAPABILITIES - {"bounded-experime
 _WRAPPER_CONFIG_KEYS = frozenset(
     {
         "admission_config",
+        "campaign_id",
+        "context_revision",
+        "episode_id",
         "required_component_version",
         "min_component_version",
         "session_token",
         "origin",
         "preservation",
         "preview",
+        "selection_revision",
+        "session_context",
+        "source_revision",
         "loop",
     }
 )
+_CONTEXT_KEYS = (
+    "campaign_id",
+    "episode_id",
+    "source_revision",
+    "selection_revision",
+    "context_revision",
+)
+_JOURNAL_STATUSES = frozenset(
+    {"running", "complete", "partial", "failed", "unavailable", "cancelled"}
+)
+_SHA256_LENGTH = 64
 _VERSION_KEYS = ("required_component_version", "min_component_version")
 _MAX_JSON_BYTES = 256 * 1024
 _MAX_TOKEN_CHARS = 256
@@ -134,6 +152,8 @@ class SessionControl:
     origin: str
     session_token: str
     payload: Mapping[str, Any] | None = None
+    session_id: str = ""
+    context_revision: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -142,6 +162,8 @@ class SessionControl:
             "origin": self.origin,
             "session_token": self.session_token,
             "payload": dict(self.payload or {}),
+            "session_id": self.session_id,
+            "context_revision": self.context_revision,
         }
 
 
@@ -203,10 +225,34 @@ def _canonical_digest(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _ensure_directory_chain(path: Path) -> None:
+    """Create a directory chain without following pre-existing symlinks."""
+
+    missing: list[Path] = []
+    current = path
+    while not current.exists():
+        missing.append(current)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    if current.is_symlink() or not current.is_dir():
+        raise ReviewSessionError(f"output_collision: parent is not a regular directory: {current}")
+    for directory in reversed(missing):
+        try:
+            directory.mkdir()
+        except FileExistsError:
+            pass
+        if directory.is_symlink() or not directory.is_dir():
+            raise ReviewSessionError(
+                f"output_collision: parent is not a regular directory: {directory}"
+            )
+
+
 def _atomic_new_file(path: Path, payload: bytes, *, overwrite: bool = False) -> str:
     """Create or replace a regular file without following destination symlinks."""
 
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory_chain(path.parent)
     if path.is_symlink() or (path.exists() and not overwrite):
         raise ReviewSessionError(f"output_collision: {path}")
     temporary = path.with_name(f".{path.name}.tmp")
@@ -293,6 +339,66 @@ def _normalise_request(request: ComponentRequest | Mapping[str, Any]) -> Compone
         raise ReviewSessionError(f"invalid_input: {error}") from error
 
 
+def _context_identity(request: ComponentRequest) -> dict[str, Any]:
+    """Return the caller-selected campaign/episode context identity.
+
+    Context values are wrapper metadata rather than SREV-24 executor config.
+    They are nevertheless part of the session identity so a browser or API
+    reader cannot reuse durable state after changing its selected episode or
+    source revision.
+    """
+
+    raw = request.config.get("session_context")
+    if raw is not None and not isinstance(raw, Mapping):
+        raise ReviewSessionError("invalid_config: session_context must be a mapping")
+    context = dict(raw) if isinstance(raw, Mapping) else {}
+    for key in _CONTEXT_KEYS:
+        if key in request.config:
+            if key in context and context[key] != request.config[key]:
+                raise ReviewSessionError(f"invalid_config: conflicting context field {key}")
+            context[key] = request.config[key]
+    unknown = sorted(str(key) for key in context if key not in _CONTEXT_KEYS)
+    if unknown:
+        raise ReviewSessionError(
+            "invalid_config: unknown session_context keys: " + ", ".join(unknown)
+        )
+    for key, value in context.items():
+        if not isinstance(value, (str, int)) or isinstance(value, bool):
+            raise ReviewSessionError(f"invalid_config: context field {key} must be text or integer")
+        if isinstance(value, str) and (not value.strip() or len(value) > 256 or "\x00" in value):
+            raise ReviewSessionError(f"invalid_config: context field {key} is invalid")
+    return {key: context[key] for key in _CONTEXT_KEYS if key in context}
+
+
+def _context_document(request: ComponentRequest, validated: Any) -> dict[str, Any]:
+    """Build the versioned selection identity exposed to API/browser readers."""
+
+    child = _loop_request(request)
+    context = _context_identity(request)
+    if not context.get("source_revision") and len(request.sources) == 1:
+        source_commit = request.sources[0].source_commit
+        if source_commit:
+            context["source_revision"] = source_commit
+    return {
+        **context,
+        "session_id": str(validated.session_id),
+        "request_id": request.request_id,
+        "request_digest": loop._canonical_digest(loop._request_identity(child)),
+        "recipe_id": str(validated.recipe.get("recipe_id", "")),
+        "recipe_digest": loop.experiment_recipe_canonical_digest(validated.recipe),
+    }
+
+
+def _control_context(request: ComponentRequest) -> dict[str, Any]:
+    try:
+        validated = loop._validate_input(
+            _loop_request(request), autonomous=True, read_only=False, resume=False
+        )
+    except (ReviewSessionError, loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
+        raise ReviewSessionError(f"invalid session context: {error}") from error
+    return _context_document(request, validated)
+
+
 def _loop_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Extract the SREV-24 config while accepting a nested ``loop`` block."""
 
@@ -314,6 +420,26 @@ def _loop_request(
     request: ComponentRequest, *, output_directory: str | None = None
 ) -> ComponentRequest:
     config = _loop_config(request.config)
+    context = _context_identity(request)
+    binding: dict[str, Any] = {}
+    if context:
+        binding["context"] = context
+    configured_token = request.config.get("session_token")
+    if configured_token is not None:
+        if (
+            not isinstance(configured_token, str)
+            or not configured_token
+            or len(configured_token) > _MAX_TOKEN_CHARS
+        ):
+            raise ReviewSessionError("invalid_config: session_token is invalid")
+        binding["control"] = {
+            "origin": request.config.get("origin", ""),
+            "session_token": configured_token,
+        }
+    if binding:
+        session_prefix = str(config.get("session_id") or request.request_id)
+        binding_digest = _canonical_digest(binding)[:16]
+        config["session_id"] = f"{session_prefix}:{binding_digest}"
     return replace(
         request,
         component_id=loop.COMPONENT_ID,
@@ -427,15 +553,28 @@ def _admission_preview(
 ) -> dict[str, Any]:
     if executor is not None:
         proof = source_admission or config.get("source_admission")
-        if isinstance(proof, Mapping):
+        try:
+            child = _loop_request(request)
+            validated = loop._validate_input(child, autonomous=True, read_only=False, resume=False)
+            admitted = _source_proof_for_child(
+                request,
+                child,
+                validated.recipe,
+                proof if isinstance(proof, Mapping) else None,
+                base=base,
+            )
+        except (ReviewSessionError, loop.ExperimentLoopError, OSError, TypeError, ValueError):
+            admitted = None
+        if admitted is not None:
             return {
                 "status": "provided",
-                "reason": "injected executor proof is checked again before dispatch",
+                "reason": "measured proof is valid and checked again before dispatch",
                 "evidence_boundary": EVIDENCE_BOUNDARY,
             }
         return {
-            "status": "required",
-            "reason": "injected executor requires measured source_admission proof",
+            "status": "unavailable",
+            "reason": "injected executor proof is missing or failed source validation",
+            "evidence_boundary": EVIDENCE_BOUNDARY,
         }
     if admission_config is None:
         return {
@@ -481,6 +620,317 @@ def _output_state(base: Path, request: ComponentRequest) -> dict[str, Any]:
     }
 
 
+def _safe_source_relative(uri: Any) -> Path | None:
+    if not isinstance(uri, str) or not uri or "\x00" in uri or "\\" in uri:
+        return None
+    relative = Path(uri)
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or relative == Path(".")
+        or ".." in relative.parts
+    ):
+        return None
+    return relative
+
+
+def _source_digest(root: Path, relative: Path) -> str | None:
+    try:
+        if root.is_symlink():
+            return None
+        resolved_root = root.resolve(strict=True)
+        if not resolved_root.is_dir():
+            return None
+        source = resolved_root.joinpath(*relative.parts)
+        resolved_source = source.resolve(strict=True)
+        resolved_source.relative_to(resolved_root)
+        if source.is_symlink() or not resolved_source.is_file():
+            return None
+        return hashlib.sha256(resolved_source.read_bytes()).hexdigest()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _source_integrity_error(
+    base: Path,
+    request: ComponentRequest,
+    recipe: Mapping[str, Any],
+    source_admission: Mapping[str, Any],
+) -> str | None:
+    """Re-check durable source identity before exposing a persisted session."""
+
+    recipe_identity = recipe.get("source_identity")
+    recipe_ref = recipe_identity.get("source_ref") if isinstance(recipe_identity, Mapping) else None
+    if recipe_ref is not None and not isinstance(recipe_ref, Mapping):
+        return "journal_source_identity_mismatch: recipe source_ref is malformed"
+    admission_source = source_admission.get("source")
+    if admission_source is not None and not isinstance(admission_source, Mapping):
+        return "journal_source_identity_mismatch: admission source is malformed"
+    roots: list[Path] = [base]
+    source_root = source_admission.get("source_root")
+    if source_root is not None:
+        if not isinstance(source_root, str) or not source_root:
+            return "journal_source_identity_mismatch: admission source_root is malformed"
+        roots.insert(0, Path(source_root))
+    checked = 0
+    for source in request.sources:
+        relative = _safe_source_relative(source.uri)
+        if relative is None:
+            return "journal_source_identity_mismatch: source URI is not a safe relative path"
+        if recipe_ref is not None:
+            for key in ("artifact_id", "uri", "format"):
+                if recipe_ref.get(key) != getattr(source, key):
+                    return "journal_source_identity_mismatch: recipe source reference differs"
+        if isinstance(admission_source, Mapping):
+            for key in ("artifact_id", "uri", "format"):
+                if admission_source.get(key) != getattr(source, key):
+                    return "journal_source_identity_mismatch: admission source differs"
+        expected_digest = source.sha256
+        if not isinstance(expected_digest, str) or len(expected_digest) != _SHA256_LENGTH:
+            if isinstance(admission_source, Mapping):
+                expected_digest = admission_source.get("sha256", "")
+            if not isinstance(expected_digest, str) or len(expected_digest) != _SHA256_LENGTH:
+                return "journal_source_integrity_unavailable: source digest is missing"
+        expected_digest = expected_digest.lower()
+        if any(character not in "0123456789abcdef" for character in expected_digest):
+            return "journal_source_integrity_unavailable: source digest is malformed"
+        checked += 1
+        actual = None
+        for root in roots:
+            actual = _source_digest(root, relative)
+            if actual is not None:
+                break
+        if actual is None:
+            return "journal_source_integrity_unavailable: source bytes are unavailable"
+        if actual != expected_digest:
+            return "journal_source_mutated: source bytes no longer match the admitted digest"
+    if checked == 0:
+        return "journal_source_integrity_unavailable: no hashed source was declared"
+    if isinstance(admission_source, Mapping):
+        admission_digest = admission_source.get("sha256")
+        request_digests = {source.sha256 for source in request.sources if source.sha256}
+        if admission_digest not in request_digests:
+            return "journal_source_identity_mismatch: admission digest differs"
+    return None
+
+
+def _contains_true_claim(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        if value.get("scientific_claim_allowed") is True:
+            return True
+        return any(_contains_true_claim(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_true_claim(item) for item in value)
+    return False
+
+
+def _journal_integrity_error(
+    base: Path, request: ComponentRequest, journal: Mapping[str, Any]
+) -> str | None:
+    """Validate the read-only journal boundary using SREV-24's identity rules."""
+
+    try:
+        child = _loop_request(request)
+        validated = loop._validate_input(child, autonomous=True, read_only=False, resume=True)
+    except (ReviewSessionError, loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
+        return f"journal_request_invalid: {error}"
+    if not isinstance(journal, Mapping):
+        return "journal_malformed: journal is not an object"
+    identity = {
+        "schema_version": loop.SESSION_JOURNAL_SCHEMA_VERSION,
+        "component_id": loop.COMPONENT_ID,
+        "component_version": loop.COMPONENT_VERSION,
+        "session_id": validated.session_id,
+        "request_id": child.request_id,
+        "request_digest": loop._canonical_digest(loop._request_identity(child)),
+        "recipe_id": str(validated.recipe.get("recipe_id", "")),
+        "recipe_digest": loop.experiment_recipe_canonical_digest(validated.recipe),
+    }
+    for key, expected in identity.items():
+        if journal.get(key) != expected:
+            return f"journal_identity_mismatch: {key}"
+    if journal.get("evidence_boundary") != EVIDENCE_BOUNDARY:
+        return "journal_boundary_tampered: evidence boundary mismatch"
+    if journal.get("scientific_claim_allowed") is not False:
+        return "journal_boundary_tampered: scientific claims are forbidden"
+    if journal.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
+        return "journal_boundary_tampered: dependent family status mismatch"
+    if _contains_true_claim(journal):
+        return "journal_boundary_tampered: nested scientific claim flag is true"
+    status = journal.get("status")
+    if status not in _JOURNAL_STATUSES:
+        return "journal_malformed: invalid status"
+    if not isinstance(journal.get("stop_reason"), str):
+        return "journal_malformed: stop reason is not text"
+    source_admission = journal.get("source_admission")
+    if not isinstance(source_admission, Mapping):
+        return "journal_malformed: source admission is not an object"
+    source_error = _source_integrity_error(base, request, validated.recipe, source_admission)
+    if source_error is not None:
+        return source_error
+    budget = journal.get("budget")
+    if not isinstance(budget, Mapping):
+        return "journal_malformed: budget is not an object"
+    required_budget_keys = {
+        "max_candidates",
+        "max_executions",
+        "wall_timeout_s",
+        "max_concurrent_local_cpu_processes",
+        "max_retries",
+    }
+    if set(budget) != required_budget_keys:
+        return "journal_malformed: budget identity is malformed"
+    for key in required_budget_keys:
+        value = budget.get(key)
+        if key == "wall_timeout_s":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+            ):
+                return f"journal_malformed: budget {key} is invalid"
+        elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return f"journal_malformed: budget {key} is invalid"
+    for key in ("executions_consumed", "reserved_executions"):
+        value = journal.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return f"journal_malformed: {key} is invalid"
+    elapsed = journal.get("elapsed_s")
+    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)):
+        return "journal_malformed: elapsed_s is invalid"
+    if not math.isfinite(float(elapsed)) or float(elapsed) < 0:
+        return "journal_malformed: elapsed_s is invalid"
+    if journal["executions_consumed"] + journal["reserved_executions"] > budget["max_executions"]:
+        return "journal_malformed: execution accounting exceeds budget"
+    candidate_catalog = journal.get("candidate_catalog")
+    expected_catalog = [
+        {
+            "intervention_id": item["intervention_id"],
+            "priority": item["priority"],
+            "factor": item.get("factor", ""),
+        }
+        for item in loop._candidate_order(validated.recipe)
+    ]
+    if candidate_catalog != expected_catalog:
+        return "journal_identity_mismatch: candidate catalog"
+    candidate_order = journal.get("candidate_order")
+    if (
+        not isinstance(candidate_order, list)
+        or candidate_order != expected_catalog[: len(candidate_order)]
+    ):
+        return "journal_malformed: candidate order"
+    candidates = journal.get("candidates")
+    if not isinstance(candidates, Mapping) or set(candidates) != {
+        str(item["intervention_id"]) for item in candidate_order
+    }:
+        return "journal_malformed: candidate state"
+    for candidate_id, candidate in candidates.items():
+        if not isinstance(candidate, Mapping) or candidate.get("intervention_id") != candidate_id:
+            return "journal_malformed: candidate identity"
+        if candidate.get("state") not in {
+            "pending",
+            "reserved",
+            *(_JOURNAL_STATUSES - {"running"}),
+        }:
+            return "journal_malformed: candidate state value"
+    for key in ("outcomes", "operations"):
+        value = journal.get(key)
+        if not isinstance(value, list) or any(not isinstance(item, Mapping) for item in value):
+            return f"journal_malformed: {key}"
+    policy = journal.get("policy")
+    expected_policy = {"autonomous": True, "read_only": False}
+    if not isinstance(policy, Mapping) or any(
+        policy.get(key) != value for key, value in expected_policy.items()
+    ):
+        return "journal_identity_mismatch: policy"
+    expected_config_identity = loop._canonical_digest(
+        loop._config_identity_document(child.config, expected_policy)
+    )
+    if journal.get("config_identity_digest") != expected_config_identity:
+        return "journal_identity_mismatch: config identity"
+    if "answerability" not in journal:
+        return "journal_malformed: answerability is missing"
+    try:
+        expected_answerability = loop._answerability_document(validated.answerability)
+    except (loop.ExperimentLoopError, TypeError, ValueError) as error:
+        return f"journal_request_invalid: answerability: {error}"
+    if journal.get("answerability") != expected_answerability:
+        return "journal_identity_mismatch: answerability"
+    provenance = journal.get("provenance")
+    if provenance is not None and not isinstance(provenance, Mapping):
+        return "journal_malformed: provenance"
+    return None
+
+
+def _report_integrity_error(
+    request: ComponentRequest,
+    report: Mapping[str, Any],
+    journal: Mapping[str, Any],
+) -> str | None:
+    try:
+        child = _loop_request(request)
+        validated = loop._validate_input(child, autonomous=True, read_only=False, resume=True)
+    except (ReviewSessionError, loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
+        return f"report_request_invalid: {error}"
+    if not isinstance(report, Mapping):
+        return "report_malformed: report is not an object"
+    expected = {
+        "schema_version": loop.LOOP_REPORT_SCHEMA_VERSION,
+        "component_id": loop.COMPONENT_ID,
+        "component_version": loop.COMPONENT_VERSION,
+        "session_id": validated.session_id,
+        "request_id": child.request_id,
+        "recipe_id": str(validated.recipe.get("recipe_id", "")),
+        "recipe_digest": loop.experiment_recipe_canonical_digest(validated.recipe),
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+        "status": journal.get("status"),
+    }
+    for key, value in expected.items():
+        if report.get(key) != value:
+            return f"report_identity_mismatch: {key}"
+    if _contains_true_claim(report):
+        return "report_boundary_tampered: nested scientific claim flag is true"
+    expected_source_identity = validated.recipe.get("source_identity", {})
+    if report.get("source_identity") != expected_source_identity:
+        return "report_identity_mismatch: source identity"
+    if report.get("source_admission") != journal.get("source_admission"):
+        return "report_identity_mismatch: source admission"
+    if report.get("candidate_order") != journal.get("candidate_order"):
+        return "report_identity_mismatch: candidate order"
+    if not isinstance(report.get("outcomes"), list) or any(
+        not isinstance(item, Mapping) for item in report["outcomes"]
+    ):
+        return "report_malformed: outcomes"
+    expected_outcomes = [
+        loop.ExperimentLoop._canonical_report_outcome(item) for item in journal.get("outcomes", [])
+    ]
+    if report.get("outcomes") != expected_outcomes:
+        return "report_identity_mismatch: outcomes"
+    expected_negative = [item for item in expected_outcomes if item.get("negative") is True]
+    if report.get("negative_outcomes") != expected_negative:
+        return "report_identity_mismatch: negative outcomes"
+    expected_budget = {
+        **dict(journal["budget"]),
+        "executions_consumed": journal["executions_consumed"],
+        "reserved_executions": journal["reserved_executions"],
+        "elapsed_s": journal["elapsed_s"],
+    }
+    if report.get("budget") != expected_budget:
+        return "report_identity_mismatch: budget"
+    if report.get("operations") != journal.get("operations"):
+        return "report_identity_mismatch: operations"
+    provenance = report.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return "report_malformed: provenance"
+    if provenance.get("request_digest") != loop._canonical_digest(loop._request_identity(child)):
+        return "report_identity_mismatch: provenance request digest"
+    if provenance.get("recipe_digest") != expected["recipe_digest"]:
+        return "report_identity_mismatch: provenance recipe digest"
+    return None
+
+
 def _read_journal(base: Path, request: ComponentRequest) -> dict[str, Any] | None:
     state = _output_state(base, request)
     if state.get("status") not in {"resume_available", "collision"}:
@@ -490,21 +940,54 @@ def _read_journal(base: Path, request: ComponentRequest) -> dict[str, Any] | Non
         payload = _read_json(output / JOURNAL_FILENAME)
     except (ReviewSessionError, OSError, ValueError, TypeError) as error:
         return {"_read_error": str(error)}
-    return payload if isinstance(payload, dict) else {"_read_error": "journal is not an object"}
+    if not isinstance(payload, dict):
+        return {"_read_error": "journal is not an object"}
+    integrity_error = _journal_integrity_error(base, request, payload)
+    if integrity_error is not None:
+        return {"_read_error": integrity_error}
+    return payload
 
 
 def _journal_progress(journal: Mapping[str, Any]) -> dict[str, Any]:
+    safe_failure = {
+        "status": "failed",
+        "reason": "journal_malformed: progress fields are invalid",
+        "budget": {},
+        "candidates": [],
+        "outcomes": [],
+        "operations": [],
+        "source_admission": {},
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+    }
+    if not isinstance(journal, Mapping):
+        return safe_failure
     budget = dict(journal.get("budget", {})) if isinstance(journal.get("budget"), Mapping) else {}
-    consumed = int(journal.get("executions_consumed", budget.get("executions_consumed", 0)) or 0)
-    reserved = int(journal.get("reserved_executions", budget.get("reserved_executions", 0)) or 0)
-    maximum = int(budget.get("max_executions", 0) or 0)
-    elapsed = float(journal.get("elapsed_s", budget.get("elapsed_s", 0.0)) or 0.0)
-    wall = float(budget.get("wall_timeout_s", 0.0) or 0.0)
+    try:
+        consumed = int(
+            journal.get("executions_consumed", budget.get("executions_consumed", 0)) or 0
+        )
+        reserved = int(
+            journal.get("reserved_executions", budget.get("reserved_executions", 0)) or 0
+        )
+        maximum = int(budget.get("max_executions", 0) or 0)
+        elapsed = float(journal.get("elapsed_s", budget.get("elapsed_s", 0.0)) or 0.0)
+        wall = float(budget.get("wall_timeout_s", 0.0) or 0.0)
+        if any(
+            value < 0 or not math.isfinite(float(value))
+            for value in (consumed, reserved, maximum, elapsed, wall)
+        ):
+            return safe_failure
+    except (TypeError, ValueError, OverflowError):
+        return safe_failure
     candidate_rows = journal.get("candidates", {})
     candidates = list(candidate_rows.values()) if isinstance(candidate_rows, Mapping) else []
     outcomes = journal.get("outcomes", [])
     return {
-        "status": journal.get("status", "running"),
+        "status": journal.get("status", "running")
+        if journal.get("status", "running") in _JOURNAL_STATUSES
+        else "failed",
         "stop_reason": journal.get("stop_reason", ""),
         "budget": {
             **budget,
@@ -519,10 +1002,12 @@ def _journal_progress(journal: Mapping[str, Any]) -> dict[str, Any]:
         "operations": [
             dict(item) for item in journal.get("operations", []) if isinstance(item, Mapping)
         ],
-        "source_admission": dict(journal.get("source_admission", {})),
-        "evidence_boundary": journal.get("evidence_boundary", EVIDENCE_BOUNDARY),
-        "scientific_claim_allowed": journal.get("scientific_claim_allowed", False),
-        "dependent_family_status": journal.get("dependent_family_status", DEPENDENT_FAMILY_STATUS),
+        "source_admission": dict(journal.get("source_admission", {}))
+        if isinstance(journal.get("source_admission", {}), Mapping)
+        else {},
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
     }
 
 
@@ -546,7 +1031,13 @@ def progress(
             "scientific_claim_allowed": False,
         }
     if "_read_error" in journal:
-        return {"status": "failed", "reason": journal["_read_error"]}
+        return {
+            "status": "failed",
+            "reason": journal["_read_error"],
+            "evidence_boundary": EVIDENCE_BOUNDARY,
+            "scientific_claim_allowed": False,
+            "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+        }
     return _journal_progress(journal)
 
 
@@ -560,6 +1051,11 @@ def result_navigation(
 
     normalized = _normalise_request(request)
     root = base if base is not None else Path.cwd()
+    journal = _read_journal(root, normalized)
+    if journal is None:
+        return {"status": "unavailable", "reason": "result_unavailable: session journal is missing"}
+    if "_read_error" in journal:
+        return {"status": "unavailable", "reason": f"result_unavailable: {journal['_read_error']}"}
     try:
         output = _resolve_output(root, normalized.output_directory, create=False)
         report = _read_json(output / REPORT_FILENAME)
@@ -567,6 +1063,9 @@ def result_navigation(
         return {"status": "unavailable", "reason": f"result_unavailable: {error}"}
     if not isinstance(report, Mapping):
         return {"status": "failed", "reason": "result report is not an object"}
+    report_error = _report_integrity_error(normalized, report, journal)
+    if report_error is not None:
+        return {"status": "unavailable", "reason": f"result_unavailable: {report_error}"}
     outcomes = [dict(item) for item in report.get("outcomes", []) if isinstance(item, Mapping)]
     if not outcomes:
         return {
@@ -633,9 +1132,35 @@ def preview(
             "evidence_boundary": EVIDENCE_BOUNDARY,
         }
     effective_config = _loop_config(config)
-    budget, candidates = _recipe_budget_preview(effective_config)
+    child_request = _loop_request(normalized)
+    try:
+        validated = loop._validate_input(
+            child_request, autonomous=False, read_only=True, resume=False
+        )
+    except (ReviewSessionError, loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
+        raise ReviewSessionError(str(error)) from error
+    budget = validated.budget.to_dict()
+    budget.update(
+        {
+            "executions_consumed": 0,
+            "reserved_executions": 0,
+            "remaining_executions": validated.budget.max_executions,
+            "elapsed_s": 0.0,
+            "remaining_elapsed_s": validated.budget.wall_timeout_s,
+        }
+    )
+    candidates = [
+        {
+            "intervention_id": item["intervention_id"],
+            "priority": item["priority"],
+            "factor": item.get("factor", ""),
+            "state": "pending",
+        }
+        for item in loop._candidate_order(validated.recipe)[: validated.budget.max_candidates]
+    ]
     root = base if base is not None else Path.cwd()
     journal = _read_journal(root, normalized)
+    journal_error = None
     if journal is not None and "_read_error" not in journal:
         persisted = _journal_progress(journal)
         budget = dict(persisted["budget"])
@@ -643,6 +1168,14 @@ def preview(
         state = str(persisted.get("status", "running"))
         source_state = dict(persisted.get("source_admission", {}))
         stop_reason = str(persisted.get("stop_reason", ""))
+    elif journal is not None:
+        journal_error = str(journal.get("_read_error", "journal unavailable"))
+        state = "failed"
+        source_state = {
+            "status": "unavailable",
+            "reason": "durable session state failed integrity validation",
+        }
+        stop_reason = journal_error
     else:
         state = "not_started"
         source_state = _admission_preview(
@@ -663,8 +1196,10 @@ def preview(
         "component_id": COMPONENT_ID,
         "component_version": COMPONENT_VERSION,
         "request_id": normalized.request_id,
-        "session_id": str(effective_config.get("session_id", "")),
+        "session_id": str(validated.session_id),
+        "context": _context_document(normalized, validated),
         "status": state,
+        **({"reason": journal_error} if journal_error else {}),
         "stop_reason": stop_reason,
         "authorization": {
             "explicit_start_required": True,
@@ -933,13 +1468,24 @@ def run(
         )
     try:
         output = _resolve_output(root, normalized.output_directory, create=False)
+        durable_journal = _read_journal(root, normalized)
+        if durable_journal is None or "_read_error" in durable_journal:
+            raise ReviewSessionError(
+                "journal_integrity_failed: "
+                + str((durable_journal or {}).get("_read_error", "journal is missing"))
+            )
+        validated_context = loop._validate_input(
+            _loop_request(normalized), autonomous=True, read_only=False, resume=True
+        )
         document = {
             "schema_version": SESSION_VIEW_SCHEMA_VERSION,
             "component_id": COMPONENT_ID,
             "component_version": COMPONENT_VERSION,
             "request_id": normalized.request_id,
             "status": child_result.status,
-            "progress": _journal_progress(_read_journal(root, normalized) or {}),
+            "session_id": str(validated_context.session_id),
+            "context": _context_document(normalized, validated_context),
+            "progress": _journal_progress(durable_journal),
             "navigation": result_navigation(normalized, base=root),
             "evidence_boundary": EVIDENCE_BOUNDARY,
             "scientific_claim_allowed": False,
@@ -997,6 +1543,7 @@ class ReviewSession:
         with self._active_lock:
             self._active = True
             self._active_done.clear()
+            self._last_result = None
         try:
             result = run(
                 self.request,
@@ -1039,7 +1586,11 @@ class ReviewSession:
         with self._active_lock:
             active = self._active
         if active:
-            self._active_done.wait(timeout=5.0)
+            # A cancellation request is only terminal once SREV-24 has
+            # persisted the settled journal.  Returning a synthetic cancelled
+            # result while the owner thread is still dispatching would let a
+            # caller race recovery or resume against live work.
+            self._active_done.wait()
             if self._last_result is not None:
                 return self._last_result
             return _result(self.request, "cancelled", reason="cancellation_requested")
@@ -1073,6 +1624,8 @@ def validate_control(
     *,
     expected_origin: str,
     expected_session_token: str,
+    expected_session_id: str | None = None,
+    expected_context_revision: str | None = None,
 ) -> SessionControl:
     """Validate a loopback, origin-bound, token-authenticated control envelope."""
 
@@ -1086,12 +1639,18 @@ def validate_control(
             origin=str(control.get("origin", "")),
             session_token=str(control.get("session_token", "")),
             payload=control.get("payload") if isinstance(control.get("payload"), Mapping) else {},
+            session_id=str(control.get("session_id", "")),
+            context_revision=str(control.get("context_revision", "")),
         )
     else:
         raise ControlAuthorizationError("control must be a mapping")
     if current.action not in {"start", "stop", "resume", "progress", "result"}:
         raise ControlAuthorizationError("unsupported control action")
-    if len(current.session_token) > _MAX_TOKEN_CHARS or not current.session_token:
+    if (
+        not isinstance(current.session_token, str)
+        or len(current.session_token) > _MAX_TOKEN_CHARS
+        or not current.session_token
+    ):
         raise ControlAuthorizationError("session token is required")
     if not secrets.compare_digest(current.session_token, expected_session_token):
         raise ControlAuthorizationError("session token mismatch")
@@ -1099,6 +1658,14 @@ def validate_control(
         raise ControlAuthorizationError("control origin must be loopback")
     if current.origin != expected_origin:
         raise ControlAuthorizationError("control origin mismatch")
+    if expected_session_id is not None:
+        if not current.session_id or current.session_id != expected_session_id:
+            raise ControlAuthorizationError("session context mismatch")
+    if (
+        expected_context_revision is not None
+        and current.context_revision != expected_context_revision
+    ):
+        raise ControlAuthorizationError("context revision mismatch")
     return current
 
 
@@ -1135,11 +1702,19 @@ def make_control_handler(
 ) -> Callable[[SessionControl | Mapping[str, Any]], Any]:
     """Build an authenticated callback for an already-running local adapter."""
 
+    context = _control_context(session.request)
+
     def handle(control: SessionControl | Mapping[str, Any]) -> Any:
         authorized = validate_control(
             control,
             expected_origin=origin,
             expected_session_token=session_token,
+            expected_session_id=str(context["session_id"]),
+            expected_context_revision=(
+                str(context["context_revision"])
+                if context.get("context_revision") is not None
+                else None
+            ),
         )
         if authorized.action == "start":
             return session.start()
@@ -1187,6 +1762,16 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configured_control_binding(request: ComponentRequest) -> tuple[str, str] | None:
+    configured_origin = request.config.get("origin")
+    configured_token = request.config.get("session_token")
+    if not isinstance(configured_origin, str) or not isinstance(configured_token, str):
+        return None
+    if not configured_origin or not configured_token:
+        return None
+    return configured_origin, configured_token
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the preview or explicit session CLI; return zero only on success."""
 
@@ -1230,6 +1815,42 @@ def main(argv: list[str] | None = None) -> int:
         return _cli_failure(
             "control_authorization_failed: loopback origin and session token required", payload
         )
+    if args.stop:
+        configured_binding = _configured_control_binding(request)
+        if configured_binding is None:
+            return _cli_failure(
+                "control_authorization_failed: request has no session-owned control binding",
+                payload,
+            )
+        expected_origin, expected_token = configured_binding
+        try:
+            context = _control_context(request)
+            validate_control(
+                SessionControl(
+                    action="stop",
+                    origin=args.origin,
+                    session_token=args.session_token,
+                    session_id=str(context["session_id"]),
+                    context_revision=str(context.get("context_revision", "")),
+                ),
+                expected_origin=expected_origin,
+                expected_session_token=expected_token,
+                expected_session_id=str(context["session_id"]),
+                expected_context_revision=(
+                    str(context["context_revision"])
+                    if context.get("context_revision") is not None
+                    else None
+                ),
+            )
+            persisted = _read_journal(root, request)
+            if persisted is None or "_read_error" in persisted:
+                raise ControlAuthorizationError(
+                    "session journal is unavailable for control authentication"
+                )
+            if persisted.get("session_id") != context["session_id"]:
+                raise ControlAuthorizationError("session token is not bound to this session")
+        except (ControlAuthorizationError, ReviewSessionError, loop.ExperimentLoopError) as error:
+            return _cli_failure(f"control_authorization_failed: {error}", payload)
     try:
         if args.stop:
             result = run(

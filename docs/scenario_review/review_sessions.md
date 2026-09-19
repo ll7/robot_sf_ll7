@@ -66,7 +66,16 @@ executor. `run(request, read_only=True)` returns
 SREV-24; they do not create a second journal or reset consumed attempts and
 elapsed budget. `stop()` sends cancellation through the same SREV-24 journal
 owner. `progress()` and `result_navigation()` only read the durable journal or
-report and never acquire a dispatch lock.
+report and never acquire a dispatch lock. Read APIs revalidate journal/report
+identity against the selected request, recipe, source bytes, and session
+context before exposing it; stale or tampered state is reported as diagnostic
+failure/unavailable rather than adopted as current progress.
+
+The optional `session_context` request mapping carries the selected
+`campaign_id`, `episode_id`, `source_revision`, `selection_revision`, and
+`context_revision`. Its digest is bound into the delegated session ID and is
+also included in the browser view/control envelope, so changing selected
+context cannot reuse another session's durable results.
 
 Complete output contains the delegated
 `experiment-loop-report.v1`/`experiment-loop-session.v1` artifacts plus
@@ -97,9 +106,12 @@ handler = make_control_handler(
 ```
 
 The origin may be `localhost`, `127.0.0.1`, or `::1` over HTTP(S), with no
-path/query/fragment. Tokens are compared in constant time. Remote origins,
-missing tokens, mismatched origins, unknown actions, and read-only controls
-fail closed.
+path/query/fragment or embedded credentials. Tokens are compared in constant
+time and controls carry the bound session ID/context revision. Remote origins,
+missing tokens, mismatched origins, stale context, unknown actions, and
+read-only controls fail closed. Standalone CLI `--stop` additionally requires
+the request to carry the session-owned `origin` and `session_token`; a
+non-empty command-line token alone is never sufficient.
 
 ## Evidence and preservation boundary
 

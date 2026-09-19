@@ -21,7 +21,8 @@ function loopbackOrigin(value) {
   try {
     const parsed = new URL(value);
     return (parsed.protocol === "http:" || parsed.protocol === "https:")
-      && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(parsed.hostname);
+      && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(parsed.hostname)
+      && parsed.username === "" && parsed.password === "";
   } catch (_error) {
     return false;
   }
@@ -30,19 +31,22 @@ function loopbackOrigin(value) {
 export function isLoopbackOrigin(value) {
   if (!loopbackOrigin(value)) return false;
   const parsed = new URL(value);
-  return (parsed.pathname === "" || parsed.pathname === "/")
+  return (parsed.pathname === "" || (parsed.pathname === "/" && !value.endsWith("/")))
     && parsed.search === "" && parsed.hash === "";
 }
 
-function controlEnvelope(action, origin, sessionToken, payload = {}) {
+function controlEnvelope(action, origin, sessionToken, sessionId, contextRevision, payload = {}) {
   if (!CONTROL_ACTIONS.includes(action)) throw new Error("unsupported control action");
   if (!isLoopbackOrigin(origin)) throw new Error("control origin must be loopback");
-  if (typeof sessionToken !== "string" || !sessionToken) throw new Error("session token is required");
+  if (typeof sessionToken !== "string" || !sessionToken || sessionToken.length > 256) throw new Error("session token is required");
+  if (typeof sessionId !== "string" || !sessionId) throw new Error("session context is required");
   return {
     schema_version: CONTROL_SCHEMA_VERSION,
     action,
     origin,
     session_token: sessionToken,
+    session_id: sessionId,
+    context_revision: contextRevision || "",
     payload: asObject(payload),
   };
 }
@@ -56,6 +60,7 @@ function renderSnapshot(root, state) {
   const budget = asObject(state?.budget);
   const authorization = asObject(state?.authorization);
   const provenance = asObject(state?.provenance);
+  const context = asObject(state?.context);
   const status = text(state?.status, "not_started");
   const reason = text(state?.stop_reason || state?.reason);
   root.replaceChildren();
@@ -99,6 +104,7 @@ function renderSnapshot(root, state) {
   }
   root.appendChild(list);
   if (provenance.component_id) root.dataset.componentId = text(provenance.component_id);
+  if (context.session_id) root.dataset.sessionId = text(context.session_id);
 }
 
 export class ReviewSessionsController {
@@ -109,6 +115,8 @@ export class ReviewSessionsController {
     scheduler = globalThis,
     origin = globalThis.location?.origin || "",
     sessionToken = "",
+    sessionId = text(view?.context?.session_id || view?.session_id),
+    contextRevision = text(view?.context?.context_revision),
     controlRequest = null,
     readOnly = true,
   } = {}) {
@@ -117,6 +125,8 @@ export class ReviewSessionsController {
     this.scheduler = scheduler;
     this.origin = origin;
     this.sessionToken = sessionToken;
+    this.sessionId = sessionId;
+    this.contextRevision = contextRevision;
     this.controlRequest = controlRequest;
     this.readOnly = Boolean(readOnly);
     this.state = { ...asObject(view), authorization: { ...asObject(view.authorization), read_only: this.readOnly } };
@@ -169,7 +179,14 @@ export class ReviewSessionsController {
     if (typeof this.controlRequest !== "function") {
       return Promise.reject(new Error("authenticated local control adapter is required"));
     }
-    const envelope = controlEnvelope(action, this.origin, this.sessionToken, payload);
+    const envelope = controlEnvelope(
+      action,
+      this.origin,
+      this.sessionToken,
+      this.sessionId,
+      this.contextRevision,
+      payload,
+    );
     return Promise.resolve(this.controlRequest(envelope)).then((result) => {
       if (result && typeof result === "object") this.setView(result);
       return result;

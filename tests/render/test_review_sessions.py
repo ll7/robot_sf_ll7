@@ -6,6 +6,9 @@ import hashlib
 import json
 import shutil
 import subprocess
+import threading
+import time
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -109,6 +112,27 @@ class FakeExecutor:
         return self.results.get(operation_id)
 
 
+class SlowExecutor(FakeExecutor):
+    """Executor that makes stop/journal settlement observable."""
+
+    def __init__(self, delay_s: float = 0.15) -> None:  # noqa: D107
+        super().__init__()
+        self.delay_s = delay_s
+        self.started = threading.Event()
+
+    def execute(
+        self,
+        operation_id: str,
+        candidate: dict[str, Any],
+        kind: str,
+        spec: dict[str, Any],
+        attempt: int,
+    ) -> dict[str, Any]:
+        self.started.set()
+        time.sleep(self.delay_s)
+        return super().execute(operation_id, candidate, kind, spec, attempt)
+
+
 def test_descriptor_is_contract_valid_and_explicitly_diagnostic() -> None:
     document = review_sessions.descriptor()
     descriptor = component_descriptor_from_dict(document)
@@ -183,6 +207,13 @@ def test_preview_reports_preservation_and_injected_admission_state(tmp_path: Pat
         "destination": "external:test",
         "receipt_reference": "receipt.json",
     }
+    forged = review_sessions.preview(
+        _request(tmp_path, output="forged-preview"),
+        base=tmp_path,
+        executor=FakeExecutor(),
+        source_admission={"status": "forged"},
+    )
+    assert forged["source_admission"]["status"] == "unavailable"
     invalid = review_sessions.preview(
         _request(tmp_path, output="invalid-preservation", preservation="unsafe"),
         base=tmp_path,
@@ -310,6 +341,36 @@ def test_cli_read_only_and_malformed_inputs_are_truthful(
     assert "config must be an object" in capsys.readouterr().out
 
 
+def test_cli_stop_requires_request_bound_origin_and_token(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload = json.loads((FIXTURE_ROOT / "request.json").read_text(encoding="utf-8"))
+    payload["config"] = {
+        **json.loads((FIXTURE_ROOT / "config.json").read_text(encoding="utf-8")),
+        "origin": "http://localhost:8000",
+        "session_token": "expected-token",
+    }
+    input_path = tmp_path / "request.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    exit_code = review_sessions.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            "session",
+            "--base",
+            str(tmp_path),
+            "--stop",
+            "--origin",
+            "http://localhost:8000",
+            "--session-token",
+            "wrong-token",
+        ]
+    )
+    assert exit_code == 1
+    assert "session token mismatch" in capsys.readouterr().out
+
+
 def test_fixture_cli_preview_writes_budget_admission_and_browser_free_artifact(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -392,6 +453,180 @@ def test_fake_executor_completion_delegates_journal_and_exposes_navigation(tmp_p
     navigation = review_sessions.result_navigation(request, base=tmp_path)
     assert navigation["total"] == 1
     assert navigation["current"]["intervention_id"] == "speed-up"
+
+
+def test_read_surfaces_bind_journal_to_request_and_current_source(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    stale = replace(request, request_id="different-session")
+    stale_progress = review_sessions.progress(stale, base=tmp_path)
+    assert stale_progress["status"] == "failed"
+    assert stale_progress["scientific_claim_allowed"] is False
+    assert review_sessions.preview(stale, base=tmp_path)["status"] == "failed"
+    assert review_sessions.result_navigation(stale, base=tmp_path)["status"] == "unavailable"
+    (tmp_path / "recipe.json").write_text("tampered", encoding="utf-8")
+    mutated = review_sessions.progress(request, base=tmp_path)
+    assert mutated["status"] == "failed"
+    assert "source_mutated" in mutated["reason"]
+
+
+def test_nested_browser_asset_symlink_is_rejected(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    output = tmp_path / request.output_directory
+    output.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (output / "components").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(review_sessions.ReviewSessionError, match="output_collision"):
+        review_sessions._write_browser_view(
+            output,
+            request,
+            {"schema_version": review_sessions.SESSION_VIEW_SCHEMA_VERSION, "status": "complete"},
+        )
+    assert not (outside / "review_sessions" / review_sessions.ASSET_FILENAME).exists()
+
+
+def test_stop_waits_for_owned_work_and_terminal_journal(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    executor = SlowExecutor()
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    worker = threading.Thread(target=session.start)
+    worker.start()
+    assert executor.started.wait(timeout=2)
+    started = time.monotonic()
+    stopped = session.stop()
+    elapsed = time.monotonic() - started
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+    assert elapsed >= executor.delay_s
+    assert stopped.status == "cancelled"
+    assert session.progress()["status"] == "cancelled"
+
+
+def test_tampered_or_malformed_journal_is_diagnostic_and_non_throwing(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    journal_path = tmp_path / request.output_directory / review_sessions.JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["scientific_claim_allowed"] = True
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    forged = review_sessions.progress(request, base=tmp_path)
+    assert forged["status"] == "failed"
+    assert forged["scientific_claim_allowed"] is False
+    assert review_sessions.preview(request, base=tmp_path)["scientific_claim_allowed"] is False
+    journal["scientific_claim_allowed"] = False
+    journal["executions_consumed"] = "bad"
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    malformed = review_sessions.progress(request, base=tmp_path)
+    assert malformed["status"] == "failed"
+    assert malformed["scientific_claim_allowed"] is False
+
+
+def test_persisted_integrity_variants_fail_closed_without_exposing_state(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    journal_path = tmp_path / request.output_directory / review_sessions.JOURNAL_FILENAME
+    original = json.loads(journal_path.read_text(encoding="utf-8"))
+    mutations = [
+        ("evidence_boundary", "benchmark"),
+        ("dependent_family_status", "shared"),
+        ("status", "bogus"),
+        ("stop_reason", 1),
+        ("source_admission", []),
+        ("budget", {}),
+        ("executions_consumed", "bad"),
+        ("elapsed_s", "bad"),
+        ("candidate_catalog", []),
+        ("candidate_order", "bad"),
+        ("candidates", []),
+        ("outcomes", ["bad"]),
+        ("operations", ["bad"]),
+        ("policy", {}),
+        ("config_identity_digest", "bad"),
+        ("answerability", {"forged": True}),
+        ("provenance", []),
+    ]
+    for key, value in mutations:
+        mutated = deepcopy(original)
+        mutated[key] = value
+        journal_path.write_text(json.dumps(mutated), encoding="utf-8")
+        document = review_sessions.progress(request, base=tmp_path)
+        assert document["status"] == "failed", key
+        assert document["scientific_claim_allowed"] is False
+    journal_path.write_text(json.dumps(original), encoding="utf-8")
+    assert (
+        review_sessions._journal_progress({"budget": {"max_executions": "bad"}})["status"]
+        == "failed"
+    )
+    assert (
+        review_sessions._journal_progress({"status": "forged", "budget": {}})["status"] == "failed"
+    )
+
+
+def test_source_and_context_guards_reject_unsafe_values(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    recipe = request.config["recipe"]
+    proof = _proof(tmp_path, request)
+    assert review_sessions._safe_source_relative("../recipe.json") is None
+    assert review_sessions._safe_source_relative("recipe\\.json") is None
+    assert review_sessions._source_digest(tmp_path / "missing", Path("recipe.json")) is None
+    malformed_root = dict(proof, source_root=[])  # type: ignore[arg-type]
+    assert "source_root is malformed" in (
+        review_sessions._source_integrity_error(tmp_path, request, recipe, malformed_root) or ""
+    )
+    malformed_source = dict(proof, source={"uri": "../escape"})
+    assert "admission source differs" in (
+        review_sessions._source_integrity_error(tmp_path, request, recipe, malformed_source) or ""
+    )
+    with pytest.raises(review_sessions.ReviewSessionError, match="session_context"):
+        review_sessions.preview(
+            _request(tmp_path, output="bad-context", session_context="forged"), base=tmp_path
+        )
+
+
+def test_tampered_report_is_not_navigable(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    report_path = tmp_path / request.output_directory / review_sessions.REPORT_FILENAME
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["outcomes"][0]["status"] = "forged"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    navigation = review_sessions.result_navigation(request, base=tmp_path)
+    assert navigation["status"] == "unavailable"
+    assert "report_identity_mismatch" in navigation["reason"]
 
 
 def test_cancelled_result_retains_journal_but_no_complete_artifacts(tmp_path: Path) -> None:
@@ -488,6 +723,52 @@ def test_loopback_control_requires_exact_origin_and_token(tmp_path: Path) -> Non
     assert not review_sessions.is_loopback_origin("http://127.0.0.1:8000/path")
 
 
+def test_context_revision_binds_session_identity(tmp_path: Path) -> None:
+    first = _request(
+        tmp_path,
+        output="context-session",
+        session_context={
+            "campaign_id": "campaign-1",
+            "episode_id": "episode-1",
+            "source_revision": "source-1",
+            "selection_revision": "selection-1",
+            "context_revision": "context-1",
+        },
+    )
+    second = _request(
+        tmp_path,
+        output="context-session-2",
+        session_context={
+            "campaign_id": "campaign-1",
+            "episode_id": "episode-1",
+            "source_revision": "source-1",
+            "selection_revision": "selection-1",
+            "context_revision": "context-2",
+        },
+    )
+    first_preview = review_sessions.preview(first, base=tmp_path)
+    second_preview = review_sessions.preview(second, base=tmp_path)
+    assert first_preview["context"]["context_revision"] == "context-1"
+    assert second_preview["context"]["context_revision"] == "context-2"
+    assert first_preview["session_id"] != second_preview["session_id"]
+    token_first = _request(
+        tmp_path,
+        output="token-session-1",
+        origin="http://localhost:8000",
+        session_token="token-one",  # noqa: S106
+    )
+    token_second = _request(
+        tmp_path,
+        output="token-session-2",
+        origin="http://localhost:8000",
+        session_token="token-two",  # noqa: S106
+    )
+    assert (
+        review_sessions.preview(token_first, base=tmp_path)["session_id"]
+        != review_sessions.preview(token_second, base=tmp_path)["session_id"]
+    )
+
+
 def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
     asset = (
         Path(__file__).resolve().parents[2]
@@ -507,8 +788,10 @@ def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
     script = f"""
       import {{ isLoopbackOrigin, ReviewSessionsController }} from {json.dumps(asset.as_uri())};
       if (!isLoopbackOrigin('http://127.0.0.1:8765')) throw new Error('loopback');
+      if (isLoopbackOrigin('http://user@localhost:8765')) throw new Error('credential origin');
+      if (isLoopbackOrigin('http://localhost:8765/')) throw new Error('path origin');
       let calls = [];
-      const controller = new ReviewSessionsController({{origin: 'http://127.0.0.1:8765', sessionToken: 't', readOnly: false, controlRequest: (value) => {{ calls.push(value); return {{status: 'running'}}; }}}});
+      const controller = new ReviewSessionsController({{origin: 'http://127.0.0.1:8765', sessionToken: 't', sessionId: 'session-1', readOnly: false, controlRequest: (value) => {{ calls.push(value); return {{status: 'running'}}; }}}});
       await controller.start();
       if (calls.length !== 1 || calls[0].action !== 'start') throw new Error('explicit control');
     """
@@ -545,7 +828,7 @@ def test_remaining_boundary_guards_and_nested_preview_paths(tmp_path: Path) -> N
             source_admission=None,
             base=tmp_path,
         )["status"]
-        == "required"
+        == "unavailable"
     )
     assert review_sessions._preservation_preview({"preservation": []}, None)["status"] == "invalid"
 
@@ -588,9 +871,15 @@ def test_navigation_control_and_run_error_statuses(tmp_path: Path) -> None:
         origin="http://localhost:8000",
         session_token=token,
     )
+    context = review_sessions._control_context(request)
     assert (
         handler(
-            {"action": "progress", "origin": "http://localhost:8000", "session_token": "token"}
+            {
+                "action": "progress",
+                "origin": "http://localhost:8000",
+                "session_token": "token",
+                "session_id": context["session_id"],
+            }
         )["status"]
         == "complete"
     )

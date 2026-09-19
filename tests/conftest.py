@@ -482,6 +482,9 @@ _FAST_FILES = {
     # Offline synchronized review-panel contract and runtime-model tests are
     # deterministic coverage for the SREV-16 renderer component.
     "test_review_panels.py",
+    # Offline recorded planner/pedestrian diagnostic contracts are deterministic
+    # SREV-18 coverage for the diagnostics renderer component (issue #9288).
+    "test_review_diagnostics.py",
     # Offline review-editor annotation, source-binding, and persistence tests
     # are deterministic coverage for SREV-17 (issue #9287).
     "test_review_editor.py",

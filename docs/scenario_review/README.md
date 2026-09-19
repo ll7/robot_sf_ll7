@@ -28,6 +28,13 @@ The Benchmark Auditor release-bound coverage evaluator is documented in
 BA-03 review receipts, emits BA-02-compatible coverage deficits, and reports
 operational health without making benchmark-validity or statistical claims.
 
+The optional Scenario Review (SREV-18) recorded planner, control, pedestrian, and failure
+diagnostic extension is documented in
+[`review_diagnostics.md`](./review_diagnostics.md) and runs with
+`python -m robot_sf.render.review_diagnostics`. It consumes retained trace
+rows only; it does not instrument a planner, run a simulator, or make a
+benchmark/scientific claim.
+
 ## Leaf fast-lane registration convention
 
 Scenario-review leaves that add a deterministic test file must also register

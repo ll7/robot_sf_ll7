@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import html
 import json
 import math
@@ -65,6 +66,8 @@ VIEW_FILENAME = f"{SESSION_VIEW_SCHEMA_VERSION}.json"
 HTML_FILENAME = f"{SESSION_VIEW_SCHEMA_VERSION}.html"
 JOURNAL_FILENAME = loop.SESSION_JOURNAL_FILENAME
 REPORT_FILENAME = loop.LOOP_REPORT_FILENAME
+INTEGRITY_FILENAME = "review-session-integrity.v1.json"
+INTEGRITY_SCHEMA_VERSION = "review-session-integrity.v1"
 ASSET_FILENAME = "review_sessions.js"
 EVIDENCE_BOUNDARY = "diagnostic_only"
 DEPENDENT_FAMILY_STATUS = "standalone_fixture_only"
@@ -110,8 +113,39 @@ _JOURNAL_STATUSES = frozenset(
     {"running", "complete", "partial", "failed", "unavailable", "cancelled"}
 )
 _SHA256_LENGTH = 64
+_NATIVE_ADMISSION_KEYS = frozenset(
+    {
+        "schema_version",
+        "source_root",
+        "receipt_reference",
+        "receipt_sha256",
+        "receipt_id",
+        "source",
+        "preservation_destination",
+        "preservation_receipt_reference",
+        "preservation_receipt_sha256",
+        "config_identity",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+    }
+)
+_INJECTED_ADMISSION_KEYS = frozenset(
+    {
+        "status",
+        "receipt_id",
+        "source_root",
+        "source",
+        "request_digest",
+        "recipe_digest",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+    }
+)
 _VERSION_KEYS = ("required_component_version", "min_component_version")
 _MAX_JSON_BYTES = 256 * 1024
+_MAX_JSON_DEPTH = 64
+_MAX_JSON_INTEGER_DIGITS = 100
 _MAX_TOKEN_CHARS = 256
 _LOOP_CONFIG_KEYS = frozenset(loop._ALLOWED_CONFIG_KEYS)
 
@@ -198,9 +232,36 @@ def _strict_loads(raw: str | bytes) -> Any:
     def reject_constant(value: str) -> Any:
         raise ReviewSessionError(f"non-finite JSON constant: {value}")
 
+    def bounded_integer(value: str) -> int:
+        digits = value.lstrip("+-")
+        if len(digits) > _MAX_JSON_INTEGER_DIGITS:
+            raise ReviewSessionError("JSON integer exceeds review-session limit")
+        return int(value)
+
+    def bounded_float(value: str) -> float:
+        converted = float(value)
+        if not math.isfinite(converted):
+            raise ReviewSessionError("JSON number is not finite")
+        return converted
+
     try:
-        return json.loads(raw, parse_constant=reject_constant)
-    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as error:
+        payload = json.loads(
+            raw,
+            parse_constant=reject_constant,
+            parse_int=bounded_integer,
+            parse_float=bounded_float,
+        )
+        stack: list[tuple[Any, int]] = [(payload, 0)]
+        while stack:
+            value, depth = stack.pop()
+            if depth > _MAX_JSON_DEPTH:
+                raise ReviewSessionError("JSON nesting exceeds review-session limit")
+            if isinstance(value, Mapping):
+                stack.extend((item, depth + 1) for item in value.values())
+            elif isinstance(value, (list, tuple)):
+                stack.extend((item, depth + 1) for item in value)
+        return payload
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError, OverflowError) as error:
         raise ReviewSessionError("JSON cannot be parsed safely") from error
 
 
@@ -216,7 +277,7 @@ def _json_bytes(payload: Any) -> bytes:
         return (json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n").encode(
             "utf-8"
         )
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
+    except (TypeError, ValueError, UnicodeEncodeError, RecursionError, OverflowError) as error:
         raise ReviewSessionError(f"strict JSON required: {error}") from error
 
 
@@ -225,7 +286,7 @@ def _canonical_digest(payload: Any) -> str:
         encoded = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode("utf-8")
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
+    except (TypeError, ValueError, UnicodeEncodeError, RecursionError, OverflowError) as error:
         raise ReviewSessionError(f"strict JSON required: {error}") from error
     return hashlib.sha256(encoded).hexdigest()
 
@@ -426,9 +487,11 @@ def _loop_request(
 ) -> ComponentRequest:
     config = _loop_config(request.config)
     context = _context_identity(request)
-    binding: dict[str, Any] = {}
-    if context:
-        binding["context"] = context
+    # The wrapper owns the durable session namespace.  Request and recipe
+    # identity are always included, even when no browser context or control
+    # token was configured; otherwise two source revisions could share the
+    # canonical SREV-24 ``request_id:recipe_digest`` session id.
+    binding: dict[str, Any] = {"context": context}
     configured_token = request.config.get("session_token")
     if configured_token is not None:
         if (
@@ -441,15 +504,15 @@ def _loop_request(
             "origin": request.config.get("origin", ""),
             "session_token": configured_token,
         }
-    if binding:
-        # Wrapper-bound sessions must rotate when either the source/request
-        # identity or the canonical recipe changes.  The wrapper context is
-        # intentionally not a substitute for SREV-24's immutable identities.
-        child_identity = replace(request, component_id=loop.COMPONENT_ID)
-        binding["request_digest"] = loop._canonical_digest(loop._request_identity(child_identity))
-        recipe = config.get("recipe")
-        if isinstance(recipe, Mapping):
-            binding["recipe_digest"] = loop.experiment_recipe_canonical_digest(recipe)
+    # Wrapper-bound sessions must rotate when either the source/request
+    # identity or the canonical recipe changes.  The wrapper context is
+    # intentionally not a substitute for SREV-24's immutable identities.
+    child_identity = replace(request, component_id=loop.COMPONENT_ID)
+    binding["request_digest"] = loop._canonical_digest(loop._request_identity(child_identity))
+    binding["output_directory"] = output_directory or request.output_directory
+    recipe = config.get("recipe")
+    if isinstance(recipe, Mapping):
+        binding["recipe_digest"] = loop.experiment_recipe_canonical_digest(recipe)
     if binding:
         session_prefix = str(config.get("session_id") or request.request_id)
         binding_digest = _canonical_digest(binding)[:16]
@@ -662,6 +725,155 @@ def _regular_output_file(output: Path, filename: str) -> Path:
     return path
 
 
+def _session_token(request: ComponentRequest) -> str | None:
+    value = request.config.get("session_token")
+    if isinstance(value, str) and value and len(value) <= _MAX_TOKEN_CHARS:
+        return value
+    return None
+
+
+def _integrity_seal_body(
+    request: ComponentRequest,
+    journal: Mapping[str, Any],
+    *,
+    journal_sha256: str,
+    report_sha256: str,
+) -> dict[str, Any]:
+    """Return the non-secret fields authenticated by the caller token."""
+
+    return {
+        "schema_version": INTEGRITY_SCHEMA_VERSION,
+        "component_id": COMPONENT_ID,
+        "session_id": journal.get("session_id"),
+        "request_id": request.request_id,
+        "output_directory": request.output_directory,
+        "request_digest": journal.get("request_digest"),
+        "recipe_digest": journal.get("recipe_digest"),
+        "journal_sha256": journal_sha256,
+        "report_sha256": report_sha256,
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+    }
+
+
+def _write_integrity_seal(
+    output: Path, request: ComponentRequest, journal: Mapping[str, Any]
+) -> str:
+    """Persist a token-keyed MAC without persisting the token itself."""
+
+    token = _session_token(request)
+    if token is None:
+        raise ReviewSessionError(
+            "integrity_seal_required: a non-empty session_token is required for complete reads"
+        )
+    journal_path = _regular_output_file(output, JOURNAL_FILENAME)
+    report_path = _regular_output_file(output, REPORT_FILENAME)
+    journal_bytes = journal_path.read_bytes()
+    report_bytes = report_path.read_bytes()
+    body = _integrity_seal_body(
+        request,
+        journal,
+        journal_sha256=hashlib.sha256(journal_bytes).hexdigest(),
+        report_sha256=hashlib.sha256(report_bytes).hexdigest(),
+    )
+    mac = hmac.new(token.encode("utf-8"), _json_bytes(body), hashlib.sha256).hexdigest()
+    return _atomic_new_file(
+        output / INTEGRITY_FILENAME,
+        _json_bytes({**body, "hmac_sha256": mac}),
+        overwrite=True,
+    )
+
+
+def _integrity_seal_error(
+    output: Path,
+    request: ComponentRequest,
+    journal: Mapping[str, Any],
+    *,
+    check_report: bool,
+) -> str | None:
+    """Verify the durable complete-read MAC and current journal/report bytes."""
+
+    token = _session_token(request)
+    if token is None:
+        return "journal_integrity_seal_missing: session_token is required"
+    try:
+        seal = _read_json(_regular_output_file(output, INTEGRITY_FILENAME))
+    except (
+        ReviewSessionError,
+        OSError,
+        ValueError,
+        TypeError,
+        RecursionError,
+        OverflowError,
+    ) as error:
+        return f"journal_integrity_seal_invalid: {error}"
+    if not isinstance(seal, Mapping):
+        return "journal_integrity_seal_invalid: seal is not an object"
+    mac = seal.get("hmac_sha256")
+    body = {key: value for key, value in seal.items() if key != "hmac_sha256"}
+    if not isinstance(mac, str) or len(mac) != _SHA256_LENGTH:
+        return "journal_integrity_seal_invalid: MAC is malformed"
+    if set(body) != {
+        "schema_version",
+        "component_id",
+        "session_id",
+        "request_id",
+        "output_directory",
+        "request_digest",
+        "recipe_digest",
+        "journal_sha256",
+        "report_sha256",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+    }:
+        return "journal_integrity_seal_invalid: seal fields are malformed"
+    if body.get("schema_version") != INTEGRITY_SCHEMA_VERSION:
+        return "journal_integrity_seal_invalid: schema mismatch"
+    expected = _integrity_seal_body(
+        request,
+        journal,
+        journal_sha256=str(body.get("journal_sha256", "")),
+        report_sha256=str(body.get("report_sha256", "")),
+    )
+    for key in (
+        "component_id",
+        "session_id",
+        "request_id",
+        "output_directory",
+        "request_digest",
+        "recipe_digest",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+        "dependent_family_status",
+    ):
+        if body.get(key) != expected.get(key):
+            return f"journal_integrity_seal_invalid: {key} mismatch"
+    for key in ("journal_sha256", "report_sha256"):
+        value = body.get(key)
+        if (
+            not isinstance(value, str)
+            or len(value) != _SHA256_LENGTH
+            or any(character not in "0123456789abcdef" for character in value.lower())
+        ):
+            return f"journal_integrity_seal_invalid: {key} is malformed"
+    expected_mac = hmac.new(token.encode("utf-8"), _json_bytes(body), hashlib.sha256).hexdigest()
+    if not secrets.compare_digest(mac, expected_mac):
+        return "journal_integrity_seal_invalid: MAC mismatch"
+    try:
+        journal_bytes = _regular_output_file(output, JOURNAL_FILENAME).read_bytes()
+        if hashlib.sha256(journal_bytes).hexdigest() != body["journal_sha256"]:
+            return "journal_integrity_seal_invalid: journal bytes changed"
+        if check_report:
+            report_bytes = _regular_output_file(output, REPORT_FILENAME).read_bytes()
+            if hashlib.sha256(report_bytes).hexdigest() != body["report_sha256"]:
+                return "journal_integrity_seal_invalid: report bytes changed"
+    except (ReviewSessionError, OSError, ValueError, TypeError) as error:
+        return f"journal_integrity_seal_invalid: {error}"
+    return None
+
+
 def _safe_source_relative(uri: Any) -> Path | None:
     if not isinstance(uri, str) or not uri or "\x00" in uri or "\\" in uri:
         return None
@@ -706,6 +918,7 @@ def _source_integrity_error(
     if recipe_ref is not None and not isinstance(recipe_ref, Mapping):
         return "journal_source_identity_mismatch: recipe source_ref is malformed"
     admission_source = source_admission.get("source")
+    native = _admission_shape(source_admission) == "native"
     if admission_source is not None and not isinstance(admission_source, Mapping):
         return "journal_source_identity_mismatch: admission source is malformed"
     roots: list[Path] = [base]
@@ -713,6 +926,25 @@ def _source_integrity_error(
     if source_root is not None:
         if not isinstance(source_root, str) or not source_root:
             return "journal_source_identity_mismatch: admission source_root is malformed"
+        # Injected proofs are only valid for the component's requested base.
+        # A persisted proof must not redirect source verification to an
+        # attacker-selected external tree.  Native launcher proofs are a
+        # separate shape and are authenticated by their launcher receipt and
+        # the wrapper integrity seal; their root may legitimately be outside
+        # the component output base.
+        injected = bool(_INJECTED_ADMISSION_KEYS & set(source_admission)) and not bool(
+            {"receipt_reference", "receipt_sha256", "preservation_receipt_reference"}
+            & set(source_admission)
+        )
+        if injected:
+            try:
+                resolved_base = base.resolve(strict=True)
+                resolved_source_root = Path(source_root).resolve(strict=True)
+                resolved_source_root.relative_to(resolved_base)
+            except (OSError, RuntimeError, ValueError):
+                return (
+                    "journal_source_identity_mismatch: injected source_root escapes requested base"
+                )
         roots.insert(0, Path(source_root))
     checked = 0
     for source in request.sources:
@@ -724,8 +956,13 @@ def _source_integrity_error(
                 if recipe_ref.get(key) != getattr(source, key):
                     return "journal_source_identity_mismatch: recipe source reference differs"
         if isinstance(admission_source, Mapping):
-            for key in ("artifact_id", "uri", "format"):
-                if admission_source.get(key) != getattr(source, key):
+            nested_keys = (
+                ("uri", "format", "schema", "sha256", "source_commit", "config_identity")
+                if native
+                else ("artifact_id", "uri", "format")
+            )
+            for key in nested_keys:
+                if key in admission_source and admission_source.get(key) != getattr(source, key):
                     return "journal_source_identity_mismatch: admission source differs"
         expected_digest = source.sha256
         if not isinstance(expected_digest, str) or len(expected_digest) != _SHA256_LENGTH:
@@ -757,13 +994,26 @@ def _source_integrity_error(
 
 
 def _contains_true_claim(value: Any) -> bool:
-    if isinstance(value, Mapping):
-        if value.get("scientific_claim_allowed") is True:
-            return True
-        return any(_contains_true_claim(item) for item in value.values())
-    if isinstance(value, (list, tuple)):
-        return any(_contains_true_claim(item) for item in value)
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            if current.get("scientific_claim_allowed") is True:
+                return True
+            pending.extend(current.values())
+        elif isinstance(current, (list, tuple)):
+            pending.extend(current)
     return False
+
+
+def _finite_number(value: Any, *, nonnegative: bool = False) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        converted = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return False
+    return math.isfinite(converted) and (not nonnegative or converted >= 0)
 
 
 def _source_admission_integrity_error(
@@ -771,27 +1021,93 @@ def _source_admission_integrity_error(
     *,
     expected_request_digest: str,
     expected_recipe_digest: str,
+    base: Path | None = None,
 ) -> str | None:
     """Validate the nested proof fields that a read-only caller can observe."""
 
-    if "status" in source_admission and source_admission.get("status") != "admitted":
-        return "journal_source_admission_tampered: admission status is not admitted"
+    keys = set(source_admission)
+    injected = bool(keys & {"status", "dependent_family_status", "request_digest", "recipe_digest"})
+    native = bool(keys & {"receipt_reference", "receipt_sha256", "preservation_receipt_reference"})
+    if injected and native:
+        return "journal_source_admission_tampered: mixed native and injected proof shape"
+    if injected:
+        required = {"status", "request_digest", "recipe_digest", "dependent_family_status"}
+        if not required.issubset(keys):
+            return "journal_source_admission_tampered: injected proof identity is incomplete"
+        if source_admission.get("status") != "admitted":
+            return "journal_source_admission_tampered: admission status is not admitted"
+        if source_admission.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
+            return "journal_source_admission_tampered: dependent family status mismatch"
+        if source_admission.get("request_digest") != expected_request_digest:
+            return "journal_source_admission_tampered: request digest mismatch"
+        if source_admission.get("recipe_digest") != expected_recipe_digest:
+            return "journal_source_admission_tampered: recipe digest mismatch"
+        if base is not None:
+            source_root = source_admission.get("source_root")
+            if not isinstance(source_root, str) or not source_root:
+                return "journal_source_admission_tampered: injected source_root is missing"
+            try:
+                Path(source_root).resolve(strict=True).relative_to(base.resolve(strict=True))
+            except (OSError, RuntimeError, ValueError):
+                return (
+                    "journal_source_admission_tampered: injected source_root escapes requested base"
+                )
+    elif native:
+        missing = sorted(_NATIVE_ADMISSION_KEYS - keys)
+        if missing:
+            return (
+                "journal_source_admission_tampered: native proof fields are missing: "
+                + ", ".join(missing)
+            )
+        for key in (
+            "schema_version",
+            "source_root",
+            "receipt_reference",
+            "receipt_sha256",
+            "preservation_destination",
+            "preservation_receipt_reference",
+            "preservation_receipt_sha256",
+            "config_identity",
+        ):
+            if not isinstance(source_admission.get(key), str) or not source_admission[key]:
+                return f"journal_source_admission_tampered: native {key} is malformed"
+        if source_admission.get("receipt_id") is not None and not isinstance(
+            source_admission.get("receipt_id"), str
+        ):
+            return "journal_source_admission_tampered: native receipt_id is malformed"
+        if source_admission.get("source") is not None and not isinstance(
+            source_admission.get("source"), Mapping
+        ):
+            return "journal_source_admission_tampered: native source is malformed"
+        native_source = source_admission.get("source")
+        if isinstance(native_source, Mapping):
+            required_source = {
+                "uri",
+                "format",
+                "schema",
+                "sha256",
+                "source_commit",
+                "config_identity",
+            }
+            if not required_source.issubset(native_source):
+                return "journal_source_admission_tampered: native source identity is incomplete"
+    else:
+        return "journal_source_admission_tampered: unrecognised proof shape"
     if source_admission.get("evidence_boundary") != EVIDENCE_BOUNDARY:
         return "journal_source_admission_tampered: evidence boundary mismatch"
     if source_admission.get("scientific_claim_allowed") is not False:
         return "journal_source_admission_tampered: scientific claims are forbidden"
-    if source_admission.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
-        return "journal_source_admission_tampered: dependent family status mismatch"
-    if (
-        "request_digest" in source_admission
-        and source_admission.get("request_digest") != expected_request_digest
-    ):
-        return "journal_source_admission_tampered: request digest mismatch"
-    if (
-        "recipe_digest" in source_admission
-        and source_admission.get("recipe_digest") != expected_recipe_digest
-    ):
-        return "journal_source_admission_tampered: recipe digest mismatch"
+    return None
+
+
+def _admission_shape(source_admission: Mapping[str, Any]) -> str | None:
+    keys = set(source_admission)
+    injected = bool(keys & {"status", "dependent_family_status", "request_digest", "recipe_digest"})
+    native = bool(keys & {"receipt_reference", "receipt_sha256", "preservation_receipt_reference"})
+    if injected and not native:
+        return "injected"
+    if native and not injected:
+        return "native"
     return None
 
 
@@ -834,13 +1150,25 @@ def _srev24_journal_semantic_error(
             loop.ExperimentLoop._load_journal(validator)
     except loop.ExperimentLoopError as error:
         return str(error)
-    except (AttributeError, KeyError, OSError, TypeError, ValueError, RecursionError) as error:
+    except (
+        AttributeError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        RecursionError,
+        OverflowError,
+    ) as error:
         return f"canonical validator error: {error}"
     return None
 
 
 def _journal_integrity_error(  # noqa: PLR0915
-    base: Path, request: ComponentRequest, journal: Mapping[str, Any]
+    base: Path,
+    request: ComponentRequest,
+    journal: Mapping[str, Any],
+    *,
+    admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
 ) -> str | None:
     """Validate the read-only journal boundary using SREV-24's identity rules."""
 
@@ -886,12 +1214,33 @@ def _journal_integrity_error(  # noqa: PLR0915
         source_admission,
         expected_request_digest=identity["request_digest"],
         expected_recipe_digest=identity["recipe_digest"],
+        base=base,
     )
     if source_admission_error is not None:
         return source_admission_error
     source_error = _source_integrity_error(base, request, validated.recipe, source_admission)
     if source_error is not None:
         return source_error
+    if _admission_shape(source_admission) == "native":
+        if admission_config is None:
+            return "journal_source_admission_unavailable: native launcher admission is required"
+        try:
+            fresh_document, _normalized_admission, admission_error = (
+                loop._preflight_native_admission(
+                    child,
+                    recipe=validated.recipe,
+                    executor_config=loop._native_executor_config(validated),
+                    admission_config=admission_config,
+                )
+            )
+        except (loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
+            return f"journal_source_admission_unavailable: {error}"
+        if admission_error or fresh_document is None:
+            return "journal_source_admission_unavailable: " + (
+                admission_error or "fresh launcher admission is unavailable"
+            )
+        if dict(fresh_document) != dict(source_admission):
+            return "journal_source_admission_tampered: native receipt or root changed"
     budget = journal.get("budget")
     if not isinstance(budget, Mapping):
         return "journal_malformed: budget is not an object"
@@ -907,11 +1256,7 @@ def _journal_integrity_error(  # noqa: PLR0915
     for key in required_budget_keys:
         value = budget.get(key)
         if key == "wall_timeout_s":
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(float(value))
-            ):
+            if not _finite_number(value, nonnegative=True):
                 return f"journal_malformed: budget {key} is invalid"
         elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
             return f"journal_malformed: budget {key} is invalid"
@@ -920,9 +1265,7 @@ def _journal_integrity_error(  # noqa: PLR0915
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             return f"journal_malformed: {key} is invalid"
     elapsed = journal.get("elapsed_s")
-    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)):
-        return "journal_malformed: elapsed_s is invalid"
-    if not math.isfinite(float(elapsed)) or float(elapsed) < 0:
+    if not _finite_number(elapsed, nonnegative=True):
         return "journal_malformed: elapsed_s is invalid"
     if journal["executions_consumed"] > budget["max_executions"]:
         return "journal_malformed: consumed execution accounting exceeds budget"
@@ -1057,10 +1400,27 @@ def _report_integrity_error(
         return "report_identity_mismatch: provenance request digest"
     if provenance.get("recipe_digest") != expected["recipe_digest"]:
         return "report_identity_mismatch: provenance recipe digest"
+    for key, expected_value in (
+        ("evidence_boundary", EVIDENCE_BOUNDARY),
+        ("benchmark_success", False),
+        ("scientific_claim_allowed", False),
+        ("dependent_family_status", DEPENDENT_FAMILY_STATUS),
+    ):
+        if provenance.get(key) != expected_value:
+            return f"report_boundary_tampered: provenance {key}"
     return None
 
 
-def _read_journal(base: Path, request: ComponentRequest) -> dict[str, Any] | None:
+def _read_journal(
+    base: Path,
+    request: ComponentRequest,
+    *,
+    admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
+) -> dict[str, Any] | None:
+    if admission_config is None:
+        configured_admission = request.config.get("admission_config")
+        if isinstance(configured_admission, Mapping):
+            admission_config = configured_admission
     state = _output_state(base, request)
     if state.get("status") == "invalid":
         return {"_read_error": str(state.get("reason", "output integrity failure"))}
@@ -1069,13 +1429,47 @@ def _read_journal(base: Path, request: ComponentRequest) -> dict[str, Any] | Non
     try:
         output = _resolve_output(base, request.output_directory, create=False)
         payload = _read_json(_regular_output_file(output, JOURNAL_FILENAME))
-    except (ReviewSessionError, OSError, ValueError, TypeError) as error:
+    except (
+        ReviewSessionError,
+        OSError,
+        ValueError,
+        TypeError,
+        RecursionError,
+        OverflowError,
+    ) as error:
         return {"_read_error": str(error)}
     if not isinstance(payload, dict):
         return {"_read_error": "journal is not an object"}
-    integrity_error = _journal_integrity_error(base, request, payload)
+    try:
+        integrity_error = _journal_integrity_error(
+            base, request, payload, admission_config=admission_config
+        )
+    except (
+        ReviewSessionError,
+        OSError,
+        ValueError,
+        TypeError,
+        RecursionError,
+        OverflowError,
+    ) as error:
+        return {"_read_error": f"journal_malformed: {error}"}
     if integrity_error is not None:
         return {"_read_error": integrity_error}
+    if payload.get("status") == "complete":
+        try:
+            output = _resolve_output(base, request.output_directory, create=False)
+            seal_error = _integrity_seal_error(output, request, payload, check_report=False)
+        except (
+            ReviewSessionError,
+            OSError,
+            ValueError,
+            TypeError,
+            RecursionError,
+            OverflowError,
+        ) as error:
+            seal_error = str(error)
+        if seal_error is not None:
+            return {"_read_error": seal_error}
     return payload
 
 
@@ -1143,13 +1537,16 @@ def _journal_progress(journal: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def progress(
-    request: ComponentRequest | Mapping[str, Any], *, base: Path | None = None
+    request: ComponentRequest | Mapping[str, Any],
+    *,
+    base: Path | None = None,
+    admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
 ) -> dict[str, Any]:
     """Read durable progress without acquiring a session lock or dispatching."""
 
     normalized = _normalise_request(request)
     root = base if base is not None else Path.cwd()
-    journal = _read_journal(root, normalized)
+    journal = _read_journal(root, normalized, admission_config=admission_config)
     if journal is None:
         budget, candidates = _recipe_budget_preview(normalized.config)
         return {
@@ -1177,12 +1574,13 @@ def result_navigation(
     *,
     base: Path | None = None,
     index: int = 0,
+    admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
 ) -> dict[str, Any]:
     """Return deterministic result navigation over retained candidate outcomes."""
 
     normalized = _normalise_request(request)
     root = base if base is not None else Path.cwd()
-    journal = _read_journal(root, normalized)
+    journal = _read_journal(root, normalized, admission_config=admission_config)
     if journal is None:
         return {"status": "unavailable", "reason": "result_unavailable: session journal is missing"}
     if "_read_error" in journal:
@@ -1190,11 +1588,25 @@ def result_navigation(
     try:
         output = _resolve_output(root, normalized.output_directory, create=False)
         report = _read_json(_regular_output_file(output, REPORT_FILENAME))
-    except (ReviewSessionError, OSError, ValueError, TypeError) as error:
+    except (
+        ReviewSessionError,
+        OSError,
+        ValueError,
+        TypeError,
+        RecursionError,
+        OverflowError,
+    ) as error:
         return {"status": "unavailable", "reason": f"result_unavailable: {error}"}
     if not isinstance(report, Mapping):
         return {"status": "failed", "reason": "result report is not an object"}
-    report_error = _report_integrity_error(normalized, report, journal)
+    if journal.get("status") == "complete":
+        seal_error = _integrity_seal_error(output, normalized, journal, check_report=True)
+        if seal_error is not None:
+            return {"status": "unavailable", "reason": f"result_unavailable: {seal_error}"}
+    try:
+        report_error = _report_integrity_error(normalized, report, journal)
+    except (RecursionError, OverflowError, TypeError, ValueError) as error:
+        report_error = f"report_malformed: {error}"
     if report_error is not None:
         return {"status": "unavailable", "reason": f"result_unavailable: {report_error}"}
     outcomes = [dict(item) for item in report.get("outcomes", []) if isinstance(item, Mapping)]
@@ -1224,11 +1636,12 @@ def navigate_result(
     base: Path | None = None,
     index: int = 0,
     direction: int = 0,
+    admission_config: Mapping[str, Any] | review_execute.ExecutorAdmissionConfig | None = None,
 ) -> dict[str, Any]:
     """Navigate retained results with clamped previous/next semantics."""
 
     target = index + direction
-    return result_navigation(request, base=base, index=target)
+    return result_navigation(request, base=base, index=target, admission_config=admission_config)
 
 
 def preview(
@@ -1290,7 +1703,7 @@ def preview(
         for item in loop._candidate_order(validated.recipe)[: validated.budget.max_candidates]
     ]
     root = base if base is not None else Path.cwd()
-    journal = _read_journal(root, normalized)
+    journal = _read_journal(root, normalized, admission_config=admission_config)
     journal_error = None
     if journal is not None and "_read_error" not in journal:
         persisted = _journal_progress(journal)
@@ -1342,7 +1755,7 @@ def preview(
         "source_admission": source_state,
         "preservation": preservation,
         "output": output_state,
-        "navigation": result_navigation(normalized, base=root),
+        "navigation": result_navigation(normalized, base=root, admission_config=admission_config),
         "evidence_boundary": EVIDENCE_BOUNDARY,
         "scientific_claim_allowed": False,
         "dependent_family_status": DEPENDENT_FAMILY_STATUS,
@@ -1555,6 +1968,12 @@ def run(
             reason="autonomous_start_authorization_required",
             diagnostics=(preview_document,),
         )
+    if _session_token(normalized) is None:
+        return _result(
+            normalized,
+            "failed",
+            reason="integrity_seal_required: a non-empty session_token is required before dispatch",
+        )
     try:
         child_request = _loop_request(normalized)
         validated = loop._validate_input(
@@ -1599,7 +2018,11 @@ def run(
         )
     try:
         output = _resolve_output(root, normalized.output_directory, create=False)
-        durable_journal = _read_journal(root, normalized)
+        journal_payload = _read_json(_regular_output_file(output, JOURNAL_FILENAME))
+        if not isinstance(journal_payload, Mapping):
+            raise ReviewSessionError("journal_integrity_failed: journal is not an object")
+        seal_digest = _write_integrity_seal(output, normalized, journal_payload)
+        durable_journal = _read_journal(root, normalized, admission_config=admission_config)
         if durable_journal is None or "_read_error" in durable_journal:
             raise ReviewSessionError(
                 "journal_integrity_failed: "
@@ -1617,13 +2040,29 @@ def run(
             "session_id": str(validated_context.session_id),
             "context": _context_document(normalized, validated_context),
             "progress": _journal_progress(durable_journal),
-            "navigation": result_navigation(normalized, base=root),
+            "navigation": result_navigation(
+                normalized, base=root, admission_config=admission_config
+            ),
             "evidence_boundary": EVIDENCE_BOUNDARY,
             "scientific_claim_allowed": False,
             "provenance": provenance,
         }
-        wrapper_artifacts = _write_browser_view(output, normalized, document)
-    except (ReviewSessionError, OSError, TypeError, ValueError) as error:
+        wrapper_artifacts = [
+            {
+                "artifact_id": INTEGRITY_FILENAME,
+                "uri": str(Path(normalized.output_directory) / INTEGRITY_FILENAME),
+                "sha256": seal_digest,
+            },
+            *_write_browser_view(output, normalized, document),
+        ]
+    except (
+        ReviewSessionError,
+        OSError,
+        TypeError,
+        ValueError,
+        RecursionError,
+        OverflowError,
+    ) as error:
         return _result(
             normalized, "failed", reason=f"browser_view_failed: {error}", provenance=provenance
         )
@@ -1670,18 +2109,20 @@ class ReviewSession:
             return bool(self.cancel())
         return bool(self.cancel) if self.cancel is not None else False
 
-    def _execute(self, *, resume: bool) -> ComponentResult:
+    def _claim_operation(self, *, cancellation: bool) -> bool:
         with self._active_lock:
             if self._active:
-                return _result(
-                    self.request,
-                    "failed",
-                    reason="session_owner_active: another lifecycle operation is running",
-                )
-            self._stop_requested.clear()
+                return False
+            if cancellation:
+                self._stop_requested.set()
+            else:
+                self._stop_requested.clear()
             self._active = True
             self._active_done.clear()
             self._last_result = None
+            return True
+
+    def _run_owned(self, *, resume: bool) -> ComponentResult:
         try:
             result = run(
                 self.request,
@@ -1693,12 +2134,22 @@ class ReviewSession:
                 source_admission=self.source_admission,
                 cancel=self._cancel_callback,
             )
-            self._last_result = result
+            with self._active_lock:
+                self._last_result = result
             return result
         finally:
             with self._active_lock:
                 self._active = False
                 self._active_done.set()
+
+    def _execute(self, *, resume: bool) -> ComponentResult:
+        if not self._claim_operation(cancellation=False):
+            return _result(
+                self.request,
+                "failed",
+                reason="session_owner_active: another lifecycle operation is running",
+            )
+        return self._run_owned(resume=resume)
 
     def preview(self) -> dict[str, Any]:
         return preview(
@@ -1716,12 +2167,18 @@ class ReviewSession:
         return self._execute(resume=True)
 
     def stop(self) -> ComponentResult:
-        """Request cancellation through the existing SREV-24 journal owner."""
+        """Cancel this controller's owner, or settle a live owner first.
 
-        self._stop_requested.set()
+        A controller created in another process/thread cannot cancel an owner
+        it does not possess; SREV-24 returns ``session_lock_owned`` and this
+        method reports that diagnostic failure.  The original controller's
+        ``stop()`` must be used for live work.
+        """
+
         with self._active_lock:
             active = self._active
         if active:
+            self._stop_requested.set()
             # A cancellation request is only terminal once SREV-24 has
             # persisted the settled journal.  Returning a synthetic cancelled
             # result while the owner thread is still dispatching would let a
@@ -1730,25 +2187,47 @@ class ReviewSession:
             if self._last_result is not None:
                 return self._last_result
             return _result(self.request, "cancelled", reason="cancellation_requested")
-        return run(
-            self.request,
-            base=self.base,
-            autonomous=True,
-            resume=True,
-            admission_config=self.admission_config,
-            executor=self.executor,
-            source_admission=self.source_admission,
-            cancel=self._cancel_callback,
-        )
+        # Claim the inactive branch under the same lock as start/resume.  A
+        # racing start is therefore rejected rather than starting after stop
+        # returned a synthetic or stale result.
+        if not self._claim_operation(cancellation=True):
+            self._active_done.wait()
+            return self._last_result or _result(
+                self.request, "failed", reason="session_owner_active: lifecycle race"
+            )
+        state = _output_state(self.base, self.request)
+        if state.get("status") == "available":
+            result = _result(
+                self.request,
+                "failed",
+                reason="stop_before_start: no existing session journal to cancel",
+            )
+            with self._active_lock:
+                self._last_result = result
+                self._active = False
+                self._active_done.set()
+            return result
+        return self._run_owned(resume=True)
 
     def progress(self) -> dict[str, Any]:
-        return progress(self.request, base=self.base)
+        return progress(self.request, base=self.base, admission_config=self.admission_config)
 
     def result(self, index: int = 0) -> dict[str, Any]:
-        return result_navigation(self.request, base=self.base, index=index)
+        return result_navigation(
+            self.request,
+            base=self.base,
+            index=index,
+            admission_config=self.admission_config,
+        )
 
     def navigate(self, index: int = 0, *, direction: int = 0) -> dict[str, Any]:
-        return navigate_result(self.request, base=self.base, index=index, direction=direction)
+        return navigate_result(
+            self.request,
+            base=self.base,
+            index=index,
+            direction=direction,
+            admission_config=self.admission_config,
+        )
 
 
 ExperimentSession = ReviewSession
@@ -2023,7 +2502,7 @@ def main(argv: list[str] | None = None) -> int:
                 expected_request_digest=str(context["request_digest"]),
                 expected_recipe_digest=str(context["recipe_digest"]),
             )
-            persisted = _read_journal(root, request)
+            persisted = _read_journal(root, request, admission_config=admission)
             if persisted is None or "_read_error" in persisted:
                 raise ControlAuthorizationError(
                     "session journal is unavailable for control authentication"

@@ -37,6 +37,7 @@ def _request(
 ) -> ComponentRequest:
     request = json.loads((FIXTURE_ROOT / "request.json").read_text(encoding="utf-8"))
     config = json.loads((FIXTURE_ROOT / "config.json").read_text(encoding="utf-8"))
+    config.setdefault("session_token", "fixture-session-token")
     config.update(config_overrides)
     shutil.copyfile(FIXTURE_ROOT / "recipe.json", tmp_path / "recipe.json")
     request["config"] = config
@@ -150,6 +151,8 @@ def test_small_helpers_reject_unsafe_json_paths_and_versions(tmp_path: Path) -> 
     assert review_sessions._strict_loads('{"ok": true}') == {"ok": True}
     with pytest.raises(review_sessions.ReviewSessionError, match="non-finite"):
         review_sessions._strict_loads("NaN")
+    with pytest.raises(review_sessions.ReviewSessionError, match="not finite"):
+        review_sessions._strict_loads("1e999")
     with pytest.raises(review_sessions.ReviewSessionError, match="JSON"):
         review_sessions._strict_loads("{")
     with pytest.raises(review_sessions.ReviewSessionError, match="strict JSON"):
@@ -181,6 +184,76 @@ def test_persisted_native_admission_is_only_a_revalidation_candidate() -> None:
     assert review_sessions._admission_config_from_journal(admission) == admission
     assert review_sessions._admission_config_from_journal({"status": "admitted"}) is None
     assert review_sessions._admission_config_from_journal(None) is None
+
+
+def test_native_and_injected_admission_shapes_are_validated_separately(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    proof = _proof(tmp_path, request)
+    native = {
+        "schema_version": "executor-admission.v1",
+        "source_root": str(tmp_path),
+        "receipt_reference": "receipts/source.json",
+        "receipt_sha256": "a" * 64,
+        "receipt_id": "source-receipt",
+        "source": {
+            "uri": request.sources[0].uri,
+            "format": request.sources[0].format,
+            "schema": request.sources[0].schema,
+            "sha256": request.sources[0].sha256,
+            "source_commit": request.sources[0].source_commit,
+            "config_identity": request.sources[0].config_identity,
+        },
+        "preservation_destination": "external:fixture",
+        "preservation_receipt_reference": "receipts/preservation.json",
+        "preservation_receipt_sha256": "b" * 64,
+        "config_identity": "fixture-config.v1",
+        "evidence_boundary": review_sessions.EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+    }
+    expected_request = loop._canonical_digest(
+        loop._request_identity(review_sessions._loop_request(request))
+    )
+    expected_recipe = loop.experiment_recipe_canonical_digest(request.config["recipe"])
+    assert (
+        review_sessions._source_admission_integrity_error(
+            native,
+            expected_request_digest=expected_request,
+            expected_recipe_digest=expected_recipe,
+            base=tmp_path,
+        )
+        is None
+    )
+    missing_native = dict(native)
+    del missing_native["receipt_sha256"]
+    assert "native proof fields are missing" in (
+        review_sessions._source_admission_integrity_error(
+            missing_native,
+            expected_request_digest=expected_request,
+            expected_recipe_digest=expected_recipe,
+            base=tmp_path,
+        )
+        or ""
+    )
+    assert (
+        review_sessions._source_admission_integrity_error(
+            proof,
+            expected_request_digest=proof["request_digest"],
+            expected_recipe_digest=proof["recipe_digest"],
+            base=tmp_path,
+        )
+        is None
+    )
+    incomplete = dict(proof)
+    del incomplete["recipe_digest"]
+    assert "injected proof identity is incomplete" in (
+        review_sessions._source_admission_integrity_error(
+            incomplete,
+            expected_request_digest=proof["request_digest"],
+            expected_recipe_digest=proof["recipe_digest"],
+            base=tmp_path,
+        )
+        or ""
+    )
 
 
 def test_atomic_output_and_symlink_guards_are_fail_closed(tmp_path: Path) -> None:
@@ -511,6 +584,125 @@ def test_fake_executor_completion_delegates_journal_and_exposes_navigation(tmp_p
     assert navigation["current"]["intervention_id"] == "speed-up"
 
 
+def test_complete_reads_require_token_mac_and_reject_coherent_rewrite(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    output = tmp_path / request.output_directory
+    seal = output / review_sessions.INTEGRITY_FILENAME
+    assert seal.is_file()
+    assert request.config["session_token"].encode() not in seal.read_bytes()
+    assert review_sessions.progress(request, base=tmp_path)["status"] == "complete"
+
+    journal_path = output / review_sessions.JOURNAL_FILENAME
+    report_path = output / review_sessions.REPORT_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    treatment = journal["operations"][1]["result"]
+    treatment["metrics"]["min_robot_ped_distance_m"] = 0.8
+    treatment["metrics"]["ped_mean_speed_m_s"] = 0.8
+    journal["outcomes"][0]["treatment"]["metrics"]["min_robot_ped_distance_m"] = 0.8
+    journal["outcomes"][0]["treatment"]["metrics"]["ped_mean_speed_m_s"] = 0.8
+    observation = loop._pair_telemetry(
+        journal["outcomes"][0]["control"],
+        journal["outcomes"][0]["treatment"],
+        factor=journal["outcomes"][0]["factor"],
+        measurement=request.config["recipe"]["measurements"][0],
+        motion_epsilon=0.05,
+    )
+    journal["outcomes"][0]["outcome"] = observation["outcome"]
+    journal["outcomes"][0]["reason"] = observation["reason"]
+    journal["outcomes"][0]["negative"] = observation["outcome"] != "survived"
+    journal["outcomes"][0]["verdict"] = observation["outcome"]
+    report["operations"] = journal["operations"]
+    report["outcomes"] = [
+        loop.ExperimentLoop._canonical_report_outcome(item) for item in journal["outcomes"]
+    ]
+    report["negative_outcomes"] = [
+        item for item in report["outcomes"] if item.get("negative") is True
+    ]
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    forged_progress = review_sessions.progress(request, base=tmp_path)
+    forged_navigation = review_sessions.result_navigation(request, base=tmp_path)
+    assert forged_progress["status"] == "failed"
+    assert "integrity_seal" in forged_progress["reason"]
+    assert forged_navigation["status"] == "unavailable"
+    assert "integrity_seal" in forged_navigation["reason"]
+
+    rotated = replace(
+        request,
+        config={**request.config, "session_token": "rotated-session-token"},
+    )
+    assert review_sessions.progress(rotated, base=tmp_path)["status"] == "failed"
+    missing = replace(
+        request,
+        config={key: value for key, value in request.config.items() if key != "session_token"},
+    )
+    assert review_sessions.progress(missing, base=tmp_path)["status"] == "failed"
+    no_token_request = replace(missing, output_directory="no-token")
+    no_token_result = review_sessions.run(
+        no_token_request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, no_token_request),
+    )
+    assert no_token_result.status == "failed"
+    assert "integrity_seal_required" in no_token_result.reason
+
+
+def test_integrity_seal_failures_are_bounded_and_non_secret(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    output = tmp_path / request.output_directory
+    seal_path = output / review_sessions.INTEGRITY_FILENAME
+    original = seal_path.read_bytes()
+
+    seal_path.unlink()
+    missing = review_sessions.progress(request, base=tmp_path)
+    assert missing["status"] == "failed"
+    assert "missing" in missing["reason"]
+
+    seal_path.write_bytes(b"[]")
+    malformed = review_sessions.progress(request, base=tmp_path)
+    assert malformed["status"] == "failed"
+    assert "seal" in malformed["reason"]
+
+    seal = json.loads(original)
+    seal["hmac_sha256"] = "0" * 64
+    seal_path.write_text(json.dumps(seal), encoding="utf-8")
+    wrong_mac = review_sessions.progress(request, base=tmp_path)
+    assert wrong_mac["status"] == "failed"
+    assert "MAC" in wrong_mac["reason"]
+
+    seal = json.loads(original)
+    seal["journal_sha256"] = "not-a-digest"
+    seal_path.write_text(json.dumps(seal), encoding="utf-8")
+    malformed_digest = review_sessions.progress(request, base=tmp_path)
+    assert malformed_digest["status"] == "failed"
+    assert "sha256" in malformed_digest["reason"]
+
+    seal_path.unlink()
+    seal_path.symlink_to(output / review_sessions.JOURNAL_FILENAME)
+    symlinked = review_sessions.progress(request, base=tmp_path)
+    assert symlinked["status"] == "failed"
+    assert "symlink" in symlinked["reason"]
+
+
 def test_read_surfaces_bind_journal_to_request_and_current_source(tmp_path: Path) -> None:
     request = _request(tmp_path)
     result = review_sessions.run(
@@ -604,6 +796,75 @@ def test_concurrent_start_preserves_active_owner_for_stop(tmp_path: Path) -> Non
     assert session.progress()["status"] == "cancelled"
 
 
+def test_start_and_stop_race_serializes_the_inactive_owner_branch(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    executor = SlowExecutor(delay_s=0.05)
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    barrier = threading.Barrier(3)
+    starts: list[Any] = []
+    stops: list[Any] = []
+
+    def start() -> None:
+        barrier.wait()
+        starts.append(session.start())
+
+    def stop() -> None:
+        barrier.wait()
+        stops.append(session.stop())
+
+    start_thread = threading.Thread(target=start)
+    stop_thread = threading.Thread(target=stop)
+    start_thread.start()
+    stop_thread.start()
+    barrier.wait()
+    start_thread.join(timeout=3)
+    stop_thread.join(timeout=3)
+    assert not start_thread.is_alive() and not stop_thread.is_alive()
+    assert len(starts) == len(stops) == 1
+    assert all(
+        "cannot resume: output directory does not exist" not in item.reason
+        for item in starts + stops
+    )
+    assert {starts[0].status, stops[0].status} <= {"cancelled", "failed", "complete"}
+    if starts[0].status == "complete":
+        assert stops[0].status == "complete"
+    else:
+        assert "session_owner_active" in starts[0].reason or stops[0].status == "cancelled"
+
+
+def test_cross_controller_stop_reports_existing_owner_contract(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    executor = SlowExecutor()
+    owner = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    other = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    worker = threading.Thread(target=owner.start)
+    worker.start()
+    assert executor.started.wait(timeout=2)
+    foreign_stop = other.stop()
+    assert foreign_stop.status == "failed"
+    assert "session_lock_owned" in foreign_stop.reason
+    assert worker.is_alive()
+    owner_stop = owner.stop()
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert owner_stop.status == "cancelled"
+
+
 def test_tampered_or_malformed_journal_is_diagnostic_and_non_throwing(tmp_path: Path) -> None:
     request = _request(tmp_path)
     result = review_sessions.run(
@@ -628,6 +889,36 @@ def test_tampered_or_malformed_journal_is_diagnostic_and_non_throwing(tmp_path: 
     malformed = review_sessions.progress(request, base=tmp_path)
     assert malformed["status"] == "failed"
     assert malformed["scientific_claim_allowed"] is False
+
+
+def test_deep_and_huge_durable_json_fail_closed_without_raising(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    journal_path = tmp_path / request.output_directory / review_sessions.JOURNAL_FILENAME
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    nested: Any = "forged"
+    for _ in range(review_sessions._MAX_JSON_DEPTH + 20):
+        nested = [nested]
+    journal["untrusted_nested_value"] = nested
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    assert review_sessions.progress(request, base=tmp_path)["status"] == "failed"
+    assert review_sessions.result_navigation(request, base=tmp_path)["status"] == "unavailable"
+    assert review_sessions.preview(request, base=tmp_path)["status"] == "failed"
+
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal.pop("untrusted_nested_value")
+    journal["budget"]["wall_timeout_s"] = 10**100
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    huge = review_sessions.progress(request, base=tmp_path)
+    assert huge["status"] == "failed"
+    assert any(marker in huge["reason"] for marker in ("journal", "JSON integer"))
 
 
 def test_persisted_integrity_variants_fail_closed_without_exposing_state(tmp_path: Path) -> None:
@@ -715,7 +1006,10 @@ def test_tampered_report_is_not_navigable(tmp_path: Path) -> None:
     report_path.write_text(json.dumps(report), encoding="utf-8")
     navigation = review_sessions.result_navigation(request, base=tmp_path)
     assert navigation["status"] == "unavailable"
-    assert "report_identity_mismatch" in navigation["reason"]
+    assert any(
+        marker in navigation["reason"]
+        for marker in ("report_identity_mismatch", "journal_integrity_seal_invalid")
+    )
 
 
 def test_semantic_journal_and_nested_admission_tampering_fail_closed(tmp_path: Path) -> None:
@@ -1003,6 +1297,48 @@ def test_control_binding_includes_recipe_and_source_identity(tmp_path: Path) -> 
                 "recipe_digest": request_context["recipe_digest"],
             }
         )
+
+
+def test_unbound_session_ids_include_source_identity(tmp_path: Path) -> None:
+    request = _request(tmp_path, output="unbound-one")
+    unbound_config = {key: value for key, value in request.config.items() if key != "session_token"}
+    first = replace(request, config=unbound_config)
+    changed_source = replace(first.sources[0], source_commit="different-source-commit")
+    second = replace(
+        first,
+        output_directory="unbound-two",
+        sources=(changed_source,),
+    )
+    assert (
+        review_sessions.preview(first, base=tmp_path)["session_id"]
+        != review_sessions.preview(second, base=tmp_path)["session_id"]
+    )
+
+
+def test_report_provenance_boundary_fields_fail_closed(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    output = tmp_path / request.output_directory
+    report_path = output / review_sessions.REPORT_FILENAME
+    original = json.loads(report_path.read_text(encoding="utf-8"))
+    for key, value in (
+        ("evidence_boundary", "benchmark"),
+        ("benchmark_success", True),
+        ("dependent_family_status", "shared"),
+    ):
+        mutated = deepcopy(original)
+        mutated["provenance"][key] = value
+        report_path.write_text(json.dumps(mutated), encoding="utf-8")
+        navigation = review_sessions.result_navigation(request, base=tmp_path)
+        assert navigation["status"] == "unavailable", key
+    report_path.write_text(json.dumps(original), encoding="utf-8")
 
 
 def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:

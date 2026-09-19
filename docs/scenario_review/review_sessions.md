@@ -65,11 +65,24 @@ executor. `run(request, read_only=True)` returns
 `unavailable: read_only_never_executes`. `start()` and `resume()` delegate to
 SREV-24; they do not create a second journal or reset consumed attempts and
 elapsed budget. `stop()` sends cancellation through the same SREV-24 journal
-owner. `progress()` and `result_navigation()` only read the durable journal or
-report and never acquire a dispatch lock. Read APIs revalidate journal/report
+owner and waits for that owner to settle. `start()`, `resume()`, and `stop()`
+on one `ReviewSession` are serialized, including the fresh-output stop race. A
+different controller cannot cancel a live owner; it receives the delegated
+`session_lock_owned` diagnostic and the original owner must issue `stop()`.
+`progress()` and `result_navigation()` only read the durable journal or report
+and never acquire a dispatch lock. Read APIs revalidate journal/report
 identity against the selected request, recipe, source bytes, and session
 context before exposing it; stale or tampered state is reported as diagnostic
 failure/unavailable rather than adopted as current progress.
+
+Because the output directory is writable by its owner, semantic consistency or
+an unkeyed SHA-256 cannot authenticate a rewritten complete result. A complete
+start therefore requires a caller-supplied loopback `session_token`. The
+wrapper writes `review-session-integrity.v1.json`, an HMAC over the exact
+journal/report bytes and their diagnostic identity; the token is never
+persisted. Reconnect/resume/read calls must provide the same token, while a
+missing or rotated token and a changed journal/report fail closed. This is a
+diagnostic integrity boundary, not scientific evidence.
 
 The optional `session_context` request mapping carries the selected
 `campaign_id`, `episode_id`, `source_revision`, `selection_revision`, and
@@ -80,10 +93,15 @@ cannot therefore reuse another session's durable results.
 
 Complete output contains the delegated
 `experiment-loop-report.v1`/`experiment-loop-session.v1` artifacts plus
-`review-session.v1.json`, `review-session.v1.html`, and the local browser
-module. Partial, failed, unavailable, and cancelled results carry no complete
-artifacts, while the delegated journal/report remain available for diagnosis
-and an explicit resume when SREV-24 permits it.
+`review-session.v1.json`, `review-session.v1.html`, the local browser module,
+and the token-keyed integrity seal. Partial, failed, unavailable, and
+cancelled results carry no complete artifacts, while the delegated
+journal/report remain available for diagnosis and an explicit resume when
+SREV-24 permits it. Native SREV-24 admission records retain their launcher
+receipt/root/preservation shape; when a native complete session is read or
+resumed, pass the launcher admission companion again for fresh receipt/root
+validation. Injected fixture proofs use their separate measured shape and must
+remain below the requested component base.
 
 ## Offline browser and local controls
 

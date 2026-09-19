@@ -23,8 +23,9 @@ Hard contract (mirrors AGENTS.md fail-closed benchmark policy and the issue's "s
 rows never promoted as benchmark evidence" rule):
 
 - ``benchmark_promotion_allowed`` is True **only** when SDD is staged AND checksum-validated
-  (``dataset_backed_prior``). A fixture or an unpinned/unvalidated staged copy can be *probed* for
-  schema readiness, but its output stays ``proxy_schema_smoke`` and must not be promoted.
+  (``dataset_backed_prior``) *and* the canonical SDD staging preflight has a satisfied license
+  acknowledgment. A fixture or an unpinned/unvalidated staged copy can be *probed* for schema
+  readiness, but its output stays ``proxy_schema_smoke`` and must not be promoted.
 - When SDD is missing, the run is ``blocked_external_input``: curation must not proceed as benchmark
   evidence. ``--require-benchmark-ready`` makes that a non-zero exit so callers fail closed.
 """
@@ -37,9 +38,12 @@ import math
 import shlex
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scripts.tools import import_sdd_scenarios, manage_external_data
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 PREFLIGHT_SCHEMA = "sdd_curation_preflight.v1"
 DECISION_PACKET_SCHEMA = "robot_sf_sdd_curation_decision_packet.v1"
@@ -130,19 +134,28 @@ def probe_annotation_file(
     label: str,
     min_track_points: int,
     max_pedestrians: int,
+    allowed_paths: Sequence[Path] | None = None,
 ) -> dict[str, Any]:
     """Probe a candidate SDD annotation file against the curation selection rule.
 
     Reuses the canonical importer parser so the probe matches exactly what curation would consume.
     No scenario/map output is written. The probe is intentionally agnostic to whether the file is a
     fixture or a staged real annotation; benchmark-promotion eligibility is decided separately by the
-    staging gate, never by this probe.
+    staging gate, never by this probe. When allowed_paths is supplied, the candidate must resolve
+    to one of the canonical manifest-matched paths before it is parsed. Proxy/fixture callers may
+    omit the binding.
 
     Returns:
         dict: ``exists``, parse/selection outcome, ``usable_label_points``, ``usable_track_count``
-        (tracks meeting ``min_track_points``), ``selection_satisfiable``, and ``blockers``.
+        (tracks meeting ``min_track_points``), ``selection_satisfiable``, and ``blockers``. The
+        resolved canonical paths are exposed as ``canonical_paths`` when a binding is supplied.
     """
     normalized_label = import_sdd_scenarios.normalize_sdd_label(label)
+    canonical_paths = (
+        tuple(sorted({candidate.expanduser().resolve(strict=False) for candidate in allowed_paths}))
+        if allowed_paths is not None
+        else None
+    )
     report: dict[str, Any] = {
         "path": str(path),
         "exists": path.is_file(),
@@ -152,8 +165,23 @@ def probe_annotation_file(
         "usable_label_points": 0,
         "usable_track_count": 0,
         "selection_satisfiable": False,
+        "canonical_paths": (
+            [str(canonical_path) for canonical_path in canonical_paths]
+            if canonical_paths is not None
+            else None
+        ),
         "blockers": [],
     }
+    if (
+        canonical_paths is not None
+        and path.expanduser().resolve(strict=False) not in canonical_paths
+    ):
+        expected = ", ".join(str(canonical_path) for canonical_path in canonical_paths) or "<none>"
+        report["blockers"].append(
+            "annotation file is not a canonical manifest-matched SDD annotation: "
+            f"{path}; canonical matched paths: {expected}"
+        )
+        return report
     if not report["exists"]:
         report["blockers"].append(f"annotation file not found: {path}")
         return report
@@ -242,19 +270,76 @@ def scan_annotation_candidates(
     }
 
 
+def _staging_preflight_status(
+    *,
+    dataset_backed: bool,
+    staging_preflight: dict[str, Any] | None,
+) -> tuple[bool, list[str]]:
+    """Return the canonical staging-receipt status and fail-closed blockers."""
+    if not dataset_backed:
+        return True, []
+    if staging_preflight is None:
+        return False, [
+            "Canonical SDD staging preflight receipt is missing; benchmark promotion requires "
+            "manage_external_data.build_sdd_preflight for the same manifest."
+        ]
+
+    license_acknowledgment = staging_preflight.get("license_acknowledgment")
+    license_ack_satisfied = (
+        isinstance(license_acknowledgment, dict) and license_acknowledgment.get("satisfied") is True
+    )
+    blockers: list[str] = []
+    if not license_ack_satisfied:
+        blockers.append(
+            "Canonical SDD staging preflight license acknowledgment is not satisfied; "
+            "set license_acknowledgment.acknowledged: true in the local manifest after "
+            "reading the dataset license."
+        )
+    if staging_preflight.get("ready") is not True:
+        blockers.append(
+            "Canonical SDD staging preflight is not ready; resolve its unmet prerequisites "
+            "before benchmark promotion."
+        )
+    return license_ack_satisfied and staging_preflight.get("ready") is True, blockers
+
+
+def _annotation_probe_status(
+    *,
+    dataset_backed: bool,
+    annotation_probe: dict[str, Any] | None,
+) -> tuple[bool, list[str]]:
+    """Return probe satisfiability and any selection blockers."""
+    if annotation_probe is not None:
+        return bool(annotation_probe.get("selection_satisfiable", False)), list(
+            annotation_probe.get("blockers", [])
+        )
+    if dataset_backed:
+        return False, [
+            "SDD is dataset-backed, but no candidate annotation was probed; select a scene/video "
+            "annotation before promoting curation output as benchmark evidence."
+        ]
+    return False, []
+
+
 def classify_curation_readiness(
     staging_gate: dict[str, Any],
     annotation_probe: dict[str, Any] | None = None,
+    *,
+    staging_preflight: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Classify curation readiness from the canonical staging gate and an optional probe.
 
     Args:
         staging_gate: Output of ``manage_external_data.resolve_sdd_scenario_prior_mode``.
         annotation_probe: Optional output of :func:`probe_annotation_file`.
+        staging_preflight: Output of :func:`manage_external_data.build_sdd_preflight` for the
+            same manifest. A dataset-backed gate without this canonical receipt, or without a
+            satisfied license acknowledgment in the receipt, fails closed.
 
     Returns:
         dict: A fail-closed readiness report. ``benchmark_promotion_allowed`` is True only when the
-        staging gate reports ``dataset_backed``.
+        staging gate is dataset-backed, the canonical staging receipt is ready with a satisfied
+        license acknowledgment, and the annotation probe is satisfiable.
     """
     dataset_backed = bool(staging_gate.get("dataset_backed", False))
     staging_mode = staging_gate.get("mode", manage_external_data.SDD_MODE_PROXY)
@@ -266,28 +351,35 @@ def classify_curation_readiness(
             "as benchmark evidence (forced to proxy_schema_smoke)."
         )
 
-    probe_satisfiable = False
-    if annotation_probe is not None:
-        probe_satisfiable = bool(annotation_probe.get("selection_satisfiable", False))
-        blockers.extend(annotation_probe.get("blockers", []))
-    elif dataset_backed:
-        blockers.append(
-            "SDD is dataset-backed, but no candidate annotation was probed; select a scene/video "
-            "annotation before promoting curation output as benchmark evidence."
-        )
+    staging_preflight_ready, staging_preflight_blockers = _staging_preflight_status(
+        dataset_backed=dataset_backed,
+        staging_preflight=staging_preflight,
+    )
+    blockers.extend(staging_preflight_blockers)
 
-    # Evidence status: dataset-backed + probe-clean is the only benchmark-candidate path.
+    probe_satisfiable, probe_blockers = _annotation_probe_status(
+        dataset_backed=dataset_backed,
+        annotation_probe=annotation_probe,
+    )
+    blockers.extend(probe_blockers)
+
+    benchmark_promotion_allowed = dataset_backed and staging_preflight_ready and probe_satisfiable
+    # Evidence status: dataset-backed + receipt-clean + probe-clean is the only benchmark-candidate
+    # path.
     if dataset_backed:
-        evidence_status = EVIDENCE_BENCHMARK_CANDIDATE if probe_satisfiable else EVIDENCE_BLOCKED
+        evidence_status = (
+            EVIDENCE_BENCHMARK_CANDIDATE if benchmark_promotion_allowed else EVIDENCE_BLOCKED
+        )
     elif staging_mode == manage_external_data.SDD_MODE_PROXY:
         evidence_status = EVIDENCE_PROXY
     else:
         evidence_status = EVIDENCE_BLOCKED
 
-    benchmark_promotion_allowed = dataset_backed and probe_satisfiable
     # Curation may *run* (e.g. on a fixture for schema-smoke) whenever the probe selection rule is
     # satisfiable; promotion to benchmark evidence is the separately gated step.
-    curation_runnable = annotation_probe is None or probe_satisfiable
+    curation_runnable = (annotation_probe is None or probe_satisfiable) and (
+        not dataset_backed or staging_preflight_ready
+    )
 
     if not dataset_backed:
         output_classification = OUTPUT_BLOCKED if annotation_probe is None else OUTPUT_PROXY_ONLY
@@ -301,6 +393,12 @@ def classify_curation_readiness(
             "SDD is staged and validated and the candidate annotation satisfies the curation "
             "selection rule. You may run scripts/tools/import_sdd_scenarios.py and decide "
             "benchmark_ready vs exploratory_only after the smoke run."
+        )
+    elif dataset_backed and not staging_preflight_ready:
+        action = (
+            "SDD staging is checksum-validated, but the canonical SDD staging preflight is not "
+            "ready or its license acknowledgment is unsatisfied; resolve that receipt before "
+            "curating or promoting benchmark evidence."
         )
     elif dataset_backed:
         action = (
@@ -322,6 +420,7 @@ def classify_curation_readiness(
         "availability": staging_gate.get("availability"),
         "staging_reason": staging_gate.get("reason"),
         "staging_dir": staging_gate.get("staging_dir"),
+        "staging_preflight": staging_preflight,
         "evidence_status": evidence_status,
         "benchmark_promotion_allowed": benchmark_promotion_allowed,
         "curation_runnable": curation_runnable,
@@ -331,6 +430,38 @@ def classify_curation_readiness(
         "action": action,
     }
     return report
+
+
+def _validated_sdd_annotation_paths(
+    staging_spec: manage_external_data.SddStagingSpec,
+    staging_gate: dict[str, Any],
+) -> tuple[Path, ...]:
+    """Return manifest-matched annotation paths from a currently validated SDD tree.
+
+    The staging gate may be backed by a cached status receipt, so its payload does not always
+    expose the matched paths. Re-run the canonical validator here to obtain the exact paths that
+    established the checksum-backed gate; callers use the result to bind the annotation argument.
+    """
+    if not staging_gate.get("dataset_backed", False):
+        return ()
+
+    validation = manage_external_data.validate_sdd_staging(staging_spec)
+    if not validation.get("ok"):
+        return ()
+
+    staging_root = staging_spec.staging_dir.expanduser().resolve(strict=False)
+    canonical_paths: set[Path] = set()
+    for relative_path in validation.get("matched_files", []):
+        if not isinstance(relative_path, str) or Path(relative_path).name != "annotations.txt":
+            continue
+        candidate = (staging_spec.staging_dir / relative_path).expanduser().resolve(strict=False)
+        try:
+            candidate.relative_to(staging_root)
+        except ValueError:
+            continue
+        if candidate.is_file():
+            canonical_paths.add(candidate)
+    return tuple(sorted(canonical_paths))
 
 
 def run_preflight(
@@ -344,8 +475,11 @@ def run_preflight(
     max_pedestrians: int,
     next_action_packet_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Resolve the staging gate, optionally probe an annotation, and classify readiness."""
+    """Resolve staging and canonical license gates, optionally probe, and classify readiness."""
+    staging_spec = manage_external_data.load_sdd_staging_spec(manifest_path)
+    staging_preflight = manage_external_data.build_sdd_preflight(staging_spec)
     staging_gate = manage_external_data.resolve_sdd_scenario_prior_mode(manifest_path=manifest_path)
+    canonical_annotation_paths = _validated_sdd_annotation_paths(staging_spec, staging_gate)
     probe = None
     if annotation is not None:
         probe = probe_annotation_file(
@@ -353,8 +487,16 @@ def run_preflight(
             label=label,
             min_track_points=min_track_points,
             max_pedestrians=max_pedestrians,
+            allowed_paths=canonical_annotation_paths
+            if staging_gate.get("dataset_backed")
+            else None,
         )
-    report = classify_curation_readiness(staging_gate, probe)
+    report = classify_curation_readiness(
+        staging_gate,
+        probe,
+        staging_preflight=staging_preflight,
+    )
+    report["canonical_annotation_paths"] = [str(path) for path in canonical_annotation_paths]
     if scan_root is not None:
         report["candidate_scan"] = scan_annotation_candidates(
             scan_root,
@@ -664,6 +806,9 @@ def build_integration_report(
     """
     dataset_backed = bool(readiness.get("dataset_backed", False))
     benchmark_promotion_allowed = bool(readiness.get("benchmark_promotion_allowed", False))
+    staging_preflight = readiness.get("staging_preflight") or {}
+    staging_preflight_ready = staging_preflight.get("ready") is True
+    staging_ready = dataset_backed and staging_preflight_ready
     annotation_probe = readiness.get("annotation_probe") or {}
     candidate_scan = readiness.get("candidate_scan") or {}
     scan_candidates = candidate_scan.get("candidates") or []
@@ -672,16 +817,19 @@ def build_integration_report(
     benchmark_ready = classification == SMOKE_BENCHMARK_READY
     exploratory_only = classification == SMOKE_EXPLORATORY_ONLY
 
-    if benchmark_ready:
+    if not staging_ready:
+        closure_status = "blocked_external_input"
+        next_action = "stage_or_restore_licensed_sdd_annotations_then_rerun_preflight"
+    elif benchmark_ready and benchmark_promotion_allowed:
         closure_status = "ready_to_close"
         next_action = "close_issue_after_reviewer_confirms_benchmark_ready_boundary"
     elif exploratory_only:
         closure_status = "open_exploratory_only"
         next_action = "tune_current_candidate_or_select_alternate_scene"
-    elif dataset_backed and scan_candidates:
+    elif staging_ready and scan_candidates:
         closure_status = "open_empirical_action_ready"
         next_action = "import_top_ranked_candidate_and_run_one_cpu_smoke"
-    elif dataset_backed:
+    elif staging_ready:
         closure_status = "open_needs_candidate_selection"
         next_action = "scan_or_probe_staged_annotations_for_satisfiable_candidate"
     else:
@@ -691,14 +839,15 @@ def build_integration_report(
     criteria = [
         _criterion(
             "#1497 staged official/BYO SDD source annotations locally or recorded failure keeps issue blocked.",
-            "met" if dataset_backed else "blocked",
+            "met" if staging_ready else "blocked",
             (
                 f"staging_mode={readiness.get('staging_mode')}; "
                 f"dataset_backed={dataset_backed}; "
+                f"staging_preflight_ready={staging_preflight_ready}; "
                 f"staging_reason={readiness.get('staging_reason')}"
             ),
             None
-            if dataset_backed
+            if staging_ready
             else "Restore or stage the licensed SDD tree with checksum/license provenance.",
         ),
         _criterion(
@@ -785,6 +934,8 @@ def build_integration_report(
         "readiness_summary": {
             "staging_mode": readiness.get("staging_mode"),
             "dataset_backed": dataset_backed,
+            "staging_preflight_ready": staging_preflight_ready,
+            "staging_ready": staging_ready,
             "benchmark_promotion_allowed": benchmark_promotion_allowed,
             "output_classification": readiness.get("output_classification"),
             "candidate_scan_satisfiable_count": candidate_scan.get("satisfiable_count"),

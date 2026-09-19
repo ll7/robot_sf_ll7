@@ -497,6 +497,14 @@ A waypoint shared by multiple routes may be locally certain while route entropy 
 
 At `H >= 2`, force evidence is primary. Heading evidence reuses velocity and must not be multiplied at full weight as if independent. Required ablations are heading-only, force-only, force plus a downweighted heading auxiliary, force plus route/path-tangent evidence, and an oracle-component upper bound reported separately.
 
+The additive Slice A hierarchy contract keeps `upstream_selected` diagnostic until an upstream
+producer supplies a valid `hierarchical_goal_evidence_receipt.v1`. That receipt binds an evidence
+digest, actor track and epoch, causal timestamp/step, candidate-set digest, producer, packet schema,
+and admitted/valid status; the posterior rejects missing, stale, or mismatched bindings before a
+flat projection. This is an integrity/custody boundary, not an upstream adapter or scientific
+admission. Temporal duplicate handling, real H1/H2/H3 evidence integration, and shared-waypoint
+many-to-many semantics remain downstream work.
+
 ## 9. Change, arrival and reset
 
 Raw heading change is not a sufficient reset signal. Use the innovation of the current force/candidate model:

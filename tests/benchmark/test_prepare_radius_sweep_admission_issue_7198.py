@@ -16,10 +16,14 @@ from robot_sf.benchmark.radius_sweep_manifest import (
 )
 from scripts.benchmark.prepare_radius_sweep_admission_issue_7198 import (
     GATE1_SURFACES,
+    _is_preparation_only_packet,
     _parse_queue_summary,
     _parse_route_output,
     _preflight_command,
+    _private_ops_snapshot,
+    _queue_summary_blockers,
     _submission_command,
+    parse_args,
     validate_gate1_report,
     validate_preflight_payload,
 )
@@ -96,6 +100,29 @@ def _preflight_payload() -> dict:
         },
         "episodes": 0,
     }
+
+
+def _queue_summary_text(
+    *,
+    state: str,
+    queue_entries: int = 1,
+    active_ledger_jobs: int = 0,
+    scope_issue: int | None = 6642,
+) -> str:
+    ready_entries = 1 if state == "ready" else 0
+    lines = [
+        f"- queue_entries: {queue_entries}",
+        f"- ready_entries: {ready_entries}",
+        f"- submit_eligible_entries: {ready_entries}",
+        "- ready_but_submit_blocked: 0",
+        f"- blocked_or_inactive_entries: {queue_entries - ready_entries}",
+        f"- active_ledger_jobs: {active_ledger_jobs}",
+        "## States",
+        f"- {state}: {queue_entries}",
+    ]
+    if scope_issue is not None:
+        lines.insert(0, f"- scope_issue: #{scope_issue}")
+    return "\n".join(lines)
 
 
 def test_gate1_report_requires_all_fifteen_binding_surfaces() -> None:
@@ -245,23 +272,155 @@ def test_preflight_rejects_non_mapping_checkpoint_metadata() -> None:
 
 def test_queue_summary_parser_captures_readiness_counts() -> None:
     """Verify private queue readiness counts are parsed into structured evidence."""
-    summary = _parse_queue_summary(
-        "\n".join(
-            [
-                "- queue_entries: 128",
-                "- ready_entries: 0",
-                "- blocked_or_inactive_entries: 128",
-                "- active_ledger_jobs: 0",
-            ]
-        )
-    )
+    summary = _parse_queue_summary(_queue_summary_text(state="blocked", queue_entries=128))
 
     assert summary == {
+        "scope_issue": 6642,
         "queue_entries": 128,
         "ready_entries": 0,
+        "submit_eligible_entries": 0,
+        "ready_but_submit_blocked": 0,
         "blocked_or_inactive_entries": 128,
         "active_ledger_jobs": 0,
+        "state_counts": {"blocked": 128},
     }
+
+
+def test_preparation_contract_accepts_exact_blocked_campaign_row() -> None:
+    """Verify preparation may inspect the blocked campaign row without authorizing dispatch."""
+    config = _packet_config()
+    assert _is_preparation_only_packet(config) is True
+
+    summary = _parse_queue_summary(_queue_summary_text(state="blocked"))
+
+    assert (
+        _queue_summary_blockers(
+            summary,
+            expected_ready=1,
+            preparation_only=True,
+            expected_scope_issue=6642,
+        )
+        == []
+    )
+
+
+def test_preparation_contract_is_explicit_and_fail_closed() -> None:
+    """Verify queue relaxation is disabled when either no-dispatch marker changes."""
+    config = _packet_config()
+
+    config["preflight"]["production_submission_authorized"] = True
+    assert _is_preparation_only_packet(config) is False
+
+    config = _packet_config()
+    config["verdict"]["never_authorizes_submission"] = False
+    assert _is_preparation_only_packet(config) is False
+
+
+def test_production_queue_validation_rejects_blocked_preparation_row() -> None:
+    """Verify a blocked row cannot satisfy the ready/submit-eligible production gate."""
+    summary = _parse_queue_summary(_queue_summary_text(state="blocked"))
+
+    blockers = _queue_summary_blockers(
+        summary,
+        expected_ready=1,
+        preparation_only=False,
+        expected_scope_issue=6642,
+    )
+
+    assert any("ready entries" in blocker for blocker in blockers)
+    assert any("submit-eligible entries" in blocker for blocker in blockers)
+
+
+def test_production_queue_validation_accepts_ready_submit_eligible_row() -> None:
+    """Verify the unchanged production path still accepts a fully admissible row."""
+    summary = _parse_queue_summary(_queue_summary_text(state="ready"))
+
+    assert (
+        _queue_summary_blockers(
+            summary,
+            expected_ready=1,
+            preparation_only=False,
+            expected_scope_issue=6642,
+        )
+        == []
+    )
+
+
+def test_ready_queue_validation_requires_explicit_cli_selection() -> None:
+    """The default remains blocked-row preparation; ready validation is opt-in."""
+    assert parse_args([]).check_ready_queue is False
+    assert parse_args(["--check-ready-queue"]).check_ready_queue is True
+
+
+def test_preparation_contract_rejects_unscoped_or_nonblocked_queue_state() -> None:
+    """Verify preparation cannot turn aggregate or unexpectedly ready evidence into a pass."""
+    summary = _parse_queue_summary(
+        _queue_summary_text(state="ready", active_ledger_jobs=1, scope_issue=None)
+    )
+
+    blockers = _queue_summary_blockers(
+        summary,
+        expected_ready=1,
+        preparation_only=True,
+        expected_scope_issue=6642,
+    )
+
+    assert any("issue-scoped" in blocker for blocker in blockers)
+    assert any("ready_entries=0" in blocker for blocker in blockers)
+    assert any("active_ledger_jobs=0" in blocker for blocker in blockers)
+    assert any("exactly one blocked row" in blocker for blocker in blockers)
+
+
+def test_preparation_snapshot_scopes_queue_query_without_dispatch(tmp_path, monkeypatch) -> None:
+    """Verify the packet path queries only #6642 and records no submission operation."""
+    config = _packet_config()
+    private_root = tmp_path / "private-ops"
+    for key in (
+        "queue_summary_script",
+        "route_script",
+        "preflight_script",
+        "submission_entrypoint",
+    ):
+        path = private_root / config["private_ops"][key]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_PRIVATE_OPS", str(private_root))
+    queue_output = _queue_summary_text(state="blocked")
+    calls = []
+
+    def fake_run(command, *, cwd, timeout):
+        calls.append(command)
+        if command[:2] == ["git", "-C"]:
+            return {"returncode": 0, "stdout": "", "stderr": ""}
+        if command[0] == "bash":
+            return {"returncode": 0, "stdout": queue_output, "stderr": ""}
+        if command[0] == "python3":
+            return {
+                "returncode": 0,
+                "stdout": "explain:\n   selected: imech192:a30-cpu\n",
+                "stderr": "",
+            }
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(
+        "scripts.benchmark.prepare_radius_sweep_admission_issue_7198._run", fake_run
+    )
+    blockers = []
+    snapshot = _private_ops_snapshot(
+        REPO_ROOT,
+        config,
+        tmp_path / "packet",
+        blockers,
+        preparation_only=True,
+        campaign_issue=6642,
+    )
+
+    queue_calls = [command for command in calls if command[0] == "bash"]
+    assert len(queue_calls) == 1
+    assert queue_calls[0][-2:] == ["--issue", "6642"]
+    assert snapshot["queue_summary"]["preparation_only"] is True
+    assert snapshot["queue_summary"]["summary"]["state_counts"] == {"blocked": 1}
+    assert blockers == []
 
 
 def test_route_parser_preserves_static_estimate() -> None:

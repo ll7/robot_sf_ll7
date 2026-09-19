@@ -49,6 +49,8 @@ GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SUMMARY_FIELDS = (
     "queue_entries",
     "ready_entries",
+    "submit_eligible_entries",
+    "ready_but_submit_blocked",
     "blocked_or_inactive_entries",
     "active_ledger_jobs",
 )
@@ -609,7 +611,122 @@ def _parse_queue_summary(text: str) -> dict[str, Any]:
     for field in SUMMARY_FIELDS:
         match = re.search(rf"^- {re.escape(field)}:\s*(\d+)\s*$", text, re.MULTILINE)
         summary[field] = int(match.group(1)) if match else None
+    scope_match = re.search(r"^- scope_issue:\s*#?(\d+)\s*$", text, re.MULTILINE)
+    summary["scope_issue"] = int(scope_match.group(1)) if scope_match else None
+    state_counts: dict[str, int] = {}
+    in_states = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "## States":
+            in_states = True
+            continue
+        if not in_states:
+            continue
+        if stripped.startswith("## "):
+            break
+        match = re.fullmatch(r"-\s+([^:]+):\s*(\d+)", stripped)
+        if match:
+            state_counts[match.group(1).strip()] = int(match.group(2))
+        elif stripped:
+            break
+    summary["state_counts"] = state_counts
     return summary
+
+
+def _is_preparation_only_packet(packet_config: dict[str, Any]) -> bool:
+    """Recognize the explicit preparation contract before relaxing queue evidence."""
+    preflight = packet_config.get("preflight")
+    verdict = packet_config.get("verdict")
+    return (
+        isinstance(preflight, dict)
+        and preflight.get("mode") == "preflight"
+        and preflight.get("production_submission_authorized") is False
+        and isinstance(verdict, dict)
+        and verdict.get("never_authorizes_submission") is True
+    )
+
+
+def _preparation_queue_summary_blockers(
+    summary: dict[str, Any],
+    *,
+    expected_scope_issue: int | str | None,
+) -> list[str]:
+    """Validate the exact blocked row allowed as preparation evidence."""
+    blockers: list[str] = []
+    if expected_scope_issue is None:
+        blockers.append("preparation-only queue validation requires an issue-scoped campaign")
+    else:
+        try:
+            expected_issue = int(str(expected_scope_issue).lstrip("#"))
+        except (TypeError, ValueError):
+            expected_issue = None
+        if expected_issue is None:
+            blockers.append("preparation-only queue validation requires a numeric campaign issue")
+        elif summary.get("scope_issue") != expected_issue:
+            blockers.append(
+                "preparation-only queue summary must be issue-scoped to the campaign; "
+                f"observed scope {summary.get('scope_issue')!r}; "
+                f"expected issue #{expected_issue}"
+            )
+    expected_counts = {
+        "queue_entries": 1,
+        "ready_entries": 0,
+        "submit_eligible_entries": 0,
+        "ready_but_submit_blocked": 0,
+        "blocked_or_inactive_entries": 1,
+        "active_ledger_jobs": 0,
+    }
+    for field, expected in expected_counts.items():
+        if summary.get(field) != expected:
+            blockers.append(
+                f"preparation-only queue requires {field}={expected}; "
+                f"observed {summary.get(field)!r}"
+            )
+    if summary.get("state_counts") != {"blocked": 1}:
+        blockers.append(
+            "preparation-only queue requires exactly one blocked row; "
+            f"observed states {summary.get('state_counts')!r}"
+        )
+    return blockers
+
+
+def _production_queue_summary_blockers(
+    summary: dict[str, Any], *, expected_ready: int
+) -> list[str]:
+    """Require a ready and submit-eligible row before production admission."""
+    blockers = []
+    if summary.get("ready_entries") != expected_ready:
+        blockers.append(
+            f"private-ops queue has {summary.get('ready_entries')!r} ready entries; "
+            f"expected exactly {expected_ready}"
+        )
+    if summary.get("submit_eligible_entries") != expected_ready:
+        blockers.append(
+            f"private-ops queue has {summary.get('submit_eligible_entries')!r} "
+            f"submit-eligible entries; expected exactly {expected_ready}"
+        )
+    if summary.get("ready_but_submit_blocked") != 0:
+        blockers.append(
+            "private-ops queue has ready rows blocked from submission; "
+            f"observed {summary.get('ready_but_submit_blocked')!r}"
+        )
+    return blockers
+
+
+def _queue_summary_blockers(
+    summary: dict[str, Any],
+    *,
+    expected_ready: int,
+    preparation_only: bool,
+    expected_scope_issue: int | str | None = None,
+) -> list[str]:
+    """Validate queue evidence without turning preparation into dispatch authority."""
+    if preparation_only:
+        return _preparation_queue_summary_blockers(
+            summary,
+            expected_scope_issue=expected_scope_issue,
+        )
+    return _production_queue_summary_blockers(summary, expected_ready=expected_ready)
 
 
 def _parse_route_output(text: str) -> dict[str, Any]:
@@ -629,6 +746,9 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
     packet_config: dict[str, Any],
     output_root: Path,
     blockers: list[str],
+    *,
+    preparation_only: bool = False,
+    campaign_issue: int | str | None = None,
 ) -> dict[str, Any]:
     private_cfg = packet_config["private_ops"]
     configured_root = os.environ.get(str(private_cfg["root_env"]))
@@ -692,6 +812,8 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
     queue_script = root_paths["queue_summary"]
     if queue_script.is_file():
         command = ["bash", str(queue_script), "--limit", "100"]
+        if campaign_issue is not None:
+            command.extend(["--issue", str(campaign_issue).lstrip("#")])
         result = _run(command, cwd=repo_root, timeout=60)
         stdout_path = output_root / "private_ops" / "queue_summary.txt"
         stderr_path = output_root / "private_ops" / "queue_summary.stderr.txt"
@@ -704,15 +826,19 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
             "summary": summary,
             "stdout_path": _repo_relative(repo_root, stdout_path),
             "stderr_path": _repo_relative(repo_root, stderr_path),
+            "preparation_only": preparation_only,
         }
         if result["returncode"] != 0:
             blockers.append("private-ops queue summary failed")
         expected_ready = int(private_cfg["queue_must_have_ready_entries"])
-        if summary.get("ready_entries") != expected_ready:
-            blockers.append(
-                f"private-ops queue has {summary.get('ready_entries')!r} ready entries; "
-                f"expected exactly {expected_ready}"
+        blockers.extend(
+            _queue_summary_blockers(
+                summary,
+                expected_ready=expected_ready,
+                preparation_only=preparation_only,
+                expected_scope_issue=campaign_issue,
             )
+        )
 
     route_script = root_paths["route"]
     if route_script.is_file():
@@ -808,6 +934,7 @@ def prepare_packet(  # noqa: PLR0915
     repo_root: Path = REPO_ROOT,
     packet_config_path: Path | None = None,
     output_root: Path | None = None,
+    check_ready_queue: bool = False,
 ) -> tuple[dict[str, Any], int]:
     """Build and write the admission packet; return the packet and process status."""
     packet_config_path = packet_config_path or repo_root / DEFAULT_PACKET_CONFIG
@@ -915,7 +1042,16 @@ def prepare_packet(  # noqa: PLR0915
     gate1_record.setdefault("status", "valid" if not gate1_errors else "blocked")
 
     preflights = _run_preflights(repo_root, packet_config, output_root, blockers)
-    private_ops = _private_ops_snapshot(repo_root, packet_config, output_root, blockers)
+    preparation_only = _is_preparation_only_packet(packet_config)
+    queue_check_mode = "ready" if check_ready_queue or not preparation_only else "blocked"
+    private_ops = _private_ops_snapshot(
+        repo_root,
+        packet_config,
+        output_root,
+        blockers,
+        preparation_only=queue_check_mode == "blocked",
+        campaign_issue=packet_config.get("campaign_issue"),
+    )
     remote_env = str(packet_config["artifacts"]["remote_results_uri_env"])
     remote_results_uri = os.environ.get(remote_env)
     if not remote_results_uri:
@@ -951,6 +1087,8 @@ def prepare_packet(  # noqa: PLR0915
         "parent_issue": int(packet_config["parent_issue"]),
         "title": packet_config["title"],
         "claim_boundary": packet_config["claim_boundary"],
+        "preparation_only": preparation_only,
+        "queue_check_mode": queue_check_mode,
         "verdict": verdict,
         "status": verdict,
         "candidate_commit": candidate,
@@ -995,6 +1133,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet-config", type=Path, default=Path(DEFAULT_PACKET_CONFIG))
     parser.add_argument("--out", type=Path, default=Path(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument(
+        "--check-ready-queue",
+        action="store_true",
+        help="Validate exactly one ready and submit-eligible issue row after reviewed promotion; this never submits or authorizes compute.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1007,7 +1150,10 @@ def main(argv: list[str] | None = None) -> int:
     output_root = args.out if args.out.is_absolute() else REPO_ROOT / args.out
     try:
         packet, status = prepare_packet(
-            repo_root=REPO_ROOT, packet_config_path=packet_path, output_root=output_root
+            repo_root=REPO_ROOT,
+            packet_config_path=packet_path,
+            output_root=output_root,
+            check_ready_queue=args.check_ready_queue,
         )
     except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         print(

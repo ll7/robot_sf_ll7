@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import json
+import math
+from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from robot_sf.analysis_workbench import (
+    AuditCoverageError,
     AuditIdentity,
+    DetectorRegistry,
+    DetectorSpec,
     ReviewRecord,
     evaluate_coverage,
     is_completion_current,
     receipt_matches_identity,
+    record_to_dict,
     validate_audit_coverage,
 )
 from robot_sf.analysis_workbench.audit_coverage import (
@@ -18,6 +26,7 @@ from robot_sf.analysis_workbench.audit_coverage import (
     STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS,
     STATUS_INCOMPLETE,
     AuditProtocol,
+    _digest,
     default_audit_protocol,
     load_audit_protocol,
 )
@@ -36,6 +45,10 @@ def _identity(release: str = "release-1") -> AuditIdentity:
         detector_registry_digest="registry-1",
         detector_config_digest="detector-config-1",
     )
+
+
+def _registry(detector_id: str = "telemetry") -> DetectorRegistry:
+    return DetectorRegistry(detectors=(DetectorSpec(detector_id, "test", "typed test detector"),))
 
 
 def _review(
@@ -76,6 +89,23 @@ def _complete_inputs() -> tuple[list[dict[str, object]], list[dict[str, str]], l
     return rows, attempts, reviews
 
 
+def _redigest(payload: dict[str, object]) -> dict[str, object]:
+    """Recompute only the outer report digest after a deliberate mutation."""
+
+    payload["report_digest"] = _digest(
+        {key: value for key, value in payload.items() if key != "report_digest"}
+    )
+    return payload
+
+
+def _redigest_identity(payload: dict[str, object]) -> dict[str, object]:
+    """Recompute the nested identity and outer report digests after a mutation."""
+
+    identity = AuditIdentity.from_dict(payload["identity"])
+    payload["identity"]["identity_digest"] = identity.digest
+    return _redigest(payload)
+
+
 def test_default_protocol_is_versioned_and_non_statistical() -> None:
     protocol = default_audit_protocol()
     assert protocol.version == "audit-protocol.v1"
@@ -93,10 +123,13 @@ def test_versioned_coverage_input_fixtures_drive_complete_and_incomplete_reports
             _review("review-success", "episode-success"),
             _review("review-collision", "episode-collision"),
         ],
+        detector_registry=_registry(),
         identity=_identity(),
     )
     incomplete = json.loads((FIXTURE_ROOT / "incomplete.json").read_text(encoding="utf-8"))
-    incomplete_report = evaluate_coverage(**incomplete, identity=_identity())
+    incomplete_report = evaluate_coverage(
+        **incomplete, detector_registry=_registry(), identity=_identity()
+    )
     assert complete_report.status == STATUS_COMPLETE_UNDER_PROTOCOL
     assert incomplete_report.status == STATUS_INCOMPLETE
     assert any(item.reason == "detector_attempt_unavailable" for item in incomplete_report.deficits)
@@ -105,10 +138,18 @@ def test_versioned_coverage_input_fixtures_drive_complete_and_incomplete_reports
 def test_complete_report_has_hand_calculated_strata_and_deterministic_digest() -> None:
     rows, attempts, reviews = _complete_inputs()
     first = evaluate_coverage(
-        rows, detector_attempts=attempts, review_records=reviews, identity=_identity()
+        rows,
+        detector_attempts=attempts,
+        review_records=reviews,
+        detector_registry=_registry(),
+        identity=_identity(),
     )
     second = evaluate_coverage(
-        rows, detector_attempts=attempts, review_records=reviews, identity=_identity()
+        rows,
+        detector_attempts=attempts,
+        review_records=reviews,
+        detector_registry=_registry(),
+        identity=_identity(),
     )
     assert first.status == STATUS_COMPLETE_UNDER_PROTOCOL
     assert first.counts["coverage"]["expected"] == 2
@@ -154,7 +195,11 @@ def test_agent_interval_duplicate_and_replay_evidence_cannot_inflate_credit() ->
         _review("full-e1", "e1"),
     ]
     report = evaluate_coverage(
-        rows, detector_attempts=attempts, review_records=reviews, identity=_identity()
+        rows,
+        detector_attempts=attempts,
+        review_records=reviews,
+        detector_registry=_registry("d"),
+        identity=_identity(),
     )
     assert report.status == STATUS_INCOMPLETE
     assert report.counts["coverage"]["expected"] == 3
@@ -171,7 +216,7 @@ def test_agent_interval_duplicate_and_replay_evidence_cannot_inflate_credit() ->
 def test_missing_detector_result_fails_closed_and_is_typed() -> None:
     report = evaluate_coverage(
         [{"episode_id": "e1", "planner_id": "p", "scenario_group": "g", "outcome": "ok"}],
-        detector_registry=["telemetry"],
+        detector_registry=_registry(),
         identity=_identity(),
     )
     assert report.status == STATUS_INCOMPLETE
@@ -189,6 +234,7 @@ def test_declared_exception_is_visible_but_can_complete_with_exception() -> None
         rows,
         detector_attempts=attempts,
         review_records=reviews,
+        detector_registry=_registry(),
         identity=_identity(),
         materialization=[{"episode_id": "episode-success", "status": "diverged"}],
         exceptions={
@@ -220,6 +266,7 @@ def test_high_priority_finding_and_unresolved_integrity_remain_visible() -> None
         rows,
         detector_attempts=attempts,
         review_records=reviews[:1],
+        detector_registry=_registry(),
         identity=_identity(),
         findings=[
             {
@@ -245,7 +292,11 @@ def test_high_priority_finding_and_unresolved_integrity_remain_visible() -> None
 def test_changed_release_invalidates_previous_completion_receipt() -> None:
     rows, attempts, reviews = _complete_inputs()
     original = evaluate_coverage(
-        rows, detector_attempts=attempts, review_records=reviews, identity=_identity("release-1")
+        rows,
+        detector_attempts=attempts,
+        review_records=reviews,
+        detector_registry=_registry(),
+        identity=_identity("release-1"),
     )
     changed_identity = _identity("release-2")
     assert not receipt_matches_identity(original.completion_receipt, changed_identity)
@@ -254,6 +305,7 @@ def test_changed_release_invalidates_previous_completion_receipt() -> None:
         rows,
         detector_attempts=attempts,
         review_records=reviews,
+        detector_registry=_registry(),
         identity=changed_identity,
         prior_receipt=original.completion_receipt,
     )
@@ -276,7 +328,11 @@ def test_ba01_scan_report_uses_typed_inventory_and_detector_identity() -> None:
 def test_renderers_and_round_trip_are_deterministic_and_disclose_boundary() -> None:
     rows, attempts, reviews = _complete_inputs()
     report = evaluate_coverage(
-        rows, detector_attempts=attempts, review_records=reviews, identity=_identity()
+        rows,
+        detector_attempts=attempts,
+        review_records=reviews,
+        detector_registry=_registry(),
+        identity=_identity(),
     )
     restored = report.from_dict(report.to_dict())
     assert restored.to_json() == report.to_json()
@@ -307,7 +363,7 @@ def test_partial_detector_schedule_and_configured_dimension_aliases_fail_closed(
             },
         ],
         protocol=protocol,
-        detector_registry=["telemetry"],
+        detector_registry=_registry(),
         detector_attempts=[{"episode_id": "e1", "detector_id": "telemetry", "status": "clear"}],
         review_records=[_review("review-e1", "e1"), _review("review-e2", "e2")],
         identity=_identity(),
@@ -341,6 +397,7 @@ def test_replayed_similarity_review_mapping_cannot_earn_human_credit() -> None:
                 "regenerated": True,
             },
         ],
+        detector_registry=_registry(),
         identity=_identity(),
     )
     assert report.status == STATUS_INCOMPLETE
@@ -356,6 +413,7 @@ def test_explicit_protocol_change_invalidates_completion_receipt() -> None:
         rows,
         detector_attempts=attempts,
         review_records=reviews,
+        detector_registry=_registry(),
         protocol=default_audit_protocol(),
         identity=_identity(),
     )
@@ -364,6 +422,7 @@ def test_explicit_protocol_change_invalidates_completion_receipt() -> None:
         rows,
         detector_attempts=attempts,
         review_records=reviews,
+        detector_registry=_registry(),
         protocol=changed_protocol,
         identity=_identity(),
         prior_receipt=original.completion_receipt,
@@ -371,3 +430,286 @@ def test_explicit_protocol_change_invalidates_completion_receipt() -> None:
     assert changed.status == STATUS_INCOMPLETE
     assert changed.identity.protocol_digest == changed_protocol.digest
     assert any(item.reason == "stale_completion_receipt" for item in changed.deficits)
+
+
+def test_only_typed_ba03_review_receipts_can_earn_human_credit() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    forged = {
+        "review_id": "forged",
+        "episode_id": "episode-success",
+        "author_kind": "human",
+        "scope": "full_episode",
+    }
+    rejected = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=[forged, reviews[1]],
+        identity=_identity(),
+    )
+    assert rejected.status == STATUS_INCOMPLETE
+    assert rejected.counts["reviews"]["full_episode_human"] == 1
+    assert rejected.counts["reviews"]["untyped_or_invalid"] == 1
+
+    serialized = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=[record_to_dict(item) for item in reviews],
+        identity=_identity(),
+    )
+    assert serialized.status == STATUS_COMPLETE_UNDER_PROTOCOL
+
+
+def test_ba02_deficit_adapter_keeps_revision_and_digest_directions() -> None:
+    identity = AuditIdentity(
+        campaign_digest="campaign-1",
+        source_digest="source-1",
+        release_digest="release-1",
+        source_revision="source-commit-1",
+        scan_revision="scan-report-1",
+        detector_registry_digest="registry-1",
+        detector_config_digest="detector-config-1",
+    )
+    report = evaluate_coverage(
+        [{"episode_id": "e1", "planner_id": "p", "scenario_group": "g"}],
+        detector_attempts=[{"episode_id": "e1", "detector_id": "telemetry", "status": "clear"}],
+        detector_registry=_registry(),
+        identity=identity,
+    )
+    deficit = next(item for item in report.deficits if item.reason == "missing_full_human_review")
+    handoff = deficit.to_ba02_dict()
+    assert handoff["source_revision"] == "scan-report-1"
+    assert handoff["protocol_revision"] == report.protocol.version
+    assert handoff["source_id"] == report.identity.source_digest
+    assert handoff["protocol_id"] == report.protocol.digest
+    assert handoff["source_revision"] != report.identity.source_digest
+
+
+def test_report_deserialization_rejects_identity_deficit_nan_and_derived_tampering() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    report = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    payload = report.to_dict()
+    missing_digest = deepcopy(payload)
+    missing_digest.pop("report_digest")
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(missing_digest)
+
+    empty_identity = deepcopy(payload)
+    empty_identity["identity"] = {}
+    with pytest.raises(AuditCoverageError):
+        report.from_dict(empty_identity)
+
+    unwaived = deepcopy(payload)
+    unwaived["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+    unwaived["deficits"] = [
+        {
+            **evaluate_coverage(
+                rows,
+                detector_attempts=attempts,
+                detector_registry=_registry(),
+                identity=_identity(),
+                review_records=reviews[:1],
+            )
+            .deficits[0]
+            .to_dict()
+        }
+    ]
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(unwaived)
+
+    nonfinite = deepcopy(payload)
+    nonfinite["counts"]["coverage"]["expected"] = math.nan
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(nonfinite)
+
+    unknown = deepcopy(payload)
+    unknown["identity"]["unexpected"] = "forged"
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(unknown)
+
+    inconsistent = deepcopy(payload)
+    inconsistent["counts"]["status"] = STATUS_INCOMPLETE
+    with pytest.raises(AuditCoverageError):
+        validate_audit_coverage(inconsistent)
+
+
+def test_report_semantics_reject_all_derived_and_status_tampering() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    complete = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    complete_payload = complete.to_dict()
+
+    def reject_complete(mutator, *, refresh_identity: bool = False) -> None:
+        candidate = deepcopy(complete_payload)
+        mutator(candidate)
+        candidate = _redigest_identity(candidate) if refresh_identity else _redigest(candidate)
+        with pytest.raises(AuditCoverageError):
+            validate_audit_coverage(candidate)
+
+    reject_complete(lambda item: item["identity"].update({"identity_digest": "0" * 64}))
+    reject_complete(lambda item: item["protocol"].update({"protocol_digest": "0" * 64}))
+    reject_complete(
+        lambda item: item["identity"].update({"protocol_version": "different"}),
+        refresh_identity=True,
+    )
+    reject_complete(
+        lambda item: item["identity"].update({"protocol_digest": "1" * 64}),
+        refresh_identity=True,
+    )
+    reject_complete(lambda item: item["counts"].update({"status": STATUS_INCOMPLETE}))
+    reject_complete(lambda item: item["counts"]["coverage"].update({"expected": 3}))
+    reject_complete(lambda item: item["counts"]["reviews"].update({"human_reviewed": 3}))
+    reject_complete(lambda item: item["counts"]["materialization"].update({"total": 1}))
+    reject_complete(lambda item: item["counts"]["diagnostics"].update({"tampered": 1}))
+    reject_complete(lambda item: item["findings"].update({"candidate_clusters": 1}))
+    reject_complete(lambda item: item["counts"]["reviews"].update({"observed_strata": 3}))
+    reject_complete(lambda item: item["counts"]["reviews"].update({"full_human_strata": 3}))
+    reject_complete(lambda item: item["counts"]["detectors"].update({"scheduled": 3}))
+
+    def mutate_evaluable(item):
+        item["counts"]["detectors"]["evaluable"] = 3
+        item["counts"]["detectors"]["by_detector"]["telemetry"]["evaluable"] = 3
+
+    reject_complete(mutate_evaluable)
+
+    incomplete = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews[:1],
+        identity=_identity(),
+    )
+    incomplete_payload = incomplete.to_dict()
+
+    def reject_incomplete(mutator) -> None:
+        candidate = deepcopy(incomplete_payload)
+        mutator(candidate)
+        with pytest.raises(AuditCoverageError):
+            validate_audit_coverage(_redigest(candidate))
+
+    reject_incomplete(lambda item: item.update({"deficits": []}))
+    reject_incomplete(
+        lambda item: item.update(
+            {
+                "status": STATUS_COMPLETE_UNDER_PROTOCOL,
+                "counts": {**item["counts"], "status": STATUS_COMPLETE_UNDER_PROTOCOL},
+            }
+        )
+    )
+
+    def waive_all(item):
+        item["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+        item["counts"]["status"] = STATUS_COMPLETE_UNDER_PROTOCOL
+        for deficit in item["deficits"]:
+            deficit["status"] = "waived"
+
+    reject_incomplete(waive_all)
+    reject_incomplete(
+        lambda item: (
+            item.update({"status": STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS}),
+            item["counts"].update({"status": STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS}),
+            item.update({"deficits": []}),
+        )
+    )
+    reject_complete(
+        lambda item: item["identity"].update({"campaign_digest": ""}),
+        refresh_identity=True,
+    )
+
+    for field in (
+        "campaign_digest",
+        "source_digest",
+        "release_digest",
+        "detector_registry_digest",
+        "detector_config_digest",
+    ):
+        reject_incomplete(
+            lambda item, field=field: item["deficits"][0].update({field: "different"})
+        )
+    reject_incomplete(lambda item: item["deficits"][0].update({"protocol_revision": "different"}))
+    reject_incomplete(lambda item: item["deficits"][0].update({"protocol_id": "0" * 64}))
+    reject_incomplete(lambda item: item["deficits"][0].update({"source_id": "different"}))
+
+
+def test_unexpected_detector_attempt_cannot_replace_missing_registry_accounting() -> None:
+    report = evaluate_coverage(
+        [{"episode_id": "expected", "planner_id": "p", "scenario_group": "g"}],
+        detector_attempts=[
+            {"episode_id": "not-expected", "detector_id": "unregistered", "status": "clear"}
+        ],
+        review_records=[_review("review-expected", "expected")],
+        identity=_identity(),
+    )
+    assert report.status == STATUS_INCOMPLETE
+    assert report.counts["reviews"]["full_episode_human"] == 1
+    assert report.counts["detectors"]["clear"] == 0
+    assert report.counts["detectors"]["error"] == 1
+    assert any(item.reason == "missing_detector_registry_or_attempts" for item in report.deficits)
+    assert any(item.reason == "detector_attempt_error" for item in report.deficits)
+
+
+def test_typed_review_receipt_must_match_active_source_and_scan_revision() -> None:
+    identity = AuditIdentity(
+        campaign_digest="campaign-1",
+        source_digest="source-1",
+        release_digest="release-1",
+        source_revision="source-current",
+        scan_revision="scan-current",
+        detector_registry_digest="registry-1",
+        detector_config_digest="detector-config-1",
+    )
+    report = evaluate_coverage(
+        [{"episode_id": "e1", "planner_id": "p", "scenario_group": "g"}],
+        detector_attempts=[{"episode_id": "e1", "detector_id": "telemetry", "status": "clear"}],
+        detector_registry=_registry(),
+        review_records=[ReviewRecord("review-e1", "e1", "full_episode", source_revision=7)],
+        identity=identity,
+    )
+    assert report.status == STATUS_INCOMPLETE
+    assert report.counts["reviews"]["full_episode_human"] == 0
+    assert report.counts["reviews"]["stale_or_mismatched"] == 1
+    assert any(item.reason == "missing_full_human_review" for item in report.deficits)
+
+
+def test_finding_order_and_renderer_boundary_are_deterministic() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    first = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        findings=[
+            {"finding_id": "b", "candidate_members": ["episode-success"]},
+            {"finding_id": "a", "candidate_members": ["episode-collision"]},
+        ],
+        identity=_identity(),
+    )
+    second = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        findings=[
+            {"finding_id": "a", "candidate_members": ["episode-collision"]},
+            {"finding_id": "b", "candidate_members": ["episode-success"]},
+        ],
+        identity=_identity(),
+    )
+    assert first.report_digest == second.report_digest
+    assert first.to_json() == second.to_json()
+    assert first.to_markdown() == second.to_markdown()
+    assert first.to_html() == second.to_html()
+    assert "full episode displayed" not in first.to_markdown().lower()
+    assert "all required measurements were present" not in first.to_markdown().lower()

@@ -22,10 +22,13 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from robot_sf.analysis_workbench.audit_contracts import (
+    AuditContractError,
     Finding,
     ReviewRecord,
     canonical_json,
+    record_from_dict,
 )
+from robot_sf.analysis_workbench.audit_detectors import DetectorRegistry
 from robot_sf.analysis_workbench.review_report import (
     render_html as render_review_html,
 )
@@ -670,7 +673,7 @@ class AuditHealthReport:
     limitations: tuple[str, ...] = ()
     report_digest: str = ""
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         """Validate and freeze report components, including the digest."""
 
         if not isinstance(self.identity, AuditIdentity):
@@ -699,6 +702,23 @@ class AuditHealthReport:
             raise AuditCoverageError("report.deficits must contain CoverageDeficit values")
         _strict_json(self.strata, path="report.strata")
         _strict_json(self.exceptions, path="report.exceptions")
+        if self.identity.protocol_version != self.protocol.version:
+            raise AuditCoverageError("report identity protocol_version does not match protocol")
+        if self.identity.protocol_digest != self.protocol.digest:
+            raise AuditCoverageError("report identity protocol_digest does not match protocol")
+        unwaived = tuple(item for item in self.deficits if item.status != DEFICIT_WAIVED)
+        if self.status != STATUS_INCOMPLETE and not self.identity.complete:
+            raise AuditCoverageError("complete report requires a complete identity")
+        if self.status != STATUS_INCOMPLETE and unwaived:
+            raise AuditCoverageError("complete report contains unwaived deficits")
+        if self.status == STATUS_INCOMPLETE and not unwaived:
+            raise AuditCoverageError("incomplete report requires an unwaived deficit")
+        if self.status == STATUS_COMPLETE_UNDER_PROTOCOL and (self.deficits or self.exceptions):
+            raise AuditCoverageError(
+                "complete_under_protocol report cannot contain deficits or exceptions"
+            )
+        if self.status == STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS and not self.exceptions:
+            raise AuditCoverageError("complete_with_declared_exceptions requires exceptions")
         digest = self._compute_digest()
         if self.report_digest and self.report_digest != digest:
             raise AuditCoverageError("report_digest does not match report contents")
@@ -821,26 +841,24 @@ class AuditHealthReport:
 
         if not isinstance(payload, Mapping):
             raise AuditCoverageError("health report must be a mapping")
-        if payload.get("schema_version") != AUDIT_COVERAGE_SCHEMA_VERSION:
-            raise AuditCoverageError("unsupported audit coverage schema")
-        identity = AuditIdentity.from_dict(payload.get("identity", {}))
-        protocol = AuditProtocol.from_dict(payload.get("protocol", {}))
-        deficits = tuple(_deficit_from_dict(item) for item in payload.get("deficits", ()))
+        validate_audit_coverage(payload)
+        identity = AuditIdentity.from_dict(payload["identity"])
+        protocol = AuditProtocol.from_dict(payload["protocol"])
+        deficits = tuple(_deficit_from_dict(item) for item in payload["deficits"])
         report = cls(
             identity=identity,
             protocol=protocol,
-            status=payload.get("status", STATUS_INCOMPLETE),
-            counts=payload.get("counts", {}),
-            strata=tuple(payload.get("strata", ())),
+            status=payload["status"],
+            counts=payload["counts"],
+            strata=tuple(payload["strata"]),
             deficits=deficits,
-            exceptions=tuple(payload.get("exceptions", ())),
-            findings=payload.get("findings", {}),
-            materialization=payload.get("materialization", {}),
-            diagnostics=payload.get("diagnostics", {}),
-            limitations=tuple(payload.get("limitations", ())),
-            report_digest=payload.get("report_digest", ""),
+            exceptions=tuple(payload["exceptions"]),
+            findings=payload["findings"],
+            materialization=payload["materialization"],
+            diagnostics=payload["diagnostics"],
+            limitations=tuple(payload["limitations"]),
+            report_digest=payload["report_digest"],
         )
-        validate_audit_coverage(report.to_dict())
         return report
 
 
@@ -1038,27 +1056,27 @@ def _detector_ids(scan: Any, detector_registry: Any) -> tuple[str, ...]:
     value = detector_registry
     if value is None:
         value = _field(scan, "detector_registry", default=None)
-    if value is not None:
-        ids = _field(value, "ids", default=None)
-        if ids is not None and not isinstance(ids, Mapping):
-            return tuple(sorted({_token(item) for item in _sequence(ids)}))
-        detectors = _field(value, "detectors", default=None)
-        if detectors is not None:
-            return tuple(
-                sorted({_token(_field(item, "detector_id", "id")) for item in _sequence(detectors)})
-            )
-        if isinstance(value, Mapping):
-            return tuple(sorted({_token(item) for item in value if item != "schema_version"}))
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            return tuple(
-                sorted({_token(_field(item, "detector_id", "id", default=item)) for item in value})
-            )
-    counts = _scan_counts(scan)
-    detectors = counts.get("detectors", {})
-    by_detector = detectors.get("by_detector") if isinstance(detectors, Mapping) else None
-    if isinstance(by_detector, Mapping):
-        return tuple(sorted(str(item) for item in by_detector))
+    # A BA-01 detector schedule is authoritative only after it has crossed the
+    # typed registry boundary.  In particular, detector IDs copied from an
+    # arbitrary mapping or inferred from observed attempts cannot define the
+    # denominator: doing so lets an unexpected clear attempt look complete.
+    if isinstance(value, DetectorRegistry):
+        return value.ids
     return ()
+
+
+def _typed_detector_registry(scan: Any, detector_registry: Any) -> DetectorRegistry | None:
+    """Return the admitted BA-01 registry, if one is present.
+
+    Serialized registry-shaped mappings deliberately do not count here.  The
+    BA-01 owner must deserialize and validate those documents before BA-04 can
+    use their detector IDs as a schedule.
+    """
+
+    value = detector_registry
+    if value is None:
+        value = _field(scan, "detector_registry", default=None)
+    return value if isinstance(value, DetectorRegistry) else None
 
 
 def _normalize_signal(value: Any, index: int) -> DetectorAttempt:
@@ -1085,7 +1103,7 @@ def _normalize_signal(value: Any, index: int) -> DetectorAttempt:
     )
 
 
-def _normalize_signals(
+def _normalize_signals(  # noqa: C901
     scan: Any,
     detector_attempts: Sequence[Any] | None,
     rows: Sequence[ExpectedEpisode],
@@ -1094,9 +1112,40 @@ def _normalize_signals(
     values = tuple(detector_attempts) if detector_attempts is not None else _scan_signals(scan)
     normalized = [_normalize_signal(value, index) for index, value in enumerate(values, start=1)]
     detector_ids = _detector_ids(scan, detector_registry)
-    row_ids = sorted({row.episode_id for row in rows if row.expected})
+    readable_ids = {row.episode_id for row in rows if row.readable}
+    typed_registry = _typed_detector_registry(scan, detector_registry)
+    # An attempt is positive evidence only when it belongs to the active
+    # readable-episode x typed-registry schedule.  Preserve the attempt ID but
+    # turn all out-of-schedule values into explicit errors so they remain
+    # visible without satisfying the detector gate.
+    admitted: list[DetectorAttempt] = []
+    for item in normalized:
+        unexpected_episode = item.episode_id not in readable_ids
+        unexpected_detector = not detector_ids or item.detector_id not in detector_ids
+        missing_registry = typed_registry is None
+        if unexpected_episode or unexpected_detector or missing_registry:
+            reasons = []
+            if missing_registry:
+                reasons.append("missing_typed_registry")
+            if unexpected_episode:
+                reasons.append("unexpected_episode")
+            if unexpected_detector:
+                reasons.append("unexpected_detector")
+            admitted.append(
+                replace(
+                    item,
+                    status="error",
+                    reason_code="unexpected_detector_attempt",
+                    message=";".join(reasons),
+                )
+            )
+        else:
+            admitted.append(item)
+    normalized = admitted
     observed_keys = {(item.episode_id, item.detector_id) for item in normalized}
-    for episode_id in row_ids:
+    # A typed registry defines the expected schedule.  Do not synthesize a
+    # schedule from untyped attempts or registry-like mappings.
+    for episode_id in readable_ids:
         for detector_id in detector_ids:
             if (episode_id, detector_id) in observed_keys:
                 continue
@@ -1132,6 +1181,8 @@ def _review_values(
 
 
 def _review_identity_matches(value: Any, identity: AuditIdentity) -> bool:
+    if not isinstance(value, ReviewRecord):
+        return False
     declared = _field(value, "identity_digest", default="")
     if declared and declared != identity.digest:
         return False
@@ -1145,12 +1196,89 @@ def _review_identity_matches(value: Any, identity: AuditIdentity) -> bool:
         and str(release_digest) != identity.release_digest
     ):
         return False
-    expected_revision = identity.review_revision
-    if expected_revision:
-        observed_revision = _field(value, "source_revision", default=None)
-        if observed_revision is not None and str(observed_revision) != expected_revision:
+    # BA-03 ReviewRecord carries the editor/selection revision as an integer.
+    # If the active audit advertises a source, scan, or review revision, an
+    # unavailable (zero) or stale receipt must not earn human coverage.  The
+    # revision token is intentionally compared as text because BA-04 identity
+    # values may be opaque hashes while BA-03's field is numeric.  If more
+    # than one active revision is declared, every token must agree; a bare
+    # BA-03 receipt cannot prove only one side of a source/scan boundary.
+    expected_revisions = {
+        str(item)
+        for item in (
+            identity.source_revision,
+            identity.scan_revision,
+            identity.review_revision,
+        )
+        if item
+    }
+    if expected_revisions:
+        observed_revision = _field(value, "source_revision", default=0)
+        if observed_revision in (None, "", 0):
+            return False
+        if any(str(observed_revision) != expected for expected in expected_revisions):
             return False
     return True
+
+
+def _typed_review(value: Any) -> ReviewRecord | None:
+    """Admit only a validated BA-03 ReviewRecord.
+
+    Mapping inputs are accepted solely when they are canonical BA-03 record
+    envelopes and deserialize successfully through the BA-03 record owner.
+    A convenient ``episode_id`` mapping is not a review receipt and can never
+    contribute to the human denominator.
+
+    Returns:
+        A validated BA-03 review, or ``None`` for an untrusted value.
+    """
+
+    if isinstance(value, ReviewRecord):
+        return value
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        record = record_from_dict(value)
+    except (AuditContractError, KeyError, TypeError, ValueError):
+        return None
+    return record if isinstance(record, ReviewRecord) else None
+
+
+def _review_is_contaminated(value: Any) -> bool:
+    """Classify rejected replay-like mappings for visible accounting only.
+
+    Returns:
+        Whether the value carries an explicit replay/duplicate marker.
+    """
+
+    if not isinstance(value, Mapping):
+        return False
+    evidence_kind = _token(
+        value.get("evidence_kind")
+        or value.get("review_kind")
+        or value.get("origin_kind")
+        or value.get("record_kind"),
+        default="",
+    ).lower()
+    return evidence_kind in {
+        "agent",
+        "clip",
+        "duplicate",
+        "interval",
+        "one_click",
+        "replay",
+        "regenerated",
+        "similarity",
+    } or any(
+        value.get(key) is True
+        for key in (
+            "is_duplicate",
+            "is_replay",
+            "regenerated",
+            "replayed",
+            "similarity_membership",
+        )
+    )
 
 
 def _normalize_reviews(  # noqa: C901
@@ -1165,13 +1293,16 @@ def _normalize_reviews(  # noqa: C901
     full_agent: set[str] = set()
     duplicate_count = 0
     stale_count = 0
+    rejected_count = 0
     for index, value in enumerate(values, start=1):
-        if (
-            not isinstance(value, ReviewRecord)
-            and not isinstance(value, Mapping)
-            and not hasattr(value, "episode_id")
-        ):
+        typed = _typed_review(value)
+        if typed is None:
+            if _review_is_contaminated(value):
+                duplicate_count += 1
+            else:
+                rejected_count += 1
             continue
+        value = typed
         episode_id = _field(value, "episode_id", default="")
         if not isinstance(episode_id, str) or episode_id not in readable_ids:
             continue
@@ -1240,6 +1371,7 @@ def _normalize_reviews(  # noqa: C901
             "reviewed_episode_union": len(reviewed_union),
             "duplicate_or_replayed": duplicate_count,
             "stale_or_mismatched": stale_count,
+            "untyped_or_invalid": rejected_count,
             "full_human_ids": sorted(full_human),
             "human_ids": sorted(human),
             "agent_ids": sorted(agent),
@@ -1314,12 +1446,17 @@ def _build_deficit(
         stratum_id=stratum_id,
         observed=observed,
         target=target,
-        source_revision=identity.source_revision or identity.source_digest or "unknown",
-        protocol_revision=identity.protocol_digest or identity.protocol_version or "unknown",
+        # BA-02 calls these fields *revisions*, not digests.  The scan
+        # revision is the queue's source revision/summary identity; when BA-04
+        # was not given one, leave it unavailable so BA-02 can surface the
+        # missing provenance instead of manufacturing a source-revision match
+        # from the source digest.
+        source_revision=identity.scan_revision or "",
+        protocol_revision=identity.protocol_version or "",
         reason=reason,
         status=status,
-        source_id=identity.source_digest or "unknown",
-        protocol_id=identity.protocol_version or AUDIT_PROTOCOL_VERSION,
+        source_id=identity.source_digest or "",
+        protocol_id=identity.protocol_digest or "",
         dimensions={key: _token(value) for key, value in dimensions.items()},
         denominator=denominator,
         campaign_id=identity.campaign_digest,
@@ -1480,6 +1617,7 @@ def _finding_summary(  # noqa: C901
                 "control_episode_ids": list(control_ids),
             }
         )
+    finding_rows.sort(key=lambda item: (item["finding_id"], canonical_json(item)))
     return (
         {
             "candidate_clusters": len(finding_rows),
@@ -1601,14 +1739,14 @@ def _identity_from_scan(  # noqa: C901
             if not value:
                 continue
             if key in {"protocol_version", "protocol_digest"}:
-                if protocol_is_explicit:
-                    continue
-                base[key] = value
+                # The serialized protocol is the local BA-04 authority.  A
+                # caller-supplied digest cannot silently describe a different
+                # configuration than the one evaluated here.
+                continue
             elif not base.get(key):
                 base[key] = value
-    if protocol_is_explicit:
-        base["protocol_version"] = protocol.version
-        base["protocol_digest"] = protocol.digest
+    base["protocol_version"] = protocol.version
+    base["protocol_digest"] = protocol.digest
     return AuditIdentity(**{key: str(value or "") for key, value in base.items()})
 
 
@@ -1788,7 +1926,9 @@ def evaluate_coverage(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "by_detector": by_detector,
     }
     if active_protocol.require_detector_attempts:
-        if not attempts and readable_ids and not _detector_ids(source_scan, detector_registry):
+        typed_registry = _typed_detector_registry(source_scan, detector_registry)
+        detector_ids = _detector_ids(source_scan, detector_registry)
+        if readable_ids and (typed_registry is None or not detector_ids):
             deficits.append(
                 _build_deficit(
                     active_identity,
@@ -2064,6 +2204,16 @@ def _report_document_for_renderer(report: AuditHealthReport) -> dict[str, Any]:
         for item in report.deficits
         if item.status in {DEFICIT_UNAVAILABLE, DEFICIT_ERROR}
     ]
+    # BA-04 emits a health document, not an episode-media excerpt.  Give the
+    # generic SREV renderer an explicit unavailable marker so it cannot infer
+    # that a zero-length excerpt means the full episode was displayed or that
+    # all telemetry measurements were present.
+    missing.append(
+        {
+            "measurement": "episode_media",
+            "unavailable_reason": "not materialized by the BA-04 health report",
+        }
+    )
     return {
         "schema_version": "review-report.v1",
         "report_id": f"audit-health-{report.report_digest}",
@@ -2084,8 +2234,8 @@ def _report_document_for_renderer(report: AuditHealthReport) -> dict[str, Any]:
         },
         "excerpt": {
             "source_interval": {"start_s": 0.0, "end_s": 0.0},
-            "omitted_intervals": [],
-            "full_episode_link": "not_applicable",
+            "omitted_intervals": [{"start_s": 0.0, "end_s": 0.0}],
+            "full_episode_link": "not_available",
         },
         "claims": claims,
         "citations": [],
@@ -2125,9 +2275,142 @@ def load_audit_coverage_schema() -> dict[str, Any]:
     return json.loads(AUDIT_COVERAGE_SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+def _canonical_equal(left: Any, right: Any) -> bool:
+    """Compare report subdocuments using the same canonical JSON rules.
+
+    Returns:
+        Whether both values have identical canonical JSON representations.
+    """
+
+    return canonical_json(left) == canonical_json(right)
+
+
+def _validate_report_semantics(  # noqa: C901, PLR0912, PLR0915
+    payload: Mapping[str, Any],
+) -> None:
+    """Validate derived fields and cross-object status invariants."""
+
+    identity_payload = payload["identity"]
+    protocol_payload = payload["protocol"]
+    identity = AuditIdentity.from_dict(identity_payload)
+    protocol = AuditProtocol.from_dict(protocol_payload)
+    if identity_payload["identity_digest"] != identity.digest:
+        raise AuditCoverageError("identity_digest does not match identity contents")
+    if protocol_payload["protocol_digest"] != protocol.digest:
+        raise AuditCoverageError("protocol_digest does not match protocol contents")
+    if identity.protocol_version != protocol.version:
+        raise AuditCoverageError("identity protocol_version does not match protocol")
+    if identity.protocol_digest != protocol.digest:
+        raise AuditCoverageError("identity protocol_digest does not match protocol")
+
+    declared_digest = payload["report_digest"]
+    digest_payload = dict(payload)
+    digest_payload.pop("report_digest")
+    if declared_digest != _digest(digest_payload):
+        raise AuditCoverageError("report_digest does not match report contents")
+
+    counts = payload["counts"]
+    if counts["status"] != payload["status"]:
+        raise AuditCoverageError("counts.status does not match report status")
+    if not _canonical_equal(counts["coverage"], counts["inventory"]):
+        raise AuditCoverageError("counts.coverage and counts.inventory disagree")
+    if not _canonical_equal(counts["reviews"], counts["review"]):
+        raise AuditCoverageError("counts.reviews and counts.review disagree")
+    if not _canonical_equal(counts["materialization"], payload["materialization"]):
+        raise AuditCoverageError("materialization counts disagree")
+    if not _canonical_equal(counts["diagnostics"], payload["diagnostics"]):
+        raise AuditCoverageError("diagnostic counts disagree")
+    finding_aggregate = {key: value for key, value in payload["findings"].items() if key != "rows"}
+    if not _canonical_equal(counts["findings"], finding_aggregate):
+        raise AuditCoverageError("finding counts disagree")
+
+    strata = payload["strata"]
+    review_counts = counts["reviews"]
+    if review_counts["human_reviewed"] != len(review_counts["human_ids"]):
+        raise AuditCoverageError("review human_reviewed does not match human_ids")
+    if review_counts["agent_reviewed"] != len(review_counts["agent_ids"]):
+        raise AuditCoverageError("review agent_reviewed does not match agent_ids")
+    if review_counts["reviewed_episode_union"] != len(
+        set(review_counts["human_ids"]) | set(review_counts["agent_ids"])
+    ):
+        raise AuditCoverageError("reviewed_episode_union does not match review ids")
+    if review_counts["full_episode_human"] > review_counts["human_reviewed"]:
+        raise AuditCoverageError("full_episode_human exceeds human_reviewed")
+    if review_counts["full_episode_agent"] > review_counts["agent_reviewed"]:
+        raise AuditCoverageError("full_episode_agent exceeds agent_reviewed")
+    if review_counts["observed_strata"] != len(strata):
+        raise AuditCoverageError("review observed_strata does not match strata")
+    if review_counts["full_human_strata"] != sum(item["status"] == "met" for item in strata):
+        raise AuditCoverageError("review full_human_strata does not match strata")
+
+    detectors = counts["detectors"]
+    by_detector = detectors["by_detector"]
+    totals = {
+        key: sum(item[key] for item in by_detector.values())
+        for key in ("scheduled", "evaluable", "flagged", "clear", "unavailable", "error")
+    }
+    if any(detectors[key] != value for key, value in totals.items()):
+        raise AuditCoverageError("detector totals do not match by_detector")
+    if detectors["evaluable"] != detectors["flagged"] + detectors["clear"]:
+        raise AuditCoverageError("detector evaluable count is inconsistent")
+
+    materialization = payload["materialization"]
+    if materialization["total"] != sum(
+        materialization[key] for key in ("verified", "diverged", "unverifiable", "unavailable")
+    ):
+        raise AuditCoverageError("materialization total is inconsistent")
+
+    deficits = payload["deficits"]
+    unwaived = [item for item in deficits if item["status"] != DEFICIT_WAIVED]
+    status = payload["status"]
+    if status != STATUS_INCOMPLETE and not identity.complete:
+        raise AuditCoverageError("complete report requires a complete identity")
+    if status != STATUS_INCOMPLETE and unwaived:
+        raise AuditCoverageError("complete report contains unwaived deficits")
+    if status == STATUS_INCOMPLETE and not unwaived:
+        raise AuditCoverageError("incomplete report requires an unwaived deficit")
+    if status == STATUS_COMPLETE_UNDER_PROTOCOL and (deficits or payload["exceptions"]):
+        raise AuditCoverageError(
+            "complete_under_protocol report cannot contain deficits or exceptions"
+        )
+    if status == STATUS_COMPLETE_WITH_DECLARED_EXCEPTIONS and not payload["exceptions"]:
+        raise AuditCoverageError("complete_with_declared_exceptions requires exceptions")
+
+    for deficit in deficits:
+        for key in (
+            "campaign_digest",
+            "source_digest",
+            "release_digest",
+            "detector_registry_digest",
+            "detector_config_digest",
+            "coverage_receipt_revision",
+        ):
+            value = deficit[key]
+            expected = getattr(identity, key)
+            if value and expected and value != expected:
+                raise AuditCoverageError(f"deficit.{key} does not match report identity")
+        if deficit["protocol_revision"] and deficit["protocol_revision"] != protocol.version:
+            raise AuditCoverageError("deficit.protocol_revision does not match protocol version")
+        if deficit["protocol_id"] and deficit["protocol_id"] != protocol.digest:
+            raise AuditCoverageError("deficit.protocol_id does not match protocol digest")
+        if deficit["source_id"] and identity.source_digest:
+            if deficit["source_id"] != identity.source_digest:
+                raise AuditCoverageError("deficit.source_id does not match source digest")
+
+
 def validate_audit_coverage(payload: Mapping[str, Any]) -> None:
     """Validate a serialized BA-04 report against its schema."""
 
+    if not isinstance(payload, Mapping):
+        raise AuditCoverageError("health report must be a mapping")
+    _strict_json(payload)
+    # canonical_json additionally rejects unsupported Python objects and is
+    # configured with allow_nan=False, so direct Python callers receive the
+    # same finite/deterministic contract as JSON deserializers.
+    try:
+        canonical_json(payload)
+    except (AuditContractError, TypeError, ValueError, RecursionError) as exc:
+        raise AuditCoverageError(f"health report is not strict JSON: {exc}") from exc
     errors = sorted(
         Draft202012Validator(load_audit_coverage_schema()).iter_errors(payload),
         key=lambda item: list(item.absolute_path),
@@ -2137,6 +2420,7 @@ def validate_audit_coverage(payload: Mapping[str, Any]) -> None:
             f"/{'/'.join(map(str, item.absolute_path))}: {item.message}" for item in errors
         )
         raise AuditCoverageError(detail)
+    _validate_report_semantics(payload)
 
 
 __all__ = [

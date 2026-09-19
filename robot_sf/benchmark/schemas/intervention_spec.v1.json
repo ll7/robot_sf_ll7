@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/intervention_spec.v1.json",
+  "title": "Robot SF bounded intervention specification v1",
+  "description": "Diagnostic-only stage-1 declaration for one source-bound intervention design. It does not execute paired runs or establish a causal claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_id",
+    "issue",
+    "evidence_tier",
+    "claim_boundary",
+    "status",
+    "hypothesis",
+    "factor",
+    "held_fixed",
+    "known_unfixable",
+    "comparison",
+    "negative_control",
+    "stop_rule",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "intervention_spec.v1"},
+    "spec_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.:-]+$"},
+    "issue": {"const": 9308},
+    "evidence_tier": {"const": "analysis_only"},
+    "claim_boundary": {"const": "diagnostic_only_no_execution"},
+    "status": {"const": "specification_only"},
+    "hypothesis": {"$ref": "#/$defs/hypothesis"},
+    "factor": {"$ref": "#/$defs/factor"},
+    "held_fixed": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_.\\[\\]-]*$"}
+    },
+    "known_unfixable": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_.\\[\\]-]*$"}
+    },
+    "comparison": {"$ref": "#/$defs/comparison"},
+    "negative_control": {"$ref": "#/$defs/negative_control"},
+    "stop_rule": {"$ref": "#/$defs/stop_rule"},
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "json_value": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "boolean"},
+        {"type": "string"},
+        {"type": "number"},
+        {"type": "array", "items": {"$ref": "#/$defs/json_value"}},
+        {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/json_value"}
+        }
+      ]
+    },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mechanism", "statement"],
+      "properties": {
+        "mechanism": {"type": "string", "minLength": 1},
+        "statement": {"type": "string", "minLength": 1}
+      }
+    },
+    "factor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "unit", "baseline", "intervention"],
+      "properties": {
+        "name": {"enum": ["visibility", "delay", "control_clipping", "planner_response"]},
+        "path": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_.\\[\\]-]*$"},
+        "unit": {"type": "string", "minLength": 1},
+        "baseline": {"$ref": "#/$defs/json_value"},
+        "intervention": {"$ref": "#/$defs/json_value"}
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "match_basis",
+        "required_shared_prefix_steps",
+        "verification_status"
+      ],
+      "properties": {
+        "classification": {"enum": ["matched_start_replay", "genuine_shared_prefix"]},
+        "match_basis": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_.\\[\\]-]*$"}
+        },
+        "required_shared_prefix_steps": {"type": "integer", "minimum": 0},
+        "verification_status": {"const": "not_verified"}
+      }
+    },
+    "negative_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "factor_path", "value", "expected", "rationale"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.:-]+$"},
+        "factor_path": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_.\\[\\]-]*$"},
+        "value": {"$ref": "#/$defs/json_value"},
+        "expected": {"const": "no_factor_activation"},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "stop_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "outcome", "conditions", "no_substitution"],
+      "properties": {
+        "action": {"const": "stop"},
+        "outcome": {"const": "not_available"},
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "comparison_contract_failure",
+              "factor_not_activated",
+              "held_fixed_violation",
+              "missing_or_ambiguous_field",
+              "negative_control_activation",
+              "source_identity_mismatch"
+            ]
+          }
+        },
+        "no_substitution": {"const": true}
+      }
+    },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "role"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "role": {
+          "enum": [
+            "case_dossier",
+            "comparison_receipt",
+            "mechanism_trace",
+            "seed_sensitivity_replay",
+            "trace_predicate"
+          ]
+        }
+      }
+    },
+    "source_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "planner_id", "episode_id", "seed", "source_kind", "source_refs"],
+      "properties": {
+        "scenario_id": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer", "minimum": 0},
+        "source_kind": {"const": "existing_diagnostic_trace_or_dossier"},
+        "source_refs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source_ref"}}
+      }
+    },
+    "config_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_id", "path", "sha256"],
+      "properties": {
+        "config_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.:-]+$"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "contract_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "schema_version", "base_commit"],
+      "properties": {
+        "owner": {"const": "robot_sf.benchmark.intervention_spec"},
+        "schema_version": {"const": "intervention_spec.v1"},
+        "base_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_boundary", "execution_status", "source_identity", "config_identity", "contract_identity"],
+      "properties": {
+        "claim_boundary": {"const": "diagnostic_only_no_execution"},
+        "execution_status": {"const": "not_executed"},
+        "source_identity": {"$ref": "#/$defs/source_identity"},
+        "config_identity": {"$ref": "#/$defs/config_identity"},
+        "contract_identity": {"$ref": "#/$defs/contract_identity"}
+      }
+    }
+  }
+}

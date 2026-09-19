@@ -40,6 +40,9 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
   artifacts to bounded safety-case sections; name simulation limits and external evidence needs.
 - [Code Review Guide](./code_review.md) — benchmark-facing review checklist (semantics,
   normalization, distributions, reproducibility, provenance).
+- [Stage-1 bounded intervention specification](./case_workbench.md#stage-1-bounded-intervention-specification)
+  — issue #9308's source-bound, diagnostic-only design contract; it does not execute paired runs
+  or establish a causal claim.
 - [Hazard Traceability](./hazard_traceability.md) — intended hazard coverage summary (not safety
   proof).
 - [ODD Contracts](./odd_contracts.md) — operating-assumption metadata bounding benchmark evidence.

@@ -110,6 +110,7 @@
     "identity",
     "imitation_manifest.py",
     "interaction_exposure.py",
+    "intervention_spec.py",
     "issue_2557_replica_readiness.py",
     "issue_5302_oracle_gap.py",
     "issue_5303_search_promotion_analysis.py",

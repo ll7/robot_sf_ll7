@@ -81,6 +81,60 @@ gate passed. Before admission, use the package's audit dossier and interactive
 viewer for review, or request an explicitly diagnostic-only preview through the
 private API flag; such a preview is not evidence.
 
+## Stage-1 bounded intervention specification
+
+Issue [#9308](https://github.com/ll7/robot_sf_ll7/issues/9308) adds a small,
+design-only contract for selecting one failure-mechanism intervention from
+existing diagnostic traces or case dossiers. The owner is
+`robot_sf.benchmark.intervention_spec`, and the contract is
+`intervention_spec.v1`:
+
+```python
+from robot_sf.benchmark.intervention_spec import load_intervention_spec
+
+spec = load_intervention_spec("<repository-relative-spec>.yaml")
+```
+
+Every spec declares exactly one changed factor (`visibility`, `delay`,
+`control_clipping`, or `planner_response`), explicit `held_fixed` and
+`known_unfixable` field sets. The fixed set must include `scenario_id`, `seed`,
+`planner_id`, and `initial_state`; anything that cannot be fixed is listed
+instead in `known_unfixable`. The spec also carries a source-bound identity for the selected
+scenario, planner, episode, seed, config, and existing source files. The
+comparison classification is either `matched_start_replay` (matched initial
+state only) or `genuine_shared_prefix`; the latter remains
+`verification_status: not_verified` until a later receipt checks the prefix.
+The no-op negative-control arm and fixed stop rule are required, and missing or
+ambiguous fields fail validation and are prescribed to end in `not_available`,
+rather than using an implicit substitute.
+Spec and negative-control identifiers, like source and config identities, must
+name real entities rather than fallback or unavailable sentinels.
+Pass `repo_root` to `load_intervention_spec` for local provenance verification.
+In that mode, `provenance.contract_identity.base_commit` is the semantic
+authority for every repository-relative source/config path: each path must be
+a tracked regular-file blob at that exact commit, and the current checkout
+bytes must match the historical blob and the declared SHA-256. Missing paths,
+trees, symlinks, submodules, and current-byte drift fail closed with a
+field-specific validation error. A current file's SHA-256 alone cannot make an
+untracked or historically different path admissible. When `repo_root` is
+omitted, the commit remains opaque metadata for an external durable source;
+the validator still requires explicit paths and lowercase digests but does not
+claim local historical-byte verification.
+The local Git probes ignore inherited repository and alternate-object settings,
+disable replacement refs, and bind all tree/blob reads to the checkout's own
+Git directories. Every lexical path component is checked for symlinks before
+the file is resolved. Factor and no-op comparisons use numeric JSON equality,
+so `1` and `1.0` (or `-0.0` and `0.0`) are equal while nonnumeric JSON types
+remain distinct. Ordinary decimal floats remain plain floats after loading; an
+integral decimal float that would lose precision is normalized to an exact
+bounded integer, and a lossy normalization that would invalidate the factor or
+negative-control contract fails during loading.
+
+This API validates and normalizes a specification only. It does not replay,
+execute paired runs, verify an intervention, or support a causal, benchmark,
+paper, safety, or mechanism-confidence claim. Stage 2 must add its own
+execution and compatibility receipts before any result can be interpreted.
+
 ## Issue #6814 compact closeout
 
 The strict #6814 re-export can additionally write a frame-free compact projection for issue

@@ -417,6 +417,9 @@ _FAST_FILES = {
     # provenance, and persistence contracts for BA-03 (issue #9484).
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
+    # Benchmark Auditor queue tests are deterministic policy, control-stream,
+    # provenance, and save/resume contracts for BA-02 (issue #9486).
+    "test_audit_queue.py",
     "test_audit_store.py",
     "test_audit_store_cli.py",
     # BA-01 campaign accounting and detector-family tests are deterministic
@@ -482,6 +485,9 @@ _FAST_FILES = {
     # Offline synchronized review-panel contract and runtime-model tests are
     # deterministic coverage for the SREV-16 renderer component.
     "test_review_panels.py",
+    # Offline recorded planner/pedestrian diagnostic contracts are deterministic
+    # SREV-18 coverage for the diagnostics renderer component (issue #9288).
+    "test_review_diagnostics.py",
     # Offline review-editor annotation, source-binding, and persistence tests
     # are deterministic coverage for SREV-17 (issue #9287).
     "test_review_editor.py",

@@ -1,0 +1,6 @@
+{
+  "cursor_time_s": 0.0,
+  "actor_id": "ped-1",
+  "context_revision": 4,
+  "panels": {"planner": true, "controls": true, "pedestrians": true, "failure_diagnosis": true}
+}

@@ -135,6 +135,18 @@ terminal-label mapping and `SHA256SUMS` covers the generated payload. The v2
 package remains `not_admitted`; a maintainer-owned
 `ch7-evidence-admission.v2` receipt is required before paper-facing use.
 
+### Post-ruling refresh (#7412)
+
+The additive package [`issue_7322_ch7_evidence_package_v2_1`](context/evidence/issue_7322_ch7_evidence_package_v2_1/)
+keeps the original v2 package byte-identical as a historical baseline and updates only the wording
+of the exclusion boundary: collision-related metrics and SNQI are explicitly excluded by the frozen
+ruling in Issue #7042. It contains the same 28-cell projection and remains `not_admitted`; the v2.1 config
+and deterministic build command are recorded in the [custody note](context/evidence/issue_7322_ch7_custody_note.md).
+
+The v2.1 check-only diagnostic removes the superseded #7042 metric-semantics blocker but retains
+the domain-approval and external-admission gates. This is a provenance/documentation refresh, not
+an empirical result, admission receipt, benchmark claim, or paper-facing result.
+
 ### Outcome-free admission diagnostic
 
 Before domain review and durable source retrieval are available, validate a

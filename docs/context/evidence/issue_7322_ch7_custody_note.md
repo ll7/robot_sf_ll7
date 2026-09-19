@@ -8,6 +8,36 @@ The generated manifest retains its internal status `blocked_pending_domain_appro
 status `not_admitted`; the package is durable and ready for the maintainer-owned admission review
 once the recorded blockers are resolved.
 
+## Frozen-ruling refresh (#7412)
+
+The additive v2.1 package preserves the original v2 directory and records the frozen #7042 ruling
+as the exclusion boundary. The old package remains an immutable historical baseline; its bytes and
+hashes are not rewritten.
+
+- Current refresh: [`issue_7322_ch7_evidence_package_v2_1/`](issue_7322_ch7_evidence_package_v2_1/)
+- v2.1 package key: `issue-7322/ch7-evidence-package-v2.1`
+- v2.1 manifest SHA-256: `edc4f9a75bb4b7805d154a41896eb8450d60fa0062ef8096bc996166687f0919`
+- v2.1 `SHA256SUMS` SHA-256: `7d4af25a64ac6859945f09fd92d04bb669542fc76d2c9b63411b12d10063bcc9`
+- Source-registry key: `issue-6792/source-registry-v1`; canonical path: `configs/analysis/source_gate_registry.v1.json`; SHA-256: `ebff0f47aeefd5e423c968f9c63f44961a7338765898874bb53b3a623e05944a`
+- Status: `blocked_pending_domain_approval` / `not_admitted`; the external admission receipt
+  remains required.
+- Exclusion boundary: collision-related metrics and SNQI remain explicitly excluded by the frozen
+  ruling in Issue #7042; no collision or SNQI field is added to the 28-cell projection.
+
+Canonical refresh command:
+
+```bash
+uv run python scripts/analysis/build_ch7_evidence_package_v2.py \
+  --source-package docs/context/evidence/issue_6792_ch7_evidence_package_v1 \
+  --config configs/analysis/ch7_evidence_package.v2.1.yaml \
+  --output docs/context/evidence/issue_7322_ch7_evidence_package_v2_1 \
+  --check-determinism
+```
+
+The v2.1 check-only diagnostic has `receipt_created=false`, `admission_status=not_admitted`, and
+retains only the domain-approval and external-receipt blockers. It is a provenance refresh, not an
+admission receipt, benchmark result, or paper-facing claim.
+
 ## Durable retrieval
 
 - Package: [`issue_7322_ch7_evidence_package_v2/`](issue_7322_ch7_evidence_package_v2/)

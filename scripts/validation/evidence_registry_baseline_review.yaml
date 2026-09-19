@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 8566
-latest_reviewed_date: 2026-09-10
+latest_reconciliation_issue: 7412
+latest_reviewed_date: 2026-09-13
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 436
-refreshed_baseline_files_with_findings: 97
+refreshed_baseline_total_findings: 438
+refreshed_baseline_files_with_findings: 99
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -111,6 +111,11 @@ decision_summary: >-
   heuristic; both findings are explicitly dispositioned below and the refreshed baseline grows
   from 419 findings across 91 files to 421 findings across 93 files. The package remains
   blocked_pending_domain_approval / not_admitted and is not paper-facing evidence.
+  Package v2.1 addendum (issue #7412): the additive collision-excluded projection preserves the
+  immutable v2 package and records the frozen #7042 exclusion wording. Its two config-style hashes
+  in the v2.1 manifest and source-verification view are explicitly baselined below because the
+  generic linter does not bind configs/... paths. The v2.1 package remains diagnostic-only and
+  not_admitted; these two findings are provenance bookkeeping, not benchmark evidence.
   Mechanism-atlas addendum (issue #7046): the repaired #7032 atlas replaces free-form identity
   strings with structured path, full-commit, and digest records. The generic evidence linter
   intentionally does not treat `configs/...` paths as artifact bindings, and the diagnostic
@@ -309,6 +314,21 @@ reviewed_files:
       artifact resolution. The source package and its member hashes are independently verified by
       the v2 builder and the custody note; retain the exact generated view and baseline this
       reviewed non-claim finding rather than mutating the package schema.
+  - path: docs/context/evidence/issue_7322_ch7_evidence_package_v2_1/manifest.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      The v2.1 manifest records exact config and source-registry digests for the checked-in custody
+      identity. The generic linter intentionally excludes configs/... paths from artifact resolution;
+      the builder and verifier independently validate the registry path, digest, package revision,
+      claim boundary, and frozen #7042 exclusion. This remains diagnostic-only provenance debt.
+  - path: docs/context/evidence/issue_7322_ch7_evidence_package_v2_1/review/source_verification.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      The v2.1 source-verification view repeats the exact custody/source-registry digest for
+      human-readable provenance. The generic linter cannot bind the config-style identity path;
+      independent v2.1 checks verify it without promoting admission or benchmark evidence.
   # Added 2026-08-05: these S10 metadata-only preflight packets were newly added to the baseline
   # by #6776 and therefore belong under reviewed_files, not reviewed_baseline_increases.
   - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json

@@ -27,13 +27,15 @@ Supported SVG Elements and Labels:
 
 Geometry contracts (issue #8314):
     - 'legacy' (default): ancestor SVG transforms are ignored, reproducing the
-      historical as-run coordinates exactly.
+      historical transform-ignoring geometry and simulation inputs.
     - 'corrected': nested ancestor ``translate(...)`` transforms are applied to
       parsed paths, rectangles, and circles. Any other transform class
-      (scale, rotate, skew, matrix) or malformed transform fails closed with
+      (scale, rotate, skew, matrix), malformed transform, or non-finite result
+      from translation accumulation or coordinate shifting fails closed with
       ``ValueError`` instead of being silently ignored.
     The active contract is recorded on ``MapDefinition.svg_geometry_contract``
-    so legacy and corrected rows cannot be pooled accidentally.
+    so downstream consumers can partition legacy and corrected rows before
+    comparing or pooling them.
 
 Typical Usage:
     # Load a single SVG map
@@ -158,17 +160,19 @@ class SvgMapConverter:
 
         Args:
             svg_file: Path to the SVG file to parse.
-            geometry_contract: ``"legacy"`` reproduces the historical
-                transform-ignoring coordinates exactly. ``"corrected"`` applies
+            geometry_contract: ``"legacy"`` preserves the historical
+                transform-ignoring geometry. ``"corrected"`` applies
                 nested ancestor ``translate(...)`` transforms and fails closed
-                on any other transform class (issue #8314).
+                on unsupported/malformed transforms or non-finite accumulated
+                and shifted coordinates (issue #8314).
 
         Raises:
             FileNotFoundError: If svg_file does not exist.
             xml.etree.ElementTree.ParseError: If SVG file has invalid XML syntax.
             ValueError: If map validation fails (e.g., no robot routes defined),
                 the geometry contract is unknown, or (corrected contract) an
-                unsupported or malformed transform is encountered.
+                unsupported/malformed transform or non-finite coordinate result
+                is encountered.
         """
         if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
             raise ValueError(
@@ -233,6 +237,34 @@ class SvgMapConverter:
         return x, y
 
     @staticmethod
+    def _add_finite_coordinate(left: float, right: float, *, description: str) -> float:
+        """Add corrected SVG coordinate terms and reject non-finite results.
+
+        Returns:
+            float: Finite sum of the two coordinate terms.
+        """
+        result = left + right
+        if not isfinite(result):
+            raise ValueError(
+                f"non-finite corrected SVG coordinate while {description}: {left!r} + {right!r}."
+            )
+        return result
+
+    @staticmethod
+    def _subtract_finite_coordinate(value: float, offset: float, *, description: str) -> float:
+        """Subtract a corrected SVG viewBox offset and reject non-finite results.
+
+        Returns:
+            float: Finite coordinate after subtracting the viewBox offset.
+        """
+        result = value - offset
+        if not isfinite(result):
+            raise ValueError(
+                f"non-finite corrected SVG coordinate while {description}: {value!r} - {offset!r}."
+            )
+        return result
+
+    @staticmethod
     def _advance_transform_cursor(transform_value: str, cursor: int, *, source: str) -> int:
         """Consume one valid separator between transform functions.
 
@@ -275,7 +307,8 @@ class SvgMapConverter:
 
         Raises:
             ValueError: If the attribute contains anything other than
-                ``translate(...)`` functions, or a malformed translate list.
+                ``translate(...)`` functions, a malformed translate list, or a
+                non-finite accumulated translation.
         """
         if not transform_value or not transform_value.strip():
             return (0.0, 0.0)
@@ -304,8 +337,16 @@ class SvgMapConverter:
                     "only translate(...) is supported under the corrected geometry contract."
                 )
             own_dx, own_dy = SvgMapConverter._parse_translate_arguments(match, source=source)
-            dx += own_dx
-            dy += own_dy
+            dx = SvgMapConverter._add_finite_coordinate(
+                dx,
+                own_dx,
+                description=f"accumulating x translation on {source}",
+            )
+            dy = SvgMapConverter._add_finite_coordinate(
+                dy,
+                own_dy,
+                description=f"accumulating y translation on {source}",
+            )
             cursor = SvgMapConverter._advance_transform_cursor(
                 transform_value, match.end(), source=source
             )
@@ -332,7 +373,8 @@ class SvgMapConverter:
 
         Raises:
             ValueError: If any element on a parsed path carries an unsupported
-                or malformed transform.
+                or malformed transform, or if ancestor translation accumulation
+                becomes non-finite.
         """
 
         def _describe(element: ET.Element) -> str:
@@ -351,11 +393,20 @@ class SvgMapConverter:
         stack: list[tuple[ET.Element, float, float]] = [(self.svg_root, 0.0, 0.0)]
         while stack:
             element, parent_dx, parent_dy = stack.pop()
+            source = _describe(element)
             own_dx, own_dy = self._parse_translate_offset(
-                element.attrib.get("transform"), source=_describe(element)
+                element.attrib.get("transform"), source=source
             )
-            dx = parent_dx + own_dx
-            dy = parent_dy + own_dy
+            dx = self._add_finite_coordinate(
+                parent_dx,
+                own_dx,
+                description=f"accumulating ancestor x translation on {source}",
+            )
+            dy = self._add_finite_coordinate(
+                parent_dy,
+                own_dy,
+                description=f"accumulating ancestor y translation on {source}",
+            )
             if element.tag == f"{{{_SVG_NAMESPACE}}}path":
                 paths.append((element, dx, dy))
             elif element.tag == f"{{{_SVG_NAMESPACE}}}rect":
@@ -373,12 +424,26 @@ class SvgMapConverter:
         """Shift parsed absolute waypoints by an ancestor translation.
 
         Returns:
-            tuple[tuple[float, float], ...]: Shifted waypoints, or the input
-                unchanged for a near-zero translation.
+            tuple[tuple[float, float], ...]: Shifted waypoints.
+
+        Raises:
+            ValueError: If any shifted coordinate is non-finite.
         """
-        if abs(dx) < 1e-12 and abs(dy) < 1e-12:
-            return coordinates
-        return tuple((x + dx, y + dy) for x, y in coordinates)
+        return tuple(
+            (
+                SvgMapConverter._add_finite_coordinate(
+                    x,
+                    dx,
+                    description="shifting path x coordinate",
+                ),
+                SvgMapConverter._add_finite_coordinate(
+                    y,
+                    dy,
+                    description="shifting path y coordinate",
+                ),
+            )
+            for x, y in coordinates
+        )
 
     @staticmethod
     def _append_point(points: list[tuple[float, float]], point: tuple[float, float]) -> None:
@@ -1029,8 +1094,8 @@ class SvgMapConverter:
 
         Walks the SVG tree depth-first (document order), accumulates nested
         translations per element, and shifts parsed coordinates. Any unsupported
-        or malformed transform fails closed in
-        :meth:`_parse_translate_offset` instead of being silently ignored.
+        or malformed transform, or a non-finite accumulated/shifted coordinate,
+        fails closed instead of being silently ignored.
         """
         paths, rects, circles = self._iter_elements_with_offsets()
         logger.debug(
@@ -1049,15 +1114,31 @@ class SvgMapConverter:
         rect_info: list[SvgRectangle] = []
         for rect, dx, dy in rects:
             parsed_rect = self._parse_rect_element(rect)
-            parsed_rect.x += dx
-            parsed_rect.y += dy
+            parsed_rect.x = self._add_finite_coordinate(
+                parsed_rect.x,
+                dx,
+                description="shifting rectangle x coordinate",
+            )
+            parsed_rect.y = self._add_finite_coordinate(
+                parsed_rect.y,
+                dy,
+                description="shifting rectangle y coordinate",
+            )
             rect_info.append(parsed_rect)
         circle_info: list[SvgCircle] = []
         for circle, dx, dy in circles:
             parsed_circle = self._parse_circle_element(circle)
             if parsed_circle is not None:
-                parsed_circle.cx += dx
-                parsed_circle.cy += dy
+                parsed_circle.cx = self._add_finite_coordinate(
+                    parsed_circle.cx,
+                    dx,
+                    description="shifting circle x coordinate",
+                )
+                parsed_circle.cy = self._add_finite_coordinate(
+                    parsed_circle.cy,
+                    dy,
+                    description="shifting circle y coordinate",
+                )
                 circle_info.append(parsed_circle)
 
         logger.debug("Parsed {} paths in the SVG file", len(path_info))
@@ -1070,6 +1151,49 @@ class SvgMapConverter:
     def _apply_viewbox_offset(self, offset_x: float, offset_y: float) -> None:
         """Shift all parsed SVG elements by the viewBox origin to normalize to (0,0)."""
         if abs(offset_x) < 1e-9 and abs(offset_y) < 1e-9:
+            return
+
+        if self.geometry_contract == GEOMETRY_CONTRACT_CORRECTED:
+            for path in self.path_info:
+                path.coordinates = tuple(
+                    (
+                        self._subtract_finite_coordinate(
+                            x,
+                            offset_x,
+                            description="normalizing path x coordinate by viewBox",
+                        ),
+                        self._subtract_finite_coordinate(
+                            y,
+                            offset_y,
+                            description="normalizing path y coordinate by viewBox",
+                        ),
+                    )
+                    for x, y in path.coordinates
+                )
+
+            for rect in self.rect_info:
+                rect.x = self._subtract_finite_coordinate(
+                    rect.x,
+                    offset_x,
+                    description="normalizing rectangle x coordinate by viewBox",
+                )
+                rect.y = self._subtract_finite_coordinate(
+                    rect.y,
+                    offset_y,
+                    description="normalizing rectangle y coordinate by viewBox",
+                )
+
+            for circle in self.circle_info:
+                circle.cx = self._subtract_finite_coordinate(
+                    circle.cx,
+                    offset_x,
+                    description="normalizing circle x coordinate by viewBox",
+                )
+                circle.cy = self._subtract_finite_coordinate(
+                    circle.cy,
+                    offset_y,
+                    description="normalizing circle y coordinate by viewBox",
+                )
             return
 
         offset = np.array([offset_x, offset_y])
@@ -1944,10 +2068,11 @@ def convert_map(
 
     Args:
         svg_file: Path to the SVG file to convert.
-        geometry_contract: ``"legacy"`` reproduces the historical
-            transform-ignoring coordinates exactly. ``"corrected"`` applies
+        geometry_contract: ``"legacy"`` preserves the historical
+            transform-ignoring geometry. ``"corrected"`` applies
             nested ancestor ``translate(...)`` transforms and fails closed on
-            any other transform class (issue #8314).
+            unsupported/malformed transforms or non-finite accumulated and
+            shifted coordinates (issue #8314).
 
     Returns:
         MapDefinition object on successful conversion, or None if parsing fails
@@ -1956,7 +2081,8 @@ def convert_map(
     Raises:
         ValueError: If map validation fails (e.g., no robot routes defined),
             the geometry contract is unknown, or (corrected contract) an
-            unsupported or malformed transform is encountered.
+            unsupported/malformed transform or non-finite coordinate result is
+            encountered.
 
     Example:
         >>> map_def = convert_map("maps/svg_maps/hallway.svg")

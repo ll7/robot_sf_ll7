@@ -711,11 +711,14 @@ class MapDefinition:
     """
 
     svg_geometry_contract: str = GEOMETRY_CONTRACT_LEGACY
-    """SVG geometry contract that produced this map (issue #8314).
+    """Geometry contract label associated with this map (issue #8314).
 
-    ``"legacy"`` reproduces the historical transform-ignoring coordinates;
-    ``"corrected"`` applies nested ancestor ``translate(...)`` transforms.
-    Rows from different contracts must never be pooled as comparable evidence.
+    SVG maps use ``"legacy"`` for historical transform-ignoring geometry and
+    ``"corrected"`` for nested ancestor ``translate(...)`` transforms. Legacy
+    JSON/YAML map formats also use ``"legacy"`` because they have no SVG
+    transform contract. The label keeps executions distinguishable; downstream
+    consumers must partition or explicitly establish compatibility before
+    pooling rows from different contracts as comparable evidence.
     """
 
     goal_completion_policy: str = GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1

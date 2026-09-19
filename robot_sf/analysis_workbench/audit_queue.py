@@ -35,11 +35,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-try:  # ``fcntl`` is the fail-closed POSIX lock owner for queue state files.
-    import fcntl
-except ImportError:  # pragma: no cover - the supported runner is POSIX.
-    fcntl = None
-
 from robot_sf.analysis_workbench.audit_contracts import (
     ActionRecord,
     AuditContractError,
@@ -63,16 +58,18 @@ from robot_sf.analysis_workbench.event_alignment import (
     PAIR_COMPATIBILITY_PROFILE_VERSION,
     unavailable_pair_compatibility,
 )
+from robot_sf.common.optional_import import try_import
 
 if TYPE_CHECKING:
     from robot_sf.analysis_workbench.audit_store import AuditStore
 
-try:  # The import is deliberately optional: the queue has no portfolio dependency at runtime.
-    from robot_sf.benchmark.case_portfolio import GRAINS as CASE_PORTFOLIO_GRAINS
-except ImportError:  # pragma: no cover - minimal installations may omit benchmark extras.
-    CASE_PORTFOLIO_GRAINS = frozenset(
-        {"episode", "matched_planner_pair", "matched_seed_pair", "cell", "cross_cell"}
-    )
+fcntl = try_import("fcntl")  # Fail-closed state locks require the Unix standard-library module.
+_case_portfolio = try_import("robot_sf.benchmark.case_portfolio")
+CASE_PORTFOLIO_GRAINS = (
+    _case_portfolio.GRAINS
+    if _case_portfolio is not None
+    else frozenset({"episode", "matched_planner_pair", "matched_seed_pair", "cell", "cross_cell"})
+)
 
 
 QUEUE_SCHEMA_VERSION = "audit-queue.v1"
@@ -2716,7 +2713,8 @@ class AuditQueue:
         return packet_id
 
     def _load_state_from_disk(self) -> None:
-        assert self.state_path is not None
+        if self.state_path is None:
+            raise QueueStateError("queue state path is unavailable")
         with _state_lock(self.state_path):
             if self.state_path.is_symlink():
                 raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
@@ -3723,7 +3721,8 @@ class AuditQueue:
             raise QueueStateError(f"cannot compare queue state {path}: {exc}") from exc
 
     def _check_state_revision_locked(self, expected: int) -> None:
-        assert self.state_path is not None
+        if self.state_path is None:
+            raise QueueStateError("queue state path is unavailable")
         path = self.state_path
         if path.is_symlink():
             raise QueueStateError(f"queue state path must not be a symlink: {path}")
@@ -3737,7 +3736,8 @@ class AuditQueue:
             raise QueueConflictError(f"queue state does not exist at expected revision {expected}")
 
     def _persist_state_locked(self, expected: int) -> None:
-        assert self.state_path is not None
+        if self.state_path is None:
+            raise QueueStateError("queue state path is unavailable")
         self._check_state_revision_locked(expected)
         self._atomic_json_replace(self.state_path, self.state.to_dict(), name="queue state")
         self._persisted_revision = self.state.state_revision
@@ -3797,7 +3797,8 @@ class AuditQueue:
     ) -> None:
         if self.state_path is None or self.store is None or not records:
             return
-        assert self._pending_path is not None
+        if self._pending_path is None:
+            raise QueueStateError("queue pending mutation path is unavailable")
         expected = self._persisted_revision if expected_revision is None else expected_revision
         body = {
             "schema_version": QUEUE_PENDING_SCHEMA_VERSION,
@@ -3830,7 +3831,8 @@ class AuditQueue:
     def _finish_mutation(self, expected_revision: int | None) -> None:
         if self.state_path is None:
             return
-        assert expected_revision is not None
+        if expected_revision is None:
+            raise QueueStateError("expected queue state revision is unavailable")
         self._persist_state(expected_revision=expected_revision, _lock_held=True)
         self._clear_pending_locked()
 
@@ -3944,7 +3946,8 @@ class AuditQueue:
         )
 
     def _recover_pending_without_state(self) -> None:
-        assert self.state_path is not None and self._pending_path is not None
+        if self.state_path is None or self._pending_path is None:
+            raise QueueStateError("queue state or pending mutation path is unavailable")
         with _state_lock(self.state_path):
             if self._pending_path.is_symlink():
                 raise QueueStateError(

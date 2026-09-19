@@ -659,10 +659,11 @@ class CoverageDeficit:
         _count(self.target, name="deficit.target")
         _count(self.denominator, name="deficit.denominator")
         dimensions = {str(key): _token(value) for key, value in self.dimensions.items()}
+        _strict_json(dimensions, path="deficit.dimensions")
         evidence_ids = tuple(
             _text(item, name="deficit.evidence_ids[]") for item in self.evidence_ids
         )
-        object.__setattr__(self, "dimensions", dimensions)
+        object.__setattr__(self, "dimensions", _freeze_json(dimensions))
         object.__setattr__(self, "evidence_ids", evidence_ids)
 
     def to_dict(self) -> dict[str, Any]:
@@ -679,7 +680,7 @@ class CoverageDeficit:
             "status": self.status,
             "source_id": self.source_id,
             "protocol_id": self.protocol_id,
-            "dimensions": dict(self.dimensions),
+            "dimensions": _thaw_json(self.dimensions),
             "denominator": self.denominator,
             "campaign_id": self.campaign_id,
             "campaign_digest": self.campaign_digest,
@@ -2483,6 +2484,82 @@ def _validate_exception_links(
         raise AuditCoverageError("each waived deficit requires one declared exception")
 
 
+def _validate_report_accounting(payload: Mapping[str, Any], protocol: AuditProtocol) -> None:  # noqa: C901, PLR0912
+    """Validate inventory, stratum, and review numerator/denominator equations."""
+
+    counts = payload["counts"]
+    coverage = counts["coverage"]
+    expected_components = sum(
+        coverage[key] for key in ("readable", "missing", "duplicate", "invalid", "unsupported")
+    )
+    indexed_components = sum(
+        coverage[key] for key in ("readable", "duplicate", "invalid", "unsupported")
+    )
+    if coverage["expected"] != expected_components:
+        raise AuditCoverageError("inventory expected count is inconsistent with row statuses")
+    if coverage["indexed"] != indexed_components:
+        raise AuditCoverageError("inventory indexed count is inconsistent with row statuses")
+    if coverage["expected"] != coverage["indexed"] + coverage["missing"]:
+        raise AuditCoverageError("inventory expected/indexed/missing equation is inconsistent")
+
+    strata = payload["strata"]
+    review_counts = counts["reviews"]
+    if review_counts["observed_strata"] != len(strata):
+        raise AuditCoverageError("review observed_strata does not match strata")
+    if review_counts["full_human_strata"] != sum(item["status"] == "met" for item in strata):
+        raise AuditCoverageError("review full_human_strata does not match strata")
+    if sum(item["denominator"] for item in strata) != coverage["readable"]:
+        raise AuditCoverageError("stratum denominators do not partition readable rows")
+
+    full_human_ids = review_counts["full_human_ids"]
+    human_ids = review_counts["human_ids"]
+    if len(full_human_ids) != len(set(full_human_ids)):
+        raise AuditCoverageError("full_human_ids contains duplicates")
+    if len(human_ids) != len(set(human_ids)):
+        raise AuditCoverageError("human_ids contains duplicates")
+    if review_counts["full_episode_human"] != len(full_human_ids):
+        raise AuditCoverageError("full_episode_human does not match full_human_ids")
+    if not set(full_human_ids).issubset(human_ids):
+        raise AuditCoverageError("full_human_ids must be a subset of human_ids")
+
+    stratum_ids: set[str] = set()
+    reviewed_ids: list[str] = []
+    for stratum in strata:
+        expected_id = _stratum_id(
+            {
+                "planner_id": stratum["planner_id"],
+                "scenario_group": stratum["scenario_group"],
+                "outcome": stratum["outcome"],
+            }
+        )
+        if stratum["stratum_id"] != expected_id:
+            raise AuditCoverageError("stratum_id does not match stratum dimensions")
+        if stratum["stratum_id"] in stratum_ids:
+            raise AuditCoverageError("strata contain duplicate stratum_id values")
+        stratum_ids.add(stratum["stratum_id"])
+        if stratum["denominator"] <= 0:
+            raise AuditCoverageError("observed strata require a positive denominator")
+        reviewed = stratum["reviewed_episode_ids"]
+        if len(reviewed) != len(set(reviewed)):
+            raise AuditCoverageError("stratum reviewed_episode_ids contains duplicates")
+        if stratum["full_human_reviewed"] != len(reviewed):
+            raise AuditCoverageError("stratum review numerator does not match reviewed IDs")
+        if not 0 <= stratum["full_human_reviewed"] <= stratum["denominator"]:
+            raise AuditCoverageError("stratum review numerator exceeds its denominator")
+        if stratum["target"] != protocol.full_human_review_target:
+            raise AuditCoverageError("stratum review target does not match protocol")
+        expected_status = (
+            "met" if stratum["full_human_reviewed"] >= stratum["target"] else "under_review"
+        )
+        if stratum["status"] != expected_status:
+            raise AuditCoverageError("stratum status does not match review numerator and target")
+        reviewed_ids.extend(reviewed)
+    if len(reviewed_ids) != len(set(reviewed_ids)):
+        raise AuditCoverageError("reviewed episode IDs occur in multiple strata")
+    if set(reviewed_ids) != set(full_human_ids):
+        raise AuditCoverageError("strata reviewed IDs do not match full_human_ids")
+
+
 def _validate_complete_matrix(  # noqa: C901, PLR0912
     payload: Mapping[str, Any], protocol: AuditProtocol, *, allow_exceptions: bool
 ) -> None:
@@ -2687,6 +2764,7 @@ def _validate_report_semantics(  # noqa: C901, PLR0912, PLR0915
         raise AuditCoverageError("review observed_strata does not match strata")
     if review_counts["full_human_strata"] != sum(item["status"] == "met" for item in strata):
         raise AuditCoverageError("review full_human_strata does not match strata")
+    _validate_report_accounting(payload, protocol)
 
     detectors = counts["detectors"]
     by_detector = detectors["by_detector"]

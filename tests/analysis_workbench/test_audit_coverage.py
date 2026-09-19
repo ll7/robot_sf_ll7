@@ -672,6 +672,36 @@ def test_recomputed_complete_report_cannot_hide_unmet_strata_or_controls() -> No
         incomplete.from_dict(payload)
 
 
+def test_recomputed_complete_report_rejects_impossible_accounting_equations() -> None:
+    rows, attempts, reviews = _complete_inputs()
+    complete = evaluate_coverage(
+        rows,
+        detector_attempts=attempts,
+        detector_registry=_registry(),
+        review_records=reviews,
+        identity=_identity(),
+    )
+    mutators = (
+        lambda item: item["strata"][0].update({"denominator": 0}),
+        lambda item: item["strata"][0].update({"full_human_reviewed": 2}),
+        lambda item: item["strata"][0].update(
+            {"full_human_reviewed": 1, "reviewed_episode_ids": []}
+        ),
+        lambda item: (
+            item["counts"]["coverage"].update({"indexed": 999, "readable": 0}),
+            item["counts"]["inventory"].update({"indexed": 999, "readable": 0}),
+        ),
+    )
+    for mutate in mutators:
+        payload = complete.to_dict()
+        mutate(payload)
+        candidate = _redigest(payload)
+        with pytest.raises(AuditCoverageError):
+            validate_audit_coverage(candidate)
+        with pytest.raises(AuditCoverageError):
+            complete.from_dict(candidate)
+
+
 def test_exceptions_must_be_nonempty_and_match_one_waived_deficit() -> None:
     rows, attempts, reviews = _complete_inputs()
     complete = evaluate_coverage(
@@ -773,6 +803,23 @@ def test_report_exports_do_not_alias_nested_state_or_stale_digest() -> None:
         }
     )
     exported["protocol"]["metadata"]["forged"] = True
+    assert report.to_json() == before
+    validate_audit_coverage(report.to_dict())
+
+
+def test_deficit_dimensions_are_frozen_and_exported_without_aliases() -> None:
+    report = evaluate_coverage(
+        [{"episode_id": "e", "planner_id": "p", "scenario_group": "g"}],
+        detector_attempts=[{"episode_id": "e", "detector_id": "d", "status": "clear"}],
+        detector_registry=_registry("d"),
+        identity=_identity(),
+    )
+    deficit = report.deficits[0]
+    before = report.to_json()
+    with pytest.raises(TypeError):
+        deficit.dimensions["forged"] = "x"
+    exported = deficit.to_dict()
+    exported["dimensions"]["forged"] = "x"
     assert report.to_json() == before
     validate_audit_coverage(report.to_dict())
 

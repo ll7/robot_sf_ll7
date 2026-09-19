@@ -73,9 +73,10 @@ failure/unavailable rather than adopted as current progress.
 
 The optional `session_context` request mapping carries the selected
 `campaign_id`, `episode_id`, `source_revision`, `selection_revision`, and
-`context_revision`. Its digest is bound into the delegated session ID and is
-also included in the browser view/control envelope, so changing selected
-context cannot reuse another session's durable results.
+`context_revision`. The delegated session ID also binds the canonical request
+and recipe digests, and those digests are included in the browser
+view/control envelope. Changing selected context, source identity, or recipe
+cannot therefore reuse another session's durable results.
 
 Complete output contains the delegated
 `experiment-loop-report.v1`/`experiment-loop-session.v1` artifacts plus
@@ -107,11 +108,16 @@ handler = make_control_handler(
 
 The origin may be `localhost`, `127.0.0.1`, or `::1` over HTTP(S), with no
 path/query/fragment or embedded credentials. Tokens are compared in constant
-time and controls carry the bound session ID/context revision. Remote origins,
+time and controls carry the bound session ID, context revision, request digest,
+and recipe digest. Remote origins,
 missing tokens, mismatched origins, stale context, unknown actions, and
 read-only controls fail closed. Standalone CLI `--stop` additionally requires
 the request to carry the session-owned `origin` and `session_token`; a
-non-empty command-line token alone is never sufficient.
+non-empty command-line token alone is never sufficient. When
+`--admission-config` is omitted, the CLI may recover the persisted native
+launcher fields only as input to SREV-24's fresh receipt/root/preservation
+validation. Injected or incomplete sessions fail closed rather than treating
+their durable proof as native admission.
 
 ## Evidence and preservation boundary
 

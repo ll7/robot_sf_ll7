@@ -29,6 +29,7 @@ import os
 import platform
 import secrets
 import sys
+import tempfile
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -154,6 +155,8 @@ class SessionControl:
     payload: Mapping[str, Any] | None = None
     session_id: str = ""
     context_revision: str = ""
+    request_digest: str = ""
+    recipe_digest: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,6 +167,8 @@ class SessionControl:
             "payload": dict(self.payload or {}),
             "session_id": self.session_id,
             "context_revision": self.context_revision,
+            "request_digest": self.request_digest,
+            "recipe_digest": self.recipe_digest,
         }
 
 
@@ -437,6 +442,15 @@ def _loop_request(
             "session_token": configured_token,
         }
     if binding:
+        # Wrapper-bound sessions must rotate when either the source/request
+        # identity or the canonical recipe changes.  The wrapper context is
+        # intentionally not a substitute for SREV-24's immutable identities.
+        child_identity = replace(request, component_id=loop.COMPONENT_ID)
+        binding["request_digest"] = loop._canonical_digest(loop._request_identity(child_identity))
+        recipe = config.get("recipe")
+        if isinstance(recipe, Mapping):
+            binding["recipe_digest"] = loop.experiment_recipe_canonical_digest(recipe)
+    if binding:
         session_prefix = str(config.get("session_id") or request.request_id)
         binding_digest = _canonical_digest(binding)[:16]
         config["session_id"] = f"{session_prefix}:{binding_digest}"
@@ -612,12 +626,40 @@ def _output_state(base: Path, request: ComponentRequest) -> dict[str, Any]:
     if not output.exists():
         return {"status": "available", "collision": False, "path": request.output_directory}
     journal = output / JOURNAL_FILENAME
+    if journal.is_symlink():
+        return {
+            "status": "invalid",
+            "collision": False,
+            "path": request.output_directory,
+            "journal": True,
+            "reason": "output_integrity: canonical journal must not be a symlink",
+        }
+    report = output / REPORT_FILENAME
+    if report.is_symlink():
+        return {
+            "status": "invalid",
+            "collision": False,
+            "path": request.output_directory,
+            "journal": journal.is_file(),
+            "reason": "output_integrity: canonical report must not be a symlink",
+        }
     return {
         "status": "resume_available" if journal.is_file() else "collision",
         "collision": not journal.is_file(),
         "path": request.output_directory,
         "journal": journal.is_file(),
     }
+
+
+def _regular_output_file(output: Path, filename: str) -> Path:
+    """Return one contained regular output file without following symlinks."""
+
+    path = output / filename
+    if path.is_symlink():
+        raise ReviewSessionError(f"output_integrity: canonical {filename} must not be a symlink")
+    if not path.is_file():
+        raise ReviewSessionError(f"output_integrity: canonical {filename} is missing")
+    return path
 
 
 def _safe_source_relative(uri: Any) -> Path | None:
@@ -724,7 +766,80 @@ def _contains_true_claim(value: Any) -> bool:
     return False
 
 
-def _journal_integrity_error(
+def _source_admission_integrity_error(
+    source_admission: Mapping[str, Any],
+    *,
+    expected_request_digest: str,
+    expected_recipe_digest: str,
+) -> str | None:
+    """Validate the nested proof fields that a read-only caller can observe."""
+
+    if "status" in source_admission and source_admission.get("status") != "admitted":
+        return "journal_source_admission_tampered: admission status is not admitted"
+    if source_admission.get("evidence_boundary") != EVIDENCE_BOUNDARY:
+        return "journal_source_admission_tampered: evidence boundary mismatch"
+    if source_admission.get("scientific_claim_allowed") is not False:
+        return "journal_source_admission_tampered: scientific claims are forbidden"
+    if source_admission.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
+        return "journal_source_admission_tampered: dependent family status mismatch"
+    if (
+        "request_digest" in source_admission
+        and source_admission.get("request_digest") != expected_request_digest
+    ):
+        return "journal_source_admission_tampered: request digest mismatch"
+    if (
+        "recipe_digest" in source_admission
+        and source_admission.get("recipe_digest") != expected_recipe_digest
+    ):
+        return "journal_source_admission_tampered: recipe digest mismatch"
+    return None
+
+
+def _srev24_journal_semantic_error(
+    child: ComponentRequest,
+    validated: Any,
+    journal: Mapping[str, Any],
+) -> str | None:
+    """Run SREV-24's complete journal validator against an isolated copy.
+
+    SREV-28 must not instantiate an execution owner while serving a read.  The
+    canonical validator is therefore run on a temporary journal copy using a
+    deliberately uninitialised ``ExperimentLoop`` object.  Any normalization
+    or persistence performed by SREV-24 is confined to that temporary copy;
+    the requested output remains strictly read-only.
+    """
+
+    source_admission = journal.get("source_admission")
+    if not isinstance(source_admission, Mapping):
+        return "source admission is not an object"
+    try:
+        validator = object.__new__(loop.ExperimentLoop)
+        validator.request = child
+        validator.recipe = dict(validated.recipe)
+        validator.budget = validated.budget
+        validator.policy = validated.policy
+        validator.session_id = str(validated.session_id)
+        validator.source_admission = dict(source_admission)
+        validator.provenance = dict(journal.get("provenance", {}))
+        validator.candidates = loop._candidate_order(validator.recipe)
+        validator.supported_factors = set(loop._SUPPORTED_FACTORS)
+        validator.supported_measurements = set(loop._SUPPORTED_MEASUREMENTS)
+        validator.measurement = loop.ExperimentLoop._measurement(validator)
+        validator._answerability_document = loop._answerability_document(validated.answerability)
+        validator._elapsed_base = 0.0
+        validator._started_at = 0.0
+        with tempfile.TemporaryDirectory(prefix="srev28-journal-check-") as directory:
+            validator.journal_path = Path(directory) / JOURNAL_FILENAME
+            validator.journal_path.write_bytes(_json_bytes(journal))
+            loop.ExperimentLoop._load_journal(validator)
+    except loop.ExperimentLoopError as error:
+        return str(error)
+    except (AttributeError, KeyError, OSError, TypeError, ValueError, RecursionError) as error:
+        return f"canonical validator error: {error}"
+    return None
+
+
+def _journal_integrity_error(  # noqa: PLR0915
     base: Path, request: ComponentRequest, journal: Mapping[str, Any]
 ) -> str | None:
     """Validate the read-only journal boundary using SREV-24's identity rules."""
@@ -765,6 +880,15 @@ def _journal_integrity_error(
     source_admission = journal.get("source_admission")
     if not isinstance(source_admission, Mapping):
         return "journal_malformed: source admission is not an object"
+    if status == "running" and journal.get("stop_reason"):
+        return "journal_semantic_invalid: running journal has a terminal stop reason"
+    source_admission_error = _source_admission_integrity_error(
+        source_admission,
+        expected_request_digest=identity["request_digest"],
+        expected_recipe_digest=identity["recipe_digest"],
+    )
+    if source_admission_error is not None:
+        return source_admission_error
     source_error = _source_integrity_error(base, request, validated.recipe, source_admission)
     if source_error is not None:
         return source_error
@@ -800,8 +924,10 @@ def _journal_integrity_error(
         return "journal_malformed: elapsed_s is invalid"
     if not math.isfinite(float(elapsed)) or float(elapsed) < 0:
         return "journal_malformed: elapsed_s is invalid"
-    if journal["executions_consumed"] + journal["reserved_executions"] > budget["max_executions"]:
-        return "journal_malformed: execution accounting exceeds budget"
+    if journal["executions_consumed"] > budget["max_executions"]:
+        return "journal_malformed: consumed execution accounting exceeds budget"
+    if journal["reserved_executions"] > budget["max_executions"]:
+        return "journal_malformed: reserved execution accounting exceeds budget"
     candidate_catalog = journal.get("candidate_catalog")
     expected_catalog = [
         {
@@ -859,6 +985,9 @@ def _journal_integrity_error(
     provenance = journal.get("provenance")
     if provenance is not None and not isinstance(provenance, Mapping):
         return "journal_malformed: provenance"
+    semantic_error = _srev24_journal_semantic_error(child, validated, journal)
+    if semantic_error is not None:
+        return f"journal_semantic_invalid: {semantic_error}"
     return None
 
 
@@ -933,11 +1062,13 @@ def _report_integrity_error(
 
 def _read_journal(base: Path, request: ComponentRequest) -> dict[str, Any] | None:
     state = _output_state(base, request)
+    if state.get("status") == "invalid":
+        return {"_read_error": str(state.get("reason", "output integrity failure"))}
     if state.get("status") not in {"resume_available", "collision"}:
         return None
     try:
         output = _resolve_output(base, request.output_directory, create=False)
-        payload = _read_json(output / JOURNAL_FILENAME)
+        payload = _read_json(_regular_output_file(output, JOURNAL_FILENAME))
     except (ReviewSessionError, OSError, ValueError, TypeError) as error:
         return {"_read_error": str(error)}
     if not isinstance(payload, dict):
@@ -1058,7 +1189,7 @@ def result_navigation(
         return {"status": "unavailable", "reason": f"result_unavailable: {journal['_read_error']}"}
     try:
         output = _resolve_output(root, normalized.output_directory, create=False)
-        report = _read_json(output / REPORT_FILENAME)
+        report = _read_json(_regular_output_file(output, REPORT_FILENAME))
     except (ReviewSessionError, OSError, ValueError, TypeError) as error:
         return {"status": "unavailable", "reason": f"result_unavailable: {error}"}
     if not isinstance(report, Mapping):
@@ -1541,6 +1672,13 @@ class ReviewSession:
 
     def _execute(self, *, resume: bool) -> ComponentResult:
         with self._active_lock:
+            if self._active:
+                return _result(
+                    self.request,
+                    "failed",
+                    reason="session_owner_active: another lifecycle operation is running",
+                )
+            self._stop_requested.clear()
             self._active = True
             self._active_done.clear()
             self._last_result = None
@@ -1572,11 +1710,9 @@ class ReviewSession:
         )
 
     def start(self) -> ComponentResult:
-        self._stop_requested.clear()
         return self._execute(resume=False)
 
     def resume(self) -> ComponentResult:
-        self._stop_requested.clear()
         return self._execute(resume=True)
 
     def stop(self) -> ComponentResult:
@@ -1626,6 +1762,8 @@ def validate_control(
     expected_session_token: str,
     expected_session_id: str | None = None,
     expected_context_revision: str | None = None,
+    expected_request_digest: str | None = None,
+    expected_recipe_digest: str | None = None,
 ) -> SessionControl:
     """Validate a loopback, origin-bound, token-authenticated control envelope."""
 
@@ -1641,6 +1779,8 @@ def validate_control(
             payload=control.get("payload") if isinstance(control.get("payload"), Mapping) else {},
             session_id=str(control.get("session_id", "")),
             context_revision=str(control.get("context_revision", "")),
+            request_digest=str(control.get("request_digest", "")),
+            recipe_digest=str(control.get("recipe_digest", "")),
         )
     else:
         raise ControlAuthorizationError("control must be a mapping")
@@ -1666,6 +1806,12 @@ def validate_control(
         and current.context_revision != expected_context_revision
     ):
         raise ControlAuthorizationError("context revision mismatch")
+    if expected_request_digest is not None:
+        if not current.request_digest or current.request_digest != expected_request_digest:
+            raise ControlAuthorizationError("request digest mismatch")
+    if expected_recipe_digest is not None:
+        if not current.recipe_digest or current.recipe_digest != expected_recipe_digest:
+            raise ControlAuthorizationError("recipe digest mismatch")
     return current
 
 
@@ -1715,6 +1861,8 @@ def make_control_handler(
                 if context.get("context_revision") is not None
                 else None
             ),
+            expected_request_digest=str(context["request_digest"]),
+            expected_recipe_digest=str(context["recipe_digest"]),
         )
         if authorized.action == "start":
             return session.start()
@@ -1770,6 +1918,35 @@ def _configured_control_binding(request: ComponentRequest) -> tuple[str, str] | 
     if not configured_origin or not configured_token:
         return None
     return configured_origin, configured_token
+
+
+def _admission_config_from_journal(
+    source_admission: Mapping[str, Any] | None,
+) -> dict[str, str] | None:
+    """Recover native launcher fields for an authenticated stop.
+
+    The recovered mapping is only a candidate for SREV-24's fresh native
+    admission check.  It is never treated as proof by itself; the delegated
+    resolver still verifies every receipt, digest, root, and preservation
+    binding before cancellation can reach the loop owner.
+    """
+
+    keys = (
+        "schema_version",
+        "source_root",
+        "receipt_reference",
+        "receipt_sha256",
+        "preservation_destination",
+        "preservation_receipt_reference",
+        "preservation_receipt_sha256",
+        "config_identity",
+    )
+    if not isinstance(source_admission, Mapping):
+        return None
+    recovered = {key: source_admission.get(key) for key in keys}
+    if any(not isinstance(value, str) or not value for value in recovered.values()):
+        return None
+    return recovered
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1832,6 +2009,8 @@ def main(argv: list[str] | None = None) -> int:
                     session_token=args.session_token,
                     session_id=str(context["session_id"]),
                     context_revision=str(context.get("context_revision", "")),
+                    request_digest=str(context["request_digest"]),
+                    recipe_digest=str(context["recipe_digest"]),
                 ),
                 expected_origin=expected_origin,
                 expected_session_token=expected_token,
@@ -1841,6 +2020,8 @@ def main(argv: list[str] | None = None) -> int:
                     if context.get("context_revision") is not None
                     else None
                 ),
+                expected_request_digest=str(context["request_digest"]),
+                expected_recipe_digest=str(context["recipe_digest"]),
             )
             persisted = _read_journal(root, request)
             if persisted is None or "_read_error" in persisted:
@@ -1849,6 +2030,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
             if persisted.get("session_id") != context["session_id"]:
                 raise ControlAuthorizationError("session token is not bound to this session")
+            if admission is None:
+                admission = _admission_config_from_journal(persisted.get("source_admission"))
+                if admission is None:
+                    return _cli_failure(
+                        "source_admission_required: durable native admission is unavailable "
+                        "for this session",
+                        payload,
+                    )
         except (ControlAuthorizationError, ReviewSessionError, loop.ExperimentLoopError) as error:
             return _cli_failure(f"control_authorization_failed: {error}", payload)
     try:

@@ -35,11 +35,13 @@ export function isLoopbackOrigin(value) {
     && parsed.search === "" && parsed.hash === "";
 }
 
-function controlEnvelope(action, origin, sessionToken, sessionId, contextRevision, payload = {}) {
+function controlEnvelope(action, origin, sessionToken, sessionId, contextRevision, requestDigest, recipeDigest, payload = {}) {
   if (!CONTROL_ACTIONS.includes(action)) throw new Error("unsupported control action");
   if (!isLoopbackOrigin(origin)) throw new Error("control origin must be loopback");
   if (typeof sessionToken !== "string" || !sessionToken || sessionToken.length > 256) throw new Error("session token is required");
   if (typeof sessionId !== "string" || !sessionId) throw new Error("session context is required");
+  if (typeof requestDigest !== "string" || !requestDigest) throw new Error("request identity is required");
+  if (typeof recipeDigest !== "string" || !recipeDigest) throw new Error("recipe identity is required");
   return {
     schema_version: CONTROL_SCHEMA_VERSION,
     action,
@@ -47,6 +49,8 @@ function controlEnvelope(action, origin, sessionToken, sessionId, contextRevisio
     session_token: sessionToken,
     session_id: sessionId,
     context_revision: contextRevision || "",
+    request_digest: requestDigest,
+    recipe_digest: recipeDigest,
     payload: asObject(payload),
   };
 }
@@ -117,6 +121,8 @@ export class ReviewSessionsController {
     sessionToken = "",
     sessionId = text(view?.context?.session_id || view?.session_id),
     contextRevision = text(view?.context?.context_revision),
+    requestDigest = text(view?.context?.request_digest),
+    recipeDigest = text(view?.context?.recipe_digest),
     controlRequest = null,
     readOnly = true,
   } = {}) {
@@ -127,6 +133,8 @@ export class ReviewSessionsController {
     this.sessionToken = sessionToken;
     this.sessionId = sessionId;
     this.contextRevision = contextRevision;
+    this.requestDigest = requestDigest;
+    this.recipeDigest = recipeDigest;
     this.controlRequest = controlRequest;
     this.readOnly = Boolean(readOnly);
     this.state = { ...asObject(view), authorization: { ...asObject(view.authorization), read_only: this.readOnly } };
@@ -185,6 +193,8 @@ export class ReviewSessionsController {
       this.sessionToken,
       this.sessionId,
       this.contextRevision,
+      this.requestDigest,
+      this.recipeDigest,
       payload,
     );
     return Promise.resolve(this.controlRequest(envelope)).then((result) => {

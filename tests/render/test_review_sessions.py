@@ -166,6 +166,23 @@ def test_small_helpers_reject_unsafe_json_paths_and_versions(tmp_path: Path) -> 
     assert not review_sessions._version_compatible({"required_component_version": "2.0.0"})[0]
 
 
+def test_persisted_native_admission_is_only_a_revalidation_candidate() -> None:
+    keys = (
+        "schema_version",
+        "source_root",
+        "receipt_reference",
+        "receipt_sha256",
+        "preservation_destination",
+        "preservation_receipt_reference",
+        "preservation_receipt_sha256",
+        "config_identity",
+    )
+    admission = {key: f"value-{key}" for key in keys}
+    assert review_sessions._admission_config_from_journal(admission) == admission
+    assert review_sessions._admission_config_from_journal({"status": "admitted"}) is None
+    assert review_sessions._admission_config_from_journal(None) is None
+
+
 def test_atomic_output_and_symlink_guards_are_fail_closed(tmp_path: Path) -> None:
     destination = tmp_path / "artifact.json"
     digest = review_sessions._atomic_new_file(destination, b"one")
@@ -371,6 +388,45 @@ def test_cli_stop_requires_request_bound_origin_and_token(
     assert "session token mismatch" in capsys.readouterr().out
 
 
+def test_cli_stop_requires_native_admission_after_authentication(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    request = _request(
+        tmp_path,
+        origin="http://localhost:8000",
+        session_token="expected-token",  # noqa: S106
+    )
+    completed = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert completed.status == "complete"
+    payload = json.loads((FIXTURE_ROOT / "request.json").read_text(encoding="utf-8"))
+    payload["config"] = dict(request.config)
+    input_path = tmp_path / "request.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    exit_code = review_sessions.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            request.output_directory,
+            "--base",
+            str(tmp_path),
+            "--stop",
+            "--origin",
+            "http://localhost:8000",
+            "--session-token",
+            "expected-token",
+        ]
+    )
+    assert exit_code == 1
+    assert "source_admission_required" in capsys.readouterr().out
+
+
 def test_fixture_cli_preview_writes_budget_admission_and_browser_free_artifact(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -515,6 +571,39 @@ def test_stop_waits_for_owned_work_and_terminal_journal(tmp_path: Path) -> None:
     assert session.progress()["status"] == "cancelled"
 
 
+def test_concurrent_start_preserves_active_owner_for_stop(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    executor = SlowExecutor()
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+    )
+    first_results: list[Any] = []
+    second_results: list[Any] = []
+    first = threading.Thread(target=lambda: first_results.append(session.start()))
+    first.start()
+    assert executor.started.wait(timeout=2)
+    live_progress = session.progress()
+    assert live_progress["status"] == "running", live_progress
+    second = threading.Thread(target=lambda: second_results.append(session.start()))
+    second.start()
+    second.join(timeout=2)
+    assert not second.is_alive()
+    assert len(second_results) == 1
+    assert second_results[0].status == "failed"
+    assert "session_owner_active" in second_results[0].reason
+    stopped = session.stop()
+    first.join(timeout=2)
+    assert not first.is_alive()
+    assert len(first_results) == 1
+    assert first_results[0].status == "cancelled"
+    assert stopped.status == "cancelled"
+    assert "session_lock_owned" not in stopped.reason
+    assert session.progress()["status"] == "cancelled"
+
+
 def test_tampered_or_malformed_journal_is_diagnostic_and_non_throwing(tmp_path: Path) -> None:
     request = _request(tmp_path)
     result = review_sessions.run(
@@ -627,6 +716,100 @@ def test_tampered_report_is_not_navigable(tmp_path: Path) -> None:
     navigation = review_sessions.result_navigation(request, base=tmp_path)
     assert navigation["status"] == "unavailable"
     assert "report_identity_mismatch" in navigation["reason"]
+
+
+def test_semantic_journal_and_nested_admission_tampering_fail_closed(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    output = tmp_path / request.output_directory
+    journal_path = output / review_sessions.JOURNAL_FILENAME
+    report_path = output / review_sessions.REPORT_FILENAME
+    original_journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    original_report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    forged_journal = deepcopy(original_journal)
+    forged_journal["status"] = "running"
+    forged_journal["stop_reason"] = "still-running"
+    forged_journal["accounting"]["controls"] = 999
+    forged_journal["outcomes"][0]["outcome"] = "falsified"
+    forged_journal["outcomes"][0]["reason"] = "forged"
+    forged_report = deepcopy(original_report)
+    forged_report["status"] = "running"
+    forged_report["budget"] = {
+        **forged_journal["budget"],
+        "executions_consumed": forged_journal["executions_consumed"],
+        "reserved_executions": forged_journal["reserved_executions"],
+        "elapsed_s": forged_journal["elapsed_s"],
+    }
+    forged_report["outcomes"] = [
+        loop.ExperimentLoop._canonical_report_outcome(item) for item in forged_journal["outcomes"]
+    ]
+    forged_report["negative_outcomes"] = [
+        item for item in forged_report["outcomes"] if item.get("negative") is True
+    ]
+    journal_path.write_text(json.dumps(forged_journal), encoding="utf-8")
+    report_path.write_text(json.dumps(forged_report), encoding="utf-8")
+    progress = review_sessions.progress(request, base=tmp_path)
+    navigation = review_sessions.result_navigation(request, base=tmp_path)
+    assert progress["status"] == "failed"
+    assert progress["scientific_claim_allowed"] is False
+    assert navigation["status"] == "unavailable"
+
+    nested_journal = deepcopy(original_journal)
+    nested_journal["source_admission"]["status"] = "forged"
+    nested_journal["source_admission"]["request_digest"] = "forged"
+    nested_journal["source_admission"]["evidence_boundary"] = "benchmark"
+    nested_report = deepcopy(original_report)
+    nested_report["source_admission"] = nested_journal["source_admission"]
+    journal_path.write_text(json.dumps(nested_journal), encoding="utf-8")
+    report_path.write_text(json.dumps(nested_report), encoding="utf-8")
+    nested_progress = review_sessions.progress(request, base=tmp_path)
+    nested_navigation = review_sessions.result_navigation(request, base=tmp_path)
+    assert nested_progress["status"] == "failed"
+    assert nested_progress["scientific_claim_allowed"] is False
+    assert nested_navigation["status"] == "unavailable"
+
+
+def test_canonical_journal_and_report_symlinks_are_not_read(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+    assert result.status == "complete"
+    output = tmp_path / request.output_directory
+    journal_path = output / review_sessions.JOURNAL_FILENAME
+    report_path = output / review_sessions.REPORT_FILENAME
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_journal = outside / "journal.json"
+    outside_report = outside / "report.json"
+    shutil.copyfile(journal_path, outside_journal)
+    shutil.copyfile(report_path, outside_report)
+
+    journal_path.unlink()
+    journal_path.symlink_to(outside_journal)
+    progress = review_sessions.progress(request, base=tmp_path)
+    assert progress["status"] == "failed"
+    assert "symlink" in progress["reason"]
+    journal_path.unlink()
+    shutil.copyfile(outside_journal, journal_path)
+
+    report_path.unlink()
+    report_path.symlink_to(outside_report)
+    navigation = review_sessions.result_navigation(request, base=tmp_path)
+    assert navigation["status"] == "unavailable"
+    assert "symlink" in navigation["reason"]
 
 
 def test_cancelled_result_retains_journal_but_no_complete_artifacts(tmp_path: Path) -> None:
@@ -769,6 +952,59 @@ def test_context_revision_binds_session_identity(tmp_path: Path) -> None:
     )
 
 
+def test_control_binding_includes_recipe_and_source_identity(tmp_path: Path) -> None:
+    request = _request(
+        tmp_path,
+        output="bound-session",
+        origin="http://localhost:8000",
+        session_token="same-token",  # noqa: S106
+        session_context={"context_revision": "same-context"},
+    )
+    changed_recipe = deepcopy(request.config["recipe"])
+    changed_recipe["hypothesis"] = "different diagnostic hypothesis"
+    recipe_request = _request(
+        tmp_path,
+        output="bound-recipe",
+        origin="http://localhost:8000",
+        session_token="same-token",  # noqa: S106
+        session_context={"context_revision": "same-context"},
+        recipe=changed_recipe,
+    )
+    changed_source = replace(request.sources[0], source_commit="different-source-commit")
+    source_request = replace(request, sources=(changed_source,), output_directory="bound-source")
+    request_context = review_sessions._control_context(request)
+    recipe_context = review_sessions._control_context(recipe_request)
+    source_context = review_sessions._control_context(source_request)
+    assert request_context["recipe_digest"] != recipe_context["recipe_digest"]
+    assert request_context["request_digest"] != source_context["request_digest"]
+    assert (
+        review_sessions.preview(request, base=tmp_path)["session_id"]
+        != review_sessions.preview(recipe_request, base=tmp_path)["session_id"]
+    )
+    assert (
+        review_sessions.preview(request, base=tmp_path)["session_id"]
+        != review_sessions.preview(source_request, base=tmp_path)["session_id"]
+    )
+
+    handler = review_sessions.make_control_handler(
+        review_sessions.ReviewSession(request, base=tmp_path),
+        origin="http://localhost:8000",
+        session_token="same-token",  # noqa: S106
+    )
+    with pytest.raises(review_sessions.ControlAuthorizationError, match="request digest"):
+        handler(
+            {
+                "action": "progress",
+                "origin": "http://localhost:8000",
+                "session_token": "same-token",
+                "session_id": request_context["session_id"],
+                "context_revision": request_context["context_revision"],
+                "request_digest": "forged-request",
+                "recipe_digest": request_context["recipe_digest"],
+            }
+        )
+
+
 def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
     asset = (
         Path(__file__).resolve().parents[2]
@@ -791,9 +1027,9 @@ def test_node_browser_runtime_is_offline_and_has_no_implicit_start() -> None:
       if (isLoopbackOrigin('http://user@localhost:8765')) throw new Error('credential origin');
       if (isLoopbackOrigin('http://localhost:8765/')) throw new Error('path origin');
       let calls = [];
-      const controller = new ReviewSessionsController({{origin: 'http://127.0.0.1:8765', sessionToken: 't', sessionId: 'session-1', readOnly: false, controlRequest: (value) => {{ calls.push(value); return {{status: 'running'}}; }}}});
+      const controller = new ReviewSessionsController({{origin: 'http://127.0.0.1:8765', sessionToken: 't', sessionId: 'session-1', requestDigest: 'request-digest', recipeDigest: 'recipe-digest', readOnly: false, controlRequest: (value) => {{ calls.push(value); return {{status: 'running'}}; }}}});
       await controller.start();
-      if (calls.length !== 1 || calls[0].action !== 'start') throw new Error('explicit control');
+      if (calls.length !== 1 || calls[0].action !== 'start' || calls[0].request_digest !== 'request-digest' || calls[0].recipe_digest !== 'recipe-digest') throw new Error('explicit control');
     """
     completed = subprocess.run(
         ["node", "--input-type=module", "-e", script],
@@ -879,6 +1115,8 @@ def test_navigation_control_and_run_error_statuses(tmp_path: Path) -> None:
                 "origin": "http://localhost:8000",
                 "session_token": "token",
                 "session_id": context["session_id"],
+                "request_digest": context["request_digest"],
+                "recipe_digest": context["recipe_digest"],
             }
         )["status"]
         == "complete"

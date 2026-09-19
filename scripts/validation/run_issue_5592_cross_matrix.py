@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-COMPLETED_TIMEOUT_REASONS = frozenset({"max_steps", "terminated", "timeout", "truncated"})
+from robot_sf.benchmark.termination_reason import TIMEOUT_TERMINATION_REASONS
+
+COMPLETED_TIMEOUT_REASONS = frozenset(TIMEOUT_TERMINATION_REASONS)
 ELIGIBLE_EXECUTION_MODES = frozenset({"adapter", "mixed", "native"})
 
 

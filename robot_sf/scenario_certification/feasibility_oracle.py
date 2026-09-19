@@ -45,6 +45,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.termination_reason import TIMEOUT_TERMINATION_REASONS
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -99,6 +100,11 @@ ROUTE_FOLLOW_ALGO = "route_follow"
 # A cell is "geometrically feasible" only when the certifier finds an inflated
 # collision-free path AND the route is not kinodynamically excluded.
 _GEOMETRIC_INFEASIBLE_STATUSES = frozenset({GEOMETRICALLY_INFEASIBLE, KINODYNAMICALLY_INFEASIBLE})
+
+# ``horizon`` and ``terminated`` are legacy terminal labels. They need either an
+# explicit timeout flag or matching step/horizon evidence before the oracle can
+# classify a rollout as time-truncated.
+_AMBIGUOUS_TIMEOUT_TERMINATION_REASONS = frozenset({"horizon", "terminated"})
 
 # Rollout episode runner protocol mirrors issue #3484 ``EpisodeRunner``.
 EpisodeRunner = Callable[[Mapping[str, Any], int, int | None, str], Mapping[str, Any]]
@@ -867,23 +873,19 @@ def _rollout_route_complete(record: Mapping[str, Any]) -> tuple[bool | None, str
     """
     termination = str(record.get("termination_reason") or record.get("status") or "").lower()
     outcome = record.get("outcome")
-    if isinstance(outcome, Mapping):
-        flag = _bool_flag(outcome.get("route_complete"))
-        if flag is not None:
-            return flag, termination or None
-    flag = (
-        _bool_flag(record.get("route_complete"))
-        if "route_complete" in record
-        else _bool_flag(record.get("goal_reached"))
-    )
-    if flag is None:
-        flag = _scan_mapping_for_bool(record, ("route_complete", "goal_reached", "success"))
-    metrics = record.get("metrics")
-    if flag is None and isinstance(metrics, Mapping):
-        flag = _scan_mapping_for_bool(metrics, ("success", "route_complete", "goal_reached"))
+    timeout_event = _timeout_event_flag(record, outcome)
+    flag = _route_complete_flag(record, outcome)
+
+    if timeout_event is True:
+        # A route-complete outcome and an explicit timeout are contradictory.
+        return (None, termination or None) if flag is True else (False, termination or None)
+
+    if termination in _AMBIGUOUS_TIMEOUT_TERMINATION_REASONS:
+        return _resolve_ambiguous_completion(record, termination, flag)
+
     if flag is not None:
         return flag, termination or None
-    return _termination_completion(termination)
+    return _termination_completion(termination, timeout_event=timeout_event)
 
 
 def _bool_flag(value: Any) -> bool | None:
@@ -904,7 +906,66 @@ def _scan_mapping_for_bool(mapping: Mapping[str, Any], keys: tuple[str, ...]) ->
     return None
 
 
-def _termination_completion(termination: str) -> tuple[bool | None, str | None]:
+def _timeout_event_flag(record: Mapping[str, Any], outcome: Any) -> bool | None:
+    """Read the canonical timeout flag, preferring the nested outcome payload.
+
+    Returns:
+        Explicit timeout flag, or ``None`` when no strict boolean is present.
+    """
+    if isinstance(outcome, Mapping):
+        flag = _bool_flag(outcome.get("timeout_event"))
+        if flag is not None:
+            return flag
+    return _bool_flag(record.get("timeout_event"))
+
+
+def _route_complete_flag(record: Mapping[str, Any], outcome: Any) -> bool | None:
+    """Read route completion using canonical, legacy, and metric aliases in order.
+
+    Returns:
+        Explicit route-completion flag, or ``None`` when the record is inconclusive.
+    """
+    candidates: list[Any] = []
+    if isinstance(outcome, Mapping):
+        candidates.append(outcome.get("route_complete"))
+    if "route_complete" in record:
+        candidates.append(record.get("route_complete"))
+    elif "goal_reached" in record:
+        candidates.append(record.get("goal_reached"))
+    for candidate in candidates:
+        flag = _bool_flag(candidate)
+        if flag is not None:
+            return flag
+
+    flag = _scan_mapping_for_bool(record, ("route_complete", "goal_reached", "success"))
+    if flag is not None:
+        return flag
+    metrics = record.get("metrics")
+    if isinstance(metrics, Mapping):
+        return _scan_mapping_for_bool(metrics, ("success", "route_complete", "goal_reached"))
+    return None
+
+
+def _resolve_ambiguous_completion(
+    record: Mapping[str, Any], termination: str, flag: bool | None
+) -> tuple[bool | None, str | None]:
+    """Resolve legacy terminal labels only when explicit completion evidence exists.
+
+    Returns:
+        Route completion state and the normalized termination reason.
+    """
+    if flag is True:
+        return True, termination or None
+    if _has_explicit_horizon_exhaustion(record, termination):
+        return False, termination or None
+    return None, termination or None
+
+
+def _termination_completion(
+    termination: str,
+    *,
+    timeout_event: bool | None = None,
+) -> tuple[bool | None, str | None]:
     """Infer route completion from a termination-reason string when no flag is present.
 
     Returns:
@@ -912,17 +973,26 @@ def _termination_completion(termination: str) -> tuple[bool | None, str | None]:
     """
     if termination in {"success", "goal_reached", "route_complete", "completed"}:
         return True, termination or None
-    if termination in {
-        "timeout",
-        "collision",
-        "failure",
-        "failed",
-        "error",
-        "truncated",
-        "max_steps",
-    }:
+    if termination in {"collision", "failure", "failed", "error"}:
+        return False, termination or None
+    if timeout_event is True:
+        return False, termination or None
+    if timeout_event is False and termination in TIMEOUT_TERMINATION_REASONS:
+        return None, termination or None
+    if termination in _AMBIGUOUS_TIMEOUT_TERMINATION_REASONS:
+        return None, termination or None
+    if termination in TIMEOUT_TERMINATION_REASONS:
         return False, termination or None
     return None, termination or None
+
+
+def _has_explicit_horizon_exhaustion(record: Mapping[str, Any], termination: str) -> bool:
+    """Return whether a legacy terminal label is paired with step/horizon exhaustion."""
+    if termination not in _AMBIGUOUS_TIMEOUT_TERMINATION_REASONS:
+        return False
+    steps = _optional_int(record.get("steps"))
+    horizon = _optional_int(record.get("horizon"))
+    return steps is not None and horizon is not None and steps >= horizon
 
 
 def _aggregate_route_checks(certificate: ScenarioCertificate) -> Mapping[str, Any]:

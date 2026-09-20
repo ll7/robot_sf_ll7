@@ -1204,7 +1204,13 @@ def test_admitted_source_rejects_special_file_without_blocking(tmp_path: Path) -
     reason="FIFO or protected descriptor flags are unavailable",
 )
 def test_admitted_source_receipt_fifo_is_rejected_without_blocking(tmp_path: Path) -> None:
-    """A receipt FIFO is rejected before a read can wait for a writer."""
+    """A receipt FIFO is rejected before a read can wait for a writer.
+
+    The subprocess deadline covers interpreter startup plus the nonblocking
+    rejection. A 2s process-start-inclusive bound flakes under hosted
+    four-shard load (issues #9507/#9514); 30s still fails a truly blocking
+    read within a finite limit.
+    """
     receipt_path = tmp_path / "receipt.json"
     os.mkfifo(receipt_path)
     command = (
@@ -1220,7 +1226,7 @@ def test_admitted_source_receipt_fifo_is_rejected_without_blocking(tmp_path: Pat
         capture_output=True,
         check=False,
         text=True,
-        timeout=2,
+        timeout=30,
     )
 
     assert completed.returncode == 0
@@ -1412,7 +1418,11 @@ def test_cli_parser_limit_emits_stable_failed_result(
 )
 @pytest.mark.parametrize("parser_input", ["request", "config"])
 def test_cli_fifo_input_is_rejected_without_blocking(tmp_path: Path, parser_input: str) -> None:
-    """CLI request and config FIFOs fail quickly without waiting for a writer."""
+    """CLI request and config FIFOs fail quickly without waiting for a writer.
+
+    See the receipt-FIFO note above: the deadline must tolerate slow hosted
+    interpreter startup while still bounding a real blocking FIFO read.
+    """
     request_path = tmp_path / "request.json"
     config_path = tmp_path / "config.json"
     request_path.write_text(
@@ -1454,7 +1464,7 @@ def test_cli_fifo_input_is_rejected_without_blocking(tmp_path: Path, parser_inpu
         capture_output=True,
         check=False,
         text=True,
-        timeout=2,
+        timeout=30,
     )
 
     assert completed.returncode == 1

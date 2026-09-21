@@ -115,6 +115,25 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
+def run_map_batch(*args: Any, **kwargs: Any) -> Any:
+    """Dispatch to the map runner without importing it during module startup.
+
+    The module-level seam is kept for callers and tests that patch
+    ``robot_sf.benchmark.runner.run_map_batch``.  Importing the implementation
+    only when map dispatch is requested preserves the lightweight native
+    diagnostic child startup path.
+
+    Returns:
+        The map-runner summary returned by the lazily imported implementation.
+    """
+
+    from robot_sf.benchmark.map_runner.map_runner import (  # noqa: PLC0415
+        run_map_batch as _run_map_batch,
+    )
+
+    return _run_map_batch(*args, **kwargs)
+
+
 DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3
 DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35
 
@@ -3114,11 +3133,6 @@ def run_batch(  # noqa: PLR0913
 
     # Map-based scenario detection: delegate to map runner
     if scenarios and any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
-        # Keep the canonical single-episode runner lightweight for bounded
-        # native diagnostic children. The map runner imports optional learned
-        # planners (including Torch) that are irrelevant to this path.
-        from robot_sf.benchmark.map_runner.map_runner import run_map_batch  # noqa: PLC0415
-
         summary = run_map_batch(
             scenarios_or_path,
             out_path,

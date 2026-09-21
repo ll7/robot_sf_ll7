@@ -1145,7 +1145,6 @@ def test_native_child_deadline_terminates_owned_process(native_case: dict[str, A
 
     assert result["status"] in {native.STATUS_UNAVAILABLE, native.STATUS_FAILED}
     assert any(
-        marker in result["reason"]
-        for marker in ("per_execution_timeout", "child_startup_timeout")
+        marker in result["reason"] for marker in ("per_execution_timeout", "child_startup_timeout")
     )
     assert result["settled"] is True

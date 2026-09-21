@@ -77,7 +77,6 @@ from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.event_ledger import validate_record_event_ledger
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
-from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.paired_effect_metric_contract import (
@@ -3115,6 +3114,11 @@ def run_batch(  # noqa: PLR0913
 
     # Map-based scenario detection: delegate to map runner
     if scenarios and any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
+        # Keep the canonical single-episode runner lightweight for bounded
+        # native diagnostic children. The map runner imports optional learned
+        # planners (including Torch) that are irrelevant to this path.
+        from robot_sf.benchmark.map_runner.map_runner import run_map_batch  # noqa: PLC0415
+
         summary = run_map_batch(
             scenarios_or_path,
             out_path,

@@ -526,6 +526,16 @@ Route remaining issues by their blocker:
    - Check the sub-agent's status and wait for it to complete.
    - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
    - If validation or proof is insufficient, instruct the sub-agent to repair it, or mark the issue blocked.
+   - Before PR handoff, require the exact-diff implementation self-review receipt
+     (`uv run python scripts/dev/implementation_self_review.py verify --receipt-file <receipt.json>
+     --worktree <task-worktree>`): the receipt must validate bound to the exact final head and
+     complete `git diff origin/main...HEAD`, with executed validation, no fail verdicts, and no
+     blocking findings. `verify` binds Git state only, so follow it with the issue-bound gate
+     (`... gate --receipt-file <receipt.json> --issue <number> --expected-head-sha <head-sha>
+     --expected-base-sha <base-sha> [--issue-body-file <body.md>]`) before opening the PR.
+     A blocking self-review finding returns to implementation; never open the PR
+     merely because tests are green. Self-review never counts as independent merge-review
+     authority.
 10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
     Mirror the reviewed issue relationship state in the PR's `## Issue Relationship Mirror` section;
     a `Closes`/`Refs` coverage reference is not itself a graph edge.

@@ -118,7 +118,9 @@ class AppendOnlyProvider:
         updated = replace(issue, comments=(*issue.comments, comment))
         self.issues = [updated if item.number == number else item for item in self.issues]
         if self.comment_error_after_success:
-            raise self.comment_error or TimeoutError("comment response lost after GitHub accepted POST")
+            raise self.comment_error or TimeoutError(
+                "comment response lost after GitHub accepted POST"
+            )
         if self.timeout_after_comment:
             raise TimeoutError("comment response lost after GitHub accepted POST")
         return {"status": "created", "comment": comment}
@@ -317,11 +319,14 @@ def test_append_only_publication_identity_validation_and_lookup(tmp_path: Path) 
         )
         assert result.outbox is not None
         publication = result.outbox
-        assert outbox.find_publication(
-            REPOSITORY,
-            finding.finding_id,
-            publication.publication_key,
-        ) is not None
+        assert (
+            outbox.find_publication(
+                REPOSITORY,
+                finding.finding_id,
+                publication.publication_key,
+            )
+            is not None
+        )
         with pytest.raises(GitHubValidationError):
             outbox.find_publication(REPOSITORY, finding.finding_id, "bad")
 

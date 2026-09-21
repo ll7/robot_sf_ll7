@@ -48,6 +48,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
     record_to_dict,
     signal_from_dict,
 )
+from robot_sf.analysis_workbench.audit_scan import AuditScanReport
 from robot_sf.analysis_workbench.audit_similarity import (
     INCOMPATIBLE,
     SIMILARITY_MODE_SAME_SCENARIO,
@@ -78,6 +79,8 @@ QUEUE_SELECTION_SCHEMA_VERSION = "audit-queue-selection.v1"
 QUEUE_PENDING_SCHEMA_VERSION = "audit-queue-pending.v1"
 QUEUE_POLICY_FIXED = "fixed"
 QUEUE_POLICY_ACTIVE = "active"
+SCAN_IDENTITY_PRODUCER = "ba01-audit-scan"
+_SCAN_IDENTITY_ADMISSION = object()
 DEFAULT_POLICY_VERSION = "audit-queue.active.v1"
 FIXED_POLICY_VERSION = "audit-queue.fixed.v1"
 
@@ -482,6 +485,8 @@ def _review_content_identity(review: ReviewRecord) -> str:
             "author_kind": review.author_kind,
             "author_id": review.author_id,
             "source_revision": review.source_revision,
+            "source_identity": review.source_identity,
+            "scan_identity": review.scan_identity,
             "annotation_ids": review.annotation_ids,
             "notes": review.notes,
         }
@@ -617,7 +622,20 @@ class CoverageDeficit:
 
 @dataclass(frozen=True, slots=True)
 class ScanSummary:
-    """Small typed identity/accounting handle for a future BA-01 scan."""
+    """Small typed identity/accounting handle for one BA-01 scan.
+
+    ``source_identity`` and ``scan_identity`` are the only queue handoff
+    fields used for active BA-04 review provenance.  They are intentionally
+    distinct from ``source_digest`` and the legacy ``source_revision`` field:
+    the former is the admitted source commit, the latter is the BA-01 scan
+    cache key, and the legacy field remains the existing scan-summary
+    compatibility value.  Use :meth:`from_scan_report` at the BA-01 boundary
+    so these values cannot be inferred from a source digest or a peer-supplied
+    mapping.  ``identity_binding`` preserves the identity data through a
+    queue transport; the in-process admission sentinel carries authority, and
+    the binding itself is an integrity token rather than an authentication
+    claim.
+    """
 
     summary_id: str
     revision: int = 0
@@ -629,6 +647,11 @@ class ScanSummary:
     missingness: tuple[str, ...] = ()
     source_revision: str = ""
     source_id: str = ""
+    source_identity: str = ""
+    scan_identity: str = ""
+    identity_producer: str = ""
+    identity_binding: str = ""
+    _identity_admission: object = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         _text(self.summary_id, name="scan_summary.summary_id")
@@ -654,6 +677,43 @@ class ScanSummary:
             self.source_revision, name="scan_summary.source_revision", allow_empty=True
         )
         source_id = _text(self.source_id, name="scan_summary.source_id", allow_empty=True)
+        source_identity = _text(
+            self.source_identity, name="scan_summary.source_identity", allow_empty=True
+        ).strip()
+        scan_identity = _text(
+            self.scan_identity, name="scan_summary.scan_identity", allow_empty=True
+        ).strip()
+        identity_producer = _text(
+            self.identity_producer, name="scan_summary.identity_producer", allow_empty=True
+        ).strip()
+        identity_binding = _text(
+            self.identity_binding, name="scan_summary.identity_binding", allow_empty=True
+        ).strip()
+        if bool(source_identity) != bool(scan_identity):
+            raise QueueInputError(
+                "scan_summary.source_identity and scan_identity must be provided together"
+            )
+        if source_identity or scan_identity:
+            if identity_producer != SCAN_IDENTITY_PRODUCER:
+                raise QueueInputError(
+                    "scan_summary identities require the typed BA-01 producer binding"
+                )
+            expected_binding = _sha256(
+                {
+                    "summary_id": self.summary_id,
+                    "campaign_digest": self.campaign_digest,
+                    "source_digest": self.source_digest,
+                    "source_identity": source_identity,
+                    "scan_identity": scan_identity,
+                }
+            )
+            if identity_binding and identity_binding != expected_binding:
+                raise QueueInputError("scan_summary identity binding does not match identities")
+            identity_binding = expected_binding
+        elif identity_producer or identity_binding:
+            raise QueueInputError(
+                "scan_summary identity binding requires source and scan identities"
+            )
         object.__setattr__(self, "revision", revision)
         object.__setattr__(self, "accounting", _freeze(accounting))
         object.__setattr__(self, "detector_accounting", _freeze(detector_accounting))
@@ -662,6 +722,56 @@ class ScanSummary:
         )
         object.__setattr__(self, "source_revision", source_revision)
         object.__setattr__(self, "source_id", source_id)
+        object.__setattr__(self, "source_identity", source_identity)
+        object.__setattr__(self, "scan_identity", scan_identity)
+        object.__setattr__(self, "identity_producer", identity_producer)
+        object.__setattr__(self, "identity_binding", identity_binding)
+
+    @property
+    def identity_is_verified(self) -> bool:
+        """Return whether this instance crossed the typed BA-01 scan seam."""
+
+        return self._identity_admission is _SCAN_IDENTITY_ADMISSION
+
+    @classmethod
+    def from_scan_report(cls, report: Any) -> ScanSummary:
+        """Build an identity-bound summary from a typed BA-01 report.
+
+        The source commit and scan cache key are copied only from the typed
+        report boundary.  A report without either token is not upgraded with
+        a digest or a caller-provided substitute; callers must keep that scan
+        explicitly unavailable for full-human BA-04 credit.
+        """
+
+        if not isinstance(report, AuditScanReport):
+            raise QueueInputError("scan summary identity requires a typed AuditScanReport")
+        source = report.audit.source
+        source_identity = source.source_commit if source is not None else ""
+        if not source_identity:
+            raise QueueInputError(
+                "typed BA-01 report has no admitted source_commit for queue review binding"
+            )
+        if not report.cache_key:
+            raise QueueInputError("typed BA-01 report has no cache_key for queue review binding")
+        counts = dict(report.counts)
+        detector_counts = counts.get("detectors", {})
+        detector_accounting = (
+            detector_counts.get("by_detector", {}) if isinstance(detector_counts, Mapping) else {}
+        )
+        if not isinstance(detector_accounting, Mapping):
+            detector_accounting = {}
+        summary = cls(
+            summary_id=report.cache_key,
+            campaign_digest=report.audit.campaign_digest,
+            source_digest=report.audit.source_digest,
+            accounting=counts,
+            detector_accounting=detector_accounting,
+            source_identity=source_identity,
+            scan_identity=report.cache_key,
+            identity_producer=SCAN_IDENTITY_PRODUCER,
+        )
+        object.__setattr__(summary, "_identity_admission", _SCAN_IDENTITY_ADMISSION)
+        return summary
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> ScanSummary:
@@ -683,6 +793,10 @@ class ScanSummary:
             missingness=payload.get("missingness", ()),
             source_revision=payload.get("source_revision", ""),
             source_id=source_id,
+            source_identity=payload.get("source_identity", ""),
+            scan_identity=payload.get("scan_identity", ""),
+            identity_producer=payload.get("identity_producer", ""),
+            identity_binding=payload.get("identity_binding", ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -698,6 +812,10 @@ class ScanSummary:
             "missingness": list(self.missingness),
             "source_revision": self.source_revision,
             "source_id": self.source_id,
+            "source_identity": self.source_identity,
+            "scan_identity": self.scan_identity,
+            "identity_producer": self.identity_producer,
+            "identity_binding": self.identity_binding,
         }
 
 
@@ -1170,6 +1288,12 @@ class QueueDataset:
     accounting: Mapping[str, Any] = field(default_factory=dict)
     missingness: tuple[str, ...] = ()
     review_context: Mapping[str, Any] | None = None
+    # These are derived from the scanner-owned ScanSummary when present.
+    # Direct values are accepted only when they exactly repeat that summary,
+    # which keeps record_review() from becoming an arbitrary identity override.
+    source_identity: str = ""
+    scan_identity: str = ""
+    _identity_admitted: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:  # noqa: C901, PLR0912, PLR0915
         candidates: list[QueueCandidate] = []
@@ -1243,6 +1367,8 @@ class QueueDataset:
                             author_kind=review.get("author_kind", "human"),
                             author_id=review.get("author_id", ""),
                             source_revision=review.get("source_revision", 0),
+                            source_identity=review.get("source_identity", ""),
+                            scan_identity=review.get("scan_identity", ""),
                             annotation_ids=_annotation_ids(review.get("annotation_ids", ())),
                             created_at=review.get("created_at", _utc_now()),
                             notes=review.get("notes", ""),
@@ -1273,6 +1399,31 @@ class QueueDataset:
         summary = self.scan_summary
         if summary is not None and not isinstance(summary, ScanSummary):
             summary = ScanSummary.from_mapping(summary)
+        source_identity = _text(
+            self.source_identity, name="queue.source_identity", allow_empty=True
+        ).strip()
+        scan_identity = _text(
+            self.scan_identity, name="queue.scan_identity", allow_empty=True
+        ).strip()
+        if bool(source_identity) != bool(scan_identity):
+            raise QueueInputError(
+                "queue.source_identity and scan_identity must be provided together"
+            )
+        summary_source_identity = summary.source_identity if summary is not None else ""
+        summary_scan_identity = summary.scan_identity if summary is not None else ""
+        if source_identity or scan_identity:
+            if summary is None:
+                raise QueueInputError(
+                    "queue source/scan identities require a scanner-owned scan_summary"
+                )
+            if source_identity != summary_source_identity or scan_identity != summary_scan_identity:
+                raise QueueInputError(
+                    "queue source/scan identities must match scan_summary identities"
+                )
+        else:
+            source_identity = summary_source_identity
+            scan_identity = summary_scan_identity
+        identity_admitted = summary is not None and summary.identity_is_verified
         campaign_digest = self.campaign_digest or (summary.campaign_digest if summary else "")
         source_digest = self.source_digest or (summary.source_digest if summary else "")
         _text(campaign_digest, name="queue.campaign_digest", allow_empty=True)
@@ -1505,6 +1656,9 @@ class QueueDataset:
         object.__setattr__(self, "campaign_digest", campaign_digest)
         object.__setattr__(self, "source_digest", source_digest)
         object.__setattr__(self, "input_revision", input_revision)
+        object.__setattr__(self, "source_identity", source_identity)
+        object.__setattr__(self, "scan_identity", scan_identity)
+        object.__setattr__(self, "_identity_admitted", identity_admitted)
         object.__setattr__(self, "accounting", _freeze(accounting))
         object.__setattr__(self, "missingness", tuple(dict.fromkeys(missingness)))
         object.__setattr__(self, "review_context", _freeze(review_context))
@@ -1542,6 +1696,8 @@ class QueueDataset:
             accounting=payload.get("accounting", {}),
             missingness=payload.get("missingness", ()),
             review_context=payload.get("review_context"),
+            source_identity=payload.get("source_identity", ""),
+            scan_identity=payload.get("scan_identity", ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1556,6 +1712,8 @@ class QueueDataset:
             "input_revision": self.input_revision,
             "accounting": _thaw(self.accounting),
             "missingness": list(self.missingness),
+            "source_identity": self.source_identity,
+            "scan_identity": self.scan_identity,
             "scan_summary": self.scan_summary.to_dict() if self.scan_summary else None,
             "coverage_deficits": [item.to_dict() for item in self.coverage_deficits],
             "signals": [record_to_dict(item) for item in self.signals],
@@ -1576,6 +1734,8 @@ class QueueDataset:
                 "protocol_version": self.protocol_version,
                 "protocol_digest": self.protocol_digest,
                 "input_revision": self.input_revision,
+                "source_identity": self.source_identity,
+                "scan_identity": self.scan_identity,
                 "accounting": dict(self.accounting),
                 "missingness": list(self.missingness),
                 "review_context": self.review_context,
@@ -4591,6 +4751,10 @@ class AuditQueue:
                 "operation_id": operation_id,
             }
         )
+        review_source_identity = (
+            self.dataset.source_identity if self.dataset._identity_admitted else ""
+        )
+        review_scan_identity = self.dataset.scan_identity if self.dataset._identity_admitted else ""
         try:
             review = ReviewRecord(
                 review_id=review_id,
@@ -4600,6 +4764,8 @@ class AuditQueue:
                 author_kind=author_kind,
                 author_id=author_id,
                 source_revision=self.dataset.input_revision,
+                source_identity=review_source_identity,
+                scan_identity=review_scan_identity,
                 annotation_ids=annotation_ids,
                 notes=notes,
             )
@@ -4852,6 +5018,7 @@ __all__ = [
     "PRIORITY_STATISTICAL",
     "PRIORITY_UNEXPLAINED",
     "QUEUE_INPUT_SCHEMA_VERSION",
+    "SCAN_IDENTITY_PRODUCER",
     "ActivePolicy",
     "AuditQueue",
     "AuditQueueConflictError",

@@ -28,7 +28,7 @@ files:
   sha256: 0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d
   role: diagnostic recurrent Gate-1 canary config with shared evaluation seed manifest
 - path: pyproject.toml
-  sha256: 9dbfd7b6925330fd67c87a195ef37d282552f8f064c7993e0b3098f7aaf0816f
+  sha256: 78e56caa2afab1817f0bc43204351656eb41788143123eae4c30643e01ca96eb
   role: dependency extra and package constraints
 - path: robot_sf/benchmark/map_runner_policies/map_runner_actions.py
   sha256: 90b14f637094210c261d17a556b71e0952ed74f90afbb7fbcc5409881b73c4ce
@@ -61,7 +61,7 @@ files:
   sha256: 1b593d77ae37ced9d137348ccd2bc39b0007bb659c89625c4d1dad24899a242b
   role: focused recurrent metric and checkpoint-selection validation
 - path: uv.lock
-  sha256: 61bc32dcdb5c983d8085449b89a9d58a73af396755a33f15fa8b3f3a544f964b
+  sha256: bda5e47dd0621d06a6d3d7253bba03b688a70eb4803caf49db9796f0f12a0798
   role: locked dependency resolution
 - path: configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml
   sha256: 3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482

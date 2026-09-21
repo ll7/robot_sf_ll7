@@ -10,6 +10,10 @@ The offline [Benchmark Auditor campaign scan](./audit_scan.md) accounts for
 recorded campaign rows and emits deterministic BA-03 detector signals without
 rerunning simulations.
 
+The bounded [BA-05 source-first materialization leaf](./audit_materialize.md)
+verifies historical recordings and lazily renders retained trace or replay
+state without starting a simulation.
+
 The contracts are consumed by offline components; the first consumer is the
 [SREV-15 review workbench](./review_contracts.md#review-workbench-srev-15)
 (`python -m robot_sf.render.review_workbench`), which renders a local,

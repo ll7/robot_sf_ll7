@@ -385,12 +385,16 @@ def _plan_open_entry(
     read_covering: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     """Plan one open candidate, reading claim/PR evidence only for running rows."""
+    try:
+        number = int(entry["number"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(f"open-row identity is not a valid issue number: {exc}") from exc
     labels = set(_label_names(entry.get("labels")))
     claim: dict[str, Any] | None = None
     covering: list[int] | None = None
     if _needs_evidence(labels):
-        claim = read_claim(int(entry["number"]))
-        coverage = read_covering(int(entry["number"]))
+        claim = read_claim(number)
+        coverage = read_covering(number)
         if (
             not isinstance(coverage, dict)
             or coverage.get("ok") is not True
@@ -398,7 +402,12 @@ def _plan_open_entry(
         ):
             claim = {"ok": False, "claimed": False, "error": "covering-PR read unavailable"}
         else:
-            covering = [int(pr) for pr in coverage.get("covering_prs", [])]
+            try:
+                covering = [int(pr) for pr in coverage.get("covering_prs", [])]
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"covering-PR list for issue {number} is malformed: {exc}"
+                ) from exc
     return plan_row(entry, repo=repo, claim=claim, covering_prs=covering)
 
 
@@ -652,7 +661,7 @@ def apply_closed_rows(
         for row in rows
         if row.get("action") == "remove_labels" and isinstance(row.get("issue"), int)
     ]
-    kwargs: dict[str, Any] = {"repo": repo}
+    kwargs: dict[str, Any] = {}
     if confirm_closed is not None:
         kwargs["confirm_closed"] = confirm_closed
     if label_remover is not None:

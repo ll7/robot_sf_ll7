@@ -447,3 +447,151 @@ def test_main_reports_blocked_inventory_without_mutation(monkeypatch: Any, capsy
 
     assert reconcile.main(["--repo", "ll7/robot_sf_ll7", "--skip-closed"]) == 2
     assert "blocked" in capsys.readouterr().err
+
+
+def _stale_issue(number: int, labels: list[str]) -> Any:
+    """Build one hygiene StaleIssue for closed-row fixture tests."""
+    from scripts.dev import closed_state_label_hygiene as hygiene
+
+    return hygiene.StaleIssue(
+        number=number,
+        title="stale closed issue",
+        url=f"https://github.test/issues/{number}",
+        state="closed",
+        stale_labels=tuple(labels),
+    )
+
+
+def _discovery_result(rows_by_label: dict) -> Any:
+    """Build one hygiene discovery result for fixture tests."""
+
+    class _Discovery:
+        def __init__(self, rows: dict) -> None:
+            self.rows_by_label = rows
+            self.truncations: list = []
+            self.source = "search"
+
+    return _Discovery(rows_by_label)
+
+
+def test_collect_closed_rows_plans_label_removal(monkeypatch: Any) -> None:
+    """Closed rows with live labels plan deterministic removal."""
+    from scripts.dev import closed_state_label_hygiene as hygiene
+
+    monkeypatch.setattr(
+        hygiene,
+        "discover_closed_issues_by_label",
+        lambda **_: _discovery_result({"state:ready": [{"number": 7701}]}),
+    )
+    monkeypatch.setattr(
+        hygiene,
+        "collect_stale_issues",
+        lambda rows_by_label, repo: [_stale_issue(7701, ["state:ready"])],
+    )
+    monkeypatch.setattr(
+        hygiene,
+        "reconcile_stale_issues",
+        lambda repo, candidates: list(candidates),
+    )
+
+    rows, inventory = reconcile.collect_closed_rows("ll7/robot_sf_ll7", limit=10)
+
+    assert inventory["complete"] is True
+    assert len(rows) == 1
+    assert rows[0]["issue"] == 7701
+    assert rows[0]["state"] == "closed"
+    assert rows[0]["reason_code"] == "closed_with_live_state_label"
+    assert rows[0]["action"] == "remove_labels"
+    assert rows[0]["target_labels"] == ["state:ready"]
+    assert rows[0]["applied"] is False
+
+
+def test_apply_closed_rows_records_removal(monkeypatch: Any) -> None:
+    """Applied closed rows record removed labels from the hygiene owner."""
+    from scripts.dev import closed_state_label_hygiene as hygiene
+
+    monkeypatch.setattr(
+        hygiene,
+        "fix_stale_issues",
+        lambda **_: [{"number": 7701, "skipped": False, "removed_labels": ["state:ready"]}],
+    )
+    rows = [
+        {
+            "issue": 7701,
+            "url": "https://github.test/issues/7701",
+            "action": "remove_labels",
+            "target_labels": ["state:ready"],
+            "reason_code": "closed_with_live_state_label",
+            "reason": "closed issues must not carry live routing labels",
+            "applied": False,
+            "applied_labels": [],
+        }
+    ]
+
+    result = reconcile.apply_closed_rows(rows, repo="ll7/robot_sf_ll7")
+
+    assert result[0]["applied"] is True
+    assert result[0]["applied_labels"] == ["state:ready"]
+
+
+def test_apply_closed_rows_defers_on_hygiene_skip(monkeypatch: Any) -> None:
+    """A hygiene skip (e.g. reopened issue) defers instead of mutating."""
+    from scripts.dev import closed_state_label_hygiene as hygiene
+
+    monkeypatch.setattr(
+        hygiene,
+        "fix_stale_issues",
+        lambda **_: [{"number": 7701, "skipped": True, "reason": "not_closed"}],
+    )
+    rows = [
+        {
+            "issue": 7701,
+            "url": "https://github.test/issues/7701",
+            "action": "remove_labels",
+            "target_labels": ["state:ready"],
+            "reason_code": "closed_with_live_state_label",
+            "reason": "closed issues must not carry live routing labels",
+            "applied": False,
+            "applied_labels": [],
+        }
+    ]
+
+    result = reconcile.apply_closed_rows(rows, repo="ll7/robot_sf_ll7")
+
+    assert result[0]["action"] == "deferred"
+    assert result[0]["applied"] is False
+
+
+def test_collect_closed_rows_fails_closed_on_discovery_error(monkeypatch: Any) -> None:
+    """Search/discovery failures never yield a partial closed set."""
+    from scripts.dev import closed_state_label_hygiene as hygiene
+
+    def _boom(**_: Any) -> Any:
+        raise RuntimeError("search unavailable")
+
+    monkeypatch.setattr(hygiene, "discover_closed_issues_by_label", _boom)
+
+    with pytest.raises(RuntimeError, match="closed-row discovery failed"):
+        reconcile.collect_closed_rows("ll7/robot_sf_ll7", limit=10)
+
+
+def test_plan_open_entry_rejects_malformed_identity() -> None:
+    """Malformed row identities fail closed instead of raising KeyError."""
+    with pytest.raises(RuntimeError, match="not a valid issue number"):
+        reconcile._plan_open_entry(
+            {"labels": [{"name": "state:running"}]},
+            repo="ll7/robot_sf_ll7",
+            read_claim=lambda issue: {"ok": True, "claimed": False},
+            read_covering=lambda issue: {"ok": True, "covering_prs": [], "truncated": False},
+        )
+
+
+def test_plan_open_entry_rejects_malformed_covering_list() -> None:
+    """Malformed covering-PR payloads fail closed instead of raising TypeError."""
+    with pytest.raises(RuntimeError, match="malformed"):
+        reconcile._plan_open_entry(
+            {"number": 7601, "labels": [{"name": "state:running"}]},
+            repo="ll7/robot_sf_ll7",
+            read_claim=lambda issue: {"ok": True, "claimed": False},
+            read_covering=lambda issue: {"ok": True, "covering_prs": ["NaN"], "truncated": False},
+        )

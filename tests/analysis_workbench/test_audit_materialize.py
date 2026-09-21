@@ -1735,3 +1735,48 @@ def test_materialization_request_and_row_adapter_preserve_boundaries(tmp_path: P
         output_root=tmp_path / "derived-row",
     )
     assert row_result.materialization_kind == DERIVED_RENDER
+
+
+def test_descriptor_backed_path_fails_closed_when_no_descriptor_view_exists() -> None:
+    """Path-only renderer adapters never fall back to a visible unresolved path."""
+
+    with pytest.raises(OSError, match="descriptor-backed renderer path is unavailable"):
+        materialize._descriptor_path(-1)
+
+
+def test_darwin_staging_helpers_use_the_private_lease_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Darwin fallback remains bounded when /dev/fd cannot be descended."""
+
+    lease = materialize._OutputLease(
+        root=tmp_path,
+        relative="render",
+        parts=("render",),
+        root_fd=-1,
+        root_identity=(0, 0),
+    )
+    monkeypatch.setattr(materialize.sys, "platform", "darwin")
+
+    assert materialize._staging_parent_path(lease, -1) == str(tmp_path)
+    assert materialize._renderer_root_path(tmp_path / "render", -1) == tmp_path / "render"
+
+
+def test_atomic_link_publication_is_no_replace_and_descriptor_relative(tmp_path: Path) -> None:
+    """The portable publication path preserves inode completeness and source removal."""
+
+    source_directory = tmp_path / "source"
+    destination_directory = tmp_path / "destination"
+    source_directory.mkdir()
+    destination_directory.mkdir()
+    (source_directory / "private.bin").write_bytes(b"complete")
+    source_fd = os.open(source_directory, os.O_RDONLY)
+    destination_fd = os.open(destination_directory, os.O_RDONLY)
+    try:
+        materialize._link_noreplace("private.bin", source_fd, "published.bin", destination_fd)
+    finally:
+        os.close(source_fd)
+        os.close(destination_fd)
+
+    assert not (source_directory / "private.bin").exists()
+    assert (destination_directory / "published.bin").read_bytes() == b"complete"

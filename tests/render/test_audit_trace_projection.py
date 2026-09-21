@@ -17,7 +17,13 @@ from robot_sf.analysis_workbench.audit_service import (
 from robot_sf.analysis_workbench.review_contracts import component_request_from_dict
 from robot_sf.benchmark.analysis_trace import trace_artifact_sha256
 from robot_sf.benchmark.runner import run_episode
-from robot_sf.render.audit_trace_projection import project_retained_native_trace
+from robot_sf.render.audit_trace_projection import (
+    TRACE_SCHEMA_VERSION,
+    _trace_from,
+    project_native_analysis_trace,
+    project_native_trace,
+    project_retained_native_trace,
+)
 from robot_sf.render.review_editor import build_editor_model
 
 if TYPE_CHECKING:
@@ -256,3 +262,63 @@ def test_projection_does_not_follow_retained_trace_path_or_media_label() -> None
     assert result["status"] == "unavailable"
     assert result["reason"] == "retained_native_trace_unavailable"
     assert result["panel_model"]["provenance"]["original_recording_presented"] is False
+
+
+def test_projection_reports_malformed_samples_events_and_optional_surfaces(
+    native_selected: dict[str, Any],
+) -> None:
+    """Malformed retained fields stay visible while optional surfaces remain explicit."""
+
+    selected = copy.deepcopy(native_selected)
+    trace = selected["retained_trace"]
+    original_steps = copy.deepcopy(trace["steps"])
+    trace["steps"] = [
+        {
+            "time_s": -1.0,
+            "robot": {
+                "position": [0.0, 0.0],
+                "actor_id": "",
+                "heading": True,
+                "velocity": ["bad", 0.0],
+                "radius_m": 0.0,
+            },
+            "pedestrians": [{"position": ["bad", 0.0], "actor_id": "", "radius_m": 0.0}],
+        },
+        {"time_s": "missing"},
+        "not-a-step",
+        *original_steps,
+    ]
+    trace["events"] = [{"time_s": -1.0}, {"time_s": "missing"}, "not-an-event"]
+    trace["map"] = {"map_id": "projection-fixture"}
+    trace["goal_point"] = [1.0, 2.0]
+    trace["artifact_sha256"] = trace_artifact_sha256(trace)
+
+    result = project_retained_native_trace(
+        selected,
+        materialization={
+            "status": "complete",
+            "materialization_kind": "derived_render",
+            "fidelity": "unverifiable",
+            "artifacts": [{"uri": "trajectory.png"}],
+        },
+    )
+
+    assert result["status"] == "partial"
+    panel = result["panel_model"]
+    assert panel["streams"]["scene"]["status"] == "partial"
+    assert panel["panels"]["scene"]["status"] == "unavailable"
+    assert panel["missingness"]["events"]["status"] == "partial"
+    assert panel["scene_surface"]["status"] == "available"
+    assert panel["goal_geometry"]["status"] == "available"
+    assert panel["provenance"]["materialization"]["presented_as"] == "derived_only"
+    assert any(item["reason_code"] == "scene_step_not_mapping" for item in panel["diagnostics"])
+
+    assert _trace_from({}, trace) is trace
+    assert _trace_from({"schema_version": TRACE_SCHEMA_VERSION}, None)["schema_version"] == (
+        TRACE_SCHEMA_VERSION
+    )
+    assert _trace_from({"algorithm_metadata": {"analysis_trace": trace}}, None) is trace
+    assert _trace_from({"retained_state": {"trace": trace}}, None) is trace
+
+    assert project_native_trace(native_selected)["status"] == "partial"
+    assert project_native_analysis_trace(native_selected)["status"] == "partial"

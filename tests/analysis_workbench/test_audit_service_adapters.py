@@ -509,3 +509,21 @@ def test_next_validation_and_lease_conflicts_are_explicit(
     with pytest.raises(CapabilityUnavailable, match="POSIX"):
         with adapters_module._next_lock(queue.state_path):
             pass
+
+
+def test_record_human_review_rejects_boolean_revision_before_queue_access(tmp_path: Path) -> None:
+    """Review CAS revisions use the same strict integer contract as Next."""
+
+    queue = AuditQueue(_queue().dataset, state_path=tmp_path / "queue.json")
+    adapter = QueueNextAdapter(_binding(), lambda: queue)
+
+    with pytest.raises(AuditContextConflict, match="expected revisions are invalid"):
+        adapter.record_human_review(
+            context=_context(),
+            before_review=lambda _queue: None,
+            expected_state_revision=True,
+            expected_input_revision=0,
+            operation_id="invalid-review-revision",
+            author_id="reviewer-1",
+            outcome="pass",
+        )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -490,6 +491,77 @@ def test_native_service_campaign_bridge_uses_literal_row_and_canonical_runner(
         assert session.usage.compute == 2.0
     finally:
         service.close()
+
+
+def test_campaign_row_binding_rejects_malformed_constructor_values(
+    admitted_native_case: dict[str, Any],
+) -> None:
+    """The immutable launcher join validates every digest and identity field."""
+
+    binding = _binding(admitted_native_case)
+    original = admitted_native_case["original"]
+    source = binding.request.sources[0]
+    descriptor = NativeDiagnosticCampaignRowBinding(
+        campaign_uri="campaign.json",
+        campaign_sha256="a" * 64,
+        native_uri=source.uri,
+        native_sha256=source.sha256,
+        episode_id=original["episode_id"],
+        scenario_id=original["scenario_id"],
+        seed=original["seed"],
+        planner_id=original["algo"],
+        source_commit=original["git_hash"],
+        config_identity=admitted_native_case["source_document"]["identity"]["config_identity"],
+    )
+
+    invalid_values = (
+        {"schema_version": "unsupported"},
+        {"campaign_sha256": "short"},
+        {"campaign_sha256": "z" * 64},
+        {"seed": True},
+        {"source_commit": "short"},
+        {"source_commit": "z" * 40},
+    )
+    for changes in invalid_values:
+        with pytest.raises(AuditValidationError):
+            replace(descriptor, **changes)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"unknown": "field"},
+        {"schema_version": "unsupported"},
+        {"campaign_sha256": "short"},
+        {"campaign_sha256": "z" * 64},
+        {"seed": -1},
+        {"source_commit": "short"},
+        {"source_commit": "z" * 40},
+    ],
+)
+def test_campaign_row_binding_from_mapping_rejects_malformed_values(
+    admitted_native_case: dict[str, Any], changes: dict[str, Any]
+) -> None:
+    """Mapping parsing applies the same closed schema before construction."""
+
+    binding = _binding(admitted_native_case)
+    original = admitted_native_case["original"]
+    source = binding.request.sources[0]
+    valid = NativeDiagnosticCampaignRowBinding(
+        campaign_uri="campaign.json",
+        campaign_sha256="a" * 64,
+        native_uri=source.uri,
+        native_sha256=source.sha256,
+        episode_id=original["episode_id"],
+        scenario_id=original["scenario_id"],
+        seed=original["seed"],
+        planner_id=original["algo"],
+        source_commit=original["git_hash"],
+        config_identity=admitted_native_case["source_document"]["identity"]["config_identity"],
+    )
+
+    with pytest.raises(AuditValidationError):
+        NativeDiagnosticCampaignRowBinding.from_mapping({**valid.to_dict(), **changes})
 
 
 @pytest.mark.parametrize(

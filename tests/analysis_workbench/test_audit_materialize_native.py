@@ -15,6 +15,7 @@ from robot_sf.analysis_workbench.audit_materialize import (
     DERIVED_RENDER,
     FIDELITY_UNVERIFIABLE,
     materialize_episode,
+    materialize_native_record,
 )
 from robot_sf.benchmark.analysis_trace import trace_artifact_sha256
 from robot_sf.benchmark.runner import run_episode
@@ -94,6 +95,54 @@ def test_native_missing_video_renders_retained_trace_without_simulation(
     )
     assert manifest["source_digest"] == trace_digest
     assert (tmp_path / "derived" / "native-retained-render" / "trajectory.png").is_file()
+
+
+def test_native_record_materialization_rejects_untrusted_generated_records(
+    tmp_path: Path, native_episode: dict
+) -> None:
+    """Generated-record admission fails closed before any derived publication."""
+
+    selected = _selected_episode(native_episode)
+    cases = (
+        None,
+        {"episode_id": "different-episode"},
+        {"episode_id": selected["episode_id"]},
+        {
+            "episode_id": selected["episode_id"],
+            "algorithm_metadata": {"analysis_trace": {"artifact_sha256": "0" * 64}},
+        },
+    )
+    for index, record in enumerate(cases):
+        result = materialize_native_record(
+            selected,
+            record,  # type: ignore[arg-type]
+            output_root=tmp_path / f"invalid-{index}",
+        )
+        assert result.status == "unavailable"
+        assert result.reason == "native_record_unavailable"
+        assert not (tmp_path / f"invalid-{index}").exists()
+
+    malformed_episode = materialize_native_record(
+        {},
+        None,  # type: ignore[arg-type]
+        output_root=tmp_path / "invalid-episode",
+    )
+    assert malformed_episode.status == "unavailable"
+    assert malformed_episode.reason == "native_record_unavailable"
+
+
+def test_native_record_materialization_uses_default_output_directory(
+    tmp_path: Path, native_episode: dict
+) -> None:
+    """A valid generated record is rendered under its deterministic default path."""
+
+    selected = _selected_episode(native_episode)
+    result = materialize_native_record(selected, native_episode, output_root=tmp_path / "derived")
+
+    assert result.status == "complete", result.to_dict()
+    assert result.materialization_kind == DERIVED_RENDER
+    assert result.output_directory is not None
+    assert (tmp_path / "derived" / result.output_directory).is_dir()
 
 
 def test_retained_trace_accepts_distinct_source_config_identity_and_trace_digest(

@@ -4,9 +4,11 @@ This module is deliberately a small BA-05 leaf.  It resolves an explicitly
 declared recording, verifies the bytes and available episode identities, and
 returns a historical-original reference without copying or replaying it.  If
 the original is unavailable, it can render *retained* trace/replay state using
-the existing SREV scene or replay figure renderer.  It never constructs or
-advances a simulator.  Exact-input diagnostic execution is an explicit
-``unavailable`` result in this slice and belongs to a later adapter.
+the existing SREV scene or replay figure renderer.  The generic
+``materialize_episode`` entry point never constructs or advances a simulator.
+The trusted native adapter may hand one newly generated exact-input record to
+the renderer through ``materialize_native_record``; that explicit seam keeps
+execution authority outside this source-first resolver.
 
 The result is diagnostic-only.  A derived render is not a historical
 recording, and an output from a later diagnostic execution must not be
@@ -23,6 +25,7 @@ import math
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
@@ -94,7 +97,8 @@ _IDENTITY_ALIASES: dict[str, tuple[str, ...]] = {
         "source_digest",
         "sha256",
     ),
-    "config_identity": ("config_identity", "config_digest", "config_hash"),
+    "config_identity": ("config_identity", "config_hash"),
+    "config_digest": ("config_digest",),
     "source_commit": ("source_commit", "repo_commit", "commit_sha", "commit"),
     "checkpoint_digest": ("checkpoint_digest", "checkpoint_hash"),
     "environment_digest": ("environment_digest", "environment_hash"),
@@ -423,6 +427,11 @@ def _episode_values(episode: Mapping[str, Any]) -> dict[str, str]:
         Normalized identity fields, including the required episode identifier.
     """
 
+    # ``config_digest`` is a recognized identity alias whose presence must be
+    # type-checked, but it is not a required cross-record identity component.
+    # Validate it independently so malformed input fails closed without
+    # turning an otherwise valid media descriptor into an ``unbound`` match.
+    _identity_value(episode, "config_digest")
     values = {field: _identity_value(episode, field) for field in _IDENTITY_FIELDS}
     values["episode_id"] = _bounded_text(values["episode_id"], name="episode_id", required=True)
     return values
@@ -435,6 +444,7 @@ def _descriptor_identity(descriptor: Mapping[str, Any]) -> dict[str, str]:
         Normalized identity values declared by the recording descriptor.
     """
 
+    _identity_value(descriptor, "config_digest")
     return {field: _identity_value(descriptor, field) for field in _IDENTITY_FIELDS}
 
 
@@ -862,7 +872,7 @@ def _verify_native_trace_identity(  # noqa: C901 - each selected claim fails clo
     for selected, observed in (
         ("scenario_id", "scenario_id"),
         ("source_commit", "git_hash"),
-        ("config_identity", "config_digest"),
+        ("config_digest", "config_digest"),
     ):
         expected = _identity_value(episode, selected)
         if expected and expected != trace.get(observed):
@@ -1297,12 +1307,19 @@ class _OutputLease:
 
 
 def _descriptor_path(descriptor: int) -> Path:
-    """Return a Linux descriptor-backed path for path-only renderer APIs."""
+    """Return a descriptor-backed path for path-only renderer APIs.
 
-    proc_path = Path(f"/proc/self/fd/{descriptor}")
-    if not proc_path.exists():
-        raise OSError("descriptor-backed renderer path is unavailable")
-    return proc_path
+    Linux exposes descriptors through ``/proc/self/fd`` while macOS exposes
+    the same capability through ``/dev/fd``. Keep the path tied to the open
+    descriptor instead of resolving its target, so a renderer cannot be
+    redirected by replacing a visible path while the lease is live.
+    """
+
+    for prefix in ("/proc/self/fd", "/dev/fd"):
+        candidate = Path(prefix) / str(descriptor)
+        if candidate.exists():
+            return candidate
+    raise OSError("descriptor-backed renderer path is unavailable")
 
 
 def _walk_output_from_fd(root_fd: int, parts: Sequence[str], *, create: bool) -> int:
@@ -1523,6 +1540,27 @@ def _open_private_staging_parent(root_fd: int, root_identity: tuple[int, int]) -
     return os.dup(root_fd)
 
 
+def _staging_parent_path(lease: _OutputLease, staging_parent_fd: int) -> str:
+    """Return a temporary-directory parent usable on the active platform.
+
+    Linux keeps the descriptor-backed path so parent swaps cannot redirect
+    renderer staging. Darwin's ``mkdtemp`` cannot reliably descend through
+    ``/dev/fd``; its private lease root remains the bounded fallback there.
+    """
+
+    if sys.platform == "darwin":
+        return str(lease.root)
+    return str(_descriptor_path(staging_parent_fd))
+
+
+def _renderer_root_path(render_root: Path, render_root_fd: int) -> Path:
+    """Return the renderer path while retaining descriptor safety where viable."""
+
+    if sys.platform == "darwin":
+        return render_root
+    return _descriptor_path(render_root_fd)
+
+
 def _bind_output_directory(lease: _OutputLease, *, create: bool) -> None:
     """Create or open the final output directory through the retained root fd."""
 
@@ -1604,46 +1642,96 @@ def _publish_staged_files(lease: _OutputLease, staged_output: int) -> None:
     os.fsync(lease.directory_fd)
 
 
+def _link_noreplace(
+    source_name: str,
+    source_directory_fd: int,
+    destination_name: str,
+    destination_directory_fd: int,
+) -> None:
+    """Publish a complete private inode with an atomic no-replace link."""
+
+    source_stat = os.stat(source_name, dir_fd=source_directory_fd, follow_symlinks=False)
+    destination_stat = os.fstat(destination_directory_fd)
+    if source_stat.st_dev != destination_stat.st_dev:
+        raise OSError("atomic no-replace publication crosses filesystems")
+    os.link(
+        source_name,
+        destination_name,
+        src_dir_fd=source_directory_fd,
+        dst_dir_fd=destination_directory_fd,
+        follow_symlinks=False,
+    )
+    try:
+        os.unlink(source_name, dir_fd=source_directory_fd)
+    except OSError:
+        try:
+            os.unlink(destination_name, dir_fd=destination_directory_fd)
+        except OSError:
+            pass
+        raise
+
+
 def _rename_noreplace(
     source_name: str,
     source_directory_fd: int,
     destination_name: str,
     destination_directory_fd: int,
 ) -> None:
-    """Atomically rename one descriptor-relative path without replacing it.
+    """Atomically rename one descriptor-relative path without replacement.
 
-    Python's portable ``os.rename`` API has no no-replace flag.  This module's
-    descriptor-backed publication contract therefore uses the Linux libc
-    ``renameat2`` primitive and fails closed when that primitive is unavailable;
-    an overwrite-prone or partially visible fallback would weaken the output
-    boundary.
+    Linux provides ``renameat2(RENAME_NOREPLACE)`` and macOS provides the
+    equivalent ``renameatx_np(RENAME_EXCL)``. Python's portable ``os.rename``
+    has no no-replace flag. When a Darwin runtime does not expose the libc
+    symbol, use a same-filesystem hard-link publication: ``link`` atomically
+    reserves the destination without replacement, and removing the private
+    source leaves the complete, fsynced inode visible. A cross-device or
+    otherwise unsupported fallback still fails closed.
     """
 
     try:
         libc = ctypes.CDLL(None, use_errno=True)
-        renameat2 = libc.renameat2
-    except (AttributeError, OSError) as error:
-        raise OSError("atomic no-replace rename is unavailable") from error
-    renameat2.argtypes = [
+    except OSError:
+        _link_noreplace(
+            source_name, source_directory_fd, destination_name, destination_directory_fd
+        )
+        return
+    try:
+        rename = libc.renameat2
+        flag = 1  # Linux RENAME_NOREPLACE
+    except AttributeError:
+        try:
+            rename = libc.renameatx_np
+            flag = 4  # macOS RENAME_EXCL
+        except AttributeError:
+            _link_noreplace(
+                source_name, source_directory_fd, destination_name, destination_directory_fd
+            )
+            return
+    rename.argtypes = [
         ctypes.c_int,
         ctypes.c_char_p,
         ctypes.c_int,
         ctypes.c_char_p,
         ctypes.c_uint,
     ]
-    renameat2.restype = ctypes.c_int
-    result = renameat2(
+    rename.restype = ctypes.c_int
+    result = rename(
         source_directory_fd,
         os.fsencode(source_name),
         destination_directory_fd,
         os.fsencode(destination_name),
-        1,  # RENAME_NOREPLACE
+        flag,
     )
     if result == 0:
         return
     error_number = ctypes.get_errno()
     if error_number == errno.EEXIST:
         raise FileExistsError(error_number, os.strerror(error_number), destination_name)
+    if error_number in {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP}:
+        _link_noreplace(
+            source_name, source_directory_fd, destination_name, destination_directory_fd
+        )
+        return
     raise OSError(error_number, os.strerror(error_number), destination_name)
 
 
@@ -2077,6 +2165,7 @@ def _result(  # noqa: PLR0913 - result envelope keeps all diagnostic fields expl
     diagnostics: Sequence[str] = (),
     provenance: Mapping[str, Any] | None = None,
     reason: str = "",
+    simulation_executed: bool = False,
 ) -> MaterializationResult:
     """Construct a consistently bounded result envelope.
 
@@ -2096,6 +2185,7 @@ def _result(  # noqa: PLR0913 - result envelope keeps all diagnostic fields expl
         diagnostics=tuple(str(item)[:MAX_TEXT] for item in diagnostics),
         provenance=dict(provenance or {}),
         reason=str(reason)[:MAX_TEXT],
+        simulation_executed=simulation_executed,
     )
 
 
@@ -2162,6 +2252,9 @@ def _render_replay_states(  # noqa: PLR0913 - native provenance accompanies exis
     render_config: Mapping[str, Any] | None,
     native_trace_digest: str | None = None,
     retained_source_file_digest: str | None = None,
+    fidelity: str = FIDELITY_UNVERIFIABLE,
+    provenance_extra: Mapping[str, Any] | None = None,
+    simulation_executed: bool = False,
 ) -> MaterializationResult:
     """Render retained replay states through the existing figure renderer.
 
@@ -2185,6 +2278,9 @@ def _render_replay_states(  # noqa: PLR0913 - native provenance accompanies exis
             render_config=render_config,
             native_trace_digest=native_trace_digest,
             retained_source_file_digest=retained_source_file_digest,
+            fidelity=fidelity,
+            provenance_extra=provenance_extra,
+            simulation_executed=simulation_executed,
             lease=lease,
         )
     finally:
@@ -2201,6 +2297,9 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
     render_config: Mapping[str, Any] | None,
     native_trace_digest: str | None,
     retained_source_file_digest: str | None,
+    fidelity: str,
+    provenance_extra: Mapping[str, Any] | None,
+    simulation_executed: bool,
     lease: _OutputLease,
 ) -> MaterializationResult:
     """Render replay state through a retained descriptor-backed output lease.
@@ -2218,7 +2317,10 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
         staging_parent_fd = _open_private_staging_parent(lease.root_fd, lease.root_identity)
         with tempfile.TemporaryDirectory(
             prefix=".audit-materialize-render-",
-            dir=str(_descriptor_path(staging_parent_fd)),
+            # macOS cannot reliably descend through ``/dev/fd/<fd>`` for
+            # ``mkdtemp``; ``_staging_parent_path`` selects the bounded
+            # visible-lease fallback only on that platform.
+            dir=_staging_parent_path(lease, staging_parent_fd),
         ) as render_root_name:
             render_root = Path(render_root_name)
             render_root_fd = os.open(
@@ -2227,7 +2329,7 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
                 dir_fd=staging_parent_fd,
             )
             try:
-                artifact_path = _descriptor_path(render_root_fd) / "trajectory.png"
+                artifact_path = _renderer_root_path(render_root, render_root_fd) / "trajectory.png"
                 figure = generate_trajectory(replay, artifact_path, fmt="png")
                 figure_digest = _figure_artifact_digest(figure)
                 _publish_staged_files(lease, render_root_fd)
@@ -2246,6 +2348,7 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
             output_directory=output,
             diagnostics=(*diagnostics, f"retained_replay_render_failed:{type(error).__name__}"),
             reason="retained_replay_render_failed",
+            simulation_executed=simulation_executed,
         )
     finally:
         if staging_parent_fd >= 0:
@@ -2264,10 +2367,12 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
         "renderer": "robot_sf.benchmark.episode_replay_figure.generate_trajectory",
         "renderer_version": MATERIALIZATION_TOOL_VERSION,
         "renderer_invoked": True,
-        "simulation_advanced": False,
+        "simulation_advanced": simulation_executed,
         "evidence_boundary": "diagnostic_only",
         "claim_boundary": "derived render of retained states; not historical original or benchmark evidence",
     }
+    if provenance_extra:
+        provenance.update(dict(provenance_extra))
     if native_trace_digest is not None:
         provenance["native_trace_digest"] = native_trace_digest
     if retained_source_file_digest is not None:
@@ -2275,7 +2380,7 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
     manifest = {
         "schema_version": MATERIALIZATION_SCHEMA_VERSION,
         "materialization_kind": DERIVED_RENDER,
-        "fidelity": FIDELITY_UNVERIFIABLE,
+        "fidelity": fidelity,
         "episode_id": episode_values["episode_id"],
         "cache_key": cache_key,
         "source_digest": source_digest,
@@ -2311,11 +2416,12 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
             output_directory=output,
             diagnostics=(*diagnostics, f"manifest_write_failed:{type(error).__name__}"),
             reason="manifest_write_failed",
+            simulation_executed=simulation_executed,
         )
     return _result(
         status="complete",
         kind=DERIVED_RENDER,
-        fidelity=FIDELITY_UNVERIFIABLE,
+        fidelity=fidelity,
         episode_id=episode_values["episode_id"],
         cache_key=cache_key,
         source_digest=source_digest,
@@ -2330,6 +2436,7 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
         ),
         diagnostics=diagnostics,
         provenance=provenance,
+        simulation_executed=simulation_executed,
     )
 
 
@@ -2403,7 +2510,9 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
         staging_parent_fd = _open_private_staging_parent(lease.root_fd, lease.root_identity)
         with tempfile.TemporaryDirectory(
             prefix=".audit-materialize-source-",
-            dir=str(lease.renderer_root),
+            # Keep the private source path usable on Darwin; publication and
+            # final identity checks remain descriptor-relative elsewhere.
+            dir=_staging_parent_path(lease, staging_parent_fd),
         ) as source_dir:
             source_base = Path(source_dir)
             source_path = source_base / "retained-trace.json"
@@ -2421,7 +2530,7 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
             typed = simulation_trace_export_from_dict(payload)
             with tempfile.TemporaryDirectory(
                 prefix=".audit-materialize-render-",
-                dir=str(_descriptor_path(staging_parent_fd)),
+                dir=_staging_parent_path(lease, staging_parent_fd),
             ) as render_root_name:
                 render_root = Path(render_root_name)
                 render_root_fd = os.open(
@@ -2430,7 +2539,7 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
                     dir_fd=staging_parent_fd,
                 )
                 try:
-                    renderer_base = _descriptor_path(render_root_fd)
+                    renderer_base = _renderer_root_path(render_root, render_root_fd)
                     request = ComponentRequest(
                         request_id=f"materialize-{cache_key[:16]}",
                         component_id=review_scene.COMPONENT_ID,
@@ -2586,6 +2695,146 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
         diagnostics=(*diagnostics, *renderer_diagnostics),
         provenance=provenance,
     )
+
+
+def materialize_native_record(
+    episode: Mapping[str, Any],
+    record: Mapping[str, Any],
+    *,
+    output_root: str | Path | MaterializationOutputRoot,
+    output_directory: str | None = None,
+    render_config: Mapping[str, Any] | None = None,
+    fidelity: str = FIDELITY_UNVERIFIABLE,
+    diagnostics: Sequence[str] = (),
+    provenance: Mapping[str, Any] | None = None,
+) -> MaterializationResult:
+    """Render one trusted, newly generated native record as a derived view.
+
+    This is intentionally separate from :func:`materialize_episode`.  The
+    caller must already have admitted the source bundle, executed the closed
+    canonical runner, and performed the comparison/source-integrity checks.
+    Only the generated record is projected into the renderer; historical
+    telemetry is never copied into the selected episode or the derived
+    artifact.
+
+    Args:
+        episode: Selected historical row, used for the episode binding and
+            cache identity.
+        record: The newly generated canonical runner record.
+        output_root: Descriptor-bound or path-based output capability.
+        output_directory: Relative output directory under ``output_root``.
+        render_config: Narrow replay renderer configuration.
+        fidelity: Comparison classification supplied by the native adapter.
+        diagnostics: Bounded adapter diagnostics to carry into the manifest.
+        provenance: Native execution/provenance fields to carry into the
+            derived manifest.  Standard renderer fields remain owned here.
+
+    Returns:
+        A diagnostic-only derived-render result.  Renderer or record proof
+        failures are unavailable/failed and never become historical media.
+    """
+
+    simulation_executed = True
+    try:
+        episode_map = _mapping(episode, name="episode")
+        episode_values = _episode_values(episode_map)
+        if not isinstance(record, Mapping):
+            raise MaterializationValidationError("native generated record must be an object")
+        record_map = dict(record)
+        if record_map.get("episode_id") != episode_values["episode_id"]:
+            raise MaterializationValidationError(
+                "native generated record episode_id does not match selected episode"
+            )
+        metadata = record_map.get("algorithm_metadata")
+        trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+        if not isinstance(trace, Mapping):
+            raise MaterializationValidationError(
+                "native generated record analysis trace is missing"
+            )
+        trace = dict(trace)
+        trace_digest = trace.get("artifact_sha256")
+        if not _valid_sha256(trace_digest) or trace_artifact_sha256(trace) != trace_digest:
+            raise MaterializationValidationError("native generated trace digest mismatch")
+        # The generated trace is already identity-checked by the native
+        # adapter. Re-run the renderer's bounded trace checks on a synthetic
+        # retained row with its distinct resolved configuration digest.
+        render_episode = {
+            "episode_id": episode_values["episode_id"],
+            "seed": record_map.get("seed"),
+            "scenario_id": record_map.get("scenario_id"),
+            "planner_id": record_map.get("algo"),
+            "source_commit": record_map.get("git_hash"),
+            "config_digest": trace.get("config_digest"),
+            "retained_trace": trace,
+        }
+        states = _native_trace_states(render_episode, trace)
+        cache_episode = dict(episode_map)
+        cache_key = build_materialization_cache_key(
+            cache_episode,
+            source_digest=str(trace_digest),
+            render_config=render_config,
+        )
+        relative_output = _safe_output_directory(output_directory)
+        if relative_output is None:
+            relative_output = _default_output_directory(episode_values["episode_id"], cache_key)
+        output_capability: Path | MaterializationOutputRoot
+        output_capability = _prepare_output_root(output_root)
+        extra = dict(provenance or {})
+        # The native adapter is trusted to supply identity/comparison fields,
+        # while the renderer owns these safety labels.
+        for protected in (
+            "renderer",
+            "renderer_version",
+            "renderer_invoked",
+            "simulation_advanced",
+            "evidence_boundary",
+            "claim_boundary",
+        ):
+            extra.pop(protected, None)
+        return _render_replay_states(
+            render_episode,
+            states,
+            output_root=output_capability,
+            output_relative=relative_output,
+            cache_key=cache_key,
+            diagnostics=tuple(diagnostics),
+            render_config=render_config,
+            native_trace_digest=str(trace_digest),
+            fidelity=fidelity,
+            provenance_extra=extra,
+            simulation_executed=simulation_executed,
+        )
+    except (
+        MaterializationValidationError,
+        FileNotFoundError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as error:
+        try:
+            episode_id = _episode_values(_mapping(episode, name="episode"))["episode_id"]
+        except MaterializationValidationError:
+            episode_id = ""
+        cache_key = _sha256(
+            _canonical_bytes(
+                {
+                    "schema_version": MATERIALIZATION_SCHEMA_VERSION,
+                    "native_record_error": type(error).__name__,
+                    "episode_id": episode_id,
+                }
+            )
+        )
+        return _result(
+            status="unavailable",
+            kind=UNAVAILABLE,
+            fidelity=FIDELITY_UNAVAILABLE,
+            episode_id=episode_id,
+            cache_key=cache_key,
+            diagnostics=(*tuple(diagnostics), f"native_record_unavailable:{type(error).__name__}"),
+            reason="native_record_unavailable",
+            simulation_executed=simulation_executed,
+        )
 
 
 def materialize_episode(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed adapter
@@ -2952,4 +3201,5 @@ __all__ = [
     "admit_source_root",
     "build_materialization_cache_key",
     "materialize_episode",
+    "materialize_native_record",
 ]

@@ -77,7 +77,6 @@ from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.event_ledger import validate_record_event_ledger
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
-from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.paired_effect_metric_contract import (
@@ -114,6 +113,25 @@ from robot_sf.training.task_bundles import is_task_bundle_reference
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+
+
+def run_map_batch(*args: Any, **kwargs: Any) -> Any:
+    """Dispatch to the map runner without importing it during module startup.
+
+    The module-level seam is kept for callers and tests that patch
+    ``robot_sf.benchmark.runner.run_map_batch``.  Importing the implementation
+    only when map dispatch is requested preserves the lightweight native
+    diagnostic child startup path.
+
+    Returns:
+        The map-runner summary returned by the lazily imported implementation.
+    """
+
+    from robot_sf.benchmark.map_runner.map_runner import (  # noqa: PLC0415
+        run_map_batch as _run_map_batch,
+    )
+
+    return _run_map_batch(*args, **kwargs)
 
 
 DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3

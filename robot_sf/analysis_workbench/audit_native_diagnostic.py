@@ -32,6 +32,7 @@ import multiprocessing
 import os
 import stat
 import time
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -50,7 +51,6 @@ from robot_sf.analysis_workbench.review_contracts import (
     resolve_admitted_source,
 )
 from robot_sf.benchmark.analysis_trace import trace_artifact_sha256
-from robot_sf.benchmark.runner import run_episode
 
 NATIVE_DIAGNOSTIC_SCHEMA_VERSION = "native-diagnostic.v1"
 NATIVE_SOURCE_SCHEMA_VERSION = "native-diagnostic-source.v1"
@@ -127,12 +127,33 @@ _SOURCE_IDENTITY_KEYS = frozenset(
 _RECORD_IDENTITY_KEYS = frozenset(
     {"config_identity", "initial_state_sha256", "environment_identity"}
 )
+_EXACT_INPUT_STATE_KEYS = frozenset(
+    {
+        "recording",
+        "original_recording",
+        "original_trace",
+        "retained_trace",
+        "retained_trace_source",
+        "retained_trace_recording",
+        "simulation_trace",
+        "trace",
+        "retained_state",
+        "retained_states",
+        "replay_steps",
+    }
+)
 _NATIVE_CONFIG_IDENTITY_PREFIX = "simple_policy-config.v1:"
 ROLE_HISTORICAL_ORIGINAL = "historical_original"
 ROLE_DIAGNOSTIC_CONTROL = "new_diagnostic_control"
 ROLE_DIAGNOSTIC_INTERVENTION = "new_diagnostic_intervention"
+ROLE_EXACT_INPUT_REGENERATION = "new_exact_input_regeneration"
 _NATIVE_RECORD_ROLES = frozenset(
-    {ROLE_HISTORICAL_ORIGINAL, ROLE_DIAGNOSTIC_CONTROL, ROLE_DIAGNOSTIC_INTERVENTION}
+    {
+        ROLE_HISTORICAL_ORIGINAL,
+        ROLE_DIAGNOSTIC_CONTROL,
+        ROLE_DIAGNOSTIC_INTERVENTION,
+        ROLE_EXACT_INPUT_REGENERATION,
+    }
 )
 _RUNTIME_BOOLEAN_MARKERS = frozenset(
     {
@@ -1150,6 +1171,275 @@ def _record_execution_errors(
     return tuple(errors)
 
 
+def _selected_identity_candidates(
+    episode: Mapping[str, Any], aliases: Sequence[str]
+) -> tuple[Any, ...]:
+    """Return explicit selected-row identity claims from named envelopes."""
+
+    containers: list[Mapping[str, Any]] = [episode]
+    pending: list[Mapping[str, Any]] = [episode]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop(0)
+        marker = id(current)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        for key in ("source", "source_identity", "provenance", "identity"):
+            nested = current.get(key)
+            if isinstance(nested, Mapping):
+                containers.append(nested)
+                pending.append(nested)
+    values: list[Any] = []
+    for container in containers:
+        for alias in aliases:
+            if alias in container and container[alias] not in (None, ""):
+                values.append(container[alias])
+    return tuple(values)
+
+
+def _selected_claim_candidates(
+    episode: Mapping[str, Any], aliases: Sequence[str]
+) -> tuple[Any, ...]:
+    """Return explicit state/planner claims from the selected row envelopes."""
+
+    containers: list[Mapping[str, Any]] = []
+    pending: list[Any] = [episode]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop(0)
+        marker = id(current)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        if isinstance(current, Mapping):
+            containers.append(current)
+            pending.extend(current.values())
+        elif isinstance(current, (list, tuple)):
+            pending.extend(current)
+    values: list[Any] = []
+    for container in containers:
+        for alias in aliases:
+            if alias in container and container[alias] not in (None, ""):
+                values.append(container[alias])
+    return tuple(values)
+
+
+def _validate_source_recipe_identity(
+    source_document: _SourceDocument, request: NativeDiagnosticRequest
+) -> None:
+    """Bind every recipe source identity field to the admitted source bundle."""
+
+    recipe_identity = request.recipe.document.get("source_identity")
+    if not isinstance(recipe_identity, Mapping):
+        raise NativeDiagnosticError(["source_admission: recipe source identity is missing"])
+    for identity_key in _SOURCE_IDENTITY_KEYS:
+        if source_document.identity[identity_key] != recipe_identity.get(identity_key):
+            raise NativeDiagnosticError(
+                [f"source_admission: {identity_key} differs between source and recipe"]
+            )
+
+
+def _selected_exact_input_errors(
+    episode: Mapping[str, Any],
+    source_document: _SourceDocument,
+    *,
+    source_digest: str,
+) -> tuple[str, ...]:
+    """Validate selected-row claims before trusted exact-input execution.
+
+    The source document remains authoritative for executable inputs.  A row may
+    omit optional identity fields, but every explicit claim must agree with the
+    admitted source.  This prevents a selected campaign row from changing the
+    scenario, planner, or state that the launcher admitted.
+    """
+
+    del source_digest  # Campaign-file digests are not native source identity.
+    if not isinstance(episode, Mapping):
+        return ("selected episode is not a mapping",)
+    errors: list[str] = []
+    runner = source_document.runner_input
+    original = source_document.original_record
+    selected_episode_id = episode.get("episode_id")
+    expected_episode_id = original.get("episode_id")
+    if selected_episode_id != expected_episode_id:
+        errors.append("selected episode_id does not match admitted historical episode")
+
+    def _check_text(
+        label: str,
+        aliases: Sequence[str],
+        expected: str,
+        *,
+        accepted: Sequence[str] = (),
+    ) -> None:
+        claims = _selected_identity_candidates(episode, aliases)
+        if not claims:
+            return
+        if any(not isinstance(value, str) for value in claims):
+            errors.append(f"selected {label} identity is malformed")
+            return
+        accepted_values = {expected, *accepted}
+        if any(value not in accepted_values for value in claims):
+            errors.append(f"selected {label} identity does not match admitted source")
+
+    _check_text(
+        "source_commit",
+        ("source_commit", "repo_commit", "commit_sha", "commit"),
+        str(source_document.identity["source_commit"]),
+    )
+    historical_trace = _trace(original)
+    historical_trace_config = (
+        historical_trace.get("config_digest") if isinstance(historical_trace, Mapping) else None
+    )
+    accepted_config = (historical_trace_config,) if isinstance(historical_trace_config, str) else ()
+    _check_text(
+        "config",
+        ("config_identity", "config_digest", "config_hash"),
+        str(source_document.identity["config_identity"]),
+        accepted=accepted_config,
+    )
+    _check_text(
+        "initial_state",
+        ("initial_state_sha256", "initial_state_digest", "initial_state_hash"),
+        str(source_document.identity["initial_state_sha256"]),
+    )
+
+    environment_claims = _selected_identity_candidates(episode, ("environment_identity",))
+    expected_environment = source_document.identity["environment_identity"]
+    for claim in environment_claims:
+        if not isinstance(claim, Mapping) or dict(claim) != dict(expected_environment):
+            errors.append("selected environment identity does not match admitted source")
+            break
+    _check_text(
+        "environment",
+        ("environment_digest", "environment_hash"),
+        str(expected_environment["scenario_digest"]),
+    )
+
+    scenario_claims = _selected_claim_candidates(episode, ("scenario_params",))
+    expected_scenario = runner["scenario_params"]
+    for claim in scenario_claims:
+        if not isinstance(claim, Mapping) or dict(claim) != dict(expected_scenario):
+            errors.append("selected scenario_params do not match admitted runner input")
+            break
+    initial_state_claims = _selected_claim_candidates(episode, ("initial_state",))
+    expected_initial_state = {
+        "robot_start": list(runner["robot_start"]),
+        "robot_goal": list(runner["robot_goal"]),
+    }
+    for claim in initial_state_claims:
+        if not isinstance(claim, Mapping) or dict(claim) != expected_initial_state:
+            errors.append("selected initial_state does not match admitted runner input")
+            break
+    for field_name, expected in (
+        ("robot_start", runner["robot_start"]),
+        ("robot_goal", runner["robot_goal"]),
+    ):
+        for claim in _selected_claim_candidates(episode, (field_name,)):
+            try:
+                if list(_vector2(claim, name=f"selected.{field_name}")) != list(
+                    _vector2(expected, name=f"runner_input.{field_name}")
+                ):
+                    errors.append(f"selected {field_name} differs from admitted runner input")
+                    break
+            except NativeDiagnosticError:
+                errors.append(f"selected {field_name} is malformed")
+                break
+    for claim in _selected_claim_candidates(episode, ("dt", "dt_s")):
+        try:
+            if not math.isclose(float(claim), float(runner["dt"]), abs_tol=1e-12):
+                errors.append("selected dt differs from admitted runner input")
+                break
+        except (TypeError, ValueError):
+            errors.append("selected dt is malformed")
+            break
+    for claim in _selected_claim_candidates(episode, ("record_forces",)):
+        if claim != runner["record_forces"]:
+            errors.append("selected record_forces differs from admitted runner input")
+            break
+    for claim in _selected_claim_candidates(episode, ("telemetry",)):
+        if not isinstance(claim, Mapping) or dict(claim) != dict(runner["telemetry"]):
+            errors.append("selected telemetry differs from admitted runner input")
+            break
+
+    historical_provenance = original.get("provenance")
+    historical_native = (
+        historical_provenance.get("native_diagnostic")
+        if isinstance(historical_provenance, Mapping)
+        else None
+    )
+    historical_execution_id = (
+        historical_native.get("execution_id") if isinstance(historical_native, Mapping) else None
+    ) or expected_episode_id
+    execution_claims = _selected_identity_candidates(episode, ("execution_id", "run_id"))
+    for claim in execution_claims:
+        if not isinstance(claim, str) or claim != historical_execution_id:
+            errors.append("selected execution_id does not match historical execution")
+            break
+
+    forbidden_claim_aliases = (
+        "planner_config",
+        "algorithm_config",
+        "algo_config",
+        "algo_config_path",
+        "config",
+        "planner_state",
+        "policy_state",
+        "model_path",
+        "model",
+        "model_id",
+        "model_checkpoint",
+        "checkpoint",
+        "checkpoint_path",
+        "checkpoint_uri",
+        "checkpoint_ref",
+        "checkpoint_digest",
+        "checkpoint_hash",
+        "stateful",
+        "state",
+        "state_path",
+        "runtime_state",
+        "replay_state",
+        "weights",
+        "resume",
+    )
+    for alias in forbidden_claim_aliases:
+        claims = _selected_claim_candidates(episode, (alias,))
+        if any(claim not in (None, "", False, [], {}) for claim in claims):
+            errors.append(f"selected {alias} claim is unsupported for stateless exact input")
+
+    for label, actual, expected in (
+        ("scenario", episode.get("scenario_id"), runner["scenario_params"]["id"]),
+        ("planner", episode.get("algo", episode.get("planner_id")), runner.get("algo")),
+    ):
+        if actual not in (None, "") and actual != expected:
+            errors.append(f"selected {label} differs from admitted runner input")
+    if "seed" in episode and episode["seed"] != runner["seed"]:
+        errors.append("selected seed differs from admitted runner input")
+    if "horizon" in episode and episode["horizon"] != runner["horizon"]:
+        errors.append("selected horizon differs from admitted runner input")
+    if "dt_s" in episode:
+        try:
+            if not math.isclose(float(episode["dt_s"]), float(runner["dt"]), abs_tol=1e-12):
+                errors.append("selected dt differs from admitted runner input")
+        except (TypeError, ValueError):
+            errors.append("selected dt is malformed")
+
+    # The exact-input route is only an explicit repair for absent review
+    # material.  It must never silently replace a retained trace or recording
+    # that the source-first materializer could have rendered.
+    for key in _EXACT_INPUT_STATE_KEYS:
+        value = episode.get(key)
+        if value not in (None, "", [], {}):
+            errors.append(f"selected episode carries retained material: {key}")
+    metadata = episode.get("algorithm_metadata")
+    if isinstance(metadata, Mapping) and isinstance(metadata.get("analysis_trace"), Mapping):
+        errors.append(
+            "selected episode carries retained material: algorithm_metadata.analysis_trace"
+        )
+    return tuple(errors)
+
+
 def _record_summary(record: Mapping[str, Any]) -> dict[str, Any]:
     trace = _trace(record)
     steps = trace.get("steps", []) if trace is not None else []
@@ -1271,6 +1561,14 @@ def _runner_kwargs(
 def _native_child(conn: Any, kwargs: Mapping[str, Any]) -> None:
     """Execute one canonical runner call in the owned child process."""
     try:
+        # Import the heavy canonical runner inside the owned child.  The
+        # parent needs a readiness boundary because macOS can spend a
+        # substantial amount of time importing the simulator stack under
+        # ``spawn``; that startup is not episode compute and must not consume
+        # the per-execution deadline.
+        from robot_sf.benchmark.runner import run_episode  # noqa: PLC0415
+
+        conn.send({"status": "ready"})
         record = run_episode(**dict(kwargs))
         conn.send({"status": "ok", "record": record})
     except BaseException as error:  # pragma: no cover - exercised through parent transport
@@ -1326,7 +1624,14 @@ def _run_bounded(
     try:
         process.start()
         child_conn.close()
-        deadline = started + timeout_s
+        # ``spawn`` imports the canonical runner in the child before the
+        # episode can begin.  Bound that startup separately, then apply the
+        # caller's timeout to actual runner execution.  This preserves the
+        # fail-closed process boundary while avoiding a platform-dependent
+        # import penalty (notably on macOS).
+        startup_timeout_s = min(MAX_TIMEOUT_S, max(5.0, timeout_s))
+        deadline = started + startup_timeout_s
+        ready = False
         while True:
             if cancel_event is not None and cancel_event.is_set():
                 settled = _terminate_child(process)
@@ -1341,7 +1646,11 @@ def _run_bounded(
                 settled = _terminate_child(process)
                 return {
                     "status": STATUS_UNAVAILABLE if settled else STATUS_FAILED,
-                    "reason": "per_execution_timeout: owned child terminated",
+                    "reason": (
+                        "per_execution_timeout: owned child terminated"
+                        if ready
+                        else "child_startup_timeout: owned child terminated"
+                    ),
                     "settled": settled,
                     "elapsed_s": time.monotonic() - started,
                 }
@@ -1361,6 +1670,10 @@ def _run_bounded(
                         "reason": "child_transport_failed: malformed result",
                         "elapsed_s": time.monotonic() - started,
                     }
+                if outcome.get("status") == "ready":
+                    ready = True
+                    deadline = time.monotonic() + timeout_s
+                    continue
                 if outcome.get("status") != "ok":
                     return {
                         "status": STATUS_FAILED,
@@ -1911,10 +2224,372 @@ def run_native_diagnostic(
                 pass
 
 
+def _exact_materialization_failure(
+    *,
+    episode_id: str,
+    status: str,
+    reason: str,
+    provenance: Mapping[str, Any] | None = None,
+    diagnostics: Sequence[str] = (),
+    simulation_executed: bool = False,
+) -> Any:
+    """Build a materialization envelope without importing the renderer early."""
+
+    from robot_sf.analysis_workbench.audit_materialize import (  # noqa: PLC0415
+        FIDELITY_UNAVAILABLE,
+        UNAVAILABLE,
+        MaterializationResult,
+    )
+
+    cache_key = hashlib.sha256(
+        _canonical_json(
+            {
+                "native_exact_input": True,
+                "episode_id": episode_id,
+                "reason": reason,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    return MaterializationResult(
+        status=status,
+        materialization_kind=UNAVAILABLE,
+        fidelity=FIDELITY_UNAVAILABLE,
+        episode_id=episode_id,
+        cache_key=cache_key,
+        diagnostics=tuple(str(item)[:MAX_TEXT_CHARS] for item in diagnostics),
+        provenance=dict(provenance or {}),
+        reason=str(reason)[:MAX_TEXT_CHARS],
+        simulation_executed=simulation_executed,
+    )
+
+
+def _original_telemetry_errors(errors: Sequence[str]) -> tuple[str, ...]:
+    """Select missing historical telemetry that makes comparison unverifiable."""
+
+    telemetry_markers = (
+        "analysis trace is missing",
+        "analysis trace artifact digest is missing",
+        "episode metrics are missing",
+        "episode outcome is missing",
+    )
+    return tuple(
+        error for error in errors if any(marker in error.lower() for marker in telemetry_markers)
+    )
+
+
+def materialize_exact_input(
+    request: NativeDiagnosticRequest | Mapping[str, Any],
+    episode: Mapping[str, Any],
+    *,
+    output_root: Any,
+    output_directory: str | None = None,
+    render_config: Mapping[str, Any] | None = None,
+    timeout_s: float | None = None,
+    execution_id: str | None = None,
+    cancel_event: Any = None,
+) -> Any:
+    """Regenerate one admitted simple-policy input and render its new trace.
+
+    This is the only native execution path owned by the materializer seam.  It
+    is intentionally separate from :func:`run_native_diagnostic`: no goal
+    intervention is run, and the selected row must have no recording or
+    retained states.  The launcher-owned source document supplies the exact
+    closed runner input; the selected row can only corroborate identity.
+
+    The returned value is a :class:`MaterializationResult` whose derived
+    artifact contains only the newly generated trace.  Historical telemetry is
+    compared when present, but is never copied into the selected row or the
+    artifact.  Missing historical telemetry therefore yields
+    ``fidelity='unverifiable'`` rather than fabricated evidence.
+    """
+
+    from robot_sf.analysis_workbench.audit_materialize import (  # noqa: PLC0415
+        FIDELITY_DIVERGED,
+        FIDELITY_UNVERIFIABLE,
+        FIDELITY_VERIFIED,
+        MaterializationResult,
+        materialize_native_record,
+    )
+
+    request_id = request.request_id if isinstance(request, NativeDiagnosticRequest) else "invalid"
+    selected_episode_id = episode.get("episode_id") if isinstance(episode, Mapping) else ""
+    selected_episode_id = selected_episode_id if isinstance(selected_episode_id, str) else ""
+    validated: NativeDiagnosticRequest
+    try:
+        validated = (
+            request
+            if isinstance(request, NativeDiagnosticRequest)
+            else NativeDiagnosticRequest.from_mapping(request)
+        )
+        request_id = validated.request_id
+        _validate_request(validated)
+        timeout = validated.timeout_s if timeout_s is None else _finite(timeout_s, name="timeout_s")
+        if timeout <= 0.0 or timeout > MAX_TIMEOUT_S:
+            raise NativeDiagnosticError([f"timeout_s must be within (0, {MAX_TIMEOUT_S:g}]"])
+        if execution_id is None:
+            execution_id = f"{request_id}:exact:{uuid.uuid4().hex}"
+        execution_id = _text(execution_id, name="execution_id")
+    except (NativeDiagnosticError, TypeError, ValueError) as error:
+        return _exact_materialization_failure(
+            episode_id=selected_episode_id,
+            status=STATUS_FAILED,
+            reason=f"invalid_request: {str(error)[:1024]}",
+        )
+    if cancel_event is not None and cancel_event.is_set():
+        return _exact_materialization_failure(
+            episode_id=selected_episode_id,
+            status=STATUS_CANCELLED,
+            reason="cancelled_by_user: before exact-input admission",
+            diagnostics=("simulation_not_started",),
+        )
+
+    root_fd: int | None = None
+    simulation_executed = False
+    provenance: dict[str, Any] = {
+        "component_id": COMPONENT_ID,
+        "component_version": NATIVE_DIAGNOSTIC_SCHEMA_VERSION,
+        "canonical_runner": "robot_sf.benchmark.runner.run_episode",
+        "route": "native_exact_input",
+        "planner": "simple_policy",
+        "execution_id": execution_id,
+        "execution_kind": "exact_input_regeneration",
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "diagnostic_only": True,
+        "original_telemetry_fabricated": False,
+        "checkpoint_identity": None,
+        "child_process": "multiprocessing.spawn",
+    }
+    try:
+        root, root_fd, _receipt_payload, receipt_digest, resolution = _open_and_resolve_source(
+            validated
+        )
+        source_document = _source_document(
+            resolution.source_bytes or b"", resolution.receipt.source
+        )
+        _validate_source_recipe_identity(source_document, validated)
+        source_commit = resolution.receipt.source.source_commit
+        source_config = resolution.receipt.source.config_identity
+        selected_errors = _selected_exact_input_errors(
+            episode,
+            source_document,
+            source_digest=resolution.receipt.source.sha256,
+        )
+        if selected_errors:
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_UNAVAILABLE,
+                reason="exact_input_identity_mismatch",
+                provenance=provenance,
+                diagnostics=selected_errors,
+            )
+        historical_id = source_document.original_record.get("episode_id")
+        historical_provenance = source_document.original_record.get("provenance")
+        historical_native = (
+            historical_provenance.get("native_diagnostic")
+            if isinstance(historical_provenance, Mapping)
+            else None
+        )
+        historical_execution_id = (
+            historical_native.get("execution_id")
+            if isinstance(historical_native, Mapping)
+            else None
+        ) or historical_id
+        provenance.update(
+            {
+                "historical_episode_id": historical_id,
+                "historical_execution_id": historical_execution_id,
+                "linked_historical_episode_id": historical_id,
+                "source_commit": source_commit,
+                "config_identity": source_config,
+                "initial_state_sha256": source_document.identity["initial_state_sha256"],
+                "environment_identity": source_document.identity["environment_identity"],
+                "source_admission": _source_admission_provenance(
+                    resolution, receipt_digest, validated
+                ),
+                "input_digests": {
+                    "source_bytes_sha256": resolution.receipt.source.sha256,
+                    "runner_input_sha256": _digest(source_document.runner_input),
+                },
+            }
+        )
+        original_errors = _record_execution_errors(
+            source_document.original_record,
+            source_document.runner_input,
+            source_commit=source_commit,
+            source_identity=source_document.identity,
+            expected_role=ROLE_HISTORICAL_ORIGINAL,
+            source_id=source_document.source_id,
+        )
+        telemetry_errors = _original_telemetry_errors(original_errors)
+        hard_errors = tuple(error for error in original_errors if error not in telemetry_errors)
+        if hard_errors:
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_UNAVAILABLE,
+                reason="historical_source_ineligible",
+                provenance=provenance,
+                diagnostics=hard_errors,
+            )
+        runner_input = source_document.runner_input
+        native_provenance = {
+            "native_diagnostic": {
+                "request_id": request_id,
+                "identity": ROLE_EXACT_INPUT_REGENERATION,
+                "source_id": source_document.source_id,
+                "source_commit": source_commit,
+                "config_identity": source_config,
+                "source_identity": _record_identity_proof(source_document.identity),
+                "runner_input_identity": _runner_input_identity(runner_input),
+                "execution_id": execution_id,
+                "historical_episode_id": historical_id,
+                "historical_execution_id": historical_execution_id,
+            }
+        }
+        generated = _run_bounded(
+            runner_input,
+            robot_goal=runner_input["robot_goal"],
+            provenance=native_provenance,
+            timeout_s=timeout,
+            cancel_event=cancel_event,
+        )
+        if generated.get("status") == STATUS_CANCELLED:
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_CANCELLED,
+                reason=str(generated.get("reason", "cancelled_by_user")),
+                provenance=provenance,
+                diagnostics=("simulation_started",),
+                simulation_executed=True,
+            )
+        simulation_executed = True
+        if cancel_event is not None and cancel_event.is_set():
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_CANCELLED,
+                reason="cancelled_by_user: after exact-input child",
+                provenance=provenance,
+                diagnostics=("simulation_started",),
+                simulation_executed=True,
+            )
+        if generated.get("status") != "ok" or not isinstance(generated.get("record"), Mapping):
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=(
+                    STATUS_UNAVAILABLE
+                    if generated.get("status") == STATUS_UNAVAILABLE
+                    else STATUS_FAILED
+                ),
+                reason="exact_input_execution_failed",
+                provenance=provenance,
+                diagnostics=(str(generated.get("reason", "canonical runner did not complete")),),
+                simulation_executed=True,
+            )
+        generated_record = dict(generated["record"])
+        generated_errors = _record_execution_errors(
+            generated_record,
+            runner_input,
+            source_commit=source_commit,
+            source_identity=source_document.identity,
+            expected_role=ROLE_EXACT_INPUT_REGENERATION,
+            request_id=request_id,
+            source_id=source_document.source_id,
+        )
+        if generated_errors:
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_FAILED,
+                reason="exact_input_record_invalid",
+                provenance=provenance,
+                diagnostics=generated_errors,
+                simulation_executed=True,
+            )
+        final_admission, _ = _final_source_check(
+            root, root_fd, validated, resolution.receipt.source.sha256
+        )
+        provenance["source_admission"] = final_admission
+        provenance["runner_elapsed_s"] = generated.get("elapsed_s")
+        if telemetry_errors:
+            fidelity = FIDELITY_UNVERIFIABLE
+            fidelity_document = {
+                "status": FIDELITY_UNVERIFIABLE,
+                "differences": list(telemetry_errors),
+                "historical_telemetry_available": False,
+                "original_fingerprint": _record_fingerprint(source_document.original_record),
+                "generated_fingerprint": _record_fingerprint(generated_record),
+            }
+        else:
+            fidelity_document = _compare_control_fidelity(
+                source_document.original_record, generated_record
+            )
+            fidelity = str(fidelity_document.get("status", FIDELITY_UNVERIFIABLE))
+            if fidelity not in {FIDELITY_VERIFIED, FIDELITY_DIVERGED, FIDELITY_UNVERIFIABLE}:
+                fidelity = FIDELITY_UNVERIFIABLE
+        provenance["fidelity"] = fidelity_document
+        provenance["simulation_advanced"] = True
+        render_diagnostics = ["native_exact_input_regenerated", f"fidelity:{fidelity}"]
+        if telemetry_errors:
+            render_diagnostics.append("historical_telemetry_unavailable")
+        render_result = materialize_native_record(
+            episode,
+            generated_record,
+            output_root=output_root,
+            output_directory=output_directory,
+            render_config=render_config,
+            fidelity=fidelity,
+            diagnostics=render_diagnostics,
+            provenance=provenance,
+        )
+        if cancel_event is not None and cancel_event.is_set():
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_CANCELLED,
+                reason="cancelled_by_user: after exact-input render",
+                provenance=provenance,
+                diagnostics=("simulation_started", "derived_artifact_published"),
+                simulation_executed=True,
+            )
+        if not isinstance(render_result, MaterializationResult):
+            return _exact_materialization_failure(
+                episode_id=selected_episode_id,
+                status=STATUS_FAILED,
+                reason="native_renderer_returned_malformed_result",
+                provenance=provenance,
+                simulation_executed=True,
+            )
+        return render_result
+    except NativeDiagnosticError as error:
+        message = str(error)
+        status = STATUS_UNAVAILABLE if "source_admission" in message else STATUS_FAILED
+        return _exact_materialization_failure(
+            episode_id=selected_episode_id,
+            status=status,
+            reason=message,
+            provenance=provenance,
+            simulation_executed=simulation_executed,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, ReviewContractsValidationError) as error:
+        return _exact_materialization_failure(
+            episode_id=selected_episode_id,
+            status=STATUS_UNAVAILABLE if isinstance(error, OSError) else STATUS_FAILED,
+            reason=f"native_exact_input_error: {type(error).__name__}: {str(error)[:1024]}",
+            provenance=provenance,
+            simulation_executed=simulation_executed,
+        )
+    finally:
+        if root_fd is not None:
+            try:
+                os.close(root_fd)
+            except OSError:
+                pass
+
+
 # Short aliases make the adapter straightforward to route from service/CLI/MCP
 # integrations without creating another execution owner.
 run = run_native_diagnostic
 execute = run_native_diagnostic
+regenerate_exact_input = materialize_exact_input
+run_exact_input_materialization = materialize_exact_input
 
 
 __all__ = [
@@ -1926,6 +2601,7 @@ __all__ = [
     "NATIVE_SOURCE_SCHEMA_VERSION",
     "ROLE_DIAGNOSTIC_CONTROL",
     "ROLE_DIAGNOSTIC_INTERVENTION",
+    "ROLE_EXACT_INPUT_REGENERATION",
     "ROLE_HISTORICAL_ORIGINAL",
     "STATUS_CANCELLED",
     "STATUS_COMPLETE",
@@ -1936,6 +2612,9 @@ __all__ = [
     "NativeDiagnosticRequest",
     "NativeDiagnosticResult",
     "execute",
+    "materialize_exact_input",
+    "regenerate_exact_input",
     "run",
+    "run_exact_input_materialization",
     "run_native_diagnostic",
 ]

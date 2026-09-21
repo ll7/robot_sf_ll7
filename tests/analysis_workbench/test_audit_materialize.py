@@ -7,7 +7,9 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
+import types
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,7 @@ from robot_sf.analysis_workbench.audit_materialize import (
 )
 from robot_sf.analysis_workbench.review_contracts import ComponentResult, SourceRef
 from robot_sf.benchmark.episode_replay_figure import FigureArtifact
+from robot_sf.nav.map_config import MapDefinition
 
 TRACE_FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -1735,3 +1738,125 @@ def test_materialization_request_and_row_adapter_preserve_boundaries(tmp_path: P
         output_root=tmp_path / "derived-row",
     )
     assert row_result.materialization_kind == DERIVED_RENDER
+
+
+def test_descriptor_backed_path_fails_closed_when_no_descriptor_view_exists() -> None:
+    """Path-only renderer adapters never fall back to a visible unresolved path."""
+
+    with pytest.raises(OSError, match="descriptor-backed renderer path is unavailable"):
+        materialize._descriptor_path(-1)
+
+
+def test_darwin_staging_helpers_use_the_private_lease_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Darwin fallback remains bounded when /dev/fd cannot be descended."""
+
+    lease = materialize._OutputLease(
+        root=tmp_path,
+        relative="render",
+        parts=("render",),
+        root_fd=-1,
+        root_identity=(0, 0),
+    )
+    monkeypatch.setattr(materialize.sys, "platform", "darwin")
+
+    assert materialize._staging_parent_path(lease, -1) == str(tmp_path)
+    assert materialize._renderer_root_path(tmp_path / "render", -1) == tmp_path / "render"
+
+
+def test_atomic_link_publication_is_no_replace_and_descriptor_relative(tmp_path: Path) -> None:
+    """The portable publication path preserves inode completeness and source removal."""
+
+    source_directory = tmp_path / "source"
+    destination_directory = tmp_path / "destination"
+    source_directory.mkdir()
+    destination_directory.mkdir()
+    (source_directory / "private.bin").write_bytes(b"complete")
+    source_fd = os.open(source_directory, os.O_RDONLY)
+    destination_fd = os.open(destination_directory, os.O_RDONLY)
+    try:
+        materialize._link_noreplace("private.bin", source_fd, "published.bin", destination_fd)
+    finally:
+        os.close(source_fd)
+        os.close(destination_fd)
+
+    assert not (source_directory / "private.bin").exists()
+    assert (destination_directory / "published.bin").read_bytes() == b"complete"
+
+
+def test_atomic_link_rejects_cross_filesystem_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The no-replace link refuses a source inode from another filesystem."""
+
+    source_directory = tmp_path / "source"
+    destination_directory = tmp_path / "destination"
+    source_directory.mkdir()
+    destination_directory.mkdir()
+    source_fd = os.open(source_directory, os.O_RDONLY)
+    destination_fd = os.open(destination_directory, os.O_RDONLY)
+    try:
+        monkeypatch.setattr(
+            materialize.os,
+            "stat",
+            lambda *_args, **_kwargs: type("Stat", (), {"st_dev": -1})(),
+        )
+        with pytest.raises(OSError, match="crosses filesystems"):
+            materialize._link_noreplace("private.bin", source_fd, "published.bin", destination_fd)
+    finally:
+        os.close(source_fd)
+        os.close(destination_fd)
+
+
+def test_rename_noreplace_uses_link_fallback_when_libc_has_no_exclusive_rename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Platforms without either exclusive rename symbol use the safe link path."""
+
+    class NoExclusiveRename:
+        pass
+
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(materialize.ctypes, "CDLL", lambda *_args, **_kwargs: NoExclusiveRename())
+    monkeypatch.setattr(materialize, "_link_noreplace", lambda *args: calls.append(args))
+
+    materialize._rename_noreplace("private.bin", 1, "published.bin", 2)
+
+    assert calls == [("private.bin", 1, "published.bin", 2)]
+
+
+def test_map_obstacle_plotting_imports_optional_matplotlib_lazily(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The plotting seam is covered without warming Matplotlib's font cache."""
+
+    fake_matplotlib = types.ModuleType("matplotlib")
+    fake_axes = types.ModuleType("matplotlib.axes")
+    fake_patches = types.ModuleType("matplotlib.patches")
+    fake_path = types.ModuleType("matplotlib.path")
+
+    class FakeAxes:
+        pass
+
+    fake_axes.Axes = FakeAxes
+    fake_matplotlib.axes = fake_axes
+    fake_patches.PathPatch = object
+
+    class FakePath:
+        MOVETO = 1
+        LINETO = 2
+        CLOSEPOLY = 79
+
+    fake_path.Path = FakePath
+    for name, module in {
+        "matplotlib": fake_matplotlib,
+        "matplotlib.axes": fake_axes,
+        "matplotlib.patches": fake_patches,
+        "matplotlib.path": fake_path,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+    map_definition = object.__new__(MapDefinition)
+    map_definition.obstacles = []
+    map_definition.plot_map_obstacles(FakeAxes())

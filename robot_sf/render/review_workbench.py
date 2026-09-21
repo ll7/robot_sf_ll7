@@ -24,7 +24,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import asdict
+from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -41,7 +43,7 @@ from robot_sf.analysis_workbench.review_contracts import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Sequence
 
 COMPONENT_ID = "srev15-review-workbench"
 COMPONENT_VERSION = "1.0.0"
@@ -56,6 +58,14 @@ VIDEO_FORMATS = ("video-mp4.v1", "video-frames.v1")
 
 DEFAULT_PRESENTATION = {"width": 1920, "height": 1080, "fps": 30.0, "speed": 1.0}
 TEST_PRESENTATION = {"width": 320, "height": 180, "fps": 10.0, "speed": 1.0}
+
+AUDIT_WORKBENCH_EXTENSION_KEY = "audit_workbench"
+AUDIT_WORKBENCH_ASSETS = (
+    "audit_workbench/audit_workbench.css",
+    "audit_workbench/audit_workbench.js",
+    "review_editor/review_editor.js",
+    "review_panels/review_panels.js",
+)
 
 REQUIRED_CAPABILITIES = ("scene-time-sync", "actor-identity", "artifact-provenance")
 OPTIONAL_CAPABILITIES = ("extension-slots", "matplotlib-figures", "threejs-scene", "video-frames")
@@ -394,6 +404,36 @@ def _episode_index(bundle_entries: Iterable[Mapping[str, Any]]) -> list[dict[str
     return index
 
 
+def _audit_workbench_extension() -> dict[str, Any]:
+    """Build the diagnostic BA-06 payload mounted by the SREV-15 shell.
+
+    The fixture facade remains deliberately behind an explicit diagnostic
+    boundary.  Keeping the payload here, rather than invoking the fixture's
+    standalone renderer, lets the canonical SREV-15 launch own the HTML and
+    output identities while leaving the eventual BA-05 service seam visible.
+
+    Returns:
+        Extension metadata and the queue/panel/editor model consumed by the
+        repository-local audit workbench web component.
+    """
+    from robot_sf.render.audit_workbench import (  # noqa: PLC0415
+        build_audit_workbench_document,
+    )
+
+    model = build_audit_workbench_document()
+    return {
+        "slot": "panels",
+        "component_id": str(model.get("component_id", "ba06-audit-workbench")),
+        "component_version": str(model.get("component_version", "")),
+        "mode": "diagnostic_fixture",
+        "evidence_status": "diagnostic_only",
+        "native": False,
+        "native_or_live_claim": False,
+        "service_boundary": "injected_fixture_facade",
+        "model": model,
+    }
+
+
 def _build_workbench_document(
     request: ComponentRequest,
     entries: Sequence[Mapping[str, Any]],
@@ -425,6 +465,7 @@ def _build_workbench_document(
         },
         "presentation": dict(presentation),
         "extension_slots": ["panels", "annotations", "storyboard", "comparison"],
+        "extensions": {AUDIT_WORKBENCH_EXTENSION_KEY: _audit_workbench_extension()},
         "diagnostics": [dict(diagnostic) for diagnostic in diagnostics],
         "provenance": {
             "component_id": COMPONENT_ID,
@@ -443,10 +484,24 @@ def _render_html(document: Mapping[str, Any]) -> str:
     """
     payload = json.dumps(document, sort_keys=True, allow_nan=False)
     safe_payload = payload.replace("</", "<\\/")
+    extensions = document.get("extensions", {})
+    audit_extension = (
+        extensions.get(AUDIT_WORKBENCH_EXTENSION_KEY) if isinstance(extensions, Mapping) else None
+    )
+    audit_payload = json.dumps(
+        audit_extension.get("model", {}) if isinstance(audit_extension, Mapping) else {},
+        sort_keys=True,
+        allow_nan=False,
+    ).replace("</", "<\\/")
+    live = isinstance(audit_extension, Mapping) and audit_extension.get("mode") == "service_live"
+    facade_factory = "createServiceFacade" if live else "createFixtureFacade"
+    facade_call = "createServiceFacade()" if live else "createFixtureFacade(data)"
+    label = "Benchmark audit workbench" if live else "Benchmark audit workbench fixture"
     return (
         "<!doctype html>\n"
         '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         "<title>Robot SF review workbench</title>\n"
+        '<link rel="stylesheet" href="./components/audit_workbench/audit_workbench.css">\n'
         "<style>\n"
         "body{font-family:system-ui,sans-serif;margin:1.5rem;color:#111}\n"
         "section{margin-bottom:1.5rem}\n"
@@ -496,11 +551,99 @@ def _render_html(document: Mapping[str, Any]) -> str:
         "for (const slot of doc.extension_slots) {\n"
         "  const element = document.createElement('div');\n"
         "  element.className = 'slot';\n"
+        "  element.id = 'slot-' + slot;\n"
+        "  element.setAttribute('data-extension-slot', slot);\n"
+        "  element.dataset.extensionSlot = slot;\n"
         "  element.textContent = slot;\n"
         "  slots.appendChild(element);\n"
         "}\n"
+        "</script>\n"
+        '<script type="application/json" id="audit-workbench-data">' + audit_payload + "</script>\n"
+        '<script type="module">\n'
+        f'import {{ {facade_factory}, mountAuditWorkbench }} from "./components/audit_workbench/audit_workbench.js";\n'
+        "const extension = doc.extensions?.audit_workbench;\n"
+        "const slot = document.getElementById('slot-' + (extension?.slot || 'panels'));\n"
+        "const data = JSON.parse(document.getElementById('audit-workbench-data').textContent || '{}');\n"
+        "if (extension && slot) {\n"
+        "  const root = document.createElement('div');\n"
+        "  root.id = 'audit-workbench-root';\n"
+        f"  root.setAttribute('aria-label', '{label}');\n"
+        "  slot.replaceChildren(root);\n"
+        f"  mountAuditWorkbench(data, root, {{ facade: {facade_call} }});\n"
+        "}\n"
         "</script>\n</body>\n</html>\n"
     )
+
+
+def live_audit_document(document: Mapping[str, Any], facade: Any) -> dict[str, Any]:
+    """Mount a server-held BA-05 facade in one existing SREV-15 document.
+
+    This returned document is for loopback serving only.  It does not alter the
+    offline generated artifact and contains no audit session credential.
+
+    Returns:
+        A detached SREV-15 document containing service-backed presentation data.
+    """
+
+    from robot_sf.render.audit_workbench import (  # noqa: PLC0415
+        ServiceAuditWorkbenchFacade,
+        build_audit_workbench_document,
+    )
+
+    if not isinstance(facade, ServiceAuditWorkbenchFacade):
+        raise TypeError("a server-held service facade is required")
+    mounted = json.loads(json.dumps(document, sort_keys=True, allow_nan=False))
+    extensions = mounted.get("extensions")
+    if not isinstance(extensions, dict) or AUDIT_WORKBENCH_EXTENSION_KEY not in extensions:
+        raise ValueError("SREV-15 audit extension is absent")
+    extension = extensions[AUDIT_WORKBENCH_EXTENSION_KEY]
+    if not isinstance(extension, dict):
+        raise ValueError("SREV-15 audit extension is invalid")
+    extension.update(
+        {
+            "mode": "service_live",
+            "evidence_status": "service_backed_not_benchmark_evidence",
+            "native": False,
+            "native_or_live_claim": False,
+            "service_boundary": "server_held_audit_service",
+            "model": build_audit_workbench_document(facade),
+        }
+    )
+    return mounted
+
+
+def _copy_web_asset(output_dir: Path, relative: str) -> Path:
+    """Copy one repository-local audit extension asset into the output bundle.
+
+    Returns:
+        Path to the copied asset.
+    """
+    destination = output_dir / "components" / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    asset = resources.files("robot_sf.render.web_assets").joinpath("components", relative)
+    destination.write_bytes(asset.read_bytes())
+    return destination
+
+
+def _copy_audit_workbench_assets(output_dir: Path, output_directory: str) -> list[dict[str, Any]]:
+    """Copy the audit shell and its existing SREV-16/17 dependencies.
+
+    Returns:
+        Result-artifact records for the copied assets.
+    """
+    artifacts: list[dict[str, Any]] = []
+    prefix = Path(output_directory)
+    for relative in AUDIT_WORKBENCH_ASSETS:
+        path = _copy_web_asset(output_dir, relative)
+        artifact_id = f"components/{relative}"
+        artifacts.append(
+            {
+                "artifact_id": artifact_id,
+                "uri": str(prefix / artifact_id),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    return artifacts
 
 
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
@@ -591,6 +734,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 }
             )
         artifacts.extend(export_declared_recordings(request, entries, output_dir, root))
+        artifacts.extend(_copy_audit_workbench_assets(output_dir, request.output_directory))
         status = "partial" if diagnostics else "complete"
         return ComponentResult(
             request_id=request.request_id,
@@ -670,6 +814,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 __all__ = [
+    "AUDIT_WORKBENCH_EXTENSION_KEY",
     "COMPONENT_ID",
     "COMPONENT_VERSION",
     "DESCRIPTOR",

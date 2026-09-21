@@ -132,6 +132,15 @@ not a replacement for that scanner admission. The binding token provides
 transport integrity, not cryptographic authentication of an untrusted
 producer.
 
+The live read-only coverage adapter uses `coverage_reviews_for_scan` to
+project a durable queue review's generated `EpisodeRef` ID onto the literal
+BA-01 inventory row ID. This does not itself create a review receipt.
+It does so only from the admitted typed scan, with an exact match across all
+episode identity fields and a unique readable row. Ambiguous or unmatched
+generated IDs earn no credit; the stored review is not rewritten. BA-04 still
+checks the review's source and scan tokens after projection. Direct BA-04
+evaluation continues to require literal inventory row IDs.
+
 Missing, unavailable, invalid, duplicate, unsupported, and error states remain
 in the report. A declared exception is a closed, non-empty
 requirement/reason/status envelope and is retained as exactly one matching

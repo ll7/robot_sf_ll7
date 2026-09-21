@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from robot_sf.analysis_workbench import audit_service_adapters
 from robot_sf.analysis_workbench.audit_codex import (
     AuditCodexClient,
     CodexRouteReceipt,
@@ -18,6 +20,7 @@ from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset
 from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
     AuditService,
+    CapabilityUnavailable,
     SessionPolicy,
 )
 from robot_sf.analysis_workbench.audit_service_adapters import (
@@ -423,6 +426,218 @@ def test_next_context_race_before_transact_returns_is_historical(
     assert coordination["active"] is None
     assert AuditQueue(dataset, state_path=queue_path).state_revision == 1
     service.close()
+
+
+def test_kill_switch_from_next_callback_does_not_deadlock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-thread cancellation callback can re-enter the durable queue lock."""
+
+    policy = SessionPolicy()
+    queue_path = tmp_path / "queue.json"
+    service, session, _adapter = _make_service(
+        tmp_path, queue_path=queue_path, dataset=_dataset("0" * 64), policy=policy
+    )
+    dataset = _dataset(session.source_digest)
+    adapter = QueueNextAdapter(
+        AuditSourceBinding("audit-campaign", CAMPAIGN_DIGEST, session.source_digest, 0),
+        lambda: AuditQueue(dataset, state_path=queue_path, store=service.store),
+    )
+    service.next_adapter = adapter
+    service.queue_next_adapter = adapter
+    original_transact = QueueNextAdapter.transact
+    callback_result: dict[str, Any] = {}
+    worker_result: dict[str, Any] = {}
+
+    def transact_then_cancel(self: QueueNextAdapter, **kwargs: Any) -> Any:
+        after_select = kwargs["after_select"]
+
+        def callback(selected: Any) -> Any:
+            result = after_select(selected)
+            callback_result["value"] = service.kill_switch(
+                session,
+                reason="cancel from next callback",
+                operation_id="next-callback-cancel",
+            )
+            return result
+
+        request = dict(kwargs)
+        request["after_select"] = callback
+        return original_transact(self, **request)
+
+    monkeypatch.setattr(QueueNextAdapter, "transact", transact_then_cancel)
+
+    def worker() -> None:
+        worker_result["value"] = service.next(session, operation_id="next-callback-cancel-race")
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
+    try:
+        assert not thread.is_alive(), "Next callback re-entry deadlocked on the queue lock"
+        assert callback_result["value"].status == "cancelled"
+        assert worker_result["value"].status == "complete"
+    finally:
+        service.close()
+
+
+def test_next_lock_setup_failure_allows_same_thread_retry_with_durable_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A setup failure must not let a same-thread retry bypass the file lock."""
+
+    assert audit_service_adapters.fcntl is not None
+    queue_path = tmp_path / "queue.json"
+    original_open = audit_service_adapters.os.open
+    open_failed = False
+
+    def fail_open_once(*args: Any, **kwargs: Any) -> int:
+        nonlocal open_failed
+        raw_path = args[0] if args else kwargs.get("path")
+        if not open_failed and raw_path is not None:
+            if os.fspath(raw_path).endswith(".service-next.lock"):
+                open_failed = True
+                raise OSError("injected durable lock setup failure")
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr(audit_service_adapters.os, "open", fail_open_once)
+    flock_calls: list[int] = []
+    original_flock = audit_service_adapters.fcntl.flock
+
+    def record_flock(file_descriptor: int, operation: int) -> Any:
+        flock_calls.append(operation)
+        return original_flock(file_descriptor, operation)
+
+    monkeypatch.setattr(audit_service_adapters.fcntl, "flock", record_flock)
+    results: dict[str, Any] = {}
+    finished = threading.Event()
+
+    def retry_on_same_thread() -> None:
+        try:
+            with audit_service_adapters._next_lock(queue_path):
+                results["first_entered"] = True
+        except CapabilityUnavailable:
+            results["first_failed"] = True
+        except BaseException as exc:  # pragma: no cover - assertion reports the failure.
+            results["first_error"] = exc
+        try:
+            with audit_service_adapters._next_lock(queue_path):
+                results["retry_entered"] = True
+        except BaseException as exc:  # pragma: no cover - assertion reports the failure.
+            results["retry_error"] = exc
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=retry_on_same_thread, daemon=True)
+    thread.start()
+    assert finished.wait(timeout=2), "same-thread retry did not complete after setup failure"
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+    assert results.get("first_failed") is True
+    assert results.get("first_entered") is None
+    assert results.get("retry_entered") is True
+    assert "retry_error" not in results
+    assert audit_service_adapters.fcntl.LOCK_EX in flock_calls
+    assert audit_service_adapters.fcntl.LOCK_UN in flock_calls
+
+
+def test_next_lock_setup_failure_releases_state_for_other_thread_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed owner must release the per-path mutex for another thread."""
+
+    assert audit_service_adapters.fcntl is not None
+    queue_path = tmp_path / "queue.json"
+    original_open = audit_service_adapters.os.open
+    open_failed = False
+
+    def fail_open_once(*args: Any, **kwargs: Any) -> int:
+        nonlocal open_failed
+        raw_path = args[0] if args else kwargs.get("path")
+        if not open_failed and raw_path is not None:
+            if os.fspath(raw_path).endswith(".service-next.lock"):
+                open_failed = True
+                raise OSError("injected durable lock setup failure")
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr(audit_service_adapters.os, "open", fail_open_once)
+    first_finished = threading.Event()
+    retry_entered = threading.Event()
+    results: dict[str, Any] = {}
+
+    def failing_owner() -> None:
+        try:
+            with audit_service_adapters._next_lock(queue_path):
+                results["first_entered"] = True
+        except CapabilityUnavailable:
+            results["first_failed"] = True
+        except BaseException as exc:  # pragma: no cover - assertion reports the failure.
+            results["first_error"] = exc
+        finally:
+            first_finished.set()
+
+    first = threading.Thread(target=failing_owner, daemon=True)
+    first.start()
+    assert first_finished.wait(timeout=2), "injected setup failure did not complete"
+    first.join(timeout=1)
+    assert not first.is_alive()
+
+    def retry_on_other_thread() -> None:
+        try:
+            with audit_service_adapters._next_lock(queue_path):
+                results["retry_entered"] = True
+                retry_entered.set()
+        except BaseException as exc:  # pragma: no cover - assertion reports the failure.
+            results["retry_error"] = exc
+
+    retry = threading.Thread(target=retry_on_other_thread, daemon=True)
+    retry.start()
+    assert retry_entered.wait(timeout=2), "other-thread retry remained blocked"
+    retry.join(timeout=1)
+    assert not retry.is_alive()
+    assert results.get("first_failed") is True
+    assert results.get("first_entered") is None
+    assert results.get("retry_entered") is True
+    assert "retry_error" not in results
+
+
+def test_next_lock_fdopen_failure_closes_descriptor_and_resets_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed descriptor wrapper must close its raw descriptor before retry."""
+
+    queue_path = tmp_path / "queue.json"
+    original_fdopen = audit_service_adapters.os.fdopen
+    original_close = audit_service_adapters.os.close
+    failed_descriptor: int | None = None
+    close_calls: list[int] = []
+
+    def fail_fdopen_once(file_descriptor: int, *args: Any, **kwargs: Any) -> Any:
+        nonlocal failed_descriptor
+        if failed_descriptor is None:
+            failed_descriptor = file_descriptor
+            raise OSError("injected descriptor wrapping failure")
+        return original_fdopen(file_descriptor, *args, **kwargs)
+
+    def record_close(file_descriptor: int) -> None:
+        close_calls.append(file_descriptor)
+        original_close(file_descriptor)
+
+    monkeypatch.setattr(audit_service_adapters.os, "fdopen", fail_fdopen_once)
+    monkeypatch.setattr(audit_service_adapters.os, "close", record_close)
+    with pytest.raises(CapabilityUnavailable, match="lock is unavailable"):
+        with audit_service_adapters._next_lock(queue_path):
+            pass
+
+    lock_key = os.path.abspath(os.fspath(queue_path.with_name("queue.json.service-next.lock")))
+    lock_state = audit_service_adapters._NEXT_LOCK_STATES[lock_key]
+    assert lock_state.owner is None
+    assert lock_state.depth == 0
+    assert failed_descriptor is not None
+    assert failed_descriptor in close_calls
+
+    with audit_service_adapters._next_lock(queue_path):
+        pass
 
 
 def test_next_context_race_finalizes_historical_result_and_context_none_retry(

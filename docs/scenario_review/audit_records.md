@@ -99,8 +99,12 @@ untrusted input.
 Saving the record uses the same canonical journal, typed reconstruction, and
 compare-and-swap revision contract as the other audit records. No proposal is
 loaded into the BA-01 default detector registry or applied automatically.
-The authenticated BA-05 service/MCP write and human-decision authority remains
-a later integration slice; this BA-03 foundation does not expose that service.
+The BA-05 service exposes a source/context/actor-bound agent proposal write and
+source-bound reads through the same projection. Human approve/reject/withdraw
+decisions require an identified human session and an expected revision; MCP
+exposes the proposal write/read path but never decision authority. Every
+decision remains `activation_status: inactive`, and no service path mutates the
+BA-01 detector registry.
 
 `find_similar_cases` supports named modes for same-scenario/cross-planner,
 same-planner/cross-seed, symptom, anomaly signature, geometry, outcome, metric,

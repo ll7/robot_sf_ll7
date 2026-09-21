@@ -36,6 +36,7 @@ from robot_sf.analysis_workbench.audit_codex import (
     CodexCapabilityInspection,
     CodexRouteReceipt,
 )
+from robot_sf.analysis_workbench.audit_mcp_stdio import MCP_SESSION_TOKEN_ENV
 
 if TYPE_CHECKING:
     from robot_sf.analysis_workbench.audit_mcp_stdio import AuditMCPBridge
@@ -242,12 +243,17 @@ class CodexAppServerConfig:
         """Build process environment while keeping session credentials private."""
 
         result = dict(os.environ)
+        result.pop(MCP_SESSION_TOKEN_ENV, None)
         if self.mcp is not None:
             result.update(self.mcp.bridge.environment(result))
         if self.env is not None:
             for key, value in self.env.items():
                 if not isinstance(key, str) or not isinstance(value, str):
                     raise ValueError("App Server environment keys and values must be strings")
+                if key == MCP_SESSION_TOKEN_ENV:
+                    raise ValueError(
+                        "App Server environment cannot override the audit session token"
+                    )
                 result[key] = value
         return result
 

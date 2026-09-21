@@ -8,10 +8,7 @@ from dataclasses import dataclass, field
 from math import isfinite, sqrt
 from typing import Any
 
-import matplotlib.axes
-import matplotlib.patches as mpl_patches
 from loguru import logger
-from matplotlib.path import Path as MplPath
 from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
@@ -1000,6 +997,13 @@ class MapDefinition:
         Raises:
             TypeError: If ax is not a matplotlib.axes.Axes object.
         """
+
+        # Keep plotting optional for canonical simulation/runner imports.  In
+        # particular, native diagnostics must not pay Matplotlib's first-use
+        # font-cache cost before their bounded execution deadline starts.
+        import matplotlib.axes  # noqa: PLC0415
+        import matplotlib.patches as mpl_patches  # noqa: PLC0415
+        from matplotlib.path import Path as MplPath  # noqa: PLC0415
 
         if not isinstance(ax, matplotlib.axes.Axes):
             raise TypeError("ax must be a matplotlib.axes.Axes object")

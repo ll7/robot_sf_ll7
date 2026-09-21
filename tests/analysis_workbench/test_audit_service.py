@@ -26,6 +26,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
     SOURCE_PROVENANCE_MUTATED,
     SOURCE_PROVENANCE_STALE,
     Annotation,
+    DetectorRuleProposal,
     Finding,
     Reference,
     record_to_dict,
@@ -36,10 +37,12 @@ from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
     AuditService,
     AuditValidationError,
+    CapabilityUnavailable,
     EpisodeView,
     SessionPolicy,
 )
 from robot_sf.analysis_workbench.review_contracts import SourceRef
+from robot_sf.render import audit_trace_projection as trace_projection
 
 FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -79,6 +82,138 @@ def _service_for_payload(tmp_path: Path, payload: dict[str, Any]) -> tuple[Audit
         policy=policy,
     )
     return service, session
+
+
+def test_artifact_reference_and_source_reason_helpers_fail_closed() -> None:
+    """Browser-facing identifiers and source failures never leak unsafe values."""
+
+    assert AuditService._artifact_safe_reference(True) is None
+    assert AuditService._artifact_safe_reference(object()) is None
+    assert AuditService._artifact_safe_reference(-1) is None
+    assert AuditService._artifact_source_reason(AuditContextConflict("stale")) == (
+        "selected source is stale"
+    )
+    assert AuditService._artifact_source_reason(AuditPolicyError("denied")) == (
+        "selected source is not permitted by session policy"
+    )
+    assert AuditService._artifact_source_reason(CapabilityUnavailable("missing")) == (
+        "selected source is unavailable"
+    )
+    assert AuditService._artifact_source_reason(ValueError("bad")) == (
+        "selected source could not be validated"
+    )
+
+
+def test_trace_projection_private_admission_helpers_preserve_missingness() -> None:
+    """Malformed native state remains explicit when projection helpers are used directly."""
+
+    assert trace_projection._finite(True) is None
+    assert trace_projection._finite(float("inf")) is None
+    trace = {"steps": []}
+    assert trace_projection._trace_from({}, trace) is trace
+    assert trace_projection._trace_from({"schema_version": "analysis-trace.v1"}, None) is not None
+    nested = {"trace": {"steps": []}}
+    assert trace_projection._trace_from({"retained_state": nested}, None) is nested["trace"]
+
+    missing = trace_projection._missing_fields(
+        {
+            "robot": {
+                "position": ["bad", 0.0],
+                "actor_id": "",
+                "heading": True,
+                "velocity": [0.0],
+                "radius_m": 0.0,
+            },
+            "pedestrians": [
+                "not-an-actor",
+                {
+                    "position": ["bad", 0.0],
+                    "actor_id": "",
+                    "velocity": [0.0],
+                    "radius_m": 0.0,
+                },
+            ],
+        }
+    )
+    assert "robot.position" in missing
+    assert "pedestrians[0]" in missing
+    assert "pedestrians[1].radius_m" in missing
+    assert trace_projection._missing_fields({"robot": {}}) == [
+        "robot.position",
+        "robot.actor_id",
+        "robot.heading",
+        "robot.velocity",
+        "robot.radius_m",
+        "pedestrians",
+    ]
+
+    samples, scene_missingness, diagnostics = trace_projection._scene_samples(
+        {
+            "steps": [
+                None,
+                {"time_s": "missing"},
+                {"time_s": 1.0, "robot": {}, "pedestrians": []},
+                {"time_s": 0.0, "robot": {}, "pedestrians": []},
+            ]
+        }
+    )
+    assert samples
+    assert scene_missingness["status"] == "unavailable"
+    assert any(item["reason_code"] == "scene_timestamp_not_increasing" for item in diagnostics)
+    assert trace_projection._scene_samples({"steps": []})[1]["status"] == "unavailable"
+
+    events, event_missingness = trace_projection._events(
+        {"events": [None, {"time_s": "missing"}, {"time_s": 1.0, "kind": "hit"}]}, 1.0
+    )
+    assert len(events) == 2
+    assert event_missingness["status"] == "partial"
+    assert events[-1]["selected"] is True
+    assert (
+        trace_projection._snapshot(
+            {"status": "available", "samples": [{"time_s": 1.0, "missing": True}]}, 1.0
+        )["reason"]
+        == "sample_missing"
+    )
+    assert trace_projection._snapshot({"status": "available", "samples": []}, 1.0)["reason"] == (
+        "exact_source_sample_unavailable"
+    )
+
+
+def _detector_rule_proposal(
+    service: AuditService,
+    session: object,
+    *,
+    proposal_id: str = "proposal-service-1",
+    episode_ids: tuple[str, ...] = (),
+    **changes: Any,
+) -> DetectorRuleProposal:
+    """Build a proposal carrying the source's current registry/provenance."""
+
+    report = service._scan(session)
+    registry = report.report.detector_registry
+    values: dict[str, Any] = {
+        "proposal_id": proposal_id,
+        "proposal_kind": "threshold_change",
+        "target_detector_id": "goal_adjacent_timeout",
+        "candidate_rule": {
+            "predicate": "goal_adjacent_timeout.v1",
+            "parameters": {"tail_steps": 120},
+        },
+        "detector_registry_version": registry.version,
+        "detector_registry_digest": registry.digest,
+        "campaign_digest": report.report.audit.campaign_digest,
+        "source_identity": session.source_digest,
+        "source_revision": session.source_revision,
+        "episode_ids": episode_ids,
+        "rationale": "The observed tail behavior warrants a bounded threshold probe.",
+        "metadata": {"evidence_boundary": "diagnostic_only"},
+        "proposer_kind": "agent",
+        "proposer_id": session.actor.actor_id,
+        "author_kind": "agent",
+        "author_id": session.actor.actor_id,
+    }
+    values.update(changes)
+    return DetectorRuleProposal(**values)
 
 
 def _versioned_record_service(
@@ -133,6 +268,476 @@ def test_selection_context_is_closed_and_cursor_revision_is_bound() -> None:
         assert "unknown" in str(exc)
     else:  # pragma: no cover - assertion branch
         raise AssertionError("unknown context fields must be rejected")
+
+
+def test_detector_rule_proposal_service_write_read_and_human_decision_are_bound(
+    tmp_path: Path,
+) -> None:
+    service, agent = _service(tmp_path)
+    try:
+        proposal = _detector_rule_proposal(service, agent)
+        created = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-service-create",
+        )
+        assert created.status == "committed", created.reason
+        assert created.value is not None and created.value.revision == 1
+
+        read = service.read_detector_rule_proposal(
+            agent,
+            proposal.proposal_id,
+            context=agent.context,
+            operation_id="proposal-service-read",
+        )
+        assert read.status == "complete", read.reason
+        assert read.value is not None and read.value.record == proposal
+
+        human = service.open_session(
+            agent.context,
+            actor="human",
+            actor_id="reviewer-1",
+            policy=agent.policy,
+        )
+        decided = service.approve_detector_rule_proposal(
+            human,
+            proposal.proposal_id,
+            decision_reason="Human review accepted this diagnostic candidate.",
+            expected_revision=1,
+            context=human.context,
+            expected_source_revision=human.source_revision,
+            operation_id="proposal-service-approve",
+        )
+        assert decided.status == "committed", decided.reason
+        stored = service.store.get(proposal.proposal_id)
+        assert stored is not None and isinstance(stored.record, DetectorRuleProposal)
+        assert stored.record.lifecycle_status == "approved"
+        assert stored.record.activation_status == "inactive"
+        assert stored.record.proposer_kind == "agent"
+        assert stored.record.proposer_id == agent.actor.actor_id
+        assert stored.record.author_kind == "human"
+        assert stored.record.author_id == "reviewer-1"
+        assert stored.record.decided_by_kind == "human"
+        assert stored.record.decided_by_id == "reviewer-1"
+        reopened = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            expected_revision=2,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-agent-reopen",
+        )
+        assert reopened.status == "denied"
+        assert service.store.get(proposal.proposal_id).record.lifecycle_status == "approved"
+    finally:
+        service.close()
+
+
+def test_detector_rule_proposal_service_rejects_actor_impersonation_and_agent_decision(
+    tmp_path: Path,
+) -> None:
+    service, agent = _service(tmp_path)
+    try:
+        proposal = _detector_rule_proposal(service, agent, proposal_id="proposal-authority-1")
+        human = service.open_session(
+            agent.context,
+            actor="human",
+            actor_id="reviewer-1",
+            policy=agent.policy,
+        )
+        human_write = service.write_detector_rule_proposal(
+            human,
+            proposal,
+            context=human.context,
+            expected_revision=0,
+            expected_source_revision=human.source_revision,
+            operation_id="proposal-human-impersonation",
+        )
+        assert human_write.status == "denied"
+        assert service.store.get(proposal.proposal_id) is None
+
+        created = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-agent-create",
+        )
+        assert created.status == "committed", created.reason
+        agent_decision = service.reject_detector_rule_proposal(
+            agent,
+            proposal.proposal_id,
+            decision_reason="An agent cannot make this decision.",
+            expected_revision=1,
+            context=agent.context,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-agent-decision",
+        )
+        assert agent_decision.status == "denied"
+        current = service.store.get(proposal.proposal_id)
+        assert current is not None and current.record.lifecycle_status == "proposed"
+
+        imported_human_authored = replace(
+            proposal,
+            proposal_id="proposal-imported-human-author",
+            author_kind="human",
+            author_id="imported-reviewer",
+        )
+        service.store.save(
+            imported_human_authored,
+            operation_id="proposal-imported-human-author-seed",
+            expected_revision=0,
+            actor="human",
+            actor_id="imported-reviewer",
+        )
+        imported_decision = service.approve_detector_rule_proposal(
+            human,
+            imported_human_authored.proposal_id,
+            decision_reason="Imported human-authored proposals are not agent proposals.",
+            expected_revision=1,
+            context=human.context,
+            expected_source_revision=human.source_revision,
+            operation_id="proposal-imported-human-author-decision",
+        )
+        assert imported_decision.status == "denied"
+        imported_current = service.store.get(imported_human_authored.proposal_id)
+        assert imported_current is not None
+        assert imported_current.record.lifecycle_status == "proposed"
+    finally:
+        service.close()
+
+
+def test_detector_rule_proposal_is_returned_by_selected_saved_record_reads(tmp_path: Path) -> None:
+    service, agent, _policy, _source, episode_id, _previous_context = _versioned_record_service(
+        tmp_path
+    )
+    try:
+        proposal = _detector_rule_proposal(
+            service,
+            agent,
+            proposal_id="proposal-saved-record-read",
+            episode_ids=(episode_id,),
+        )
+        created = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-saved-record-create",
+        )
+        assert created.status == "committed", created.reason
+        saved = service.read_saved_records(
+            agent,
+            episode_id=episode_id,
+            context=agent.context,
+            operation_id="proposal-saved-record-read",
+        )
+        assert saved.status == "complete", saved.reason
+        assert saved.value is not None
+        assert [item.record_id for item in saved.value] == [proposal.proposal_id]
+    finally:
+        service.close()
+
+
+def test_detector_rule_proposal_service_closes_cas_replay_source_and_registry_gaps(
+    tmp_path: Path,
+) -> None:
+    service, agent = _service(tmp_path)
+    try:
+        proposal = _detector_rule_proposal(service, agent, proposal_id="proposal-cas-1")
+        created = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-cas-create",
+        )
+        assert created.status == "committed", created.reason
+        stale = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-cas-stale",
+        )
+        assert stale.status == "conflict"
+        wrong_context = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            context=agent.context.next_revision(execution_id="different-execution"),
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-wrong-context",
+        )
+        assert wrong_context.status == "conflict"
+        wrong_source_revision = service.write_detector_rule_proposal(
+            agent,
+            proposal,
+            expected_revision=0,
+            expected_source_revision="foreign-source-revision",
+            operation_id="proposal-wrong-source-revision",
+        )
+        assert wrong_source_revision.status == "conflict"
+
+        human = service.open_session(
+            agent.context,
+            actor="human",
+            actor_id="reviewer-1",
+            policy=agent.policy,
+        )
+        first = service.approve_detector_rule_proposal(
+            human,
+            proposal.proposal_id,
+            decision_reason="Accepted after review.",
+            expected_revision=1,
+            operation_id="proposal-decision-replay",
+        )
+        assert first.status == "committed", first.reason
+        altered = service.approve_detector_rule_proposal(
+            human,
+            proposal.proposal_id,
+            decision_reason="Altered replay must not commit.",
+            expected_revision=1,
+            operation_id="proposal-decision-replay",
+        )
+        assert altered.status == "conflict"
+
+        foreign_source = _detector_rule_proposal(
+            service,
+            agent,
+            proposal_id="proposal-foreign-source",
+            source_identity="f" * 64,
+        )
+        foreign_result = service.write_detector_rule_proposal(
+            agent,
+            foreign_source,
+            expected_revision=0,
+            operation_id="proposal-foreign-source-write",
+        )
+        assert foreign_result.status == "conflict"
+
+        forged_registry = _detector_rule_proposal(
+            service,
+            agent,
+            proposal_id="proposal-forged-registry",
+            detector_registry_digest="e" * 64,
+        )
+        forged_result = service.write_detector_rule_proposal(
+            agent,
+            forged_registry,
+            expected_revision=0,
+            operation_id="proposal-forged-registry-write",
+        )
+        assert forged_result.status == "conflict"
+        assert service.store.get("proposal-forged-registry") is None
+    finally:
+        service.close()
+
+
+def test_detector_rule_proposal_evidence_ids_are_canonical_and_source_bound(
+    tmp_path: Path,
+) -> None:
+    service, agent, _policy, _source, episode_id, _previous_context = _versioned_record_service(
+        tmp_path
+    )
+    try:
+        valid_annotation = Annotation(
+            annotation_id="annotation-proposal-evidence-valid",
+            episode_id=episode_id,
+            classification="unclear",
+            source_revision=7,
+            source_identity=agent.source_digest,
+        )
+        valid_finding = Finding(
+            finding_id="finding-proposal-evidence-valid",
+            title="proposal evidence finding",
+            candidate_members=(episode_id,),
+            source_revision="7",
+        )
+        service.store.save(
+            valid_annotation,
+            operation_id="proposal-evidence-annotation-seed",
+            expected_revision=0,
+            actor="human",
+            actor_id="fixture",
+        )
+        service.store.save(
+            valid_finding,
+            operation_id="proposal-evidence-finding-seed",
+            expected_revision=0,
+            actor="human",
+            actor_id="fixture",
+        )
+        valid = _detector_rule_proposal(
+            service,
+            agent,
+            proposal_id="proposal-evidence-valid",
+            episode_ids=(episode_id,),
+            annotation_ids=(valid_annotation.annotation_id,),
+            finding_ids=(valid_finding.finding_id,),
+        )
+        created = service.write_detector_rule_proposal(
+            agent,
+            valid,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-evidence-valid-write",
+        )
+        assert created.status == "committed", created.reason
+        read = service.read_detector_rule_proposal(
+            agent,
+            valid.proposal_id,
+            context=agent.context,
+            operation_id="proposal-evidence-valid-read",
+        )
+        assert read.status == "complete", read.reason
+
+        unknown = replace(
+            valid,
+            proposal_id="proposal-evidence-unknown",
+            annotation_ids=("annotation-proposal-evidence-unknown",),
+        )
+        unknown_result = service.write_detector_rule_proposal(
+            agent,
+            unknown,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-evidence-unknown-write",
+        )
+        assert unknown_result.status == "conflict"
+        assert service.store.get(unknown.proposal_id) is None
+
+        unknown_finding = replace(
+            valid,
+            proposal_id="proposal-evidence-unknown-finding",
+            annotation_ids=(),
+            finding_ids=("finding-proposal-evidence-unknown",),
+        )
+        unknown_finding_result = service.write_detector_rule_proposal(
+            agent,
+            unknown_finding,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-evidence-unknown-finding-write",
+        )
+        assert unknown_finding_result.status == "conflict"
+        assert service.store.get(unknown_finding.proposal_id) is None
+
+        foreign_annotation = Annotation(
+            annotation_id="annotation-proposal-evidence-foreign",
+            episode_id=episode_id,
+            classification="unclear",
+            source_revision=7,
+            source_identity="f" * 64,
+        )
+        service.store.save(
+            foreign_annotation,
+            operation_id="proposal-evidence-foreign-annotation-seed",
+            expected_revision=0,
+            actor="human",
+            actor_id="fixture",
+        )
+        foreign = replace(
+            valid,
+            proposal_id="proposal-evidence-foreign",
+            annotation_ids=(foreign_annotation.annotation_id,),
+        )
+        foreign_result = service.write_detector_rule_proposal(
+            agent,
+            foreign,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-evidence-foreign-write",
+        )
+        assert foreign_result.status == "conflict"
+        assert service.store.get(foreign.proposal_id) is None
+
+        foreign_finding = Finding(
+            finding_id="finding-proposal-evidence-foreign",
+            title="foreign proposal evidence finding",
+            candidate_members=("foreign-episode",),
+            source_revision="7",
+        )
+        service.store.save(
+            foreign_finding,
+            operation_id="proposal-evidence-foreign-finding-seed",
+            expected_revision=0,
+            actor="human",
+            actor_id="fixture",
+        )
+        foreign_finding_proposal = replace(
+            valid,
+            proposal_id="proposal-evidence-foreign-finding",
+            annotation_ids=(),
+            finding_ids=(foreign_finding.finding_id,),
+        )
+        foreign_finding_result = service.write_detector_rule_proposal(
+            agent,
+            foreign_finding_proposal,
+            context=agent.context,
+            expected_revision=0,
+            expected_source_revision=agent.source_revision,
+            operation_id="proposal-evidence-foreign-finding-write",
+        )
+        assert foreign_finding_result.status == "conflict"
+        assert service.store.get(foreign_finding_proposal.proposal_id) is None
+
+        imported_unknown = replace(
+            valid,
+            proposal_id="proposal-evidence-imported-unknown",
+            annotation_ids=("annotation-proposal-evidence-imported-unknown",),
+        )
+        service.store.save(
+            imported_unknown,
+            operation_id="proposal-evidence-imported-unknown-seed",
+            expected_revision=0,
+            actor="agent",
+            actor_id=agent.actor.actor_id,
+        )
+        imported_read = service.read_detector_rule_proposal(
+            agent,
+            imported_unknown.proposal_id,
+            context=agent.context,
+            operation_id="proposal-evidence-imported-unknown-read",
+        )
+        assert imported_read.status == "conflict"
+        saved = service.read_saved_records(
+            agent,
+            episode_id=episode_id,
+            context=agent.context,
+            operation_id="proposal-evidence-imported-unknown-saved-read",
+        )
+        assert saved.status == "complete", saved.reason
+        assert saved.value is not None
+        assert imported_unknown.proposal_id not in {item.record_id for item in saved.value}
+        human = service.open_session(
+            agent.context,
+            actor="human",
+            actor_id="reviewer-evidence",
+            policy=agent.policy,
+        )
+        imported_decision = service.approve_detector_rule_proposal(
+            human,
+            imported_unknown.proposal_id,
+            decision_reason="Unknown canonical evidence must not be approved.",
+            expected_revision=1,
+            context=human.context,
+            expected_source_revision=human.source_revision,
+            operation_id="proposal-evidence-imported-unknown-decision",
+        )
+        assert imported_decision.status == "conflict"
+        current = service.store.get(imported_unknown.proposal_id)
+        assert current is not None and current.record.lifecycle_status == "proposed"
+    finally:
+        service.close()
 
 
 def test_read_saved_records_reconnects_from_durable_projection(tmp_path: Path) -> None:
@@ -1089,6 +1694,85 @@ def test_materialization_requires_selected_episode_and_allowlisted_output(tmp_pa
         assert denied.status == "denied"
         assert not (tmp_path / "outside").exists()
         assert service.get_session(session).usage.compute == 0.0
+    finally:
+        service.close()
+
+
+def test_selected_artifact_status_is_read_only_and_unconfigured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Status reads do not charge, receipt, render, or spawn work."""
+
+    service, session, _policy, _source, _episode_id, _previous_context = _versioned_record_service(
+        tmp_path
+    )
+    try:
+        before_usage = service.get_session(session).usage.to_dict()
+        before_records = service.list_operation_records(session)
+        before_paths = {path.relative_to(tmp_path) for path in tmp_path.rglob("*")}
+
+        def unexpected_execute(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("artifact status must not execute an operation")
+
+        monkeypatch.setattr(service, "_execute", unexpected_execute)
+        result = service.read_selected_artifact_status(session)
+
+        assert result.status == "complete", result.reason
+        assert result.value is not None
+        assert result.value["materialization"]["status"] == "not_configured"
+        assert result.value["materialization"]["classification"] is None
+        assert result.value["materialization"]["fidelity"] is None
+        assert result.value["native_diagnostic"]["status"] == "not_configured"
+        assert result.value["materialization"]["diagnostic_only"] is True
+        assert result.value["native_diagnostic"]["evidence_boundary"] == "diagnostic_only"
+        assert result.value["native_diagnostic"]["scientific_claim_allowed"] is False
+        assert service.get_session(session).usage.to_dict() == before_usage
+        assert service.list_operation_records(session) == before_records
+        assert {path.relative_to(tmp_path) for path in tmp_path.rglob("*")} == before_paths
+    finally:
+        service.close()
+
+
+def test_selected_artifact_status_reports_no_selection_without_source_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty selection is explicit and never probes a source or adapter."""
+
+    service, session = _service(tmp_path)
+    try:
+
+        def unexpected_source(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("no-selection status must not validate a source")
+
+        monkeypatch.setattr(service, "_assert_source", unexpected_source)
+        result = service.read_selected_artifact_status(session)
+
+        assert result.status == "complete", result.reason
+        assert result.value is not None
+        assert result.value["episode_id"] is None
+        assert result.value["materialization"]["status"] == "no_selection"
+        assert result.value["native_diagnostic"]["status"] == "no_selection"
+    finally:
+        service.close()
+
+
+def test_selected_artifact_status_fails_closed_after_source_change(tmp_path: Path) -> None:
+    """A source mutation yields unavailable diagnostics without path leakage."""
+
+    service, session, _policy, source, _episode_id, _previous_context = _versioned_record_service(
+        tmp_path
+    )
+    try:
+        source.write_bytes(source.read_bytes() + b" stale")
+        result = service.read_selected_artifact_status(session)
+        serialized = json.dumps(result.to_dict(), sort_keys=True)
+
+        assert result.status == "complete", result.reason
+        assert result.value is not None
+        assert result.value["materialization"]["status"] == "unavailable"
+        assert result.value["native_diagnostic"]["status"] == "not_configured"
+        assert result.value["materialization"]["reason"] == "selected source is stale"
+        assert str(source) not in serialized
     finally:
         service.close()
 

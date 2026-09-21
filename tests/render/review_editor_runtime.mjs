@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 
 import {
   ReviewEditorController,
+  makeFullAnnotation,
   overlayCommands,
+  snapReference,
   sourceRevision,
   storyboardRecordId,
 } from "../../robot_sf/render/web_assets/components/review_editor/review_editor.js";
@@ -92,6 +94,10 @@ class Document {
   removeEventListener(type, listener) { this.listeners.set(type, (this.listeners.get(type) || []).filter((item) => item !== listener)); }
 }
 
+function renderedText(node) {
+  return [node.textContent || "", ...(node.children || []).map(renderedText)].join(" ");
+}
+
 const documentRef = new Document();
 const root = new Element(documentRef, "main");
 const model = {
@@ -118,6 +124,109 @@ assert.equal(
 );
 assert.equal(sourceRevision(model), canonicalSourceRevision);
 const controller = new ReviewEditorController(model, root);
+const spatialModel = {
+  schema_version: "review-editor.v1",
+  context: { episode_id: "spatial-ep", execution_id: "spatial-run", actor_id: "robot", cursor: { time_s: 1 } },
+  time: { origin_s: 0, terminal_s: 2 },
+  source_identity: {
+    coordinate_frame: "world",
+    units: "m",
+    sources: {
+      scene: {
+        artifact_id: "scene", uri: "scene.json", format: "threejs-viewer.v1",
+        sha256: "c".repeat(64), source_commit: "spatial-r1", coordinate_frame: "world", units: "m",
+        declared_sha256: "c".repeat(64), computed_sha256: "c".repeat(64),
+        integrity: "verified", availability: "retained", admission: "not_evaluated",
+      },
+      video: {
+        artifact_id: "video", uri: "video.mp4", format: "video/mp4",
+        sha256: "d".repeat(64), source_commit: "spatial-r1", coordinate_frame: "image",
+      },
+    },
+  },
+  streams: {
+    scene: { status: "available", resolution_s: 1, samples: [
+      { time_s: 1, value: { robot: { actor_id: "robot", position: [1, 2] }, pedestrians: [{ actor_id: "ped-1", position: [3, 4] }] } },
+    ] },
+    "metric:clearance": { status: "available", resolution_s: 1, samples: [{ time_s: 1, value: 0.4 }] },
+  },
+  scene_surface: { objects: [{ id: "wall-1", point: [2, 3] }], waypoints: [{ id: "wp-1", point: [4, 5] }] },
+  goal_geometry: { point: [6, 7] },
+  image_transform: {
+    source_width: 640, source_height: 360, display_width: 320, display_height: 180,
+    crop_x: 80, crop_y: 40, crop_width: 480, crop_height: 270,
+  },
+  metrics: { clearance: { metric_id: "clearance", unit: "m", stream: { status: "available", resolution_s: 1, samples: [{ time_s: 1, value: 0.4 }] } } },
+  annotations: [],
+  storyboard: { schema_version: "review-storyboard-edit.v1", source_identity: "spatial-source", intervals: [], order: [], captions: {} },
+};
+spatialModel.storyboard.source_revision = sourceRevision(spatialModel);
+const spatialRoot = new Element(documentRef, "main");
+const spatialController = new ReviewEditorController(spatialModel, spatialRoot);
+assert.match(renderedText(spatialRoot), /Full annotation/);
+assert.match(renderedText(spatialRoot), /Observed behaviour/);
+spatialController.dispatch({ type: "set-full-field", field: "observed_behavior", value: "robot pauses before the crossing" });
+spatialController.dispatch({ type: "set-full-field", field: "hypothesis", value: "clearance guard engaged" });
+spatialController.dispatch({ type: "set-full-field", field: "confidence", value: "0.8" });
+spatialController.dispatch({ type: "set-full-field", field: "evidence_text", value: "clearance reaches 0.4 m" });
+spatialController.dispatch({ type: "set-full-field", field: "evidence_metric_id", value: "clearance" });
+spatialController.dispatch({ type: "set-full-field", field: "evidence_value", value: "0.4" });
+spatialController.dispatch({ type: "set-full-field", field: "evidence_units", value: "m" });
+spatialController.dispatch({ type: "snap-reference", target: "actor", target_id: "robot" });
+spatialController.dispatch({ type: "snap-reference", target: "goal", target_id: "goal" });
+spatialController.dispatch({ type: "snap-reference", target: "map", target_id: "wall-1" });
+const spatialDraft = spatialController.snapshot().full_draft;
+assert.equal(spatialDraft.references.length, 3);
+assert.deepEqual(spatialDraft.references.map((item) => item.coordinate_frame), ["world", "world", "world"]);
+assert.equal(spatialDraft.references[0].timestamp_s, 1);
+const fullRecord = spatialController.dispatch({ type: "structured-note", classification: "planner_defect" }).annotations.at(-1);
+assert.equal(fullRecord.mode, "full");
+assert.equal(fullRecord.observed_behavior, "robot pauses before the crossing");
+assert.equal(fullRecord.suspected_cause, "clearance guard engaged");
+assert.equal(fullRecord.confidence, 0.8);
+assert.equal(fullRecord.evidence[0].metric_id, "clearance");
+assert.equal(fullRecord.references[1].goal_id, "goal");
+assert.deepEqual(Object.keys(fullRecord.source_ref).sort(), [
+  "artifact_id", "coordinate_frame", "format", "sha256", "source_commit", "units", "uri",
+]);
+assert.deepEqual(Object.keys(fullRecord.references[0].source).sort(), [
+  "artifact_id", "coordinate_frame", "format", "sha256", "source_commit", "units", "uri",
+]);
+assert.equal(Object.keys(fullRecord.metadata.reference_source_provenance).length, 3);
+const sceneOnlyModel = JSON.parse(JSON.stringify(spatialModel));
+delete sceneOnlyModel.source_identity.sources.video;
+const sceneOnlyMetric = snapReference(sceneOnlyModel, "metric", { target_id: "clearance" });
+assert.equal(sceneOnlyMetric.source.artifact_id, "scene");
+assert.equal(sceneOnlyMetric.calibration, undefined);
+const imageReference = snapReference(spatialModel, "metric", { target_id: "clearance" });
+assert.equal(imageReference.coordinate_frame, "image");
+assert.deepEqual(imageReference.source_point, imageReference.point);
+assert.equal(imageReference.source.artifact_id, "scene");
+assert.equal(imageReference.calibration, undefined);
+assert.equal(imageReference.source_revision, "spatial-r1");
+assert.equal(imageReference.seek_identity, "spatial-run");
+assert.equal(overlayCommands(spatialModel, [imageReference])[0].display_point, null);
+assert.equal(makeFullAnnotation(spatialModel, "normal", { observed_behavior: "direct API" }).mode, "full");
+assert.equal(overlayCommands(spatialModel, [imageReference, imageReference], { distances: true }).some((item) => item.kind === "distance"), false);
+assert.throws(
+  () => snapReference({
+    ...spatialModel,
+    streams: {
+      ...spatialModel.streams,
+      scene: {
+        status: "available", resolution_s: 1,
+        samples: [
+          { time_s: 1, missing: true, missing_reason: "capture_gap" },
+          { time_s: 1.4, value: { robot: { actor_id: "robot", position: [9, 9] } } },
+        ],
+      },
+    },
+  }, "actor", { target_id: "robot" }),
+  /capture_gap/,
+);
+let typedShortcutPrevented = false;
+for (const listener of documentRef.listeners.get("keydown") || []) listener({ key: "b", target: { tagName: "TEXTAREA" }, preventDefault() { typedShortcutPrevented = true; } });
+assert.equal(typedShortcutPrevented, false);
 const foreignRecordId = "storyboard-foreign";
 assert.equal(storyboardRecordId({ ...model, storyboard_record_id: foreignRecordId }), controller.storyboardRecordId);
 assert.throws(

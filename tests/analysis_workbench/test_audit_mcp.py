@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from robot_sf.analysis_workbench.audit_contracts import EpisodeRef
+from robot_sf.analysis_workbench.audit_contracts import (
+    DetectorRuleProposal,
+    EpisodeRef,
+    record_to_dict,
+)
 from robot_sf.analysis_workbench.audit_mcp import (
     REDACTED_MCP_REQUEST_ID,
     AuditMCPDispatcher,
@@ -95,6 +100,32 @@ def _enable_next(
     service.next_adapter = adapter
     service.queue_next_adapter = adapter
     return dataset, queue_path
+
+
+def _proposal(
+    service: AuditService, session: AuditSession, *, proposal_id: str
+) -> DetectorRuleProposal:
+    """Build an MCP proposal with the currently admitted source and registry."""
+
+    campaign = service._scan(session)
+    registry = campaign.report.detector_registry
+    return DetectorRuleProposal(
+        proposal_id=proposal_id,
+        proposal_kind="threshold_change",
+        target_detector_id="goal_adjacent_timeout",
+        candidate_rule={"predicate": "goal_adjacent_timeout.v1", "parameters": {"tail_steps": 120}},
+        detector_registry_version=registry.version,
+        detector_registry_digest=registry.digest,
+        campaign_digest=campaign.report.audit.campaign_digest,
+        source_identity=session.source_digest,
+        source_revision=session.source_revision,
+        rationale="MCP candidate for a bounded diagnostic review.",
+        metadata={"evidence_boundary": "diagnostic_only"},
+        proposer_kind="agent",
+        proposer_id=session.actor.actor_id,
+        author_kind="agent",
+        author_id=session.actor.actor_id,
+    )
 
 
 def test_fake_transport_dispatches_to_one_service_and_rejects_origin_or_token(
@@ -562,6 +593,135 @@ def test_write_tool_rejects_untrusted_context_or_untyped_record(
         )
         assert response.status == "failed"
         assert service.list_operation_records(session) == ()
+    finally:
+        service.close()
+
+
+def test_mcp_exposes_only_closed_agent_proposal_write_and_read_without_secrets(
+    tmp_path: Path,
+) -> None:
+    service, session, transport = _setup(tmp_path)
+    try:
+        proposal = _proposal(service, session, proposal_id="proposal-mcp-1")
+        # Use the canonical contract serializer so the MCP request cannot
+        # bypass typed reconstruction through a dataclass implementation detail.
+        payload = {"record": record_to_dict(proposal)}
+        created = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-create",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "write_detector_rule_proposal",
+                payload={**payload, "expected_revision": 0},
+            )
+        )
+        assert created.status == "committed", created.reason
+        assert created.result["value"]["revision"] == 1
+
+        read = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-read",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "read_detector_rule_proposal",
+                payload={"proposal_id": proposal.proposal_id},
+            )
+        )
+        assert read.status == "complete", read.reason
+        assert read.result["value"]["record"]["activation_status"] == "inactive"
+        assert session.session_token not in json.dumps(read.to_dict(), sort_keys=True)
+
+        malformed_read = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-null-operation-id",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "read_detector_rule_proposal",
+                payload={"proposal_id": proposal.proposal_id, "operation_id": None},
+            )
+        )
+        assert malformed_read.status == "failed"
+        assert "operation_id" in malformed_read.reason
+
+        malformed_write = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-null-write-operation-id",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "write_detector_rule_proposal",
+                payload={"record": payload["record"], "operation_id": None},
+            )
+        )
+        assert malformed_write.status == "failed"
+        assert "operation_id" in malformed_write.reason
+
+        decision = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-decision",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "approve_detector_rule_proposal",
+                payload={"proposal_id": proposal.proposal_id, "expected_revision": 1},
+            )
+        )
+        assert decision.status == "unavailable"
+
+        forbidden = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-forbidden",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "write_detector_rule_proposal",
+                payload={
+                    **payload,
+                    "expected_revision": 0,
+                    "lifecycle_status": "approved",
+                },
+            )
+        )
+        assert forbidden.status == "failed"
+        assert service.store.get(proposal.proposal_id).revision == 1
+
+        forged_activation = record_to_dict(
+            _proposal(service, session, proposal_id="proposal-mcp-active")
+        )
+        forged_activation["activation_status"] = "active"
+        activation = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-active",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "write_detector_rule_proposal",
+                payload={"record": forged_activation, "expected_revision": 0},
+            )
+        )
+        assert activation.status == "failed"
+        assert service.store.get("proposal-mcp-active") is None
+
+        secret_proposal = _proposal(service, session, proposal_id="proposal-mcp-secret")
+        secret_proposal = replace(secret_proposal, metadata={"note": session.session_token})
+        secret = transport.send(
+            AuditMCPRequest(
+                "mcp-proposal-secret",
+                session.session_id,
+                session.session_token,
+                "http://localhost",
+                "write_detector_rule_proposal",
+                payload={
+                    "record": record_to_dict(secret_proposal),
+                    "expected_revision": 0,
+                },
+            )
+        )
+        assert secret.status == "failed"
+        assert session.session_token not in json.dumps(secret.to_dict(), sort_keys=True)
     finally:
         service.close()
 

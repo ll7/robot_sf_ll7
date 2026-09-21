@@ -1,0 +1,7 @@
+seed,fork_step,contact_step,mode,steps,undiscounted_return,discounted_return,ends_in_contact,divergence_note
+225,90,100,hold_stop,60,-1.3730867701515634,-0.9611051790421914,False,open-loop prefix replay to fork state; pedestrian reactions after fork may differ from measured episode
+225,90,100,policy_continuation,11,-14.569919084198473,-13.154973274341037,True,open-loop prefix replay to fork state; pedestrian reactions after fork may differ from measured episode
+226,89,99,hold_stop,60,-1.2987055811973292,-0.9016525942163736,False,open-loop prefix replay to fork state; pedestrian reactions after fork may differ from measured episode
+226,89,99,policy_continuation,11,-14.540937769865026,-13.127383758446115,True,open-loop prefix replay to fork state; pedestrian reactions after fork may differ from measured episode
+227,82,92,hold_stop,60,-1.4044946600978132,-0.9800610900233031,False,open-loop prefix replay to fork state; pedestrian reactions after fork may differ from measured episode
+227,82,92,policy_continuation,11,-14.498161138365347,-13.086672723463808,True,open-loop prefix replay to fork state; pedestrian reactions after fork may differ from measured episode

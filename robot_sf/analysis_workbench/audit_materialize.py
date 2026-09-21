@@ -1620,6 +1620,35 @@ def _publish_staged_files(lease: _OutputLease, staged_output: int) -> None:
     os.fsync(lease.directory_fd)
 
 
+def _link_noreplace(
+    source_name: str,
+    source_directory_fd: int,
+    destination_name: str,
+    destination_directory_fd: int,
+) -> None:
+    """Publish a complete private inode with an atomic no-replace link."""
+
+    source_stat = os.stat(source_name, dir_fd=source_directory_fd, follow_symlinks=False)
+    destination_stat = os.fstat(destination_directory_fd)
+    if source_stat.st_dev != destination_stat.st_dev:
+        raise OSError("atomic no-replace publication crosses filesystems")
+    os.link(
+        source_name,
+        destination_name,
+        src_dir_fd=source_directory_fd,
+        dst_dir_fd=destination_directory_fd,
+        follow_symlinks=False,
+    )
+    try:
+        os.unlink(source_name, dir_fd=source_directory_fd)
+    except OSError:
+        try:
+            os.unlink(destination_name, dir_fd=destination_directory_fd)
+        except OSError:
+            pass
+        raise
+
+
 def _rename_noreplace(
     source_name: str,
     source_directory_fd: int,
@@ -1630,20 +1659,32 @@ def _rename_noreplace(
 
     Linux provides ``renameat2(RENAME_NOREPLACE)`` and macOS provides the
     equivalent ``renameatx_np(RENAME_EXCL)``. Python's portable ``os.rename``
-    has no no-replace flag, so unsupported platforms still fail closed rather
-    than falling back to an overwrite-prone check-then-rename sequence.
+    has no no-replace flag. When a Darwin runtime does not expose the libc
+    symbol, use a same-filesystem hard-link publication: ``link`` atomically
+    reserves the destination without replacement, and removing the private
+    source leaves the complete, fsynced inode visible. A cross-device or
+    otherwise unsupported fallback still fails closed.
     """
 
     try:
         libc = ctypes.CDLL(None, use_errno=True)
+    except OSError:
+        _link_noreplace(
+            source_name, source_directory_fd, destination_name, destination_directory_fd
+        )
+        return
+    try:
+        rename = libc.renameat2
+        flag = 1  # Linux RENAME_NOREPLACE
+    except AttributeError:
         try:
-            rename = libc.renameat2
-            flag = 1  # Linux RENAME_NOREPLACE
-        except AttributeError:
             rename = libc.renameatx_np
             flag = 4  # macOS RENAME_EXCL
-    except (AttributeError, OSError) as error:
-        raise OSError("atomic no-replace rename is unavailable") from error
+        except AttributeError:
+            _link_noreplace(
+                source_name, source_directory_fd, destination_name, destination_directory_fd
+            )
+            return
     rename.argtypes = [
         ctypes.c_int,
         ctypes.c_char_p,
@@ -1664,6 +1705,11 @@ def _rename_noreplace(
     error_number = ctypes.get_errno()
     if error_number == errno.EEXIST:
         raise FileExistsError(error_number, os.strerror(error_number), destination_name)
+    if error_number in {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP}:
+        _link_noreplace(
+            source_name, source_directory_fd, destination_name, destination_directory_fd
+        )
+        return
     raise OSError(error_number, os.strerror(error_number), destination_name)
 
 

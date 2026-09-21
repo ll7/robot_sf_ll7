@@ -490,7 +490,10 @@ def test_launch_scans_and_serves_one_source_bound_workbench(tmp_path: Path) -> N
             },
             method="POST",
         )
-        with urlopen(request, timeout=5) as response:
+        # Scanning a retained source can exceed the browser smoke budget under
+        # the full xdist lane; the server remains live and the store must not
+        # be closed while this request is still draining.
+        with urlopen(request, timeout=30) as response:
             selected = json.load(response)
         assert selected["status"] == "complete", selected.get("reason")
         assert selected["inspection_status"] == "complete"

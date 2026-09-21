@@ -393,7 +393,9 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
             },
             method="POST",
         )
-        with urlopen(request, timeout=5) as response:
+        # The native-scene projection is intentionally an integration path;
+        # allow the bounded slow lane under xdist before closing the store.
+        with urlopen(request, timeout=30) as response:
             selected = json.load(response)
         assert selected["status"] == "complete" and selected["presentation_status"] == "selected", (
             selected.get("reason")

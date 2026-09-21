@@ -1450,7 +1450,14 @@ def make_audit_workbench_server(  # noqa: C901 - bounded HTTP verb guards live h
                 result = dict(result)
             self._json(HTTPStatus.OK, result)
 
-    return ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    # Do not let a caller close the SQLite-backed service while an in-flight
+    # request still owns the facade. ``ThreadingHTTPServer`` defaults to
+    # daemon request threads, which makes ``server_close()`` return while a
+    # handler can still be reading or checkpointing the audit store.
+    server.daemon_threads = False
+    server.block_on_close = True
+    return server
 
 
 def _unsafe_payload(value: Any) -> bool:

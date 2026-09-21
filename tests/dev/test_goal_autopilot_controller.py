@@ -255,3 +255,83 @@ def test_lane_result_rejects_global_terminal_state() -> None:
     )
     assert result["global_terminal"] is False
     assert result["status"] == "implementation_queue_exhausted"
+
+
+def _lifecycle_snapshot(*, unresolved: int | None, repaired: int | None) -> dict:
+    """Return the terminal fixture with a lifecycle reconciliation block."""
+    snapshot = _snapshot()
+    if unresolved is None and repaired is None:
+        snapshot["preparation"].pop("lifecycle_reconciliation", None)
+    else:
+        snapshot["preparation"]["lifecycle_reconciliation"] = {
+            "unresolved_drift_count": unresolved,
+            "repaired_count": repaired,
+        }
+    return snapshot
+
+
+def test_lifecycle_drift_routes_before_implement() -> None:
+    """Unresolved lifecycle drift beats a claimable issue for selection hygiene."""
+    snapshot = _lifecycle_snapshot(unresolved=2, repaired=1)
+    snapshot["implementation"]["claimable_count"] = 1
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["next_action"] == "reconcile_lifecycle"
+
+
+def test_resolved_lifecycle_drift_preserves_zero_work() -> None:
+    """A clean lifecycle block binds into the terminal receipt."""
+    result = controller.arbitrate_controller(_lifecycle_snapshot(unresolved=0, repaired=3))
+
+    assert result["global_zero_work"] is True
+    proof = result["zero_work_proof"]
+    assert proof["preparation"]["lifecycle_reconciliation"] == {
+        "unresolved_drift_count": 0,
+        "repaired_count": 3,
+    }
+
+
+def test_absent_lifecycle_block_preserves_zero_work() -> None:
+    """Snapshots without lifecycle evidence arbitrate exactly as before."""
+    result = controller.arbitrate_controller(_lifecycle_snapshot(unresolved=None, repaired=None))
+
+    assert result["global_zero_work"] is True
+    assert result["next_action"] is None
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        {"unresolved_drift_count": -1, "repaired_count": 0},
+        {"unresolved_drift_count": "2", "repaired_count": 0},
+        {"unresolved_drift_count": 1},
+    ],
+)
+def test_malformed_lifecycle_block_cannot_produce_zero_work(block: dict) -> None:
+    """Malformed lifecycle evidence fails closed instead of routing on it."""
+    snapshot = _snapshot()
+    snapshot["preparation"]["lifecycle_reconciliation"] = block
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["next_action"] == "refresh_controller_evidence"
+
+
+def test_zero_work_proof_validation_rejects_unresolved_lifecycle_drift() -> None:
+    """A receipt claiming zero work with pending drift is invalid."""
+    snapshot = _snapshot()
+    proof = deepcopy(controller.arbitrate_controller(snapshot)["zero_work_proof"])
+    proof["preparation"]["lifecycle_reconciliation"] = {
+        "unresolved_drift_count": 2,
+        "repaired_count": 1,
+    }
+
+    validation = controller.validate_zero_work_proof(
+        proof,
+        origin_main_sha=ORIGIN,
+        freshness=FRESHNESS,
+    )
+
+    assert validation["valid"] is False
+    assert "proof_lifecycle_drift_unresolved" in validation["reasons"]

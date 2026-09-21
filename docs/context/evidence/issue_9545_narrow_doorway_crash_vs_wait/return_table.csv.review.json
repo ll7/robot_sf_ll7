@@ -1,0 +1,11 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait/return_table.csv",
+  "artifact_sha256": "6da060610af02ab6a5edfdc9b484b973bb14246f13c69a8e7ac6b5012bf2214a",
+  "claim_boundary": "diagnostic-only evidence for issue #9545; not benchmark evidence and not admitted to the dissertation",
+  "dissertation_admission_status": "not_admitted",
+  "domain_approval_status": "not_granted",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs_independent_review",
+  "schema_version": "evidence-review-marker.v1"
+}

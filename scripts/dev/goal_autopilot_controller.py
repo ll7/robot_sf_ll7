@@ -21,6 +21,27 @@ digests.  A digest must change when its covered state changes:
     The exact open-issue preparation audit.
 ``discovery_relevant_paths_digest``
     Paths and inputs covered by the discovery saturation decision.
+
+The ``preparation`` lane additionally carries head-bound pass evidence.  Zero
+counts are route evidence of "nothing found" only when the pass that produced
+them ran against the current head:
+
+``preparation.audit_base_sha``
+    ``origin/main`` the preparation scan (``prepare_open_issue_contracts.py``)
+    ran against.  Must equal the snapshot ``origin_main_sha``.
+``preparation.reconciliation_base_sha``
+    ``origin/main`` the blocker-reconciliation pass ran against.  Must equal
+    the snapshot ``origin_main_sha``.
+``preparation.stale_state_count``
+    Open-issue rows with stale lifecycle state (for example a ``state:running``
+    label with no atomic claim, or conflicting execution-state labels) that
+    need the canonical read-only reconciler
+    (``open_state_label_hygiene.py``) before admission truth is trustworthy.
+
+A missing or drifted pass binding, or any stale lifecycle row, refuses every
+exhaustion verdict and routes ``reconcile_lifecycle``, ``reconcile_blockers``,
+or ``run_preparation`` instead of ``refresh_controller_evidence`` or a
+terminal receipt.
 """
 
 from __future__ import annotations
@@ -156,6 +177,28 @@ def _status(value: Any, *, field: str, errors: list[str]) -> str | None:
     return value.strip()
 
 
+def _pass_binding(
+    preparation: Mapping[str, Any], *, field: str, origin_main_sha: str | None, errors: list[str]
+) -> bool:
+    """Validate one head-bound preparation pass binding.
+
+    A zero-count preparation lane proves "nothing found" only when the pass
+    that produced it ran against the current head.  Missing or drifted
+    bindings refuse exhaustion; callers route the named recovery lane.
+    """
+    value = preparation.get(field)
+    if value is None:
+        errors.append(f"preparation_{field}_evidence_missing")
+        return False
+    if not isinstance(value, str) or FULL_SHA_RE.fullmatch(value) is None:
+        errors.append(f"preparation_{field}_must_be_40_character_lowercase_sha")
+        return False
+    if origin_main_sha is not None and value != origin_main_sha:
+        errors.append(f"preparation_{field}_evidence_stale")
+        return False
+    return True
+
+
 def _reconciliation_complete(preparation: Mapping[str, Any], count: int | None) -> bool:
     """Interpret the legacy zero-count form while preferring an explicit flag."""
     explicit = preparation.get("blocker_reconciliation_complete")
@@ -228,6 +271,28 @@ def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed e
         preparation,
         lane_name="preparation",
         field="blocker_reconciliation_count",
+        errors=errors,
+    )
+    stale_state_count = preparation.get("stale_state_count")
+    if stale_state_count is None:
+        errors.append("preparation.stale_state_count_missing")
+        stale_state_count = None
+    elif isinstance(stale_state_count, bool) or not isinstance(stale_state_count, int):
+        errors.append("preparation.stale_state_count_must_be_non_negative_integer")
+        stale_state_count = None
+    elif stale_state_count < 0:
+        errors.append("preparation.stale_state_count_must_be_non_negative_integer")
+        stale_state_count = None
+    audit_evidence_ok = _pass_binding(
+        preparation,
+        field="audit_base_sha",
+        origin_main_sha=origin_main_sha,
+        errors=errors,
+    )
+    reconciliation_evidence_ok = _pass_binding(
+        preparation,
+        field="reconciliation_base_sha",
+        origin_main_sha=origin_main_sha,
         errors=errors,
     )
 
@@ -315,8 +380,11 @@ def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed e
             "promotable_count": promotable_count,
             "formalizable_count": formalizable_count,
             "blocker_reconciliation_count": blocker_reconciliation_count,
+            "stale_state_count": stale_state_count,
             **optional_counts,
         },
+        "audit_evidence_ok": audit_evidence_ok,
+        "reconciliation_evidence_ok": reconciliation_evidence_ok,
         "queue_completeness": queue_completeness,
         "discovery_status": discovery_status,
         "relevant_head_sha": relevant_head_sha,
@@ -373,6 +441,9 @@ def _build_zero_work_proof(normalized: Mapping[str, Any]) -> dict[str, Any]:
         },
         "preparation": {
             "audit_digest": preparation.get("audit_digest"),
+            "audit_base_sha": preparation.get("audit_base_sha"),
+            "reconciliation_base_sha": preparation.get("reconciliation_base_sha"),
+            "stale_state_count": normalized["counts"]["stale_state_count"],
             "promotable_count": normalized["counts"]["promotable_count"],
             "formalizable_count": normalized["counts"]["formalizable_count"],
             "blocker_reconciliation_count": normalized["counts"]["blocker_reconciliation_count"],
@@ -416,7 +487,10 @@ def _lane_statuses(normalized: Mapping[str, Any]) -> dict[str, str]:
         "preparation_queue_exhausted"
         if _zero(counts, "promotable_count")
         and _zero(counts, "formalizable_count")
+        and _zero(counts, "stale_state_count")
         and normalized["reconciliation_complete"]
+        and normalized["audit_evidence_ok"]
+        and normalized["reconciliation_evidence_ok"]
         else "preparation_queue_pending"
     )
     discovery_status = (
@@ -434,7 +508,7 @@ def _lane_statuses(normalized: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _choose_next_action(  # noqa: C901 - precedence is the controller contract
+def _choose_next_action(  # noqa: C901, PLR0912 - precedence is the controller contract
     normalized: Mapping[str, Any], errors: list[str]
 ) -> tuple[str | None, str | None]:
     """Choose the next controller lane using the documented precedence."""
@@ -461,6 +535,12 @@ def _choose_next_action(  # noqa: C901 - precedence is the controller contract
         return "decompose_issue", None
     if _positive(counts, "active_handoff_count"):
         return "recover_pr", None
+    if _positive(counts, "stale_state_count"):
+        return "reconcile_lifecycle", None
+    if not normalized["reconciliation_evidence_ok"]:
+        return "reconcile_blockers", None
+    if not normalized["audit_evidence_ok"]:
+        return "run_preparation", None
 
     if normalized["counts"]["claimable_count"] == 0 and (
         normalized["queue_completeness"] != "complete"
@@ -477,6 +557,55 @@ def _choose_next_action(  # noqa: C901 - precedence is the controller contract
     if errors:
         return "refresh_controller_evidence", None
     return None, GLOBAL_ZERO_WORK
+
+
+def _preparation_terminal(normalized: Mapping[str, Any]) -> bool:
+    """Return whether preparation evidence supports an exhaustion verdict.
+
+    Zero promotable/formalizable counts prove "nothing to prepare" only when a
+    head-bound reconciliation pass and preparation scan ran clean and no stale
+    lifecycle row is pending canonical reconciliation.
+    """
+    counts = normalized["counts"]
+    return (
+        _zero(counts, "promotable_count")
+        and _zero(counts, "formalizable_count")
+        and _zero(counts, "stale_state_count")
+        and normalized["reconciliation_complete"]
+        and normalized["audit_evidence_ok"]
+        and normalized["reconciliation_evidence_ok"]
+    )
+
+
+def _terminal_ready(normalized: Mapping[str, Any], errors: list[str]) -> bool:
+    """Return whether normalized evidence supports the terminal receipt."""
+    return (
+        not errors
+        and normalized["origin_main_sha"] is not None
+        and normalized["queue_completeness"] == "complete"
+        and normalized["implementation"].get("zero_work_authoritative") is True
+        and _zero(normalized["counts"], "claimable_count")
+        and _zero(normalized["counts"], "merge_ready_count")
+        and _zero(normalized["counts"], "review_eligible_count")
+        and _zero(normalized["counts"], "recoverable_active_count")
+        and _zero(normalized["counts"], "open_count")
+        and _preparation_terminal(normalized)
+        and all(
+            _zero(normalized["counts"], field)
+            for field in (
+                "decision_count",
+                "blocker_count",
+                "decomposition_count",
+                "active_handoff_count",
+            )
+        )
+        and normalized["discovery_status"] == "saturated"
+        and normalized["relevant_head_sha"] == normalized["origin_main_sha"]
+        and normalized["readiness_outcomes_complete"]
+        and isinstance(normalized["freshness"], Mapping)
+        and isinstance(normalized["preparation"].get("audit_digest"), str)
+        and SHA256_RE.fullmatch(normalized["preparation"]["audit_digest"]) is not None
+    )
 
 
 def arbitrate_controller(
@@ -515,35 +644,7 @@ def arbitrate_controller(
             )
 
     next_action, stop_reason = _choose_next_action(normalized, errors)
-    terminal_ready = (
-        not errors
-        and normalized["origin_main_sha"] is not None
-        and normalized["queue_completeness"] == "complete"
-        and normalized["implementation"].get("zero_work_authoritative") is True
-        and _zero(normalized["counts"], "claimable_count")
-        and _zero(normalized["counts"], "merge_ready_count")
-        and _zero(normalized["counts"], "review_eligible_count")
-        and _zero(normalized["counts"], "recoverable_active_count")
-        and _zero(normalized["counts"], "open_count")
-        and _zero(normalized["counts"], "promotable_count")
-        and _zero(normalized["counts"], "formalizable_count")
-        and all(
-            _zero(normalized["counts"], field)
-            for field in (
-                "decision_count",
-                "blocker_count",
-                "decomposition_count",
-                "active_handoff_count",
-            )
-        )
-        and normalized["reconciliation_complete"]
-        and normalized["discovery_status"] == "saturated"
-        and normalized["relevant_head_sha"] == normalized["origin_main_sha"]
-        and normalized["readiness_outcomes_complete"]
-        and isinstance(normalized["freshness"], Mapping)
-        and isinstance(normalized["preparation"].get("audit_digest"), str)
-        and SHA256_RE.fullmatch(normalized["preparation"]["audit_digest"]) is not None
-    )
+    terminal_ready = _terminal_ready(normalized, errors)
     proof = _build_zero_work_proof(normalized) if terminal_ready else None
     if terminal_ready:
         next_action = None
@@ -558,6 +659,20 @@ def arbitrate_controller(
         "global_zero_work": terminal_ready,
         "next_action": next_action,
         "stop_reason": stop_reason,
+        "counts": {
+            key: normalized["counts"][key]
+            for key in (
+                "claimable_count",
+                "merge_ready_count",
+                "review_eligible_count",
+                "recoverable_active_count",
+                "open_count",
+                "promotable_count",
+                "formalizable_count",
+                "stale_state_count",
+                "blocker_reconciliation_count",
+            )
+        },
         "lane_status": _lane_statuses(normalized),
         "reasons": sorted(set(errors)),
         "prior_zero_work_proof": prior_validation,
@@ -648,10 +763,14 @@ def validate_zero_work_proof(  # noqa: C901, PLR0912, PLR0915 - validate every p
             "promotable_count",
             "formalizable_count",
             "blocker_reconciliation_count",
+            "stale_state_count",
             *PREPARATION_COUNT_FIELDS,
         ):
             if preparation.get(field) != 0:
                 reasons.append(f"proof_{field}_nonzero")
+        for field in ("audit_base_sha", "reconciliation_base_sha"):
+            if preparation.get(field) != origin_main_sha:
+                reasons.append(f"proof_{field}_drift")
         if preparation.get("blocker_reconciliation_complete") is not True:
             reasons.append("proof_blocker_reconciliation_incomplete")
         if (

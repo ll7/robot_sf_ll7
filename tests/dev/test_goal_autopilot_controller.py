@@ -38,6 +38,9 @@ def _snapshot() -> dict:
         },
         "preparation": {
             "audit_digest": "e" * 64,
+            "audit_base_sha": ORIGIN,
+            "reconciliation_base_sha": ORIGIN,
+            "stale_state_count": 0,
             "promotable_count": 0,
             "formalizable_count": 0,
             "blocker_reconciliation_count": 0,
@@ -239,7 +242,9 @@ def test_stale_zero_work_proof_fails_closed_for_all_freshness_inputs() -> None:
         prior_zero_work_proof=proof,
     )
     assert stale_result["global_zero_work"] is False
-    assert stale_result["next_action"] == "refresh_controller_evidence"
+    # Head drift invalidates the preparation pass bindings first, so the
+    # controller routes the named recovery lane instead of generic refresh.
+    assert stale_result["next_action"] == "reconcile_blockers"
     assert any(reason.startswith("stale_zero_work_proof:") for reason in stale_result["reasons"])
 
 
@@ -255,3 +260,74 @@ def test_lane_result_rejects_global_terminal_state() -> None:
     )
     assert result["global_terminal"] is False
     assert result["status"] == "implementation_queue_exhausted"
+
+
+def test_empty_queue_without_preparation_evidence_routes_recovery() -> None:
+    """Zero claimable with missing pass bindings must recover, never exhaust.
+
+    Regression for the live 0-claimable incident: four ``state:ready`` rows
+    were all correctly rejected (stale running claim, decision gate, parked
+    owner, incomplete contract), yet no reconciliation or preparation pass had
+    run against the current head, so zero counts proved nothing.
+    """
+    snapshot = _snapshot()
+    del snapshot["preparation"]["audit_base_sha"]
+    del snapshot["preparation"]["reconciliation_base_sha"]
+    snapshot["preparation"]["stale_state_count"] = 2
+
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["zero_work_proof"] is None
+    assert result["next_action"] == "reconcile_lifecycle"
+    assert result["lane_status"]["preparation"] == "preparation_queue_pending"
+    assert "preparation_audit_base_sha_evidence_missing" in result["reasons"]
+    assert "preparation_reconciliation_base_sha_evidence_missing" in result["reasons"]
+    assert result["counts"]["promotable_count"] == 0
+    assert result["counts"]["formalizable_count"] == 0
+    assert result["counts"]["stale_state_count"] == 2
+
+
+def test_stale_preparation_pass_routes_runner_not_receipt() -> None:
+    """A preparation pass against an older head cannot support exhaustion."""
+    snapshot = _snapshot()
+    snapshot["preparation"]["audit_base_sha"] = "9" * 40
+    snapshot["preparation"]["reconciliation_base_sha"] = "9" * 40
+
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["next_action"] == "reconcile_blockers"
+    assert "preparation_audit_base_sha_evidence_stale" in result["reasons"]
+    assert "preparation_reconciliation_base_sha_evidence_stale" in result["reasons"]
+
+
+def test_fresh_recovery_evidence_restores_exhaustion_verdict() -> None:
+    """The same empty queue exhausts once head-bound passes ran clean."""
+    snapshot = _snapshot()
+    snapshot["preparation"]["stale_state_count"] = 0
+
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is True
+    assert result["lane_status"]["preparation"] == "preparation_queue_exhausted"
+    proof = result["zero_work_proof"]
+    assert proof["preparation"]["audit_base_sha"] == ORIGIN
+    assert proof["preparation"]["reconciliation_base_sha"] == ORIGIN
+    assert proof["preparation"]["stale_state_count"] == 0
+
+
+def test_zero_work_proof_rejects_stale_lifecycle_rows() -> None:
+    """A receipt with unresolved stale rows or drifted pass bindings is invalid."""
+    snapshot = _snapshot()
+    proof = deepcopy(controller.arbitrate_controller(snapshot)["zero_work_proof"])
+    proof["preparation"]["stale_state_count"] = 1
+
+    validation = controller.validate_zero_work_proof(
+        proof,
+        origin_main_sha=ORIGIN,
+        freshness=FRESHNESS,
+    )
+
+    assert validation["valid"] is False
+    assert "proof_stale_state_count_nonzero" in validation["reasons"]

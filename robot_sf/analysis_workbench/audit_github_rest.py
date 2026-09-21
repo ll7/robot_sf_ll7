@@ -10,10 +10,10 @@ separate append-only comment operation for later service integration.
 
 Only ``GET`` and ``POST`` are implemented.  In particular, this adapter does
 not implement read-then-``PATCH`` issue-body updates or pretend that GitHub's
-ordinary issue endpoint provides a compare-and-swap primitive.  The current
-``GitHubSync`` contract still requires those capabilities for existing-issue
-updates; wiring this adapter into that path is intentionally a follow-up
-integration seam.
+ordinary issue endpoint provides a compare-and-swap primitive.  The V1
+``GitHubSync`` path therefore creates the immutable issue snapshot once and
+uses ``append_auditor_comment`` for later revisions.  The historical body-CAS
+path remains available only to explicit compatibility fakes.
 
 The HTTP client is injected.  No network client, credential lookup, retry, or
 automatic mutation is constructed by this module.  A caller may provide an

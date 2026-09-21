@@ -58,6 +58,7 @@ viz = [
     "matplotlib>=3.11.1",
     "pillow>=10.4.0",
     "moviepy>=2.0.0",
+    "imageio-ffmpeg>=0.6.0",
     "seaborn>=0.13.2",
 ]
 maps = [

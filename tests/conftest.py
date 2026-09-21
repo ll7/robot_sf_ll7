@@ -418,13 +418,35 @@ _FAST_FILES = {
     # Benchmark Auditor release-bound coverage tests are deterministic
     # denominator, protocol, and receipt contracts for BA-04 (issue #9487).
     "test_audit_coverage.py",
+    "test_audit_codex.py",
+    "test_audit_codex_app_server.py",
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
+    "test_audit_github.py",
+    "test_audit_github_rest.py",
     # Benchmark Auditor queue tests are deterministic policy, control-stream,
     # provenance, and save/resume contracts for BA-02 (issue #9486).
     "test_audit_queue.py",
+    "test_audit_mcp.py",
+    "test_audit_mcp_stdio.py",
+    "test_audit_service.py",
+    "test_audit_service_adapters.py",
+    # Durable BA-05 Next integration tests exercise the queue/authority
+    # transaction and replay boundary entirely with local fixtures.
+    "test_audit_service_next.py",
     "test_audit_store.py",
     "test_audit_store_cli.py",
+    # BA-05 source-first lazy materialization contracts stay in the exact-head
+    # fast lane (issue #9488).
+    "test_audit_materialize.py",
+    # The BA-05 native/provider seams below are deterministic offline admission,
+    # replay, and diagnostic contracts.  Keep them in the exact-head fast lane
+    # so changed coverage does not depend on live providers or benchmark runs.
+    "test_audit_codex_durable.py",
+    "test_audit_github_service.py",
+    "test_audit_materialize_native.py",
+    "test_audit_native_diagnostic.py",
+    "test_audit_native_service.py",
     # BA-01 campaign accounting and detector-family tests are deterministic
     # offline contracts; keep changed coverage in the exact-head fast lane.
     "test_audit_scan.py",

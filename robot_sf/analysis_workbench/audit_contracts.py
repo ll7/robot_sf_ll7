@@ -12,11 +12,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, TypeVar
 
 from jsonschema import Draft202012Validator
@@ -48,6 +50,34 @@ FINDING_STATUSES = (
     "refuted",
     "resolved",
 )
+DETECTOR_RULE_PROPOSAL_KINDS = (
+    "new_rule",
+    "threshold_change",
+    "parameter_change",
+    "cohort_change",
+)
+DETECTOR_RULE_PROPOSAL_STATUSES = ("proposed", "approved", "rejected", "withdrawn")
+DETECTOR_RULE_PROPOSAL_ACTIVATION_STATUSES = ("inactive",)
+DETECTOR_RULE_PROPOSAL_IMMUTABLE_FIELDS = (
+    "proposal_id",
+    "proposal_kind",
+    "target_detector_id",
+    "candidate_rule",
+    "detector_registry_version",
+    "detector_registry_digest",
+    "campaign_digest",
+    "source_identity",
+    "source_revision",
+    "annotation_ids",
+    "finding_ids",
+    "episode_ids",
+    "rationale",
+    "metadata",
+    "activation_status",
+    "proposer_kind",
+    "proposer_id",
+    "created_at",
+)
 SIGNAL_STATUSES = ("flagged", "clear", "unavailable", "error")
 COORDINATE_FRAMES = ("world", "image")
 SOURCE_PROVENANCE_STATUSES = ("verified", "stale", "mutated", "unavailable")
@@ -58,6 +88,40 @@ SOURCE_PROVENANCE_UNAVAILABLE = "unavailable"
 
 _DIGEST_LENGTHS = {40, 64}
 _IMAGE_DIMENSION_LIMIT = 100_000_000
+_PROPOSAL_TEXT_LIMIT = 4096
+_PROPOSAL_RULE_DEPTH_LIMIT = 8
+_PROPOSAL_RULE_MAPPING_LIMIT = 64
+_PROPOSAL_RULE_SEQUENCE_LIMIT = 128
+_PROPOSAL_RULE_NODE_LIMIT = 512
+_PROPOSAL_METADATA_LIMIT = 32
+_PROPOSAL_ID_LIMIT = 256
+_PROPOSAL_DECLARATIVE_KEY_RE = re.compile(r"[a-z][a-z0-9_]{0,127}")
+_PROPOSAL_EXECUTION_KEY_PARTS = frozenset(
+    {
+        "callable",
+        "callback",
+        "class",
+        "command",
+        "commands",
+        "code",
+        "entrypoint",
+        "eval",
+        "exec",
+        "executable",
+        "expression",
+        "function",
+        "import",
+        "module",
+        "python",
+        "runtime",
+        "script",
+        "shell",
+    }
+)
+_PROPOSAL_EXECUTION_KEY_FRAGMENTS = frozenset(
+    item for item in _PROPOSAL_EXECUTION_KEY_PARTS if item not in {"class", "code"}
+)
+_PROPOSAL_SPLIT_CLASS_CODE_RE = re.compile(r"(?:c_*l_*a_*s_*s|c_*o_*d_*e)(?:_|$)")
 _T = TypeVar("_T")
 AUDIT_RECORD_SCHEMA_FILE = Path(__file__).with_name("schemas") / "audit_record.v1.json"
 
@@ -146,7 +210,7 @@ def _jsonable(value: Any) -> Any:
     """
 
     if is_dataclass(value):
-        return {key: _jsonable(item) for key, item in asdict(value).items()}
+        return {item.name: _jsonable(getattr(value, item.name)) for item in fields(value)}
     if isinstance(value, Mapping):
         if any(not isinstance(key, str) for key in value):
             raise AuditContractError("audit mappings must use string field names")
@@ -187,6 +251,154 @@ def _closed_mapping(value: Any, *, name: str) -> dict[str, Any]:
     result = dict(value)
     _jsonable(result)
     _strict_json_values(result, path=name)
+    return result
+
+
+def _proposal_key_is_executable(key: str) -> bool:
+    """Return whether a proposal key names an execution mechanism."""
+
+    normalized = "".join(char for char in key.casefold() if char.isalnum())
+    parts = {
+        part
+        for part in "".join(char if char.isalnum() else " " for char in key.casefold()).split()
+        if part
+    }
+    if normalized in _PROPOSAL_EXECUTION_KEY_PARTS or parts & {"class", "code"}:
+        return True
+    if _PROPOSAL_SPLIT_CLASS_CODE_RE.search(key):
+        return True
+    return any(fragment in normalized for fragment in _PROPOSAL_EXECUTION_KEY_FRAGMENTS)
+
+
+def _bounded_proposal_value(  # noqa: C901, PLR0912
+    value: Any,
+    *,
+    name: str,
+    depth: int = 0,
+    nodes: list[int] | None = None,
+    reject_executable_keys: bool = False,
+) -> Any:
+    """Validate a bounded JSON value used by a detector proposal.
+
+    Proposal data is declarative input.  It is intentionally copied into
+    ordinary JSON values, bounded by depth/node/collection limits, and never
+    accepted as a callable, module, command, or expression.
+
+    Returns:
+        A copied JSON-compatible value.
+    """
+
+    if nodes is None:
+        nodes = [0]
+    nodes[0] += 1
+    if nodes[0] > _PROPOSAL_RULE_NODE_LIMIT:
+        raise AuditContractError(f"{name} exceeds the proposal value size limit")
+    if depth > _PROPOSAL_RULE_DEPTH_LIMIT:
+        raise AuditContractError(f"{name} exceeds the proposal nesting limit")
+    if isinstance(value, str):
+        if len(value) > _PROPOSAL_TEXT_LIMIT:
+            raise AuditContractError(f"{name} exceeds the proposal text limit")
+        return value
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise AuditContractError(f"{name} contains a non-finite number")
+        return value
+    if isinstance(value, Mapping):
+        if len(value) > _PROPOSAL_RULE_MAPPING_LIMIT:
+            raise AuditContractError(f"{name} exceeds the proposal mapping limit")
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str) or not key.strip():
+                raise AuditContractError(f"{name} keys must be non-empty strings")
+            if len(key) > 128:
+                raise AuditContractError(f"{name}.{key} exceeds the proposal key limit")
+            if reject_executable_keys:
+                if _PROPOSAL_DECLARATIVE_KEY_RE.fullmatch(key) is None:
+                    raise AuditContractError(
+                        f"{name}.{key} is not a declarative lower_snake_case key"
+                    )
+                if _proposal_key_is_executable(key):
+                    raise AuditContractError(
+                        f"{name}.{key} is executable proposal data; use declarative values only"
+                    )
+            result[key] = _bounded_proposal_value(
+                item,
+                name=f"{name}.{key}",
+                depth=depth + 1,
+                nodes=nodes,
+                reject_executable_keys=reject_executable_keys,
+            )
+        return result
+    if isinstance(value, (tuple, list)):
+        if len(value) > _PROPOSAL_RULE_SEQUENCE_LIMIT:
+            raise AuditContractError(f"{name} exceeds the proposal sequence limit")
+        return [
+            _bounded_proposal_value(
+                item,
+                name=f"{name}[{index}]",
+                depth=depth + 1,
+                nodes=nodes,
+                reject_executable_keys=reject_executable_keys,
+            )
+            for index, item in enumerate(value)
+        ]
+    raise AuditContractError(f"{name} contains unsupported value {type(value).__name__}")
+
+
+def _bounded_proposal_mapping(
+    value: Any, *, name: str, reject_executable_keys: bool
+) -> dict[str, Any]:
+    """Return a bounded, strict JSON mapping for proposal fields."""
+
+    if not isinstance(value, Mapping):
+        raise AuditContractError(f"{name} must be a mapping")
+    result = _bounded_proposal_value(
+        value,
+        name=name,
+        reject_executable_keys=reject_executable_keys,
+    )
+    if not isinstance(result, dict):  # pragma: no cover - mapping input guarantees this.
+        raise AuditContractError(f"{name} must be a mapping")
+    return result
+
+
+def _freeze_proposal_value(value: Any) -> Any:
+    """Return an immutable copy of a proposal JSON value."""
+
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_proposal_value(item) for key, item in value.items()})
+    if isinstance(value, (tuple, list)):
+        return tuple(_freeze_proposal_value(item) for item in value)
+    return value
+
+
+def _proposal_text(value: Any, *, name: str, allow_empty: bool = False) -> str:
+    """Validate a bounded proposal text field.
+
+    Returns:
+        The validated text.
+    """
+
+    result = _text(value, name=name, allow_empty=allow_empty)
+    if len(result) > _PROPOSAL_TEXT_LIMIT:
+        raise AuditContractError(f"{name} exceeds the proposal text limit")
+    return result
+
+
+def _proposal_ids(value: Any, *, name: str) -> tuple[str, ...]:
+    """Validate bounded, deterministic evidence ID lists.
+
+    Returns:
+        A normalized tuple of evidence IDs.
+    """
+
+    result = _tuple_of_strings(value, name=name)
+    if len(result) > _PROPOSAL_RULE_SEQUENCE_LIMIT:
+        raise AuditContractError(f"{name} exceeds the proposal sequence limit")
+    if any(len(item) > _PROPOSAL_ID_LIMIT for item in result):
+        raise AuditContractError(f"{name} contains an ID exceeding the proposal key limit")
     return result
 
 
@@ -1103,6 +1315,179 @@ class Finding:
 
 
 @dataclass(frozen=True, slots=True)
+class DetectorRuleProposal:
+    """A declarative detector-rule candidate awaiting human governance.
+
+    This record is deliberately separate from :class:`Finding`.  A proposal
+    describes data that a future detector *could* consume; it is never an
+    executable detector implementation or an implicit registry update.  V1
+    stores the proposal and its decision while ``activation_status`` remains
+    permanently ``inactive``.
+    """
+
+    proposal_id: str
+    proposal_kind: str
+    target_detector_id: str
+    candidate_rule: Mapping[str, Any]
+    detector_registry_version: str = ""
+    detector_registry_digest: str = ""
+    campaign_digest: str = ""
+    source_identity: str = ""
+    source_revision: int | str = ""
+    annotation_ids: tuple[str, ...] = ()
+    finding_ids: tuple[str, ...] = ()
+    episode_ids: tuple[str, ...] = ()
+    rationale: str = ""
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    lifecycle_status: str = "proposed"
+    activation_status: str = "inactive"
+    proposer_kind: str = "agent"
+    proposer_id: str = ""
+    author_kind: str = "agent"
+    author_id: str = ""
+    decided_by_kind: str = ""
+    decided_by_id: str = ""
+    decided_at: str = ""
+    decision_reason: str = ""
+    created_at: str = field(default_factory=utc_now)
+    updated_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912, PLR0915
+        """Validate provenance, declarative data, and the human decision gate."""
+
+        _proposal_text(self.proposal_id, name="proposal_id")
+        _proposal_text(self.proposal_kind, name="proposal_kind")
+        _proposal_text(self.target_detector_id, name="target_detector_id")
+        _proposal_text(
+            self.detector_registry_version,
+            name="detector_registry_version",
+            allow_empty=True,
+        )
+        detector_registry_digest = _digest(
+            self.detector_registry_digest,
+            name="detector_registry_digest",
+        )
+        campaign_digest = _digest(self.campaign_digest, name="campaign_digest")
+        source_identity = _proposal_text(
+            self.source_identity,
+            name="source_identity",
+            allow_empty=True,
+        ).strip()
+        if isinstance(self.source_revision, bool) or not isinstance(
+            self.source_revision, (int, str)
+        ):
+            raise AuditContractError("source_revision must be a non-negative integer or token")
+        if isinstance(self.source_revision, int) and self.source_revision < 0:
+            raise AuditContractError("source_revision must be a non-negative integer")
+        source_revision: int | str = (
+            ""
+            if self.source_revision == ""
+            else self.source_revision
+            if isinstance(self.source_revision, int)
+            else _proposal_text(
+                self.source_revision,
+                name="source_revision",
+                allow_empty=True,
+            ).strip()
+        )
+        if self.source_revision not in (0, "") and not source_revision:
+            raise AuditContractError("source_revision token must be non-empty")
+
+        candidate_rule = _bounded_proposal_mapping(
+            self.candidate_rule,
+            name="candidate_rule",
+            reject_executable_keys=True,
+        )
+        if not candidate_rule:
+            raise AuditContractError("candidate_rule must contain declarative data")
+        metadata = _bounded_proposal_mapping(
+            self.metadata,
+            name="metadata",
+            reject_executable_keys=False,
+        )
+        if len(metadata) > _PROPOSAL_METADATA_LIMIT:
+            raise AuditContractError("metadata exceeds the proposal field limit")
+
+        annotation_ids = _proposal_ids(self.annotation_ids, name="annotation_ids")
+        finding_ids = _proposal_ids(self.finding_ids, name="finding_ids")
+        episode_ids = _proposal_ids(self.episode_ids, name="episode_ids")
+        rationale = _proposal_text(self.rationale, name="rationale")
+        for name, value in (
+            ("proposer_id", self.proposer_id),
+            ("author_id", self.author_id),
+            ("decided_by_id", self.decided_by_id),
+        ):
+            _proposal_text(value, name=name, allow_empty=True)
+        _proposal_text(self.created_at, name="created_at")
+        _proposal_text(self.updated_at, name="updated_at")
+        decided_at = _proposal_text(self.decided_at, name="decided_at", allow_empty=True)
+        decided_by_kind = _proposal_text(
+            self.decided_by_kind,
+            name="decided_by_kind",
+            allow_empty=True,
+        )
+        decision_reason = _proposal_text(
+            self.decision_reason,
+            name="decision_reason",
+            allow_empty=True,
+        )
+
+        if self.proposal_kind not in DETECTOR_RULE_PROPOSAL_KINDS:
+            raise AuditContractError(f"proposal_kind must be one of {DETECTOR_RULE_PROPOSAL_KINDS}")
+        if self.lifecycle_status not in DETECTOR_RULE_PROPOSAL_STATUSES:
+            raise AuditContractError(
+                f"lifecycle_status must be one of {DETECTOR_RULE_PROPOSAL_STATUSES}"
+            )
+        if self.activation_status not in DETECTOR_RULE_PROPOSAL_ACTIVATION_STATUSES:
+            raise AuditContractError("detector rule proposals are inactive in audit-record.v1")
+        for name, value in (
+            ("proposer_kind", self.proposer_kind),
+            ("author_kind", self.author_kind),
+        ):
+            if value not in AUTHOR_KINDS:
+                raise AuditContractError(f"{name} must be one of {AUTHOR_KINDS}")
+
+        decision_fields = (
+            decided_by_kind,
+            self.decided_by_id,
+            decided_at,
+            decision_reason,
+        )
+        if self.lifecycle_status == "proposed":
+            if any(decision_fields):
+                raise AuditContractError(
+                    "proposed detector rule proposals cannot carry decision fields"
+                )
+        else:
+            if self.author_kind != "human":
+                raise AuditContractError(
+                    "approved, rejected, or withdrawn proposals require a human author"
+                )
+            if decided_by_kind != "human":
+                raise AuditContractError("proposal decisions must be made by a human")
+            if not self.decided_by_id.strip():
+                raise AuditContractError("decided_by_id is required for a proposal decision")
+            if not self.decided_at.strip():
+                raise AuditContractError("decided_at is required for a proposal decision")
+            if not decision_reason.strip():
+                raise AuditContractError("decision_reason is required for a proposal decision")
+
+        object.__setattr__(self, "candidate_rule", _freeze_proposal_value(candidate_rule))
+        object.__setattr__(self, "metadata", _freeze_proposal_value(metadata))
+        object.__setattr__(self, "detector_registry_digest", detector_registry_digest)
+        object.__setattr__(self, "campaign_digest", campaign_digest)
+        object.__setattr__(self, "source_identity", source_identity)
+        object.__setattr__(self, "source_revision", source_revision)
+        object.__setattr__(self, "annotation_ids", annotation_ids)
+        object.__setattr__(self, "finding_ids", finding_ids)
+        object.__setattr__(self, "episode_ids", episode_ids)
+        object.__setattr__(self, "rationale", rationale)
+        object.__setattr__(self, "decided_by_kind", decided_by_kind)
+        object.__setattr__(self, "decided_at", decided_at)
+        object.__setattr__(self, "decision_reason", decision_reason)
+
+
+@dataclass(frozen=True, slots=True)
 class ActionRecord:
     """An auditable user/agent action, including failed or undone actions."""
 
@@ -1131,7 +1516,12 @@ class ActionRecord:
 
 @dataclass(frozen=True, slots=True)
 class ReviewRecord:
-    """Explicit review receipt; opening an interval is not full review credit."""
+    """Explicit review receipt; opening an interval is not full review credit.
+
+    ``source_identity`` is the opaque BA-04 source-revision token (usually the
+    admitted source commit), not the source digest used by annotation records.
+    ``scan_identity`` is the opaque BA-01 scan token (usually its cache key).
+    """
 
     review_id: str
     episode_id: str
@@ -1143,6 +1533,11 @@ class ReviewRecord:
     annotation_ids: tuple[str, ...] = ()
     created_at: str = field(default_factory=utc_now)
     notes: str = ""
+    # ``source_revision`` is intentionally retained as the integer editor
+    # selection/CAS revision.  These optional opaque tokens carry the distinct
+    # BA-04 source and scan identities without changing that existing meaning.
+    source_identity: str = ""
+    scan_identity: str = ""
 
     def __post_init__(self) -> None:
         """Validate explicit review scope and author identity."""
@@ -1165,7 +1560,11 @@ class ReviewRecord:
         _optional_text(self.outcome, name="outcome")
         _optional_text(self.author_id, name="author_id")
         _optional_text(self.notes, name="notes")
+        source_identity = _optional_text(self.source_identity, name="source_identity").strip()
+        scan_identity = _optional_text(self.scan_identity, name="scan_identity").strip()
         _text(self.created_at, name="created_at")
+        object.__setattr__(self, "source_identity", source_identity)
+        object.__setattr__(self, "scan_identity", scan_identity)
 
 
 _RECORD_TYPES: dict[str, type[Any]] = {
@@ -1176,6 +1575,7 @@ _RECORD_TYPES: dict[str, type[Any]] = {
     "reference": Reference,
     "annotation": Annotation,
     "finding": Finding,
+    "detector_rule_proposal": DetectorRuleProposal,
     "action_record": ActionRecord,
     "review_record": ReviewRecord,
 }
@@ -1207,6 +1607,7 @@ def record_id(record: Any) -> str:
         "reference": "reference_id",
         "annotation": "annotation_id",
         "finding": "finding_id",
+        "detector_rule_proposal": "proposal_id",
         "action_record": "action_id",
         "review_record": "review_id",
     }[kind]
@@ -1404,6 +1805,43 @@ def finding_from_dict(payload: Mapping[str, Any]) -> Finding:
     )
 
 
+def detector_rule_proposal_from_dict(payload: Mapping[str, Any]) -> DetectorRuleProposal:
+    """Build a detector-rule proposal from a canonical mapping.
+
+    Returns:
+        A validated :class:`DetectorRuleProposal`.
+    """
+
+    return DetectorRuleProposal(
+        proposal_id=payload["proposal_id"],
+        proposal_kind=payload["proposal_kind"],
+        target_detector_id=payload["target_detector_id"],
+        candidate_rule=payload["candidate_rule"],
+        detector_registry_version=payload.get("detector_registry_version", ""),
+        detector_registry_digest=payload.get("detector_registry_digest", ""),
+        campaign_digest=payload.get("campaign_digest", ""),
+        source_identity=payload.get("source_identity", ""),
+        source_revision=payload.get("source_revision", ""),
+        annotation_ids=_proposal_ids(payload.get("annotation_ids", ()), name="annotation_ids"),
+        finding_ids=_proposal_ids(payload.get("finding_ids", ()), name="finding_ids"),
+        episode_ids=_proposal_ids(payload.get("episode_ids", ()), name="episode_ids"),
+        rationale=payload.get("rationale", ""),
+        metadata=payload.get("metadata", {}),
+        lifecycle_status=payload.get("lifecycle_status", "proposed"),
+        activation_status=payload.get("activation_status", "inactive"),
+        proposer_kind=payload.get("proposer_kind", "agent"),
+        proposer_id=payload.get("proposer_id", ""),
+        author_kind=payload.get("author_kind", "agent"),
+        author_id=payload.get("author_id", ""),
+        decided_by_kind=payload.get("decided_by_kind", ""),
+        decided_by_id=payload.get("decided_by_id", ""),
+        decided_at=payload.get("decided_at", ""),
+        decision_reason=payload.get("decision_reason", ""),
+        created_at=payload.get("created_at", utc_now()),
+        updated_at=payload.get("updated_at", utc_now()),
+    )
+
+
 def review_packet_from_dict(payload: Mapping[str, Any]) -> ReviewPacket:
     """Build a review packet from a canonical mapping.
 
@@ -1425,7 +1863,7 @@ def review_packet_from_dict(payload: Mapping[str, Any]) -> ReviewPacket:
     )
 
 
-def record_from_dict(payload: Mapping[str, Any]) -> Any:  # noqa: C901
+def record_from_dict(payload: Mapping[str, Any]) -> Any:  # noqa: C901, PLR0912
     """Validate and deserialize a canonical record mapping.
 
     Returns:
@@ -1447,6 +1885,8 @@ def record_from_dict(payload: Mapping[str, Any]) -> Any:  # noqa: C901
             record = annotation_from_dict(payload)
         elif kind == "finding":
             record = finding_from_dict(payload)
+        elif kind == "detector_rule_proposal":
+            record = detector_rule_proposal_from_dict(payload)
         elif kind == "review_packet":
             record = review_packet_from_dict(payload)
         else:
@@ -1649,6 +2089,10 @@ __all__ = [
     "AUDIT_SCHEMA_VERSION",
     "AUTHOR_KINDS",
     "COORDINATE_FRAMES",
+    "DETECTOR_RULE_PROPOSAL_ACTIVATION_STATUSES",
+    "DETECTOR_RULE_PROPOSAL_IMMUTABLE_FIELDS",
+    "DETECTOR_RULE_PROPOSAL_KINDS",
+    "DETECTOR_RULE_PROPOSAL_STATUSES",
     "FINDING_STATUSES",
     "REVIEW_SCOPES",
     "SIGNAL_STATUSES",
@@ -1662,6 +2106,7 @@ __all__ = [
     "AuditContractError",
     "AuditIdentityError",
     "CampaignAudit",
+    "DetectorRuleProposal",
     "EpisodeRef",
     "Finding",
     "ImageDisplayTransform",
@@ -1675,6 +2120,7 @@ __all__ = [
     "canonical_json",
     "deserialize_audit_record",
     "deserialize_record",
+    "detector_rule_proposal_from_dict",
     "episode_ref_from_dict",
     "finding_from_dict",
     "load_audit_record_schema",

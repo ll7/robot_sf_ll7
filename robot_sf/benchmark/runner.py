@@ -2460,6 +2460,9 @@ def run_episode(  # noqa: PLR0913
             git_hash=record.get("git_hash"),
             termination_reason=termination_reason,
             safety_events=[],
+            episode_id=record["episode_id"],
+            seed=seed,
+            execution_id=record.get("execution_id"),
         )
         record["algorithm_metadata"]["analysis_trace"] = trace
         record["algorithm_metadata"]["telemetry"] = telemetry_profile.to_mapping()

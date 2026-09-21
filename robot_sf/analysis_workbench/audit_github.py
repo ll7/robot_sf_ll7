@@ -117,7 +117,9 @@ _LOCAL_MEDIA_KEYS = {
 _OUTBOX_STATES = frozenset({"pending", "in_flight", "succeeded", "ambiguous", "conflict", "failed"})
 _CLAIM_STATES = frozenset({"in_flight", "succeeded", "ambiguous", "conflict", "failed"})
 _PUBLICATION_KINDS = frozenset({"legacy_body", "initial_issue", "revision_comment"})
-_PUBLICATION_SCHEMA_VERSIONS = frozenset({GITHUB_PUBLICATION_SCHEMA_VERSION, "github-publication.legacy"})
+_PUBLICATION_SCHEMA_VERSIONS = frozenset(
+    {GITHUB_PUBLICATION_SCHEMA_VERSION, "github-publication.legacy"}
+)
 
 
 class GitHubSyncError(RuntimeError):
@@ -743,7 +745,9 @@ class GitHubOutboxEntry:
             reason=payload.get("reason", ""),
             created_at=payload.get("created_at", ""),
             updated_at=payload.get("updated_at", ""),
-            publication_schema_version=payload.get("publication_schema_version", "github-publication.legacy"),
+            publication_schema_version=payload.get(
+                "publication_schema_version", "github-publication.legacy"
+            ),
             publication_kind=payload.get("publication_kind", "legacy_body"),
             publication_revision=payload.get("publication_revision"),
             publication_digest=payload.get("publication_digest", ""),
@@ -970,7 +974,10 @@ class GitHubOutbox:
         if not re.fullmatch(r"[0-9a-f]{64}", publication_key):
             raise GitHubValidationError("publication_key must be a SHA-256 hex digest")
         for stored in self.store.list_records():
-            if not isinstance(stored.record, ActionRecord) or stored.record.action_type != self.ACTION_TYPE:
+            if (
+                not isinstance(stored.record, ActionRecord)
+                or stored.record.action_type != self.ACTION_TYPE
+            ):
                 continue
             try:
                 entry = GitHubOutboxEntry.from_dict(stored.record.details)
@@ -1951,18 +1958,40 @@ class GitHubSync:
         search, search_error = self._search(repository, rendered.marker)
         if search_error is not None:
             entry = self._mark(entry, "failed", search_error)
-            return self._append_result("failed", repository, finding, operation_id, entry, None, finding, reason=search_error)
+            return self._append_result(
+                "failed",
+                repository,
+                finding,
+                operation_id,
+                entry,
+                None,
+                finding,
+                reason=search_error,
+            )
         if search is None or not search.complete:
             reason = (search.reason if search is not None else "") or "marker search is incomplete"
             entry = self._mark(entry, "ambiguous", reason)
-            return self._append_result("ambiguous", repository, finding, operation_id, entry, None, finding, reason=reason)
+            return self._append_result(
+                "ambiguous", repository, finding, operation_id, entry, None, finding, reason=reason
+            )
         remote = _select_marker_issue(search, repository=repository, finding_id=finding.finding_id)
 
         if remote is None:
             if entry.state in {"in_flight", "ambiguous"} and not retry_ambiguous:
-                reason = "create remains ambiguous; exact marker is absent and retry was not authorized"
+                reason = (
+                    "create remains ambiguous; exact marker is absent and retry was not authorized"
+                )
                 entry = self._mark(entry, "ambiguous", reason)
-                return self._append_result("ambiguous", repository, finding, operation_id, entry, None, finding, reason=reason)
+                return self._append_result(
+                    "ambiguous",
+                    repository,
+                    finding,
+                    operation_id,
+                    entry,
+                    None,
+                    finding,
+                    reason=reason,
+                )
             claim, claim_owned = self._acquire_finding_claim(
                 rendered,
                 operation_id=entry.operation_id,
@@ -1976,8 +2005,19 @@ class GitHubSync:
                     remote = self._refresh_claim_issue(claim, repository, finding.finding_id)
                 else:
                     reason = claim.reason or "another worker owns the finding publication"
-                    entry = self._mark(entry, "ambiguous" if claim.state == "ambiguous" else "pending", reason)
-                    return self._append_result("ambiguous" if claim.state == "ambiguous" else "pending", repository, finding, operation_id, entry, None, finding, reason=reason)
+                    entry = self._mark(
+                        entry, "ambiguous" if claim.state == "ambiguous" else "pending", reason
+                    )
+                    return self._append_result(
+                        "ambiguous" if claim.state == "ambiguous" else "pending",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        None,
+                        finding,
+                        reason=reason,
+                    )
             if remote is None and claim_owned:
                 entry = self._claim(entry, worker_id)
                 try:
@@ -1989,24 +2029,46 @@ class GitHubSync:
                             labels=rendered.labels,
                         )
                     )
-                    _validate_issue_for_finding(remote, repository, finding.finding_id, rendered.marker)
+                    _validate_issue_for_finding(
+                        remote, repository, finding.finding_id, rendered.marker
+                    )
                     remote_write = "applied"
                     status = "created"
                 except Exception as exc:  # noqa: BLE001 - remote create is ambiguous by definition.
                     reconciled, reconcile_error = self._search(repository, rendered.marker)
                     remote = (
-                        _select_marker_issue(reconciled, repository=repository, finding_id=finding.finding_id)
-                        if reconciled is not None and reconcile_error is None and reconciled.complete
+                        _select_marker_issue(
+                            reconciled, repository=repository, finding_id=finding.finding_id
+                        )
+                        if reconciled is not None
+                        and reconcile_error is None
+                        and reconciled.complete
                         else None
                     )
                     if remote is None:
                         reason = f"create outcome is ambiguous: {type(exc).__name__}: {exc}"
                         entry = self._mark(entry, "ambiguous", reason)
                         self._mark_claim(claim, "ambiguous", reason)
-                        return self._append_result("ambiguous", repository, finding, operation_id, entry, None, finding, reason=reason, remote_write="ambiguous")
+                        return self._append_result(
+                            "ambiguous",
+                            repository,
+                            finding,
+                            operation_id,
+                            entry,
+                            None,
+                            finding,
+                            reason=reason,
+                            remote_write="ambiguous",
+                        )
                     status = "reconciled"
                     remote_write = "none"
-                entry = replace(entry, issue=remote.to_dict(), state="succeeded", reason="", updated_at=utc_now())
+                entry = replace(
+                    entry,
+                    issue=remote.to_dict(),
+                    state="succeeded",
+                    reason="",
+                    updated_at=utc_now(),
+                )
                 # Persist the remote observation before attempting the optional
                 # canonical FindingStore link CAS.  A link conflict must not
                 # erase evidence that GitHub accepted the immutable issue.
@@ -2048,7 +2110,16 @@ class GitHubSync:
                     # durable; preserve the observation if the paired claim
                     # boundary races with another worker.
                     entry = self._persist_entry(entry)
-                return self._append_result(status, repository, finding, operation_id, entry, remote, updated_finding, remote_write=remote_write)
+                return self._append_result(
+                    status,
+                    repository,
+                    finding,
+                    operation_id,
+                    entry,
+                    remote,
+                    updated_finding,
+                    remote_write=remote_write,
+                )
 
         # A marker found remotely settles the immutable initial publication,
         # even when the local outbox was lost or this is a migration from the
@@ -2127,7 +2198,16 @@ class GitHubSync:
         claimed_comment = self._claim(comment_entry, worker_id)
         if claimed_comment.worker_id != worker_id and claimed_comment.state == "in_flight":
             reason = "another worker owns the in-flight auditor comment"
-            return self._append_result("pending", repository, finding, operation_id, claimed_comment, remote, finding, reason=reason)
+            return self._append_result(
+                "pending",
+                repository,
+                finding,
+                operation_id,
+                claimed_comment,
+                remote,
+                finding,
+                reason=reason,
+            )
         try:
             write = self.provider.append_auditor_comment(
                 repository,
@@ -2143,7 +2223,17 @@ class GitHubSync:
             if comment is None:
                 reason = f"comment outcome is ambiguous: {type(exc).__name__}: {exc}"
                 comment_entry = self._mark(claimed_comment, "ambiguous", reason)
-                return self._append_result("ambiguous", repository, finding, operation_id, comment_entry, remote, finding, reason=reason, remote_write="ambiguous")
+                return self._append_result(
+                    "ambiguous",
+                    repository,
+                    finding,
+                    operation_id,
+                    comment_entry,
+                    remote,
+                    finding,
+                    reason=reason,
+                    remote_write="ambiguous",
+                )
             write_status = "reconciled"
             remote_write = "none"
             status = "reconciled"
@@ -2177,7 +2267,16 @@ class GitHubSync:
                 reason=reason,
                 remote_write=remote_write,
             )
-        return self._append_result(status, repository, finding, operation_id, comment_entry, remote, updated_finding, remote_write=remote_write)
+        return self._append_result(
+            status,
+            repository,
+            finding,
+            operation_id,
+            comment_entry,
+            remote,
+            updated_finding,
+            remote_write=remote_write,
+        )
 
     def _publication_entry(
         self,
@@ -3036,7 +3135,9 @@ def _publication_digest(
             "publication_kind": publication_kind,
             "rendered_request_digest": rendered.request_digest,
             "body": (
-                rendered.body if body is None and publication_kind == "initial_issue" else body
+                rendered.body
+                if body is None and publication_kind == "initial_issue"
+                else body
                 if body is not None
                 else rendered.auditor_block
             ),
@@ -3244,9 +3345,7 @@ def _build_link(
                 "publication_digest": entry.publication_digest,
                 "publication_key": entry.publication_key,
                 "comment_id": (
-                    entry.comment.get("id")
-                    if isinstance(entry.comment, Mapping)
-                    else None
+                    entry.comment.get("id") if isinstance(entry.comment, Mapping) else None
                 ),
             }
         )

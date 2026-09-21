@@ -23,6 +23,8 @@ from robot_sf.analysis_workbench.audit_contracts import (
 from robot_sf.analysis_workbench.audit_mcp import AuditMCPDispatcher
 from robot_sf.analysis_workbench.audit_mcp_stdio import (
     AUDIT_MCP_TOOLS,
+    MAX_UNIX_SOCKET_PATH_BYTES,
+    MCP_SOCKET_DIR_ENV,
     AuditMCPBridge,
     AuditMCPStdioServer,
 )
@@ -783,3 +785,91 @@ def test_mcp_entrypoints_fail_closed_without_private_bridge_or_dispatcher(tmp_pa
     with pytest.raises(RuntimeError, match="injected dispatcher"):
         audit_mcp_stdio._direct_server_from_environment()
     assert audit_mcp_stdio.main(["--bridge-socket", str(tmp_path / "missing.sock")]) == 2
+
+
+def test_bridge_allocates_safe_socket_under_long_tmpdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deeply nested TMPDIR falls back to a safe short root within platform limits."""
+    long_tmpdir = tmp_path / ("nested_scratch_dir_" + "x" * 70) / "deep_tmp"
+    long_tmpdir.mkdir(parents=True)
+    monkeypatch.setenv("TMPDIR", str(long_tmpdir))
+
+    service, session, dispatcher = _setup(tmp_path)
+    bridge = AuditMCPBridge(
+        dispatcher,
+        session_id=session.session_id,
+        session_token=session.session_token,
+    )
+    try:
+        assert len(str(bridge.socket_path).encode()) < MAX_UNIX_SOCKET_PATH_BYTES
+        assert bridge.socket_path.parent.exists()
+        bridge.start()
+        assert bridge.running
+    finally:
+        socket_dir = bridge.socket_path.parent
+        bridge.close()
+        service.close()
+        assert not bridge.socket_path.exists()
+        assert not socket_dir.exists()
+
+
+def test_bridge_respects_configured_socket_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configured ROBOT_SF_AUDIT_MCP_SOCKET_DIR is prioritized when safe."""
+    custom_root = Path("/tmp/mcp_cfg_root")
+    custom_root.mkdir(exist_ok=True)
+    try:
+        monkeypatch.setenv(MCP_SOCKET_DIR_ENV, str(custom_root))
+
+        service, session, dispatcher = _setup(tmp_path)
+        bridge = AuditMCPBridge(
+            dispatcher,
+            session_id=session.session_id,
+            session_token=session.session_token,
+        )
+        try:
+            assert custom_root in bridge.socket_path.parents
+            assert len(str(bridge.socket_path).encode()) < MAX_UNIX_SOCKET_PATH_BYTES
+        finally:
+            bridge.close()
+            service.close()
+    finally:
+        shutil.rmtree(custom_root, ignore_errors=True)
+
+
+def test_bridge_fails_closed_when_explicit_socket_path_oversized(tmp_path: Path) -> None:
+    """An explicit socket path that exceeds platform limit fails closed."""
+    service, session, dispatcher = _setup(tmp_path)
+    oversized_path = tmp_path / ("oversized_path_" + "y" * 100 + ".sock")
+    try:
+        with pytest.raises(ValueError, match="Unix socket path exceeds the platform limit"):
+            AuditMCPBridge(
+                dispatcher,
+                session_id=session.session_id,
+                session_token=session.session_token,
+                socket_path=oversized_path,
+            )
+    finally:
+        service.close()
+
+
+def test_allocate_temporary_socket_fails_closed_when_all_candidates_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If no candidate root produces a valid path, fail closed with ValueError."""
+
+    class FakeOversizedTempDir:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.name = (
+                "/a/very/long/temporary/directory/path/that/is/guaranteed/to/exceed/"
+                "the/unix/domain/socket/limit"
+            )
+
+        def cleanup(self) -> None:
+            pass
+
+    monkeypatch.setattr(audit_mcp_stdio.tempfile, "TemporaryDirectory", FakeOversizedTempDir)
+    with pytest.raises(ValueError, match="Unix socket path exceeds the platform limit"):
+        audit_mcp_stdio._allocate_temporary_socket()

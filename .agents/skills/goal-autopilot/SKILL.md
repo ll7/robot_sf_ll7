@@ -239,9 +239,13 @@ Each cycle iteration follows a fixed phase order:
    issues are routed to closure, not scored. A failure here is non-fatal: log it and proceed with the
    existing ordering.
 2. `reconcile` — refresh project permission and worker-route status, then reconcile satisfied
-   blockers and stale lifecycle labels. Missing `read:project` is a non-fatal priority limitation;
-   it does not authorize treating the candidate queue as claimable. Route status is also non-fatal
-   for local work, but a prior failed route probe expires and must not remain authoritative.
+   blockers and stale lifecycle labels. Run the deterministic lifecycle reconciler in report mode
+   first (`uv run python scripts/dev/lifecycle_state_reconcile.py --report --json`); repair only
+   through its drift-checked apply mode and feed its `unresolved_drift_count` into the controller
+   receipt so terminal zero-work cannot ignore lifecycle drift. Missing `read:project` is a
+   non-fatal priority limitation; it does not authorize treating the candidate queue as claimable.
+   Route status is also non-fatal for local work, but a prior failed route probe expires and must
+   not remain authoritative.
 3. `prepare` — run the report-only open-issue audit and deterministic preparation planner. Review
    `ready`, `needs_ready_label`, `needs_spec`, parent, decision, compute, external-input, active,
    review, covered, and wrong-owner groups separately. Run the explicit relationship audit for
@@ -260,6 +264,20 @@ Each cycle iteration follows a fixed phase order:
 8. `discover` — delegate to `goal-issue-discovery` for one bounded, unsaturated discovery lane.
 
 ### Reconciliation and empty-queue policy
+
+Prefer the executable driver for the whole sequence (issue #9534). It composes
+the canonical owners, refuses terminal output, and emits a versioned receipt
+that doubles as the compact resume surface:
+
+```bash
+uv run python scripts/dev/autopilot_recovery_cycle.py \
+  --repo ll7/robot_sf_ll7 --json
+```
+
+Receipt schema: `autopilot_recovery_cycle_receipt.v1` (lanes evaluated, lane
+errors, skipped lanes with reasons, every lane count, `next_action`,
+`terminal_refused`, stale lifecycle rows, discovery decision). The driver is
+report-only; it never writes labels, issues, or claims.
 
 When the candidate queue has no claimable leaf, run the following bounded recovery sequence before
 declaring zero work:

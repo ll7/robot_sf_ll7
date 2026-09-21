@@ -198,8 +198,15 @@ class CodexAppServerConfig:
     close_timeout_seconds: float = DEFAULT_CLOSE_TIMEOUT_SECONDS
     max_frame_bytes: int = MAX_APP_SERVER_FRAME_BYTES
     max_events: int = MAX_APP_SERVER_EVENTS
+    accounting_mode: str = "local_accounting"
+    require_explicit_route: bool = False
+    required_route_id: str = ""
+    required_provider: str = ""
+    required_model_id: str = ""
+    provider_ceiling_verified: bool = False
+    provider_compute_ceiling: float | None = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         """Validate timeout, frame, and client metadata bounds."""
 
         if self.cwd is not None and not isinstance(self.cwd, (str, Path)):
@@ -218,6 +225,33 @@ class CodexAppServerConfig:
         _text(self.client_name, name="client_name")
         _text(self.client_version, name="client_version")
         _text(self.expected_cli_version, name="expected_cli_version")
+        if self.accounting_mode not in {"offline", "local_accounting", "strict_provider_ceiling"}:
+            raise ValueError("unsupported App Server accounting_mode")
+        if not isinstance(self.require_explicit_route, bool):
+            raise ValueError("require_explicit_route must be boolean")
+        for name in ("required_route_id", "required_provider", "required_model_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str):
+                raise ValueError(f"{name} must be text")
+            if value and any(char.isspace() for char in value):
+                raise ValueError(f"{name} must not contain whitespace")
+        if self.require_explicit_route and not (
+            self.required_route_id and self.required_provider and self.required_model_id
+        ):
+            raise ValueError(
+                "explicit-route mode requires required_route_id, required_provider, and "
+                "required_model_id"
+            )
+        if not isinstance(self.provider_ceiling_verified, bool):
+            raise ValueError("provider_ceiling_verified must be boolean")
+        if self.provider_compute_ceiling is not None:
+            _finite_positive(self.provider_compute_ceiling, name="provider_compute_ceiling")
+        if self.accounting_mode == "strict_provider_ceiling" and (
+            not self.provider_ceiling_verified or self.provider_compute_ceiling is None
+        ):
+            raise ValueError("strict_provider_ceiling requires a verified provider_compute_ceiling")
+        if self.accounting_mode == "strict_provider_ceiling" and not self.require_explicit_route:
+            raise ValueError("strict_provider_ceiling requires require_explicit_route=True")
 
     def resolve_executable(self) -> str:
         """Resolve an explicit or PATH-installed Codex executable."""
@@ -729,13 +763,18 @@ def _version(executable: str, *, timeout_seconds: float) -> str:
     return text.split()[0] if text else ""
 
 
-def _model_choice(result: Mapping[str, Any]) -> Mapping[str, Any]:
+def _model_choice(result: Mapping[str, Any], *, requested_model_id: str = "") -> Mapping[str, Any]:
     data = result.get("data")
     if not isinstance(data, Sequence) or isinstance(data, (str, bytes)):
         raise AppServerUnavailable("model/list returned no model data")
     models = [
         item for item in data if isinstance(item, Mapping) and isinstance(item.get("id"), str)
     ]
+    if requested_model_id:
+        matches = [item for item in models if item.get("id") == requested_model_id]
+        if len(matches) != 1:
+            raise AppServerUnavailable("model/list did not expose the requested exact model")
+        return matches[0]
     defaults = [item for item in models if item.get("isDefault") is True]
     if len(defaults) == 1:
         return defaults[0]
@@ -744,7 +783,13 @@ def _model_choice(result: Mapping[str, Any]) -> Mapping[str, Any]:
     raise AppServerUnavailable("model/list did not identify one actual default model")
 
 
-def _thread_route(result: Mapping[str, Any], *, client_version: str) -> CodexRouteReceipt:
+def _thread_route(
+    result: Mapping[str, Any],
+    *,
+    client_version: str,
+    accounting_mode: str = "local_accounting",
+    provider_ceiling_verified: bool = False,
+) -> CodexRouteReceipt:
     model_id = result.get("model")
     provider = result.get("modelProvider")
     if not isinstance(model_id, str) or not model_id.strip():
@@ -759,6 +804,8 @@ def _thread_route(result: Mapping[str, Any], *, client_version: str) -> CodexRou
         client_version=client_version,
         protocol=APP_SERVER_PROTOCOL,
         source="live-app-server-capability",
+        accounting_mode=accounting_mode,
+        provider_ceiling_verified=provider_ceiling_verified,
         capability_digest=_digest(
             {
                 "route_id": route_id,
@@ -802,7 +849,7 @@ def inspect_live_capabilities(
         try:
             transport.initialize()
             listed = transport.request("model/list", {"includeHidden": False, "limit": 100})
-            model = _model_choice(listed)
+            model = _model_choice(listed, requested_model_id=cfg.required_model_id)
             params: dict[str, Any] = {
                 "model": model["id"],
                 "ephemeral": True,
@@ -812,7 +859,18 @@ def inspect_live_capabilities(
             if cfg.cwd is not None:
                 params["cwd"] = str(cfg.cwd)
             started = transport.request("thread/start", params)
-            route = _thread_route(started, client_version=installed_version)
+            route = _thread_route(
+                started,
+                client_version=installed_version,
+                accounting_mode=cfg.accounting_mode,
+                provider_ceiling_verified=cfg.provider_ceiling_verified,
+            )
+            if cfg.required_route_id and route.route_id != cfg.required_route_id:
+                raise AppServerUnavailable("discovered route does not match required_route_id")
+            if cfg.required_provider and route.provider != cfg.required_provider:
+                raise AppServerUnavailable("discovered route does not match required_provider")
+            if cfg.required_model_id and route.model_id != cfg.required_model_id:
+                raise AppServerUnavailable("discovered route does not match required_model_id")
             return CodexCapabilityInspection(
                 "available",
                 routes=(route,),
@@ -865,11 +923,46 @@ class CodexAppServerProvider:
             raise AppServerUnavailable("route was not discovered from App Server v2")
         if route.client_version != self.config.expected_cli_version:
             raise AppServerUnavailable("route CLI version does not match the tested adapter")
+        if route.accounting_mode != self.config.accounting_mode:
+            raise AppServerUnavailable(
+                "route accounting mode does not match provider configuration"
+            )
+        if route.provider_ceiling_verified != self.config.provider_ceiling_verified:
+            raise AppServerUnavailable(
+                "route provider-ceiling evidence does not match configuration"
+            )
+        if self.config.required_route_id and route.route_id != self.config.required_route_id:
+            raise AppServerUnavailable("route does not match required_route_id")
+        if self.config.required_provider and route.provider != self.config.required_provider:
+            raise AppServerUnavailable("route does not match required_provider")
+        if self.config.required_model_id and route.model_id != self.config.required_model_id:
+            raise AppServerUnavailable("route does not match required_model_id")
+        if self.config.accounting_mode == "strict_provider_ceiling" and (
+            not self.config.provider_ceiling_verified
+            or self.config.provider_compute_ceiling is None
+        ):
+            raise AppServerUnavailable(
+                "strict provider-ceiling mode is unavailable without a verified provider ceiling"
+            )
 
     @staticmethod
-    def _require_turn_reservation(reserved_compute: float | None) -> float:
+    def _require_turn_reservation(
+        reserved_compute: float | None,
+        *,
+        accounting_mode: str = "local_accounting",
+        provider_ceiling_verified: bool = False,
+        provider_compute_ceiling: float | None = None,
+    ) -> float:
         """Require authority pre-admission before an unmeasured model turn."""
 
+        if accounting_mode == "offline":
+            raise AppServerUnavailable("offline accounting mode refuses provider turns")
+        if accounting_mode == "strict_provider_ceiling" and (
+            not provider_ceiling_verified or provider_compute_ceiling is None
+        ):
+            raise AppServerUnavailable(
+                "strict provider-ceiling mode requires a verified provider ceiling"
+            )
         if isinstance(reserved_compute, bool) or not isinstance(reserved_compute, (int, float)):
             raise AppServerUnavailable(
                 "unmeasured App Server turn requires reserved_compute >= "
@@ -880,6 +973,14 @@ class CodexAppServerProvider:
             raise AppServerUnavailable(
                 "unmeasured App Server turn requires reserved_compute >= "
                 f"{UNMEASURED_TURN_COMPUTE_CHARGE} before provider work"
+            )
+        if (
+            accounting_mode == "strict_provider_ceiling"
+            and provider_compute_ceiling is not None
+            and value > float(provider_compute_ceiling)
+        ):
+            raise AppServerUnavailable(
+                "reserved_compute exceeds the verified provider compute ceiling"
             )
         return value
 
@@ -1004,7 +1105,7 @@ class CodexAppServerProvider:
                 "status": "failed",
                 "provider_session_id": provider_session_id,
                 "reason": f"App Server turn ended with status {status}",
-                "usage": usage,
+                "usage": self._annotate_accounting_usage(usage),
             }
         if not usage:
             raise AppServerProtocolError("App Server turn completed without token usage telemetry")
@@ -1012,9 +1113,26 @@ class CodexAppServerProvider:
             "status": "complete",
             "provider_session_id": provider_session_id,
             "message": "Codex App Server turn completed",
-            "usage": usage,
+            "usage": self._annotate_accounting_usage(usage),
             "event_count": len(frames),
         }
+
+    def _annotate_accounting_usage(self, usage: Mapping[str, Any]) -> dict[str, Any]:
+        """Expose accounting mode and the physical-cap evidence boundary."""
+
+        result = dict(usage)
+        result.update(
+            {
+                "accounting_mode": self.config.accounting_mode,
+                "provider_ceiling_verified": self.config.provider_ceiling_verified,
+                "physical_provider_cap_enforced": (
+                    self.config.accounting_mode == "strict_provider_ceiling"
+                ),
+            }
+        )
+        if self.config.provider_compute_ceiling is not None:
+            result["provider_compute_ceiling"] = self.config.provider_compute_ceiling
+        return result
 
     def start(
         self,
@@ -1026,8 +1144,13 @@ class CodexAppServerProvider:
     ) -> Mapping[str, Any]:
         """Start one bounded turn after authority reserves compute."""
 
-        self._require_turn_reservation(reserved_compute)
         self._check_route(route)
+        self._require_turn_reservation(
+            reserved_compute,
+            accounting_mode=self.config.accounting_mode,
+            provider_ceiling_verified=self.config.provider_ceiling_verified,
+            provider_compute_ceiling=self.config.provider_compute_ceiling,
+        )
         self.transport.initialize()
         started = self.transport.request(
             "thread/start",
@@ -1059,8 +1182,13 @@ class CodexAppServerProvider:
     ) -> Mapping[str, Any]:
         """Resume a thread after authority reserves compute for the new turn."""
 
-        self._require_turn_reservation(reserved_compute)
         self._check_route(route)
+        self._require_turn_reservation(
+            reserved_compute,
+            accounting_mode=self.config.accounting_mode,
+            provider_ceiling_verified=self.config.provider_ceiling_verified,
+            provider_compute_ceiling=self.config.provider_compute_ceiling,
+        )
         self.transport.initialize()
         resumed = self.transport.request(
             "thread/resume",
@@ -1106,7 +1234,9 @@ class CodexAppServerProvider:
             "provider_session_id": provider_session_id,
             "message": "Codex App Server transport reconnected",
             "restarted": restarted,
-            "usage": {"tokens": 0, "compute": 0.0, "issue_writes": 0},
+            "usage": self._annotate_accounting_usage(
+                {"tokens": 0, "compute": 0.0, "issue_writes": 0}
+            ),
         }
 
     def cancel(self, *, provider_session_id: str, route: CodexRouteReceipt) -> Mapping[str, Any]:
@@ -1120,7 +1250,9 @@ class CodexAppServerProvider:
                 "status": "cancelled",
                 "provider_session_id": provider_session_id,
                 "message": "Codex App Server had no active turn",
-                "usage": {"tokens": 0, "compute": 0.0, "issue_writes": 0},
+                "usage": self._annotate_accounting_usage(
+                    {"tokens": 0, "compute": 0.0, "issue_writes": 0}
+                ),
             }
         with self._lock:
             thread_id = self._threads.get(provider_session_id, provider_session_id)
@@ -1133,7 +1265,9 @@ class CodexAppServerProvider:
             "status": "cancelled",
             "provider_session_id": provider_session_id,
             "message": "Codex App Server turn interrupted",
-            "usage": {"tokens": 0, "compute": 0.0, "issue_writes": 0},
+            "usage": self._annotate_accounting_usage(
+                {"tokens": 0, "compute": 0.0, "issue_writes": 0}
+            ),
         }
 
     def close(self) -> None:

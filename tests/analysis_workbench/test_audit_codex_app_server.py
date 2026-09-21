@@ -837,3 +837,234 @@ def test_installed_app_server_audit_client_charges_live_turn(
     finally:
         provider.close()
         service.close()
+
+
+def test_d2_strict_provider_ceiling_requires_verified_capability() -> None:
+    with pytest.raises(ValueError, match="verified provider_compute_ceiling"):
+        CodexAppServerConfig(accounting_mode="strict_provider_ceiling")
+
+
+def test_d2_model_list_never_falls_back_from_an_exact_requested_model(tmp_path: Path) -> None:
+    config = replace(_config(_fake_codex(tmp_path)), required_model_id="premium-not-installed")
+    inspection = inspect_live_capabilities(config)
+    assert inspection.status == "unavailable"
+    assert "requested exact model" in inspection.reason
+
+
+def test_d2_explicit_route_gate_rejects_default_selection_before_transport(
+    tmp_path: Path,
+) -> None:
+    executable = _fake_codex(tmp_path)
+    config = replace(
+        _config(executable),
+        require_explicit_route=True,
+        required_route_id="provider-fixture:model-fixture",
+        required_provider="provider-fixture",
+        required_model_id="model-fixture",
+    )
+    inspection = inspect_live_capabilities(config)
+    assert inspection.status == "available"
+    service, audit_session = _meter_setup(tmp_path)
+    provider = _ReservedProvider(
+        config=config,
+        reserved_compute=UNMEASURED_TURN_COMPUTE_CHARGE,
+    )
+    client = AuditCodexClient(service, inspector=lambda: inspection, provider=provider)
+    try:
+        result = client.start(
+            audit_session,
+            prompt="explicit route is required",
+            operation_id="d2-explicit-route",
+            token_budget=7,
+            compute_budget=UNMEASURED_TURN_COMPUTE_CHARGE,
+        )
+        assert result.status == "unavailable"
+        assert "explicit provider/model route" in result.reason
+        assert provider.transport.process is None
+        assert audit_session.usage.to_dict() == {
+            "tokens": 0,
+            "compute": 0.0,
+            "issue_writes": 0,
+        }
+    finally:
+        provider.close()
+        service.close()
+
+
+def test_d2_offline_mode_refuses_provider_work_before_transport(tmp_path: Path) -> None:
+    config = replace(_config(_fake_codex(tmp_path)), accounting_mode="offline")
+    inspection = inspect_live_capabilities(config)
+    assert inspection.status == "available"
+    route = inspection.choose()
+    assert route is not None
+    provider = CodexAppServerProvider(config=config)
+    try:
+        with pytest.raises(AppServerUnavailable, match="offline"):
+            provider.start(
+                route=route,
+                prompt="provider-free",
+                evidence=[],
+                reserved_compute=UNMEASURED_TURN_COMPUTE_CHARGE,
+            )
+        assert provider.transport.process is None
+    finally:
+        provider.close()
+
+
+def test_d2_strict_ceiling_rejects_a_reservation_above_verified_cap(tmp_path: Path) -> None:
+    config = replace(
+        _config(_fake_codex(tmp_path)),
+        accounting_mode="strict_provider_ceiling",
+        require_explicit_route=True,
+        required_route_id="provider-fixture:model-fixture",
+        required_provider="provider-fixture",
+        required_model_id="model-fixture",
+        provider_ceiling_verified=True,
+        provider_compute_ceiling=UNMEASURED_TURN_COMPUTE_CHARGE,
+    )
+    inspection = inspect_live_capabilities(config)
+    route = inspection.choose()
+    assert route is not None
+    provider = CodexAppServerProvider(config=config)
+    try:
+        with pytest.raises(AppServerUnavailable, match="exceeds"):
+            provider.start(
+                route=route,
+                prompt="too much reserved compute",
+                evidence=[],
+                reserved_compute=UNMEASURED_TURN_COMPUTE_CHARGE + 1.0,
+            )
+        assert provider.transport.process is None
+    finally:
+        provider.close()
+
+
+def test_d2_local_accounting_records_provider_overspend_without_retry(tmp_path: Path) -> None:
+    class OverrunProvider(CodexAppServerProvider):
+        def start(self, *, route, prompt, evidence, reserved_compute=None):
+            del prompt, evidence, reserved_compute
+            self._check_route(route)
+            return {
+                "status": "complete",
+                "provider_session_id": "overrun-thread",
+                "message": "simulated provider overspend",
+                "usage": {
+                    "tokens": 20,
+                    "compute": UNMEASURED_TURN_COMPUTE_CHARGE,
+                    "issue_writes": 0,
+                },
+            }
+
+    config = _config(_fake_codex(tmp_path))
+    inspection = inspect_live_capabilities(config)
+    route = inspection.choose()
+    assert route is not None
+    service, audit_session = _meter_setup(
+        tmp_path,
+        token_budget=7,
+        compute_budget=UNMEASURED_TURN_COMPUTE_CHARGE,
+    )
+    provider = OverrunProvider(config=config)
+    client = AuditCodexClient(service, inspector=lambda: inspection, provider=provider)
+    try:
+        result = client.start(
+            audit_session,
+            prompt="record overspend",
+            route_id=route.route_id,
+            operation_id="d2-overspend",
+            token_budget=7,
+            compute_budget=UNMEASURED_TURN_COMPUTE_CHARGE,
+        )
+        assert result.status == "denied"
+        assert result.receipt is not None
+        assert result.receipt.overspent
+        assert result.receipt.accounting_mode == "local_accounting"
+        assert result.receipt.provider_ceiling_verified is False
+        assert result.receipt.usage["tokens"] == 20
+        assert audit_session.usage.to_dict() == {
+            "tokens": 7,
+            "compute": UNMEASURED_TURN_COMPUTE_CHARGE,
+            "issue_writes": 0,
+        }
+    finally:
+        provider.close()
+        service.close()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"accounting_mode": "unknown"},
+        {"require_explicit_route": 1},
+        {"required_route_id": 7},
+        {"required_provider": "provider with whitespace"},
+        {"require_explicit_route": True},
+        {"provider_ceiling_verified": 1},
+        {
+            "accounting_mode": "strict_provider_ceiling",
+            "require_explicit_route": False,
+            "provider_ceiling_verified": True,
+            "provider_compute_ceiling": 1.0,
+        },
+    ],
+)
+def test_d2_accounting_config_rejects_ambiguous_route_or_cap_settings(
+    invalid: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        CodexAppServerConfig(**invalid)
+
+
+def test_d2_route_and_capability_evidence_mismatches_fail_before_transport(tmp_path: Path) -> None:
+    executable = _fake_codex(tmp_path)
+    inspection = inspect_live_capabilities(_config(executable))
+    route = inspection.choose()
+    assert route is not None
+
+    provider = CodexAppServerProvider(config=_config(executable))
+    try:
+        for invalid_route in (
+            replace(route, accounting_mode="offline"),
+            replace(route, provider_ceiling_verified=True),
+        ):
+            with pytest.raises(AppServerUnavailable):
+                provider._check_route(invalid_route)
+
+        model_provider = CodexAppServerProvider(
+            config=replace(_config(executable), required_model_id="model-fixture")
+        )
+        try:
+            with pytest.raises(AppServerUnavailable, match="required_model_id"):
+                model_provider._check_route(replace(route, model_id="other-model"))
+        finally:
+            model_provider.close()
+
+        required_route = replace(
+            _config(executable),
+            required_route_id="other-provider:other-model",
+        )
+        required_inspection = inspect_live_capabilities(required_route)
+        assert required_inspection.status == "unavailable"
+        assert "required_route_id" in required_inspection.reason
+    finally:
+        provider.close()
+
+
+def test_d2_strict_reservation_and_usage_annotation_keep_cap_boundary_explicit(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(AppServerUnavailable, match="verified provider ceiling"):
+        CodexAppServerProvider._require_turn_reservation(
+            UNMEASURED_TURN_COMPUTE_CHARGE,
+            accounting_mode="strict_provider_ceiling",
+            provider_ceiling_verified=False,
+            provider_compute_ceiling=None,
+        )
+
+    config = replace(_config(_fake_codex(tmp_path)), provider_compute_ceiling=3.0)
+    provider = CodexAppServerProvider(config=config)
+    try:
+        usage = provider._annotate_accounting_usage({"tokens": 1, "compute": 2.0})
+        assert usage["provider_compute_ceiling"] == 3.0
+    finally:
+        provider.close()

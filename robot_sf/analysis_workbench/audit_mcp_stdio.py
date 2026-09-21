@@ -50,9 +50,11 @@ MAX_MCP_STDIO_MESSAGES = 4_096
 MAX_MCP_STDIO_LIFETIME_SECONDS = 600.0
 MAX_MCP_STDIO_IDLE_SECONDS = 300.0
 MAX_MCP_BRIDGE_CLIENTS = 4
+MAX_UNIX_SOCKET_PATH_BYTES = 104
 MCP_SESSION_ID_ENV = "ROBOT_SF_AUDIT_MCP_SESSION_ID"
 MCP_SESSION_TOKEN_ENV = "ROBOT_SF_AUDIT_MCP_SESSION_TOKEN"
 MCP_ORIGIN_ENV = "ROBOT_SF_AUDIT_MCP_ORIGIN"
+MCP_SOCKET_DIR_ENV = "ROBOT_SF_AUDIT_MCP_SOCKET_DIR"
 
 # The names deliberately match the closed operation vocabulary in
 # AuditMCPDispatcher.  Aliases accepted by the dispatcher are omitted so a
@@ -517,6 +519,43 @@ class AuditMCPStdioServer:
             output_stream.flush()
 
 
+def _allocate_temporary_socket() -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    """Allocate a private temporary directory whose socket path fits platform limits.
+
+    Unix domain socket paths have a platform limit (typically 104 or 108 bytes).
+    When ``TMPDIR`` is nested deeply (for example, in worktree-local scratch
+    directories), allocating under :func:`tempfile.gettempdir` can exceed this limit.
+    This helper attempts the default temporary directory first, falling back to
+    standard short temporary roots (or ``ROBOT_SF_AUDIT_MCP_SOCKET_DIR`` if configured)
+    when necessary, while failing closed if no candidate produces a path within
+    the platform limit.
+    """
+    configured_root = os.environ.get(MCP_SOCKET_DIR_ENV)
+    candidate_roots: tuple[Path | None, ...] = (
+        (Path(configured_root),) if configured_root else ()
+    ) + (
+        None,
+        Path("/tmp"),
+        Path("/var/tmp"),
+    )
+    for root in candidate_roots:
+        if root is not None and not (root.exists() and root.is_dir()):
+            continue
+        try:
+            candidate_dir: tempfile.TemporaryDirectory[str] = (
+                tempfile.TemporaryDirectory(prefix="robot-sf-audit-mcp-")
+                if root is None
+                else tempfile.TemporaryDirectory(prefix="robot-sf-audit-mcp-", dir=str(root))
+            )
+        except OSError:
+            continue
+        candidate_path = Path(candidate_dir.name) / "bridge.sock"
+        if len(str(candidate_path).encode()) < MAX_UNIX_SOCKET_PATH_BYTES:
+            return candidate_dir, candidate_path
+        candidate_dir.cleanup()
+    raise ValueError("Unix socket path exceeds the platform limit")
+
+
 class AuditMCPBridge:
     """Private Unix-socket bridge for an external Codex MCP child."""
 
@@ -538,11 +577,11 @@ class AuditMCPBridge:
         self.origin = origin
         self._temporary_directory: tempfile.TemporaryDirectory[str] | None = None
         if socket_path is None:
-            self._temporary_directory = tempfile.TemporaryDirectory(prefix="robot-sf-audit-mcp-")
-            socket_path = Path(self._temporary_directory.name) / "bridge.sock"
-        self.socket_path = Path(socket_path)
-        if len(str(self.socket_path).encode()) >= 104:
-            raise ValueError("Unix socket path exceeds the platform limit")
+            self._temporary_directory, self.socket_path = _allocate_temporary_socket()
+        else:
+            self.socket_path = Path(socket_path)
+            if len(str(self.socket_path).encode()) >= MAX_UNIX_SOCKET_PATH_BYTES:
+                raise ValueError("Unix socket path exceeds the platform limit")
         self.max_clients = max(1, int(max_clients))
         self._server_socket: socket.socket | None = None
         self._thread: threading.Thread | None = None
@@ -816,11 +855,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "AUDIT_MCP_TOOLS",
+    "MAX_UNIX_SOCKET_PATH_BYTES",
     "MCP_JSONRPC_VERSION",
     "MCP_ORIGIN_ENV",
     "MCP_PROTOCOL_VERSIONS",
     "MCP_SESSION_ID_ENV",
     "MCP_SESSION_TOKEN_ENV",
+    "MCP_SOCKET_DIR_ENV",
     "AuditMCPBridge",
     "AuditMCPStdioServer",
     "MCPDispatcherLike",

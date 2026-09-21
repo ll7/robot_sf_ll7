@@ -5,6 +5,41 @@ Status: maintainer-selected requirements and implementation plan, not implemente
 Plan version: 1.0, 2026-09-17. Coordination issue: [#9483](https://github.com/ll7/robot_sf_ll7/issues/9483).
 Source snapshot inspected during preparation: `main` at `a74984e2376e55728d792787705f015b94b38e99`. Refresh current code, issue state, claims and pull requests before implementation.
 
+### Additive BA-05 contract amendment (2026-09-21)
+
+The accepted BA-05 service slice uses `github-publication.v1`. It creates one
+immutable issue snapshot containing the stable finding marker, then publishes
+later finding revisions as auditor-owned comments carrying an exact semantic
+publication marker. The durable local outbox is the authority for publication
+identity, revision, digest, request operation, remote observation and
+reconciliation state. Replays therefore deduplicate by semantic publication
+key rather than by a caller's operation ID. Existing body-CAS helpers remain
+only as an explicitly selected compatibility path for test fakes; the REST
+adapter never performs a read-then-`PATCH` issue-body update.
+
+This protocol does **not** claim a GitHub compare-and-swap primitive,
+atomicity between the local journal and GitHub, or exactly-once remote
+delivery. A complete marker search is required before create or comment
+retry; incomplete pagination, a timeout that cannot be reconciled, a remote
+duplicate, or a local link-CAS conflict remains visible as ambiguous or
+conflict and blocks automatic retry. These limitations are acceptance gates,
+not reasons to promote a plausible issue body to canonical evidence. The
+acceptance report must retain the local outbox record, remote marker, exact
+head and hosted-CI receipt for every claimed publication.
+
+The service's Codex route is likewise explicit about accounting. `offline`
+is provider-free and read-only. `local_accounting` reserves finite local
+token/compute/issue-write budgets, records observed usage and overspend, and
+does not imply a provider-enforced ceiling. The opt-in
+`strict_provider_ceiling` mode requires an exact route/provider/model and a
+verified finite provider compute ceiling; it refuses admission when that
+ceiling is absent or a reservation exceeds it. A provider capability that
+does not expose a verified physical ceiling cannot be represented as strict
+mode. Missing usage, cancellation, retries, reconnects and nested sessions
+remain ledger outcomes, never silent budget resets. Hosted/live evidence must
+report the selected mode and whether a physical provider cap was actually
+verified.
+
 This initial pull request adds only this file. The implementation coordinator must review, correct and merge this documentation PR first, then deliver the complete package in independently reviewed implementation slices. Merging this plan does not close any implementation issue.
 
 ## 1. Goal and product boundary

@@ -928,6 +928,7 @@ def test_unknown_verification_variant_still_rejected() -> None:
     "heading",
     [
         "Inputs / Affected Files",
+        "Inputs / Affected Surfaces",
         "Inputs and Affected Files",
         "Inputs / Context",
         "Inputs / Predecessor",
@@ -1220,3 +1221,101 @@ def test_main_preflight_body_mode_is_zero_write(tmp_path: Path, capsys) -> None:
         "acceptance",
         "verification",
     ]
+
+
+def test_natural_acceptance_and_reproduction_heading_aliases_satisfy_contract() -> None:
+    """Issue #9501: natural Acceptance and Reproduction headings satisfy contract fields."""
+    body = (
+        "## Goal / Problem\n\nFriction in the contract matcher.\n\n"
+        "## Scope\n\n- in scope: alias additions\n- out of scope: contract changes\n\n"
+        "## Affected Files\n\n- scripts/dev/issue_implementability.py\n\n"
+        "## Acceptance\n\n- bullet 1\n- bullet 2\n\n"
+        "## Reproduction\n\nRun the admission probe on the fixture.\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is True
+    assert inspection["missing_fields"] == []
+    assert inspection["fields"]["acceptance"]["matched_headings"] == ["acceptance"]
+    assert inspection["fields"]["verification"]["matched_headings"] == ["reproduction"]
+
+    issue = {
+        "number": 9501,
+        "title": "friction fix",
+        "body": body,
+        "state": "OPEN",
+        "labels": ["state:ready"],
+        "assignees": [],
+    }
+    report = evaluate_issue(issue, {"ok": True, "claimed": False})
+    assert report["classification"] == "ready"
+    assert report["ready"] is True
+    assert report["contract"]["complete"] is True
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Acceptance and Verification",
+        "## Acceptance & Verification",
+        "## Acceptance / Verification",
+        "## Acceptance Criteria and Verification",
+        "## Acceptance Criteria / Validation",
+    ],
+)
+def test_compound_acceptance_and_verification_headings(heading: str) -> None:
+    """Compound acceptance and verification headings satisfy both contract fields."""
+    body = (
+        "## Goal / Problem\n\nFix friction.\n\n"
+        "## Scope\n\nOnly this module.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        f"{heading}\n\n- tests pass and criteria met\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is True
+    assert inspection["missing_fields"] == []
+    assert inspection["fields"]["acceptance"]["present"] is True
+    assert inspection["fields"]["verification"]["present"] is True
+
+
+def test_vague_body_without_acceptance_is_still_rejected() -> None:
+    """A body without an acceptance section is still rejected fail-closed."""
+    body = (
+        "## Goal / Problem\n\nFix friction.\n\n"
+        "## Scope\n\nOnly this module.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        "## Verification\n\n- run tests\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is False
+    assert inspection["missing_fields"] == ["acceptance"]
+    assert inspection["fields"]["acceptance"]["present"] is False
+
+    issue = {
+        "number": 1234,
+        "title": "vague issue",
+        "body": body,
+        "state": "OPEN",
+        "labels": ["state:ready"],
+        "assignees": [],
+    }
+    report = evaluate_issue(issue, {"ok": True, "claimed": False})
+    assert report["classification"] == "needs_spec"
+    assert report["ready"] is False
+    assert "acceptance" in report["contract"]["missing_fields"]
+
+
+def test_inspect_contract_surfaces_heading_suggestions_on_missing_fields() -> None:
+    """inspect_contract includes heading_suggestions when fields are missing."""
+    body = (
+        "## Goal / Problem\n\nFix friction.\n\n"
+        "## Scope\n\nOnly this module.\n\n"
+        "## Input contract\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- tests pass\n\n"
+        "## Verification\n\n- run tests\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is False
+    assert inspection["missing_fields"] == ["inputs"]
+    assert "heading_suggestions" in inspection
+    assert "input contract" in inspection["heading_suggestions"]
+    assert inspection["heading_suggestions"]["input contract"]["field"] == "inputs"

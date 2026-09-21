@@ -53,6 +53,27 @@ def compact_admission(payload: dict[str, Any]) -> dict[str, Any]:
         claim = preflight.get("claim")
     if not isinstance(claim, dict):
         claim = None
+    reasons = list(preflight.get("reasons", []))
+    contract = preflight.get("contract")
+    if (
+        preflight.get("classification") == "needs_spec"
+        and isinstance(contract, Mapping)
+        and contract.get("heading_suggestions")
+    ):
+        suggestions = contract["heading_suggestions"]
+        if isinstance(suggestions, Mapping):
+            for heading, suggestion in suggestions.items():
+                if (
+                    isinstance(suggestion, Mapping)
+                    and suggestion.get("alias")
+                    and suggestion.get("field")
+                ):
+                    hint = (
+                        f"heading suggestion: '{heading}' -> '{suggestion['alias']}' "
+                        f"for field '{suggestion['field']}'"
+                    )
+                    if hint not in reasons:
+                        reasons.append(hint)
     return {
         "schema": SCHEMA,
         "ok": payload.get("ok") is True,
@@ -61,7 +82,7 @@ def compact_admission(payload: dict[str, Any]) -> dict[str, Any]:
         "source_ref": payload.get("source_ref", DEFAULT_SOURCE_REF),
         "classification": preflight.get("classification"),
         "admission_reason": preflight.get("admission_reason"),
-        "reasons": list(preflight.get("reasons", [])),
+        "reasons": reasons,
         "execution_contract": preflight.get("execution_contract"),
         "ready": preflight.get("ready") is True,
         "write_allowed": preflight.get("write_allowed") is True,

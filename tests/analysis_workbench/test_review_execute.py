@@ -171,6 +171,28 @@ def test_validate_execute_config_rejects_unknown_keys() -> None:
 
 
 def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
+    """Exercise real SREV-22 execution producing survived and falsified verdicts.
+
+    Runtime note (issue #9520):
+    This test runs 4 real episode executions sequentially in isolated child
+    processes (control and treatment for 'ped-speed-up', control and treatment
+    for 'ped-speed-down'). Each child process incurs ~1.9s of Python module
+    imports plus ~4.0s of Numba LLVM JIT compilation on step 0 for the
+    PySocialForce force calculators (DesiredForce, SocialForce, ObstacleForce,
+    etc.), totaling ~5.9s per execution (~24s total in isolation, scaling to
+    ~54s under parallel suite contention).
+
+    Profiling confirms:
+    - Step 0 accounts for ~3.98s (Numba JIT compilation), while steps 1..60
+      take ~0.0001s each. Shortening horizon_steps (e.g. 60 -> 10) saves <0.1s.
+    - Candidate count cannot be reduced without eliminating either the
+      'ped-speed-up' ('survived') or 'ped-speed-down' ('falsified') verdict,
+      which would violate the measured-verdict assertion contract.
+    - Process isolation via 'spawn' is required for timeout and termination
+      safety.
+    The ~24s quiet / ~54s contended call duration is therefore necessary and
+    intrinsic to real-execution verification.
+    """
     request = _fixture_request()
     result = run(request, base=tmp_path)
     assert result.status == "complete"

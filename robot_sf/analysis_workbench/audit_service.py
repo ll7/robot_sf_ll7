@@ -1149,7 +1149,9 @@ class ServiceResult(Generic[_T]):  # noqa: UP046 - repository supports Python 3.
         """Return a bounded JSON-safe result envelope."""
 
         value: Any = self.value
-        if hasattr(value, "to_dict"):
+        if hasattr(value, "to_service_dict"):
+            value = value.to_service_dict()
+        elif hasattr(value, "to_dict"):
             value = value.to_dict()
         elif isinstance(value, tuple):
             value = [item.to_dict() if hasattr(item, "to_dict") else item for item in value]

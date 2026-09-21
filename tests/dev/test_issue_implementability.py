@@ -1220,3 +1220,170 @@ def test_main_preflight_body_mode_is_zero_write(tmp_path: Path, capsys) -> None:
         "acceptance",
         "verification",
     ]
+
+
+NATURAL_ACCEPTANCE_BODY = """## Goal / Problem
+
+Fix the stale running label.
+
+## Reproduction
+
+Run the gate without arguments.
+
+## Scope
+
+- In scope: the hint text.
+
+## Acceptance
+
+- A documented roundtrip exists in `--help`.
+- Focused helper tests pass.
+
+## Affected Files
+
+- `scripts/dev/check_prepublication_state.py`.
+"""
+
+
+def _verifiable_body(body: str) -> str:
+    """Replace the problem-reproduction section with a verification section."""
+    return body.replace(
+        "## Reproduction\n\nRun the gate without arguments.",
+        "## Verification\n\nRun the gate without arguments; expect the hint.",
+    )
+
+
+def test_natural_acceptance_heading_matches_contract() -> None:
+    """Issue #9501: a natural `## Acceptance` heading satisfies acceptance."""
+    contract = issue_implementability.inspect_contract(NATURAL_ACCEPTANCE_BODY)
+
+    assert contract["fields"]["acceptance"]["matched_headings"] == ["acceptance"]
+    assert contract["missing_fields"] == ["verification"]
+
+
+def test_needs_spec_reason_surfaces_closest_alias() -> None:
+    """Issue #9501: admission failures name the closest heading suggestion."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Input contract"
+    )
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert report["reasons"] == [
+        "missing implementation-contract fields: inputs; closest heading suggestions: "
+        "'input contract' resembles field 'inputs' (alias 'inputs')"
+    ]
+
+
+def test_needs_spec_reason_without_suggestion_has_no_suffix() -> None:
+    """Headings with no close alias keep the historical reason text."""
+    report = evaluate_issue(_issue(body=NATURAL_ACCEPTANCE_BODY), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert report["reasons"] == ["missing implementation-contract fields: verification"]
+
+
+def test_build_repair_packet_renames_unambiguous_heading() -> None:
+    """The #9535 heading shape repairs to a complete contract."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs / Affected Surfaces"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is True
+    assert packet["missing_fields"] == ["inputs"]
+    assert packet["renames"] == [
+        {"field": "inputs", "old_heading": "inputs affected surfaces", "new_heading": "inputs"}
+    ]
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+    assert issue_implementability.inspect_contract(repaired)["complete"] is True
+    assert (
+        packet["expected_body_sha256"]
+        == issue_implementability.inspect_contract(repaired)["body_sha256"]
+    )
+
+
+def test_repaired_body_admits_with_ready_label() -> None:
+    """A repaired deterministic case passes the contract gate for readiness."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs / Affected Surfaces"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+    report = evaluate_issue(_issue(body=repaired), _claim())
+
+    assert report["classification"] == "ready"
+
+
+def test_build_repair_packet_refuses_complete_body() -> None:
+    """Complete bodies produce no packet instead of a no-op rename."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace("## Affected Files", "## Inputs")
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is False
+    assert packet["reason"] == "contract complete; no repair needed"
+
+
+def test_build_repair_packet_refuses_ambiguous_tie() -> None:
+    """Two exact-equivalent headings for one field refuse instead of choosing."""
+    body = (
+        "## Goal / Problem\n\nFix x.\n\n"
+        "## Inputs list\n\n- one file\n\n"
+        "## Inputs appendix\n\n- another file\n\n"
+        "## Scope\n\n- bounded\n\n"
+        "## Acceptance\n\n- done\n\n"
+        "## Verification\n\n- checked\n"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is False
+    assert "ambiguous" in packet["reason"]
+
+
+def test_build_repair_packet_refuses_invented_content() -> None:
+    """Missing verification with only a low-score Reproduction refuses."""
+    packet = issue_implementability.build_repair_packet(NATURAL_ACCEPTANCE_BODY)
+
+    assert packet["repairable"] is False
+    assert "invented" in packet["reason"]
+
+
+def test_apply_repair_packet_rejects_body_drift() -> None:
+    """A body changed since planning cannot consume the packet."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs / Affected Surfaces"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    with pytest.raises(ValueError, match="drifted"):
+        issue_implementability.apply_repair_packet(body + "\nExtra line.\n", packet)
+
+
+def test_apply_repair_packet_rejects_duplicate_heading_line() -> None:
+    """A twice-present heading refuses instead of renaming both occurrences."""
+    body = (
+        "## Goal / Problem\n\nFix x.\n\n"
+        "## Inputs / Affected Surfaces\n\n- one file\n\n"
+        "## Inputs / Affected Surfaces\n\n- another file\n\n"
+        "## Scope\n\n- bounded\n\n"
+        "## Acceptance\n\n- done\n\n"
+        "## Verification\n\n- checked\n"
+    )
+    packet = {
+        "schema": issue_implementability.REPAIR_SCHEMA,
+        "body_sha256": issue_implementability.inspect_contract(body)["body_sha256"],
+        "missing_fields": ["inputs"],
+        "repairable": True,
+        "reason": "",
+        "renames": [
+            {
+                "field": "inputs",
+                "old_heading": "inputs affected surfaces",
+                "new_heading": "inputs",
+            }
+        ],
+        "expected_body_sha256": "0" * 64,
+    }
+
+    with pytest.raises(ValueError, match="exactly one"):
+        issue_implementability.apply_repair_packet(body, packet)

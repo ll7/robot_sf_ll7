@@ -48,6 +48,7 @@ AUDIT_CODEX_CAPABILITY_SCHEMA_VERSION = "audit-codex-capability.v1"
 AUDIT_CODEX_ROUTE_SCHEMA_VERSION = "audit-codex-route.v1"
 AUDIT_CODEX_EVENT_SCHEMA_VERSION = "audit-codex-event.v1"
 CODEX_STATUSES = ("complete", "unavailable", "failed", "cancelled", "conflict")
+CODEX_ACCOUNTING_MODES = ("offline", "local_accounting", "strict_provider_ceiling")
 MAX_PROMPT_CHARS = 32_768
 MAX_EVENTS = 256
 MAX_EVIDENCE = 256
@@ -91,6 +92,8 @@ class CodexRouteReceipt:
     discovered: bool = True
     capability_digest: str = ""
     source: str = "installed-capability-inspection"
+    accounting_mode: str = "local_accounting"
+    provider_ceiling_verified: bool = False
     schema_version: str = AUDIT_CODEX_ROUTE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -105,6 +108,12 @@ class CodexRouteReceipt:
         if not self.discovered:
             raise ValueError("a Codex route must be discovered before use")
         object.__setattr__(self, "source", _text(self.source, name="route.source"))
+        if self.accounting_mode not in CODEX_ACCOUNTING_MODES:
+            raise ValueError("unsupported Codex accounting mode")
+        if not isinstance(self.provider_ceiling_verified, bool):
+            raise ValueError("route provider_ceiling_verified must be boolean")
+        if self.accounting_mode == "strict_provider_ceiling" and not self.provider_ceiling_verified:
+            raise ValueError("strict provider-ceiling mode requires a verified provider ceiling")
         digest = self.capability_digest or _digest(self.to_dict(include_digest=False))
         object.__setattr__(self, "capability_digest", digest)
 
@@ -124,6 +133,8 @@ class CodexRouteReceipt:
             "discovered",
             "capability_digest",
             "source",
+            "accounting_mode",
+            "provider_ceiling_verified",
         }
         unknown = set(value) - allowed
         if unknown:
@@ -144,6 +155,8 @@ class CodexRouteReceipt:
             "protocol": self.protocol,
             "discovered": self.discovered,
             "source": self.source,
+            "accounting_mode": self.accounting_mode,
+            "provider_ceiling_verified": self.provider_ceiling_verified,
         }
         if include_digest:
             result["capability_digest"] = self.capability_digest
@@ -334,6 +347,9 @@ class CodexOperationReceipt:
     replayed: bool = False
     request_digest: str = ""
     usage: Mapping[str, Any] = field(default_factory=dict)
+    accounting_mode: str = ""
+    provider_ceiling_verified: bool = False
+    overspent: bool = False
     created_at: str = field(default_factory=_now)
 
     def to_dict(self) -> dict[str, Any]:
@@ -355,6 +371,9 @@ class CodexOperationReceipt:
             "replayed": self.replayed,
             "request_digest": self.request_digest,
             "usage": dict(self.usage),
+            "accounting_mode": self.accounting_mode,
+            "provider_ceiling_verified": self.provider_ceiling_verified,
+            "overspent": self.overspent,
             "created_at": self.created_at,
         }
 
@@ -594,6 +613,77 @@ class AuditCodexClient:
         return {"tokens": tokens, "compute": float(compute), "issue_writes": issue_writes}
 
     @staticmethod
+    def _accounting_result(
+        provider: CodexProvider,
+        provider_result: Mapping[str, Any],
+        *,
+        session: CodexSession | None,
+        reserved_tokens: int,
+        reserved_compute: float,
+        reserved_issue_writes: int,
+    ) -> Mapping[str, Any]:
+        """Attach explicit local-accounting and overspend evidence to a result."""
+
+        result = dict(provider_result)
+        usage = result.get("usage")
+        if not isinstance(usage, Mapping):
+            return result
+        normalized = {
+            "tokens": usage.get("tokens"),
+            "compute": usage.get("compute"),
+            "issue_writes": usage.get("issue_writes", 0),
+        }
+        config = getattr(provider, "config", None)
+        mode = (
+            session.route.accounting_mode
+            if session is not None
+            else getattr(config, "accounting_mode", "local_accounting")
+        )
+        ceiling_verified = (
+            session.route.provider_ceiling_verified
+            if session is not None
+            else bool(getattr(config, "provider_ceiling_verified", False))
+        )
+        tokens = usage.get("tokens")
+        compute = usage.get("compute")
+        issue_writes = usage.get("issue_writes", 0)
+        overspent = (
+            (isinstance(tokens, int) and not isinstance(tokens, bool) and tokens > reserved_tokens)
+            or (
+                isinstance(compute, (int, float))
+                and not isinstance(compute, bool)
+                and float(compute) > reserved_compute
+            )
+            or (
+                isinstance(issue_writes, int)
+                and not isinstance(issue_writes, bool)
+                and issue_writes > reserved_issue_writes
+            )
+        )
+        result["accounting"] = {
+            **{
+                key: value
+                for key, value in usage.items()
+                if key not in {"tokens", "compute", "issue_writes"}
+            },
+            **{
+                "accounting_mode": mode,
+                "provider_ceiling_verified": ceiling_verified,
+                "physical_provider_cap_enforced": (
+                    mode == "strict_provider_ceiling" and ceiling_verified
+                ),
+                "reservation": {
+                    "tokens": reserved_tokens,
+                    "compute": reserved_compute,
+                    "issue_writes": reserved_issue_writes,
+                },
+                "overspent": overspent,
+            },
+        }
+        result["usage"] = normalized
+        return result
+
+    @staticmethod
     def _authority_session_snapshot(
         session: CodexSession,
         audit: AuditSession,
@@ -687,6 +777,12 @@ class AuditCodexClient:
             operation.operation_id,
             reason=lease.reason,
             usage=operation.result.get("usage") if isinstance(operation.result, Mapping) else None,
+            accounting=(
+                operation.result.get("accounting")
+                if isinstance(operation.result, Mapping)
+                and isinstance(operation.result.get("accounting"), Mapping)
+                else None
+            ),
             replayed=lease.replayed if replayed is None else replayed,
             request_digest=operation.request_digest,
         )
@@ -755,6 +851,14 @@ class AuditCodexClient:
             action=action,
             provider_result=provider_result,
             result_status=result_status,
+            session=session,
+            reserved_tokens=lease.reserved_tokens,
+            reserved_compute=lease.reserved_compute,
+            reserved_issue_writes=lease.reserved_issue_writes,
+        )
+        provider_result = self._accounting_result(
+            provider,
+            provider_result,
             session=session,
             reserved_tokens=lease.reserved_tokens,
             reserved_compute=lease.reserved_compute,
@@ -876,7 +980,7 @@ class AuditCodexClient:
             )
         return tuple(result)
 
-    def _receipt(
+    def _receipt(  # noqa: PLR0913
         self,
         session: CodexSession,
         action: str,
@@ -885,9 +989,14 @@ class AuditCodexClient:
         *,
         reason: str = "",
         usage: Mapping[str, Any] | None = None,
+        accounting: Mapping[str, Any] | None = None,
         replayed: bool = False,
         request_digest: str = "",
     ) -> CodexOperationReceipt:
+        raw_usage = dict(usage or {})
+        accounting_value = dict(accounting or {})
+        public_usage = dict(raw_usage)
+        public_usage.update(accounting_value)
         receipt = CodexOperationReceipt(
             operation_id=operation_id,
             action=action,
@@ -902,7 +1011,16 @@ class AuditCodexClient:
             reason=reason,
             replayed=replayed,
             request_digest=request_digest,
-            usage=dict(usage or {}),
+            usage=public_usage,
+            accounting_mode=str(
+                accounting_value.get("accounting_mode", session.route.accounting_mode)
+            ),
+            provider_ceiling_verified=bool(
+                accounting_value.get(
+                    "provider_ceiling_verified", session.route.provider_ceiling_verified
+                )
+            ),
+            overspent=bool(accounting_value.get("overspent", False)),
         )
         with self._lock:
             self._receipts[operation_id] = receipt
@@ -1686,6 +1804,19 @@ class AuditCodexClient:
                 return CodexResult(
                     "unavailable", reason="no supported Codex provider is configured"
                 )
+            provider_config = getattr(provider, "config", None)
+            if getattr(provider_config, "require_explicit_route", False) and (
+                not isinstance(route_id, str) or not route_id.strip()
+            ):
+                return CodexResult(
+                    "unavailable",
+                    reason="explicit provider/model route is required; default selection is disabled",
+                )
+            if getattr(provider_config, "accounting_mode", "") == "offline":
+                return CodexResult(
+                    "unavailable",
+                    reason="offline accounting mode is provider-free",
+                )
             if not getattr(provider, "supports_tools", False):
                 return CodexResult(
                     "unavailable", reason="provider route does not expose audit tools"
@@ -2169,7 +2300,7 @@ class AuditCodexClient:
             raise AuditContextConflict("audit source identity or revision changed")
         return owned
 
-    def _reconnect_durable(  # noqa: C901
+    def _reconnect_durable(  # noqa: C901, PLR0912
         self,
         session: CodexSession | str,
         *,
@@ -2187,12 +2318,25 @@ class AuditCodexClient:
                     session=current,
                     reason="no supported Codex provider is configured",
                 )
+            provider_config = getattr(self.provider, "config", None)
+            if getattr(provider_config, "accounting_mode", "") == "offline":
+                return CodexResult(
+                    "unavailable",
+                    session=current,
+                    reason="offline accounting mode is provider-free",
+                )
             route = self.inspect_capabilities().choose(current.route.route_id)
             if route is None or route.to_dict() != current.route.to_dict():
                 return CodexResult(
                     "unavailable",
                     session=current,
                     reason="current Codex route does not match session",
+                )
+            if getattr(getattr(self.provider, "config", None), "accounting_mode", "") == "offline":
+                return CodexResult(
+                    "unavailable",
+                    session=current,
+                    reason="offline accounting mode is provider-free",
                 )
             opid = operation_id or f"codex-op-{uuid.uuid4().hex}"
             request_digest = _digest(
@@ -2896,6 +3040,14 @@ class AuditCodexClient:
                     request_digest=request_digest,
                     status="unavailable",
                     reason="no supported Codex provider is configured",
+                )
+            if getattr(getattr(self.provider, "config", None), "accounting_mode", "") == "offline":
+                return self._durable_blocked_cancel(
+                    audit,
+                    current,
+                    operation_id=opid,
+                    request_digest=request_digest,
+                    reason="offline accounting mode keeps cancellation provider-free",
                 )
             route = self.inspect_capabilities().choose(current.route.route_id)
             if route is None or route.to_dict() != current.route.to_dict():

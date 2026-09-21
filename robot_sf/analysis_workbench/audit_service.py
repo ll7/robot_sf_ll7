@@ -165,6 +165,8 @@ _CODEX_ROUTE_FIELDS = {
     "discovered",
     "capability_digest",
     "source",
+    "accounting_mode",
+    "provider_ceiling_verified",
 }
 _CODEX_APP_SERVER_SCHEMA_DIGEST = "7b9e7d385fffef8d428cc5490b56ce9c393bd3ed7bc7ccd730956387e723ec05"
 

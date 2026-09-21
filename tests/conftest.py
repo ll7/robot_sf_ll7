@@ -423,6 +423,10 @@ _FAST_FILES = {
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
     "test_audit_github.py",
+    # BA-05 immutable-issue publication tests are deterministic append-only
+    # reconciliation contracts; keep them in the exact-head fast lane so the
+    # changed GitHub sync implementation receives hosted coverage.
+    "test_audit_github_append_only.py",
     # Bounded GitHub REST provider contracts are deterministic pagination,
     # accounting, and redaction checks; keep changed coverage in fast shards.
     "test_audit_github_rest.py",

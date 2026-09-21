@@ -2295,7 +2295,10 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
         staging_parent_fd = _open_private_staging_parent(lease.root_fd, lease.root_identity)
         with tempfile.TemporaryDirectory(
             prefix=".audit-materialize-render-",
-            dir=str(_descriptor_path(staging_parent_fd)),
+            # macOS cannot reliably descend through ``/dev/fd/<fd>`` for
+            # ``mkdtemp``. The directory remains private and is still
+            # published only through the retained output descriptor below.
+            dir=str(lease.root),
         ) as render_root_name:
             render_root = Path(render_root_name)
             render_root_fd = os.open(
@@ -2304,7 +2307,7 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
                 dir_fd=staging_parent_fd,
             )
             try:
-                artifact_path = _descriptor_path(render_root_fd) / "trajectory.png"
+                artifact_path = render_root / "trajectory.png"
                 figure = generate_trajectory(replay, artifact_path, fmt="png")
                 figure_digest = _figure_artifact_digest(figure)
                 _publish_staged_files(lease, render_root_fd)
@@ -2485,7 +2488,9 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
         staging_parent_fd = _open_private_staging_parent(lease.root_fd, lease.root_identity)
         with tempfile.TemporaryDirectory(
             prefix=".audit-materialize-source-",
-            dir=str(lease.renderer_root),
+            # Keep the private source path usable on Darwin; publication and
+            # final identity checks remain descriptor-relative.
+            dir=str(lease.root),
         ) as source_dir:
             source_base = Path(source_dir)
             source_path = source_base / "retained-trace.json"
@@ -2503,7 +2508,7 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
             typed = simulation_trace_export_from_dict(payload)
             with tempfile.TemporaryDirectory(
                 prefix=".audit-materialize-render-",
-                dir=str(_descriptor_path(staging_parent_fd)),
+                dir=str(lease.root),
             ) as render_root_name:
                 render_root = Path(render_root_name)
                 render_root_fd = os.open(
@@ -2512,7 +2517,7 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
                     dir_fd=staging_parent_fd,
                 )
                 try:
-                    renderer_base = _descriptor_path(render_root_fd)
+                    renderer_base = render_root
                     request = ComponentRequest(
                         request_id=f"materialize-{cache_key[:16]}",
                         component_id=review_scene.COMPONENT_ID,

@@ -1306,12 +1306,19 @@ class _OutputLease:
 
 
 def _descriptor_path(descriptor: int) -> Path:
-    """Return a Linux descriptor-backed path for path-only renderer APIs."""
+    """Return a descriptor-backed path for path-only renderer APIs.
 
-    proc_path = Path(f"/proc/self/fd/{descriptor}")
-    if not proc_path.exists():
-        raise OSError("descriptor-backed renderer path is unavailable")
-    return proc_path
+    Linux exposes descriptors through ``/proc/self/fd`` while macOS exposes
+    the same capability through ``/dev/fd``. Keep the path tied to the open
+    descriptor instead of resolving its target, so a renderer cannot be
+    redirected by replacing a visible path while the lease is live.
+    """
+
+    for prefix in ("/proc/self/fd", "/dev/fd"):
+        candidate = Path(prefix) / str(descriptor)
+        if candidate.exists():
+            return candidate
+    raise OSError("descriptor-backed renderer path is unavailable")
 
 
 def _walk_output_from_fd(root_fd: int, parts: Sequence[str], *, create: bool) -> int:
@@ -1619,34 +1626,38 @@ def _rename_noreplace(
     destination_name: str,
     destination_directory_fd: int,
 ) -> None:
-    """Atomically rename one descriptor-relative path without replacing it.
+    """Atomically rename one descriptor-relative path without replacement.
 
-    Python's portable ``os.rename`` API has no no-replace flag.  This module's
-    descriptor-backed publication contract therefore uses the Linux libc
-    ``renameat2`` primitive and fails closed when that primitive is unavailable;
-    an overwrite-prone or partially visible fallback would weaken the output
-    boundary.
+    Linux provides ``renameat2(RENAME_NOREPLACE)`` and macOS provides the
+    equivalent ``renameatx_np(RENAME_EXCL)``. Python's portable ``os.rename``
+    has no no-replace flag, so unsupported platforms still fail closed rather
+    than falling back to an overwrite-prone check-then-rename sequence.
     """
 
     try:
         libc = ctypes.CDLL(None, use_errno=True)
-        renameat2 = libc.renameat2
+        try:
+            rename = libc.renameat2
+            flag = 1  # Linux RENAME_NOREPLACE
+        except AttributeError:
+            rename = libc.renameatx_np
+            flag = 4  # macOS RENAME_EXCL
     except (AttributeError, OSError) as error:
         raise OSError("atomic no-replace rename is unavailable") from error
-    renameat2.argtypes = [
+    rename.argtypes = [
         ctypes.c_int,
         ctypes.c_char_p,
         ctypes.c_int,
         ctypes.c_char_p,
         ctypes.c_uint,
     ]
-    renameat2.restype = ctypes.c_int
-    result = renameat2(
+    rename.restype = ctypes.c_int
+    result = rename(
         source_directory_fd,
         os.fsencode(source_name),
         destination_directory_fd,
         os.fsencode(destination_name),
-        1,  # RENAME_NOREPLACE
+        flag,
     )
     if result == 0:
         return

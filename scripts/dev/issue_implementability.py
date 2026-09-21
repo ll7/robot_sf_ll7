@@ -117,6 +117,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "exact surface",
         "inputs",
         "inputs affected files",
+        "inputs affected surfaces",
         "inputs and affected files",
         "inputs and canonical owners",
         "inputs and existing owners",

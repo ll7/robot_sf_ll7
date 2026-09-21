@@ -892,6 +892,20 @@ class GitHubSyncResult:
             "publication_digest": self.publication_digest,
         }
 
+    def to_service_dict(self) -> dict[str, Any]:
+        """Return the compact projection accepted by the service envelope.
+
+        The typed result keeps the comment at the top level for direct callers,
+        while the authenticated service already carries the same durable
+        comment under ``outbox``.  Omitting that duplicate projection keeps the
+        complete response below the service node bound for both legacy and
+        append-only publications.
+        """
+
+        payload = self.to_dict()
+        payload.pop("comment", None)
+        return payload
+
 
 class GitHubOutbox:
     """Persist GitHub sync entries through the canonical audit store.

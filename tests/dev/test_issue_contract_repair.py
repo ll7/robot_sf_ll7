@@ -20,7 +20,7 @@ Fix the stale running label.
 
 - In scope: the hint text.
 
-## Inputs / Affected Surfaces
+## Inputs and files
 
 - `scripts/dev/check_prepublication_state.py`.
 
@@ -45,14 +45,14 @@ def test_plan_body_file_emits_packet(tmp_path: Any, capsys: Any) -> None:
     assert packet["repairable"] is True
     assert packet["missing_fields"] == ["inputs"]
     assert packet["renames"] == [
-        {"field": "inputs", "old_heading": "inputs affected surfaces", "new_heading": "inputs"}
+        {"field": "inputs", "old_heading": "inputs and files", "new_heading": "inputs"}
     ]
 
 
 def test_plan_body_file_reports_refusal_for_complete_body(tmp_path: Any, capsys: Any) -> None:
     """Complete bodies report no repair instead of failing the plan."""
     body_file = tmp_path / "body.md"
-    body_file.write_text(REPAIRABLE_BODY.replace("## Inputs / Affected Surfaces", "## Inputs"))
+    body_file.write_text(REPAIRABLE_BODY.replace("## Inputs and files", "## Inputs"))
 
     assert repair.main(["plan", "--body-file", str(body_file)]) == 0
 
@@ -100,6 +100,8 @@ def test_apply_repairs_and_verifies_with_injected_owners(monkeypatch: Any, capsy
     assert "## inputs\n" in writes[0].lower()
     assert reads["count"] == 2
     assert receipt["admission"]["outcome"] == "not_admitted"
+    assert "labels" not in receipt or receipt.get("packet", {}).get("labels") == []
+    assert set(receipt) >= {"schema", "issue", "repo", "applied", "packet", "admission"}
 
 
 def test_apply_refuses_unrepairable_body(monkeypatch: Any, capsys: Any) -> None:

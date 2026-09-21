@@ -2,17 +2,17 @@
 """Semantics-preserving contract repair for mechanically incomplete issues.
 
 The preparation lane stalls on issues whose intent is complete but whose
-contract defect is mechanical: an unambiguous heading alias, a duplicated
-planning wrapper, or a missing canonical section name with equivalent prose
-already present. This helper emits a versioned repair packet
+contract defect is mechanical: an unambiguous heading alias for a missing
+canonical section. This helper emits a versioned repair packet
 (:func:`scripts.dev.issue_implementability.build_repair_packet`) and, in
 apply mode, writes the renamed body through a compare-and-swap exact-read
 cycle, re-reads the issue, and reruns canonical admission check-only.
 
-The helper never adds ``state:ready``, never acquires a claim, and never
-invents content: a packet is refused when acceptance or verification prose
-would have to be synthesized, reinterpreted, or decided. Readiness and
-claiming stay on the existing readiness-gate and admission owners.
+The helper never adds ``state:ready``, never acquires a claim, never touches
+labels, and never invents content: a packet is refused when acceptance or
+verification prose would have to be synthesized, reinterpreted, or decided.
+Readiness and claiming stay on the existing readiness-gate and admission
+owners.
 """
 
 from __future__ import annotations
@@ -69,9 +69,26 @@ def _patch_body(number: int, *, repo: str, expected_sha256: str, body: str) -> N
         raise RuntimeError(detail)
 
 
-def plan_for_body(body: str) -> dict[str, Any]:
+def _label_snapshot(raw: Any) -> list[str] | None:
+    """Normalize live labels to a read-only snapshot; None when malformed."""
+    if not isinstance(raw, list):
+        return None
+    names: list[str] = []
+    for value in raw:
+        if isinstance(value, str):
+            name = value.strip()
+        elif isinstance(value, dict) and isinstance(value.get("name"), str):
+            name = str(value["name"]).strip()
+        else:
+            return None
+        if name:
+            names.append(name)
+    return sorted(set(names))
+
+
+def plan_for_body(body: str, *, labels: list[str] | None = None) -> dict[str, Any]:
     """Build a repair packet for one body without performing any I/O."""
-    return issue_implementability.build_repair_packet(body)
+    return issue_implementability.build_repair_packet(body, labels=labels)
 
 
 def apply_for_issue(
@@ -83,7 +100,9 @@ def apply_for_issue(
 ) -> dict[str, Any]:
     """Repair one live issue body, then verify it and rerun admission."""
     first = _exact_read_body(number, repo=repo)
-    packet = issue_implementability.build_repair_packet(first["body"])
+    packet = issue_implementability.build_repair_packet(
+        first["body"], labels=_label_snapshot(first.get("labels"))
+    )
     if not packet.get("repairable"):
         return {
             "schema": SCHEMA,

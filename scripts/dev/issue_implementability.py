@@ -117,6 +117,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "exact surface",
         "inputs",
         "inputs affected files",
+        "inputs affected surfaces",
         "inputs and affected files",
         "inputs and canonical owners",
         "inputs and existing owners",
@@ -378,22 +379,53 @@ def _apply_renames(body: str, renames: list[dict[str, str]]) -> str:
     return "".join(updated)
 
 
-def build_repair_packet(body: str) -> dict[str, Any]:
+def _field_vocabularies() -> dict[str, set[str]]:
+    """Return stemmed token vocabularies per contract field from alias tables."""
+    return {
+        field: {_stem_token(token) for alias in aliases for token in alias.split()}
+        for field, aliases in FIELD_ALIASES.items()
+    }
+
+
+def _rename_eligible(*, heading: str, field: str, alias: str) -> bool:
+    """Return whether renaming a heading to a canonical field is meaning-safe.
+
+    Exact alias membership always qualifies. Otherwise both must hold: every
+    stemmed heading token already occurs in the field's alias vocabulary (the
+    heading introduces no novel vocabulary such as ``appendix``), and the
+    heading covers every stemmed token of the matched alias (the rename drops
+    no qualifier the alias requires). This admits genuine synonyms such as
+    ``inputs affected surfaces`` while refusing ``inputs appendix``.
+    """
+    if heading in FIELD_ALIASES.get(field, ()):
+        return True
+    vocabularies = _field_vocabularies()
+    heading_tokens = {_stem_token(token) for token in heading.split()}
+    alias_tokens = {_stem_token(token) for token in alias.split()}
+    return heading_tokens <= vocabularies.get(field, set()) and alias_tokens <= heading_tokens
+
+
+def build_repair_packet(body: str, *, labels: list[str] | None = None) -> dict[str, Any]:
     """Build a versioned semantics-preserving repair packet for an issue body.
 
     A packet is emitted only when every missing contract field is covered by
-    exactly one score-1.0 heading suggestion (an exact or leading-token alias
-    match), the rename targets introduce no duplicate headings, and the
-    renamed body passes the full contract. Anything requiring invented
-    content, reinterpreted prose, or a maintainer decision refuses with a
-    reason instead of a packet.
+    exactly one score-1.0 heading suggestion that also passes the
+    rename-eligibility rule, the rename targets introduce no duplicate
+    headings, and the renamed body passes the full contract. Similarity score
+    alone never authorizes a rename: a leading-token or permuted match with
+    novel vocabulary refuses. Anything requiring invented content,
+    reinterpreted prose, or a maintainer decision refuses with a reason
+    instead of a packet. ``labels`` is recorded read-only as repair-context
+    evidence; the packet never authorizes label changes.
     """
     contract = inspect_contract(body)
     missing = list(contract["missing_fields"])
     digest = str(contract["body_sha256"])
+    label_snapshot = sorted({str(label).strip() for label in labels or [] if str(label).strip()})
     refusal = {
         "schema": REPAIR_SCHEMA,
         "body_sha256": digest,
+        "labels": label_snapshot,
         "missing_fields": missing,
         "repairable": False,
         "reason": "",
@@ -405,7 +437,12 @@ def build_repair_packet(body: str) -> dict[str, Any]:
         return refusal
     suggestions = _suggest_heading_aliases(contract, set(missing))
     exact = {
-        heading: detail for heading, detail in suggestions.items() if detail.get("score") == 1.0
+        heading: detail
+        for heading, detail in suggestions.items()
+        if detail.get("score") == 1.0
+        and _rename_eligible(
+            heading=heading, field=str(detail["field"]), alias=str(detail["alias"])
+        )
     }
     by_field: dict[str, list[str]] = {}
     for heading, detail in exact.items():
@@ -427,9 +464,7 @@ def build_repair_packet(body: str) -> dict[str, Any]:
         {
             "field": field,
             "old_heading": by_field[field][0],
-            "new_heading": str(
-                next(detail["alias"] for detail in exact.values() if detail["field"] == field)
-            ),
+            "new_heading": field,
         }
         for field in sorted(missing)
     ]
@@ -456,6 +491,7 @@ def build_repair_packet(body: str) -> dict[str, Any]:
     return {
         "schema": REPAIR_SCHEMA,
         "body_sha256": digest,
+        "labels": label_snapshot,
         "missing_fields": missing,
         "repairable": True,
         "reason": "",

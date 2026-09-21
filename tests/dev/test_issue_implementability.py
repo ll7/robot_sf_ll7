@@ -1286,14 +1286,14 @@ def test_needs_spec_reason_without_suggestion_has_no_suffix() -> None:
 def test_build_repair_packet_renames_unambiguous_heading() -> None:
     """The #9535 heading shape repairs to a complete contract."""
     body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
-        "## Affected Files", "## Inputs / Affected Surfaces"
+        "## Affected Files", "## Inputs and files"
     )
     packet = issue_implementability.build_repair_packet(body)
 
     assert packet["repairable"] is True
     assert packet["missing_fields"] == ["inputs"]
     assert packet["renames"] == [
-        {"field": "inputs", "old_heading": "inputs affected surfaces", "new_heading": "inputs"}
+        {"field": "inputs", "old_heading": "inputs and files", "new_heading": "inputs"}
     ]
     repaired = issue_implementability.apply_repair_packet(body, packet)
     assert issue_implementability.inspect_contract(repaired)["complete"] is True
@@ -1306,7 +1306,7 @@ def test_build_repair_packet_renames_unambiguous_heading() -> None:
 def test_repaired_body_admits_with_ready_label() -> None:
     """A repaired deterministic case passes the contract gate for readiness."""
     body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
-        "## Affected Files", "## Inputs / Affected Surfaces"
+        "## Affected Files", "## Inputs and files"
     )
     packet = issue_implementability.build_repair_packet(body)
     repaired = issue_implementability.apply_repair_packet(body, packet)
@@ -1324,12 +1324,27 @@ def test_build_repair_packet_refuses_complete_body() -> None:
     assert packet["reason"] == "contract complete; no repair needed"
 
 
-def test_build_repair_packet_refuses_ambiguous_tie() -> None:
-    """Two exact-equivalent headings for one field refuse instead of choosing."""
+def test_build_repair_packet_refuses_prefix_only_heading() -> None:
+    """A leading-token match that is not a known synonym refuses repair."""
     body = (
         "## Goal / Problem\n\nFix x.\n\n"
-        "## Inputs list\n\n- one file\n\n"
-        "## Inputs appendix\n\n- another file\n\n"
+        "## Inputs appendix\n\n- one file\n\n"
+        "## Scope\n\n- bounded\n\n"
+        "## Acceptance\n\n- done\n\n"
+        "## Verification\n\n- checked\n"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is False
+    assert "no exact heading equivalent" in packet["reason"]
+
+
+def test_build_repair_packet_refuses_ambiguous_tie() -> None:
+    """Two eligible equivalent headings for one field refuse instead of choosing."""
+    body = (
+        "## Goal / Problem\n\nFix x.\n\n"
+        "## Inputs and files\n\n- one file\n\n"
+        "## Inputs and paths\n\n- another file\n\n"
         "## Scope\n\n- bounded\n\n"
         "## Acceptance\n\n- done\n\n"
         "## Verification\n\n- checked\n"
@@ -1338,6 +1353,50 @@ def test_build_repair_packet_refuses_ambiguous_tie() -> None:
 
     assert packet["repairable"] is False
     assert "ambiguous" in packet["reason"]
+
+
+def test_repaired_body_preserves_non_contract_prose() -> None:
+    """Only renamed heading lines change; all other bytes are preserved."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+
+    old_lines = body.splitlines()
+    new_lines = repaired.splitlines()
+    assert len(old_lines) == len(new_lines)
+    changed = [(old, new) for old, new in zip(old_lines, new_lines, strict=True) if old != new]
+    assert len(changed) == 1
+    assert changed[0][0] == "## Inputs and files"
+    assert changed[0][1] == "## inputs"
+
+
+def test_repair_packet_is_idempotent_on_repaired_body() -> None:
+    """Planning on an already-repaired body reports completeness, not a packet."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+
+    second = issue_implementability.build_repair_packet(repaired)
+
+    assert second["repairable"] is False
+    assert second["reason"] == "contract complete; no repair needed"
+
+
+def test_repair_packet_records_read_only_label_snapshot() -> None:
+    """The packet carries labels as evidence without authorizing changes."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(
+        body, labels=["state:ready", "type:workflow"]
+    )
+
+    assert packet["labels"] == ["state:ready", "type:workflow"]
+    assert packet["repairable"] is True
 
 
 def test_build_repair_packet_refuses_invented_content() -> None:
@@ -1351,7 +1410,7 @@ def test_build_repair_packet_refuses_invented_content() -> None:
 def test_apply_repair_packet_rejects_body_drift() -> None:
     """A body changed since planning cannot consume the packet."""
     body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
-        "## Affected Files", "## Inputs / Affected Surfaces"
+        "## Affected Files", "## Inputs and files"
     )
     packet = issue_implementability.build_repair_packet(body)
 
@@ -1363,8 +1422,8 @@ def test_apply_repair_packet_rejects_duplicate_heading_line() -> None:
     """A twice-present heading refuses instead of renaming both occurrences."""
     body = (
         "## Goal / Problem\n\nFix x.\n\n"
-        "## Inputs / Affected Surfaces\n\n- one file\n\n"
-        "## Inputs / Affected Surfaces\n\n- another file\n\n"
+        "## Inputs and files\n\n- one file\n\n"
+        "## Inputs and files\n\n- another file\n\n"
         "## Scope\n\n- bounded\n\n"
         "## Acceptance\n\n- done\n\n"
         "## Verification\n\n- checked\n"
@@ -1378,7 +1437,7 @@ def test_apply_repair_packet_rejects_duplicate_heading_line() -> None:
         "renames": [
             {
                 "field": "inputs",
-                "old_heading": "inputs affected surfaces",
+                "old_heading": "inputs and files",
                 "new_heading": "inputs",
             }
         ],

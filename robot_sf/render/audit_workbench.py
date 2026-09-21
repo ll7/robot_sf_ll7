@@ -117,6 +117,20 @@ class AuditWorkbenchFacade(Protocol):
     def read_selected_artifact_status(self) -> Mapping[str, Any]:
         """Return read-only selected artifact/native capability status."""
 
+    def sync_finding(
+        self,
+        *,
+        finding_id: str,
+        repository: str,
+        expected_finding_revision: int,
+        expected_selection_revision: int,
+        expected_context_revision: int,
+        expected_source_revision: int | str,
+        operation_id: str,
+        retry_ambiguous: bool = False,
+    ) -> Mapping[str, Any]:
+        """Publish one canonical finding through the server-held service."""
+
 
 class AuditCodexClientProtocol(Protocol):
     """Narrow server-held BA-05 Codex lifecycle seam."""
@@ -3736,26 +3750,96 @@ class ServiceAuditWorkbenchFacade:
 
     selected_artifact_status = read_selected_artifact_status
 
-    def sync_finding(
+    def sync_finding(  # noqa: C901, PLR0913
         self,
-        finding: Any,
+        finding: Any | None = None,
         *,
+        finding_id: str | None = None,
+        repository: str | None = None,
+        expected_finding_revision: int | None = None,
+        expected_selection_revision: int | None = None,
+        expected_context_revision: int | None = None,
+        expected_source_revision: int | str | None = None,
+        retry_ambiguous: bool = False,
         operation_id: str | None = None,
         **kwargs: Any,
     ) -> Mapping[str, Any]:
-        """Use an explicitly injected service GitHub capability, if accepted.
+        """Publish one retained finding through the accepted BA-05 service.
 
-        BA-06 does not own provider credentials or outbox transport.  When the
-        accepted BA-05 service exposes no wrapper this returns ``unavailable``
-        through ``_call_service`` instead of attempting a direct network call.
+        BA-06 supplies only the finding/repository identity and compare-and-swap
+        coordinates.  Provider credentials, evidence, outbox state, and the
+        canonical finding load remain inside BA-05.  The positional ``finding``
+        form is retained for fixture callers; live requests use ``finding_id``.
 
         Returns:
             The service sync receipt or an explicit unavailable envelope.
         """
 
-        result = self._call_service("sync_finding", finding, operation_id=operation_id, **kwargs)
+        guard = self._selection_guard(expected_selection_revision)
+        if guard is not None:
+            return guard
+        service_cas_guard = self._service_cas_guard(
+            expected_context_revision=expected_context_revision,
+            expected_source_revision=expected_source_revision,
+        )
+        if service_cas_guard is not None:
+            return service_cas_guard
+
+        candidate: Mapping[str, Any] | None = None
+        if isinstance(finding, Mapping):
+            candidate = finding
+        elif finding is not None:
+            return self._local_result(
+                "failed", "sync_finding finding must be a mapping", context=self._context
+            )
+        if candidate is None and finding_id:
+            candidate = self._finding_records.get(str(finding_id))
+        if candidate is None and self._last_finding is not None:
+            candidate = self._last_finding
+        if candidate is not None:
+            candidate_id = candidate.get("finding_id") or candidate.get("record_id")
+            if finding_id is None and candidate_id:
+                finding_id = str(candidate_id)
+            if expected_finding_revision is None:
+                candidate_revision = candidate.get("revision", candidate.get("record_revision"))
+                if _is_revision(candidate_revision):
+                    expected_finding_revision = candidate_revision
+        if not isinstance(finding_id, str) or not finding_id.strip():
+            return self._local_result(
+                "unavailable",
+                "sync_finding requires a retained canonical finding_id",
+                context=self._context,
+            )
+        if not isinstance(repository, str) or not repository.strip():
+            return self._local_result(
+                "unavailable",
+                "sync_finding requires an explicit allowlisted repository",
+                context=self._context,
+            )
+        if not _is_revision(expected_finding_revision):
+            return self._local_result(
+                "unavailable",
+                "sync_finding requires a canonical finding revision",
+                context=self._context,
+            )
+        request_context = deepcopy(self._context)
+        call_kwargs = dict(kwargs)
+        call_kwargs.update(
+            {
+                "finding_id": finding_id,
+                "repository": repository,
+                "context": request_context,
+                "expected_finding_revision": expected_finding_revision,
+                "expected_source_revision": expected_source_revision,
+                "retry_ambiguous": retry_ambiguous,
+            }
+        )
+        result = self._call_service("sync_finding", operation_id=operation_id, **call_kwargs)
         self._remember_result(result)
-        return _service_result_mapping(result, secret=self._token)
+        envelope = _service_result_mapping(result, secret=self._token)
+        envelope.setdefault("evidence_boundary", "diagnostic_only")
+        envelope.setdefault("scientific_claim_allowed", False)
+        return envelope
 
     sync_github = sync_finding
 

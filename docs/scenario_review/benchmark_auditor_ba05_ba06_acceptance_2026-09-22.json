@@ -1,0 +1,83 @@
+{
+  "schema_version": "benchmark-auditor-acceptance.v1",
+  "generated_at": "2026-09-22",
+  "status": "ba05_bounded_slices_accepted_ba06_publication_slice_pending_hosted_ci",
+  "epic": {
+    "issue": 9483,
+    "status": "open",
+    "complete": false,
+    "reason": "BA-06 full real-data, Codex/MCP, recovery, and retained-media gates remain."
+  },
+  "baseline": {
+    "origin_main": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
+    "evidence_class": "diagnostic_only"
+  },
+  "packages": {
+    "ba05_d1": {
+      "issue": 9488,
+      "pr": 9559,
+      "exact_head": "ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088",
+      "merge_sha": "6787f5b93a1023dd243f66d81b1e6a13fe6871a3",
+      "focused": {"passed": 102, "failed": 0, "skipped": 0},
+      "hosted": {"run_id": 35655668527, "attempt": 2, "conclusion": "success"},
+      "contract": "immutable_initial_issue_append_only_revision_comments"
+    },
+    "ba05_d2": {
+      "issue": 9525,
+      "pr": 9558,
+      "exact_head": "78fb3c818fafe1ae0ea1522c96092e55b8460e3b",
+      "merge_sha": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
+      "focused": {"passed": 113, "failed": 0, "skipped": 2},
+      "hosted": {"run_id": 35658827492, "conclusion": "success"},
+      "contract": "offline_local_accounting_strict_provider_ceiling"
+    },
+    "ba06_publication": {
+      "issue": 9489,
+      "branch": "feat/9489-publish-boundary-20260922",
+      "hosted": {"required": true, "status": "pending"},
+      "local": {
+        "facade_server_tests": "passed",
+        "real_service_http_fake_provider": "passed",
+        "result_boundary": "diagnostic_only"
+      }
+    }
+  },
+  "srev": {
+    "9285": "contract_test_integrated",
+    "9287": "contract_test_integrated",
+    "9288": "contract_test_integrated",
+    "9296": "live_admitted_source_proof_pending",
+    "9299": "shared_session_recovery_proof_pending",
+    "9417": "focused_executor_admission_verified_live_ba06_proof_pending"
+  },
+  "limitations": {
+    "github_cas": {
+      "status": "unresolved_gate",
+      "details": [
+        "No GitHub issue-body CAS or cross-system atomic linkage is claimed.",
+        "Ambiguous, duplicate, incomplete-pagination, and local-link conflicts remain durable.",
+        "Exactly-once remote delivery is not claimed."
+      ]
+    },
+    "provider_ceiling": {
+      "status": "unresolved_gate",
+      "details": [
+        "Local accounting is not a physical provider cap.",
+        "Strict provider ceiling refuses admission without a verified finite ceiling.",
+        "Installed App Server does not expose a verified token ceiling."
+      ]
+    },
+    "environment": {
+      "status": "known_local_gap",
+      "issue": 9560,
+      "details": "imageio_ffmpeg is missing locally; hosted CI is authoritative for the affected optional native import."
+    }
+  },
+  "remaining_gates": [
+    "review and hosted-green BA-06 publication PR",
+    "complete real-data browser workflow",
+    "external MCP/Codex same-context smoke",
+    "reconnect/cancellation/recovery evidence",
+    "retained media/source coverage"
+  ]
+}

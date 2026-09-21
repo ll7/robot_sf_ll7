@@ -559,6 +559,136 @@ def test_live_route_forwards_finding_service_cas_contract() -> None:
         assert calls[-1] == ("persist_finding", arguments)
 
 
+def _sync_arguments(**overrides: Any) -> dict[str, Any]:
+    arguments: dict[str, Any] = {
+        "finding_id": "finding-http",
+        "repository": "ll7/robot_sf_ll7",
+        "expected_finding_revision": 3,
+        "expected_selection_revision": 1,
+        "expected_context_revision": 4,
+        "expected_source_revision": "source-r4",
+        "retry_ambiguous": False,
+        "operation_id": "github-sync-http",
+    }
+    arguments.update(overrides)
+    return arguments
+
+
+def test_live_route_sync_finding_is_closed_and_redacts_provider_authority() -> None:
+    secret = "sync-private-token"
+
+    class SyncService:
+        context = SimpleNamespace(
+            campaign_id="retained",
+            episode_id="retained-episode",
+            context_revision=4,
+            source_revision="source-r4",
+            source_identity="source-digest-r4",
+        )
+
+        def sync_finding(self, session: Any, **kwargs: Any) -> Any:
+            del session
+            return SimpleNamespace(
+                status="committed",
+                reason="",
+                value={
+                    "status": "created",
+                    "finding_id": kwargs["finding_id"],
+                    "repository": kwargs["repository"],
+                    "source_path": "/private/source.json",
+                    "token": secret,
+                },
+                operation=None,
+                context=self.context,
+            )
+
+    service = SyncService()
+
+    def configure(facade, _calls, _secret):
+        facade._selected_episode_id = "retained-episode"
+        facade._selection_epoch = 1
+        facade._context = service.context
+        facade._last_finding = {"finding_id": "finding-http", "revision": 3}
+
+    with _server(secret, service=service, configure=configure) as (
+        url,
+        _calls,
+        _document,
+        _,
+        cookie,
+    ):
+        status, body = _post(
+            url,
+            {"operation": "sync_finding", "arguments": _sync_arguments()},
+            origin=url,
+            cookie=cookie,
+        )
+        assert status == 200
+        assert body["status"] == "committed"
+        assert body["value"]["status"] == "created"
+        payload = json.dumps(body, sort_keys=True)
+        assert secret not in payload
+        assert "/private/source.json" not in payload
+
+        forbidden = _sync_arguments(provider="client-provider")
+        assert (
+            _post(
+                url,
+                {"operation": "sync_finding", "arguments": forbidden},
+                origin=url,
+                cookie=cookie,
+            )[0]
+            == 403
+        )
+
+
+def test_live_route_sync_finding_rejects_stale_selection_or_context() -> None:
+    service = SimpleNamespace(context=SimpleNamespace(context_revision=4))
+
+    def configure(facade, _calls, _secret):
+        facade._selected_episode_id = "retained-episode"
+        facade._selection_epoch = 2
+        facade._context = service.context
+        facade._last_finding = {"finding_id": "finding-http", "revision": 3}
+
+    with _server(service=service, configure=configure) as (url, _calls, _document, _, cookie):
+        status, body = _post(
+            url,
+            {
+                "operation": "sync_finding",
+                "arguments": _sync_arguments(expected_selection_revision=1),
+            },
+            origin=url,
+            cookie=cookie,
+        )
+        assert status == 409
+        assert body["status"] == "conflict"
+
+
+def test_live_route_sync_finding_reports_provider_unavailable_without_fallback() -> None:
+    def configure(facade, _calls, _secret):
+        facade._selected_episode_id = "retained-episode"
+        facade._selection_epoch = 1
+        facade._context = SimpleNamespace(
+            context_revision=4,
+            source_revision="source-r4",
+            source_identity="source-digest-r4",
+            episode_id="retained-episode",
+        )
+        facade._last_finding = {"finding_id": "finding-http", "revision": 3}
+
+    with _server(configure=configure) as (url, _calls, _document, _, cookie):
+        status, body = _post(
+            url,
+            {"operation": "sync_finding", "arguments": _sync_arguments()},
+            origin=url,
+            cookie=cookie,
+        )
+        assert status == 200
+        assert body["status"] == "unavailable"
+        assert "sync_finding" in body["reason"]
+
+
 def test_live_route_rejects_serialized_slash_secret_in_retained_document() -> None:
     """The final HTML form of ``</...>`` must never contain the server token."""
     secret = "</retained-private-token>"

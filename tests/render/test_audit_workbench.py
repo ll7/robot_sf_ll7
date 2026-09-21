@@ -2885,6 +2885,84 @@ def test_service_facade_keeps_unaccepted_github_capability_unavailable() -> None
     assert service_token not in json.dumps(result, sort_keys=True)
 
 
+def test_service_facade_sync_maps_keyword_only_service_contract_and_cas() -> None:
+    """BA-06 forwards only canonical identity and server-held context to BA-05."""
+
+    class SyncService(_FakeAuditService):
+        def sync_finding(self, session: Any, **kwargs: Any) -> _FakeResult:
+            self._record("sync_finding", session, **kwargs)
+            return _FakeResult(
+                "committed",
+                {
+                    "status": "created",
+                    "repository": kwargs["repository"],
+                    "finding_id": kwargs["finding_id"],
+                    "issue": {"url": "https://github.com/ll7/robot_sf_ll7/issues/7"},
+                    "source_path": "/private/source.json",
+                    "token": _FakeSession.session_token,
+                },
+                operation=_FakeOperation(kwargs["operation_id"], "github.sync_finding"),
+                context=self.context,
+            )
+
+    service = SyncService()
+    session = _FakeSession()
+    facade = ServiceAuditWorkbenchFacade(service, session, token=session.session_token)
+    facade._selected_episode_id = "episode-real"
+    facade._selection_epoch = 2
+    facade._last_finding = {"finding_id": "finding-real", "revision": 7}
+    result = facade.sync_finding(
+        finding_id="finding-real",
+        repository="ll7/robot_sf_ll7",
+        expected_finding_revision=7,
+        expected_selection_revision=2,
+        expected_context_revision=4,
+        expected_source_revision="source-revision-1",
+        operation_id="github-sync-1",
+    )
+
+    assert result["status"] == "committed"
+    assert result["value"]["status"] == "created"
+    assert result["evidence_boundary"] == "diagnostic_only"
+    assert result["scientific_claim_allowed"] is False
+    assert session.session_token not in json.dumps(result, sort_keys=True)
+    assert "/private/source.json" not in json.dumps(result, sort_keys=True)
+    call = service.calls[-1]
+    assert call[0] == "sync_finding"
+    assert call[2]["finding_id"] == "finding-real"
+    assert call[2]["expected_finding_revision"] == 7
+    assert call[2]["expected_source_revision"] == "source-revision-1"
+    assert call[2]["context"] == session.context
+    assert call[2]["token"] == session.session_token
+
+
+def test_service_facade_sync_rejects_stale_selection_before_service_call() -> None:
+    """A stale browser epoch cannot reach the provider-bound service seam."""
+
+    class SyncService(_FakeAuditService):
+        def sync_finding(self, session: Any, **kwargs: Any) -> _FakeResult:
+            self._record("sync_finding", session, **kwargs)
+            return _FakeResult("committed", {}, context=self.context)
+
+    service = SyncService()
+    facade = ServiceAuditWorkbenchFacade(service, _FakeSession(), token=_FakeSession.session_token)
+    facade._selected_episode_id = "episode-real"
+    facade._selection_epoch = 3
+    facade._last_finding = {"finding_id": "finding-real", "revision": 1}
+    result = facade.sync_finding(
+        finding_id="finding-real",
+        repository="ll7/robot_sf_ll7",
+        expected_finding_revision=1,
+        expected_selection_revision=2,
+        expected_context_revision=4,
+        expected_source_revision="source-revision-1",
+        operation_id="github-sync-stale",
+    )
+
+    assert result["status"] == "conflict"
+    assert service.calls == []
+
+
 def test_fixture_queue_selection_cas_and_missing_media_case() -> None:
     """Queue Next advances selection revision and keeps missing media explicit."""
     service = FixtureAuditService(fixture_document())

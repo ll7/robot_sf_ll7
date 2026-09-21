@@ -14,6 +14,8 @@ from urllib.request import Request, urlopen
 import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import ActionRecord, Annotation
+from robot_sf.analysis_workbench.audit_findings import add_candidate, new_finding
+from robot_sf.analysis_workbench.audit_github import GitHubIssue, SearchResult
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset
 from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
@@ -39,6 +41,57 @@ FIXTURE = (
     / "audit_campaign_v1"
     / "campaign.json"
 )
+
+
+class _LiveGitHubProvider:
+    """Minimal append-only provider fake for the HTTP publication proof."""
+
+    def __init__(self) -> None:
+        self.issues: list[GitHubIssue] = []
+        self.create_calls: list[dict[str, Any]] = []
+
+    def search_issues(self, repository: str, *, marker: str) -> SearchResult:
+        del marker
+        return SearchResult(
+            tuple(issue for issue in self.issues if issue.repository == repository),
+            complete=True,
+        )
+
+    def create_issue(
+        self,
+        repository: str,
+        *,
+        title: str,
+        body: str,
+        labels: tuple[str, ...],
+    ) -> GitHubIssue:
+        self.create_calls.append(
+            {"repository": repository, "title": title, "body": body, "labels": labels}
+        )
+        issue = GitHubIssue(
+            repository=repository,
+            number=len(self.issues) + 1,
+            url=f"https://github.com/{repository}/issues/{len(self.issues) + 1}",
+            title=title,
+            body=body,
+            labels=labels,
+            updated_at=str(len(self.issues) + 1),
+        )
+        self.issues.append(issue)
+        return issue
+
+    def create_issue_with_finding_revision(
+        self,
+        repository: str,
+        *,
+        finding_id: str,
+        expected_finding_revision: int,
+        title: str,
+        body: str,
+        labels: tuple[str, ...],
+    ) -> GitHubIssue:
+        del finding_id, expected_finding_revision
+        return self.create_issue(repository, title=title, body=body, labels=labels)
 
 
 def _browser_source_ref(source_entry: dict[str, object]) -> dict[str, str]:
@@ -250,6 +303,92 @@ def test_live_related_cases_accepts_verified_source_row_alias(tmp_path: Path) ->
             literal_id
         }
         assert related["membership_boundary"] == "candidates_are_unconfirmed"
+    finally:
+        opened.server.shutdown()
+        server_thread.join(timeout=5)
+        opened.close()
+
+
+def test_live_http_publication_uses_canonical_finding_and_append_only_provider(
+    tmp_path: Path,
+) -> None:
+    """The resumed BA-06 slice reaches BA-05 sync without browser authority."""
+
+    root = tmp_path / "source"
+    root.mkdir()
+    source = root / "campaign.json"
+    shutil.copyfile(FIXTURE, source)
+    repository = "ll7/robot_sf_ll7"
+    policy = SessionPolicy(
+        allowed_roots=(str(root),),
+        allowed_repositories=(repository,),
+        issue_write_budget=1,
+    )
+    opened = open_live_audit_workbench(
+        source,
+        source_root=root,
+        store_root=tmp_path / "store",
+        policy=policy,
+    )
+    provider = _LiveGitHubProvider()
+    opened.service.github_provider = provider
+    session = next(iter(opened.service._sessions.values()))
+    server_thread = threading.Thread(target=opened.server.serve_forever, daemon=True)
+    server_thread.start()
+    try:
+        with urlopen(opened.url, timeout=15) as response:
+            browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        parsed = urlsplit(opened.url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+
+        def post(operation: str, arguments: dict[str, object]) -> dict[str, object]:
+            request = Request(
+                origin + "/api/audit",
+                data=json.dumps({"operation": operation, "arguments": arguments}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": origin,
+                    "Cookie": browser_cookie,
+                },
+                method="POST",
+            )
+            with urlopen(request, timeout=30) as response:
+                return json.load(response)
+
+        selected = post("next", {"expected_selection_revision": 0, "operation_id": "sync-next"})
+        assert selected["status"] == "complete", selected.get("reason")
+        episode_id = selected["packet"]["primary"]["episode_id"]
+        finding = add_candidate(
+            new_finding("live-http-finding", "retained source symptom"), episode_id
+        )
+        commit = opened.service.finding_store.create(
+            finding,
+            operation_id="live-http-finding-create",
+            actor="human",
+        )
+        source_revision = session.source_revision
+        sync = post(
+            "sync_finding",
+            {
+                "finding_id": finding.finding_id,
+                "repository": repository,
+                "expected_finding_revision": commit.revision,
+                "expected_selection_revision": selected["selection_revision"],
+                "expected_context_revision": selected["context_revision"],
+                "expected_source_revision": source_revision,
+                "retry_ambiguous": False,
+                "operation_id": "live-http-github-sync",
+            },
+        )
+        assert sync["status"] == "committed", sync
+        assert sync["value"]["status"] == "created", sync
+        assert len(provider.create_calls) == 1
+        assert "robot_sf_audit_finding:v1" in provider.create_calls[0]["body"]
+        payload = json.dumps(sync, sort_keys=True)
+        assert session.session_token not in payload
+        assert str(root) not in payload
+        assert sync["evidence_boundary"] == "diagnostic_only"
+        assert sync["scientific_claim_allowed"] is False
     finally:
         opened.server.shutdown()
         server_thread.join(timeout=5)
@@ -569,8 +708,8 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
         assert reopened["record_projection"]["authoritative"] is True
         assert [record["record_id"] for record in reopened["annotations"]] == ["native-scene-note"]
         assert [record["record_id"] for record in reopened["findings"]] == ["native-scene-finding"]
-        # GitHub sync is intentionally outside this retained local proof: no
-        # provider is configured and no sync operation is sent.
+        # This retained native-trace proof keeps provider sync disabled; the
+        # separate publication test covers the append-only service boundary.
         assert opened.service.github_provider is None
         _assert_native_annotation_provenance(reopened["annotations"][0], source_entry)
     finally:

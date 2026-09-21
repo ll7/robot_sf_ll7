@@ -229,6 +229,7 @@ export function createServiceFacade(endpoint = "/api/audit") {
   };
   const saveAnnotation = (annotation, options = {}) => call("save_annotation", { annotation, ...options });
   const persistFinding = (annotation, options = {}) => call("persist_finding", { annotation, ...options });
+  const syncFinding = (options = {}) => call("sync_finding", { ...options });
   const recordHumanReview = (outcome, options = {}) => call("record_human_review", { outcome, ...options });
   const relatedCases = (value = {}, options = {}) => call(
     "related_cases", relatedCasesArguments(value, options),
@@ -243,6 +244,7 @@ export function createServiceFacade(endpoint = "/api/audit") {
     next: (options = {}) => call("next", options),
     saveAnnotation, save_annotation: saveAnnotation,
     persistFinding, persist_finding: persistFinding,
+    syncFinding, sync_finding: syncFinding,
     recordHumanReview, record_human_review: recordHumanReview,
     relatedCases, related_cases: relatedCases,
     runNativeDiagnostic, run_native_diagnostic: runNativeDiagnostic,
@@ -1349,6 +1351,7 @@ export class AuditWorkbenchController {
       selectionRevision: Number(this.model.selection_revision || this.model.packet?.selection_revision || 0),
       coverage: clone(this.model.coverage || {}),
       finding: (this.model.findings || this.model.service_snapshot?.findings || []).at(-1) || null,
+      githubSync: clone(this.model.github_sync || this.model.githubSync || null),
       autosave: { state: "saved", error: "", revision: null },
       serviceStatus: "ready",
       serviceAuthorityStatus: this.model.service_status || this.model.status || "ready",
@@ -1423,6 +1426,7 @@ export class AuditWorkbenchController {
       schema_version: AUDIT_WORKBENCH_MODEL_SCHEMA_VERSION,
       selected: clone(this.state.selected), selection_revision: this.state.selectionRevision,
       coverage: clone(this.state.coverage), finding: clone(this.state.finding),
+      github_sync: clone(this.state.githubSync),
       next: clone(this.state.next),
       artifact_status: clone(this.state.artifactStatus),
       autosave: clone(this.state.autosave), service_status: this.state.serviceStatus,
@@ -2072,6 +2076,59 @@ export class AuditWorkbenchController {
         this.state.selectionRevision === selectedRevision
         && this.state.selected?.episode_id === selectedEpisodeId
       ) this._setStatus(normalized.status || "error", normalized.message);
+      throw normalized;
+    }
+  }
+
+  async syncFinding(repository) {
+    const selectedEpisodeId = this.state.selected?.episode_id;
+    const selectedRevision = this.state.selectionRevision;
+    const finding = this.state.finding;
+    const sync = this.facade.syncFinding || this.facade.sync_finding;
+    if (typeof sync !== "function") {
+      return { status: "unavailable", reason: "GitHub sync is unavailable" };
+    }
+    if (!selectedEpisodeId || !finding?.finding_id) {
+      throw new Error("select and persist a finding before publishing it");
+    }
+    const findingRevision = finding.revision ?? finding.record_revision;
+    if (!Number.isSafeInteger(findingRevision) || findingRevision < 0) {
+      throw new Error("canonical finding revision is unavailable");
+    }
+    if (typeof repository !== "string" || !repository.trim()) {
+      throw new Error("an allowlisted GitHub repository is required");
+    }
+    const cas = this._serviceCas;
+    if (!Number.isSafeInteger(cas.contextRevision) || cas.sourceRevision === undefined) {
+      throw new Error("current service and source revisions are unavailable");
+    }
+    try {
+      const result = await sync.call(this.facade, {
+        finding_id: String(finding.finding_id),
+        repository: repository.trim(),
+        expected_finding_revision: findingRevision,
+        expected_selection_revision: selectedRevision,
+        expected_context_revision: cas.contextRevision,
+        expected_source_revision: cas.sourceRevision,
+        retry_ambiguous: false,
+        operation_id: operationId("github-sync"),
+      });
+      this._rememberServiceState(result);
+      if (this.state.selectionRevision !== selectedRevision
+        || this.state.selected?.episode_id !== selectedEpisodeId) return result;
+      this.state.githubSync = clone(result);
+      const syncedFinding = result?.value?.finding;
+      if (syncedFinding && typeof syncedFinding === "object") this.state.finding = clone(syncedFinding);
+      this._setStatus(result?.status || "unavailable", result?.reason || "");
+      this.render({ captureEditor: false });
+      return result;
+    } catch (error) {
+      const normalized = serviceError(error, "GitHub sync failed");
+      if (this.state.selectionRevision === selectedRevision
+        && this.state.selected?.episode_id === selectedEpisodeId) {
+        this.state.githubSync = { status: normalized.status || "failed", reason: normalized.message };
+        this._setStatus(normalized.status || "error", normalized.message);
+      }
       throw normalized;
     }
   }
@@ -2781,6 +2838,41 @@ export class AuditWorkbenchController {
       ? `Finding state ${this.state.recordsStatus}: ${this.state.recordsReason}`
       : (this.state.finding ? `${this.state.finding.finding_id}: ${this.state.finding.status}` : "No finding persisted yet.");
     findingPane.body.appendChild(text(documentRef, "p", findingText));
+    const syncFinding = this.facade.syncFinding || this.facade.sync_finding;
+    if (typeof syncFinding === "function") {
+      const publish = documentRef.createElement("div");
+      publish.className = "audit-github-publication";
+      const repository = documentRef.createElement("input");
+      repository.type = "text";
+      repository.placeholder = "owner/repository (allowlisted by the service)";
+      repository.value = this.state.githubSync?.repository || this.model.github_repository || "";
+      repository.setAttribute?.("aria-label", "GitHub repository");
+      const publishButton = button(
+        documentRef,
+        "Publish finding to GitHub",
+        () => this.syncFinding(repository.value).catch(() => {}),
+        { "aria-label": "Publish finding to GitHub" },
+      );
+      const syncStatus = this.state.githubSync;
+      publishButton.disabled = !this.state.finding || !repository.value.trim();
+      if (publishButton.disabled) publishButton.setAttribute?.("disabled", "");
+      repository.addEventListener?.("input", () => {
+        publishButton.disabled = !this.state.finding || !repository.value.trim();
+        if (publishButton.disabled) publishButton.setAttribute?.("disabled", "");
+        else publishButton.removeAttribute?.("disabled");
+      });
+      publish.appendChild(repository);
+      publish.appendChild(publishButton);
+      publish.appendChild(text(
+        documentRef,
+        "p",
+        syncStatus
+          ? `GitHub sync: ${syncStatus.status} — ${syncStatus.reason || ""}`
+          : "Server-held, append-only publication; provider capability is checked at request time.",
+        syncStatus?.status === "committed" ? "audit-status" : "audit-warning",
+      ));
+      findingPane.body.appendChild(publish);
+    }
     findingPane.details.appendChild(findingPane.body);
     shell.appendChild(findingPane.details);
     const relatedPane = detailsPane(documentRef, "related", "Related cases", this.state.panes.related);

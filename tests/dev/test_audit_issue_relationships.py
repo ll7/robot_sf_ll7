@@ -249,3 +249,196 @@ def test_apply_without_confirmation_does_not_call_post() -> None:
 
     assert report["apply"]["status"] == "blocked"
     assert "POST" not in calls
+
+
+def test_apply_reciprocal_dependencies_produces_one_write_and_already_applied() -> None:
+    calls: list[tuple[str, object | None, str | None]] = []
+    dependency_added = False
+
+    def api(
+        path: str, payload: object | None, method: str | None
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal dependency_added
+        calls.append((path, payload, method))
+        if "issues?state=open" in path:
+            return _result(
+                [
+                    {
+                        "number": 1,
+                        "id": 101,
+                        "title": "blocker",
+                        "body": "## Relationships\n- Parent issue: none\n- Blocked by: none\n- Blocking: #2\n- Relates to: none\n",
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/1",
+                    },
+                    {
+                        "number": 2,
+                        "id": 102,
+                        "title": "blocked",
+                        "body": "## Relationships\n- Parent issue: none\n- Blocked by: #1\n- Blocking: none\n- Relates to: none\n",
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/2",
+                    },
+                ]
+            )
+        if path.endswith("/parent"):
+            return _result({})
+        if path.endswith("/issues/1/dependencies/blocked_by"):
+            return _result([])
+        if path.endswith("/issues/1/dependencies/blocking"):
+            return _result([{"number": 2}] if dependency_added else [])
+        if path.endswith("/issues/2/dependencies/blocked_by") and method != "POST":
+            return _result([{"number": 1}] if dependency_added else [])
+        if path.endswith("/issues/2/dependencies/blocking"):
+            return _result([])
+        if path.endswith("/issues/2/dependencies/blocked_by") and method == "POST":
+            dependency_added = True
+            return _result({})
+        raise AssertionError(f"unexpected call: {path} (method={method})")
+
+    report = audit_relationships(
+        api=api,
+        per_page=10,
+        max_pages=1,
+        apply=True,
+        confirmation="RELATIONSHIP_MIGRATION",
+    )
+
+    assert report["apply"]["status"] == "complete"
+    writes = [(path, method) for path, _, method in calls if method == "POST"]
+    assert writes == [("repos/ll7/robot_sf_ll7/issues/2/dependencies/blocked_by", "POST")]
+
+    ops = report["apply"]["operations"]
+    assert len(ops) == 2
+    assert ops[0]["kind"] == "blocking"
+    assert ops[0]["status"] == "applied"
+    assert ops[1]["kind"] == "blocked_by"
+    assert ops[1]["status"] == "already_applied"
+    assert "reciprocal native relationship already added" in ops[1]["reason"]
+
+
+def test_write_operation_reconciles_422_when_readback_confirms() -> None:
+    calls: list[tuple[str, object | None, str | None]] = []
+    write_attempted = False
+
+    def api(
+        path: str, payload: object | None, method: str | None
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal write_attempted
+        calls.append((path, payload, method))
+        if "issues?state=open" in path:
+            return _result(
+                [
+                    {
+                        "number": 2,
+                        "id": 102,
+                        "title": "blocked",
+                        "body": "## Relationships\n- Parent issue: none\n- Blocked by: #1\n- Blocking: none\n- Relates to: none\n",
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/2",
+                    },
+                ]
+            )
+        if "issues/1" in path and method != "POST":
+            return _result({"number": 1, "id": 101, "title": "blocker", "body": ""})
+        if path.endswith("/parent"):
+            return _result({})
+        if path.endswith("/dependencies/blocking"):
+            return _result([])
+        if path.endswith("/issues/2/dependencies/blocked_by") and method == "POST":
+            write_attempted = True
+            return _result(
+                {},
+                returncode=1,
+                stderr="gh: Target issue has already been taken (HTTP 422)",
+            )
+        if path.endswith("/issues/2/dependencies/blocked_by") and method != "POST":
+            return _result([{"number": 1}] if write_attempted else [])
+        raise AssertionError(f"unexpected call: {path} (method={method})")
+
+    report = audit_relationships(
+        api=api,
+        per_page=10,
+        max_pages=1,
+        apply=True,
+        confirmation="RELATIONSHIP_MIGRATION",
+    )
+
+    assert report["apply"]["status"] == "complete"
+    ops = report["apply"]["operations"]
+    assert len(ops) == 1
+    assert ops[0]["status"] == "already_applied"
+    assert "verified with read-back" in ops[0]["reason"]
+
+
+def test_write_operation_fails_closed_on_server_error() -> None:
+    def api_500(
+        path: str, payload: object | None, method: str | None
+    ) -> subprocess.CompletedProcess[str]:
+        if "issues?state=open" in path:
+            return _result(
+                [
+                    {
+                        "number": 2,
+                        "id": 102,
+                        "title": "blocked",
+                        "body": "## Relationships\n- Parent issue: none\n- Blocked by: #1\n- Blocking: none\n- Relates to: none\n",
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/2",
+                    },
+                ]
+            )
+        if "issues/1" in path and method != "POST":
+            return _result({"number": 1, "id": 101, "title": "blocker", "body": ""})
+        if path.endswith("/parent") or path.endswith("/dependencies/blocking"):
+            return _result([])
+        if path.endswith("/issues/2/dependencies/blocked_by") and method == "POST":
+            return _result({}, returncode=1, stderr="HTTP 500 Internal Server Error")
+        if path.endswith("/issues/2/dependencies/blocked_by") and method != "POST":
+            return _result([])
+        raise AssertionError(path)
+
+    report = audit_relationships(
+        api=api_500,
+        apply=True,
+        confirmation="RELATIONSHIP_MIGRATION",
+        max_pages=1,
+    )
+    assert report["apply"]["status"] == "failed"
+    assert report["apply"]["operations"][0]["status"] == "failed"
+
+
+def test_write_operation_fails_closed_on_unverified_422() -> None:
+    def api_unverified_422(
+        path: str, payload: object | None, method: str | None
+    ) -> subprocess.CompletedProcess[str]:
+        if "issues?state=open" in path:
+            return _result(
+                [
+                    {
+                        "number": 2,
+                        "id": 102,
+                        "title": "blocked",
+                        "body": "## Relationships\n- Parent issue: none\n- Blocked by: #1\n- Blocking: none\n- Relates to: none\n",
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/2",
+                    },
+                ]
+            )
+        if "issues/1" in path and method != "POST":
+            return _result({"number": 1, "id": 101, "title": "blocker", "body": ""})
+        if path.endswith("/parent") or path.endswith("/dependencies/blocking"):
+            return _result([])
+        if path.endswith("/issues/2/dependencies/blocked_by") and method == "POST":
+            return _result(
+                {},
+                returncode=1,
+                stderr="gh: Target issue has already been taken (HTTP 422)",
+            )
+        if path.endswith("/issues/2/dependencies/blocked_by") and method != "POST":
+            return _result([])  # Does NOT contain target #1
+        raise AssertionError(path)
+
+    report = audit_relationships(
+        api=api_unverified_422,
+        apply=True,
+        confirmation="RELATIONSHIP_MIGRATION",
+        max_pages=1,
+    )
+    assert report["apply"]["status"] == "failed"
+    assert report["apply"]["operations"][0]["status"] == "failed"

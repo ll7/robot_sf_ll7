@@ -986,6 +986,10 @@ _FAST_FILES = {
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).
     "test_review_execute.py",
+    # Issue #7387 diagnostic-report tests are deterministic adapter, rule,
+    # and fixture-manifest contracts for the new benchmark leaf; keep changed
+    # coverage in fast shards.
+    "test_diagnostic_report.py",
     # SREV-24 loop tests are deterministic journal, budget, and recovery
     # contracts; keep their changed coverage in fast shards (issue #9296).
     "test_review_experiment_loop.py",

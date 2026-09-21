@@ -239,9 +239,13 @@ Each cycle iteration follows a fixed phase order:
    issues are routed to closure, not scored. A failure here is non-fatal: log it and proceed with the
    existing ordering.
 2. `reconcile` — refresh project permission and worker-route status, then reconcile satisfied
-   blockers and stale lifecycle labels. Missing `read:project` is a non-fatal priority limitation;
-   it does not authorize treating the candidate queue as claimable. Route status is also non-fatal
-   for local work, but a prior failed route probe expires and must not remain authoritative.
+   blockers and stale lifecycle labels. Run the deterministic lifecycle reconciler in report mode
+   first (`uv run python scripts/dev/lifecycle_state_reconcile.py --report --json`); repair only
+   through its drift-checked apply mode and feed its `unresolved_drift_count` into the controller
+   receipt so terminal zero-work cannot ignore lifecycle drift. Missing `read:project` is a
+   non-fatal priority limitation; it does not authorize treating the candidate queue as claimable.
+   Route status is also non-fatal for local work, but a prior failed route probe expires and must
+   not remain authoritative.
 3. `prepare` — run the report-only open-issue audit and deterministic preparation planner. Review
    `ready`, `needs_ready_label`, `needs_spec`, parent, decision, compute, external-input, active,
    review, covered, and wrong-owner groups separately. Route `formalize_issue` rows through the

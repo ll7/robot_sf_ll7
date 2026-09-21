@@ -133,7 +133,20 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "acceptance": (
         "acceptance",
         "acceptance and validation",
+        "acceptance and verification",
+        "acceptance and verification criteria",
+        "acceptance checklist",
         "acceptance criteria",
+        "acceptance criteria and validation",
+        "acceptance criteria and verification",
+        "acceptance criteria validation",
+        "acceptance criteria verification",
+        "acceptance criterion",
+        "acceptance definition of done",
+        "acceptance requirement",
+        "acceptance requirements",
+        "acceptance validation",
+        "acceptance verification",
         "completion",
         "definition of done",
         "required outputs",
@@ -141,14 +154,27 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "verification": (
         "acceptance and validation",
+        "acceptance and verification",
+        "acceptance and verification criteria",
+        "acceptance criteria and validation",
+        "acceptance criteria and verification",
+        "acceptance criteria validation",
+        "acceptance criteria verification",
+        "acceptance validation",
+        "acceptance verification",
         "proof",
+        "reproduction",
+        "reproduction and verification",
+        "reproduction steps",
         "testing",
         "validation",
         "validation gates",
         "validation proof",
         "validation testing",
         "verification",
+        "verification and validation",
         "verification gates",
+        "verification testing",
     ),
 }
 
@@ -219,59 +245,6 @@ def _heading_matches(heading: str, alias: str) -> bool:
     return heading == alias
 
 
-def inspect_contract(body: str) -> dict[str, Any]:
-    """Inspect required implementation-contract sections without inferring intent."""
-    records = _heading_records(body)
-    headings = sorted({heading for heading, _ in records})
-    fields: dict[str, dict[str, Any]] = {}
-    missing_fields: list[str] = []
-    for field, aliases in FIELD_ALIASES.items():
-        matched = sorted(
-            {
-                heading
-                for heading, _ in records
-                if any(_heading_matches(heading, alias) for alias in aliases)
-            }
-        )
-        fields[field] = {"present": bool(matched), "matched_headings": matched}
-        if not matched:
-            missing_fields.append(field)
-    return {
-        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
-        "headings": headings,
-        "fields": fields,
-        "missing_fields": missing_fields,
-        "complete": not missing_fields,
-    }
-
-
-def preflight_body_text(body: str) -> dict[str, Any]:
-    """Run the deterministic zero-write preflight for one issue body.
-
-    Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
-    (objective, scope, inputs, acceptance, verification), ``heading_suggestions``
-    mapping each unmatched body heading to its closest canonical alias (empty when
-    nothing is missing), and the body digest so a worker can repair the local draft
-    before any GitHub create request. This guard creates no labels, comments,
-    projects, claims, or issues; the live ``goal_issue_admission`` boundary remains
-    responsible for state, claims, blockers, and freshness.
-    """
-    contract = inspect_contract(body)
-    missing_fields = list(contract["missing_fields"])
-    heading_candidates = [heading for heading, _ in _heading_sections(body)]
-    return {
-        "schema": "issue_body_preflight.v1",
-        "ready": not missing_fields,
-        "missing_fields": missing_fields,
-        "heading_suggestions": _suggest_heading_aliases(
-            contract,
-            set(missing_fields),
-            heading_candidates=heading_candidates,
-        ),
-        "body_sha256": contract["body_sha256"],
-    }
-
-
 def _stem_token(token: str) -> str:
     """Reduce one token to a light stem for heading similarity (plural folding)."""
     if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
@@ -339,6 +312,62 @@ def _suggest_heading_aliases(
                 "score": round(score, 4),
             }
     return suggestions
+
+
+def inspect_contract(body: str) -> dict[str, Any]:
+    """Inspect required implementation-contract sections without inferring intent."""
+    records = _heading_records(body)
+    headings = sorted({heading for heading, _ in records})
+    fields: dict[str, dict[str, Any]] = {}
+    missing_fields: list[str] = []
+    for field, aliases in FIELD_ALIASES.items():
+        matched = sorted(
+            {
+                heading
+                for heading, _ in records
+                if any(_heading_matches(heading, alias) for alias in aliases)
+            }
+        )
+        fields[field] = {"present": bool(matched), "matched_headings": matched}
+        if not matched:
+            missing_fields.append(field)
+    result: dict[str, Any] = {
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "headings": headings,
+        "fields": fields,
+        "missing_fields": missing_fields,
+        "complete": not missing_fields,
+    }
+    if missing_fields:
+        heading_candidates = [heading for heading, _ in _heading_sections(body)]
+        result["heading_suggestions"] = _suggest_heading_aliases(
+            result,
+            set(missing_fields),
+            heading_candidates=heading_candidates,
+        )
+    return result
+
+
+def preflight_body_text(body: str) -> dict[str, Any]:
+    """Run the deterministic zero-write preflight for one issue body.
+
+    Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
+    (objective, scope, inputs, acceptance, verification), ``heading_suggestions``
+    mapping each unmatched body heading to its closest canonical alias (empty when
+    nothing is missing), and the body digest so a worker can repair the local draft
+    before any GitHub create request. This guard creates no labels, comments,
+    projects, claims, or issues; the live ``goal_issue_admission`` boundary remains
+    responsible for state, claims, blockers, and freshness.
+    """
+    contract = inspect_contract(body)
+    missing_fields = list(contract["missing_fields"])
+    return {
+        "schema": "issue_body_preflight.v1",
+        "ready": not missing_fields,
+        "missing_fields": missing_fields,
+        "heading_suggestions": contract.get("heading_suggestions", {}),
+        "body_sha256": contract["body_sha256"],
+    }
 
 
 REPAIR_SCHEMA = "issue_contract_repair.v1"

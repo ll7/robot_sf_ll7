@@ -557,9 +557,10 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
             method="POST",
         )
         # A fresh snapshot revalidates queue, coverage, episode, and records
-        # through the service; the prior five-second replay timeout was too
-        # short under the full native-scene integration fixture.
-        with urlopen(snapshot_request, timeout=30) as response:
+        # through the service.  The full native-scene integration fixture can
+        # take over a minute under hosted xdist, so keep this bounded timeout
+        # above the observed slow path while still failing a hung server.
+        with urlopen(snapshot_request, timeout=90) as response:
             reopened = json.load(response)
         assert reopened["artifact_status"]["materialization"]["status"] == "not_configured"
         assert reopened["artifact_status"]["native_diagnostic"]["status"] == "available"

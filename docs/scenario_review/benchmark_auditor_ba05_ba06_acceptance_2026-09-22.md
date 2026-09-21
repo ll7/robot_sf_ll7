@@ -1,8 +1,9 @@
 # Benchmark Auditor BA-05 / BA-06 acceptance report (2026-09-22)
 
 Status: BA-05's bounded D1/D2 slices are accepted and merged. BA-06's
-server-held publication slice is implemented and locally proven with an
-injected provider. The full BA-06 workflow and epic #9483 remain open.
+server-held publication slice is implemented, hosted-green, and merged with
+an injected-provider diagnostic proof. The full BA-06 workflow and epic #9483
+remain open.
 
 ## Evidence boundary
 
@@ -17,7 +18,7 @@ append-only provider behind the real `AuditService` and loopback HTTP route.
 |---|---|---|---|---|
 | BA-05 D1 append-only publication | #9559 / `ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088` | `6787f5b93a1023dd243f66d81b1e6a13fe6871a3` | 102 passed | run `35655668527`, attempt 2: full matrix, CodeQL, changed coverage and merge queue green |
 | BA-05 D2 route/accounting | #9558 / `78fb3c818fafe1ae0ea1522c96092e55b8460e3b` | `6982a2456aa98cabff6f5186d396d4f15eb72b48` | 113 passed, 2 skipped | run `35658827492`: full matrix, CodeQL, changed coverage and merge queue green |
-| BA-06 publication boundary | resumed from #9544, new slice pending PR merge | local branch `feat/9489-publish-boundary-20260922` | facade/server tests plus real-service HTTP fake-provider test passed | hosted CI required before acceptance |
+| BA-06 publication boundary | #9561 / `e2c84dd8ea75bd63a62005ecbc55ae7847d06328` | `208e8a3bf02f5b2c2b3eafe39fe776da07a9dcc7` | 149 passed | run `35667772524` green; changed coverage job `106560755969` and merge-queue-gate run `35669539946` green |
 
 D1's first hosted attempt had one transient macOS/Matplotlib native-launch
 failure while the font cache was unavailable; the guarded failed-job rerun
@@ -60,9 +61,10 @@ recovery acceptance.
 
 ## Remaining BA-06 / epic gates
 
-BA-06 still needs the reviewed and hosted-green publication PR, then the
-complete real-data browser workflow, external MCP/Codex same-context smoke,
-reconnect/cancellation/recovery evidence, and retained media/source coverage.
+The merged publication boundary is only one BA-06 slice. The issue still
+needs the complete real-data browser workflow, external MCP/Codex same-context
+smoke, reconnect/cancellation/recovery evidence, and retained media/source
+coverage.
 SREV #9285/#9287/#9288 are integrated at contract/test level; #9296/#9299 and
 prerequisite #9417 still need the admitted-source/live proof recorded by the
 epic acceptance criteria. Epic #9483 remains open and is not complete.

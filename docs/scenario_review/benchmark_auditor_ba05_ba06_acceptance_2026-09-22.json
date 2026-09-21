@@ -1,7 +1,7 @@
 {
   "schema_version": "benchmark-auditor-acceptance.v1",
   "generated_at": "2026-09-22",
-  "status": "ba05_bounded_slices_accepted_ba06_publication_slice_pending_hosted_ci",
+  "status": "ba05_bounded_slices_accepted_ba06_publication_slice_merged_full_workflow_pending",
   "epic": {
     "issue": 9483,
     "status": "open",
@@ -9,7 +9,8 @@
     "reason": "BA-06 full real-data, Codex/MCP, recovery, and retained-media gates remain."
   },
   "baseline": {
-    "origin_main": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
+    "origin_main": "208e8a3bf02f5b2c2b3eafe39fe776da07a9dcc7",
+    "ba06_review_base": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
     "evidence_class": "diagnostic_only"
   },
   "packages": {
@@ -33,12 +34,24 @@
     },
     "ba06_publication": {
       "issue": 9489,
+      "pr": 9561,
       "branch": "feat/9489-publish-boundary-20260922",
-      "hosted": {"required": true, "status": "pending"},
+      "exact_head": "e2c84dd8ea75bd63a62005ecbc55ae7847d06328",
+      "merge_sha": "208e8a3bf02f5b2c2b3eafe39fe776da07a9dcc7",
+      "hosted": {
+        "required": true,
+        "status": "success",
+        "run_id": 35667772524,
+        "changed_coverage_job_id": 106560755969,
+        "merge_queue_run_id": 35669539946
+      },
+      "focused": {"passed": 149, "failed": 0, "skipped": 0},
       "local": {
         "facade_server_tests": "passed",
         "real_service_http_fake_provider": "passed",
-        "result_boundary": "diagnostic_only"
+        "changed_server_coverage": "100_percent",
+        "result_boundary": "diagnostic_only",
+        "readiness_note": "Two pre-existing base-sensitive failures remain outside BA-06 proof."
       }
     }
   },
@@ -74,7 +87,6 @@
     }
   },
   "remaining_gates": [
-    "review and hosted-green BA-06 publication PR",
     "complete real-data browser workflow",
     "external MCP/Codex same-context smoke",
     "reconnect/cancellation/recovery evidence",

@@ -37,10 +37,12 @@ from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
     AuditService,
     AuditValidationError,
+    CapabilityUnavailable,
     EpisodeView,
     SessionPolicy,
 )
 from robot_sf.analysis_workbench.review_contracts import SourceRef
+from robot_sf.render import audit_trace_projection as trace_projection
 
 FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -80,6 +82,101 @@ def _service_for_payload(tmp_path: Path, payload: dict[str, Any]) -> tuple[Audit
         policy=policy,
     )
     return service, session
+
+
+def test_artifact_reference_and_source_reason_helpers_fail_closed() -> None:
+    """Browser-facing identifiers and source failures never leak unsafe values."""
+
+    assert AuditService._artifact_safe_reference(True) is None
+    assert AuditService._artifact_safe_reference(object()) is None
+    assert AuditService._artifact_safe_reference(-1) is None
+    assert AuditService._artifact_source_reason(AuditContextConflict("stale")) == (
+        "selected source is stale"
+    )
+    assert AuditService._artifact_source_reason(AuditPolicyError("denied")) == (
+        "selected source is not permitted by session policy"
+    )
+    assert AuditService._artifact_source_reason(CapabilityUnavailable("missing")) == (
+        "selected source is unavailable"
+    )
+    assert AuditService._artifact_source_reason(ValueError("bad")) == (
+        "selected source could not be validated"
+    )
+
+
+def test_trace_projection_private_admission_helpers_preserve_missingness() -> None:
+    """Malformed native state remains explicit when projection helpers are used directly."""
+
+    assert trace_projection._finite(True) is None
+    assert trace_projection._finite(float("inf")) is None
+    trace = {"steps": []}
+    assert trace_projection._trace_from({}, trace) is trace
+    assert trace_projection._trace_from({"schema_version": "analysis-trace.v1"}, None) is not None
+    nested = {"trace": {"steps": []}}
+    assert trace_projection._trace_from({"retained_state": nested}, None) is nested["trace"]
+
+    missing = trace_projection._missing_fields(
+        {
+            "robot": {
+                "position": ["bad", 0.0],
+                "actor_id": "",
+                "heading": True,
+                "velocity": [0.0],
+                "radius_m": 0.0,
+            },
+            "pedestrians": [
+                "not-an-actor",
+                {
+                    "position": ["bad", 0.0],
+                    "actor_id": "",
+                    "velocity": [0.0],
+                    "radius_m": 0.0,
+                },
+            ],
+        }
+    )
+    assert "robot.position" in missing
+    assert "pedestrians[0]" in missing
+    assert "pedestrians[1].radius_m" in missing
+    assert trace_projection._missing_fields({"robot": {}}) == [
+        "robot.position",
+        "robot.actor_id",
+        "robot.heading",
+        "robot.velocity",
+        "robot.radius_m",
+        "pedestrians",
+    ]
+
+    samples, scene_missingness, diagnostics = trace_projection._scene_samples(
+        {
+            "steps": [
+                None,
+                {"time_s": "missing"},
+                {"time_s": 1.0, "robot": {}, "pedestrians": []},
+                {"time_s": 0.0, "robot": {}, "pedestrians": []},
+            ]
+        }
+    )
+    assert samples
+    assert scene_missingness["status"] == "unavailable"
+    assert any(item["reason_code"] == "scene_timestamp_not_increasing" for item in diagnostics)
+    assert trace_projection._scene_samples({"steps": []})[1]["status"] == "unavailable"
+
+    events, event_missingness = trace_projection._events(
+        {"events": [None, {"time_s": "missing"}, {"time_s": 1.0, "kind": "hit"}]}, 1.0
+    )
+    assert len(events) == 2
+    assert event_missingness["status"] == "partial"
+    assert events[-1]["selected"] is True
+    assert (
+        trace_projection._snapshot(
+            {"status": "available", "samples": [{"time_s": 1.0, "missing": True}]}, 1.0
+        )["reason"]
+        == "sample_missing"
+    )
+    assert trace_projection._snapshot({"status": "available", "samples": []}, 1.0)["reason"] == (
+        "exact_source_sample_unavailable"
+    )
 
 
 def _detector_rule_proposal(

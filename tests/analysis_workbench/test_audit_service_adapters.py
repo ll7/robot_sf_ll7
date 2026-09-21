@@ -527,3 +527,31 @@ def test_record_human_review_rejects_boolean_revision_before_queue_access(tmp_pa
             author_id="reviewer-1",
             outcome="pass",
         )
+
+
+def test_record_human_review_rejects_stale_queue_revision_after_lock(
+    tmp_path: Path,
+) -> None:
+    """Review CAS checks the durable queue revision after taking its lock."""
+
+    queue = AuditQueue(_queue().dataset, state_path=tmp_path / "queue.json")
+    adapter = QueueNextAdapter(_binding(), lambda: queue)
+    selection = adapter.select_next(context=_context()).value
+    context = AuditSelectionContext(
+        campaign_id="audit-campaign",
+        episode_id=selection.packet.primary.episode_id,
+        reference_id=selection.packet.packet_id,
+        source_identity=SOURCE,
+        source_revision=3,
+    )
+
+    with pytest.raises(AuditContextConflict, match="queue revision CAS failed"):
+        adapter.record_human_review(
+            context=context,
+            before_review=lambda _queue: None,
+            expected_state_revision=99,
+            expected_input_revision=0,
+            operation_id="stale-review-revision",
+            author_id="reviewer-1",
+            outcome="pass",
+        )

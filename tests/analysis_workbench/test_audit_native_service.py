@@ -47,6 +47,13 @@ def _binding(case: dict[str, Any]) -> NativeDiagnosticBinding:
     )
 
 
+def test_native_campaign_row_mapping_rejects_non_mapping_payload() -> None:
+    """The campaign/native join descriptor has a closed mapping boundary."""
+
+    with pytest.raises(AuditValidationError, match="must be a mapping"):
+        NativeDiagnosticCampaignRowBinding.from_mapping(None)  # type: ignore[arg-type]
+
+
 def _service(
     tmp_path: Path,
     case: dict[str, Any],

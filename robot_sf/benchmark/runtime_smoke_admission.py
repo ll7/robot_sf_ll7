@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import math
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.checkpoint_staging_receipt import (
@@ -29,6 +31,13 @@ RUNTIME_SMOKE_MANIFEST = Path(
 )
 RUNTIME_SMOKE_CONFIG = Path(
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml"
+)
+RUNTIME_SMOKE_V03_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3"
+RUNTIME_SMOKE_V03_MANIFEST = Path(
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
+)
+RUNTIME_SMOKE_V03_CONFIG = Path(
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
 )
 RUNTIME_SMOKE_HORIZON = 600
 RUNTIME_SMOKE_KINEMATICS = "differential_drive"
@@ -51,6 +60,45 @@ RUNTIME_SMOKE_PLANNER_KEYS = (
     "predictive_mppi",
     "risk_dwa",
 )
+
+
+@dataclass(frozen=True)
+class _RuntimeSmokeContract:
+    """Pinned identity fields for one supported runtime-smoke generation."""
+
+    release_id: str
+    manifest_path: Path
+    config_path: Path
+    scenario_path: str
+
+
+_RUNTIME_SMOKE_CONTRACTS = {
+    RUNTIME_SMOKE_RELEASE_ID: _RuntimeSmokeContract(
+        release_id=RUNTIME_SMOKE_RELEASE_ID,
+        manifest_path=RUNTIME_SMOKE_MANIFEST,
+        config_path=RUNTIME_SMOKE_CONFIG,
+        scenario_path="configs/scenarios/single/francis2023_blind_corner.yaml",
+    ),
+    RUNTIME_SMOKE_V03_RELEASE_ID: _RuntimeSmokeContract(
+        release_id=RUNTIME_SMOKE_V03_RELEASE_ID,
+        manifest_path=RUNTIME_SMOKE_V03_MANIFEST,
+        config_path=RUNTIME_SMOKE_V03_CONFIG,
+        scenario_path=("configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml"),
+    ),
+}
+
+
+def _runtime_smoke_contract_for_release_id(release_id: Any) -> _RuntimeSmokeContract:
+    """Return the exact pinned contract named by a smoke receipt."""
+    normalized = str(release_id).strip()
+    try:
+        return _RUNTIME_SMOKE_CONTRACTS[normalized]
+    except KeyError as exc:
+        raise RuntimeSmokeAdmissionError(
+            f"unsupported runtime smoke release identity: {normalized or '<missing>'}"
+        ) from exc
+
+
 _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS = frozenset(
     {"prediction_planner", "ppo", "sacadrl", "guarded_ppo", "predictive_mppi"}
 )
@@ -601,20 +649,32 @@ def _canonical_repo_artifact(path: Path, *, repo_root: Path, label: str) -> Path
 
 
 def _canonical_scenario_matrix_hash(
-    scenario_path: Path, *, repo_root: Path, scenario_id: str, seed: int
+    scenario_path: Path,
+    *,
+    repo_root: Path,
+    scenario_id: str,
+    seed: int,
+    scenario_override: dict[str, Any] | None = None,
 ) -> str:
     """Reproduce the scoped scenario digest written by the canonical campaign producer.
 
     Returns:
         Stable structural digest after map, seed, and kinematics normalization.
     """
-    payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
-    scenarios = payload.get("scenarios")
-    if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
-        raise RuntimeSmokeAdmissionError(
-            "canonical runtime smoke must resolve exactly one scenario"
-        )
-    scenario = dict(scenarios[0])
+    if scenario_override is None:
+        payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
+        scenarios = payload.get("scenarios")
+        if (
+            not isinstance(scenarios, list)
+            or len(scenarios) != 1
+            or not isinstance(scenarios[0], dict)
+        ):
+            raise RuntimeSmokeAdmissionError(
+                "canonical runtime smoke must resolve exactly one scenario"
+            )
+        scenario = dict(scenarios[0])
+    else:
+        scenario = dict(scenario_override)
     observed_id = str(scenario.get("name") or scenario.get("id") or "").strip()
     if observed_id != scenario_id:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario identifier mismatch")
@@ -622,7 +682,8 @@ def _canonical_scenario_matrix_hash(
     if isinstance(raw_map, str) and raw_map.strip():
         map_path = Path(raw_map)
         if not map_path.is_absolute():
-            map_path = scenario_path.parent / map_path
+            scenario_relative = scenario_path.parent / map_path
+            map_path = scenario_relative if scenario_relative.is_file() else repo_root / map_path
         resolved_map = map_path.resolve()
         if not resolved_map.is_relative_to(repo_root) or not resolved_map.is_file():
             raise RuntimeSmokeAdmissionError("canonical runtime smoke map path is invalid")
@@ -872,8 +933,11 @@ def _validate_episode_provenance_sidecar(  # noqa: C901, PLR0913, PLR0915
     )
 
 
-def _canonical_smoke_contract(  # noqa: C901
-    *, repo_root: Path, expected_planner_keys: tuple[str, ...]
+def _canonical_smoke_contract(  # noqa: C901, PLR0915
+    *,
+    repo_root: Path,
+    expected_planner_keys: tuple[str, ...],
+    contract: _RuntimeSmokeContract | None = None,
 ) -> tuple[Path, Path, Path, str, int, str, dict[str, str], dict[str, str | None]]:
     """Resolve the tracked smoke axes and planner algorithms from canonical inputs.
 
@@ -882,13 +946,14 @@ def _canonical_smoke_contract(  # noqa: C901
         expected scoped-scenario hash, planner-to-algorithm mapping, and
         planner-to-algorithm-config mapping.
     """
+    contract = contract or _RUNTIME_SMOKE_CONTRACTS[RUNTIME_SMOKE_RELEASE_ID]
     manifest_path = _canonical_repo_artifact(
-        repo_root / RUNTIME_SMOKE_MANIFEST,
+        repo_root / contract.manifest_path,
         repo_root=repo_root,
         label="canonical runtime smoke manifest",
     )
     config_path = _canonical_repo_artifact(
-        repo_root / RUNTIME_SMOKE_CONFIG,
+        repo_root / contract.config_path,
         repo_root=repo_root,
         label="canonical runtime smoke config",
     )
@@ -896,7 +961,7 @@ def _canonical_smoke_contract(  # noqa: C901
     config = _read_yaml_object(config_path, "canonical runtime smoke config")
     if tuple(expected_planner_keys) != RUNTIME_SMOKE_PLANNER_KEYS:
         raise RuntimeSmokeAdmissionError("caller planner roster is not the canonical 14-arm roster")
-    if manifest.get("release_id") != RUNTIME_SMOKE_RELEASE_ID:
+    if manifest.get("release_id") != contract.release_id:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke release identity mismatch")
     if manifest.get("campaign_config_sha256") != sha256_file(config_path):
         raise RuntimeSmokeAdmissionError("canonical runtime smoke config pin mismatch")
@@ -938,11 +1003,25 @@ def _canonical_smoke_contract(  # noqa: C901
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario pin mismatch")
     scenario_payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
     scenarios = scenario_payload.get("scenarios")
+    scenario_override: dict[str, Any] | None = None
     if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
-        raise RuntimeSmokeAdmissionError(
-            "canonical runtime smoke must resolve exactly one scenario"
-        )
-    scenario_id = str(scenarios[0].get("name") or scenarios[0].get("id") or "").strip()
+        try:
+            cfg = load_campaign_config(config_path, repository_root=repo_root)
+            resolved_scenarios = _load_campaign_scenarios(cfg, repository_root=repo_root)
+        except (OSError, TypeError, ValueError, RuntimeSmokeAdmissionError) as exc:
+            raise RuntimeSmokeAdmissionError(
+                "canonical runtime smoke scenario include resolution failed"
+            ) from exc
+        if len(resolved_scenarios) != 1 or not isinstance(resolved_scenarios[0], dict):
+            raise RuntimeSmokeAdmissionError(
+                "canonical runtime smoke must resolve exactly one scenario"
+            )
+        scenario_override = dict(resolved_scenarios[0])
+        scenario_id = str(
+            scenario_override.get("name") or scenario_override.get("id") or ""
+        ).strip()
+    else:
+        scenario_id = str(scenarios[0].get("name") or scenarios[0].get("id") or "").strip()
     if not scenario_id:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario identifier is missing")
     expected_scenario_matrix_hash = _canonical_scenario_matrix_hash(
@@ -950,6 +1029,7 @@ def _canonical_smoke_contract(  # noqa: C901
         repo_root=repo_root,
         scenario_id=scenario_id,
         seed=int(seeds[0]),
+        scenario_override=scenario_override,
     )
     algorithms = {str(entry["key"]): str(entry.get("algo", "")) for entry in enabled}
     algorithm_configs = {
@@ -973,6 +1053,7 @@ def _canonical_smoke_contract(  # noqa: C901
 def _validate_campaign_metadata(  # noqa: PLR0913
     *,
     campaign_root: Path,
+    contract: _RuntimeSmokeContract,
     expected_source_commit: str,
     campaign_id: Any,
     scenario_id: str,
@@ -1002,9 +1083,9 @@ def _validate_campaign_metadata(  # noqa: PLR0913
         block = payload.get("benchmark_release")
         block = block if isinstance(block, dict) else {}
         for field, expected in (
-            ("release_id", RUNTIME_SMOKE_RELEASE_ID),
-            ("manifest_path", RUNTIME_SMOKE_MANIFEST.as_posix()),
-            ("canonical_campaign_config", RUNTIME_SMOKE_CONFIG.as_posix()),
+            ("release_id", contract.release_id),
+            ("manifest_path", contract.manifest_path.as_posix()),
+            ("canonical_campaign_config", contract.config_path.as_posix()),
             ("manifest_sha256", sha256_file(manifest_path)),
             ("canonical_campaign_config_sha256", sha256_file(config_path)),
         ):
@@ -1023,7 +1104,7 @@ def _validate_campaign_metadata(  # noqa: PLR0913
     _require_equal(
         problems,
         campaign_manifest.get("scenario_matrix"),
-        "configs/scenarios/single/francis2023_blind_corner.yaml",
+        contract.scenario_path,
         "campaign manifest scenario path",
     )
     seed_policy = campaign_manifest.get("seed_policy")
@@ -1141,7 +1222,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     expected_planner_keys: tuple[str, ...],
     max_age_hours: float = 24.0,
 ) -> dict[str, Any]:
-    """Validate a byte-addressable smoke result before a full v0.2 campaign.
+    """Validate a byte-addressable smoke result before a full release campaign.
 
     Returns:
         Sanitized admission metadata suitable for release provenance and launch packets.
@@ -1176,6 +1257,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         campaign_root=campaign_root,
         label="runtime smoke campaign summary",
     )
+    result_release = result.get("benchmark_release")
+    result_release = result_release if isinstance(result_release, dict) else {}
+    contract = _runtime_smoke_contract_for_release_id(result_release.get("release_id"))
     (
         manifest_path,
         config_path,
@@ -1188,22 +1272,22 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     ) = _canonical_smoke_contract(
         repo_root=resolved_repo,
         expected_planner_keys=expected_planner_keys,
+        contract=contract,
     )
 
     problems: list[str] = []
-    release = result.get("benchmark_release")
-    release = release if isinstance(release, dict) else {}
-    _require_equal(problems, release.get("release_id"), RUNTIME_SMOKE_RELEASE_ID, "release_id")
+    release = result_release
+    _require_equal(problems, release.get("release_id"), contract.release_id, "release_id")
     _require_equal(
         problems,
         release.get("manifest_path"),
-        RUNTIME_SMOKE_MANIFEST.as_posix(),
+        contract.manifest_path.as_posix(),
         "runtime smoke manifest path",
     )
     _require_equal(
         problems,
         release.get("canonical_campaign_config"),
-        RUNTIME_SMOKE_CONFIG.as_posix(),
+        contract.config_path.as_posix(),
         "runtime smoke config path",
     )
     _require_equal(
@@ -1220,6 +1304,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     )
     _validate_campaign_metadata(
         campaign_root=campaign_root,
+        contract=contract,
         expected_source_commit=str(expected_source_commit).strip().lower(),
         campaign_id=result.get("campaign_id"),
         scenario_id=scenario_id,
@@ -1244,8 +1329,8 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         problems, tuple(planners.get("keys") or ()), expected_planner_keys, "planner roster"
     )
     for field, expected in (
-        ("release_id", RUNTIME_SMOKE_RELEASE_ID),
-        ("canonical_campaign_config", RUNTIME_SMOKE_CONFIG.as_posix()),
+        ("release_id", contract.release_id),
+        ("canonical_campaign_config", contract.config_path.as_posix()),
     ):
         if field in resolved:
             _require_equal(problems, resolved.get(field), expected, f"resolved manifest {field}")
@@ -1254,7 +1339,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         _require_equal(
             problems,
             resolved_scenario.get("matrix_path"),
-            "configs/scenarios/single/francis2023_blind_corner.yaml",
+            contract.scenario_path,
             "resolved manifest scenario path",
         )
     resolved_seed_policy = resolved.get("seed_policy")
@@ -1427,7 +1512,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         _require_equal(
             problems,
             summary_release.get("release_id"),
-            RUNTIME_SMOKE_RELEASE_ID,
+            contract.release_id,
             "summary release identity",
         )
         _require_equal(

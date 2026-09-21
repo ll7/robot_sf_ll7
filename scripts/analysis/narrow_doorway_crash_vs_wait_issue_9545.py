@@ -113,7 +113,7 @@ def _checkpoint_gamma() -> tuple[float | None, str]:
                 m = re.search(rb'"gamma": ([0-9.]+)', raw)
                 if m:
                     return float(m.group(1)), str(cand)
-        except Exception:  # noqa: BLE001 - provenance best-effort, reported explicitly
+        except (OSError, ValueError, KeyError, RuntimeError):
             continue
     return None, "unavailable"
 
@@ -126,7 +126,7 @@ def _git_head() -> str:
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
         )
         return out.stdout.strip()
-    except Exception:  # noqa: BLE001
+    except (OSError, ValueError, RuntimeError):
         return "unavailable"
 
 
@@ -151,7 +151,7 @@ def _reward_git_sha() -> str:
         )
         _ = lines
         return blob.stdout.strip()
-    except Exception:  # noqa: BLE001
+    except (OSError, ValueError, RuntimeError):
         return "unavailable"
 
 
@@ -179,7 +179,7 @@ def _min_obstacle_clearance(env) -> float:
     radius = float(getattr(env.env_config.robot_config, "radius", 1.0))
     try:
         obstacles = np.asarray(sim.map_def.obstacles_pysf, dtype=float)
-    except Exception:  # noqa: BLE001
+    except (AttributeError, TypeError, ValueError):
         return float("nan")
     best = float("inf")
     pts = np.asarray([rx, ry], dtype=float)
@@ -202,7 +202,7 @@ def _min_ped_distance(env) -> float:
     rx, ry = float(sim.robot_pos[0][0]), float(sim.robot_pos[0][1])
     try:
         peds = np.asarray(sim.ped_pos, dtype=float).reshape(-1, 2)
-    except Exception:  # noqa: BLE001
+    except (AttributeError, TypeError, ValueError):
         return float("nan")
     if peds.size == 0:
         return float("inf")
@@ -243,7 +243,7 @@ def _rollout_policy(env, planner, max_steps: int, obs):
         rx, ry = float(env.simulator.robot_pos[0][0]), float(env.simulator.robot_pos[0][1])
         try:
             peds = np.asarray(env.simulator.ped_pos, dtype=float).reshape(-1, 2).tolist()
-        except Exception:  # noqa: BLE001
+        except (AttributeError, TypeError, ValueError):
             peds = []
         rows.append(
             {
@@ -286,7 +286,7 @@ def _env_obs_to_runner_obs(env, obs):
     peds_vel = np.asarray(get("pedestrians_velocities", np.zeros((0, 2))), dtype=float)
     try:
         dt = float(np.asarray(get("sim_timestep", [0.1])).reshape(-1)[0])
-    except Exception:  # noqa: BLE001
+    except (TypeError, ValueError):
         dt = 0.1
     agents = []
     for i in range(peds_pos.reshape(-1, 2).shape[0]):
@@ -303,7 +303,7 @@ def _env_obs_to_runner_obs(env, obs):
     heading = get("robot_heading", [0.0])
     try:
         heading = float(np.asarray(heading).reshape(-1)[0])
-    except Exception:  # noqa: BLE001
+    except (TypeError, ValueError):
         heading = 0.0
     return {
         "robot": {

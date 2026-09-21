@@ -196,3 +196,30 @@ revision, and source identity; delayed or foreign responses reopen as unavailabl
 than changing the remembered selection. Path-like or otherwise unsafe reasons
 and references also clear positive capability, classification, and fidelity
 claims. The status-specific envelope omits generic operation and receipt data.
+
+## Codex accounting and route gate (BA-05 amendment)
+
+The App Server route is not accepted merely because a local executable is
+installed. For hosted or live evidence, configure an exact
+`required_route_id`, `required_provider`, and `required_model_id` with
+`require_explicit_route: true`; model discovery does not fall back to a
+default or premium model when the requested model is absent.
+
+Choose one accounting mode explicitly:
+
+- `offline` refuses provider work and remains provider-free/read-only.
+- `local_accounting` reserves finite local token, compute, and issue-write
+  budgets, records observed usage and overspend, and treats retries,
+  cancellation, reconnect, missing usage, and nested sessions as durable
+  ledger outcomes. It is **not** a physical provider cap.
+- `strict_provider_ceiling` is admitted only with the exact route above and a
+  verified finite `provider_compute_ceiling`. It refuses admission when the
+  ceiling is absent or a reservation exceeds it. The current App Server
+  contract does not expose a verified token ceiling, so token accounting stays
+  local unless a future provider capability proves otherwise.
+
+Receipts expose `accounting_mode`, `provider_ceiling_verified`,
+`physical_provider_cap_enforced`, reservation, and `overspent`. A green local
+or hosted test therefore proves the selected accounting contract only; it
+must not be reported as evidence of an external provider quota or a completed
+BA-06 benchmark workflow.

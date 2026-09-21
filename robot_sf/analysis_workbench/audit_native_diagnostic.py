@@ -51,7 +51,6 @@ from robot_sf.analysis_workbench.review_contracts import (
     resolve_admitted_source,
 )
 from robot_sf.benchmark.analysis_trace import trace_artifact_sha256
-from robot_sf.benchmark.runner import run_episode
 
 NATIVE_DIAGNOSTIC_SCHEMA_VERSION = "native-diagnostic.v1"
 NATIVE_SOURCE_SCHEMA_VERSION = "native-diagnostic-source.v1"
@@ -1562,6 +1561,14 @@ def _runner_kwargs(
 def _native_child(conn: Any, kwargs: Mapping[str, Any]) -> None:
     """Execute one canonical runner call in the owned child process."""
     try:
+        # Import the heavy canonical runner inside the owned child.  The
+        # parent needs a readiness boundary because macOS can spend a
+        # substantial amount of time importing the simulator stack under
+        # ``spawn``; that startup is not episode compute and must not consume
+        # the per-execution deadline.
+        from robot_sf.benchmark.runner import run_episode  # noqa: PLC0415
+
+        conn.send({"status": "ready"})
         record = run_episode(**dict(kwargs))
         conn.send({"status": "ok", "record": record})
     except BaseException as error:  # pragma: no cover - exercised through parent transport
@@ -1617,7 +1624,14 @@ def _run_bounded(
     try:
         process.start()
         child_conn.close()
-        deadline = started + timeout_s
+        # ``spawn`` imports the canonical runner in the child before the
+        # episode can begin.  Bound that startup separately, then apply the
+        # caller's timeout to actual runner execution.  This preserves the
+        # fail-closed process boundary while avoiding a platform-dependent
+        # import penalty (notably on macOS).
+        startup_timeout_s = min(MAX_TIMEOUT_S, max(5.0, timeout_s))
+        deadline = started + startup_timeout_s
+        ready = False
         while True:
             if cancel_event is not None and cancel_event.is_set():
                 settled = _terminate_child(process)
@@ -1632,7 +1646,11 @@ def _run_bounded(
                 settled = _terminate_child(process)
                 return {
                     "status": STATUS_UNAVAILABLE if settled else STATUS_FAILED,
-                    "reason": "per_execution_timeout: owned child terminated",
+                    "reason": (
+                        "per_execution_timeout: owned child terminated"
+                        if ready
+                        else "child_startup_timeout: owned child terminated"
+                    ),
                     "settled": settled,
                     "elapsed_s": time.monotonic() - started,
                 }
@@ -1652,6 +1670,10 @@ def _run_bounded(
                         "reason": "child_transport_failed: malformed result",
                         "elapsed_s": time.monotonic() - started,
                     }
+                if outcome.get("status") == "ready":
+                    ready = True
+                    deadline = time.monotonic() + timeout_s
+                    continue
                 if outcome.get("status") != "ok":
                     return {
                         "status": STATUS_FAILED,

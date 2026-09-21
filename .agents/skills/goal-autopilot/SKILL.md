@@ -265,6 +265,20 @@ Each cycle iteration follows a fixed phase order:
 
 ### Reconciliation and empty-queue policy
 
+Prefer the executable driver for the whole sequence (issue #9534). It composes
+the canonical owners, refuses terminal output, and emits a versioned receipt
+that doubles as the compact resume surface:
+
+```bash
+uv run python scripts/dev/autopilot_recovery_cycle.py \
+  --repo ll7/robot_sf_ll7 --json
+```
+
+Receipt schema: `autopilot_recovery_cycle_receipt.v1` (lanes evaluated, lane
+errors, skipped lanes with reasons, every lane count, `next_action`,
+`terminal_refused`, stale lifecycle rows, discovery decision). The driver is
+report-only; it never writes labels, issues, or claims.
+
 When the candidate queue has no claimable leaf, run the following bounded recovery sequence before
 declaring zero work:
 

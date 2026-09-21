@@ -928,6 +928,7 @@ def test_unknown_verification_variant_still_rejected() -> None:
     "heading",
     [
         "Inputs / Affected Files",
+        "Inputs / Affected Surfaces",
         "Inputs and Affected Files",
         "Inputs / Context",
         "Inputs / Predecessor",

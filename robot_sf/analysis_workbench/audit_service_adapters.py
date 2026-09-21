@@ -14,17 +14,21 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
 import time
 import uuid
+from collections import Counter
 from collections.abc import Mapping
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.analysis_workbench.audit_contracts import (
     ReviewPacket,
+    ReviewRecord,
     canonical_json,
     record_from_dict,
+    record_to_dict,
 )
 from robot_sf.analysis_workbench.audit_coverage import AuditHealthReport
 from robot_sf.analysis_workbench.audit_queue import (
@@ -36,6 +40,7 @@ from robot_sf.analysis_workbench.audit_queue import (
     SelectionExplanation,
     SelectionResult,
 )
+from robot_sf.analysis_workbench.audit_scan import AuditScanReport
 from robot_sf.analysis_workbench.audit_service import (
     AuditContextConflict,
     AuditNextAmbiguous,
@@ -43,10 +48,11 @@ from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
     CapabilityResult,
     CapabilityUnavailable,
+    _episode_ref_matches_row,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
     from pathlib import Path
 
 try:
@@ -58,6 +64,58 @@ except ImportError:  # pragma: no cover - the queue itself is POSIX-bound.
 _NEXT_COORDINATION_SCHEMA = "audit-queue-next.v1"
 _NEXT_COORDINATION_MAX_BYTES = 4 * 1024 * 1024
 _NEXT_COORDINATION_MAX_COMPLETED = 512
+
+
+def coverage_reviews_for_scan(
+    scan: AuditScanReport, reviews: tuple[ReviewRecord, ...]
+) -> tuple[ReviewRecord, ...]:
+    """Project BA-02 episode IDs onto BA-04's literal inventory IDs.
+
+    This is a read-only projection of trusted typed evidence.  A generated
+    EpisodeRef ID earns credit only when its *full* identity matches exactly
+    one readable inventory row and no other ref claims that row.  Ambiguous
+    generated IDs are omitted, including a collision with a literal row ID.
+    BA-04 still checks the receipt's source and scan tokens independently.
+
+    Returns:
+        Typed reviews with only unambiguous generated IDs projected.
+    """
+
+    if not isinstance(scan, AuditScanReport) or any(
+        not isinstance(review, ReviewRecord) for review in reviews
+    ):
+        raise ValueError("coverage projection requires typed scan and reviews")
+    row_counts = Counter(item.episode_id for item in scan.inventory)
+    ref_ids = {ref.episode_id for ref in scan.episode_refs}
+    candidate_rows: dict[str, str] = {}
+    claimed_rows: dict[str, int] = {}
+    for ref in scan.episode_refs:
+        if (
+            ref.campaign_digest != scan.audit.campaign_digest
+            or ref.source_digest != scan.audit.source_digest
+            or ref.source != scan.audit.source
+        ):
+            continue
+        matches = [
+            item.episode_id
+            for item in scan.inventory
+            if item.readable and _episode_ref_matches_row(ref, item.row)
+        ]
+        if len(matches) != 1 or row_counts[matches[0]] != 1:
+            continue
+        candidate_rows[ref.episode_id] = matches[0]
+        claimed_rows[matches[0]] = claimed_rows.get(matches[0], 0) + 1
+
+    projected: list[ReviewRecord] = []
+    for review in reviews:
+        if review.episode_id not in ref_ids:
+            projected.append(review)
+            continue
+        row_id = candidate_rows.get(review.episode_id)
+        if row_id is None or claimed_rows[row_id] != 1:
+            continue
+        projected.append(replace(review, episode_id=row_id))
+    return tuple(projected)
 
 
 def _next_coordination_path(state_path: Path) -> Path:
@@ -176,24 +234,82 @@ class AuditSourceBinding:
             raise AuditContextConflict("audit adapter source identity changed")
 
 
-@contextmanager
-def _next_lock(path: Path):
-    """Hold the durable cross-service lock for one queue state path."""
+class _NextLockState:
+    """In-process ownership state for one durable queue lock path."""
 
-    if fcntl is None:
-        raise CapabilityUnavailable("BA-02 service Next requires POSIX file locking")
-    lock_path = path.with_name(f"{path.name}.service-next.lock")
-    flags = os.O_RDWR | os.O_CREAT
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
+    __slots__ = ("depth", "mutex", "owner")
+
+    def __init__(self) -> None:
+        self.mutex = threading.RLock()
+        self.owner: int | None = None
+        self.depth = 0
+
+
+_NEXT_LOCK_STATES_GUARD = threading.Lock()
+_NEXT_LOCK_STATES: dict[str, _NextLockState] = {}
+
+
+def _open_next_lock_handle(lock_path: Path, flags: int) -> Any:
+    """Open the durable Next lock and close a raw descriptor on wrapper failure.
+
+    Returns:
+        The open text handle for the durable lock file.
+    """
+
+    descriptor: int | None = None
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         descriptor = os.open(lock_path, flags, 0o600)
         handle = os.fdopen(descriptor, "a+", encoding="utf-8")
+        descriptor = None
+        return handle
     except OSError as exc:
         raise CapabilityUnavailable("BA-02 service Next lock is unavailable") from exc
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+@contextmanager
+def _next_lock(path: Path):
+    """Hold the durable cross-service lock for one queue state path.
+
+    The queue callback contract permits a same-thread service operation to
+    re-enter the transaction (for example, an authority context CAS from a
+    ``Next`` callback).  ``flock`` on a newly opened descriptor is not
+    reentrant, so keep an in-process owner/depth guard around the durable lock:
+    nested calls reuse the outer descriptor while other threads still wait on
+    the per-path mutex and other processes still wait on ``flock``.
+    """
+
+    if fcntl is None:
+        raise CapabilityUnavailable("BA-02 service Next requires POSIX file locking")
+    lock_path = path.with_name(f"{path.name}.service-next.lock")
+    lock_key = os.path.abspath(os.fspath(lock_path))
+    with _NEXT_LOCK_STATES_GUARD:
+        lock_state = _NEXT_LOCK_STATES.setdefault(lock_key, _NextLockState())
+    lock_state.mutex.acquire()
+    owner = threading.get_ident()
+    if lock_state.owner == owner:
+        lock_state.depth += 1
+        try:
+            yield
+        finally:
+            lock_state.depth -= 1
+            lock_state.mutex.release()
+        return
+    lock_state.owner = owner
+    lock_state.depth = 1
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    handle = None
     locked = False
     try:
+        handle = _open_next_lock_handle(lock_path, flags)
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             locked = True
@@ -210,7 +326,13 @@ def _next_lock(path: Path):
                         "BA-02 service Next lock cannot be released"
                     ) from exc
         finally:
-            handle.close()
+            try:
+                if handle is not None:
+                    handle.close()
+            finally:
+                lock_state.owner = None
+                lock_state.depth = 0
+                lock_state.mutex.release()
 
 
 @dataclass(frozen=True)
@@ -229,13 +351,13 @@ class QueueNextResult:
         return self.selection_result.packet
 
     @property
-    def context(self) -> QueueSelectionContext:
+    def context(self):
         """Return BA-02's versioned selection context."""
 
         return self.selection_result.context
 
     @property
-    def selection(self) -> QueueSelectionContext:
+    def selection(self):
         """Compatibility alias for the queue selection context."""
 
         return self.selection_result.context
@@ -282,8 +404,9 @@ class QueueReadAdapter:
                 "source_revision": self.binding.source_revision,
                 "input_revision": queue.input_revision,
                 "state_revision": queue.state_revision,
+                "input_identity": queue.dataset.identity,
                 "ranked": [candidate.to_dict() for candidate in ranked],
-                "current_packet": packet.to_dict() if packet is not None else None,
+                "current_packet": record_to_dict(packet) if packet is not None else None,
             },
             provider="audit_queue.AuditQueue",
         )
@@ -752,12 +875,78 @@ class QueueNextAdapter:
             return result
 
     @contextmanager
-    def transaction_lock(self, *, context: AuditSelectionContext) -> Iterator[None]:
+    def transaction_lock(self, *, context: AuditSelectionContext):
         """Hold the durable Next lock across admission and queue commit."""
 
         queue = self._stable_queue(context)
         with _next_lock(queue.state_path):
             yield
+
+    def record_human_review(  # noqa: PLR0913
+        self,
+        *,
+        context: AuditSelectionContext,
+        before_review: Callable[[AuditQueue], None],
+        expected_state_revision: int,
+        expected_input_revision: int,
+        operation_id: str,
+        author_id: str,
+        outcome: str,
+        notes: str = "",
+        annotation_ids: tuple[str, ...] = (),
+    ) -> ReviewRecord:
+        """Commit one explicit full-human review of the current packet.
+
+        This uses the same durable coordination lock as Next. BA-02 remains
+        the owner of queue state and the BA-03 store remains the record owner.
+
+        Returns:
+            The BA-02 durable review receipt.
+        """
+
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in (expected_state_revision, expected_input_revision)
+        ):
+            raise AuditContextConflict("BA-02 review expected revisions are invalid")
+        queue = self._stable_queue(context)
+        with _next_lock(queue.state_path):
+            queue = self._stable_queue(context)
+            coordination = _read_coordination(_next_coordination_path(queue.state_path))
+            if coordination["active"] is not None:
+                raise AuditNextAmbiguous("BA-02 Next has an unresolved durable lease")
+            before_review(queue)
+            if (
+                queue.state_revision != expected_state_revision
+                or queue.input_revision != expected_input_revision
+            ):
+                raise AuditContextConflict("BA-02 review queue revision CAS failed")
+            if not (
+                queue.dataset._identity_admitted
+                and queue.dataset.source_identity
+                and queue.dataset.scan_identity
+            ):
+                raise CapabilityUnavailable("BA-02 review lacks typed BA-01 scan admission")
+            packet = queue.current_packet
+            if (
+                packet is None
+                or packet.packet_id != context.reference_id
+                or packet.primary.episode_id != context.episode_id
+            ):
+                raise AuditContextConflict("BA-02 review is not bound to the current packet")
+            try:
+                return queue.record_review(
+                    context.episode_id,
+                    scope="full_episode",
+                    outcome=outcome,
+                    author_kind="human",
+                    author_id=author_id,
+                    notes=notes,
+                    annotation_ids=annotation_ids,
+                    operation_id=operation_id,
+                )
+            except (QueueConflictError, QueueOperationConflictError, QueueStateError) as exc:
+                raise AuditContextConflict("BA-02 review queue commit conflicted") from exc
 
     def select_next(
         self,
@@ -896,6 +1085,10 @@ class CoverageReadAdapter:
 
     binding: AuditSourceBinding
     report_provider: Callable[[], AuditHealthReport]
+    # BA-04's provenance revision may be the source commit, while BA-05's
+    # integer source_revision is a separate service CAS dimension.  The
+    # trusted launcher supplies the former when it differs.
+    report_source_revision: str | None = None
 
     def read(self, *, context: AuditSelectionContext) -> CapabilityResult:
         """Return deficits and evidence status; never infer missing inputs as complete."""
@@ -908,7 +1101,12 @@ class CoverageReadAdapter:
         if (
             identity.campaign_digest != self.binding.campaign_digest
             or identity.source_digest != self.binding.source_digest
-            or identity.source_revision != str(self.binding.source_revision)
+            or identity.source_revision
+            != (
+                str(self.binding.source_revision)
+                if self.report_source_revision is None
+                else self.report_source_revision
+            )
         ):
             raise AuditContextConflict("BA-04 report input identity changed")
         return CapabilityResult(

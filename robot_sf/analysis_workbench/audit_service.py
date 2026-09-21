@@ -28,6 +28,7 @@ import secrets
 import threading
 import uuid
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -48,9 +49,11 @@ from robot_sf.analysis_workbench.audit_contracts import (
     ActionRecord,
     Annotation,
     AuditContractError,
+    DetectorRuleProposal,
     EpisodeRef,
     Finding,
     Reference,
+    ReviewRecord,
     Signal,
     canonical_json,
     record_from_dict,
@@ -70,6 +73,7 @@ from robot_sf.analysis_workbench.audit_similarity import (
     find_similar_cases,
 )
 from robot_sf.analysis_workbench.audit_store import (
+    AuditConflictError,
     AuditStore,
     AuditStoreError,
     CommitResult,
@@ -184,6 +188,9 @@ MAX_CONTEXT_NODES = 128
 MAX_PAYLOAD_DEPTH = 24
 NATIVE_DIAGNOSTIC_OPERATION_TYPE = "diagnostic.native"
 NATIVE_DIAGNOSTIC_DEFAULT_COMPUTE_COST = 2.0
+ARTIFACT_STATUS_SCHEMA_VERSION = "audit-artifact-status.v1"
+NATIVE_DIAGNOSTIC_CAMPAIGN_ROW_SCHEMA_VERSION = "native-diagnostic-campaign-row.v1"
+
 
 _T = TypeVar("_T")
 
@@ -1290,6 +1297,170 @@ class CapabilityResult:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeDiagnosticCampaignRowBinding:
+    """Closed launcher claim joining one campaign row to native source bytes."""
+
+    campaign_uri: str
+    campaign_sha256: str
+    native_uri: str
+    native_sha256: str
+    episode_id: str
+    scenario_id: str
+    seed: int
+    planner_id: str
+    source_commit: str
+    config_identity: str
+    schema_version: str = NATIVE_DIAGNOSTIC_CAMPAIGN_ROW_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        """Reject malformed descriptors even when constructed without parsing."""
+
+        if self.schema_version != NATIVE_DIAGNOSTIC_CAMPAIGN_ROW_SCHEMA_VERSION:
+            raise AuditValidationError("native diagnostic campaign row schema is unsupported")
+        for name in (
+            "campaign_uri",
+            "native_uri",
+            "episode_id",
+            "scenario_id",
+            "planner_id",
+            "config_identity",
+        ):
+            _bounded_text(getattr(self, name), name=f"native diagnostic campaign row {name}")
+        for name in ("campaign_sha256", "native_sha256"):
+            value = _bounded_text(
+                getattr(self, name), name=f"native diagnostic campaign row {name}"
+            )
+            if len(value) != 64:
+                raise AuditValidationError(
+                    f"native diagnostic campaign row {name} must be a 64-hex SHA-256"
+                )
+            try:
+                int(value, 16)
+            except ValueError as exc:
+                raise AuditValidationError(
+                    f"native diagnostic campaign row {name} must be a 64-hex SHA-256"
+                ) from exc
+        if (
+            isinstance(self.seed, bool)
+            or not isinstance(self.seed, int)
+            or self.seed < 0
+            or self.seed >= 2**32
+        ):
+            raise AuditValidationError(
+                "native diagnostic campaign row seed must be a non-negative 32-bit integer"
+            )
+        commit = _bounded_text(
+            self.source_commit, name="native diagnostic campaign row source_commit"
+        )
+        if len(commit) != 40:
+            raise AuditValidationError(
+                "native diagnostic campaign row source_commit must be a 40-hex commit SHA"
+            )
+        try:
+            int(commit, 16)
+        except ValueError as exc:
+            raise AuditValidationError(
+                "native diagnostic campaign row source_commit must be a 40-hex commit SHA"
+            ) from exc
+
+    @classmethod
+    def from_mapping(  # noqa: C901
+        cls, payload: Mapping[str, Any]
+    ) -> NativeDiagnosticCampaignRowBinding:
+        """Parse a bounded, immutable campaign/native join descriptor."""
+
+        if not isinstance(payload, Mapping):
+            raise AuditValidationError("native diagnostic campaign row must be a mapping")
+        allowed = {
+            "schema_version",
+            "campaign_uri",
+            "campaign_sha256",
+            "native_uri",
+            "native_sha256",
+            "episode_id",
+            "scenario_id",
+            "seed",
+            "planner_id",
+            "source_commit",
+            "config_identity",
+        }
+        unknown = set(payload) - allowed
+        if unknown:
+            raise AuditValidationError(
+                "native diagnostic campaign row contains unknown fields: "
+                + ", ".join(sorted(unknown))
+            )
+        if payload.get("schema_version", NATIVE_DIAGNOSTIC_CAMPAIGN_ROW_SCHEMA_VERSION) != (
+            NATIVE_DIAGNOSTIC_CAMPAIGN_ROW_SCHEMA_VERSION
+        ):
+            raise AuditValidationError("native diagnostic campaign row schema is unsupported")
+
+        def text(name: str) -> str:
+            value = payload.get(name)
+            return _bounded_text(value, name=f"native diagnostic campaign row {name}")
+
+        def digest(name: str) -> str:
+            value = text(name)
+            if len(value) != 64:
+                raise AuditValidationError(
+                    f"native diagnostic campaign row {name} must be a 64-hex SHA-256"
+                )
+            try:
+                int(value, 16)
+            except ValueError as exc:
+                raise AuditValidationError(
+                    f"native diagnostic campaign row {name} must be a 64-hex SHA-256"
+                ) from exc
+            return value.lower()
+
+        seed = payload.get("seed")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0 or seed >= 2**32:
+            raise AuditValidationError(
+                "native diagnostic campaign row seed must be a non-negative 32-bit integer"
+            )
+        source_commit = text("source_commit").lower()
+        if len(source_commit) != 40:
+            raise AuditValidationError(
+                "native diagnostic campaign row source_commit must be a 40-hex commit SHA"
+            )
+        try:
+            int(source_commit, 16)
+        except ValueError as exc:
+            raise AuditValidationError(
+                "native diagnostic campaign row source_commit must be a 40-hex commit SHA"
+            ) from exc
+        return cls(
+            campaign_uri=text("campaign_uri"),
+            campaign_sha256=digest("campaign_sha256"),
+            native_uri=text("native_uri"),
+            native_sha256=digest("native_sha256"),
+            episode_id=text("episode_id"),
+            scenario_id=text("scenario_id"),
+            seed=seed,
+            planner_id=text("planner_id"),
+            source_commit=source_commit,
+            config_identity=text("config_identity"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the closed descriptor without caller/session authority."""
+
+        return {
+            "schema_version": self.schema_version,
+            "campaign_uri": self.campaign_uri,
+            "campaign_sha256": self.campaign_sha256,
+            "native_uri": self.native_uri,
+            "native_sha256": self.native_sha256,
+            "episode_id": self.episode_id,
+            "scenario_id": self.scenario_id,
+            "seed": self.seed,
+            "planner_id": self.planner_id,
+            "source_commit": self.source_commit,
+            "config_identity": self.config_identity,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class NativeDiagnosticBinding:
     """Launcher-owned native source, request, recipe, and trust admission.
 
@@ -1301,6 +1472,7 @@ class NativeDiagnosticBinding:
     admission: NativeDiagnosticAdmission
     request: ComponentRequest
     recipe: ExperimentRecipe
+    campaign_row: NativeDiagnosticCampaignRowBinding | None = None
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> NativeDiagnosticBinding:
@@ -1310,7 +1482,7 @@ class NativeDiagnosticBinding:
 
         if not isinstance(payload, Mapping):
             raise AuditValidationError("native diagnostic binding must be a mapping")
-        allowed = {"admission", "request", "recipe"}
+        allowed = {"admission", "request", "recipe", "campaign_row"}
         unknown = set(payload) - allowed
         if unknown:
             raise AuditValidationError(
@@ -1344,7 +1516,22 @@ class NativeDiagnosticBinding:
             raise AuditValidationError(f"invalid native diagnostic binding: {exc}") from exc
         if len(request.sources) != 1:
             raise AuditValidationError("native diagnostic binding requires exactly one source")
-        return cls(admission=admission, request=request, recipe=recipe)
+        campaign_row = payload.get("campaign_row")
+        campaign_row = (
+            None
+            if campaign_row is None
+            else (
+                campaign_row
+                if isinstance(campaign_row, NativeDiagnosticCampaignRowBinding)
+                else NativeDiagnosticCampaignRowBinding.from_mapping(campaign_row)
+            )
+        )
+        return cls(
+            admission=admission,
+            request=request,
+            recipe=recipe,
+            campaign_row=campaign_row,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a bounded launcher configuration representation."""
@@ -1361,11 +1548,14 @@ class NativeDiagnosticBinding:
         recipe = dict(self.recipe.document)
         recipe.setdefault("schema_version", EXPERIMENT_RECIPE_SCHEMA_VERSION)
         recipe.setdefault("recipe_id", self.recipe.recipe_id)
-        return {
+        result = {
             "admission": self.admission.to_dict(),
             "request": request,
             "recipe": recipe,
         }
+        if self.campaign_row is not None:
+            result["campaign_row"] = self.campaign_row.to_dict()
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -1489,6 +1679,21 @@ class AuditQueueNextAdapter(Protocol):
 
     def transaction_lock(self, *, context: AuditSelectionContext) -> Any:
         """Hold the adapter's durable lock across operation admission."""
+
+    def record_human_review(  # noqa: PLR0913
+        self,
+        *,
+        context: AuditSelectionContext,
+        before_review: Callable[[Any], None],
+        expected_state_revision: int,
+        expected_input_revision: int,
+        operation_id: str,
+        author_id: str,
+        outcome: str,
+        notes: str = "",
+        annotation_ids: tuple[str, ...] = (),
+    ) -> ReviewRecord:
+        """Persist one full-human receipt under the same lock as Next."""
 
     def current(self, *, context: AuditSelectionContext) -> Any:
         """Return the durable current selection for replay reconstruction."""
@@ -2772,6 +2977,31 @@ class AuditService:
             )
         return selected
 
+    def _queue_transaction_lock(self, context: AuditSelectionContext) -> Any:
+        """Return the queue lock that serializes authority changes with review writes.
+
+        A source-bound context identifies the queue whose review commit must be
+        serialized with context and cancellation CAS operations.  The initial
+        context bind is intentionally exempt: before ``source_identity`` is
+        admitted, requiring a queue lock would make it impossible to attach a
+        newly opened session to its queue.  Callers must acquire this lock
+        before ``self._lock`` so the durable queue -> authority ordering stays
+        consistent with :class:`QueueNextAdapter`.  This is a pre-commit
+        serialization boundary, not a crash-atomic transaction across the
+        queue, authority, and source-byte stores; callers without a bound
+        queue adapter cannot participate in it.
+        """
+
+        adapter = self.next_adapter or self.queue_next_adapter
+        transaction_lock = (
+            getattr(adapter, "transaction_lock", None)
+            if adapter is not None and context.source_identity
+            else None
+        )
+        if not callable(transaction_lock):
+            return nullcontext()
+        return transaction_lock(context=context)
+
     def _source_identities(self, session: AuditSession) -> frozenset[str]:
         """Return the exact source identities accepted for this session."""
 
@@ -3000,14 +3230,15 @@ class AuditService:
             raise AuditContextConflict("annotation provenance does not match selected source")
         self._validate_annotation_references(session, annotation)
 
-    def _read_saved_records_for_context(
+    def _read_saved_records_for_context(  # noqa: C901, PLR0912
         self,
         session: AuditSession,
         *,
         episode_id: str,
         episode_ref: EpisodeRef,
+        campaign: CampaignView,
     ) -> tuple[StoredRecord, ...]:
-        """Read current source-bound annotation/finding envelopes from BA-03."""
+        """Read current source-bound annotation/finding/proposal envelopes."""
 
         records: list[StoredRecord] = []
         for record_type_name, record_class in (
@@ -3037,6 +3268,38 @@ class AuditService:
                 if self._contains_sensitive_text(stored.to_dict(), session.session_token):
                     raise CapabilityUnavailable("durable record contains a session secret")
                 records.append(stored)
+        for stored in self.store.list_records(record_type="detector_rule_proposal"):
+            if not isinstance(stored, StoredRecord):
+                raise AuditStoreError("durable record projection is malformed")
+            if stored.deleted or stored.record is None:
+                raise AuditStoreError("deleted durable record reached active projection")
+            if stored.record_type != "detector_rule_proposal" or not isinstance(
+                stored.record, DetectorRuleProposal
+            ):
+                raise AuditStoreError("durable proposal type is inconsistent")
+            if stored.revision <= 0 or stored.global_revision <= 0:
+                raise AuditStoreError("durable proposal revision is invalid")
+            if not self._saved_proposal_for_context(
+                session,
+                stored,
+                episode_id=episode_id,
+                episode_ref=episode_ref,
+            ):
+                continue
+            try:
+                self._validate_detector_rule_proposal_evidence(
+                    session,
+                    stored.record,
+                    selected=session.context,
+                    campaign=campaign,
+                )
+            except (AuditContextConflict, CapabilityUnavailable):
+                # A canonical proposal with stale or unknown BA-03 evidence
+                # must never be promoted into a current selected read.
+                continue
+            if self._contains_sensitive_text(stored.to_dict(), session.session_token):
+                raise CapabilityUnavailable("durable record contains a session secret")
+            records.append(stored)
         return tuple(sorted(records, key=lambda item: (item.record_id, item.record_type)))
 
     def _validate_context_source(
@@ -4066,6 +4329,7 @@ class AuditService:
                 target,
                 episode_id=selected_episode_id,
                 episode_ref=episode.episode_ref,
+                campaign=campaign,
             )
 
         result, _ = self._execute(
@@ -4123,60 +4387,68 @@ class AuditService:
         opid = self._operation_id(operation_id)
 
         def update() -> AuditSelectionContext:
-            with self._lock:
-                self._assert_source(target)
+            # Review writes hold the same durable queue lock across authority
+            # preflight and queue receipt commit.  Acquire it before the
+            # service lock so context CAS keeps the queue -> authority order;
+            # an empty source identity is the initial bind and intentionally
+            # uses the no-op context from ``_queue_transaction_lock``.
+            with self._queue_transaction_lock(target.context):
+                with self._lock:
+                    self._assert_source(target)
 
-                def update_state(working: AuditSession, state: dict[str, Any]) -> dict[str, Any]:
-                    self._check_session(working)
-                    if any(
-                        isinstance(raw, Mapping)
-                        and raw.get("session_id") == working.session_id
-                        and self._reservation_send_lease(raw) is not None
-                        for raw in state["reservations"].values()
-                    ):
-                        raise AuditContextConflict("provider send is in flight")
-                    if expected_context_revision != working.context.context_revision:
-                        raise AuditContextConflict(
-                            "context revision CAS failed",
-                            expected=working.context.context_revision,
-                            actual=expected_context_revision,
-                        )
-                    if selected.context_revision != expected_context_revision + 1:
-                        raise AuditContextConflict(
-                            "new context must advance exactly one revision",
-                            expected=expected_context_revision + 1,
-                            actual=selected.context_revision,
-                        )
-                    self._validate_context_source(working, selected)
-                    updated = selected
-                    if working.source_revision not in (0, ""):
-                        if selected.source_revision in (0, ""):
-                            updated = replace(selected, source_revision=working.source_revision)
-                        elif selected.source_revision != working.source_revision:
+                    def update_state(
+                        working: AuditSession, state: dict[str, Any]
+                    ) -> dict[str, Any]:
+                        self._check_session(working)
+                        if any(
+                            isinstance(raw, Mapping)
+                            and raw.get("session_id") == working.session_id
+                            and self._reservation_send_lease(raw) is not None
+                            for raw in state["reservations"].values()
+                        ):
+                            raise AuditContextConflict("provider send is in flight")
+                        if expected_context_revision != working.context.context_revision:
                             raise AuditContextConflict(
-                                "context source revision does not match session source",
-                                expected=working.source_revision,
-                                actual=selected.source_revision,
+                                "context revision CAS failed",
+                                expected=working.context.context_revision,
+                                actual=expected_context_revision,
                             )
-                    elif selected.source_revision != working.context.source_revision:
-                        raise AuditContextConflict(
-                            "context source revision changed without source CAS"
-                        )
-                    self._set_context_locked(working, updated)
-                    return updated.to_dict()
+                        if selected.context_revision != expected_context_revision + 1:
+                            raise AuditContextConflict(
+                                "new context must advance exactly one revision",
+                                expected=expected_context_revision + 1,
+                                actual=selected.context_revision,
+                            )
+                        self._validate_context_source(working, selected)
+                        updated = selected
+                        if working.source_revision not in (0, ""):
+                            if selected.source_revision in (0, ""):
+                                updated = replace(selected, source_revision=working.source_revision)
+                            elif selected.source_revision != working.source_revision:
+                                raise AuditContextConflict(
+                                    "context source revision does not match session source",
+                                    expected=working.source_revision,
+                                    actual=selected.source_revision,
+                                )
+                        elif selected.source_revision != working.context.source_revision:
+                            raise AuditContextConflict(
+                                "context source revision changed without source CAS"
+                            )
+                        self._set_context_locked(working, updated)
+                        return updated.to_dict()
 
-                value, _replayed = self._mutate_session_authority(
-                    target,
-                    transaction_id=f"authority.context.update:{target.session_id}:{opid}",
-                    request_digest=_digest(
-                        {
-                            "operation_id": opid,
-                            "context": selected.to_dict(),
-                            "expected_context_revision": expected_context_revision,
-                        }
-                    ),
-                    callback=update_state,
-                )
+                    value, _replayed = self._mutate_session_authority(
+                        target,
+                        transaction_id=f"authority.context.update:{target.session_id}:{opid}",
+                        request_digest=_digest(
+                            {
+                                "operation_id": opid,
+                                "context": selected.to_dict(),
+                                "expected_context_revision": expected_context_revision,
+                            }
+                        ),
+                        callback=update_state,
+                    )
             if not isinstance(value, Mapping):
                 raise AuditAuthorityError("context update returned malformed context")
             return AuditSelectionContext.from_mapping(value)
@@ -4226,7 +4498,10 @@ class AuditService:
             raise AuditPolicyError("cancel operation contains a sensitive value")
 
         def cancel() -> None:
-            with self._lock:
+            # Cancellation must linearize with an in-flight human review.
+            # Enter the durable queue lock before the service lock, matching
+            # the review/Next queue -> authority ordering.
+            with self._queue_transaction_lock(target.context), self._lock:
 
                 def cancel_state(working: AuditSession, state: dict[str, Any]) -> None:
                     for event in tuple(self._native_cancel_events.get(working.session_id, ())):
@@ -4734,6 +5009,7 @@ class AuditService:
         request_digest: str = "",
         enforce_source: bool = True,
         enforce_active: bool = True,
+        enforce_active_at_completion: bool = True,
         bind_request: bool = True,
         receipt_context_revision_provider: Callable[[], int | None] | None = None,
     ) -> tuple[ServiceResult[_T], OperationReceipt]:
@@ -4870,6 +5146,41 @@ class AuditService:
                         status="failed",
                         reason=str(exc),
                     )
+            if enforce_source:
+                try:
+                    self._assert_source(session, expected_source_revision=expected_source_revision)
+                except AuditContextConflict as exc:
+                    return self._operation_status_result(
+                        session,
+                        operation_id=opid,
+                        operation_type=operation_type,
+                        status="conflict",
+                        reason=str(exc),
+                    )
+                except AuditCancelled as exc:
+                    return self._operation_status_result(
+                        session,
+                        operation_id=opid,
+                        operation_type=operation_type,
+                        status="cancelled",
+                        reason=str(exc),
+                    )
+                except CapabilityUnavailable as exc:
+                    return self._operation_status_result(
+                        session,
+                        operation_id=opid,
+                        operation_type=operation_type,
+                        status="unavailable",
+                        reason=str(exc),
+                    )
+                except AuditPolicyError as exc:
+                    return self._operation_status_result(
+                        session,
+                        operation_id=opid,
+                        operation_type=operation_type,
+                        status="denied",
+                        reason=str(exc),
+                    )
             return ServiceResult(
                 existing.status, None, existing.reason, existing, session.context
             ), existing
@@ -4881,6 +5192,14 @@ class AuditService:
                 self._assert_source(session, expected_source_revision=expected_source_revision)
             if preflight is not None:
                 preflight()
+            # A preflight may scan a mutable campaign and then yield to the
+            # authority/charge transition.  Re-check the source immediately
+            # before charging or invoking the child when that gap exists;
+            # ordinary writes retain the post-save check as their source
+            # linearization point. Native-only callers keep their
+            # receipt-backed path by passing ``enforce_source=False``.
+            if enforce_source and (preflight is not None or durable_charge):
+                self._assert_source(session, expected_source_revision=expected_source_revision)
             if durable_charge:
                 if tokens or compute:
                     checked_tokens = _nonnegative_int(tokens, name="tokens")
@@ -4958,16 +5277,33 @@ class AuditService:
             )
             if operation_type == "session.kill_switch" and not reason:
                 reason = session.cancel_reason
-            receipt = self._record_action_result(
-                session,
-                opid,
-                operation_type,
-                status,
-                reason=reason,
-                result=value,
-                request_digest=request_digest,
-                context_revision=receipt_context_revision,
-            )
+            # Serialize the final active-session check with kill_switch and
+            # receipt publication.  A callback may have completed after a
+            # cancellation request; that result must not surface as success.
+            if enforce_active and enforce_active_at_completion:
+                with self._lock:
+                    self._check_session(session)
+                    receipt = self._record_action_result(
+                        session,
+                        opid,
+                        operation_type,
+                        status,
+                        reason=reason,
+                        result=value,
+                        request_digest=request_digest,
+                        context_revision=receipt_context_revision,
+                    )
+            else:
+                receipt = self._record_action_result(
+                    session,
+                    opid,
+                    operation_type,
+                    status,
+                    reason=reason,
+                    result=value,
+                    request_digest=request_digest,
+                    context_revision=receipt_context_revision,
+                )
             return ServiceResult(status, value, reason, receipt, selected), receipt
         except AuditNextBlocked as exc:
             # A different queue operation owns the committed sidecar lease.
@@ -5418,6 +5754,99 @@ class AuditService:
     find_related_cases = related_cases
     compatible_peers = related_cases
 
+    def record_human_review(  # noqa: PLR0913
+        self,
+        session: AuditSession | str,
+        *,
+        outcome: str,
+        notes: str = "",
+        annotation_ids: Sequence[str] = (),
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        expected_context_revision: int,
+        expected_queue_state_revision: int,
+        expected_queue_input_revision: int,
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[ReviewRecord]:
+        """Persist explicit full-episode human credit for the selected packet.
+
+        Selection, annotation, and agent activity never invoke this action.
+        A stale context or queue revision fails closed before BA-03 writes.
+        Source-bound context CAS and cancellation operations use the queue
+        adapter's durable transaction lock so they cannot cross this
+        preflight-to-receipt boundary concurrently.  Queue and authority
+        persistence remain separate crash-recovery domains.
+
+        Returns:
+            The committed review and durable service operation receipt.
+        """
+
+        target = self._session(session, token=token)
+        requested = self._bind_context(target, context)
+        checked_outcome = _bounded_text(outcome, name="review outcome")
+        checked_notes = _optional_text(notes, name="review notes")
+        if isinstance(annotation_ids, (str, bytes)) or not isinstance(annotation_ids, Sequence):
+            raise AuditValidationError("review annotation_ids must be a sequence")
+        checked_annotations = tuple(
+            _bounded_text(value, name="review annotation_id") for value in annotation_ids
+        )
+        for name, value in (
+            ("expected context revision", expected_context_revision),
+            ("expected queue state revision", expected_queue_state_revision),
+            ("expected queue input revision", expected_queue_input_revision),
+        ):
+            _nonnegative_int(value, name=name)
+        opid = self._operation_id(operation_id)
+        adapter = self.next_adapter or self.queue_next_adapter
+
+        def before_review(_queue: Any) -> None:
+            current = self._refresh_session(
+                target.session_id, token=target.session_token, existing=target
+            )
+            self._check_session(current)
+            self._assert_source(current)
+            if current.context != requested or (
+                current.context.context_revision != expected_context_revision
+            ):
+                raise AuditContextConflict("review selection context CAS failed")
+            if current.actor.kind != "human" or not current.actor.actor_id:
+                raise AuditPolicyError("full-human review requires an identified human session")
+
+        def commit() -> ReviewRecord:
+            if adapter is None:
+                raise CapabilityUnavailable("BA-02 durable review adapter is unavailable")
+            return adapter.record_human_review(
+                context=requested,
+                before_review=before_review,
+                expected_state_revision=expected_queue_state_revision,
+                expected_input_revision=expected_queue_input_revision,
+                operation_id=opid,
+                author_id=target.actor.actor_id,
+                outcome=checked_outcome,
+                notes=checked_notes,
+                annotation_ids=checked_annotations,
+            )
+
+        result, _ = self._execute(
+            target,
+            operation_type="write.review",
+            operation_id=opid,
+            context=requested,
+            request_digest=_operation_request_digest(
+                {
+                    "outcome": checked_outcome,
+                    "notes": checked_notes,
+                    "annotation_ids": checked_annotations,
+                    "context": requested.to_dict(),
+                    "expected_context_revision": expected_context_revision,
+                    "expected_queue_state_revision": expected_queue_state_revision,
+                    "expected_queue_input_revision": expected_queue_input_revision,
+                }
+            ),
+            callback=commit,
+        )
+        return result
+
     def next(  # noqa: C901, PLR0915
         self,
         session: AuditSession | str,
@@ -5582,6 +6011,10 @@ class AuditService:
             request_digest=request_digest,
             callback=select,
             bind_request=False,
+            # BA-02 and the context CAS have already committed inside select.
+            # A later kill switch cannot undo that packet or relabel its
+            # terminal receipt as an uncommitted cancellation.
+            enforce_active_at_completion=False,
             receipt_context_revision_provider=lambda: terminal_context_revision,
         )
         if (
@@ -5724,8 +6157,18 @@ class AuditService:
 
     coverage = read_coverage
 
-    def _native_binding_for_session(self, session: AuditSession) -> NativeDiagnosticBinding:
-        """Select one trusted binding matching the immutable session source."""
+    def _native_binding_for_session(
+        self, session: AuditSession, *, allow_campaign_source: bool = False
+    ) -> NativeDiagnosticBinding:
+        """Select one trusted binding matching the immutable session source.
+
+        Native diagnostics require the admitted source to be the immutable
+        session source.  Exact-input materialization is also allowed from a
+        selected campaign row when the launcher configured a separate native
+        source bundle; that narrow route still requires one unambiguous
+        launcher binding and rechecks the selected episode against the bundle
+        before starting a child.
+        """
 
         bindings = self.native_diagnostic_config.bindings
         if not bindings:
@@ -5738,17 +6181,124 @@ class AuditService:
             if len(binding.request.sources) == 1
             and self._source_ref_matches(session, binding.request.sources[0])
         ]
+        if not source_matches and allow_campaign_source and self.campaign_source is not None:
+            # The campaign row and native source bundle are distinct admitted
+            # artifacts in the exact-input path.  The native helper performs
+            # the authoritative episode/identity binding before execution.
+            source_matches = list(bindings)
         if not source_matches:
             raise AuditContextConflict("native diagnostic source does not match session source_ref")
         if len(source_matches) > 1:
             raise AuditPolicyError("native diagnostic source binding is ambiguous")
         binding = source_matches[0]
+        self._check_native_binding_policy(session, binding)
+        return binding
+
+    @staticmethod
+    def _check_native_binding_policy(
+        session: AuditSession, binding: NativeDiagnosticBinding
+    ) -> None:
+        """Apply the session recipe/root ceiling to one launcher binding."""
+
         if not session.policy.allows_recipe(binding.recipe.recipe_id):
             raise AuditPolicyError("native diagnostic recipe is not allowed by the session policy")
         root = Path(binding.admission.source_root).resolve(strict=False)
         if not session.policy.allows_path(root):
             raise AuditPolicyError("native diagnostic source root is not allowed")
+
+    def _native_campaign_binding_for_session(
+        self, session: AuditSession
+    ) -> NativeDiagnosticBinding:
+        """Select exactly one descriptor bound to the immutable campaign source."""
+
+        if self.campaign_source is None:
+            raise AuditContextConflict("campaign-native binding requires a campaign source")
+        source_ref = session.source_ref
+        if source_ref is None:
+            raise AuditContextConflict("campaign-native binding requires a session source_ref")
+        candidates = tuple(
+            binding
+            for binding in self.native_diagnostic_config.bindings
+            if binding.campaign_row is not None
+            and binding.campaign_row.campaign_uri == source_ref.uri
+            and binding.campaign_row.campaign_sha256 == session.source_digest
+        )
+        if not candidates:
+            raise CapabilityUnavailable(
+                "native diagnostic campaign row binding does not match session source"
+            )
+        if len(candidates) != 1:
+            raise AuditPolicyError("native diagnostic campaign row binding is ambiguous")
+        binding = candidates[0]
+        self._check_native_binding_policy(session, binding)
+        source = binding.request.sources[0]
+        row = binding.campaign_row
+        assert row is not None
+        if row.native_uri != source.uri or row.native_sha256 != source.sha256:
+            raise AuditPolicyError("native diagnostic campaign row/native source identities differ")
         return binding
+
+    @staticmethod
+    def _native_campaign_row_claim_errors(
+        row: Mapping[str, Any], descriptor: NativeDiagnosticCampaignRowBinding
+    ) -> tuple[str, ...]:
+        """Compare explicit canonical row claims, excluding scanner defaults."""
+
+        defaults = row.get("_audit_scan_identity_defaults")
+        defaults = defaults if isinstance(defaults, Mapping) else {}
+        errors: list[str] = []
+        expected = {
+            "episode_id": descriptor.episode_id,
+            "scenario_id": descriptor.scenario_id,
+            "seed": descriptor.seed,
+            "planner_id": descriptor.planner_id,
+            "source_commit": descriptor.source_commit,
+            "config_identity": descriptor.config_identity,
+        }
+        for name, value in expected.items():
+            actual = row.get(name)
+            # The scanner marker is trusted only for values it itself derived;
+            # execution/source/campaign/config digests are deliberately not
+            # treated as historical claims by this bridge.
+            if name in defaults and defaults.get(name) == actual:
+                continue
+            if actual != value:
+                errors.append(f"campaign row {name} does not match native binding")
+        return tuple(errors)
+
+    def _native_campaign_episode_for_session(
+        self,
+        session: AuditSession,
+        selected: AuditSelectionContext,
+        binding: NativeDiagnosticBinding,
+    ) -> EpisodeView:
+        """Resolve and validate the literal campaign row before native work."""
+
+        descriptor = binding.campaign_row
+        if descriptor is None:
+            raise CapabilityUnavailable("native diagnostic campaign row binding is not configured")
+        self._assert_source(session)
+        source_ref = session.source_ref
+        if source_ref is None:
+            raise AuditContextConflict("campaign-native binding requires a session source_ref")
+        if (
+            descriptor.campaign_uri != source_ref.uri
+            or descriptor.campaign_sha256 != session.source_digest
+        ):
+            raise AuditContextConflict("campaign-native binding source identity is stale")
+        episode = self._episode_from_campaign(session, selected.episode_id)
+        if episode.status != "readable" or not isinstance(episode.row, Mapping):
+            raise CapabilityUnavailable("selected campaign row is not readable")
+        if episode.episode_id != descriptor.episode_id:
+            raise AuditContextConflict(
+                "selected campaign row does not match native binding",
+                expected=descriptor.episode_id,
+                actual=episode.episode_id,
+            )
+        errors = self._native_campaign_row_claim_errors(episode.row, descriptor)
+        if errors:
+            raise AuditContextConflict("; ".join(errors))
+        return episode
 
     @staticmethod
     def _native_intervention(
@@ -5827,10 +6377,13 @@ class AuditService:
             timeout_s=deadline_s,
         )
 
-    def _preflight_native_request(
+    def _preflight_native_request(  # noqa: C901
         self,
         request: NativeDiagnosticRequest,
         selected: AuditSelectionContext,
+        *,
+        campaign_row: Mapping[str, Any] | None = None,
+        campaign_binding: NativeDiagnosticCampaignRowBinding | None = None,
     ) -> None:
         """Resolve source bytes and historical eligibility before child work."""
 
@@ -5856,12 +6409,50 @@ class AuditService:
                     resolution.source_bytes or b"", resolution.receipt.source
                 )
                 original = source_document.original_record
-                if selected.episode_id and original.get("episode_id") != selected.episode_id:
+                expected_episode_id = (
+                    campaign_binding.episode_id
+                    if campaign_binding is not None
+                    else selected.episode_id
+                )
+                if expected_episode_id and original.get("episode_id") != expected_episode_id:
                     raise AuditContextConflict(
                         "native diagnostic source episode does not match selected context",
-                        expected=selected.episode_id,
+                        expected=expected_episode_id,
                         actual=original.get("episode_id"),
                     )
+                if campaign_binding is not None:
+                    if campaign_row is None:
+                        raise AuditContextConflict("native diagnostic campaign row is missing")
+                    source = request.request.sources[0]
+                    if (
+                        campaign_binding.native_uri != source.uri
+                        or campaign_binding.native_sha256 != source.sha256
+                    ):
+                        raise AuditPolicyError(
+                            "native diagnostic campaign row/native source identities differ"
+                        )
+                    runner = source_document.runner_input
+                    identity = source_document.identity
+                    native_claims = {
+                        "episode_id": original.get("episode_id"),
+                        "scenario_id": runner.get("scenario_params", {}).get("id")
+                        if isinstance(runner.get("scenario_params"), Mapping)
+                        else None,
+                        "seed": runner.get("seed"),
+                        "planner_id": runner.get("algo"),
+                        "source_commit": identity.get("source_commit"),
+                        "config_identity": identity.get("config_identity"),
+                    }
+                    descriptor_claims = {
+                        name: getattr(campaign_binding, name) for name in native_claims
+                    }
+                    for name, expected in descriptor_claims.items():
+                        if native_claims[name] != expected:
+                            raise AuditContextConflict(
+                                f"native source {name} does not match campaign binding",
+                                expected=expected,
+                                actual=native_claims[name],
+                            )
                 execution_errors = native._record_execution_errors(
                     original,
                     source_document.runner_input,
@@ -5954,13 +6545,25 @@ class AuditService:
             selected = self._bind_context(target, context)
             if not selected.episode_id:
                 raise AuditContextConflict("native diagnostic requires a selected episode")
-            binding = self._native_binding_for_session(target)
+            campaign_episode: EpisodeView | None = None
+            if self.campaign_source is not None:
+                binding = self._native_campaign_binding_for_session(target)
+                campaign_episode = self._native_campaign_episode_for_session(
+                    target, selected, binding
+                )
+            else:
+                binding = self._native_binding_for_session(target)
             request_holder["request"] = self._native_request(
                 binding,
                 checked_intervention,
                 deadline_s=checked_deadline,
             )
-            self._preflight_native_request(request_holder["request"], selected)
+            self._preflight_native_request(
+                request_holder["request"],
+                selected,
+                campaign_row=campaign_episode.row if campaign_episode is not None else None,
+                campaign_binding=binding.campaign_row if campaign_episode is not None else None,
+            )
 
         def execute() -> NativeDiagnosticResult:
             request = request_holder.get("request")
@@ -5998,7 +6601,7 @@ class AuditService:
                     }
                 ),
                 callback=execute,
-                enforce_source=False,
+                enforce_source=self.campaign_source is not None,
             )
             return result
         finally:
@@ -6012,7 +6615,178 @@ class AuditService:
     native_diagnostic = run_native_diagnostic
     run_native = run_native_diagnostic
 
-    def materialize_selected(  # noqa: C901 - policy, capability, charge, and adapter ordering
+    @staticmethod
+    def _artifact_safe_reference(value: Any, *, limit: int = 256) -> str | int | None:
+        """Return one browser-safe identifier or digest without path syntax."""
+
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value if value >= 0 else None
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        if not value or len(value) > limit or "/" in value or "\\" in value:
+            return None
+        return value
+
+    @staticmethod
+    def _artifact_source_reason(error: BaseException) -> str:
+        """Classify source failures without exposing paths or raw receipts."""
+
+        if isinstance(error, AuditContextConflict):
+            return "selected source is stale"
+        if isinstance(error, AuditPolicyError):
+            return "selected source is not permitted by session policy"
+        if isinstance(error, CapabilityUnavailable):
+            return "selected source is unavailable"
+        return "selected source could not be validated"
+
+    def read_selected_artifact_status(  # noqa: C901, PLR0912
+        self,
+        session: AuditSession | str,
+        *,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[dict[str, Any]]:
+        """Read selected artifact/native capability state without executing work.
+
+        This is deliberately outside :meth:`_execute`: status polling must not
+        create an operation receipt, charge compute, materialize files, spawn a
+        child process, or accept browser-owned source/output authority.  Result
+        classifications remain omitted until a durable, source-bound result
+        projection exists; this read must not create a second result store.
+        """
+
+        target = self._session(session, token=token)
+        try:
+            self._check_session(target)
+            selected = self._bind_context(target, context)
+        except AuditContextConflict:
+            return ServiceResult(
+                "conflict", None, "selected context is stale", context=target.context
+            )
+        except AuditCancelled:
+            return ServiceResult(
+                "cancelled", None, "audit session is cancelled", context=target.context
+            )
+
+        episode_id = self._artifact_safe_reference(selected.episode_id)
+        base: dict[str, Any] = {
+            "schema_version": ARTIFACT_STATUS_SCHEMA_VERSION,
+            "episode_id": episode_id,
+            "context_revision": selected.context_revision,
+            "source_revision": self._artifact_safe_reference(target.source_revision),
+            "source_digest": self._artifact_safe_reference(target.source_digest),
+        }
+        if not selected.episode_id:
+            base["materialization"] = {
+                "status": "no_selection",
+                "classification": None,
+                "fidelity": None,
+                "reason": "no selected episode",
+                "diagnostic_only": True,
+            }
+            base["native_diagnostic"] = {
+                "status": "no_selection",
+                "reason": "no selected episode",
+                "evidence_boundary": "diagnostic_only",
+                "scientific_claim_allowed": False,
+            }
+            return ServiceResult("complete", base, context=selected)
+
+        source_error: BaseException | None = None
+        materialization_configured = self.source_root is not None
+        native_configured = bool(self.native_diagnostic_config.bindings)
+        if materialization_configured or native_configured:
+            try:
+                self._assert_source(target)
+            except (
+                AuditContextConflict,
+                AuditPolicyError,
+                CapabilityUnavailable,
+                AuditScanError,
+                AuditStoreError,
+                AuditContractError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as error:
+                source_error = error
+        source_reason = self._artifact_source_reason(source_error) if source_error else ""
+
+        if not materialization_configured:
+            materialization_status = "not_configured"
+            materialization_reason = "materialization source/output capability is not configured"
+        elif source_error is not None:
+            materialization_status = "unavailable"
+            materialization_reason = source_reason
+        elif not target.policy.allows_path(self.source_root):
+            materialization_status = "unavailable"
+            materialization_reason = (
+                "materialization source root is not permitted by session policy"
+            )
+        else:
+            # The current live launcher supplies no output-root capability.  A
+            # positive status would let the browser infer an execution path.
+            materialization_status = "not_configured"
+            materialization_reason = "materialization output capability is not configured"
+        materialization = {
+            "status": materialization_status,
+            "classification": None,
+            "fidelity": None,
+            "reason": materialization_reason,
+            "diagnostic_only": True,
+        }
+
+        if not native_configured:
+            native_status = "not_configured"
+            native_reason = "native diagnostic binding is not configured"
+        elif source_error is not None:
+            native_status = "unavailable"
+            native_reason = source_reason
+        else:
+            try:
+                if self.campaign_source is not None:
+                    campaign_binding = self._native_campaign_binding_for_session(target)
+                    self._native_campaign_episode_for_session(target, selected, campaign_binding)
+                else:
+                    self._native_binding_for_session(target)
+            except CapabilityUnavailable:
+                native_status = "not_configured"
+                native_reason = "native diagnostic binding is not configured"
+            except (
+                AuditContextConflict,
+                AuditPolicyError,
+                AuditScanError,
+                AuditStoreError,
+                AuditContractError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as error:
+                native_status = "unavailable"
+                native_reason = self._artifact_source_reason(error)
+            else:
+                native_status = "available"
+                native_reason = "native diagnostic binding is configured; execution is not started"
+        native = {
+            "status": native_status,
+            "reason": native_reason,
+            "evidence_boundary": "diagnostic_only",
+            "scientific_claim_allowed": False,
+        }
+        return ServiceResult(
+            "complete",
+            {**base, "materialization": materialization, "native_diagnostic": native},
+            context=selected,
+        )
+
+    selected_artifact_status = read_selected_artifact_status
+
+    def materialize_selected(  # noqa: C901, PLR0915 - policy, capability, charge, and adapter ordering
         self,
         session: AuditSession | str,
         *,
@@ -6041,14 +6815,70 @@ class AuditService:
         target = self._session(session, token=token)
         output = Path(output_root).resolve(strict=False)
         opid = self._operation_id(operation_id)
+        exact_cancel_event = threading.Event()
+        native_binding: NativeDiagnosticBinding | None = None
 
-        def materialize() -> Any:  # noqa: C901 - ordered capability and adapter admission
+        def native_replay_preflight() -> None:
+            """Re-admit launcher bytes before replaying an exact-input receipt."""
+
+            if not self.native_diagnostic_config.bindings:
+                return
+            from robot_sf.analysis_workbench import (  # noqa: PLC0415
+                audit_native_diagnostic as native,
+            )
+
+            binding = native_binding or self._native_binding_for_session(
+                target, allow_campaign_source=self.campaign_source is not None
+            )
+            request = self._native_request(
+                binding,
+                {
+                    "intervention_id": f"{opid}-exact-input-replay-guard",
+                    "factor": "robot_goal",
+                    "robot_goal": (0.0, 0.0),
+                    "activation_epsilon_m": 0.0,
+                },
+                deadline_s=self.native_diagnostic_config.max_timeout_s,
+            )
+            root_fd: int | None = None
+            try:
+                native._validate_request(request)
+                _root, root_fd, _receipt, _receipt_digest, _resolution = (
+                    native._open_and_resolve_source(request)
+                )
+            except (
+                native.NativeDiagnosticError,
+                OSError,
+                ReviewContractsValidationError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as error:
+                raise CapabilityUnavailable(
+                    f"native exact-input source is unavailable on replay: {error}"
+                ) from error
+            finally:
+                if root_fd is not None:
+                    try:
+                        os.close(root_fd)
+                    except OSError:
+                        pass
+
+        def materialize() -> Any:  # noqa: C901, PLR0912 - ordered capability and adapter admission
+            nonlocal native_binding
             selected = self._bind_context(target, context)
             if not selected.episode_id:
                 raise AuditContextConflict("materialization requires a selected episode")
             if not target.policy.allows_path(output):
                 raise AuditPolicyError("materialization output root is not allowed")
             source_root = self.source_root
+            if (
+                source_root is None
+                and self.campaign_source is None
+                and self.native_diagnostic_config.bindings
+            ):
+                native_binding = self._native_binding_for_session(target)
+                source_root = Path(native_binding.admission.source_root).resolve(strict=False)
             if source_root is None:
                 raise CapabilityUnavailable("materialization source root is not configured")
             if not target.policy.allows_path(source_root):
@@ -6063,7 +6893,18 @@ class AuditService:
                     "materialization source root could not be safely admitted"
                 ) from error
             try:
-                episode = self._episode_from_campaign(target, selected.episode_id)
+                if self.campaign_source is None and self.native_diagnostic_config.bindings:
+                    # A native-only launcher has no BA-01 campaign row.  The
+                    # selected episode ID remains the sole row claim; the
+                    # admitted native source supplies the closed runner input
+                    # and all remaining identity proof.
+                    episode = EpisodeView(
+                        selected.episode_id,
+                        "readable",
+                        {"episode_id": selected.episode_id},
+                    )
+                else:
+                    episode = self._episode_from_campaign(target, selected.episode_id)
                 if episode.status != "readable" or episode.row is None:
                     raise CapabilityUnavailable("selected episode has no readable source row")
                 try:
@@ -6090,16 +6931,76 @@ class AuditService:
                             charge.reason or "materialization compute charge failed"
                         )
                     self._check_session(self._session(target))
+                    exact_row = dict(episode.row)
+                    # BA-01 can add a derived ``config_digest`` alongside the
+                    # source's ``config_identity``. Materialization and the
+                    # native adapter receive only explicit row claims; the
+                    # scanner's trusted marker distinguishes derived values.
+                    scan_defaults = exact_row.get("_audit_scan_identity_defaults")
+                    if isinstance(scan_defaults, Mapping) and scan_defaults.get(
+                        "config_digest"
+                    ) == exact_row.get("config_digest"):
+                        exact_row.pop("config_digest", None)
+                    if isinstance(scan_defaults, Mapping) and scan_defaults.get(
+                        "execution_id"
+                    ) == exact_row.get("execution_id"):
+                        exact_row.pop("execution_id", None)
                     materialized = materialize_episode(
-                        episode,
+                        exact_row,
                         source_root=source_capability,
                         output_root=output_capability,
                         output_directory=output_directory,
                         render_config=render_config,
-                        _trusted_scan_identity_defaults=episode.row.get(
-                            "_audit_scan_identity_defaults"
+                        _trusted_scan_identity_defaults=(
+                            {
+                                key: value
+                                for key, value in scan_defaults.items()
+                                if key in {"campaign_id", "source_digest", "execution_id"}
+                            }
+                            if isinstance(scan_defaults, Mapping)
+                            else None
                         ),
                     )
+                    if (
+                        materialized.reason
+                        in {
+                            "exact_input_execution_deferred",
+                            "retained_state_missing",
+                        }
+                        or (
+                            materialized.reason == "invalid_episode"
+                            and any(
+                                "config_identity identity aliases conflict" in diagnostic
+                                for diagnostic in materialized.diagnostics
+                            )
+                        )
+                    ) and self.native_diagnostic_config.bindings:
+                        from robot_sf.analysis_workbench import (  # noqa: PLC0415
+                            audit_native_diagnostic as native,
+                        )
+
+                        binding = native_binding or self._native_binding_for_session(
+                            target, allow_campaign_source=self.campaign_source is not None
+                        )
+                        exact_request = self._native_request(
+                            binding,
+                            {
+                                "intervention_id": f"{opid}-exact-input",
+                                "factor": "robot_goal",
+                                "robot_goal": (0.0, 0.0),
+                                "activation_epsilon_m": 0.0,
+                            },
+                            deadline_s=self.native_diagnostic_config.max_timeout_s,
+                        )
+                        return native.materialize_exact_input(
+                            exact_request,
+                            exact_row,
+                            output_root=output_capability,
+                            output_directory=output_directory,
+                            render_config=render_config,
+                            execution_id=f"{opid}:exact:{uuid.uuid4().hex}",
+                            cancel_event=exact_cancel_event,
+                        )
                     self._check_session(self._session(target))
                     return materialized
                 finally:
@@ -6107,22 +7008,34 @@ class AuditService:
             finally:
                 source_capability.close()
 
-        result, _ = self._execute(
-            target,
-            operation_type="materialize.selected",
-            operation_id=opid,
-            context=context,
-            request_digest=_operation_request_digest(
-                {
-                    "context": _context_request_value(context),
-                    "output_root": str(output),
-                    "output_directory": output_directory,
-                    "render_config": render_config,
-                }
-            ),
-            callback=materialize,
-        )
-        return result
+        with self._lock:
+            self._native_cancel_events.setdefault(target.session_id, set()).add(exact_cancel_event)
+        try:
+            result, _ = self._execute(
+                target,
+                operation_type="materialize.selected",
+                operation_id=opid,
+                context=context,
+                request_digest=_operation_request_digest(
+                    {
+                        "context": _context_request_value(context),
+                        "output_root": str(output),
+                        "output_directory": output_directory,
+                        "render_config": render_config,
+                        "native_config_digest": _digest(self.native_diagnostic_config.to_dict()),
+                    }
+                ),
+                callback=materialize,
+                replay_preflight=native_replay_preflight,
+            )
+            return result
+        finally:
+            with self._lock:
+                events = self._native_cancel_events.get(target.session_id)
+                if events is not None:
+                    events.discard(exact_cancel_event)
+                    if not events:
+                        self._native_cancel_events.pop(target.session_id, None)
 
     def _validate_github_finding_scope(
         self,
@@ -6576,6 +7489,12 @@ class AuditService:
             expected_source_revision=checked_source_revision,
             request_digest=request_digest,
             callback=sync,
+            # The send lease is the provider-boundary commit point.  The
+            # callback rejects cancellation before that lease is acquired and
+            # revalidates source/context after the provider returns, so a
+            # cancellation that arrives after the remote write must not
+            # relabel the paid outcome as an uncommitted cancellation.
+            enforce_active_at_completion=False,
         )
         return result
 
@@ -7836,6 +8755,306 @@ class AuditService:
             evidence=evidence,
         )
 
+    @staticmethod
+    def _proposal_source_revision_matches(
+        session_revision: int | str, proposal_revision: int | str
+    ) -> bool:
+        """Return whether a proposal carries the session's source revision."""
+
+        if session_revision in (0, ""):
+            return proposal_revision in (0, "", "0")
+        return str(proposal_revision) == str(session_revision)
+
+    def _validate_detector_rule_proposal_origin(  # noqa: C901
+        self,
+        session: AuditSession,
+        proposal: DetectorRuleProposal,
+        *,
+        selected: AuditSelectionContext,
+        expected_source_revision: int | str | None,
+        require_current_registry: bool,
+        campaign: CampaignView | None = None,
+    ) -> None:
+        """Validate a proposal's source, context, and immutable registry origin.
+
+        Detector-rule proposals are deliberately not routed through the generic
+        annotation/finding author checks.  Their origin is a separate,
+        declarative governance contract: source and campaign identity must be
+        current, evidence IDs must belong to the selected source, and the
+        registry fields must describe the currently admitted detector registry.
+        The registry is read-only here; this method never applies a proposal.
+        """
+
+        self._assert_source(session, expected_source_revision=expected_source_revision)
+        if not proposal.source_identity:
+            raise AuditContextConflict("detector rule proposal source identity is required")
+        if proposal.source_identity not in self._source_identities(session):
+            raise AuditContextConflict(
+                "detector rule proposal source identity does not match session source",
+                expected=session.source_digest,
+                actual=proposal.source_identity,
+            )
+        if not self._proposal_source_revision_matches(
+            session.source_revision, proposal.source_revision
+        ):
+            raise AuditContextConflict(
+                "detector rule proposal source revision does not match session source",
+                expected=session.source_revision,
+                actual=proposal.source_revision,
+            )
+        if not proposal.campaign_digest:
+            raise AuditContextConflict("detector rule proposal campaign identity is required")
+
+        campaign = campaign or self._scan(session)
+        expected_campaign_digest = campaign.report.audit.campaign_digest
+        if proposal.campaign_digest != expected_campaign_digest:
+            raise AuditContextConflict(
+                "detector rule proposal campaign identity does not match source",
+                expected=expected_campaign_digest,
+                actual=proposal.campaign_digest,
+            )
+        if require_current_registry:
+            registry = campaign.report.detector_registry
+            if proposal.detector_registry_version != registry.version:
+                raise AuditContextConflict(
+                    "detector rule proposal registry version does not match source",
+                    expected=registry.version,
+                    actual=proposal.detector_registry_version,
+                )
+            if proposal.detector_registry_digest != registry.digest:
+                raise AuditContextConflict(
+                    "detector rule proposal registry digest does not match source",
+                    expected=registry.digest,
+                    actual=proposal.detector_registry_digest,
+                )
+
+        if proposal.episode_ids:
+            known_episode_ids = {item.episode_id for item in campaign.report.episode_refs}
+            unknown_episode_ids = set(proposal.episode_ids) - known_episode_ids
+            if unknown_episode_ids:
+                raise AuditContextConflict(
+                    "detector rule proposal contains evidence from another source"
+                )
+            if selected.episode_id and selected.episode_id not in proposal.episode_ids:
+                raise AuditContextConflict(
+                    "detector rule proposal evidence does not match selected context",
+                    expected=selected.episode_id,
+                    actual=proposal.episode_ids,
+                )
+        self._validate_detector_rule_proposal_evidence(
+            session,
+            proposal,
+            selected=selected,
+            campaign=campaign,
+        )
+
+    def _validate_detector_rule_proposal_evidence(  # noqa: C901
+        self,
+        session: AuditSession,
+        proposal: DetectorRuleProposal,
+        *,
+        selected: AuditSelectionContext,
+        campaign: CampaignView,
+    ) -> None:
+        """Require every referenced BA-03 record to match current evidence.
+
+        Proposal evidence IDs are opaque caller input and are not trusted just
+        because the proposal's own source fields are current.  Resolve every
+        annotation/finding through the canonical projection, then require its
+        episode membership, source revision, and current campaign references to
+        agree with the proposal's context.  This check is reused for create,
+        direct read, and human decision paths.
+        """
+
+        if not proposal.annotation_ids and not proposal.finding_ids:
+            return
+        known_refs = {item.episode_id: item for item in campaign.report.episode_refs}
+        declared_episode_ids = set(proposal.episode_ids)
+        if not declared_episode_ids and not selected.episode_id:
+            raise AuditContextConflict(
+                "detector rule proposal evidence requires an episode-bound context"
+            )
+        expected_revision = self._source_revision_token(session.source_revision)
+        digest_only = session.source_revision in (0, "")
+
+        def evidence_episode_ref(evidence_episode_id: str) -> EpisodeRef:
+            episode_ref = known_refs.get(evidence_episode_id)
+            if episode_ref is None:
+                raise AuditContextConflict(
+                    "detector rule proposal evidence belongs to another source"
+                )
+            if declared_episode_ids:
+                if evidence_episode_id not in declared_episode_ids:
+                    raise AuditContextConflict(
+                        "detector rule proposal evidence does not match proposal context",
+                        expected=tuple(sorted(declared_episode_ids)),
+                        actual=evidence_episode_id,
+                    )
+            elif evidence_episode_id != selected.episode_id:
+                raise AuditContextConflict(
+                    "detector rule proposal evidence does not match selected context",
+                    expected=selected.episode_id,
+                    actual=evidence_episode_id,
+                )
+            return episode_ref
+
+        for annotation_id in proposal.annotation_ids:
+            stored = self.store.get(annotation_id)
+            if (
+                stored is None
+                or stored.deleted
+                or stored.record_type != "annotation"
+                or not isinstance(stored.record, Annotation)
+            ):
+                raise AuditContextConflict(
+                    "detector rule proposal annotation evidence is unavailable"
+                )
+            annotation = stored.record
+            episode_ref = evidence_episode_ref(annotation.episode_id)
+            self._validate_annotation_provenance_status(session, annotation)
+            if (
+                not self._saved_annotation_for_context(
+                    session,
+                    annotation,
+                    episode_id=annotation.episode_id,
+                    source_digest=session.source_digest,
+                    expected_revision=expected_revision,
+                    digest_only=digest_only,
+                )
+                or episode_ref.source_digest != session.source_digest
+            ):
+                raise AuditContextConflict(
+                    "detector rule proposal annotation evidence is not source-bound"
+                )
+
+        for finding_id in proposal.finding_ids:
+            stored = self.store.get(finding_id)
+            if (
+                stored is None
+                or stored.deleted
+                or stored.record_type != "finding"
+                or not isinstance(stored.record, Finding)
+            ):
+                raise AuditContextConflict("detector rule proposal finding evidence is unavailable")
+            finding = stored.record
+            members = (
+                set(finding.candidate_members)
+                | set(finding.confirmed_members)
+                | set(finding.negative_controls)
+            )
+            if not members:
+                raise AuditContextConflict(
+                    "detector rule proposal finding evidence has no episode membership"
+                )
+            if set(members) - set(known_refs):
+                raise AuditContextConflict(
+                    "detector rule proposal finding evidence belongs to another source"
+                )
+            candidate_members = (
+                members & declared_episode_ids
+                if declared_episode_ids
+                else members & {selected.episode_id}
+            )
+            if not candidate_members:
+                raise AuditContextConflict(
+                    "detector rule proposal finding evidence does not match context"
+                )
+            if not any(
+                self._saved_finding_for_context(
+                    finding,
+                    episode_id=member,
+                    expected_revision=expected_revision,
+                    digest_only=digest_only,
+                )
+                for member in candidate_members
+            ):
+                raise AuditContextConflict(
+                    "detector rule proposal finding evidence is not source-bound"
+                )
+
+    def _validate_detector_rule_proposal_write(
+        self,
+        session: AuditSession,
+        proposal: DetectorRuleProposal,
+        *,
+        selected: AuditSelectionContext,
+        expected_source_revision: int | str | None,
+    ) -> None:
+        """Validate an agent-authored proposed record before BA-03 save."""
+
+        if session.actor.kind != "agent" or not session.actor.actor_id:
+            raise AuditPolicyError("detector rule proposals require an identified agent session")
+        if proposal.lifecycle_status != "proposed":
+            raise AuditPolicyError("agent proposal writes may only create proposed records")
+        if proposal.activation_status != "inactive":
+            raise AuditPolicyError("detector rule proposals are always inactive")
+        if proposal.proposer_kind != "agent" or proposal.author_kind != "agent":
+            raise AuditPolicyError("agent proposal writes must remain agent-authored")
+        if (
+            proposal.proposer_id != session.actor.actor_id
+            or proposal.author_id != session.actor.actor_id
+        ):
+            raise AuditPolicyError("detector rule proposal author does not match session actor")
+        if self._contains_sensitive_text(record_to_dict(proposal), session.session_token):
+            raise AuditValidationError("detector rule proposal contains session credentials")
+        self._validate_detector_rule_proposal_origin(
+            session,
+            proposal,
+            selected=selected,
+            expected_source_revision=expected_source_revision,
+            require_current_registry=True,
+        )
+
+    def _load_detector_rule_proposal(self, proposal_id: str) -> StoredRecord:
+        """Load one typed proposal from the canonical BA-03 projection."""
+
+        checked_id = _bounded_text(proposal_id, name="proposal_id")
+        stored = self.store.get(checked_id)
+        if stored is None or not isinstance(stored.record, DetectorRuleProposal):
+            raise CapabilityUnavailable("detector rule proposal is unavailable")
+        if stored.record_type != "detector_rule_proposal" or stored.deleted:
+            raise AuditStoreError("detector rule proposal projection is malformed")
+        if stored.revision <= 0 or stored.global_revision <= 0:
+            raise AuditStoreError("detector rule proposal revision is invalid")
+        return stored
+
+    @staticmethod
+    def _saved_proposal_for_context(
+        session: AuditSession,
+        stored: StoredRecord,
+        *,
+        episode_id: str,
+        episode_ref: EpisodeRef,
+    ) -> bool:
+        """Return whether a durable proposal is current for a selected source."""
+
+        if stored.deleted or stored.record_type != "detector_rule_proposal":
+            return False
+        proposal = stored.record
+        if not isinstance(proposal, DetectorRuleProposal):
+            return False
+        if proposal.activation_status != "inactive":
+            return False
+        identities = {
+            item
+            for item in (
+                session.source_digest,
+                session.context.source_identity,
+                session.source_ref.artifact_id if session.source_ref is not None else "",
+                session.source_ref.sha256 if session.source_ref is not None else "",
+            )
+            if item
+        }
+        if proposal.source_identity not in identities:
+            return False
+        if not AuditService._proposal_source_revision_matches(
+            session.source_revision, proposal.source_revision
+        ):
+            return False
+        if proposal.campaign_digest != episode_ref.campaign_digest:
+            return False
+        return not proposal.episode_ids or episode_id in proposal.episode_ids
+
     def _write_record(  # noqa: C901
         self,
         session: AuditSession,
@@ -7908,7 +9127,7 @@ class AuditService:
     def _save_record_source_bound(
         self,
         session: AuditSession,
-        record: Annotation | Reference | Finding,
+        record: Annotation | Reference | Finding | DetectorRuleProposal,
         *,
         operation_id: str | None,
         expected_revision: int | None,
@@ -7927,7 +9146,11 @@ class AuditService:
         record_id_value = getattr(
             record,
             "annotation_id",
-            getattr(record, "reference_id", getattr(record, "finding_id", "")),
+            getattr(
+                record,
+                "reference_id",
+                getattr(record, "finding_id", getattr(record, "proposal_id", "")),
+            ),
         )
         opid = self._operation_id(operation_id)
         with self._lock:
@@ -8102,6 +9325,355 @@ class AuditService:
 
     save_finding = write_finding
 
+    def write_detector_rule_proposal(
+        self,
+        session: AuditSession | str,
+        proposal: DetectorRuleProposal | Mapping[str, Any],
+        *,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        expected_revision: int | None = None,
+        expected_source_revision: int | str | None = None,
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[CommitResult]:
+        """Persist one authenticated, inactive, agent-authored proposal.
+
+        This is intentionally separate from the generic BA-03 record writes.
+        An agent may create a ``proposed`` record bound to its session actor,
+        current source, and selection context; it cannot submit a human
+        decision or activate a detector through this method.
+        """
+
+        target = self._session(session, token=token)
+        value = (
+            proposal if isinstance(proposal, DetectorRuleProposal) else record_from_dict(proposal)
+        )
+        if not isinstance(value, DetectorRuleProposal):
+            raise AuditValidationError(
+                "detector rule proposal payload is not a DetectorRuleProposal record"
+            )
+        opid = self._operation_id(operation_id)
+
+        def commit() -> CommitResult:
+            selected = self._bind_context(target, context)
+            existing = self.store.get(value.proposal_id)
+            if existing is not None:
+                if not isinstance(existing.record, DetectorRuleProposal):
+                    raise AuditStoreError("detector rule proposal projection is malformed")
+                if existing.record.lifecycle_status != "proposed":
+                    raise AuditPolicyError(
+                        "agent proposal writes cannot reopen a decided detector rule record"
+                    )
+            self._validate_detector_rule_proposal_write(
+                target,
+                value,
+                selected=selected,
+                expected_source_revision=expected_source_revision,
+            )
+            try:
+                return self._save_record_source_bound(
+                    target,
+                    value,
+                    operation_id=opid,
+                    expected_revision=expected_revision,
+                    expected_source_revision=expected_source_revision,
+                )
+            except AuditConflictError as exc:
+                raise AuditContextConflict(
+                    "detector rule proposal revision CAS failed",
+                    expected=exc.expected_revision,
+                    actual=exc.actual_revision,
+                ) from exc
+
+        result, _ = self._execute(
+            target,
+            operation_type="write.detector_rule_proposal",
+            operation_id=opid,
+            context=context,
+            expected_source_revision=expected_source_revision,
+            request_digest=_operation_request_digest(
+                record_to_dict(value),
+                expected_revision=expected_revision,
+                expected_source_revision=expected_source_revision,
+            ),
+            callback=commit,
+        )
+        return result
+
+    save_detector_rule_proposal = write_detector_rule_proposal
+    save_detector_proposal = write_detector_rule_proposal
+    write_proposal = write_detector_rule_proposal
+
+    def decide_detector_rule_proposal(  # noqa: PLR0913
+        self,
+        session: AuditSession | str,
+        proposal_id: str,
+        *,
+        decision: str,
+        decision_reason: str,
+        expected_revision: int,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        expected_source_revision: int | str | None = None,
+        decided_at: str = "",
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[CommitResult]:
+        """Apply one human-only proposal decision using BA-03 CAS.
+
+        The caller supplies only the proposal ID and decision fields.  The
+        current durable record is reloaded and reconstructed server-side, so
+        origin/provenance, proposer identity, and activation status cannot be
+        replaced by a forged decision payload.
+        """
+
+        target = self._session(session, token=token)
+        checked_id = _bounded_text(proposal_id, name="proposal_id")
+        checked_decision = _bounded_text(decision, name="proposal decision")
+        if checked_decision not in {"approved", "rejected", "withdrawn"}:
+            raise AuditValidationError("proposal decision must be approved, rejected, or withdrawn")
+        checked_reason = _bounded_text(
+            decision_reason, name="proposal decision_reason", limit=MAX_REASON_CHARS
+        )
+        checked_revision = _nonnegative_int(expected_revision, name="expected_revision")
+        checked_decided_at = _optional_text(decided_at, name="decided_at", limit=MAX_TEXT_CHARS)
+        opid = self._operation_id(operation_id)
+
+        def decide() -> CommitResult:
+            if target.actor.kind != "human" or not target.actor.actor_id:
+                raise AuditPolicyError(
+                    "detector rule proposal decisions require an identified human"
+                )
+            selected = self._bind_context(target, context)
+            stored = self._load_detector_rule_proposal(checked_id)
+            current = stored.record
+            if not isinstance(current, DetectorRuleProposal):  # pragma: no cover - guarded above
+                raise AuditStoreError("detector rule proposal projection is malformed")
+            if current.lifecycle_status != "proposed":
+                raise AuditPolicyError("only proposed detector rule records may be decided")
+            if (
+                current.proposer_kind != "agent"
+                or current.author_kind != "agent"
+                or not current.proposer_id
+                or not current.author_id
+            ):
+                raise AuditPolicyError("only agent-authored detector rule proposals may be decided")
+            self._validate_detector_rule_proposal_origin(
+                target,
+                current,
+                selected=selected,
+                expected_source_revision=expected_source_revision,
+                require_current_registry=False,
+            )
+            updated = replace(
+                current,
+                lifecycle_status=checked_decision,
+                activation_status="inactive",
+                author_kind="human",
+                author_id=target.actor.actor_id,
+                decided_by_kind="human",
+                decided_by_id=target.actor.actor_id,
+                decided_at=checked_decided_at or utc_now(),
+                decision_reason=checked_reason,
+                updated_at=utc_now(),
+            )
+            if self._contains_sensitive_text(record_to_dict(updated), target.session_token):
+                raise AuditValidationError("detector rule proposal contains session credentials")
+            try:
+                return self._save_record_source_bound(
+                    target,
+                    updated,
+                    operation_id=opid,
+                    expected_revision=checked_revision,
+                    expected_source_revision=expected_source_revision,
+                )
+            except AuditConflictError as exc:
+                raise AuditContextConflict(
+                    "detector rule proposal revision CAS failed",
+                    expected=exc.expected_revision,
+                    actual=exc.actual_revision,
+                ) from exc
+
+        result, _ = self._execute(
+            target,
+            operation_type="write.detector_rule_proposal.decision",
+            operation_id=opid,
+            context=context,
+            expected_source_revision=expected_source_revision,
+            request_digest=_operation_request_digest(
+                {
+                    "proposal_id": checked_id,
+                    "decision": checked_decision,
+                    "decision_reason": checked_reason,
+                    # An omitted timestamp is generated by the service callback
+                    # and therefore has one stable idempotency token.
+                    "decided_at": checked_decided_at or "<service-generated>",
+                },
+                expected_revision=checked_revision,
+                expected_source_revision=expected_source_revision,
+            ),
+            callback=decide,
+        )
+        return result
+
+    decide_proposal = decide_detector_rule_proposal
+
+    def approve_detector_rule_proposal(  # noqa: PLR0913
+        self,
+        session: AuditSession | str,
+        proposal_id: str,
+        *,
+        decision_reason: str,
+        expected_revision: int,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        expected_source_revision: int | str | None = None,
+        decided_at: str = "",
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[CommitResult]:
+        """Approve one proposal without enabling the detector."""
+
+        return self.decide_detector_rule_proposal(
+            session,
+            proposal_id,
+            decision="approved",
+            decision_reason=decision_reason,
+            expected_revision=expected_revision,
+            context=context,
+            expected_source_revision=expected_source_revision,
+            decided_at=decided_at,
+            operation_id=operation_id,
+            token=token,
+        )
+
+    approve_proposal = approve_detector_rule_proposal
+
+    def reject_detector_rule_proposal(  # noqa: PLR0913
+        self,
+        session: AuditSession | str,
+        proposal_id: str,
+        *,
+        decision_reason: str,
+        expected_revision: int,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        expected_source_revision: int | str | None = None,
+        decided_at: str = "",
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[CommitResult]:
+        """Reject one proposal without changing detector registry state."""
+
+        return self.decide_detector_rule_proposal(
+            session,
+            proposal_id,
+            decision="rejected",
+            decision_reason=decision_reason,
+            expected_revision=expected_revision,
+            context=context,
+            expected_source_revision=expected_source_revision,
+            decided_at=decided_at,
+            operation_id=operation_id,
+            token=token,
+        )
+
+    reject_proposal = reject_detector_rule_proposal
+
+    def withdraw_detector_rule_proposal(  # noqa: PLR0913
+        self,
+        session: AuditSession | str,
+        proposal_id: str,
+        *,
+        decision_reason: str,
+        expected_revision: int,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        expected_source_revision: int | str | None = None,
+        decided_at: str = "",
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[CommitResult]:
+        """Withdraw one proposal without changing detector registry state."""
+
+        return self.decide_detector_rule_proposal(
+            session,
+            proposal_id,
+            decision="withdrawn",
+            decision_reason=decision_reason,
+            expected_revision=expected_revision,
+            context=context,
+            expected_source_revision=expected_source_revision,
+            decided_at=decided_at,
+            operation_id=operation_id,
+            token=token,
+        )
+
+    withdraw_proposal = withdraw_detector_rule_proposal
+
+    def read_detector_rule_proposal(
+        self,
+        session: AuditSession | str,
+        proposal_id: str,
+        *,
+        context: AuditSelectionContext | Mapping[str, Any] | None = None,
+        operation_id: str | None = None,
+        token: str | None = None,
+    ) -> ServiceResult[StoredRecord]:
+        """Read one source/context-bound proposal through the durable projection."""
+
+        target = self._session(session, token=token)
+        checked_id = _bounded_text(proposal_id, name="proposal_id")
+
+        def read() -> StoredRecord:
+            selected = self._bind_context(target, context)
+            stored = self._load_detector_rule_proposal(checked_id)
+            proposal = stored.record
+            if not isinstance(proposal, DetectorRuleProposal):  # pragma: no cover - guarded above
+                raise AuditStoreError("detector rule proposal projection is malformed")
+            campaign = self._scan(target)
+            episode_ref = next(
+                (
+                    item
+                    for item in campaign.report.episode_refs
+                    if not proposal.episode_ids or item.episode_id in proposal.episode_ids
+                ),
+                None,
+            )
+            if episode_ref is None:
+                if proposal.episode_ids:
+                    raise CapabilityUnavailable("detector rule proposal evidence is unavailable")
+            elif not self._saved_proposal_for_context(
+                target,
+                stored,
+                episode_id=selected.episode_id or episode_ref.episode_id,
+                episode_ref=episode_ref,
+            ):
+                raise AuditContextConflict(
+                    "detector rule proposal is outside selected source/context"
+                )
+            self._validate_detector_rule_proposal_origin(
+                target,
+                proposal,
+                selected=selected,
+                expected_source_revision=None,
+                require_current_registry=False,
+                campaign=campaign,
+            )
+            if self._contains_sensitive_text(stored.to_dict(), target.session_token):
+                raise CapabilityUnavailable("durable proposal contains a session secret")
+            return stored
+
+        result, _ = self._execute(
+            target,
+            operation_type="read.detector_rule_proposal",
+            operation_id=self._operation_id(operation_id),
+            context=context,
+            request_digest=_operation_request_digest(
+                {"proposal_id": checked_id, "context": _context_request_value(context)}
+            ),
+            callback=read,
+        )
+        return result
+
+    read_proposal = read_detector_rule_proposal
+
     def finding_from_annotation(
         self,
         session: AuditSession | str,
@@ -8177,6 +9749,7 @@ class AuditService:
 
 __all__ = [
     "ACTOR_KINDS",
+    "ARTIFACT_STATUS_SCHEMA_VERSION",
     "AUDIT_OPERATION_SCHEMA_VERSION",
     "AUDIT_POLICY_SCHEMA_VERSION",
     "AUDIT_SELECTION_CONTEXT_SCHEMA_VERSION",
@@ -8185,6 +9758,7 @@ __all__ = [
     "CODEX_ACTIVITY_SCHEMA_VERSION",
     "CODEX_AUTHORITY_SCHEMA_VERSION",
     "CODEX_OPERATION_STATUSES",
+    "NATIVE_DIAGNOSTIC_CAMPAIGN_ROW_SCHEMA_VERSION",
     "NATIVE_DIAGNOSTIC_OPERATION_TYPE",
     "ActorRef",
     "AuditAuthorityError",
@@ -8214,6 +9788,7 @@ __all__ = [
     "CodexSessionSnapshot",
     "EpisodeView",
     "NativeDiagnosticBinding",
+    "NativeDiagnosticCampaignRowBinding",
     "NativeDiagnosticServiceConfig",
     "OperationReceipt",
     "ServiceResult",

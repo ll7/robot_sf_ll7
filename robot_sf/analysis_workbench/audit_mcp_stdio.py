@@ -68,11 +68,13 @@ AUDIT_MCP_TOOLS: tuple[str, ...] = (
     "read_queue",
     "next",
     "read_coverage",
+    "read_detector_rule_proposal",
     "run_native_diagnostic",
     "materialize_selected",
     "write_annotation",
     "write_reference",
     "write_finding",
+    "write_detector_rule_proposal",
     "sync_finding",
     "cancel",
 )
@@ -182,6 +184,7 @@ def _tool_schema(name: str) -> dict[str, Any]:
     properties: dict[str, Any] = {
         "episode_id": {"type": "string"},
         "finding_id": {"type": "string"},
+        "proposal_id": {"type": "string", "minLength": 1, "maxLength": 4096},
         "context": {"type": "object"},
         "operation_id": {"type": "string", "minLength": 1, "maxLength": 4096},
         "record": {"type": "object"},
@@ -221,6 +224,25 @@ def _tool_schema(name: str) -> dict[str, Any]:
         result["required"] = ["episode_id"]
     if name in {"write_annotation", "write_reference", "write_finding"}:
         result["required"] = ["record"]
+    if name == "write_detector_rule_proposal":
+        result["properties"] = {
+            key: properties[key]
+            for key in (
+                "context",
+                "operation_id",
+                "record",
+                "expected_revision",
+                "expected_source_revision",
+            )
+        }
+        result["required"] = ["record"]
+        result["additionalProperties"] = False
+    if name == "read_detector_rule_proposal":
+        result["properties"] = {
+            key: properties[key] for key in ("context", "operation_id", "proposal_id")
+        }
+        result["required"] = ["proposal_id"]
+        result["additionalProperties"] = False
     if name == "sync_finding":
         result["required"] = ["finding_id", "repository", "expected_finding_revision"]
     if name == "materialize_selected":
@@ -239,8 +261,15 @@ def _tool_descriptors() -> list[dict[str, Any]]:
             "name": name,
             "title": f"Audit {name.replace('_', ' ')}",
             "description": (
-                "Read or update one scoped Robot SF audit operation. "
-                "The audit service enforces session, source, context, and budget policy."
+                "Submit one authenticated, inactive, agent-authored detector-rule proposal; "
+                "human decisions are unavailable through MCP."
+                if name == "write_detector_rule_proposal"
+                else "Read one source/context-bound detector-rule proposal."
+                if name == "read_detector_rule_proposal"
+                else (
+                    "Read or update one scoped Robot SF audit operation. "
+                    "The audit service enforces session, source, context, and budget policy."
+                )
             ),
             "inputSchema": _tool_schema(name),
         }
@@ -561,13 +590,14 @@ class AuditMCPBridge:
         )
 
     def environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:
-        """Return process environment metadata without exposing token in args."""
+        """Return process environment metadata without exposing session credentials."""
 
         result = dict(base or os.environ)
+        # The stdio child is only a socket proxy; the bridge server retains the
+        # bearer and authenticates every forwarded request.  Remove both an
+        # ambient token and any caller-supplied copy before spawning the child.
+        result.pop(MCP_SESSION_TOKEN_ENV, None)
         result[MCP_SESSION_ID_ENV] = self.session_id
-        # The proxy does not need this value, but retaining it in the child
-        # makes direct server mode possible and keeps the context explicit.
-        result[MCP_SESSION_TOKEN_ENV] = self.session_token
         result[MCP_ORIGIN_ENV] = self.origin
         return result
 

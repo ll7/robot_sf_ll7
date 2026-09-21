@@ -1648,7 +1648,17 @@ def _row_claims_identity(row: Mapping[str, Any], aliases: tuple[str, ...]) -> bo
         seen.add(id(current))
         if any(current.get(alias) not in (None, "") for alias in aliases):
             return True
-        for name in ("source", "source_identity", "provenance", "identity"):
+        for name in (
+            "source",
+            "source_identity",
+            "provenance",
+            "identity",
+            "result_provenance",
+            "cell_context",
+            "config",
+            "algorithm_metadata",
+            "analysis_trace",
+        ):
             nested = current.get(name)
             if isinstance(nested, Mapping):
                 pending.append(nested)
@@ -2332,6 +2342,8 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
             config_digest = _row_config_digest(row_copy)
             if config_digest:
                 row_copy["config_digest"] = config_digest
+                scan_defaults["config_digest"] = config_digest
+                row_copy["_audit_scan_identity_defaults"] = scan_defaults
         row_copy.setdefault(
             "expected_provenance",
             {

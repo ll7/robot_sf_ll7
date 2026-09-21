@@ -103,10 +103,40 @@ cancelled, and unavailable results are not benchmark evidence.
 
 ## Materialization boundary
 
-The canonical retained `analysis_trace` is carried in each native runner record,
-but this adapter does not own rendering. At this branch base,
-`robot_sf/analysis_workbench/audit_materialize.py` is not present, so a
-cross-module `materialize_episode` smoke cannot be run without coupling another
-lane's implementation. Integration must verify that the retained control or
-intervention trace can render a missing video through the materializer and must
-keep lazy materialization or divergent replay distinct from this native result.
+The generic `materialize_episode` source-first resolver remains non-executing:
+when a selected row has no original recording, retained trace, or replay state,
+it returns `exact_input_execution_deferred` and never substitutes another
+planner. `materialize_exact_input` is the separate, explicitly trusted seam
+for a launcher-owned source bundle. It accepts only a selected state-free row
+and the admitted closed `simple_policy` `runner_input`; the source bundle, not
+the row, supplies scenario, seed, horizon, time step, initial state, goal,
+environment, commit, and configuration identity. Checkpoint, stateful, model,
+retained-state, and recording paths are rejected before a child starts.
+
+The seam starts one bounded canonical `run_episode` child with a fresh
+`execution_id` linked to the historical episode/execution ID. It observes the
+caller cancellation event and performs a final source receipt/digest guard
+before rendering. The generated `analysis_trace` alone is passed to
+`materialize_native_record`, so the result is a `derived_render` with
+`simulation_executed: true`; no historical metrics, trace steps, or telemetry
+are copied into the artifact. When historical telemetry is available, the
+adapter classifies the result as `verified` or `diverged`; when it is missing,
+the result is `unverifiable` and remains diagnostic-only with
+`scientific_claim_allowed: false`. Source mutation, identity mismatch,
+timeout, cancellation, and renderer failure remain unavailable/failed rather
+than benchmark evidence.
+
+The focused positive test removes the trace from a real canonical source-backed
+fixture, runs the native child, and asserts the rendered trajectory artifact.
+The focused negatives cover source mutation, identity mismatch, cancellation,
+divergence, missing historical telemetry, and service idempotent replay. These
+tests establish only the bounded diagnostic path, not historical replay
+fidelity or a benchmark result.
+
+Run that proof with:
+
+```text
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q \
+  tests/analysis_workbench/test_audit_materialize_native.py::test_exact_input_regeneration_renders_trace_removed_from_selected_row \
+  tests/analysis_workbench/test_audit_native_service.py::test_materialize_selected_regenerates_state_free_row_from_admitted_source
+```

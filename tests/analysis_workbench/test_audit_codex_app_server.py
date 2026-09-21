@@ -275,13 +275,26 @@ def test_app_server_private_mcp_config_keeps_token_out_of_process_arguments(
         assert audit_session.session_token not in " ".join(command)
         assert any("mcp_servers.robot_sf_audit" in item for item in command)
         environment = config.process_environment()
-        assert environment["ROBOT_SF_AUDIT_MCP_SESSION_TOKEN"] == audit_session.session_token
+        assert "ROBOT_SF_AUDIT_MCP_SESSION_TOKEN" not in environment
+        assert audit_session.session_token not in str(environment)
         assert environment["BA05_TEST"] == "value"
         with pytest.raises(ValueError):
             replace(config, env={"INVALID": 7}).process_environment()
+        with pytest.raises(ValueError, match="cannot override"):
+            replace(
+                config, env={"ROBOT_SF_AUDIT_MCP_SESSION_TOKEN": "explicit-secret"}
+            ).process_environment()
     finally:
         bridge.close()
         service.close()
+
+
+def test_app_server_without_mcp_drops_ambient_audit_session_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ROBOT_SF_AUDIT_MCP_SESSION_TOKEN", "ambient-secret")
+    environment = CodexAppServerConfig().process_environment()
+    assert "ROBOT_SF_AUDIT_MCP_SESSION_TOKEN" not in environment
 
 
 def test_app_server_provider_refuses_guessed_or_wrong_version_route_before_work(

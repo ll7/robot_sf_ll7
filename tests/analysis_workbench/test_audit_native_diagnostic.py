@@ -515,6 +515,55 @@ def test_campaign_alias_binds_foreign_native_trace_across_source_forms(
         service.close()
 
 
+def test_explicit_row_config_campaign_requires_native_trace_campaign(
+    native_case: dict[str, Any], tmp_path: Path
+) -> None:
+    """A row claim is not a scanner default when the retained trace omits it."""
+    original = native_case["original"]
+    row = _retained_campaign_row(original)
+    assert "campaign_id" not in row["retained_trace"]
+    row["config"] = {"campaign": "selected-campaign"}
+    root = tmp_path / "allowed"
+    root.mkdir()
+    source = root / "campaign.json"
+    _write_json(
+        source,
+        {
+            "schema_version": "campaign-result.v1",
+            "campaign_id": "selected-campaign",
+            "expected_episode_ids": [original["episode_id"]],
+            "execution_status": "native",
+            "episodes": [row],
+        },
+    )
+    report = scan_campaign(source, root=root)
+    admitted = report.inventory[0]
+    assert admitted.status == "readable"
+    assert admitted.row is not None
+    assert "campaign_id" not in admitted.row.get("_audit_scan_identity_defaults", {})
+    service = AuditService(tmp_path / "store", campaign_source=source, source_root=root)
+    try:
+        session = service.open_session(
+            AuditSelectionContext(campaign_id="selected-campaign"),
+            policy=SessionPolicy(allowed_roots=(str(root),), compute_budget=1.0),
+        )
+        selected = service.update_context(
+            session,
+            session.context.next_revision(episode_id=original["episode_id"]),
+            expected_context_revision=0,
+        )
+        assert selected.status == "committed", selected.reason
+        materialized = service.materialize_selected(
+            session, output_root=root / "derived", operation_id="explicit-row-campaign"
+        )
+        assert materialized.status == "unavailable"
+        assert materialized.value is not None
+        assert materialized.value.reason == "native_retained_trace_unavailable"
+        assert any("campaign_id" in item for item in materialized.value.diagnostics)
+    finally:
+        service.close()
+
+
 def _request(case: dict[str, Any], *, goal: tuple[float, float] = (4.0, 4.0)) -> dict[str, Any]:
     return {
         "schema_version": native.NATIVE_DIAGNOSTIC_SCHEMA_VERSION,

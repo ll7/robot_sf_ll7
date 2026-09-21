@@ -423,6 +423,8 @@ _FAST_FILES = {
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
     "test_audit_github.py",
+    # Bounded GitHub REST provider contracts are deterministic pagination,
+    # accounting, and redaction checks; keep changed coverage in fast shards.
     "test_audit_github_rest.py",
     # Benchmark Auditor queue tests are deterministic policy, control-stream,
     # provenance, and save/resume contracts for BA-02 (issue #9486).
@@ -431,6 +433,14 @@ _FAST_FILES = {
     "test_audit_mcp_stdio.py",
     "test_audit_service.py",
     "test_audit_service_adapters.py",
+    # BA-06 fixture workbench tests exercise deterministic UI/facade contracts.
+    # They do not claim the native BA-05 service or simulator-backed evidence.
+    "test_audit_workbench.py",
+    "test_audit_workbench_server.py",
+    # BA-06 local launch and service/queue HTTP wiring are deterministic
+    # contracts; retained native-trace execution remains outside this lane.
+    "test_audit_workbench_launch.py",
+    "test_audit_workbench_live_integration.py",
     # Durable BA-05 Next integration tests exercise the queue/authority
     # transaction and replay boundary entirely with local fixtures.
     "test_audit_service_next.py",
@@ -1008,10 +1018,6 @@ _FAST_FILES = {
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).
     "test_review_execute.py",
-    # Issue #7387 diagnostic-report tests are deterministic adapter, rule,
-    # and fixture-manifest contracts for the new benchmark leaf; keep changed
-    # coverage in fast shards.
-    "test_diagnostic_report.py",
     # SREV-24 loop tests are deterministic journal, budget, and recovery
     # contracts; keep their changed coverage in fast shards (issue #9296).
     "test_review_experiment_loop.py",

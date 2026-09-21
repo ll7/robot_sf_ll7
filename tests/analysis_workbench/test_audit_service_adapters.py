@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import robot_sf.analysis_workbench.audit_service_adapters as adapters_module
-from robot_sf.analysis_workbench.audit_contracts import EpisodeRef
+from robot_sf.analysis_workbench.audit_contracts import EpisodeRef, ReviewRecord
 from robot_sf.analysis_workbench.audit_coverage import (
     STATUS_INCOMPLETE,
     AuditHealthReport,
@@ -18,6 +18,7 @@ from robot_sf.analysis_workbench.audit_coverage import (
     evaluate_coverage,
 )
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, SelectionResult
+from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.analysis_workbench.audit_service import (
     AuditContextConflict,
     AuditNextAmbiguous,
@@ -32,6 +33,7 @@ from robot_sf.analysis_workbench.audit_service_adapters import (
     CoverageReadAdapter,
     QueueNextAdapter,
     QueueReadAdapter,
+    coverage_reviews_for_scan,
 )
 
 CAMPAIGN = "a" * 64
@@ -75,17 +77,72 @@ def _queue(*, source_digest: str = SOURCE) -> AuditQueue:
     )
 
 
-def _report(*, source_digest: str = SOURCE) -> AuditHealthReport:
+def _report(*, source_digest: str = SOURCE, source_revision: str = "3") -> AuditHealthReport:
     protocol = default_audit_protocol()
     return evaluate_coverage(
         [],
         identity=AuditIdentity(
             campaign_digest=CAMPAIGN,
             source_digest=source_digest,
-            source_revision="3",
+            source_revision=source_revision,
             protocol_digest=protocol.digest,
         ),
         protocol=protocol,
+    )
+
+
+def test_coverage_projection_joins_only_unique_full_episode_identity() -> None:
+    scan = scan_campaign(FIXTURE)
+    ref = scan.episode_refs[0]
+    review = ReviewRecord(
+        review_id="review-generated-id",
+        episode_id=ref.episode_id,
+        scope="full_episode",
+        author_kind="human",
+        source_identity=scan.audit.source.source_commit,
+        scan_identity=scan.cache_key,
+    )
+    assert (
+        evaluate_coverage(scan, review_records=(review,)).counts["reviews"]["full_episode_human"]
+        == 0
+    )
+    projected = coverage_reviews_for_scan(scan, (review,))
+    assert projected[0].episode_id == "fixture-readable"
+    assert review.episode_id == ref.episode_id  # the durable receipt is never rewritten
+    assert (
+        evaluate_coverage(scan, review_records=projected).counts["reviews"]["full_episode_human"]
+        == 1
+    )
+
+    readable = next(item for item in scan.inventory if item.episode_id == "fixture-readable")
+    ambiguous = replace(
+        scan,
+        inventory=(*scan.inventory, replace(readable, episode_id="same-identity-second-row")),
+    )
+    assert coverage_reviews_for_scan(ambiguous, (review,)) == ()
+
+    wrong_identity = replace(
+        scan,
+        inventory=tuple(
+            replace(item, row={**item.row, "seed": 999}) if item is readable else item
+            for item in scan.inventory
+        ),
+    )
+    assert coverage_reviews_for_scan(wrong_identity, (review,)) == ()
+
+    foreign_ref = replace(ref, campaign_digest="f" * 64, episode_id="")
+    foreign_scan = replace(scan, episode_refs=(foreign_ref,))
+    foreign_review = replace(review, episode_id=foreign_ref.episode_id)
+    assert coverage_reviews_for_scan(foreign_scan, (foreign_review,)) == ()
+
+    literal = replace(review, review_id="review-literal", episode_id="fixture-readable")
+    assert coverage_reviews_for_scan(scan, (literal,)) == (literal,)
+    stale = replace(review, source_identity="stale-source")
+    assert (
+        evaluate_coverage(scan, review_records=coverage_reviews_for_scan(scan, (stale,))).counts[
+            "reviews"
+        ]["full_episode_human"]
+        == 0
     )
 
 
@@ -125,6 +182,27 @@ def test_coverage_read_preserves_incomplete_deficits_and_source_identity() -> No
         CoverageReadAdapter(_binding(), lambda: _report(source_digest="e" * 64)).read(
             context=_context()
         )
+
+
+def test_coverage_read_keeps_scan_commit_distinct_from_service_revision() -> None:
+    adapter = CoverageReadAdapter(
+        _binding(),
+        lambda: _report(source_revision="source-commit-1"),
+        report_source_revision="source-commit-1",
+    )
+
+    result = adapter.read(context=_context())
+
+    assert result.status == "complete"
+    assert result.value["identity"]["source_revision"] == "source-commit-1"
+    with pytest.raises(AuditContextConflict, match="source revision"):
+        adapter.read(context=replace(_context(), source_revision=4))
+    with pytest.raises(AuditContextConflict, match="input identity"):
+        CoverageReadAdapter(
+            _binding(),
+            lambda: _report(source_revision="different-commit"),
+            report_source_revision="source-commit-1",
+        ).read(context=_context())
 
 
 def test_service_reads_real_queue_and_coverage_adapters_without_advancing_queue(

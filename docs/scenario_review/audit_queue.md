@@ -155,6 +155,18 @@ missing authoritative receipt or changed material is an explicit conflict.
 
 ## BA-05 service Next boundary
 
+`AuditService.record_human_review` is a separate explicit write; Next and
+annotations never award human coverage credit. It requires an identified
+human session, the current selected packet, matching service context and
+queue state/input revisions, and an in-process typed BA-01 scan admission.
+The BA-02 adapter holds the same durable coordination lock used by Next while
+it calls the queue's canonical `record_review`, which stores the BA-03 receipt.
+An unresolved Next lease, an agent session, or a stale/ambiguous selection
+fails closed. A crash after the queue/store write but before the service
+receipt can leave an inflight authority operation requiring reconciliation;
+this is not a cross-store atomic transaction. BA-06 browser exposure of this
+action is a separate integration step.
+
 `AuditService.next` is the authenticated BA-05 owner for advancing this queue.
 It calls the canonical `AuditQueue.select_next` through a durable sibling lock,
 and binds the campaign, source identity/revision, queue input revision, queue

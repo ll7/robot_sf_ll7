@@ -2,8 +2,10 @@
 
 `robot_sf.analysis_workbench.audit_materialize` is the bounded source-first
 slice of BA-05 (Benchmark Auditor lazy materialization). It provides diagnostic
-artifacts for one already-selected episode. It does not start a simulator,
-rerun a planner, or create benchmark evidence.
+artifacts for one already-selected episode. Its generic materializer does not
+start a simulator or rerun a planner. A separate, explicitly trusted native
+adapter may regenerate one admitted state-free `simple_policy` input for a
+derived diagnostic view; neither route creates benchmark evidence.
 
 ## Resolution order
 
@@ -60,8 +62,15 @@ rerun a planner, or create benchmark evidence.
    states through the existing replay figure renderer.
 4. If no retained state is available, return `unavailable`. Rows carrying
    exact-input execution information return
-   `exact_input_execution_deferred`; this slice does not invent a new execution
-   path or substitute another policy.
+   `exact_input_execution_deferred`; the generic materializer still never starts
+   a runner or substitutes another policy.
+5. `AuditService.materialize_selected` may explicitly hand that deferred row to
+   the launcher-owned native adapter. This is a separate diagnostic execution,
+   not a continuation of the generic materializer. It is admitted only when
+   the launcher has supplied a digest-verified native source bundle with a
+   closed `simple_policy` `runner_input`, and the selected row has no recording,
+   retained trace, replay states, checkpoint, or stateful planner input. The
+   source bundle—not row fields—supplies the executable inputs.
 
 Convenience fields such as `video_path` are not source declarations. A path is
 used only when it appears in `recording`, `original_recording`,
@@ -86,7 +95,16 @@ classification:
   `native_trace_digest` identify the canonical trace payload, while
   `retained_state_digest` identifies the projected states; path-backed traces
   also report `retained_source_file_digest` for the verified file bytes. Its
-  trajectory image is a derived view, never the historical recording.
+trajectory image is a derived view, never the historical recording. An
+exact-input regeneration is also `derived_render`, with
+`simulation_executed: true` and a fresh execution ID linked to the historical
+episode/execution ID. Its manifest records the admitted source commit, closed
+runner-input/config identity, initial-state digest, environment identity,
+bounded timeout, source-admission receipt, and a fidelity classification of
+`verified`, `diverged`, or `unverifiable`. Only the newly generated trace is
+rendered. Historical metrics, trace steps, and telemetry are never copied into
+the artifact; missing historical telemetry therefore remains `unverifiable`,
+not fabricated.
 - `unavailable`: source proof or retained state was insufficient. The reason
   and bounded diagnostics explain the next missing proof.
 
@@ -140,13 +158,18 @@ silently treated as a new request.
 The `materialize_selected` MCP tool invokes this same service method; its
 request cannot supply a different session identity or bearer token.
 
-This module does not own Codex integration, and it does not
-implement exact-input diagnostic execution. Native recording/control/fidelity
-proof remains a separate acceptance step. Fixture-backed rendering demonstrates
-the adapter contract only. The focused native smoke starts one real canonical
-episode to prove its retained trace can produce a missing-asset derived view
-without a second simulation; this is diagnostic proof for that narrow path, not
-benchmark or scientific evidence or proof of historical replay fidelity.
+This module does not own Codex integration. Exact-input regeneration is a
+separate diagnostic-only path, admitted only for a launcher-owned source bundle
+whose closed runner input is the supported stateless `simple_policy` form. It
+rejects checkpoint/stateful/model paths, retained state or recordings, source
+or identity mismatches, and ambiguous native bindings before execution. The
+single canonical child is bounded by the adapter timeout, observes cancellation,
+and performs a final source-integrity check. A duplicate service operation ID
+returns its durable receipt without starting another child. The focused native
+smoke removes the trace from a selected row, starts one real canonical episode,
+and renders that generated trace; separate tests cover divergence,
+unverifiable historical telemetry, cancellation, mutation, and idempotent
+replay. These are diagnostic checks, not benchmark or scientific evidence.
 
 Focused validation:
 
@@ -154,5 +177,7 @@ Focused validation:
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   scripts/dev/run_worktree_shared_venv.sh -- \
   uv run pytest tests/analysis_workbench/test_audit_materialize.py \
-  tests/analysis_workbench/test_audit_materialize_native.py -q
+  tests/analysis_workbench/test_audit_materialize_native.py \
+  tests/analysis_workbench/test_audit_native_diagnostic.py \
+  tests/analysis_workbench/test_audit_native_service.py -q
 ```

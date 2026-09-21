@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any
 
 from robot_sf.analysis_workbench.audit_contracts import record_from_dict
@@ -77,6 +77,20 @@ def _strict_payload(value: Mapping[str, Any], *, limit: int, name: str) -> dict[
     if len(encoded) > limit:
         raise AuditValidationError(f"{name} exceeds {limit} bytes")
     return copied
+
+
+def _json_safe(value: Any) -> Any:
+    """Project service values into strict MCP JSON without changing authority."""
+
+    if hasattr(value, "to_dict"):
+        return _json_safe(value.to_dict())
+    if is_dataclass(value):
+        return _json_safe(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,7 +194,7 @@ class AuditMCPResponse:
             "request_id": self.request_id,
             "status": self.status,
             "reason": self.reason,
-            "result": dict(self.result),
+            "result": _json_safe(self.result),
         }
 
 
@@ -214,20 +228,36 @@ class AuditMCPDispatcher:
         return AuditSelectionContext.from_mapping(value)
 
     @staticmethod
+    def _operation_id(
+        envelope: AuditMCPRequest,
+        payload: Mapping[str, Any],
+        response_request_id: str,
+        *,
+        label: str = "",
+    ) -> str:
+        """Resolve one closed operation ID without accepting explicit nulls."""
+
+        candidate = payload.get("operation_id", response_request_id)
+        if not isinstance(candidate, str) or not candidate.strip() or len(candidate) > 4_096:
+            raise AuditValidationError(
+                f"MCP {label + ' ' if label else ''}operation_id must be a non-empty bounded string"
+            )
+        if envelope.session_token in candidate:
+            raise AuditValidationError(
+                f"MCP {label + ' ' if label else ''}operation_id cannot contain session credentials"
+            )
+        return candidate
+
+    @staticmethod
     def _next_arguments(envelope: AuditMCPRequest, payload: Mapping[str, Any]) -> tuple[str, bool]:
         """Validate mutation-sensitive Next arguments before service admission."""
 
-        if "operation_id" not in payload:
-            operation_id = envelope.request_id
-        else:
-            candidate = payload["operation_id"]
-            if not isinstance(candidate, str) or not candidate.strip() or len(candidate) > 4_096:
-                raise AuditValidationError(
-                    "MCP next operation_id must be a non-empty bounded string"
-                )
-            operation_id = candidate
-        if envelope.session_token in operation_id:
-            raise AuditValidationError("MCP next operation_id cannot contain session credentials")
+        operation_id = AuditMCPDispatcher._operation_id(
+            envelope,
+            payload,
+            envelope.request_id,
+            label="next",
+        )
         force_current = payload.get("force_current", False)
         if not isinstance(force_current, bool):
             raise AuditValidationError("MCP next force_current must be a boolean")
@@ -243,9 +273,14 @@ class AuditMCPDispatcher:
 
     @staticmethod
     def _response(request_id: str, result: ServiceResult[Any]) -> AuditMCPResponse:
-        return AuditMCPResponse(request_id, result.status, result.to_dict(), result.reason)
+        return AuditMCPResponse(
+            request_id,
+            result.status,
+            _json_safe(result.to_dict()),
+            result.reason,
+        )
 
-    def dispatch(  # noqa: C901, PLR0912
+    def dispatch(  # noqa: C901, PLR0912, PLR0915
         self, request: AuditMCPRequest | Mapping[str, Any]
     ) -> AuditMCPResponse:
         """Validate origin/token and dispatch one bounded operation."""
@@ -264,9 +299,14 @@ class AuditMCPDispatcher:
             payload = envelope.payload
             context = self._context(payload)
             operation = envelope.operation
+            common_operation_id = (
+                response_request_id
+                if operation == "next"
+                else self._operation_id(envelope, payload, response_request_id)
+            )
             common = {
                 "context": context,
-                "operation_id": payload.get("operation_id", response_request_id),
+                "operation_id": common_operation_id,
                 "token": envelope.session_token,
             }
             if operation == "read_campaign":
@@ -349,6 +389,48 @@ class AuditMCPDispatcher:
                     render_config=payload.get("render_config"),
                     **common,
                 )
+            elif operation == "read_detector_rule_proposal":
+                allowed = {"context", "operation_id", "proposal_id"}
+                unknown = set(payload) - allowed
+                if unknown:
+                    raise AuditValidationError(
+                        "detector rule proposal read contains forbidden fields: "
+                        + ", ".join(sorted(unknown))
+                    )
+                proposal_id = payload.get("proposal_id")
+                if not isinstance(proposal_id, str) or not proposal_id.strip():
+                    raise AuditValidationError("MCP proposal read requires proposal_id")
+                result = self.service.read_detector_rule_proposal(
+                    envelope.session_id,
+                    proposal_id,
+                    **common,
+                )
+            elif operation == "write_detector_rule_proposal":
+                allowed = {
+                    "context",
+                    "operation_id",
+                    "record",
+                    "expected_revision",
+                    "expected_source_revision",
+                }
+                unknown = set(payload) - allowed
+                if unknown:
+                    raise AuditValidationError(
+                        "detector rule proposal write contains forbidden fields: "
+                        + ", ".join(sorted(unknown))
+                    )
+                record_payload = payload.get("record")
+                if not isinstance(record_payload, Mapping):
+                    raise AuditValidationError(
+                        "MCP proposal write requires a typed DetectorRuleProposal mapping"
+                    )
+                result = self.service.write_detector_rule_proposal(
+                    envelope.session_id,
+                    record_from_dict(record_payload),
+                    expected_revision=payload.get("expected_revision"),
+                    expected_source_revision=payload.get("expected_source_revision"),
+                    **common,
+                )
             elif operation in {"write_annotation", "write_reference", "write_finding"}:
                 record_payload = payload.get(
                     "record", payload.get(operation.removeprefix("write_"))
@@ -379,7 +461,7 @@ class AuditMCPDispatcher:
                 result = self.service.kill_switch(
                     envelope.session_id,
                     reason=payload.get("reason", "MCP cancellation"),
-                    operation_id=payload.get("operation_id", response_request_id),
+                    operation_id=common["operation_id"],
                     token=envelope.session_token,
                 )
             else:

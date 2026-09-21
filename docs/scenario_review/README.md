@@ -27,6 +27,16 @@ The SREV-17 offline annotation and storyboard editor is documented in
 [`review_editor.md`](./review_editor.md) and runs with
 `python -m robot_sf.render.review_editor`.
 
+The bounded BA-06 fixture-backed queue-to-finding UI slice is documented in
+[`audit_workbench_fixture.md`](./audit_workbench_fixture.md). It is diagnostic
+UI-wiring evidence only; final integration uses the existing SREV-15 launch
+path and BA-05's accepted service facade.
+
+The [local live Benchmark Auditor launch](./audit_workbench_live.md) is an
+in-progress integration slice that opens one campaign, queue, server-held
+service session, and SREV-15 browser mount. Its documented limits still apply;
+it is not the completed BA-06 workflow.
+
 The Benchmark Auditor release-bound coverage evaluator is documented in
 [`audit_coverage.md`](./audit_coverage.md). It consumes BA-01 scan results and
 BA-03 review receipts, emits BA-02-compatible coverage deficits, and reports

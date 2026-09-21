@@ -15,7 +15,11 @@ from types import SimpleNamespace
 import pytest
 
 from robot_sf.analysis_workbench import audit_mcp_stdio
-from robot_sf.analysis_workbench.audit_contracts import EpisodeRef
+from robot_sf.analysis_workbench.audit_contracts import (
+    DetectorRuleProposal,
+    EpisodeRef,
+    record_to_dict,
+)
 from robot_sf.analysis_workbench.audit_mcp import AuditMCPDispatcher
 from robot_sf.analysis_workbench.audit_mcp_stdio import (
     AUDIT_MCP_TOOLS,
@@ -103,6 +107,30 @@ def _enable_next(
     return dataset, queue_path
 
 
+def _proposal(service: AuditService, session: AuditSession) -> DetectorRuleProposal:
+    """Build one source-bound proposal for the stdio JSON-RPC path."""
+
+    campaign = service._scan(session)
+    registry = campaign.report.detector_registry
+    return DetectorRuleProposal(
+        proposal_id="proposal-stdio-1",
+        proposal_kind="threshold_change",
+        target_detector_id="goal_adjacent_timeout",
+        candidate_rule={"predicate": "goal_adjacent_timeout.v1", "parameters": {"tail_steps": 120}},
+        detector_registry_version=registry.version,
+        detector_registry_digest=registry.digest,
+        campaign_digest=campaign.report.audit.campaign_digest,
+        source_identity=session.source_digest,
+        source_revision=session.source_revision,
+        rationale="Source-bound stdio candidate.",
+        metadata={"evidence_boundary": "diagnostic_only"},
+        proposer_kind="agent",
+        proposer_id=session.actor.actor_id,
+        author_kind="agent",
+        author_id=session.actor.actor_id,
+    )
+
+
 def _initialize(server: AuditMCPStdioServer) -> dict[str, object]:
     response = server.handle_message(
         {
@@ -156,6 +184,21 @@ def test_stdio_dispatches_real_tools_and_keeps_session_authority_server_owned(
         assert next_properties["expected_queue_state_revision"]["type"] == ["integer", "null"]
         assert next_properties["expected_queue_input_revision"]["type"] == ["integer", "null"]
         assert next_properties["force_current"] == {"type": "boolean"}
+        proposal_tool = next(
+            tool
+            for tool in listed["result"]["tools"]
+            if tool["name"] == "write_detector_rule_proposal"
+        )
+        assert proposal_tool["inputSchema"]["additionalProperties"] is False
+        assert set(proposal_tool["inputSchema"]["properties"]) == {
+            "context",
+            "operation_id",
+            "record",
+            "expected_revision",
+            "expected_source_revision",
+        }
+        assert "decided_at" not in proposal_tool["inputSchema"]["properties"]
+        assert "approve_detector_rule_proposal" not in AUDIT_MCP_TOOLS
 
         called = server.handle_message(
             {
@@ -204,6 +247,90 @@ def test_stdio_dispatches_real_tools_and_keeps_session_authority_server_owned(
         assert denied_next is not None
         assert denied_next["result"]["isError"] is True
         assert denied_next["result"]["structuredContent"]["status"] == "denied"
+    finally:
+        service.close()
+
+
+def test_stdio_proposal_write_and_read_are_json_safe_and_decisionless(tmp_path: Path) -> None:
+    service, session, dispatcher = _setup(tmp_path)
+    try:
+        server = AuditMCPStdioServer(
+            dispatcher,
+            session_id=session.session_id,
+            session_token=session.session_token,
+        )
+        _initialize(server)
+        proposal = _proposal(service, session)
+        created = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": "proposal-write",
+                "method": "tools/call",
+                "params": {
+                    "name": "write_detector_rule_proposal",
+                    "arguments": {
+                        "record": record_to_dict(proposal),
+                        "expected_revision": 0,
+                    },
+                },
+            }
+        )
+        assert created is not None
+        assert created["result"]["isError"] is False
+        structured = created["result"]["structuredContent"]
+        assert structured["status"] == "committed"
+        assert structured["result"]["value"]["revision"] == 1
+        assert session.session_token not in json.dumps(created, sort_keys=True)
+
+        read = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": "proposal-read",
+                "method": "tools/call",
+                "params": {
+                    "name": "read_detector_rule_proposal",
+                    "arguments": {"proposal_id": proposal.proposal_id},
+                },
+            }
+        )
+        assert read is not None
+        assert read["result"]["structuredContent"]["status"] == "complete"
+        assert (
+            read["result"]["structuredContent"]["result"]["value"]["record"]["activation_status"]
+            == "inactive"
+        )
+
+        malformed = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": "proposal-null-operation-id",
+                "method": "tools/call",
+                "params": {
+                    "name": "read_detector_rule_proposal",
+                    "arguments": {
+                        "proposal_id": proposal.proposal_id,
+                        "operation_id": None,
+                    },
+                },
+            }
+        )
+        assert malformed is not None
+        assert malformed["result"]["isError"] is True
+        assert "operation_id" in malformed["result"]["structuredContent"]["reason"]
+
+        decision = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": "proposal-decision",
+                "method": "tools/call",
+                "params": {
+                    "name": "approve_detector_rule_proposal",
+                    "arguments": {"proposal_id": proposal.proposal_id},
+                },
+            }
+        )
+        assert decision is not None
+        assert decision["error"]["code"] == -32602
     finally:
         service.close()
 
@@ -407,10 +534,15 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
     try:
         bridge.start()
         assert session.session_token not in " ".join(bridge.command())
+        environment = bridge.environment(
+            {audit_mcp_stdio.MCP_SESSION_TOKEN_ENV: session.session_token}
+        )
+        assert audit_mcp_stdio.MCP_SESSION_TOKEN_ENV not in environment
+        assert session.session_token not in json.dumps(environment, sort_keys=True)
         process = subprocess.Popen(
             list(bridge.command()),
             cwd=str(Path.cwd()),
-            env=bridge.environment(),
+            env=environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -460,6 +592,9 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
             }
         )
         assert called["result"]["structuredContent"]["status"] == "complete"
+        assert session.session_token not in json.dumps(
+            (initialized, listed, called), sort_keys=True
+        )
     finally:
         if process is not None:
             if process.stdin is not None:

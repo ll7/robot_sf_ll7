@@ -409,6 +409,8 @@ export class ReviewPanelsController {
       ? options.allowedMediaSchemes
       : [];
     this._videoTargetTime = null;
+    this._onCursorChange = typeof options.onCursorChange === "function"
+      ? options.onCursorChange : null;
     const clock = options.clock || {};
     this._now = typeof options.now === "function"
       ? options.now
@@ -521,9 +523,14 @@ export class ReviewPanelsController {
 
   _applyCursor(value, source, forceRevision = false) {
     const next = clamp(value, this.state.start, this.state.end);
-    if (next !== this.state.cursorTimeS || forceRevision) this.state.contextRevision += 1;
+    const changed = next !== this.state.cursorTimeS || forceRevision;
+    if (changed) this.state.contextRevision += 1;
     this.state.cursorTimeS = next;
     this._lastDispatch = { type: "seek", source };
+    if (changed) this._onCursorChange?.({
+      time_s: next, source, context_revision: this.state.contextRevision,
+      interval_id: this.state.intervalId,
+    });
     return next;
   }
 

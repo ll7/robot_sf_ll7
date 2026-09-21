@@ -19,12 +19,14 @@ from robot_sf.analysis_workbench.audit_store import StoredRecord
 from robot_sf.analysis_workbench.review_contracts import SourceRef
 from robot_sf.render.audit_workbench import ServiceAuditWorkbenchFacade
 from robot_sf.render.audit_workbench_server import (
+    _dispatch_facade_operation,
     _materialization_source_alias,
     _sanitize_codex_reference,
     _sanitize_codex_result,
     _sanitize_codex_text,
     _sanitize_materialization_result,
     _sanitize_native_diagnostic_result,
+    _validate_sync_finding_arguments,
     make_audit_workbench_server,
 )
 from robot_sf.render.review_workbench import live_audit_document
@@ -572,6 +574,30 @@ def _sync_arguments(**overrides: Any) -> dict[str, Any]:
     }
     arguments.update(overrides)
     return arguments
+
+
+def test_sync_finding_validation_and_dispatch_keep_the_route_closed() -> None:
+    valid = _sync_arguments()
+
+    class Facade:
+        def sync_finding(self, **kwargs: Any) -> dict[str, Any]:
+            return {"status": "accepted", "arguments": kwargs}
+
+    assert _dispatch_facade_operation(Facade(), "sync_finding", valid)["status"] == "accepted"
+    invalid_cases = (
+        {"extra": True},
+        {"finding_id": "bad/finding"},
+        {"repository": "not-a-repository"},
+        {"expected_finding_revision": -1},
+        {"expected_source_revision": True},
+        {"expected_source_revision": -1},
+        {"expected_source_revision": ""},
+        {"operation_id": "not valid"},
+        {"retry_ambiguous": "false"},
+    )
+    for overrides in invalid_cases:
+        with pytest.raises(ValueError):
+            _validate_sync_finding_arguments({**valid, **overrides})
 
 
 def test_live_route_sync_finding_is_closed_and_redacts_provider_authority() -> None:

@@ -485,6 +485,31 @@ def _materialization_source_alias(
     return alias if isinstance(alias, str) and alias else None
 
 
+def _safe_materialization_failure_details(value: Any) -> dict[str, Any]:
+    """Expose bounded non-path diagnostics for an unavailable render.
+
+    Returns:
+        A safe reason/diagnostic projection, or an empty mapping.
+    """
+
+    if not isinstance(value, Mapping):
+        return {}
+    details: dict[str, Any] = {}
+    reason = value.get("reason")
+    if isinstance(reason, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", reason):
+        details["reason"] = reason
+    diagnostics = value.get("diagnostics")
+    if isinstance(diagnostics, (list, tuple)):
+        safe_diagnostics = [
+            item
+            for item in diagnostics
+            if isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", item)
+        ][:8]
+        if safe_diagnostics:
+            details["diagnostics"] = safe_diagnostics
+    return details
+
+
 def _sanitize_materialization_result(
     value: Any, *, episode_id: str, source_episode_id: str | None = None
 ) -> dict[str, Any]:
@@ -509,6 +534,7 @@ def _sanitize_materialization_result(
     result = value.get("value")
     projected["status"] = status
     if status not in {"complete", "partial"}:
+        projected.update(_safe_materialization_failure_details(value.get("value")))
         return projected
     result_episode_id = result.get("episode_id") if isinstance(result, Mapping) else None
     if not isinstance(result_episode_id, str) or result_episode_id not in {

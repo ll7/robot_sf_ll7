@@ -21,6 +21,12 @@ digests.  A digest must change when its covered state changes:
     The exact open-issue preparation audit.
 ``discovery_relevant_paths_digest``
     Paths and inputs covered by the discovery saturation decision.
+
+An optional ``preparation.lifecycle_reconciliation`` block carries the
+``lifecycle_state_reconcile.v1`` summary counts (``unresolved_drift_count``
+and ``repaired_count``). When present, unresolved lifecycle drift routes the
+next action to ``reconcile_lifecycle`` and blocks terminal zero-work; when
+absent, arbitration is unchanged.
 """
 
 from __future__ import annotations
@@ -230,6 +236,28 @@ def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed e
         field="blocker_reconciliation_count",
         errors=errors,
     )
+    lifecycle = preparation.get("lifecycle_reconciliation")
+    lifecycle_unresolved: int | None = None
+    lifecycle_repaired: int | None = None
+    if lifecycle is not None:
+        if not isinstance(lifecycle, Mapping):
+            errors.append("preparation.lifecycle_reconciliation_not_object")
+        else:
+            unresolved = lifecycle.get("unresolved_drift_count")
+            repaired = lifecycle.get("repaired_count")
+            unresolved_ok = (
+                not isinstance(unresolved, bool) and isinstance(unresolved, int) and unresolved >= 0
+            )
+            repaired_ok = (
+                not isinstance(repaired, bool) and isinstance(repaired, int) and repaired >= 0
+            )
+            if not unresolved_ok:
+                errors.append("preparation.lifecycle_unresolved_drift_count_invalid")
+            if not repaired_ok:
+                errors.append("preparation.lifecycle_repaired_count_invalid")
+            if unresolved_ok and repaired_ok:
+                lifecycle_unresolved = unresolved
+                lifecycle_repaired = repaired
 
     optional_counts: dict[str, int | None] = {}
     for field in PREPARATION_COUNT_FIELDS:
@@ -306,6 +334,8 @@ def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed e
         "preparation": preparation,
         "discovery": discovery,
         "freshness": freshness,
+        "lifecycle_unresolved": lifecycle_unresolved,
+        "lifecycle_repaired": lifecycle_repaired,
         "counts": {
             "claimable_count": claimable_count,
             "merge_ready_count": merge_ready_count,
@@ -377,6 +407,10 @@ def _build_zero_work_proof(normalized: Mapping[str, Any]) -> dict[str, Any]:
             "formalizable_count": normalized["counts"]["formalizable_count"],
             "blocker_reconciliation_count": normalized["counts"]["blocker_reconciliation_count"],
             "blocker_reconciliation_complete": True,
+            "lifecycle_reconciliation": {
+                "unresolved_drift_count": normalized.get("lifecycle_unresolved"),
+                "repaired_count": normalized.get("lifecycle_repaired"),
+            },
             **{field: normalized["counts"][field] for field in PREPARATION_COUNT_FIELDS},
         },
         "discovery": {
@@ -447,8 +481,12 @@ def _choose_next_action(  # noqa: C901 - precedence is the controller contract
         return "recover_pr", None
     if _positive(counts, "open_count"):
         return "review", None
-    if _positive(counts, "claimable_count"):
-        return "implement", None
+    lifecycle_drift = (
+        isinstance(normalized.get("lifecycle_unresolved"), int)
+        and normalized["lifecycle_unresolved"] > 0
+    )
+    if _positive(counts, "claimable_count") or lifecycle_drift:
+        return ("reconcile_lifecycle" if lifecycle_drift else "implement"), None
     if _positive(counts, "promotable_count"):
         return "gate_readiness", None
     if _positive(counts, "formalizable_count"):
@@ -537,6 +575,10 @@ def arbitrate_controller(
             )
         )
         and normalized["reconciliation_complete"]
+        and (
+            not isinstance(normalized.get("lifecycle_unresolved"), int)
+            or normalized["lifecycle_unresolved"] == 0
+        )
         and normalized["discovery_status"] == "saturated"
         and normalized["relevant_head_sha"] == normalized["origin_main_sha"]
         and normalized["readiness_outcomes_complete"]
@@ -654,6 +696,19 @@ def validate_zero_work_proof(  # noqa: C901, PLR0912, PLR0915 - validate every p
                 reasons.append(f"proof_{field}_nonzero")
         if preparation.get("blocker_reconciliation_complete") is not True:
             reasons.append("proof_blocker_reconciliation_incomplete")
+        lifecycle_proof = preparation.get("lifecycle_reconciliation")
+        if lifecycle_proof is not None:
+            if not isinstance(lifecycle_proof, Mapping):
+                reasons.append("proof_lifecycle_reconciliation_not_object")
+            else:
+                unresolved = lifecycle_proof.get("unresolved_drift_count")
+                if unresolved is not None and unresolved != 0:
+                    reasons.append("proof_lifecycle_drift_unresolved")
+                repaired = lifecycle_proof.get("repaired_count")
+                if repaired is not None and (
+                    isinstance(repaired, bool) or not isinstance(repaired, int) or repaired < 0
+                ):
+                    reasons.append("proof_lifecycle_repaired_count_invalid")
         if (
             not isinstance(preparation.get("audit_digest"), str)
             or SHA256_RE.fullmatch(preparation.get("audit_digest", "")) is None

@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
@@ -351,13 +351,13 @@ class QueueNextResult:
         return self.selection_result.packet
 
     @property
-    def context(self):
+    def context(self) -> QueueSelectionContext:
         """Return BA-02's versioned selection context."""
 
         return self.selection_result.context
 
     @property
-    def selection(self):
+    def selection(self) -> QueueSelectionContext:
         """Compatibility alias for the queue selection context."""
 
         return self.selection_result.context
@@ -875,7 +875,7 @@ class QueueNextAdapter:
             return result
 
     @contextmanager
-    def transaction_lock(self, *, context: AuditSelectionContext):
+    def transaction_lock(self, *, context: AuditSelectionContext) -> Iterator[None]:
         """Hold the durable Next lock across admission and queue commit."""
 
         queue = self._stable_queue(context)

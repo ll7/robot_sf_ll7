@@ -30,7 +30,7 @@ from robot_sf.analysis_workbench.audit_codex_app_server import (
     inspect_live_capabilities,
 )
 from robot_sf.analysis_workbench.audit_contracts import ReviewRecord
-from robot_sf.analysis_workbench.audit_coverage import evaluate_coverage
+from robot_sf.analysis_workbench.audit_coverage import AuditHealthReport, evaluate_coverage
 from robot_sf.analysis_workbench.audit_mcp import LOOPBACK_ORIGINS, AuditMCPDispatcher
 from robot_sf.analysis_workbench.audit_mcp_stdio import AuditMCPBridge
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, ScanSummary
@@ -583,7 +583,7 @@ def open_live_audit_workbench(  # noqa: C901, PLR0913
         service.next_adapter = queue_adapter
         service.queue_next_adapter = queue_adapter
 
-        def coverage_report():
+        def coverage_report() -> AuditHealthReport:
             """Recompute BA-04 from the admitted scan and typed BA-03 reviews.
 
             Returns:

@@ -25,6 +25,7 @@ import math
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
@@ -1539,6 +1540,27 @@ def _open_private_staging_parent(root_fd: int, root_identity: tuple[int, int]) -
     return os.dup(root_fd)
 
 
+def _staging_parent_path(lease: _OutputLease, staging_parent_fd: int) -> str:
+    """Return a temporary-directory parent usable on the active platform.
+
+    Linux keeps the descriptor-backed path so parent swaps cannot redirect
+    renderer staging. Darwin's ``mkdtemp`` cannot reliably descend through
+    ``/dev/fd``; its private lease root remains the bounded fallback there.
+    """
+
+    if sys.platform == "darwin":
+        return str(lease.root)
+    return str(_descriptor_path(staging_parent_fd))
+
+
+def _renderer_root_path(render_root: Path, render_root_fd: int) -> Path:
+    """Return the renderer path while retaining descriptor safety where viable."""
+
+    if sys.platform == "darwin":
+        return render_root
+    return _descriptor_path(render_root_fd)
+
+
 def _bind_output_directory(lease: _OutputLease, *, create: bool) -> None:
     """Create or open the final output directory through the retained root fd."""
 
@@ -2296,9 +2318,9 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
         with tempfile.TemporaryDirectory(
             prefix=".audit-materialize-render-",
             # macOS cannot reliably descend through ``/dev/fd/<fd>`` for
-            # ``mkdtemp``. The directory remains private and is still
-            # published only through the retained output descriptor below.
-            dir=str(lease.root),
+            # ``mkdtemp``; ``_staging_parent_path`` selects the bounded
+            # visible-lease fallback only on that platform.
+            dir=_staging_parent_path(lease, staging_parent_fd),
         ) as render_root_name:
             render_root = Path(render_root_name)
             render_root_fd = os.open(
@@ -2307,7 +2329,7 @@ def _render_replay_states_with_lease(  # noqa: PLR0913 - keeps digest identities
                 dir_fd=staging_parent_fd,
             )
             try:
-                artifact_path = render_root / "trajectory.png"
+                artifact_path = _renderer_root_path(render_root, render_root_fd) / "trajectory.png"
                 figure = generate_trajectory(replay, artifact_path, fmt="png")
                 figure_digest = _figure_artifact_digest(figure)
                 _publish_staged_files(lease, render_root_fd)
@@ -2489,8 +2511,8 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
         with tempfile.TemporaryDirectory(
             prefix=".audit-materialize-source-",
             # Keep the private source path usable on Darwin; publication and
-            # final identity checks remain descriptor-relative.
-            dir=str(lease.root),
+            # final identity checks remain descriptor-relative elsewhere.
+            dir=_staging_parent_path(lease, staging_parent_fd),
         ) as source_dir:
             source_base = Path(source_dir)
             source_path = source_base / "retained-trace.json"
@@ -2508,7 +2530,7 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
             typed = simulation_trace_export_from_dict(payload)
             with tempfile.TemporaryDirectory(
                 prefix=".audit-materialize-render-",
-                dir=str(lease.root),
+                dir=_staging_parent_path(lease, staging_parent_fd),
             ) as render_root_name:
                 render_root = Path(render_root_name)
                 render_root_fd = os.open(
@@ -2517,7 +2539,7 @@ def _render_trace_payload_with_lease(  # noqa: PLR0913, PLR0915
                     dir_fd=staging_parent_fd,
                 )
                 try:
-                    renderer_base = render_root
+                    renderer_base = _renderer_root_path(render_root, render_root_fd)
                     request = ComponentRequest(
                         request_id=f"materialize-{cache_key[:16]}",
                         component_id=review_scene.COMPONENT_ID,

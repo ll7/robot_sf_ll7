@@ -249,9 +249,7 @@ class CodexAppServerConfig:
         if self.accounting_mode == "strict_provider_ceiling" and (
             not self.provider_ceiling_verified or self.provider_compute_ceiling is None
         ):
-            raise ValueError(
-                "strict_provider_ceiling requires a verified provider_compute_ceiling"
-            )
+            raise ValueError("strict_provider_ceiling requires a verified provider_compute_ceiling")
         if self.accounting_mode == "strict_provider_ceiling" and not self.require_explicit_route:
             raise ValueError("strict_provider_ceiling requires require_explicit_route=True")
 
@@ -765,9 +763,7 @@ def _version(executable: str, *, timeout_seconds: float) -> str:
     return text.split()[0] if text else ""
 
 
-def _model_choice(
-    result: Mapping[str, Any], *, requested_model_id: str = ""
-) -> Mapping[str, Any]:
+def _model_choice(result: Mapping[str, Any], *, requested_model_id: str = "") -> Mapping[str, Any]:
     data = result.get("data")
     if not isinstance(data, Sequence) or isinstance(data, (str, bytes)):
         raise AppServerUnavailable("model/list returned no model data")
@@ -928,9 +924,13 @@ class CodexAppServerProvider:
         if route.client_version != self.config.expected_cli_version:
             raise AppServerUnavailable("route CLI version does not match the tested adapter")
         if route.accounting_mode != self.config.accounting_mode:
-            raise AppServerUnavailable("route accounting mode does not match provider configuration")
+            raise AppServerUnavailable(
+                "route accounting mode does not match provider configuration"
+            )
         if route.provider_ceiling_verified != self.config.provider_ceiling_verified:
-            raise AppServerUnavailable("route provider-ceiling evidence does not match configuration")
+            raise AppServerUnavailable(
+                "route provider-ceiling evidence does not match configuration"
+            )
         if self.config.required_route_id and route.route_id != self.config.required_route_id:
             raise AppServerUnavailable("route does not match required_route_id")
         if self.config.required_provider and route.provider != self.config.required_provider:

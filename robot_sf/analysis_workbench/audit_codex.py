@@ -648,17 +648,17 @@ class AuditCodexClient:
         compute = usage.get("compute")
         issue_writes = usage.get("issue_writes", 0)
         overspent = (
-            isinstance(tokens, int)
-            and not isinstance(tokens, bool)
-            and tokens > reserved_tokens
-        ) or (
-            isinstance(compute, (int, float))
-            and not isinstance(compute, bool)
-            and float(compute) > reserved_compute
-        ) or (
-            isinstance(issue_writes, int)
-            and not isinstance(issue_writes, bool)
-            and issue_writes > reserved_issue_writes
+            (isinstance(tokens, int) and not isinstance(tokens, bool) and tokens > reserved_tokens)
+            or (
+                isinstance(compute, (int, float))
+                and not isinstance(compute, bool)
+                and float(compute) > reserved_compute
+            )
+            or (
+                isinstance(issue_writes, int)
+                and not isinstance(issue_writes, bool)
+                and issue_writes > reserved_issue_writes
+            )
         )
         result["accounting"] = {
             **{
@@ -678,7 +678,7 @@ class AuditCodexClient:
                     "issue_writes": reserved_issue_writes,
                 },
                 "overspent": overspent,
-            }
+            },
         }
         result["usage"] = normalized
         return result
@@ -1805,9 +1805,8 @@ class AuditCodexClient:
                     "unavailable", reason="no supported Codex provider is configured"
                 )
             provider_config = getattr(provider, "config", None)
-            if (
-                getattr(provider_config, "require_explicit_route", False)
-                and (not isinstance(route_id, str) or not route_id.strip())
+            if getattr(provider_config, "require_explicit_route", False) and (
+                not isinstance(route_id, str) or not route_id.strip()
             ):
                 return CodexResult(
                     "unavailable",

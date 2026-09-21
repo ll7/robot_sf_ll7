@@ -250,16 +250,6 @@ _CODEX_USAGE_FIELDS = frozenset(
 )
 _CODEX_ACTIVITY_FIELDS = frozenset({"message", "text", "evidence_ids", "operation_id", "timestamp"})
 _CODEX_REFERENCE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
-_CODEX_PATH_PATTERN = re.compile(
-    r"(?:"
-    r"[A-Za-z]:[\\/][^\s<>\"']*"
-    r"|/[A-Za-z0-9._~-]+(?:/[^\s<>\"']*)?"
-    r"|/{2,}[^\s<>\"']*"
-    r"|\\{2,}[^\s<>\"']*"
-    r"|(?:[^/\\\s<>:\"']+[\\/])+[^/\\\s<>\"']+"
-    r")",
-    re.IGNORECASE,
-)
 
 
 class _CodexCapabilityUnavailable(Exception):
@@ -673,6 +663,38 @@ def _normalize_codex_text(value: str) -> str:
     return normalized
 
 
+def _redact_path_like_text(value: str) -> str:
+    """Redact path-shaped tokens with a bounded linear scan.
+
+    Provider text is untrusted and can be arbitrarily repetitive.  Avoid a
+    backtracking regular expression here so sanitization remains predictable
+    even for adversarial input.
+
+    Returns:
+        Text with path-shaped tokens replaced by a fixed marker.
+    """
+
+    output: list[str] = []
+    token: list[str] = []
+
+    def flush_token() -> None:
+        if token:
+            token_text = "".join(token)
+            output.append(
+                "<path redacted>" if "/" in token_text or "\\" in token_text else token_text
+            )
+            token.clear()
+
+    for character in value:
+        if character.isspace():
+            flush_token()
+            output.append(character)
+        else:
+            token.append(character)
+    flush_token()
+    return "".join(output)
+
+
 def _sanitize_codex_text(value: Any, *, maximum: int = 8192) -> str | None:
     if not isinstance(value, str):
         return None
@@ -682,7 +704,7 @@ def _sanitize_codex_text(value: Any, *, maximum: int = 8192) -> str | None:
         # Partial encoding can leave the credential itself in the unencoded
         # fragments, so never preserve any part of an encoded provider field.
         return "<encoded redacted>"
-    return _CODEX_PATH_PATTERN.sub("<path redacted>", bounded)
+    return _redact_path_like_text(bounded)
 
 
 def _sanitize_codex_reference(value: Any) -> str | int | float | None:
@@ -871,7 +893,7 @@ def _sanitize_related_text(value: Any, *, maximum: int = 512) -> str | None:
     normalized = _normalize_codex_text(bounded)
     if normalized != bounded:
         return "<encoded redacted>"
-    return _CODEX_PATH_PATTERN.sub("<path redacted>", bounded)
+    return _redact_path_like_text(bounded)
 
 
 def _sanitize_related_reference(value: Any) -> str | int | float | None:

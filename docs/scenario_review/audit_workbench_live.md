@@ -157,9 +157,28 @@ media availability or full BA-06 acceptance.
 
 The native trace had no retained video or synchronized metrics, and the tracked
 summary-only fixture cannot supply them; the workbench does not recreate
-missing media from summary data. Diagnostics, GitHub sync, embedded Codex
-activity, browser-side visual inspection, and complete recovery proof remain
-unvalidated for the full epic.
+missing media from summary data. Embedded Codex activity, browser-side visual
+inspection, and complete recovery proof remain unvalidated for the full epic.
+
+## Server-held GitHub publication (BA-06 bounded slice)
+
+After a finding is durably persisted, the live finding pane may submit an
+explicit `owner/repository` plus the finding, selection, context, source, and
+canonical finding-revision compare-and-swap coordinates. The browser never
+sends a token, provider, client, path, evidence override, or service context.
+The loopback server dispatches the closed `sync_finding` operation to the
+authenticated BA-05 service; the service loads the canonical finding, checks
+the session policy's repository allowlist and issue-write budget, and owns the
+GitHub outbox/provider call. Missing provider capability is returned as
+`unavailable`; stale selection/context/finding revisions are `conflict`, and
+ambiguous outcomes remain durable for an explicit retry.
+
+The accepted BA-05 publication contract creates one immutable marker-bearing
+issue and appends later finding revisions as marker-bearing comments. It does
+not claim GitHub issue-body compare-and-swap, atomic cross-system linkage, or
+exactly-once remote mutation. A successful local fake-provider or hosted test
+proves only this server-held diagnostic publication seam; it is not benchmark
+evidence and does not establish a provider quota or full BA-06 completion.
 
 The service snapshot also exposes a read-only selected-artifact status line.
 By default, materialization is explicitly `not_configured` because no

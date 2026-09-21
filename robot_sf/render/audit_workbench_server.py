@@ -71,6 +71,7 @@ _OPERATIONS = frozenset(
         "related_cases",
         "save_annotation",
         "persist_finding",
+        "sync_finding",
         "record_human_review",
         "materialize_selected",
         "run_native_diagnostic",
@@ -120,6 +121,21 @@ _RELATED_CASE_MODES = frozenset(
 _RELATED_CASE_ARGUMENTS = frozenset(
     {"episode_id", "mode", "limit", "operation_id", "expected_context_revision"}
 )
+_SYNC_FINDING_ARGUMENTS = frozenset(
+    {
+        "finding_id",
+        "repository",
+        "expected_finding_revision",
+        "expected_selection_revision",
+        "expected_context_revision",
+        "expected_source_revision",
+        "retry_ambiguous",
+        "operation_id",
+    }
+)
+_GITHUB_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_MAX_SYNC_FINDING_ID_LENGTH = 256
+_MAX_SYNC_REPOSITORY_LENGTH = 256
 _MAX_RELATED_CASE_ID_LENGTH = 256
 _MAX_RELATED_CASE_MODE_LENGTH = 64
 _MAX_RELATED_CASE_LIMIT = 100
@@ -177,6 +193,7 @@ _ARGUMENTS = {
             "title",
         }
     ),
+    "sync_finding": _SYNC_FINDING_ARGUMENTS,
     "record_human_review": frozenset(
         {
             "outcome",
@@ -288,6 +305,8 @@ def _dispatch_facade_operation(  # noqa: C901
         return facade.save_annotation(**arguments)
     if operation == "persist_finding":
         return facade.persist_finding(**arguments)
+    if operation == "sync_finding":
+        return facade.sync_finding(**arguments)
     if operation == "record_human_review":
         return facade.record_human_review(**arguments)
     if operation == "codex_start":
@@ -338,6 +357,50 @@ def _validate_human_review_arguments(arguments: dict[str, Any]) -> None:
     operation_id = arguments["operation_id"]
     if not isinstance(operation_id, str) or not _OPAQUE_OPERATION_ID.fullmatch(operation_id):
         raise ValueError("human review operation_id is invalid")
+
+
+def _validate_sync_finding_arguments(arguments: dict[str, Any]) -> None:  # noqa: C901
+    """Admit one explicit repository publication request with full CAS."""
+
+    if set(arguments) != _SYNC_FINDING_ARGUMENTS:
+        raise ValueError("GitHub sync requires all closed fields")
+    finding_id = arguments["finding_id"]
+    if (
+        not isinstance(finding_id, str)
+        or not finding_id.strip()
+        or len(finding_id) > _MAX_SYNC_FINDING_ID_LENGTH
+        or not re.fullmatch(r"[A-Za-z0-9_.:-]+", finding_id)
+    ):
+        raise ValueError("GitHub sync finding_id is invalid")
+    repository = arguments["repository"]
+    if (
+        not isinstance(repository, str)
+        or len(repository) > _MAX_SYNC_REPOSITORY_LENGTH
+        or not _GITHUB_REPOSITORY.fullmatch(repository)
+    ):
+        raise ValueError("GitHub sync repository is invalid")
+    for field in (
+        "expected_finding_revision",
+        "expected_selection_revision",
+        "expected_context_revision",
+    ):
+        value = arguments[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"GitHub sync {field} is invalid")
+    source_revision = arguments["expected_source_revision"]
+    if isinstance(source_revision, bool) or not isinstance(source_revision, (int, str)):
+        raise ValueError("GitHub sync expected_source_revision is invalid")
+    if isinstance(source_revision, int) and source_revision < 0:
+        raise ValueError("GitHub sync expected_source_revision is invalid")
+    if isinstance(source_revision, str) and (
+        not source_revision or len(source_revision) > _MAX_SYNC_REPOSITORY_LENGTH
+    ):
+        raise ValueError("GitHub sync expected_source_revision is invalid")
+    operation_id = arguments["operation_id"]
+    if not isinstance(operation_id, str) or not _OPAQUE_OPERATION_ID.fullmatch(operation_id):
+        raise ValueError("GitHub sync operation_id is invalid")
+    if not isinstance(arguments["retry_ambiguous"], bool):
+        raise ValueError("GitHub sync retry_ambiguous is invalid")
 
 
 def _validate_materialization_arguments(arguments: dict[str, Any]) -> None:
@@ -1327,6 +1390,8 @@ def make_audit_workbench_server(  # noqa: C901 - bounded HTTP verb guards live h
                     _validate_related_case_arguments(arguments)
                 if operation == "record_human_review":
                     _validate_human_review_arguments(arguments)
+                if operation == "sync_finding":
+                    _validate_sync_finding_arguments(arguments)
                 if operation == "materialize_selected":
                     _validate_materialization_arguments(arguments)
                 if operation == "run_native_diagnostic":
@@ -1425,6 +1490,26 @@ def make_audit_workbench_server(  # noqa: C901 - bounded HTTP verb guards live h
                                 ),
                             ),
                         )
+                        return
+                    if operation == "sync_finding":
+                        selected = getattr(facade, "_selected_episode_id", None)
+                        if (
+                            not isinstance(selected, str)
+                            or not selected
+                            or arguments["expected_selection_revision"]
+                            != getattr(facade, "_selection_epoch", None)
+                            or arguments["expected_context_revision"] != facade._context_revision()
+                        ):
+                            self._json(
+                                HTTPStatus.CONFLICT,
+                                {
+                                    "status": "conflict",
+                                    "reason": "GitHub sync selection or context is stale",
+                                },
+                            )
+                            return
+                        result = facade.sync_finding(**arguments)
+                        self._json(HTTPStatus.OK, result)
                         return
                     if operation == "related_cases":
                         scope_reason = _related_scope_conflict(facade, arguments)

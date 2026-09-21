@@ -295,7 +295,7 @@ def run_with_launch_check(
         process.communicate()
         returncode = process.returncode
         exec_error = f"command timed out after {timeout} seconds"
-    except Exception as exc:  # noqa: BLE001
+    except (subprocess.SubprocessError, OSError) as exc:
         process.kill()
         returncode = process.returncode
         exec_error = f"execution failed: {type(exc).__name__}: {exc}"

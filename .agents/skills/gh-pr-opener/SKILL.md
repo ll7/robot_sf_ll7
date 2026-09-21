@@ -27,7 +27,9 @@ uv run python scripts/dev/implementation_self_review.py gate --receipt-file <rec
   --issue <number> --expected-head-sha <head-sha> --expected-base-sha <base-sha>
 ```
 
-A non-zero gate result stops publication; it never authorizes a human override by itself.
+Add `--issue-body-file <body.md>` when the issue text is at hand so the contract digest
+binds too. A non-zero gate result stops publication; it never authorizes a human override
+by itself.
 Self-review is implementation-quality proof only and never substitutes for independent
 merge-review authority.
 

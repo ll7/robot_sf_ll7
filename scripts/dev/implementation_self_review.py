@@ -21,6 +21,14 @@ Self-review is implementation-quality proof only. It never counts as
 independent merge-review authority (see issue #8677), merge approval,
 benchmark evidence, or a scientific claim. The post-handoff delivery
 contract stays on :mod:`scripts.dev.issue_completion_receipt`.
+
+Design note on :mod:`scripts.dev.issue_completion_receipt`: the small
+type/shape validators below deliberately mirror that module's fail-closed
+style without importing its privates. The two schemas share no field
+semantics beyond trivial type checks (different required fields, different
+authority boundaries); the one genuinely shared semantic — canonical JSON
+digests — is reused via the public
+:func:`scripts.dev.goal_autopilot_controller.sha256_json`.
 """
 
 from __future__ import annotations
@@ -118,6 +126,21 @@ def compute_receipt_digest(receipt: Mapping[str, Any]) -> str:
     """Return the canonical digest over the receipt payload minus its digest."""
     payload = {key: receipt[key] for key in receipt if key != "receipt_digest"}
     return sha256_json(payload)
+
+
+def _require_mapping(
+    receipt: Mapping[str, Any], field: str, errors: list[str]
+) -> Mapping[str, Any] | None:
+    """Return a required object field, recording a fail-closed type error.
+
+    A present-but-malformed section must refuse, never silently skip its
+    checks: skipping would let a malformed receipt authorize handoff.
+    """
+    value = receipt.get(field)
+    if not isinstance(value, Mapping):
+        errors.append(f"{field} must be an object")
+        return None
+    return value
 
 
 def _validate_contract(contract: Mapping[str, Any] | None, errors: list[str]) -> str | None:
@@ -308,31 +331,27 @@ def validate_receipt(  # noqa: C901, PLR0912 - schema gate validates every field
     elif expected_issue is not None and issue != expected_issue:
         errors.append(f"issue {issue} does not match expected issue {expected_issue}")
     contract_digest = _validate_contract(
-        receipt.get("contract") if isinstance(receipt.get("contract"), Mapping) else None,
+        _require_mapping(receipt, "contract", errors),
         errors,
     )
-    if "contract" in receipt and not isinstance(receipt.get("contract"), Mapping):
-        pass
     if issue_contract is not None and contract_digest is not None:
         if hashlib.sha256(issue_contract.encode("utf-8")).hexdigest() != contract_digest:
             errors.append("contract digest does not match the supplied issue body text")
     _validate_delivery(
-        receipt.get("delivery") if isinstance(receipt.get("delivery"), Mapping) else None,
+        _require_mapping(receipt, "delivery", errors),
         expected_base_sha=expected_base_sha,
         expected_head_sha=expected_head_sha,
         expected_branch=expected_branch,
         errors=errors,
     )
-    if "delivery" in receipt and not isinstance(receipt.get("delivery"), Mapping):
-        pass
     _validate_diff(
-        receipt.get("diff") if isinstance(receipt.get("diff"), Mapping) else None,
+        _require_mapping(receipt, "diff", errors),
         errors,
     )
     _, checks_failed = _validate_checks(receipt.get("checks"), errors)
     claimed_pass = _validate_validation(receipt.get("validation"), errors)
     has_blocking = _validate_findings(
-        receipt.get("findings") if isinstance(receipt.get("findings"), Mapping) else None,
+        _require_mapping(receipt, "findings", errors),
         errors,
     )
     producer = receipt.get("producer")
@@ -547,6 +566,11 @@ def _build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--expected-head-sha", required=True, help="Expected exact head SHA.")
     gate.add_argument("--expected-base-sha", required=True, help="Expected exact base SHA.")
     gate.add_argument("--expected-branch", default=None, help="Expected branch name.")
+    gate.add_argument(
+        "--issue-body-file",
+        default=None,
+        help="Issue body text for contract-digest binding; recommended when at hand.",
+    )
     return parser
 
 
@@ -584,12 +608,20 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(evidence, indent=2, sort_keys=True))
             return 0
         receipt = _load_json_file(args.receipt_file)
+        contract = None
+        if getattr(args, "issue_body_file", None) is not None:
+            try:
+                contract = Path(args.issue_body_file).read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                print(f"implementation self-review blocked: {exc}", file=sys.stderr)
+                return 2
         decision = handoff_decision(
             receipt,
             expected_issue=args.issue,
             expected_base_sha=args.expected_base_sha,
             expected_head_sha=args.expected_head_sha,
             expected_branch=args.expected_branch,
+            issue_contract=contract,
         )
         print(json.dumps(decision, indent=2, sort_keys=True))
         return 0 if decision["ok"] else 2

@@ -349,3 +349,143 @@ def test_collect_git_evidence_rejects_empty_diff() -> None:
         self_review.collect_git_evidence(
             worktree="/tmp/issue-9537-exact-diff-self-review", git_runner=runner
         )
+
+
+def test_non_object_sections_refuse_handoff() -> None:
+    """Present-but-malformed sections refuse instead of skipping their checks."""
+    for field in ("contract", "delivery", "diff", "findings"):
+        declaration = _declaration()
+        declaration[field] = "not-an-object"
+        decision = self_review.handoff_decision(
+            declaration,
+            expected_issue=9537,
+            expected_base_sha=BASE_SHA,
+            expected_head_sha=HEAD_SHA,
+        )
+
+        assert decision["ok"] is False, field
+        assert f"{field} must be an object" in decision["reasons"], field
+
+
+def test_base_sha_move_invalidates_handoff() -> None:
+    """A base move after self-review refuses handoff without re-review."""
+    receipt = self_review.build_receipt(_declaration())
+
+    decision = self_review.handoff_decision(
+        receipt,
+        expected_issue=9537,
+        expected_base_sha="d" * 40,
+        expected_head_sha=HEAD_SHA,
+    )
+
+    assert decision["ok"] is False
+    assert any("base_sha" in reason for reason in decision["reasons"])
+
+
+def test_gate_cli_exit_codes(tmp_path: Any) -> None:
+    """The gate CLI reports 0 for accept and 2 for refuse."""
+    import json as json_module
+
+    receipt = self_review.build_receipt(_declaration())
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json_module.dumps(receipt), encoding="utf-8")
+
+    assert (
+        self_review.main(
+            [
+                "gate",
+                "--receipt-file",
+                str(receipt_file),
+                "--issue",
+                "9537",
+                "--expected-head-sha",
+                HEAD_SHA,
+                "--expected-base-sha",
+                BASE_SHA,
+            ]
+        )
+        == 0
+    )
+    assert (
+        self_review.main(
+            [
+                "gate",
+                "--receipt-file",
+                str(receipt_file),
+                "--issue",
+                "9537",
+                "--expected-head-sha",
+                "c" * 40,
+                "--expected-base-sha",
+                BASE_SHA,
+            ]
+        )
+        == 2
+    )
+
+
+def test_validate_cli_exit_codes(tmp_path: Any, capsys: Any) -> None:
+    """The validate CLI reports 0 for valid and 1 for invalid receipts."""
+    import json as json_module
+
+    receipt = self_review.build_receipt(_declaration())
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json_module.dumps(receipt), encoding="utf-8")
+
+    assert self_review.main(["validate", "--receipt-file", str(receipt_file)]) == 0
+
+    tampered = dict(receipt)
+    tampered["findings"] = {"blocking": [], "non_blocking": ["edited"]}
+    receipt_file.write_text(json_module.dumps(tampered), encoding="utf-8")
+
+    assert self_review.main(["validate", "--receipt-file", str(receipt_file)]) == 1
+
+
+def test_gate_cli_binds_issue_body_digest(tmp_path: Any) -> None:
+    """The gate enforces the contract digest when a body file is supplied."""
+    import json as json_module
+
+    receipt = self_review.build_receipt(_declaration())
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json_module.dumps(receipt), encoding="utf-8")
+    body_file = tmp_path / "body.md"
+    body_file.write_text(ISSUE_BODY, encoding="utf-8")
+
+    assert (
+        self_review.main(
+            [
+                "gate",
+                "--receipt-file",
+                str(receipt_file),
+                "--issue",
+                "9537",
+                "--expected-head-sha",
+                HEAD_SHA,
+                "--expected-base-sha",
+                BASE_SHA,
+                "--issue-body-file",
+                str(body_file),
+            ]
+        )
+        == 0
+    )
+    body_file.write_text(ISSUE_BODY + "\nEdited.\n", encoding="utf-8")
+
+    assert (
+        self_review.main(
+            [
+                "gate",
+                "--receipt-file",
+                str(receipt_file),
+                "--issue",
+                "9537",
+                "--expected-head-sha",
+                HEAD_SHA,
+                "--expected-base-sha",
+                BASE_SHA,
+                "--issue-body-file",
+                str(body_file),
+            ]
+        )
+        == 2
+    )

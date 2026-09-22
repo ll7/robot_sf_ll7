@@ -24,6 +24,30 @@ D1's first hosted attempt had one transient macOS/Matplotlib native-launch
 failure while the font cache was unavailable; the guarded failed-job rerun
 passed. The accepted receipt is attempt 2, not the transient attempt.
 
+## Post-merge CI reconciliation
+
+The hosted receipts above are exact PR-head acceptance runs. They do not imply
+that the later merge commits were independently hosted-green. The repository
+records the later runs explicitly:
+
+- D1 merge `6787f5b93a1023dd243f66d81b1e6a13fe6871a`: push run
+  `35658730273` was cancelled after supersession; it is not a focused failure.
+- D2 merge `6982a2456aa98cabff6f5186d396d4f15eb72b48`: workflow-dispatch run
+  `35668217774` was cancelled and reported base-sensitive `ci`/macOS failures;
+  its optional-import and #7330/#7331 inventory drift is not used as D2
+  acceptance evidence.
+- BA-06 merge `208e8a3bf02f5b2c2b3eafe39fe776da07a9dcc7`: push run
+  `35669627895` failed in `fast-feedback (2)` on optional-import and
+  #7330/#7331 inventory drift and in `fast-feedback (4)` on the timing-sensitive
+  `tests/render/test_review_sessions.py::test_start_and_stop_race_serializes_the_inactive_owner_branch`.
+  The failed logs did not identify a BA-06 focused-test failure, but the merged
+  SHA is still not hosted-green and is not promoted as such.
+
+This reconciliation preserves the valid exact-head focused/hosted receipts
+while making the post-merge evidence boundary fail closed. A future clean
+merge-SHA run can replace this limitation; until then, BA-06 remains
+diagnostic-only and the epic remains open.
+
 ## BA-06 bounded proof
 
 The loopback route now admits a closed `sync_finding` operation. It accepts

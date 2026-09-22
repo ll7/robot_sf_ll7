@@ -13,6 +13,49 @@
     "ba06_review_base": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
     "evidence_class": "diagnostic_only"
   },
+  "post_merge_ci": {
+    "status": "not_green_base_sensitive_runs",
+    "interpretation": "The hosted receipts above are exact PR-head acceptance runs. Later merge-commit runs are recorded here for reconciliation and are not promoted to hosted-green evidence.",
+    "runs": [
+      {
+        "package": "ba05_d1",
+        "run_id": 35658730273,
+        "head_sha": "6787f5b93a1023dd243f66d81b1e6a13fe6871a3",
+        "event": "push",
+        "conclusion": "cancelled",
+        "note": "Superseded push run; cancellation is not a focused BA-05 failure."
+      },
+      {
+        "package": "ba05_d2",
+        "run_id": 35668217774,
+        "head_sha": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
+        "event": "workflow_dispatch",
+        "conclusion": "cancelled",
+        "failed_jobs": [
+          "ci",
+          "compat-matrix (macos-latest, 3.13)"
+        ],
+        "note": "The run also hit base-sensitive optional-import and inventory drift; it is not used as BA-05 D2 acceptance evidence."
+      },
+      {
+        "package": "ba06_publication",
+        "run_id": 35669627895,
+        "head_sha": "208e8a3bf02f5b2c2b3eafe39fe776da07a9dcc7",
+        "event": "push",
+        "conclusion": "failure",
+        "failed_jobs": [
+          "ci",
+          "fast-feedback (2)",
+          "fast-feedback (4)"
+        ],
+        "failure_classes": [
+          "optional-import snapshot and base-sensitive #7330/#7331 inventory drift",
+          "timing-sensitive tests/render/test_review_sessions.py::test_start_and_stop_race_serializes_the_inactive_owner_branch"
+        ],
+        "note": "No BA-06 focused test failure was identified in the failed logs; the merged SHA is nevertheless not hosted-green and remains a reconciliation limitation."
+      }
+    ]
+  },
   "packages": {
     "ba05_d1": {
       "issue": 9488,

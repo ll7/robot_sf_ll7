@@ -807,11 +807,19 @@ def validate_zero_work_proof(  # noqa: C901, PLR0912, PLR0915 - validate every p
             if pull_requests.get(field) != 0:
                 reasons.append(f"proof_{field}_nonzero")
     if isinstance(preparation, Mapping):
+        stale_state_count = preparation.get("stale_state_count")
+        if (
+            isinstance(stale_state_count, bool)
+            or not isinstance(stale_state_count, int)
+            or stale_state_count < 0
+        ):
+            reasons.append("proof_stale_state_count_invalid")
+        elif stale_state_count != 0:
+            reasons.append("proof_stale_state_count_nonzero")
         for field in (
             "promotable_count",
             "formalizable_count",
             "blocker_reconciliation_count",
-            "stale_state_count",
             *PREPARATION_COUNT_FIELDS,
         ):
             if preparation.get(field) != 0:

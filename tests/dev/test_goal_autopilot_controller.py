@@ -333,6 +333,39 @@ def test_zero_work_proof_rejects_stale_lifecycle_rows() -> None:
     assert "proof_stale_state_count_nonzero" in validation["reasons"]
 
 
+@pytest.mark.parametrize("value", [False, 0.0, "0", None, -1])
+def test_zero_work_proof_rejects_malformed_stale_state_count(value: object) -> None:
+    """Stale-state evidence must be a non-negative integer, not a coercible value."""
+    snapshot = _snapshot()
+    proof = deepcopy(controller.arbitrate_controller(snapshot)["zero_work_proof"])
+    proof["preparation"]["stale_state_count"] = value
+
+    validation = controller.validate_zero_work_proof(
+        proof,
+        origin_main_sha=ORIGIN,
+        freshness=FRESHNESS,
+    )
+
+    assert validation["valid"] is False
+    assert "proof_stale_state_count_invalid" in validation["reasons"]
+
+
+def test_zero_work_proof_rejects_missing_stale_state_count() -> None:
+    """Missing stale-state evidence cannot be treated as an empty preparation pass."""
+    snapshot = _snapshot()
+    proof = deepcopy(controller.arbitrate_controller(snapshot)["zero_work_proof"])
+    proof["preparation"].pop("stale_state_count")
+
+    validation = controller.validate_zero_work_proof(
+        proof,
+        origin_main_sha=ORIGIN,
+        freshness=FRESHNESS,
+    )
+
+    assert validation["valid"] is False
+    assert "proof_stale_state_count_invalid" in validation["reasons"]
+
+
 def test_stale_preparation_rows_route_before_implement() -> None:
     """Unresolved stale rows require lifecycle recovery before new work."""
     snapshot = _snapshot()

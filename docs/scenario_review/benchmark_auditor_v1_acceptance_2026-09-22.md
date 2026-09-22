@@ -12,7 +12,7 @@ accepted BA-05 package. This additive update supersedes the historical
 `current origin/main` line below for the repository's current state; the
 dated slice table and matrix retain their original receipts.
 
-- Current `origin/main`: `f231fc2faa729a5c96f732d4d690365882878feb`.
+- Current `origin/main`: `d511a8c1499e9d33eea658825de901cedafc40cf`.
 - PR #9571 exact reviewed head: `1aa3bb47bc60771d0511a36a201e1084c2c9c01e`.
 - PR #9571 guarded squash merge: `f231fc2faa729a5c96f732d4d690365882878feb`.
 - Final PR metadata digest: `492a32dfe252d660757c700fd9e8e9b7dab95936204ef9fa5ac1fadef0b407f3`.

@@ -77,11 +77,20 @@ _OPERATIONS = frozenset(
         "run_native_diagnostic",
         "codex_start",
         "codex_read",
+        "codex_reconnect",
         "codex_cancel",
     }
 )
 _CODEX_START_ARGUMENTS = frozenset({"prompt", "operation_id", "token_budget", "compute_budget"})
 _CODEX_READ_ARGUMENTS = frozenset({"operation_id"})
+_CODEX_RECONNECT_ARGUMENTS = frozenset(
+    {
+        "codex_session_id",
+        "operation_id",
+        "expected_selection_revision",
+        "expected_context_revision",
+    }
+)
 _CODEX_CANCEL_ARGUMENTS = frozenset({"reason", "operation_id"})
 _HUMAN_REVIEW_OUTCOMES = frozenset({"pass", "fail", "uncertain"})
 _MATERIALIZATION_STATUSES = frozenset({"complete", "partial", "unavailable", "failed"})
@@ -220,6 +229,7 @@ _ARGUMENTS = {
     ),
     "codex_start": _CODEX_START_ARGUMENTS,
     "codex_read": _CODEX_READ_ARGUMENTS,
+    "codex_reconnect": _CODEX_RECONNECT_ARGUMENTS,
     "codex_cancel": _CODEX_CANCEL_ARGUMENTS,
 }
 
@@ -228,6 +238,7 @@ _CODEX_RESULT_FIELDS = frozenset(
         "status",
         "reason",
         "operation_id",
+        "codex_session_id",
         "context",
         "current_context",
         "source",
@@ -316,6 +327,11 @@ def _dispatch_facade_operation(  # noqa: C901
         return method(**arguments)
     if operation == "codex_read":
         method = getattr(facade, "codex_read", None)
+        if not callable(method):
+            raise _CodexCapabilityUnavailable
+        return method(**arguments)
+    if operation == "codex_reconnect":
+        method = getattr(facade, "codex_reconnect", None)
         if not callable(method):
             raise _CodexCapabilityUnavailable
         return method(**arguments)
@@ -620,7 +636,7 @@ def _sanitize_materialization_result(
     return projected
 
 
-def _validate_codex_arguments(operation: str, arguments: dict[str, Any]) -> None:  # noqa: C901
+def _validate_codex_arguments(operation: str, arguments: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     """Validate browser-facing Codex arguments before facade dispatch."""
 
     if operation == "codex_start":
@@ -659,6 +675,26 @@ def _validate_codex_arguments(operation: str, arguments: dict[str, Any]) -> None
             )
             if not _OPAQUE_OPERATION_ID.fullmatch(operation_id or ""):
                 raise ValueError("operation_id must be an opaque identifier")
+        return
+    if operation == "codex_reconnect":
+        session_id = _bounded_text(
+            arguments.get("codex_session_id"),
+            field="codex_session_id",
+            maximum=_MAX_CODEX_OPERATION_ID_LENGTH,
+        )
+        if not _OPAQUE_OPERATION_ID.fullmatch(session_id or ""):
+            raise ValueError("codex_session_id must be an opaque identifier")
+        operation_id = _bounded_text(
+            arguments.get("operation_id"),
+            field="operation_id",
+            maximum=_MAX_CODEX_OPERATION_ID_LENGTH,
+        )
+        if not _OPAQUE_OPERATION_ID.fullmatch(operation_id or ""):
+            raise ValueError("operation_id must be an opaque identifier")
+        for field in ("expected_selection_revision", "expected_context_revision"):
+            revision = arguments.get(field)
+            if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+                raise ValueError(f"{field} must be a non-negative integer")
         return
     if operation == "codex_cancel":
         operation_id = _bounded_text(
@@ -909,6 +945,7 @@ def _sanitize_codex_mapping(  # noqa: C901
             sanitized[key] = _sanitize_codex_activity(item, depth=depth + 1, seen=seen)
         elif key in {
             "operation_id",
+            "codex_session_id",
             "route_id",
             "context_revision",
             "selection_revision",

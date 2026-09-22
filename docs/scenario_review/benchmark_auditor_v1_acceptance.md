@@ -7,7 +7,7 @@ synthetic, and diagnostic-only paths are never promoted.
 
 ## Current merged boundary
 
-- Current `origin/main`: `f231fc2faa729a5c96f732d4d690365882878feb`.
+- Current `origin/main`: `d511a8c1499e9d33eea658825de901cedafc40cf`.
 - BA-05 D1/D2 remain accepted bounded contracts with exact focused and hosted
   receipts recorded in the [dated full report](./benchmark_auditor_v1_acceptance_2026-09-22.md).
 - BA-06 PR #9571 exact reviewed head:

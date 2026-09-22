@@ -902,6 +902,101 @@ def test_two_services_serialize_next_and_stale_context_cas(tmp_path: Path) -> No
     second.close()
 
 
+def test_pending_recovery_after_writer_cleanup_preserves_stale_context_conflict(  # noqa: PLR0915
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reader that observed pending state before the writer commits reloads the state file."""
+
+    policy = SessionPolicy()
+    queue_path = tmp_path / "queue.json"
+    first, session, _adapter = _make_service(
+        tmp_path / "first", queue_path=queue_path, dataset=_dataset("0" * 64), policy=policy
+    )
+    dataset = _dataset(session.source_digest)
+    first.next_adapter = QueueNextAdapter(
+        AuditSourceBinding("audit-campaign", CAMPAIGN_DIGEST, session.source_digest, 0),
+        lambda: AuditQueue(dataset, state_path=queue_path, store=first.store),
+    )
+    first.queue_next_adapter = first.next_adapter
+    second = AuditService(
+        tmp_path / "first" / "store",
+        campaign_source={"campaign_id": "audit-campaign", "episodes": []},
+        trusted_policy=policy,
+    )
+    other = second.reconnect_session(session.session_id, session.session_token)
+    second.next_adapter = QueueNextAdapter(
+        AuditSourceBinding("audit-campaign", CAMPAIGN_DIGEST, other.source_digest, 0),
+        lambda: AuditQueue(dataset, state_path=queue_path, store=second.store),
+    )
+    second.queue_next_adapter = second.next_adapter
+
+    pending_written = threading.Event()
+    recovery_started = threading.Event()
+    release_writer = threading.Event()
+    release_recovery = threading.Event()
+    original_write_pending = AuditQueue._write_pending_locked
+    original_recover_pending = AuditQueue._recover_pending_without_state
+
+    def hold_pending_write(self: AuditQueue, **kwargs: Any) -> None:
+        original_write_pending(self, **kwargs)
+        pending_written.set()
+        if not release_writer.wait(timeout=5):
+            raise AssertionError("writer did not receive the recovery observation")
+
+    def observe_pending_recovery(self: AuditQueue) -> None:
+        recovery_started.set()
+        if not release_recovery.wait(timeout=5):
+            raise AssertionError("recovery did not receive the committed-state handoff")
+        original_recover_pending(self)
+
+    monkeypatch.setattr(AuditQueue, "_write_pending_locked", hold_pending_write)
+    monkeypatch.setattr(AuditQueue, "_recover_pending_without_state", observe_pending_recovery)
+
+    results: list[Any] = []
+    errors: list[BaseException] = []
+
+    def run(service: AuditService, handle: Any, operation_id: str) -> None:
+        try:
+            results.append(service.next(handle, operation_id=operation_id))
+        except BaseException as exc:  # pragma: no cover - surfaced by the assertion below
+            errors.append(exc)
+
+    writer = threading.Thread(target=run, args=(first, session, "next-pending-writer"))
+    reader = threading.Thread(target=run, args=(second, other, "next-pending-reader"))
+    writer.start()
+    reader_started = False
+    try:
+        assert pending_written.wait(timeout=5)
+        reader.start()
+        reader_started = True
+        assert recovery_started.wait(timeout=5)
+        release_writer.set()
+        writer.join(timeout=10)
+        assert not writer.is_alive()
+    finally:
+        release_writer.set()
+        release_recovery.set()
+        if writer.is_alive():
+            writer.join(timeout=10)
+        if reader_started:
+            reader.join(timeout=10)
+
+    assert not writer.is_alive()
+    assert not reader.is_alive()
+    assert errors == []
+    assert len(results) == 2
+    assert sorted(result.status for result in results) == ["complete", "conflict"]
+    completed = next(result for result in results if result.status == "complete")
+    assert isinstance(completed.value, QueueNextResult)
+    final_queue = AuditQueue(dataset, state_path=queue_path)
+    assert final_queue.state_revision == 1
+    assert final_queue.current_packet is not None
+    assert final_queue.current_packet.packet_id == completed.value.packet.packet_id
+    assert not queue_path.with_name(f"{queue_path.name}.pending").exists()
+    first.close()
+    second.close()
+
+
 def test_next_rejects_stale_queue_source_and_operation_collision(tmp_path: Path) -> None:
     policy = SessionPolicy()
     queue_path = tmp_path / "queue.json"

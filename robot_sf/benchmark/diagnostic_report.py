@@ -236,6 +236,10 @@ def _validate_row(row: Mapping[str, Any]) -> dict[str, Any]:
     if cost_units is not None and (not isinstance(cost_units, str) or not cost_units):
         raise DiagnosticReportError(f"row {row_id!r}: malformed cost_units")
 
+    cost_scale = row.get("cost_scale")
+    if cost_scale is not None and not isinstance(cost_scale, Mapping):
+        raise DiagnosticReportError(f"row {row_id!r}: malformed cost_scale")
+
     normalized = dict(row)
     provenance = row.get("provenance")
     normalized["provenance"] = dict(provenance) if isinstance(provenance, Mapping) else provenance
@@ -358,7 +362,8 @@ def _check_cost_scale(row: dict[str, Any]) -> tuple[list, list, list, list]:
     gated = _missing_cost_inputs(row, candidates, scale)
     if gated is not None:
         return gated
-    assert isinstance(candidates, list) and isinstance(scale, Mapping)
+    if not isinstance(candidates, list) or not isinstance(scale, Mapping):
+        raise DiagnosticReportError(f"row {row['row_id']!r}: malformed cost_scale")
     recorded, rescaled = _score_candidates(row, candidates, scale)
     recorded_best = min(recorded, key=lambda key: (recorded[key], key))
     rescaled_best = min(rescaled, key=lambda key: (rescaled[key], key))
@@ -404,6 +409,8 @@ def _missing_cost_inputs(
         reason, field = "ordering_needs_two_candidates", "candidates>=2"
     elif scale is None:
         reason, field = "cannot_assess_scale_without_declared_scales", "cost_scale"
+    elif not isinstance(scale, Mapping):
+        raise DiagnosticReportError(f"row {row_id!r}: malformed cost_scale")
     else:
         return None
     return (

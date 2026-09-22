@@ -63,6 +63,7 @@ PROFILE_IMPORTS = frozenset(
         "pygame",
         "matplotlib",
         "PIL",
+        "imageio_ffmpeg",
         # Maps extra (tests/unit/test_geojson_map_builder.py).
         "geopandas",
         "osmnx",
@@ -84,6 +85,49 @@ PROFILE_IMPORTS = frozenset(
 ACCEPTED_SKIPS = {
     "playwright": "browser rendering needs Chromium, unavailable in CI runners",
     "sklearn": "optional-by-design annotation check, skips with explicit reason",
+}
+
+# First-party owners may expose explicitly lazy adapters that are not part of
+# the slim compatibility lane. Keep those exemptions path-scoped and named so
+# a new owner runtime import cannot silently evade the profile. Imports that
+# are in PROFILE_IMPORTS are still checked for availability; only the
+# intentionally out-of-profile adapters below use this exception.
+OWNER_RUNTIME_IMPORT_EXEMPTIONS = {
+    "robot_sf/baselines/distributional_rl.py": {
+        "torch": "training-only checkpoint adapter",
+    },
+    "robot_sf/benchmark/camera_ready/campaign.py": {
+        "torch": "optional CUDA memory diagnostics",
+    },
+    "robot_sf/benchmark/camera_ready/resource_lifecycle.py": {
+        "torch": "optional CUDA memory diagnostics",
+    },
+    "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": {
+        "torch": "optional CUDA cache cleanup",
+    },
+    "robot_sf/planner/crowdnav_height.py": {
+        "torch": "external planner adapter",
+    },
+    "robot_sf/planner/social_navigation_pyenvs_force_model.py": {
+        "torch": "external planner adapter",
+    },
+    "robot_sf/planner/sonic_crowdnav.py": {
+        "torch": "external planner adapter",
+    },
+    "robot_sf/planner/socnav_base.py": {
+        "dotmap": "optional external planner adapter",
+        "params": "optional external planner adapter",
+        "planners": "optional external planner adapter",
+    },
+    "robot_sf/training/distributional_rl.py": {
+        "torch": "training-only model implementation",
+    },
+    "robot_sf/training/risk_objectives.py": {
+        "torch": "training-only tensor implementation",
+    },
+    "scripts/validation/smoke_threejs_viewer_browser.py": {
+        "playwright": "browser-only validation helper",
+    },
 }
 
 # In-repo namespaces that resolve from the checkout, not from the environment.
@@ -211,14 +255,43 @@ def _record(
             buckets["func_heavy"].add(name.split(".")[0])
 
 
+class _DirectGuardedImportVisitor(ast.NodeVisitor):
+    """Collect imports directly covered by one guarded ``try`` body."""
+
+    def __init__(self) -> None:
+        self.imports: list[ast.Import | ast.ImportFrom] = []
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.imports.append(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.imports.append(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Do not let an outer guard exempt a function-body import."""
+        return
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Do not let an outer guard exempt an async function-body import."""
+        return
+
+    def visit_Try(self, node: ast.Try) -> None:
+        """Let a nested try determine whether its own imports are optional."""
+        return
+
+
 def _imports_in_body(statements: list[ast.stmt]) -> list[ast.Import | ast.ImportFrom]:
-    """Return import statements nested in a guarded body."""
-    return [
-        node
-        for statement in statements
-        for node in ast.walk(statement)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-    ]
+    """Return imports directly covered by a guarded body.
+
+    Control-flow blocks such as ``if`` and ``with`` remain covered by the
+    surrounding ``try``. Nested functions and ``try`` statements do not: their
+    imports execute under a different runtime boundary and are visited by the
+    collector with their own context.
+    """
+    visitor = _DirectGuardedImportVisitor()
+    for statement in statements:
+        visitor.visit(statement)
+    return visitor.imports
 
 
 def _optional_import_ids(
@@ -458,6 +531,44 @@ def _check_deferred_test_imports(
             errors.append(_check_violation(display, module, "deferred test execution"))
 
 
+def _check_owner_deferred_imports(
+    display: str,
+    modules: set[str],
+    errors: list[str],
+    report: dict[str, list[str]],
+) -> None:
+    """Check deferred third-party imports exposed by first-party owners.
+
+    Owner function bodies are scanned conservatively.  Known lazy adapters are
+    exempted only by the path-scoped policy above; all new out-of-profile
+    imports fail closed instead of becoming an unreviewed coverage boundary.
+    """
+    exemptions = OWNER_RUNTIME_IMPORT_EXEMPTIONS.get(display, {})
+    for module in sorted(modules):
+        report.setdefault(module, []).append(display)
+        if module in PROFILE_IMPORTS or module in exemptions:
+            continue
+        errors.append(_check_violation(display, module, "deferred owner execution"))
+
+
+def _check_owner_skip_strings(
+    display: str,
+    modules: set[str],
+    errors: list[str],
+    report: dict[str, list[str]],
+) -> None:
+    """Reject undocumented ``importorskip`` calls in first-party owners."""
+    for module in sorted(modules):
+        if module in ACCEPTED_SKIPS or module in LOCAL_NAMESPACES:
+            continue
+        report.setdefault(module, []).append(display)
+        errors.append(
+            f"{display} silently skips on missing {module!r} in a first-party owner: "
+            "outside the compat profile (base+viz+maps); "
+            "a skip here would shrink lane coverage without failing"
+        )
+
+
 def _collect_roots(root: Path, errors: list[str], report: dict[str, list[str]]) -> list[str]:
     """Scan test roots; return in-repo modules for transitive closure."""
     pending: list[str] = []
@@ -493,10 +604,10 @@ def _collect_closure(
 ) -> None:
     """Follow local imports from the selected test roots through their owners.
 
-    Source-owner function bodies can expose optional runtime adapters that are
-    outside this slim compatibility lane. Deferred third-party imports in the
-    selected test files are checked by ``_collect_roots``; local imports from
-    either phase still enter the closure so their owners cannot hide imports.
+    Source-owner function bodies are checked under the explicit, path-scoped
+    lazy-adapter policy. Unknown deferred imports and all undocumented
+    ``importorskip`` targets fail closed; local imports from either phase still
+    enter the closure so their owners cannot hide dependencies.
     """
     seen_files: set[Path] = set()
     while pending:
@@ -518,6 +629,8 @@ def _collect_closure(
                 errors.append(
                     _check_violation(display, module, "collection time (reached from compat tests)")
                 )
+        _check_owner_deferred_imports(display, buckets["func_heavy"], errors, report)
+        _check_owner_skip_strings(display, buckets["skip_strings"], errors, report)
         pending.extend(sorted(buckets["top_in_repo"]))
         pending.extend(sorted(buckets["deferred_in_repo"]))
 

@@ -72,6 +72,33 @@ def test_import_error_handler_and_finally_imports_are_checked(tmp_path: Path) ->
     assert not any("definitely_not_installed_attempt" in error for error in errors)
 
 
+def test_import_error_guard_does_not_exempt_nested_function_or_try(
+    tmp_path: Path,
+) -> None:
+    """An outer guard exempts only imports directly covered by its body."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_nested_guard.py": (
+                "try:\n"
+                "    import definitely_not_installed_optional\n"
+                "    def deferred():\n"
+                "        import definitely_not_installed_function\n"
+                "    try:\n"
+                "        import definitely_not_installed_nested\n"
+                "    except ValueError:\n"
+                "        pass\n"
+                "except ImportError:\n"
+                "    pass\n"
+            )
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert any("definitely_not_installed_function" in error for error in errors)
+    assert any("definitely_not_installed_nested" in error for error in errors)
+    assert not any("definitely_not_installed_optional" in error for error in errors)
+
+
 def test_deferred_test_import_fails_with_module_name(tmp_path: Path) -> None:
     """A function-body import is part of the lane and must be profile-covered."""
     _write_tree(
@@ -108,6 +135,76 @@ def test_deferred_local_import_joins_transitive_closure(tmp_path: Path) -> None:
         "robot_sf/synthetic/owner.py" in error and "definitely_not_installed_xyz" in error
         for error in errors
     )
+
+
+def test_deferred_owner_import_fails_with_module_name(tmp_path: Path) -> None:
+    """An owner function import cannot hide an unavailable runtime dependency."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_deferred_owner_runtime.py": (
+                "from robot_sf.synthetic.owner import value\nassert value\n"
+            ),
+            "robot_sf/synthetic/__init__.py": "",
+            "robot_sf/synthetic/owner.py": (
+                "def load():\n"
+                "    import definitely_not_installed_xyz\n"
+                "    return definitely_not_installed_xyz\n"
+                "value = 1\n"
+            ),
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert any(
+        "robot_sf/synthetic/owner.py" in error
+        and "definitely_not_installed_xyz" in error
+        and "deferred owner execution" in error
+        for error in errors
+    )
+
+
+def test_deferred_owner_importorskip_fails_with_module_name(tmp_path: Path) -> None:
+    """An owner importorskip target must use an explicitly accepted exemption."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_deferred_owner_skip.py": (
+                "from robot_sf.synthetic.owner import value\nassert value\n"
+            ),
+            "robot_sf/synthetic/__init__.py": "",
+            "robot_sf/synthetic/owner.py": (
+                "import pytest\n"
+                "def load():\n"
+                "    return pytest.importorskip('definitely_not_installed_xyz')\n"
+                "value = 1\n"
+            ),
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert any(
+        "robot_sf/synthetic/owner.py" in error
+        and "definitely_not_installed_xyz" in error
+        and "first-party owner" in error
+        for error in errors
+    )
+
+
+def test_dynamic_import_boundary_is_not_static_dependency(tmp_path: Path) -> None:
+    """Runtime-selected importlib modules remain outside static AST closure."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_dynamic_owner.py": (
+                "from robot_sf.synthetic.owner import load\nassert load\n"
+            ),
+            "robot_sf/synthetic/__init__.py": "",
+            "robot_sf/synthetic/owner.py": (
+                "import importlib\ndef load(name):\n    return importlib.import_module(name)\n"
+            ),
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert errors == []
 
 
 def test_relative_import_joins_transitive_closure(tmp_path: Path) -> None:

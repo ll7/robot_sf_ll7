@@ -1254,6 +1254,26 @@ class AuditStore:
         with _PathLock(self.lock_path):
             self._ensure_projection_locked()
 
+    @staticmethod
+    def _stored_record_from_row(row: sqlite3.Row) -> StoredRecord:
+        """Materialize one projected row without re-reading the journal.
+
+        Returns:
+            The typed record and its projection metadata.
+        """
+
+        payload = json.loads(row["payload"]) if row["payload"] is not None else None
+        return StoredRecord(
+            record_id=row["record_id"],
+            record_type=row["record_type"],
+            revision=int(row["revision"]),
+            deleted=bool(row["deleted"]),
+            record=(record_from_dict(payload) if payload is not None else None),
+            operation_id=row["operation_id"],
+            committed_at=row["committed_at"],
+            global_revision=int(row["global_revision"]),
+        )
+
     def get(self, rid: str, *, include_deleted: bool = False) -> StoredRecord | None:
         """Read a projected record, optionally including its latest tombstone.
 
@@ -1270,17 +1290,7 @@ class AuditStore:
         ).fetchone()
         if row is None or (row["deleted"] and not include_deleted):
             return None
-        payload = json.loads(row["payload"]) if row["payload"] is not None else None
-        return StoredRecord(
-            record_id=row["record_id"],
-            record_type=row["record_type"],
-            revision=int(row["revision"]),
-            deleted=bool(row["deleted"]),
-            record=(record_from_dict(payload) if payload is not None else None),
-            operation_id=row["operation_id"],
-            committed_at=row["committed_at"],
-            global_revision=int(row["global_revision"]),
-        )
+        return self._stored_record_from_row(row)
 
     load = get
     get_record = get
@@ -1302,20 +1312,19 @@ class AuditStore:
 
         self._ensure_open()
         self._ensure_projection()
-        query = (
-            "SELECT record_id FROM records WHERE deleted = 0 ORDER BY record_id"
-            if not include_deleted
-            else "SELECT record_id FROM records ORDER BY record_id"
-        )
-        ids = [row["record_id"] for row in self._connection.execute(query)]
-        result = [
-            item
-            for rid in ids
-            if (item := self.get(rid, include_deleted=include_deleted)) is not None
-        ]
+        clauses = [] if include_deleted else ["deleted = 0"]
+        parameters: list[str] = []
         if record_type is not None:
-            result = [item for item in result if item.record_type == record_type]
-        return result
+            clauses.append("record_type = ?")
+            parameters.append(record_type)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._connection.execute(
+            "SELECT record_id, record_type, revision, deleted, payload, operation_id, "
+            "committed_at, global_revision FROM records"
+            f"{where} ORDER BY record_id",
+            parameters,
+        )
+        return [self._stored_record_from_row(row) for row in rows]
 
     records = list_records
 

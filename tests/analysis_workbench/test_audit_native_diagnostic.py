@@ -90,6 +90,8 @@ class _NeverReadyConnection:
 
     def close(self) -> None:
         pass
+
+
 class _BoundedFakeProcess:
     pid = 1
 
@@ -124,6 +126,36 @@ class _BoundedFakeContext:
         return self.process
 
 
+class _StartFailingFakeProcess:
+    pid = None
+
+    def __init__(self) -> None:
+        self.is_alive_calls = 0
+        self.terminate_calls = 0
+
+    def start(self) -> None:
+        raise RuntimeError("spawn failed before pid")
+
+    def is_alive(self) -> bool:
+        self.is_alive_calls += 1
+        raise AssertionError("can only test child process after it has been started")
+
+    def terminate(self) -> None:
+        self.terminate_calls += 1
+
+
+class _StartFailingFakeContext:
+    def __init__(self, process: _StartFailingFakeProcess) -> None:
+        self.process = process
+
+    def Pipe(self, *, duplex: bool) -> tuple[_ReadyOnlyConnection, _ReadyOnlyConnection]:
+        assert duplex is False
+        return _ReadyOnlyConnection([]), _ReadyOnlyConnection([])
+
+    def Process(self, **_kwargs: Any) -> _StartFailingFakeProcess:
+        return self.process
+
+
 class _StartupBudgetFakeContext:
     def __init__(
         self,
@@ -144,6 +176,8 @@ class _StartupBudgetFakeContext:
 
     def Process(self, **_kwargs: Any) -> _BoundedFakeProcess:
         return self.process
+
+
 def _make_case(
     tmp_path: Path,
     original: dict[str, Any],
@@ -1256,6 +1290,34 @@ def test_native_child_execution_deadline_starts_after_ready(
     assert result["reason"] == "per_execution_timeout: owned child terminated"
     assert result["settled"] is True
     assert process.terminated is True
+
+
+def test_native_child_start_failure_before_pid_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-pid spawn failure returns a settled result without cleanup escape."""
+
+    process = _StartFailingFakeProcess()
+    context = _StartFailingFakeContext(process)
+    monotonic_values = iter((100.0, 100.25))
+    monkeypatch.setattr(native.multiprocessing, "get_context", lambda _method: context)
+    monkeypatch.setattr(native.time, "monotonic", lambda: next(monotonic_values))
+
+    result = native._run_bounded(
+        _base_runner_input(),
+        robot_goal=(4.0, 0.0),
+        provenance={"test": "child-start-failed-before-pid"},
+        timeout_s=30.0,
+    )
+
+    assert result == {
+        "status": native.STATUS_FAILED,
+        "reason": "child_start_failed: RuntimeError: spawn failed before pid",
+        "settled": True,
+        "elapsed_s": pytest.approx(0.25),
+    }
+    assert process.is_alive_calls == 0
+    assert process.terminate_calls == 0
 
 
 def test_native_child_startup_budget_is_not_shrunk_to_execution_deadline(

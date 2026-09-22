@@ -49,6 +49,11 @@ FIXTURE = (
     / "audit_campaign_v1"
     / "campaign.json"
 )
+# Hosted xdist shards can spend several seconds in the real source-bound
+# ``read_episode`` dispatch while other render tests are active.  Keep the
+# external-child assertion finite, but avoid mistaking that bounded scheduler
+# contention for a transport failure.
+EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = 10.0
 TRACE_FIXTURE = (
     Path(__file__).resolve().parents[1]
     / "fixtures"
@@ -601,7 +606,9 @@ def _run_external_mcp_launch_smoke(
         def external_exchange(message: dict[str, object]) -> dict[str, object]:
             external_process.stdin.write(json.dumps(message).encode() + b"\n")
             external_process.stdin.flush()
-            ready, _, _ = select.select([external_process.stdout], [], [], 3.0)
+            ready, _, _ = select.select(
+                [external_process.stdout], [], [], EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS
+            )
             assert ready, "external MCP client did not return a bounded response"
             line = external_process.stdout.readline()
             assert line

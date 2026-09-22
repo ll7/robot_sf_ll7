@@ -142,6 +142,16 @@ the summary-only fixture has no playable scene and therefore no such button.
 Fresh snapshots read the durable queue and coverage again after a review;
 reopening the queue reconstructs only review receipts named by its own state.
 
+On 2026-09-22, the live launch smoke also started the launch-owned private
+bridge command as an external MCP stdio client. It completed `initialize`,
+`tools/list`, and `read_episode` after the fake Codex route selected a packet;
+the MCP response matched the server-held episode reference, context revision,
+source identity, and source revision, and the child exited without exposing the
+session token. This is diagnostic integration evidence only: it does not claim
+retained media, recovery, provider-enforced limits, or complete BA-06
+acceptance. The focused proof is
+`tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp`.
+
 The admitted browser editor also exposes the SREV-17 full-annotation draft:
 observed behaviour, hypothesis, confidence, measured evidence, notes, actors,
 and explicit full-episode scope. Its source-time snap controls reuse recorded

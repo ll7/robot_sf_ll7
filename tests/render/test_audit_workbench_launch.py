@@ -6,17 +6,21 @@ import ast
 import hashlib
 import json
 import os
+import select
 import shutil
 import stat
+import subprocess
 import threading
 from dataclasses import replace as dataclass_replace
 from pathlib import Path
+from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 import pytest
 
+from robot_sf.analysis_workbench import audit_mcp_stdio
 from robot_sf.analysis_workbench import audit_native_diagnostic as native
 from robot_sf.analysis_workbench.audit_codex_app_server import CodexAppServerConfig
 from robot_sf.analysis_workbench.audit_service import (
@@ -566,6 +570,122 @@ def test_launch_rejects_output_without_budget_or_policy_authority(tmp_path: Path
         )
 
 
+def _run_external_mcp_launch_smoke(
+    bridge: Any,
+    service_session: Any,
+    selected: dict[str, Any],
+    started: dict[str, Any],
+) -> None:
+    """Exercise the launch-owned MCP bridge from an external stdio child."""
+
+    external_environment = bridge.environment(
+        {
+            **os.environ,
+            audit_mcp_stdio.MCP_SESSION_TOKEN_ENV: service_session.session_token,
+        }
+    )
+    assert audit_mcp_stdio.MCP_SESSION_TOKEN_ENV not in external_environment
+    assert service_session.session_token not in json.dumps(external_environment, sort_keys=True)
+    external_process: subprocess.Popen[bytes] | None = None
+    try:
+        external_process = subprocess.Popen(
+            list(bridge.command()),
+            cwd=str(Path.cwd()),
+            env=external_environment,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert external_process.stdin is not None and external_process.stdout is not None
+
+        def external_exchange(message: dict[str, object]) -> dict[str, object]:
+            external_process.stdin.write(json.dumps(message).encode() + b"\n")
+            external_process.stdin.flush()
+            ready, _, _ = select.select([external_process.stdout], [], [], 3.0)
+            assert ready, "external MCP client did not return a bounded response"
+            line = external_process.stdout.readline()
+            assert line
+            return json.loads(line)
+
+        initialized = external_exchange(
+            {
+                "jsonrpc": "2.0",
+                "id": "external-init",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "external-launch-smoke", "version": "1"},
+                },
+            }
+        )
+        assert initialized["result"]["serverInfo"]["name"] == "robot-sf-audit"
+        external_process.stdin.write(
+            json.dumps(
+                {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+            ).encode()
+            + b"\n"
+        )
+        external_process.stdin.flush()
+        listed = external_exchange(
+            {"jsonrpc": "2.0", "id": "external-list", "method": "tools/list", "params": {}}
+        )
+        listed_tools = listed["result"]["tools"]
+        assert {tool["name"] for tool in listed_tools} == set(audit_mcp_stdio.AUDIT_MCP_TOOLS)
+
+        selected_context = selected["context"]
+        server_context = service_session.context.to_dict()
+        episode_id = selected_context["episode_id"]
+        called = external_exchange(
+            {
+                "jsonrpc": "2.0",
+                "id": "external-read",
+                "method": "tools/call",
+                "params": {
+                    "name": "read_episode",
+                    "arguments": {"episode_id": episode_id},
+                },
+            }
+        )
+        mcp_payload = called["result"]["structuredContent"]
+        mcp_result = mcp_payload["result"]
+        mcp_context = mcp_result["context"]
+        assert mcp_result["status"] == "complete", mcp_result
+        assert mcp_result["value"]["episode_id"] == selected["episode"]["episode_id"]
+        assert mcp_result["value"]["episode_ref"]["episode_id"] == episode_id
+        for key in ("episode_id", "context_revision", "source_identity", "source_revision"):
+            assert mcp_context[key] == selected_context[key] == server_context[key]
+        assert started["context"]["episode_id"] == episode_id
+        assert started["context"]["context_revision"] == selected_context["context_revision"]
+        assert started["source"]["source_digest"] == selected_context["source_identity"]
+        assert started["source"]["source_revision"] == selected_context["source_revision"]
+        assert service_session.session_token not in json.dumps(
+            (initialized, listed, called), sort_keys=True
+        )
+    finally:
+        if external_process is not None:
+            if external_process.stdin is not None:
+                try:
+                    external_process.stdin.close()
+                except OSError:
+                    pass
+            try:
+                external_process.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                external_process.terminate()
+                try:
+                    external_process.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    external_process.kill()
+                    external_process.wait(timeout=3.0)
+            assert external_process.returncode == 0, (
+                f"external MCP client exited unexpectedly: {external_process.returncode}"
+            )
+            if external_process.stderr is not None:
+                diagnostics = external_process.stderr.read()
+                assert service_session.session_token.encode() not in diagnostics
+
+
 def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> None:
     root = tmp_path / "source"
     root.mkdir()
@@ -647,6 +767,7 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
         assert started["usage"]["total_tokens"] == 7
         assert started["usage"]["measured_compute"] == 1.0
         assert service_session.session_token not in json.dumps(started)
+        _run_external_mcp_launch_smoke(bridge, service_session, selected, started)
 
         with pytest.raises(HTTPError, match="403"):
             post(
@@ -673,6 +794,8 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
         opened.server.shutdown()
         server_thread.join(timeout=5)
         opened.close()
+        assert not bridge.running
+        assert all(not thread.is_alive() for thread in bridge._client_threads)
 
 
 def test_launch_fails_closed_when_live_app_server_is_unavailable(tmp_path: Path) -> None:

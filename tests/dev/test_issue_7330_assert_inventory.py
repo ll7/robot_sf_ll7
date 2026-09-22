@@ -20,11 +20,11 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
 
     assert payload["schema"] == "production-assert-inventory.v1"
     assert isinstance(payload["source"]["clean"], bool)
-    assert payload["counts"]["assertion_count"] == 26
-    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 26}
+    assert payload["counts"]["assertion_count"] == 41
+    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 41}
     assert payload["counts"]["ownership"] == {
         "completed_historical_review": 14,
-        "unowned_residual": 12,
+        "unowned_residual": 27,
     }
     assert {
         (row["path"], row["scope"], row["expression"])
@@ -37,6 +37,11 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
             "state is not None",
         )
     }
+    assert (
+        "robot_sf/analysis_workbench/review_experiment_loop.py",
+        "run",
+        "native_config is not None and normalized_admission is not None",
+    ) in {(row["path"], row["scope"], row["expression"]) for row in payload["assertions"]}
     assert payload["recommendation"]["code"] == "close_parent_residuals_internal_only"
     assert all(
         row["recommended_action"] == "retain_assert_as_internal_invariant"
@@ -108,7 +113,7 @@ def test_cli_writes_both_issue_outputs(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["counts"]["assertion_count"] == 26
+    assert payload["counts"]["assertion_count"] == 41
     assert "# Production assert inventory (issue #7330)" in markdown_path.read_text(
         encoding="utf-8"
     )

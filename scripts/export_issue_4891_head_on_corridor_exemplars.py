@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -28,7 +27,7 @@ from robot_sf.evidence.writers import (
     write_sha256sums,
     write_text,
 )
-from scripts.dev.git_common import resolve_repo_root
+from scripts.dev.git_common import git_head_commit, resolve_repo_root
 
 # Back-compat alias for the shared helper (kept for the module-attribute tests).
 _extract_marker_date = extract_marker_date
@@ -85,16 +84,7 @@ def _repo_root() -> Path:
 
 def _git_commit() -> str:
     """Return the current commit hash, or ``unknown`` outside git."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-    return result.stdout.strip()
+    return git_head_commit()
 
 
 def _min_distance(

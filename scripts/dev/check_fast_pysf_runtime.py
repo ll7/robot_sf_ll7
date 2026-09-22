@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 
@@ -100,6 +101,26 @@ def check_fast_pysf_runtime() -> str | None:
     return check_fast_pysf_package_coherence(FAST_PYSF_SOURCE_PACKAGE, installed_package)
 
 
+def _environment_evidence() -> str:
+    """Return one stable line identifying the checked environment (issue #9449).
+
+    A repeat refusal with identical digests but a moved ``venv_mtime`` reads as a
+    transient concurrent-mutation race (retry); differing digests read as genuinely
+    stale (re-sync). Never raises: an unreadable mtime degrades to ``unavailable``.
+    """
+    try:
+        venv_mtime = datetime.fromtimestamp(Path(sys.prefix).stat().st_mtime, tz=UTC).isoformat(
+            timespec="seconds"
+        )
+    except OSError:
+        venv_mtime = "unavailable"
+    checked_at = datetime.now(tz=UTC).isoformat(timespec="seconds")
+    return (
+        f"evidence: checked_at={checked_at} venv={sys.prefix} "
+        f"venv_mtime={venv_mtime} python={sys.executable}"
+    )
+
+
 def main() -> int:
     """Run the fast-pysf readiness check and print repair guidance on failure."""
     error = check_fast_pysf_runtime()
@@ -108,6 +129,7 @@ def main() -> int:
         return 0
 
     print("fast-pysf runtime preflight failed: " + error, file=sys.stderr)
+    print(_environment_evidence(), file=sys.stderr)
     print(
         "The active PySocialForce environment does not satisfy this checkout's fast-pysf API.",
         file=sys.stderr,

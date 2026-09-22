@@ -1,0 +1,24 @@
+{
+  "schema_version": "diagnostic_report_truth.v1",
+  "note": "Hidden ground truth for tests only. diagnose_diagnostic_rows never reads this file.",
+  "families": {
+    "stale_observation": {
+      "present.json": {"mechanism_present": true, "observation": "stale_observation_version", "symptom": "stale_observation_consumed", "abstention": false},
+      "benign.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": false},
+      "ambiguous.json": {"mechanism_present": true, "observation": "stale_observation_version", "symptom": "stale_observation_consumed", "abstention": true, "narrative_rejected": true},
+      "missing.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": true}
+    },
+    "cost_scaling": {
+      "present.json": {"mechanism_present": true, "observation": "cost_scale_order_change", "symptom": "cost_scale_inconsistency", "abstention": false},
+      "benign.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": false},
+      "ambiguous.json": {"mechanism_present": true, "observation": "cost_scale_order_change", "symptom": "cost_scale_inconsistency", "abstention": true, "narrative_rejected": true},
+      "missing.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": true}
+    },
+    "controller_saturation": {
+      "present.json": {"mechanism_present": true, "observation": "command_execution_gap", "symptom": "saturated_command_execution_gap", "abstention": false},
+      "benign.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": false},
+      "ambiguous.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": true},
+      "missing.json": {"mechanism_present": false, "observation": null, "symptom": null, "abstention": true}
+    }
+  }
+}

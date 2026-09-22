@@ -18,7 +18,7 @@ latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "e30d3b799d07467794c736b5a18ab13bed376ce201b714a14701c8cab5edf7b6"
+campaign_config_sha256: "095331329b06673dc165109c8523579549f769c98542b207a712f6e2bf9ed6ad"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -47,8 +47,8 @@ claim_boundary:
   fallback_or_degraded_evidence: prohibited
 
 scenario:
-  matrix_path: ../../scenarios/classic_interactions_francis2023.yaml
-  matrix_sha256: "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+  matrix_path: ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
+  matrix_sha256: "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
   suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
   suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
   route_certification_path: ../route_clearance_certifications_v1.yaml

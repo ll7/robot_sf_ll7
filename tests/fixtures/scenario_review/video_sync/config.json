@@ -1,0 +1,9 @@
+{
+  "presentation": {
+    "width": 320,
+    "height": 180,
+    "fps": 10.0,
+    "speed": 1.0
+  },
+  "time_origin_s": 0.0
+}

@@ -1,0 +1,3 @@
+# Explicit release input for the versioned social-force terminal goal approach.
+# The legacy planner behavior remains the default when this file is absent.
+social_force_goal_approach_version: terminal_goal_v1

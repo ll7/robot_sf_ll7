@@ -67,6 +67,8 @@ from robot_sf.sim.simulator import (
 )
 from robot_sf.telemetry.pane import TelemetrySession
 
+_LEGACY_GOAL_COMPLETION_POLICY = "waypoint_radius_v1"
+
 DEFAULT_PANE_WIDTH = 320
 DEFAULT_PANE_HEIGHT = 240
 MIN_PANE_WIDTH = 200
@@ -102,6 +104,26 @@ __all__ = [
 
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
+def _hash_payload_without_default_goal_policy(value: Any) -> Any:
+    """Remove policy fields that did not exist in historical config hashes.
+
+    Returns:
+        Any: Recursively normalized payload suitable for stable JSON hashing.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _hash_payload_without_default_goal_policy(item)
+            for key, item in value.items()
+            if not (
+                key == "goal_completion_policy"
+                and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+            )
+        }
+    if isinstance(value, list):
+        return [_hash_payload_without_default_goal_policy(item) for item in value]
+    return value
+
+
 def _stable_config_hash(cfg: EnvSettings) -> str:
     """Build a stable short hash of the environment settings.
 
@@ -112,8 +134,9 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         16-character hexadecimal hash string representing the configuration.
     """
     try:
+        config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
         payload = json.dumps(
-            asdict(cfg) if is_dataclass(cfg) else cfg.__dict__,
+            _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,
             default=str,
         )
@@ -428,11 +451,18 @@ def _jsonl_runtime_metadata(
     Returns:
         Runtime metadata for the obstacle-force site, or ``None`` when absent.
     """
-    if "obstacle_force_law" not in info:
+    runtime_metadata: dict[str, Any] = {}
+    if "obstacle_force_law" in info:
+        obstacle_metadata = dict(info["obstacle_force_law"])
+        obstacle_metadata.setdefault("config_hash", config_hash)
+        runtime_metadata["obstacle_force_law"] = obstacle_metadata
+    if "success_definition" in info:
+        success_definition = info["success_definition"]
+        if isinstance(success_definition, dict):
+            runtime_metadata["success_definition"] = dict(success_definition)
+    if not runtime_metadata:
         return None
-    obstacle_metadata = dict(info["obstacle_force_law"])
-    obstacle_metadata.setdefault("config_hash", config_hash)
-    return {"obstacle_force_law": obstacle_metadata}
+    return runtime_metadata
 
 
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:

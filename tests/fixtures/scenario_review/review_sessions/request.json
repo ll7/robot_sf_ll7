@@ -1,0 +1,18 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev28-fixture-request",
+  "component_id": "srev28-review-sessions",
+  "sources": [
+    {
+      "artifact_id": "recipe-srev28-fixture",
+      "uri": "recipe.json",
+      "format": "experiment-recipe.v1",
+      "schema": "experiment-recipe.v1",
+      "sha256": "b45553bad6f64ab6915b73d3b9d0ca41a408827753a35000ab80d45204f6242f",
+      "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
+      "config_identity": "srev28-fixture-config.v1"
+    }
+  ],
+  "config": {},
+  "output_directory": "srev-28-smoke"
+}

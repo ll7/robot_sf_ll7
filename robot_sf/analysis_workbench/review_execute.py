@@ -39,24 +39,35 @@ import math
 import multiprocessing
 import os
 import platform
+import re
+import stat
 import subprocess
 import sys
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 from robot_sf.analysis_workbench.review_contracts import (
+    ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
+    ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+    ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+    ADMITTED_SOURCE_REASON_SOURCE_MUTATED,
     COMPONENT_REQUEST_SCHEMA_VERSION,
     COMPONENT_RESULT_SCHEMA_VERSION,
+    MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
+    AdmittedSourceResolution,
     ComponentRequest,
     ComponentResult,
     ReviewContractsValidationError,
     component_request_from_dict,
     component_result_from_dict,
+    experiment_recipe_canonical_digest,
     experiment_recipe_from_dict,
+    resolve_admitted_source,
 )
 from robot_sf.benchmark.counterfactual_pair import (
     PairHypothesis,
@@ -72,6 +83,21 @@ EXECUTE_REPORT_SCHEMA_VERSION = "execute-report.v1"
 ATTEMPT_LEDGER_SCHEMA_VERSION = "attempt-ledger.v1"
 ACTIVATION_TRACE_SCHEMA_VERSION = "activation-trace.v1"
 PRESERVATION_MANIFEST_SCHEMA_VERSION = "preservation-manifest.v1"
+EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION = "executor-admission.v1"
+PRESERVATION_RECEIPT_SCHEMA_VERSION = "srev22-preservation-receipt.v1"
+_PRESERVATION_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "destination",
+        "source_receipt_id",
+        "source_sha256",
+        "recipe_sha256",
+        "config_identity",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+    }
+)
 
 SUPPORTED_INPUT_VERSIONS = (COMPONENT_REQUEST_SCHEMA_VERSION,)
 REQUIRED_CAPABILITIES = ("bounded-execution",)
@@ -132,6 +158,10 @@ _SUPPORTED_FIXTURE_SOURCE_REFERENCE = (
     ("uri", "recipe.json"),
     ("format", "experiment-recipe.v1"),
 )
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_MAX_ADMISSION_CONFIG_TEXT = 4_096
+_MAX_PRESERVATION_RECEIPT_BYTES = 256 * 1024
+_ADMISSION_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 
 _DT_S = 0.1
 _ROBOT_GOAL = (16.8, 16.8)
@@ -153,6 +183,78 @@ class ReviewExecuteError(RobotSfError, ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutorAdmissionConfig:
+    """Caller-owned source and preservation trust configuration.
+
+    This configuration is intentionally separate from the recipe.  A recipe can
+    identify the source it expects, but it cannot choose the root or receipts
+    that make that source admissible.
+    """
+
+    schema_version: str
+    source_root: str
+    receipt_reference: str
+    receipt_sha256: str
+    preservation_destination: str
+    preservation_receipt_reference: str
+    preservation_receipt_sha256: str
+    config_identity: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the validated external admission configuration."""
+        return {
+            "schema_version": self.schema_version,
+            "source_root": self.source_root,
+            "receipt_reference": self.receipt_reference,
+            "receipt_sha256": self.receipt_sha256,
+            "preservation_destination": self.preservation_destination,
+            "preservation_receipt_reference": self.preservation_receipt_reference,
+            "preservation_receipt_sha256": self.preservation_receipt_sha256,
+            "config_identity": self.config_identity,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _AdmissionProof:
+    """The source and external preservation proof used by one invocation."""
+
+    config: ExecutorAdmissionConfig
+    root: Path
+    root_fd: int
+    source: AdmittedSourceResolution
+    receipt_sha256: str
+    preservation_receipt_sha256: str
+    preservation_receipt: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return non-secret, non-source-byte admission provenance."""
+        receipt = self.source.receipt
+        source = receipt.source if receipt is not None else None
+        return {
+            "schema_version": self.config.schema_version,
+            "source_root": str(self.root),
+            "receipt_reference": self.config.receipt_reference,
+            "receipt_sha256": self.receipt_sha256,
+            "receipt_id": receipt.receipt_id if receipt is not None else None,
+            "source": source.to_dict() if source is not None else None,
+            "preservation_destination": self.config.preservation_destination,
+            "preservation_receipt_reference": self.config.preservation_receipt_reference,
+            "preservation_receipt_sha256": self.preservation_receipt_sha256,
+            "config_identity": self.config.config_identity,
+            "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+            "scientific_claim_allowed": False,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _PinnedAdmissionRoot:
+    """Descriptor-pinned launcher trust root retained across one execution."""
+
+    path: Path
+    fd: int
+
+
+@dataclass(frozen=True, slots=True)
 class ExecuteConfig:
     """Validated execution config (closed allowlist, never arbitrary code)."""
 
@@ -169,6 +271,10 @@ class ExecuteConfig:
     required_component_version: str | None = None
     intervention_parameters: dict[str, Any] = field(default_factory=dict)
     recipe: dict[str, Any] = field(default_factory=dict)
+    # Populated only from the explicit launcher argument in ``run``.  A raw
+    # request/config admission declaration is parsed for migration diagnostics
+    # but never becomes an authority source.
+    admission: ExecutorAdmissionConfig | None = None
 
 
 def descriptor() -> dict[str, Any]:
@@ -200,7 +306,191 @@ def _is_finite_number(value: Any) -> bool:
     )
 
 
-def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
+def _admission_text(
+    raw: Mapping[str, Any], key: str, errors: list[str], *, allow_empty: bool = False
+) -> str:
+    """Validate one bounded admission-config string and return a safe value.
+
+    Returns:
+        The validated value, or an empty string after recording an error.
+    """
+    value = raw.get(key)
+    if not isinstance(value, str) or (not allow_empty and not value.strip()):
+        errors.append(f"source_admission_config: {key} must be a non-empty string")
+        return ""
+    if len(value) > _MAX_ADMISSION_CONFIG_TEXT:
+        errors.append(
+            f"source_admission_config: {key} exceeds {_MAX_ADMISSION_CONFIG_TEXT} characters"
+        )
+        return ""
+    if "\x00" in value:
+        errors.append(f"source_admission_config: {key} contains a NUL character")
+        return ""
+    return value
+
+
+def _admission_sha256(raw: Mapping[str, Any], key: str, errors: list[str]) -> str:
+    """Validate one externally anchored SHA-256 digest.
+
+    Returns:
+        The normalized digest, or an empty string after recording an error.
+    """
+    value = _admission_text(raw, key, errors)
+    if value and _SHA256_RE.fullmatch(value) is None:
+        errors.append(f"source_admission_config: {key} must be a 64-hex SHA-256")
+    return value.lower()
+
+
+def _admission_relative_reference(raw: Mapping[str, Any], key: str, errors: list[str]) -> str:
+    """Validate a receipt reference as a root-relative local path.
+
+    Returns:
+        The validated reference, or an empty string after recording an error.
+    """
+    value = _admission_text(raw, key, errors)
+    if not value:
+        return value
+    try:
+        path = Path(value)
+        uri = urlsplit(value)
+    except (OSError, TypeError, ValueError):
+        errors.append(f"source_admission_config: {key} must be a local relative path")
+        return ""
+    if (
+        path.is_absolute()
+        or not path.parts
+        or value in {".", ".."}
+        or ".." in path.parts
+        or "\\" in value
+        or uri.scheme
+        or uri.netloc
+        or uri.query
+        or uri.fragment
+    ):
+        errors.append(
+            f"source_admission_config: {key} must be a relative path without traversal or URI syntax"
+        )
+    return value
+
+
+def _validate_executor_admission_config(
+    raw: Any, *, source: Any = None
+) -> ExecutorAdmissionConfig | None:
+    """Validate the external, versioned executor admission configuration.
+
+    ``None`` is retained as a documented legacy diagnostic path.  The runner
+    handles it as unavailable and never starts an episode or emits complete
+    artifacts, so old v1 requests cannot silently claim admitted completion.
+
+    Returns:
+        The validated config, or ``None`` for the legacy diagnostic path.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ReviewExecuteError(
+            ["source_admission_config: admission must be a mapping"], source=source
+        )
+    allowed = {
+        "schema_version",
+        "source_root",
+        "receipt_reference",
+        "receipt_sha256",
+        "preservation_destination",
+        "preservation_receipt_reference",
+        "preservation_receipt_sha256",
+        "config_identity",
+    }
+    unknown = sorted((str(key) for key in raw if key not in allowed), key=str)
+    if unknown:
+        raise ReviewExecuteError(
+            ["source_admission_config: unknown keys are rejected: " + ", ".join(unknown)],
+            source=source,
+        )
+    errors: list[str] = []
+    schema_version = _admission_text(raw, "schema_version", errors)
+    if schema_version and schema_version != EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION:
+        errors.append(
+            "source_admission_config: schema_version must be "
+            f"{EXECUTOR_ADMISSION_CONFIG_SCHEMA_VERSION}"
+        )
+    source_root = _admission_text(raw, "source_root", errors)
+    if source_root:
+        try:
+            source_root_path = Path(source_root)
+            root_uri = urlsplit(source_root)
+        except (OSError, TypeError, ValueError):
+            source_root_path = None
+            root_uri = None
+        if (
+            source_root_path is None
+            or root_uri is None
+            or root_uri.scheme
+            or root_uri.netloc
+            or root_uri.query
+            or root_uri.fragment
+            or "\\" in source_root
+            or ".." in source_root_path.parts
+        ):
+            errors.append(
+                "source_admission_config: source_root must be a local path without traversal"
+            )
+    receipt_reference = _admission_relative_reference(raw, "receipt_reference", errors)
+    receipt_sha256 = _admission_sha256(raw, "receipt_sha256", errors)
+    preservation_destination = _admission_text(raw, "preservation_destination", errors)
+    if preservation_destination and (
+        not preservation_destination.startswith(_SAFE_PRESERVATION_DESTINATION_PREFIXES)
+        or Path(preservation_destination).is_absolute()
+        or ".." in Path(preservation_destination).parts
+    ):
+        errors.append(
+            "source_admission_config: preservation_destination must be a safe external:, "
+            "artifact:, or fixture: URI"
+        )
+    preservation_receipt_reference = _admission_relative_reference(
+        raw, "preservation_receipt_reference", errors
+    )
+    preservation_receipt_sha256 = _admission_sha256(raw, "preservation_receipt_sha256", errors)
+    config_identity = _admission_text(raw, "config_identity", errors)
+    if errors:
+        raise ReviewExecuteError(errors, source=source)
+    return ExecutorAdmissionConfig(
+        schema_version=schema_version,
+        source_root=source_root,
+        receipt_reference=receipt_reference,
+        receipt_sha256=receipt_sha256,
+        preservation_destination=preservation_destination,
+        preservation_receipt_reference=preservation_receipt_reference,
+        preservation_receipt_sha256=preservation_receipt_sha256,
+        config_identity=config_identity,
+    )
+
+
+def validate_executor_admission_config(raw: Any, *, source: Any = None) -> ExecutorAdmissionConfig:
+    """Validate launcher-owned source admission configuration.
+
+    Args:
+        raw: External executor/launcher configuration, never request content.
+        source: Optional source label for error messages.
+
+    Returns:
+        A validated admission configuration suitable for ``run``.
+
+    Raises:
+        ReviewExecuteError: If the external configuration is absent or invalid.
+    """
+    config = _validate_executor_admission_config(raw, source=source)
+    if config is None:
+        raise ReviewExecuteError(
+            ["source_admission_config: explicit launcher admission configuration is required"],
+            source=source,
+        )
+    return config
+
+
+def validate_execute_config(  # noqa: C901
+    raw: Any, *, source: Any = None
+) -> ExecuteConfig:
     """Validate raw execution config against the closed allowlist.
 
     Args:
@@ -229,6 +519,7 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         "required_component_version",
         "intervention_parameters",
         "recipe",
+        "admission",
     }
     unknown = sorted((key for key in raw if key not in allowed), key=str)
     if unknown:
@@ -291,6 +582,11 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         errors.append("intervention_parameters must be a mapping")
     else:
         _validate_intervention_parameters(intervention_parameters, errors)
+    try:
+        admission = _validate_executor_admission_config(raw.get("admission"), source=source)
+    except ReviewExecuteError as error:
+        errors.extend(error.errors)
+        admission = None
     if errors:
         raise ReviewExecuteError(errors, source=source)
     return ExecuteConfig(
@@ -307,6 +603,7 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         required_component_version=required_version,
         intervention_parameters=dict(intervention_parameters),
         recipe=dict(raw["recipe"]),
+        admission=admission,
     )
 
 
@@ -589,6 +886,174 @@ def _write_json(path: Path, payload: Any) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _admission_open_flags(*, directory: bool) -> int | None:
+    """Return descriptor-relative no-follow flags or ``None`` if unsupported."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory_flag = getattr(os, "O_DIRECTORY", None)
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if (
+        not _ADMISSION_SUPPORTS_DIR_FD
+        or not isinstance(nofollow, int)
+        or not isinstance(nonblocking, int)
+        or (directory and not isinstance(directory_flag, int))
+    ):
+        return None
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0)
+    if directory:
+        flags |= directory_flag
+    else:
+        flags |= nonblocking
+    return flags
+
+
+def _open_pinned_admission_root(source_root: str) -> _PinnedAdmissionRoot:
+    """Pin every configured root component with descriptor-relative no-follow opens.
+
+    Returns:
+        A pinned root path and open directory descriptor.
+    """
+    directory_flags = _admission_open_flags(directory=True)
+    if directory_flags is None:
+        raise OSError("descriptor-relative admission root protection is unavailable")
+    configured = Path(source_root)
+    if configured.is_absolute():
+        current_fd = os.open(configured.anchor, directory_flags)
+        components = configured.parts[1:]
+        display_path = configured
+    else:
+        current_fd = os.open(".", directory_flags)
+        components = configured.parts
+        display_path = Path.cwd() / configured
+    try:
+        for component in components:
+            if component in {"", "."}:
+                continue
+            next_fd = os.open(component, directory_flags, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        if not stat.S_ISDIR(os.fstat(current_fd).st_mode):
+            raise OSError("configured source root is not a directory")
+        return _PinnedAdmissionRoot(path=display_path, fd=current_fd)
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _open_admission_reference(root_fd: int, reference: str) -> int:
+    """Open a root-relative receipt through pinned directory descriptors.
+
+    Returns:
+        An open regular-file descriptor owned by the caller.
+    """
+    directory_flags = _admission_open_flags(directory=True)
+    file_flags = _admission_open_flags(directory=False)
+    path = Path(reference)
+    if (
+        directory_flags is None
+        or file_flags is None
+        or path.is_absolute()
+        or not path.parts
+        or ".." in path.parts
+        or "\\" in reference
+    ):
+        raise OSError("admission reference is not a safe relative path")
+    opened_fds: list[int] = []
+    try:
+        parent_fd = os.dup(root_fd)
+        opened_fds.append(parent_fd)
+        for component in path.parts[:-1]:
+            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            opened_fds.append(next_fd)
+            os.close(parent_fd)
+            opened_fds.remove(parent_fd)
+            parent_fd = next_fd
+        file_fd = os.open(path.parts[-1], file_flags, dir_fd=parent_fd)
+        opened_fds.append(file_fd)
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise OSError("admission reference must be a regular file")
+        os.close(parent_fd)
+        opened_fds.remove(parent_fd)
+        return file_fd
+    except BaseException:
+        for file_descriptor in reversed(opened_fds):
+            try:
+                os.close(file_descriptor)
+            except OSError:
+                pass
+        raise
+
+
+def _read_admission_fd(file_descriptor: int, *, label: str, maximum_bytes: int) -> bytes:
+    """Read bounded bytes from one already-open regular admission file.
+
+    Returns:
+        The bounded file bytes.
+    """
+    content = bytearray()
+    while True:
+        chunk = os.read(file_descriptor, maximum_bytes + 1 - len(content))
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > maximum_bytes:
+            raise OSError(f"{label} exceeds maximum size of {maximum_bytes} bytes")
+    return bytes(content)
+
+
+def _parse_admission_json(
+    root_fd: int, reference: str, *, label: str, maximum_bytes: int
+) -> tuple[dict[str, Any] | None, tuple[str, str] | None, str | None]:
+    """Read one bounded JSON proof, returning bytes digest for external anchoring.
+
+    Returns:
+        Parsed payload, optional typed failure, and the raw-bytes digest.
+    """
+    file_descriptor: int | None = None
+    try:
+        file_descriptor = _open_admission_reference(root_fd, reference)
+        content = _read_admission_fd(file_descriptor, label=label, maximum_bytes=maximum_bytes)
+    except FileNotFoundError:
+        reason = (
+            "receipt_missing"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_missing"
+        )
+        return None, ("unavailable", f"source_admission: {reason}"), None
+    except (OSError, UnicodeError) as error:
+        reason = (
+            "receipt_unreadable"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_unreadable"
+        )
+        return None, ("unavailable", f"source_admission: {reason}: {error}"), None
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+    digest = hashlib.sha256(content).hexdigest()
+    try:
+        payload = json.loads(
+            content.decode("utf-8"),
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"non-standard JSON constant: {value}")
+            ),
+        )
+    except (UnicodeError, ValueError, RecursionError) as error:
+        reason = (
+            "receipt_malformed"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_malformed"
+        )
+        return None, ("failed", f"source_admission: {reason}: {error}"), digest
+    if not isinstance(payload, dict):
+        reason = (
+            "receipt_malformed"
+            if label == "admitted-source receipt"
+            else "preservation_receipt_malformed"
+        )
+        return None, ("failed", f"source_admission: {reason}: document must be an object"), digest
+    return payload, None, digest
+
+
 def _repo_commit() -> str:
     try:
         completed = subprocess.run(
@@ -644,6 +1109,38 @@ def _episode_job_identity_error(job: dict[str, Any]) -> str | None:
             "immutable supported fixture source reference"
         )
     return None
+
+
+def _simple_policy_fixture_adapter(
+    robot_pos: Any,
+    goal: Any,
+    *,
+    speed: float,
+) -> Any:
+    """Canonical simple-policy adapter for the SREV-22 fixture executor.
+
+    Routes velocity command calculation through the benchmark runner's canonical
+    ``_simple_robot_policy`` to ensure strict parity with benchmark runner semantics.
+
+    Adapter deviations from the full benchmark runner (``robot_sf.benchmark.runner``):
+    1. Fixed-horizon execution: The fixture executor executes all ``horizon`` steps
+       without early goal termination (which ``runner._simulate_episode_with_policy``
+       applies upon reaching ``goal_radius``). Rationale: SREV-22 analysis workbench
+       recipes compute comparative trajectory telemetry across matched control/treatment
+       pairs, requiring equal-length trajectory arrays of shape ``(horizon + 1, 2)``.
+    2. Simulator integration: The fixture executes in an owned ``Simulator`` instance
+       configured with the SREV-22 tiny crossing map and holonomic drive, passing
+       velocity commands via ``simulator.step_once([(vx, vy)])`` rather than
+       direct kinematic position integration ``pos += vel * dt``. Rationale: The
+       fixture evaluates counterfactual pedestrian interactions via PySocialForce
+       forces in the full simulator stack rather than the lightweight wrapper.
+
+    Returns:
+        Velocity command 2D numpy array of shape ``(2,)``.
+    """
+    from robot_sf.benchmark.runner import _simple_robot_policy  # noqa: PLC0415 - lazy: child-process sim stack
+
+    return _simple_robot_policy(robot_pos, goal, speed=speed)
 
 
 def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -734,12 +1231,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         robot_traj = [np.asarray(simulator.robots[0].pos, dtype=float).copy()]
         for _ in range(horizon):
             robot_pos = np.asarray(simulator.robots[0].pos, dtype=float)
-            offset = goal - robot_pos
-            distance = float(np.linalg.norm(offset))
-            if distance > 0.3:
-                command = offset / distance * robot_speed
-            else:
-                command = np.zeros(2)
+            command = _simple_policy_fixture_adapter(robot_pos, goal, speed=robot_speed)
             simulator.step_once([(float(command[0]), float(command[1]))])
             ped_traj.append(simulator.pysf_sim.peds.pos().copy())
             robot_traj.append(np.asarray(simulator.robots[0].pos, dtype=float).copy())
@@ -782,18 +1274,26 @@ def _child_main(entry_name: str, payload: dict[str, Any], conn: Any) -> None:
         conn.close()
 
 
-def _terminate_owned_process(process: Any) -> None:
-    """Stop an owned child within a small fixed cleanup allowance."""
+def _terminate_owned_process(process: Any, *, join_timeout_s: float = 0.5) -> bool:
+    """Stop an owned child within a small fixed cleanup allowance.
+
+    Returns:
+        True if the process is terminated (not alive), False if it resisted termination.
+    """
     if not process.is_alive():
-        return
-    process.terminate()
-    process.join(1.0)
-    if process.is_alive() and hasattr(process, "kill"):
-        process.kill()
-        process.join(1.0)
+        return True
+    try:
+        process.terminate()
+        process.join(join_timeout_s)
+        if process.is_alive() and hasattr(process, "kill"):
+            process.kill()
+            process.join(join_timeout_s)
+    except Exception:  # noqa: BLE001 - defensive against process lookup errors
+        pass
+    return not process.is_alive()
 
 
-def _run_owned_child(
+def _run_owned_child(  # noqa: C901, PLR0912
     job: dict[str, Any], timeout_s: float, *, target: str = "episode"
 ) -> dict[str, Any]:
     """Run one job in an owned child process with timeout and termination.
@@ -814,6 +1314,7 @@ def _run_owned_child(
     context = multiprocessing.get_context("spawn")
     parent_conn, child_conn = context.Pipe(duplex=False)
     process = context.Process(target=_child_main, args=(target, job, child_conn))
+    monotonic_start = time.monotonic()
     try:
         process.start()
     except OSError as error:
@@ -823,27 +1324,79 @@ def _run_owned_child(
     # The parent never uses the child end; close it only after start so the
     # forked child inherits a live descriptor.
     child_conn.close()
+
+    startup_elapsed = time.monotonic() - monotonic_start
+    remaining_s = timeout_s - startup_elapsed
+    if remaining_s <= 0.0:
+        try:
+            terminated = _terminate_owned_process(process)
+            if not terminated:
+                return {
+                    "outcome": "error",
+                    "error": (
+                        "stubborn_child: child process resisted termination after startup timeout"
+                    ),
+                }
+            return {
+                "outcome": "timeout",
+                "error": f"child startup exceeded {timeout_s:g}s deadline and was terminated",
+            }
+        finally:
+            parent_conn.close()
+            if not process.is_alive():
+                try:
+                    process.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
     try:
-        if parent_conn.poll(timeout_s):
+        if parent_conn.poll(remaining_s):
             try:
                 payload = parent_conn.recv()
             except EOFError as error:
                 payload = {"status": "error", "error": f"child closed pipe: {error}"}
-            process.join(1.0)
-            _terminate_owned_process(process)
+            elapsed_so_far = time.monotonic() - monotonic_start
+            cleanup_budget = max(0.0, timeout_s - elapsed_so_far)
+            process.join(min(1.0, cleanup_budget) if cleanup_budget > 0.0 else 0.0)
+            terminated = _terminate_owned_process(process)
+            if not terminated:
+                return {
+                    "outcome": "error",
+                    "error": (
+                        "stubborn_child: child process resisted termination after completion"
+                    ),
+                }
+            if time.monotonic() - monotonic_start > timeout_s:
+                return {
+                    "outcome": "timeout",
+                    "error": f"child cleanup exceeded {timeout_s:g}s deadline and was terminated",
+                }
             if isinstance(payload, dict):
                 return {"outcome": "ok", "payload": payload}
             return {"outcome": "error", "error": "child returned a non-mapping payload"}
-        _terminate_owned_process(process)
+        terminated = _terminate_owned_process(process)
+        if not terminated:
+            return {
+                "outcome": "error",
+                "error": "stubborn_child: child process resisted termination after timeout",
+            }
         return {"outcome": "timeout", "error": f"child exceeded {timeout_s:g}s and was terminated"}
     except KeyboardInterrupt:
-        _terminate_owned_process(process)
+        terminated = _terminate_owned_process(process)
+        if not terminated:
+            return {
+                "outcome": "error",
+                "error": "stubborn_child: child process resisted termination after interrupt",
+            }
         return {"outcome": "interrupted", "error": "cancelled by user; owned child terminated"}
     finally:
         parent_conn.close()
         _terminate_owned_process(process)
         if not process.is_alive():
-            process.close()
+            try:
+                process.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _telemetry_metrics(
@@ -972,6 +1525,7 @@ def _config_identity_document(config: ExecuteConfig) -> dict[str, Any]:
         "required_component_version": config.required_component_version,
         "intervention_parameters": dict(config.intervention_parameters),
         "recipe_digest": _canonical_digest(config.recipe),
+        "admission": config.admission.to_dict() if config.admission is not None else None,
     }
 
 
@@ -993,22 +1547,254 @@ def _config_document(config: ExecuteConfig) -> dict[str, Any]:
     }
 
 
+def _resume_attempt_index(
+    attempts: list[dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index validated resume attempts by (candidate_id, kind).
+
+    Returns:
+        Mapping from ``(candidate_id, kind)`` to the validated attempt entry.
+    """
+    return {
+        (str(entry["candidate_id"]), str(entry["kind"])): entry
+        for entry in attempts
+        if isinstance(entry.get("candidate_id"), str) and isinstance(entry.get("kind"), str)
+    }
+
+
+def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
+    *,
+    attempts: list[dict[str, Any]],
+    reports: list[dict[str, Any]],
+    traces: list[dict[str, Any]],
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+) -> None:
+    """Reject forged nested report/trace fields against recorded attempt digests.
+
+    The attempt ledger entries carry the measured telemetry; candidate reports
+    and activation traces must reproduce those measurements field-by-field.
+    Any digest mismatch, recomputed activation-flag mismatch, or recomputed
+    pair-verdict mismatch fails closed so a tampered envelope cannot resume
+    as ``complete``.
+
+    Raises:
+        ReviewExecuteError: When any envelope layer is inconsistent.
+    """
+    attempt_index = _resume_attempt_index(attempts)
+    reports_by_id = {
+        str(report["intervention_id"]): report
+        for report in reports
+        if isinstance(report.get("intervention_id"), str)
+    }
+    traces_by_id = {
+        str(trace["intervention_id"]): trace
+        for trace in traces
+        if isinstance(trace.get("intervention_id"), str)
+    }
+    measurement, _measurement_error = _measurement_for_recipe(recipe)
+    has_complete = any(report.get("status") == "complete" for report in reports)
+    if has_complete and measurement is None:
+        raise ReviewExecuteError(["cannot resume: resume envelope measurement is invalid"])
+    metric_name = str(measurement["name"]) if measurement is not None else ""
+    expected_direction = str(measurement["expected_direction"]) if measurement is not None else ""
+
+    for report in reports:
+        candidate_id = str(report.get("intervention_id", ""))
+        status = report.get("status")
+        if status == "unavailable":
+            if any(cid == candidate_id for cid, _kind in attempt_index):
+                raise ReviewExecuteError(
+                    [
+                        f"cannot resume: candidate report {candidate_id} is inconsistent with attempts"
+                    ]
+                )
+            if "control_metrics" in report or "treatment_metrics" in report:
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            continue
+        control_entry = attempt_index.get((candidate_id, "control"))
+        treatment_entry = attempt_index.get((candidate_id, "treatment"))
+        report_control = report.get("control_metrics")
+        report_treatment = report.get("treatment_metrics")
+        if status == "complete":
+            if (
+                control_entry is None
+                or treatment_entry is None
+                or control_entry.get("status") != "ok"
+                or treatment_entry.get("status") != "ok"
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            control_metrics = control_entry.get("metrics")
+            treatment_metrics = treatment_entry.get("metrics")
+            if not isinstance(control_metrics, dict) or not isinstance(treatment_metrics, dict):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            if not isinstance(report_control, dict) or not isinstance(report_treatment, dict):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            if _canonical_digest(report_control) != _canonical_digest(control_metrics) or (
+                _canonical_digest(report_treatment) != _canonical_digest(treatment_metrics)
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            try:
+                expected_control_activated = (
+                    float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+                )
+                expected_treatment_activated = (
+                    abs(
+                        float(treatment_metrics["ped_mean_speed_m_s"])
+                        - float(control_metrics["ped_mean_speed_m_s"])
+                    )
+                    > config.activation_speed_tolerance_m_s
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                ) from None
+            if (
+                report.get("control_activated") is not expected_control_activated
+                or report.get("treatment_activated") is not expected_treatment_activated
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} activation is inconsistent"]
+                )
+            try:
+                pair_result = evaluate_counterfactual_pair(
+                    {
+                        "mechanism_activated": expected_control_activated,
+                        "metrics": {metric_name: control_metrics[metric_name]},
+                    },
+                    {
+                        "mechanism_activated": expected_treatment_activated,
+                        "metrics": {metric_name: treatment_metrics[metric_name]},
+                    },
+                    PairHypothesis(
+                        expected_mechanism=str(report.get("factor", "")),
+                        outcome_metric=metric_name,
+                        expected_direction=expected_direction,
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} verdict is inconsistent"]
+                ) from None
+            if report.get("verdict") != pair_result.verdict:
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} verdict is inconsistent"]
+                )
+        elif status == "failed":
+            if isinstance(report_control, dict) and control_entry is not None:
+                attempt_metrics = control_entry.get("metrics")
+                if (
+                    control_entry.get("status") == "ok"
+                    and isinstance(attempt_metrics, dict)
+                    and _canonical_digest(report_control) != _canonical_digest(attempt_metrics)
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+            if isinstance(report_treatment, dict) and treatment_entry is not None:
+                attempt_metrics = treatment_entry.get("metrics")
+                if (
+                    treatment_entry.get("status") == "ok"
+                    and isinstance(attempt_metrics, dict)
+                    and _canonical_digest(report_treatment) != _canonical_digest(attempt_metrics)
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+    for trace in traces:
+        candidate_id = str(trace.get("intervention_id", ""))
+        report = reports_by_id.get(candidate_id)
+        if report is None or report.get("status") != "complete":
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} has no complete report"]
+            )
+        control_entry = attempt_index.get((candidate_id, "control"))
+        treatment_entry = attempt_index.get((candidate_id, "treatment"))
+        if (
+            control_entry is None
+            or treatment_entry is None
+            or not isinstance(control_entry.get("metrics"), dict)
+            or not isinstance(treatment_entry.get("metrics"), dict)
+        ):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+        control_metrics = control_entry["metrics"]
+        treatment_metrics = treatment_entry["metrics"]
+        trace_control = trace.get("control_metrics")
+        trace_treatment = trace.get("treatment_metrics")
+        if not isinstance(trace_control, dict) or not isinstance(trace_treatment, dict):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            )
+        if _canonical_digest(trace_control) != _canonical_digest(
+            control_metrics
+        ) or _canonical_digest(trace_treatment) != _canonical_digest(treatment_metrics):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            )
+        try:
+            expected_control_activated = (
+                float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+            )
+            expected_treatment_activated = (
+                abs(
+                    float(treatment_metrics["ped_mean_speed_m_s"])
+                    - float(control_metrics["ped_mean_speed_m_s"])
+                )
+                > config.activation_speed_tolerance_m_s
+            )
+        except (KeyError, TypeError, ValueError):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            ) from None
+        if (
+            trace.get("control_activated") is not expected_control_activated
+            or trace.get("treatment_activated") is not expected_treatment_activated
+        ):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} activation is inconsistent"]
+            )
+        if trace.get("control_activated") is not bool(report.get("control_activated")) or trace.get(
+            "treatment_activated"
+        ) is not bool(report.get("treatment_activated")):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} activation is inconsistent"]
+            )
+    for candidate_id, report in reports_by_id.items():
+        if report.get("status") == "complete" and candidate_id not in traces_by_id:
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+
+
 @dataclass
 class _Executor:
     request: ComponentRequest
     config: ExecuteConfig
     recipe: dict[str, Any]
     output_dir: Path
+    admission_proof: _AdmissionProof | None = None
     resume: bool = False
     _attempts: list[dict[str, Any]] = field(default_factory=list)
     _executions_consumed: int = 0
     _wall_elapsed_s: float = 0.0
-    _started_at: float = 0.0
+    _started_at: float = field(default_factory=time.monotonic)
     _candidate_reports: list[dict[str, Any]] = field(default_factory=list)
     _traces: list[dict[str, Any]] = field(default_factory=list)
 
     def _elapsed(self) -> float:
-        return self._wall_elapsed_s + (time.monotonic() - self._started_at)
+        return self._wall_elapsed_s + max(0.0, time.monotonic() - self._started_at)
 
     def _budget_remaining(self, required_executions: int = 1) -> bool:
         return (
@@ -1034,6 +1820,34 @@ class _Executor:
 
     def _record_attempt(self, attempt: dict[str, Any]) -> None:
         self._attempts.append(attempt)
+
+    def _refresh_admission(self) -> None:
+        """Re-verify source and preservation proof immediately before execution."""
+        proof, failure = _resolve_executor_admission(
+            self.request,
+            self.config,
+            self.recipe,
+            admission=self.config.admission,
+            pinned_root=(
+                _PinnedAdmissionRoot(self.admission_proof.root, self.admission_proof.root_fd)
+                if self.admission_proof is not None
+                else None
+            ),
+        )
+        if failure is not None or proof is None:
+            status, reason = failure or (
+                "failed",
+                "source_admission: resolver returned no proof",
+            )
+            raise _SourceAdmissionRejected(status, reason)
+        self.admission_proof = proof
+
+    def _close_admission_root(self) -> None:
+        """Close the invocation-owned pinned root descriptor exactly once."""
+        if self.admission_proof is None or self.admission_proof.root_fd < 0:
+            return
+        os.close(self.admission_proof.root_fd)
+        self.admission_proof = replace(self.admission_proof, root_fd=-1)
 
     def _record_progress(self) -> None:
         """Persist attempts and candidate state after every execution boundary."""
@@ -1099,6 +1913,8 @@ class _Executor:
             raise ReviewExecuteError(["cannot resume: ledger scientific-claim boundary is invalid"])
         if ledger.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
             raise ReviewExecuteError(["cannot resume: ledger dependent-family boundary is invalid"])
+        if ledger.get("source_admission") != self.admission_proof.to_dict():
+            raise ReviewExecuteError(["cannot resume: source admission proof identity mismatch"])
         if ledger.get("config_identity_digest") != _canonical_digest(
             _config_identity_document(self.config)
         ):
@@ -1240,23 +2056,45 @@ class _Executor:
                 raise ReviewExecuteError(
                     [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
                 )
-            if any(
-                set(report[key]) != REQUIRED_TELEMETRY_METRICS
-                or any(
-                    not _is_finite_number(report[key][metric])
-                    for metric in REQUIRED_TELEMETRY_METRICS
-                )
-                for key in ("control_metrics", "treatment_metrics")
-            ):
-                raise ReviewExecuteError(
-                    [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
-                )
+            if report["status"] == "complete":
+                if any(
+                    not isinstance(report.get(key), dict)
+                    or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                    or any(
+                        not _is_finite_number(report[key][metric])
+                        for metric in REQUIRED_TELEMETRY_METRICS
+                    )
+                    for key in ("control_metrics", "treatment_metrics")
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
+                    )
+            elif report["status"] == "failed":
+                for key in ("control_metrics", "treatment_metrics"):
+                    if key in report and (
+                        not isinstance(report[key], dict)
+                        or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                        or any(
+                            not _is_finite_number(report[key][metric])
+                            for metric in REQUIRED_TELEMETRY_METRICS
+                        )
+                    ):
+                        raise ReviewExecuteError(
+                            [f"cannot resume: candidate report {candidate_id} metrics are invalid"]
+                        )
         if seen_traces != {
             report["intervention_id"]
             for report in validated_reports
             if report["status"] == "complete"
         }:
             raise ReviewExecuteError(["cannot resume: activation traces do not match reports"])
+        _verify_resume_envelope(
+            attempts=validated_attempts,
+            reports=validated_reports,
+            traces=validated_traces,
+            config=self.config,
+            recipe=self.recipe,
+        )
         consumed = ledger.get("executions_consumed", 0)
         if not _is_int(consumed) or consumed != len(validated_attempts) or consumed < 0:
             raise ReviewExecuteError(["cannot resume: ledger execution count is inconsistent"])
@@ -1293,11 +2131,15 @@ class _Executor:
             "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
             "scientific_claim_allowed": False,
             "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+            "source_admission": self.admission_proof.to_dict(),
             "wall_elapsed_s": round(self._elapsed(), 3),
         }
         return _write_json(self.output_dir / "attempt-ledger.json", payload)
 
-    def _run_episode(self, candidate_id: str, kind: str, spec: dict[str, Any]) -> dict[str, Any]:
+    def _run_episode(  # noqa: C901
+        self, candidate_id: str, kind: str, spec: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._refresh_admission()
         if not self._budget_remaining():
             raise _ExecutionBudgetExhausted("execution_budget_exhausted: no execution slot remains")
         wall_remaining = self._wall_remaining()
@@ -1378,6 +2220,17 @@ class _Executor:
             self._record_attempt(attempt)
             self._record_progress()
             raise _ExecutionCancelled(attempt["reason"])
+        if str(outcome.get("error", "")).startswith("stubborn_child"):
+            attempt = {
+                "candidate_id": candidate_id,
+                "kind": kind,
+                "status": "failed",
+                "reason": f"execution_error: {outcome.get('error', '')}",
+                "elapsed_s": round(elapsed, 3),
+            }
+            self._record_attempt(attempt)
+            self._record_progress()
+            raise _ExecutionStubbornChild(attempt["reason"])
         attempt = {
             "candidate_id": candidate_id,
             "kind": kind,
@@ -1586,6 +2439,19 @@ class _ExecutionCancelled(Exception):
     """Internal signal: execution was cancelled; the owned child was terminated."""
 
 
+class _ExecutionStubbornChild(Exception):
+    """Internal signal: an owned child process resisted termination."""
+
+
+class _SourceAdmissionRejected(Exception):
+    """Internal signal: source or preservation proof changed during execution."""
+
+    def __init__(self, status: str, reason: str):
+        self.status = status if status in {"unavailable", "failed"} else "failed"
+        self.reason = reason
+        super().__init__(reason)
+
+
 def _measurement_for_recipe(recipe: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     measurements = recipe.get("measurements", [])
     if not isinstance(measurements, list) or not measurements:
@@ -1630,6 +2496,7 @@ def _write_complete_outputs(
         "component_id": COMPONENT_ID,
         "recipe_id": str(executor.recipe.get("recipe_id", "")),
         "source_identity": dict(executor.recipe.get("source_identity", {})),
+        "source_admission": executor.admission_proof.to_dict(),
         "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
         "benchmark_success": False,
         "scientific_claim_allowed": False,
@@ -1650,6 +2517,7 @@ def _write_complete_outputs(
         "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
         "scientific_claim_allowed": False,
         "dependent_family_status": DEPENDENT_FAMILY_STATUS,
+        "source_admission": executor.admission_proof.to_dict(),
         "traces": list(executor._traces),
     }
     executor._write_ledger()
@@ -1664,6 +2532,7 @@ def _write_complete_outputs(
         "recipe_digest": _canonical_digest(executor.recipe),
         "config_digest": _canonical_digest(_config_document(executor.config)),
         "source_identity": dict(executor.recipe.get("source_identity", {})),
+        "source_admission": executor.admission_proof.to_dict(),
         "retrieval_destination": str(executor.recipe.get("preservation_destination", "")),
         "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
         "benchmark_success": False,
@@ -1700,6 +2569,17 @@ def _write_complete_outputs(
             "sha256": manifest_digest,
         },
     ]
+
+
+def _remove_complete_outputs(executor: _Executor) -> None:
+    """Remove artifacts that must not represent completion after final recheck."""
+    for artifact_name in (
+        "execute-report.json",
+        "activation-traces.json",
+        "attempt-ledger.json",
+        "preservation-manifest.json",
+    ):
+        (executor.output_dir / artifact_name).unlink(missing_ok=True)
 
 
 def _diagnostics(executor: _Executor) -> list[dict[str, Any]]:
@@ -1745,6 +2625,267 @@ def _final_result(
             status="failed",
             reason=f"internal_result_invalid: {'; '.join(error.errors)}",
         )
+
+
+def _admission_failure(status: str, reason: str, detail: str = "") -> tuple[str, str]:
+    """Normalize one source-admission failure into a typed result pair.
+
+    Returns:
+        A non-complete result status and bounded reason prefix.
+    """
+    normalized_status = status if status in {"unavailable", "failed"} else "failed"
+    normalized_reason = f"source_admission: {reason}"
+    if detail:
+        normalized_reason += f": {detail}"
+    return normalized_status, normalized_reason
+
+
+def _validate_preservation_receipt(
+    payload: dict[str, Any], expected: dict[str, Any]
+) -> tuple[str, str] | None:
+    """Validate the closed diagnostic-only preservation receipt contract.
+
+    Returns:
+        A typed failure pair, or ``None`` when the receipt is valid.
+    """
+    if set(payload) != _PRESERVATION_RECEIPT_FIELDS:
+        unknown = sorted(set(payload) - _PRESERVATION_RECEIPT_FIELDS)
+        missing = sorted(_PRESERVATION_RECEIPT_FIELDS - set(payload))
+        detail = f"unknown={unknown}; missing={missing}"
+        return _admission_failure("failed", "preservation_receipt_malformed", detail)
+    if payload.get("scientific_claim_allowed") is not False:
+        return _admission_failure(
+            "failed",
+            "preservation_receipt_malformed",
+            "scientific_claim_allowed must be false",
+        )
+    if payload.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY:
+        return _admission_failure(
+            "failed",
+            "preservation_receipt_malformed",
+            "evidence_boundary must be diagnostic_only",
+        )
+    for key in _PRESERVATION_RECEIPT_FIELDS - {
+        "scientific_claim_allowed",
+        "evidence_boundary",
+    }:
+        if not isinstance(payload.get(key), str) or not payload[key].strip():
+            return _admission_failure(
+                "failed",
+                "preservation_receipt_malformed",
+                f"{key} must be a non-empty string",
+            )
+    for key in ("source_sha256", "recipe_sha256"):
+        if _SHA256_RE.fullmatch(payload[key]) is None:
+            return _admission_failure(
+                "failed", "preservation_receipt_malformed", f"{key} must be a SHA-256"
+            )
+    for key, actual in expected.items():
+        if payload.get(key) != actual:
+            return _admission_failure(
+                "unavailable",
+                "preservation_receipt_stale",
+                f"preservation receipt {key} does not match the admitted invocation",
+            )
+    return None
+
+
+def _source_admission_request_projection(
+    request: ComponentRequest, admission: ExecutorAdmissionConfig
+) -> ComponentRequest:
+    """Project the source-level request identity used by the executor.
+
+    Runtime controls are not source-artifact content and are already bound by
+    the full executor config in provenance and resume state.  The receipt binds
+    the stable request envelope, source declarations, and launcher admission
+    identity without creating a receipt-hash cycle through path and digest
+    references in the external admission block.
+
+    Returns:
+        A validated request carrying only source-level admission identity.
+    """
+    return ComponentRequest(
+        request_id=request.request_id,
+        component_id=request.component_id,
+        sources=request.sources,
+        output_directory=request.output_directory,
+        config={
+            "admission": {
+                "schema_version": admission.schema_version,
+                "config_identity": admission.config_identity,
+            }
+        },
+        required_capabilities=request.required_capabilities,
+    )
+
+
+def _resolve_executor_admission(
+    request: ComponentRequest,
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+    *,
+    admission: ExecutorAdmissionConfig | None = None,
+    pinned_root: _PinnedAdmissionRoot | None = None,
+) -> tuple[_AdmissionProof | None, tuple[str, str] | None]:
+    """Resolve admission while retaining one launcher-owned root descriptor.
+
+    Returns:
+        An admission proof, or a typed non-complete failure pair.
+    """
+    if admission is None:
+        return None, _admission_failure(
+            "unavailable",
+            "legacy_config_requires_admission",
+            "executor-admission.v1 is required; request config cannot authorize its own source",
+        )
+    owns_root = pinned_root is None
+    if pinned_root is None:
+        try:
+            pinned_root = _open_pinned_admission_root(admission.source_root)
+        except FileNotFoundError:
+            return None, _admission_failure(
+                "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, "source_root is missing"
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            return None, _admission_failure(
+                "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, str(error)
+            )
+    try:
+        proof, failure = _resolve_executor_admission_at_root(
+            request,
+            config,
+            recipe,
+            admission=admission,
+            pinned_root=pinned_root,
+        )
+    except BaseException:
+        if owns_root:
+            os.close(pinned_root.fd)
+        raise
+    if owns_root and proof is None:
+        os.close(pinned_root.fd)
+    return proof, failure
+
+
+def _resolve_executor_admission_at_root(
+    request: ComponentRequest,
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+    *,
+    admission: ExecutorAdmissionConfig,
+    pinned_root: _PinnedAdmissionRoot,
+) -> tuple[_AdmissionProof | None, tuple[str, str] | None]:
+    """Resolve the caller-owned source and preservation proof.
+
+    ``admission`` must come from the explicit launcher boundary.  It is never
+    inferred from ``request.config`` or from the recipe.
+
+    The source receipt itself remains untrusted data.  Its bytes are anchored
+    by the external config digest, and the canonical resolver binds the parsed
+    receipt to the current request and recipe before returning protected source
+    bytes.  The preservation receipt is independently anchored and checked
+    against the same source, recipe, config identity, and destination.
+
+    Returns:
+        An admission proof, or a typed non-complete result pair.
+    """
+    root = pinned_root.path
+    root_fd = pinned_root.fd
+    receipt_payload, failure, receipt_digest = _parse_admission_json(
+        root_fd,
+        admission.receipt_reference,
+        label="admitted-source receipt",
+        maximum_bytes=MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
+    )
+    if failure is not None or receipt_payload is None or receipt_digest is None:
+        return None, failure or _admission_failure(
+            "failed", ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED
+        )
+    if receipt_digest != admission.receipt_sha256:
+        return None, _admission_failure(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            "external receipt digest does not match executor admission config",
+        )
+    try:
+        request_projection = _source_admission_request_projection(request, admission)
+        source_resolution = resolve_admitted_source(
+            receipt_payload,
+            allowed_root=root,
+            allowed_root_fd=root_fd,
+            request=request_projection,
+            recipe=recipe,
+            expected_config_identity=admission.config_identity,
+        )
+    except (
+        OSError,
+        RecursionError,
+        TypeError,
+        ValueError,
+        ReviewContractsValidationError,
+    ) as error:
+        return None, _admission_failure("failed", "resolver_error", str(error))
+    if source_resolution.status != "admitted" or source_resolution.receipt is None:
+        return None, _admission_failure(
+            source_resolution.status,
+            source_resolution.reason,
+            source_resolution.detail,
+        )
+    if source_resolution.source_bytes is None:
+        return None, _admission_failure(
+            "failed",
+            ADMITTED_SOURCE_REASON_SOURCE_MUTATED,
+            "resolver returned no protected source bytes",
+        )
+    if recipe.get("preservation_destination") != admission.preservation_destination:
+        return None, _admission_failure(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            "preservation destination differs between recipe and external config",
+        )
+
+    preservation_payload, failure, preservation_digest = _parse_admission_json(
+        root_fd,
+        admission.preservation_receipt_reference,
+        label="preservation receipt",
+        maximum_bytes=_MAX_PRESERVATION_RECEIPT_BYTES,
+    )
+    if failure is not None or preservation_payload is None or preservation_digest is None:
+        return None, failure or _admission_failure("failed", "preservation_receipt_malformed")
+    if preservation_digest != admission.preservation_receipt_sha256:
+        return None, _admission_failure(
+            "unavailable",
+            "preservation_receipt_stale",
+            "external preservation receipt digest does not match executor admission config",
+        )
+    expected_preservation = {
+        "schema_version": PRESERVATION_RECEIPT_SCHEMA_VERSION,
+        "status": "preserved",
+        "destination": admission.preservation_destination,
+        "source_receipt_id": source_resolution.receipt.receipt_id,
+        "source_sha256": source_resolution.receipt.source.sha256,
+        "recipe_sha256": experiment_recipe_canonical_digest(recipe),
+        "config_identity": admission.config_identity,
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+    }
+    preservation_failure = _validate_preservation_receipt(
+        preservation_payload, expected_preservation
+    )
+    if preservation_failure is not None:
+        return None, preservation_failure
+    return (
+        _AdmissionProof(
+            config=admission,
+            root=root,
+            root_fd=root_fd,
+            source=source_resolution,
+            receipt_sha256=receipt_digest,
+            preservation_receipt_sha256=preservation_digest,
+            preservation_receipt=preservation_payload,
+        ),
+        None,
+    )
 
 
 def _admit_request(  # noqa: C901
@@ -2030,10 +3171,14 @@ def _drive_candidates(
         return "partial", f"per_execution_timeout: {error}; owned child terminated"
     except _ExecutionCancelled as error:
         return "cancelled", f"cancelled_by_user: {error}"
+    except _ExecutionStubbornChild as error:
+        return "failed", str(error)
+    except _SourceAdmissionRejected as error:
+        return error.status, error.reason
     return status, reason
 
 
-def _settle(
+def _settle(  # noqa: C901, PLR0912, PLR0915
     executor: _Executor, provenance: dict[str, Any], status: str, reason: str
 ) -> ComponentResult:
     """Settle the final result envelope for a driven executor.
@@ -2042,6 +3187,36 @@ def _settle(
         Validated component result for the recorded candidate reports.
     """
     request = executor.request
+    final_proof, admission_failure = _resolve_executor_admission(
+        request,
+        executor.config,
+        executor.recipe,
+        admission=executor.config.admission,
+        pinned_root=(
+            _PinnedAdmissionRoot(executor.admission_proof.root, executor.admission_proof.root_fd)
+            if executor.admission_proof is not None
+            else None
+        ),
+    )
+    if admission_failure is not None or final_proof is None:
+        failure_status, failure_reason = admission_failure or (
+            "failed",
+            "source_admission: resolver returned no proof at complete-result boundary",
+        )
+        try:
+            executor._write_ledger()
+        except (OSError, TypeError, ValueError) as error:
+            failure_reason += f"; output_write_failed: {error}"
+            failure_status = "failed"
+        return _final_result(
+            request,
+            status=failure_status,
+            reason=failure_reason,
+            diagnostics=tuple(_diagnostics(executor)),
+            provenance=provenance,
+        )
+    executor.admission_proof = final_proof
+    provenance["source_admission"] = final_proof.to_dict()
     selected_ids = {
         str(candidate["intervention_id"])
         for candidate in _select_candidates(executor.recipe, executor.config.max_candidates)
@@ -2075,15 +3250,64 @@ def _settle(
             str(report.get("reason", "failed")) for report in failed
         )
     if status == "complete":
-        artifacts = _write_complete_outputs(executor, provenance)
-        return _final_result(
-            request,
-            status="complete",
-            reason=reason,
-            artifacts=tuple(artifacts),
-            diagnostics=tuple(_diagnostics(executor)),
-            provenance=provenance,
-        )
+        if executor._elapsed() >= executor.config.wall_timeout_s:
+            status = "partial"
+            reason = "wall_timeout: wall budget exhausted before finalization"
+        else:
+            artifacts = _write_complete_outputs(executor, provenance)
+            if executor._elapsed() >= executor.config.wall_timeout_s:
+                status = "partial"
+                reason = "wall_timeout: wall budget exhausted during finalization"
+                for art_name in (
+                    "execute-report.json",
+                    "activation-traces.json",
+                    "preservation-manifest.json",
+                ):
+                    art_file = executor.output_dir / art_name
+                    if art_file.is_file():
+                        art_file.unlink(missing_ok=True)
+            else:
+                finalized_proof, finalized_failure = _resolve_executor_admission(
+                    request,
+                    executor.config,
+                    executor.recipe,
+                    admission=executor.config.admission,
+                    pinned_root=(
+                        _PinnedAdmissionRoot(
+                            executor.admission_proof.root, executor.admission_proof.root_fd
+                        )
+                        if executor.admission_proof is not None
+                        else None
+                    ),
+                )
+                if finalized_failure is not None or finalized_proof is None:
+                    _remove_complete_outputs(executor)
+                    failure_status, failure_reason = finalized_failure or (
+                        "failed",
+                        "source_admission: resolver returned no proof after output finalization",
+                    )
+                    try:
+                        executor._write_ledger()
+                    except (OSError, TypeError, ValueError) as error:
+                        failure_reason += f"; output_write_failed: {error}"
+                        failure_status = "failed"
+                    return _final_result(
+                        request,
+                        status=failure_status,
+                        reason=failure_reason,
+                        diagnostics=tuple(_diagnostics(executor)),
+                        provenance=provenance,
+                    )
+                executor.admission_proof = finalized_proof
+                provenance["source_admission"] = finalized_proof.to_dict()
+                return _final_result(
+                    request,
+                    status="complete",
+                    reason=reason,
+                    artifacts=tuple(artifacts),
+                    diagnostics=tuple(_diagnostics(executor)),
+                    provenance=provenance,
+                )
     try:
         executor._write_ledger()
     except (OSError, TypeError, ValueError) as error:
@@ -2101,8 +3325,12 @@ def _settle(
     )
 
 
-def run(
-    request: ComponentRequest, *, base: Path | None = None, resume: bool = False
+def run(  # noqa: C901
+    request: ComponentRequest,
+    *,
+    base: Path | None = None,
+    resume: bool = False,
+    admission_config: ExecutorAdmissionConfig | Mapping[str, Any] | None = None,
 ) -> ComponentResult:
     """Execute one bounded review-execute request.
 
@@ -2111,34 +3339,81 @@ def run(
         base: Base directory the request output directory resolves under.
         resume: Reuse an existing output directory ledger instead of failing
             on output collision.
+        admission_config: Validated launcher-owned source admission config.
 
     Returns:
         Component result with artifacts (complete only), diagnostics, and
         provenance.
     """
+    start_time = time.monotonic()
     root = base if base is not None else Path.cwd()
     config, recipe_doc, measurement, early = _admit_request(request)
     if early is not None or config is None or recipe_doc is None or measurement is None:
         assert early is not None
         return early
+    try:
+        if admission_config is None:
+            external_admission = None
+        elif isinstance(admission_config, ExecutorAdmissionConfig):
+            external_admission = validate_executor_admission_config(admission_config.to_dict())
+        else:
+            external_admission = validate_executor_admission_config(admission_config)
+    except ReviewExecuteError as error:
+        return _final_result(
+            request,
+            status="failed",
+            reason=f"invalid_source_admission_config: {'; '.join(error.errors)}",
+        )
+    if external_admission is None:
+        return _final_result(
+            request,
+            status="unavailable",
+            reason=(
+                "source_admission: legacy_config_requires_admission: explicit launcher "
+                "admission configuration is required; request config cannot authorize its own source"
+            ),
+        )
+    config = replace(config, admission=external_admission)
+    admission_proof, admission_failure = _resolve_executor_admission(
+        request,
+        config,
+        recipe_doc,
+        admission=external_admission,
+    )
+    if admission_failure is not None or admission_proof is None:
+        failure_status, failure_reason = admission_failure or (
+            "failed",
+            "source_admission: resolver returned no proof during admission",
+        )
+        return _final_result(request, status=failure_status, reason=failure_reason)
     output_dir, dir_early = _prepare_output_dir(request, root, resume=resume)
     if dir_early is not None or output_dir is None:
         assert dir_early is not None
+        os.close(admission_proof.root_fd)
         return dir_early
     executor = _Executor(
-        request=request, config=config, recipe=recipe_doc, output_dir=output_dir, resume=resume
+        request=request,
+        config=config,
+        recipe=recipe_doc,
+        output_dir=output_dir,
+        admission_proof=admission_proof,
+        resume=resume,
+        _started_at=start_time,
     )
     if resume:
         try:
             executor._load_resume_ledger()
         except ReviewExecuteError as error:
-            return _final_result(request, status="failed", reason="; ".join(error.errors))
+            result = _final_result(request, status="failed", reason="; ".join(error.errors))
+            executor._close_admission_root()
+            return result
     provenance = _commit_provenance()
     provenance["recipe_id"] = str(recipe_doc.get("recipe_id", ""))
     provenance["source_identity"] = dict(recipe_doc.get("source_identity", {}))
     provenance["request_digest"] = _canonical_digest(_request_identity_document(request))
     provenance["recipe_digest"] = _canonical_digest(recipe_doc)
     provenance["config_digest"] = _canonical_digest(_config_document(config))
+    provenance["source_admission"] = admission_proof.to_dict()
     provenance["sources"] = [
         {
             "artifact_id": source.artifact_id,
@@ -2148,29 +3423,54 @@ def run(
         for source in request.sources
     ]
     provenance["output_directory"] = request.output_directory
-    executor._started_at = time.monotonic()
-    try:
-        status, reason = _drive_candidates(executor, config, measurement)
-        return _settle(executor, provenance, status, reason)
-    except Exception as error:  # noqa: BLE001 - fail closed while preserving the ledger
-        reason = f"execution_failed: {type(error).__name__}: {error}"
+    if executor._elapsed() >= config.wall_timeout_s:
+        reason = "wall_timeout: wall budget exhausted during admission or initialization"
         try:
             executor._write_ledger()
         except (OSError, TypeError, ValueError) as ledger_error:
             reason += f"; output_write_failed: {ledger_error}"
-        return _final_result(
+        result = _final_result(
             request,
             status="failed",
             reason=reason,
             diagnostics=tuple(_diagnostics(executor)),
             provenance=provenance,
         )
+        executor._close_admission_root()
+        return result
+    try:
+        status, reason = _drive_candidates(executor, config, measurement)
+        result = _settle(executor, provenance, status, reason)
+        executor._close_admission_root()
+        return result
+    except Exception as error:  # noqa: BLE001 - fail closed while preserving the ledger
+        reason = f"execution_failed: {type(error).__name__}: {error}"
+        _remove_complete_outputs(executor)
+        try:
+            executor._write_ledger()
+        except (OSError, TypeError, ValueError) as ledger_error:
+            reason += f"; output_write_failed: {ledger_error}"
+        result = _final_result(
+            request,
+            status="failed",
+            reason=reason,
+            diagnostics=tuple(_diagnostics(executor)),
+            provenance=provenance,
+        )
+        executor._close_admission_root()
+        return result
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Execute SREV-22 bounded review experiments.")
     parser.add_argument("--input", required=True, help="Component request JSON file.")
     parser.add_argument("--config", required=False, default=None, help="Optional config JSON file.")
+    parser.add_argument(
+        "--admission-config",
+        required=False,
+        default=None,
+        help="Launcher-owned executor admission JSON file (required for completion).",
+    )
     parser.add_argument("--output", required=True, help="Output directory (must not exist).")
     parser.add_argument("--base", required=False, default=None, help="Base directory for output.")
     parser.add_argument(
@@ -2219,7 +3519,7 @@ def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
     return 1
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     """CLI entry point for the review-execute component.
 
     Args:
@@ -2237,6 +3537,22 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(payload, dict):
         return _print_cli_failure("invalid_input: request must be a JSON object")
     request_id, component_id = _cli_identity(payload)
+    external_admission: ExecutorAdmissionConfig | None = None
+    if args.admission_config is not None:
+        try:
+            admission_payload = json.loads(Path(args.admission_config).read_text(encoding="utf-8"))
+            external_admission = validate_executor_admission_config(
+                admission_payload, source=args.admission_config
+            )
+        except (OSError, ValueError, RecursionError):
+            return _print_cli_failure(
+                "invalid_input: admission config JSON cannot be parsed safely", payload=payload
+            )
+        except ReviewExecuteError as error:
+            return _print_cli_failure(
+                f"invalid_input: admission config is invalid: {'; '.join(error.errors)}",
+                payload=payload,
+            )
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))
@@ -2263,7 +3579,10 @@ def main(argv: list[str] | None = None) -> int:
             payload={"request_id": request_id, "component_id": component_id},
         )
     result = run(
-        request, base=Path(args.base) if args.base is not None else None, resume=args.resume
+        request,
+        base=Path(args.base) if args.base is not None else None,
+        resume=args.resume,
+        admission_config=external_admission,
     )
     print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
     return 0 if result.status == "complete" else 1

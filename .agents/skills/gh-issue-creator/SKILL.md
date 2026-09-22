@@ -32,6 +32,8 @@ execution.
 3. Normalize prompt into required fields:
    - goal, scope/non-scope, value/effort/complexity/risk, definition of done, success metrics,
      validation plan.
+   - for every issue, include the canonical `Relationships` block from
+     `docs/context/issue_relationships.md`, using `none` explicitly when a field does not apply.
    - for child issues, include `Parent issue`, `Non-goals`, `Validation / Testing`, and
      `Blocked by` fields before creation.
 4. Assign an archetype and evidence tier using the convention in
@@ -65,6 +67,9 @@ execution.
      verified label write). A failed, stale, or unavailable check leaves the issue
      without `state:ready` and emits a stable JSON outcome for follow-up; retries
      are idempotent and never remove labels.
+   - after creation, set explicit Parent, Blocked by, and Blocking links in GitHub's Relationships
+     panel (or with the documented REST/CLI route) and read them back. Do not infer links from
+     prose. `Relates to` remains a manual panel action; keep the body mirror.
 7. Project routing:
    - use `gh project item-add` when the CLI route is the active Project #5 write path
    - use `gh project item-edit` for explicit field updates when the CLI route is active
@@ -78,7 +83,8 @@ execution.
 
 - Keep assumptions explicit and conservative.
 - If template fit is unclear, pick the smallest viable template and note the assumption.
-- Do not proceed with speculative follow-up links unless concrete and actionable.
+- Do not proceed with speculative follow-up links unless concrete and actionable. A body mention is
+  not permission to create a native relationship.
 - For parent-derived child issues, require a duplicate check from `issue-splitter` or perform one
   before calling `gh issue create`.
 - Use REST for deterministic issue operations; use GraphQL/MCP only where useful for Project #5.

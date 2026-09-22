@@ -74,7 +74,8 @@ than running experiments (see the [Research & Benchmark Guide](./research-guide.
 - [Data Analysis Utilities](./DATA_ANALYSIS.md) — analysis helpers and data processing tools.
 - [Imitation Results Analysis](./imitation_results_analysis.md) — baseline vs pre-trained comparisons.
 - [Imitation Learning Pipeline](./imitation_learning_pipeline.md) — training pipeline overview.
-- [Dev scripts](./../scripts/dev/) — shared development entry points (ruff, tests, PR readiness).
+- [Dev scripts](./../scripts/dev/README.md) — shared development entry points with a task-oriented
+  index (ruff, tests, PR readiness, worktrees, GitHub helpers, audits).
 - [SVG Inspection Workflow](./dev/svg_inspection_workflow.md) — route/zone consistency checks.
 
 ## 6. Visualization and rendering internals

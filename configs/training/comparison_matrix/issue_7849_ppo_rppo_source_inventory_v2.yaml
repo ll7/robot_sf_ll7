@@ -1,0 +1,295 @@
+schema_version: training_source_inventory.v1
+campaign: issue_7849_ppo_rppo_gpu_admission_v2
+issue: 7849
+source_base_ref: origin/main
+source_base_commit: d62a4433716910db4135d6308e01ffccfaa26a74
+claim_boundary: Preparation-only source inventory for the shared evaluation-seed successor;
+  no training, benchmark, or performance claim.
+files:
+- path: configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml
+  sha256: a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa
+  role: frozen preregistration contract
+- path: configs/training/ppo/issue_4014_ppo_smoke_matched.yaml
+  sha256: 117185e82ef2665d437b981c96a0de3eefd0ae4a145622669e21939276994715
+  role: merged feed-forward smoke reference
+- path: configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml
+  sha256: 040834e4eaef43efc6cd26a6d35c85e7a3f0c27d58a8f1f59ad31d0433200ec8
+  role: merged recurrent smoke reference
+- path: configs/training/ppo/issue_7849_ppo_full_v2.yaml
+  sha256: f83d66ded3a22b2f5e7c2fa8fe894b663769e49586ca42d47cd8f41abfb74103
+  role: candidate feed-forward full-budget config with shared evaluation seed manifest
+- path: configs/training/ppo/issue_7849_ppo_gate1_canary_v2.yaml
+  sha256: a151561ed17afa59ec870e687a6015aad8718a8847aba33f99aacbd0bd659f24
+  role: diagnostic feed-forward Gate-1 canary config with shared evaluation seed manifest
+- path: configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml
+  sha256: 7d1de6452d47a88b2b40fec39ced8017cee37fb23bb17138c87b2cef9d4ca865
+  role: candidate recurrent full-budget config with shared evaluation seed manifest
+- path: configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v2.yaml
+  sha256: 0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d
+  role: diagnostic recurrent Gate-1 canary config with shared evaluation seed manifest
+- path: pyproject.toml
+  sha256: 78e56caa2afab1817f0bc43204351656eb41788143123eae4c30643e01ca96eb
+  role: dependency extra and package constraints
+- path: robot_sf/benchmark/map_runner_policies/map_runner_actions.py
+  sha256: 90b14f637094210c261d17a556b71e0952ed74f90afbb7fbcc5409881b73c4ce
+  role: canonical desired-command conversion
+- path: robot_sf/benchmark/research_answerability.py
+  sha256: bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3
+  role: research_answerability.v1 evaluator
+- path: robot_sf/gym_env/observation_mode.py
+  sha256: 4f041620b9d96bd5468c6d3027ee22ff23a02f161995bd25ba50ffcaa0844789
+  role: observation-mode owner
+- path: robot_sf/planner/recurrent_ppo_learned_adapter.py
+  sha256: 54dea7111c33eceb20fc59cf2223fd4133a8b0b7f461ed0f2a9359b7934df040
+  role: merged stateful adapter
+- path: robot_sf/training/recurrent_runtime.py
+  sha256: 42f6a86e14612ca6b9e9cdbe47bf5000b29c03ddba5cd99d809960ad4487d5d8
+  role: recurrent-state evaluation/checkpoint helpers
+- path: scripts/dev/preflight_launch_packet.py
+  sha256: 32e901f7199905298a45d0662bd8787ef0b69c673b6f0ad84df4f3121d9d3626
+  role: generic path/checksum preflight
+- path: scripts/training/train_ppo.py
+  sha256: 5e3821b7e8fb5491ce7047ea74c8fbdbcfa12fc4945e76ada0cf32943b1462f3
+  role: feed-forward runner
+- path: scripts/training/train_recurrent_ppo.py
+  sha256: d8e85301c5263cb08bebcebe3311190191c7831a8d97e2ed2ce6546ee521a1f8
+  role: RecurrentPPO runner
+- path: tests/training/test_issue_7849_gpu_admission_packet.py
+  sha256: aca87a684c197dbeaff8187ee768fbc854a575dce3a9b0562e55a5c3ea9f1bf1
+  role: focused admission and source-inventory validation
+- path: tests/training/test_train_recurrent_ppo_runtime.py
+  sha256: 1b593d77ae37ced9d137348ccd2bc39b0007bb659c89625c4d1dad24899a242b
+  role: focused recurrent metric and checkpoint-selection validation
+- path: uv.lock
+  sha256: bda5e47dd0621d06a6d3d7253bba03b688a70eb4803caf49db9796f0f12a0798
+  role: locked dependency resolution
+- path: configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml
+  sha256: 3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482
+  role: immutable shared disjoint evaluation-seed manifest
+- path: robot_sf/training/imitation_config.py
+  sha256: 54a8b560271f477efc71ec7f2a09dff8a109d5122391af017f3d6a88f74fcc06
+  role: evaluation schedule and seed-manifest dataclass
+scenario_inputs:
+- path: configs/scenarios/archetypes/classic_bottleneck.yaml
+  sha256: 74882625aaa863ef6e9d4e9a57f7709e00c57d483344f91025ce79c8b91017ac
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_cross_trap.yaml
+  sha256: 2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_doorway.yaml
+  sha256: 2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_group_crossing.yaml
+  sha256: 370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+  sha256: e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_merging.yaml
+  sha256: eb1c80372a6c0d96fdfe36d5523980bb5461475abbca8db0d7f8a04b0cfd9023
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_overtaking.yaml
+  sha256: fdd789f19e833039cee0bd4f5fceeb2f273dedb9925c58f41b26246cdfee9f74
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_realworld_bottleneck.yaml
+  sha256: b6210d3a11fd2270ae1e8729b1d4e5b9045cc5e036249f822f4b34ea445fee34
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_station_platform.yaml
+  sha256: 7f093fdb6406f4043e07b4a8d4113defd4cb17ec4bc793bf3583f12960b77228
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_t_intersection.yaml
+  sha256: 97d7f9a95c57ac58814df6271d518aec84d4233fb027c1ca397250b06b0fecde
+  role: transitive scenario manifest input
+- path: configs/scenarios/archetypes/classic_urban_crossing.yaml
+  sha256: ea65d720fd8765bb725fedba0f50ccc9bbd1e609aa24a80c8ad9711666550161
+  role: transitive scenario manifest input
+- path: configs/scenarios/classic_interactions.yaml
+  sha256: 5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5
+  role: transitive scenario manifest input
+- path: configs/scenarios/classic_interactions_francis2023.yaml
+  sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  role: transitive scenario manifest input
+- path: configs/scenarios/francis2023.yaml
+  sha256: f60ccf7235d1c965e2d1989ae157024734366d0ed6f4db5acdc83127f0325f56
+  role: transitive scenario manifest input
+- path: configs/scenarios/sets/classic_cross_trap_subset.yaml
+  sha256: fc5c2ccec86d2bf8eac069f04fb24ecb742705844adc11b59d34c0faad685726
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_accompanying_peer.yaml
+  sha256: c5c1dc3d171e0defdce2916dc28213bf16220e98dd31657f7fab1e79cfcad4f9
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_blind_corner.yaml
+  sha256: 5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_circular_crossing.yaml
+  sha256: 58a627b73ed74510f339a9cc8a3614701a4c5d94e237b3f8554fbdab7fd52967
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_crowd_navigation.yaml
+  sha256: 84fcb9fb8b640f8340488b2baddc259778c7df3f0b3b8f1b182a9680b8167cef
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_down_path.yaml
+  sha256: 0aa47e6267475b391c80a7bf0afe0efcc02b128149cb2b9646238eabc5a8db6d
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_entering_elevator.yaml
+  sha256: d9b2abd060b66eaff0ac4f84a5309b03700f7cc6850a9b3338298354fa3b82fe
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_entering_room.yaml
+  sha256: 23d3a835d031007891b6ef71bca8262dbfc8ca7bfca49b8dff3343e12968da7a
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_exiting_elevator.yaml
+  sha256: d4b59fcc296e09352f5166fda1c03aea21caebcd78644539f738c50fe4e30a68
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_exiting_room.yaml
+  sha256: 0871fd8c769b342cd7f923c90d652ff96b9afa2c64fb6955f601689f35c6bfe6
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_following_human.yaml
+  sha256: 82aa88231fcbd1775703950f0a3d64f205235bab1ab9bfea0e170fb8e5616655
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_frontal_approach.yaml
+  sha256: d2d5680764c487969d4c3a623b6ace3dd69918185d77004a0c3a4e76432cb5b0
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_intersection_no_gesture.yaml
+  sha256: 3e01b2173d2c5f567328af422c647fe931561ca0c1d7712a141cf0fdbbb7b4d7
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_intersection_proceed.yaml
+  sha256: a9a4ec7c49d1121a319a3c7c85936d1caec30de181a2f785d6860a8e2615df7b
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_intersection_wait.yaml
+  sha256: 608fc06727c57731febd214a9c84a3839b799701f53eaaf3d6cd9e329648ba75
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_join_group.yaml
+  sha256: a1139933e4acf2b6066fe0a9d66c7e69e58ea6596ead7df92dd65e61bc15a208
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_leading_human.yaml
+  sha256: a30b54b4677086968d10742edba95db4f1ba7157e39329c5244b562f0658d7b8
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_leave_group.yaml
+  sha256: 4427dc9f9afa38a9ae76254d9ec8dbdb44706da4fccec8c93f1bb0c8e8f6cb43
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_narrow_doorway.yaml
+  sha256: d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_narrow_hallway.yaml
+  sha256: 94662d62415766f229b8b80d09d3eea59d71977add85bd58728be47f6939f984
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_parallel_traffic.yaml
+  sha256: 51ab362a25e38ad20726ff50208d5fbe5e01331cbd55c5889591df40c8f9a387
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_pedestrian_obstruction.yaml
+  sha256: b76535a0060a6c4ebd9dfa4170b61621c0459fce7d0228c734c08a04059847be
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_pedestrian_overtaking.yaml
+  sha256: dc1a403432195175031252af06ecadad661f61b35cc0715623d2814ca52d5057
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_perpendicular_traffic.yaml
+  sha256: cd9dab418641d5a1dc5e0755ab405ed15f8d3e1a0858a0729c3317026f63aa8f
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_robot_crowding.yaml
+  sha256: a6da0946bbdae3d5818efb15d7148d313252e8ff477f1bbeaa88097520223de7
+  role: transitive scenario manifest input
+- path: configs/scenarios/single/francis2023_robot_overtaking.yaml
+  sha256: 92f6dadfa4ce7aba13d6f0506e6d4d189fedc2c9fb2ba8a6cde07bd12f8b17dc
+  role: transitive scenario manifest input
+map_inputs:
+- path: maps/registry.yaml
+  sha256: 471d863ece35395e09d040610e77e8822f8cdf32a39a5caf88e8b56b1dbdfaad
+  role: canonical map-ID registry used to resolve scenario references
+- path: maps/svg_maps/classic_bottleneck.svg
+  sha256: 65772c0ec5ef521b9ee1332fdee433e8bfa25b8c06753692ea1bf2c667b74357
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_bottleneck_high.svg
+  sha256: bf074d4cbf53a9b6785604f32053d44b6694caa41e5222aa66e59ce90b7b4403
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_bottleneck_medium.svg
+  sha256: d8401829a4828fca80083f506096389218b5d1178c4f3c4ac35f47340bdbdc4b
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_crossing.svg
+  sha256: dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911
+  role: map alias target referenced by the Gate-1 canary
+- path: maps/svg_maps/classic_doorway.svg
+  sha256: 42f3911d15c8a2edc61e177d2d25fbb8416810ba937b2ec5009ad6220308cb48
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_group_crossing.svg
+  sha256: fcd08b528c091e4b929f06dd5e268f8e092e89ac75df348d2a7346445420476b
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_head_on_corridor.svg
+  sha256: 89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_merging.svg
+  sha256: 3a9d1d566542d60a3a9feab57e7c225b818eb37a3e26c1ca30f12a469e22397a
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_overtaking.svg
+  sha256: dbcbaaf8eb96b89017451b5dbd8cc1806c610a2c29b39c132a9fa71e7cd47153
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_realworld_bottleneck.svg
+  sha256: 6219c0dc6e8ede2ea91bd0916c1224ff43df3bacb6332bdabcc7eba829095c11
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_station_platform.svg
+  sha256: 5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_t_intersection.svg
+  sha256: c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/classic_urban_crossing.svg
+  sha256: 305261b242008fcaa9b298cdc5fa0334ddaf96bf7a2c83c11d49f5ea0fdaf5e0
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_blind_corner.svg
+  sha256: 8359a5d5999552b8abd9781c82ee7cad4b2052bb458b94d348578e5dda586ef8
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_circular_crossing.svg
+  sha256: c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_crowd_navigation.svg
+  sha256: 90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_down_path.svg
+  sha256: a195335ea021714a93a2aaab6e8494580d7c442f84d648b995a003104ff1c519
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_entering_elevator.svg
+  sha256: fa52e7b55bae9ae8a1fdfc0c13cd3e18e43d2c005cb325fe9a978fa1c39f6c10
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_entering_room.svg
+  sha256: 3d18c06ee133949b14e4274c548b19b61f10ed518c105b5a94f660b53376c945
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_exiting_elevator.svg
+  sha256: 3e09a3ef263b0ba0b2f0ad68a33157db6c78bb8794535675f4db33457cf76e75
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_exiting_room.svg
+  sha256: 6968e1d3459f213638406340a258a3b61c7e80bf56976802b110491cd9d4d6fc
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_frontal_approach.svg
+  sha256: 685092e88811f450f47e5350965122f9a4cc8aff084b2584a628804a96f20e33
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  sha256: 416caeb391a0f8a12d25c6346a38d023e210c173c9275e08823171fbce172723
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_join_group.svg
+  sha256: 787bddcc270cc56e0703616ff2d9ad9a1a63890227fbbc6257670c1503aa8c7a
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_leave_group.svg
+  sha256: 869256f3d5d3b32810873dd3ab668678774a86b043d1612c58e8492d4c9c02a7
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_narrow_doorway.svg
+  sha256: 7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_narrow_hallway.svg
+  sha256: d592f0fff7fe604119db92fba6146acee6f55f99c360e8768cd5c6a8bf670467
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_parallel_traffic.svg
+  sha256: df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_ped_obstruction.svg
+  sha256: 5360ced91b6bb3f2d36510988c0b23a69a7baa40c3bf909f1816bce4eb9a35bc
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_ped_overtaking.svg
+  sha256: 76f0746da014d61f50ee0f96914cb2d42c11aa78f0ecfe2022d0e4ddff7344d1
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg
+  sha256: 67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_robot_crowding.svg
+  sha256: 202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617
+  role: map referenced by frozen scenario surface
+- path: maps/svg_maps/francis2023/francis2023_robot_overtaking.svg
+  sha256: 13f5927f1aec35b8653b2daa13d0e2832f300b1d808ce7a9a317a8fa93d264fe
+  role: map referenced by frozen scenario surface

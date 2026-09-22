@@ -1,0 +1,8 @@
+{
+  "title": "Scenario Review: Bottleneck Near-Miss Analysis",
+  "reviewer_notes": "Preliminary inspection indicates robot made late evasive maneuver near pedestrian.",
+  "excerpt_interval": {
+    "start_s": 0.2,
+    "end_s": 0.8
+  }
+}

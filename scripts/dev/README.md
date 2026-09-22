@@ -5,6 +5,40 @@ opt-in support tools. A script is not an automatic PR gate merely because it
 lives under `scripts/dev/`; use the invocation surface documented below as the
 source of truth.
 
+## Task index
+
+Fast finder for the most common contributor tasks. Each entry names the
+maintained entry point; run `uv run python scripts/dev/<script>.py --help`
+(shell helpers: `scripts/dev/<script>.sh --help`) for flags and exit codes.
+
+| I want to... | Use |
+| --- | --- |
+| Check whether my branch is ready for a PR | `pr_ready_check.sh` (see [Required readiness gates](#required-readiness-gates)) |
+| Format and lint my changes | `ruff_fix_format.sh` |
+| Run the test suite | `run_tests_parallel.sh`, `run_focused_tests.sh`, `run_ci_local.sh` |
+| Run a bounded command without flooding the terminal | `run_compact_validation.py` |
+| Count collected tests for validation metadata | `pytest_collect_count.py` |
+| Create a linked worktree for isolated work | `create_worktree.sh` |
+| Restore files without losing uncommitted work | `safe_checkout.sh` |
+| Reuse the main checkout environment in a worktree | `run_worktree_shared_venv.sh` |
+| Check worktree disk capacity or reclaim space | `check_worktree_capacity.py` |
+| Diagnose a worktree or stale CI state | `worktree_hygiene_snapshot.py`, `recover_stale_ci_run.py`, `diagnose_actions_job.py` |
+| Check CI status for a PR | `check_pr_ci_status.py`, `watch_pr_ci_status.py`, `compact_ci_snapshot.py` |
+| Post a Markdown-heavy GitHub comment or review | `gh_comment.sh`, `gh_pr_review_rest.py` |
+| Reconcile a PR title/body after a fix push | `gh_pr_body_rest.py` |
+| Read issue or PR state without deprecated GraphQL fields | `gh_issue_rest.py`, `gh_issue_view.sh`, `snapshot_issue_batch.py`, `snapshot_pr_queue.py` |
+| Claim an issue for cross-machine agent work | `issue_claim.py` |
+| Audit what the scripts catalog tracks | `check_scripts_catalog.py`, `scripts_catalog.py` |
+| Regenerate generated docs surfaces | `render_scripts_readme.py`, `generate_cli_reference.py`, `generate_environment_config_reference.py`, `generate_skills_readme.py`, `generate_quickstart_notebooks.py` |
+| Check documentation link and evidence integrity | `check_curated_doc_links.py`, `check_docs_evidence_integrity.py`, `check_context_notes.sh` |
+| Run docstring TODO ratchets | `check_docstring_todos_ratchet.sh`, `check_docstring_todos_diff.sh` |
+| Audit code-size, assert, config-family, or helper drift | `audit_function_lengths.py`, `audit_production_asserts.py`, `audit_config_families.py`, `audit_validation_helpers.py` |
+| Run an offline smoke of the local workflow | `run_offline_smoke.py` |
+| Check optional dependencies without importing project code | `check_worktree_optional_deps.py` |
+
+Full narrative contracts for the numbered sections below cover the tools that
+need more explanation than a table row.
+
 ## Required readiness gates
 
 `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` is the local readiness

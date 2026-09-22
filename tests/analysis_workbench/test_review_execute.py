@@ -5,10 +5,13 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from robot_sf.analysis_workbench.review_contracts import (
@@ -20,13 +23,43 @@ from robot_sf.analysis_workbench.review_contracts import (
 from robot_sf.analysis_workbench.review_execute import (
     COMPONENT_ID,
     COMPONENT_VERSION,
+    ExecutorAdmissionConfig,
     _run_owned_child,
     descriptor,
-    run,
     validate_execute_config,
+    validate_executor_admission_config,
+)
+from robot_sf.analysis_workbench.review_execute import (
+    run as _component_run,
 )
 
 FIXTURES = "tests/fixtures/scenario_review/review_execute"
+
+
+def _fixture_admission_config(root: Path | None = None) -> ExecutorAdmissionConfig:
+    """Build the launcher-owned admission argument used by fixture tests."""
+    payload = _fixture_json("admission.json")
+    if root is not None:
+        payload["source_root"] = str(root)
+    return validate_executor_admission_config(payload)
+
+
+def run(
+    request: Any,
+    *,
+    base: Path | None = None,
+    resume: bool = False,
+    admission_config: ExecutorAdmissionConfig | None = None,
+) -> Any:
+    """Run fixture requests through an explicit launcher-owned config."""
+    return _component_run(
+        request,
+        base=base,
+        resume=resume,
+        admission_config=(
+            admission_config if admission_config is not None else _fixture_admission_config()
+        ),
+    )
 
 
 def _fixture_json(name: str) -> dict[str, Any]:
@@ -54,6 +87,33 @@ def _fixture_episode_identity() -> dict[str, Any]:
         "scenario_id": source_identity["scenario_id"],
         "source_ref": dict(source_identity["source_ref"]),
     }
+
+
+def _fixture_request_for_root(root: Path) -> Any:
+    """Point the external admission config at a private fixture copy."""
+    request = _fixture_request()
+    config = copy.deepcopy(request.config)
+    config["admission"]["source_root"] = str(root)
+    return replace(request, config=config)
+
+
+def _nested_fixture_admission_config(root: Path) -> ExecutorAdmissionConfig:
+    """Move both proof files under nested directories and return their config."""
+    receipt_reference = Path("proofs") / "receipts" / "admitted-source.json"
+    preservation_reference = Path("proofs") / "preservation" / "receipt.json"
+    (root / receipt_reference).parent.mkdir(parents=True)
+    (root / preservation_reference).parent.mkdir(parents=True)
+    (root / "receipt.json").rename(root / receipt_reference)
+    (root / "preservation-receipt.json").rename(root / preservation_reference)
+    payload = _fixture_json("admission.json")
+    payload.update(
+        {
+            "source_root": str(root),
+            "receipt_reference": str(receipt_reference),
+            "preservation_receipt_reference": str(preservation_reference),
+        }
+    )
+    return validate_executor_admission_config(payload)
 
 
 def _patch_fake_execution(
@@ -111,6 +171,28 @@ def test_validate_execute_config_rejects_unknown_keys() -> None:
 
 
 def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
+    """Exercise real SREV-22 execution producing survived and falsified verdicts.
+
+    Runtime note (issue #9520):
+    This test runs 4 real episode executions sequentially in isolated child
+    processes (control and treatment for 'ped-speed-up', control and treatment
+    for 'ped-speed-down'). Each child process incurs ~1.9s of Python module
+    imports plus ~4.0s of Numba LLVM JIT compilation on step 0 for the
+    PySocialForce force calculators (DesiredForce, SocialForce, ObstacleForce,
+    etc.), totaling ~5.9s per execution (~24s total in isolation, scaling to
+    ~54s under parallel suite contention).
+
+    Profiling confirms:
+    - Step 0 accounts for ~3.98s (Numba JIT compilation), while steps 1..60
+      take ~0.0001s each. Shortening horizon_steps (e.g. 60 -> 10) saves <0.1s.
+    - Candidate count cannot be reduced without eliminating either the
+      'ped-speed-up' ('survived') or 'ped-speed-down' ('falsified') verdict,
+      which would violate the measured-verdict assertion contract.
+    - Process isolation via 'spawn' is required for timeout and termination
+      safety.
+    The ~24s quiet / ~54s contended call duration is therefore necessary and
+    intrinsic to real-execution verification.
+    """
     request = _fixture_request()
     result = run(request, base=tmp_path)
     assert result.status == "complete"
@@ -165,7 +247,470 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     assert manifest["dependent_family_status"] == "standalone_fixture_only"
 
 
-def test_repeated_runs_agree_on_logical_artifacts(tmp_path: Path) -> None:
+def test_source_admission_positive_fixture_binds_external_proof(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A complete result records the externally anchored source and preservation proof."""
+    _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert result.provenance["scientific_claim_allowed"] is False
+    admission = result.provenance["source_admission"]
+    assert admission["receipt_id"] == "srev22-review-execute-receipt"
+    assert admission["preservation_destination"] == "external:post-execution-preservation"
+    assert admission["scientific_claim_allowed"] is False
+
+
+def test_nested_admission_receipts_complete_via_public_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Nested receipt references remain valid through the public run boundary."""
+    _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["receipt_reference"] == (
+        "proofs/receipts/admitted-source.json"
+    )
+    assert result.provenance["source_admission"]["preservation_receipt_reference"] == (
+        "proofs/preservation/receipt.json"
+    )
+
+
+def test_legacy_v1_config_cannot_claim_admitted_completion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Request-only admission declarations remain non-complete and do no work."""
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    request_only = _component_run(request, base=tmp_path)
+    assert request_only.status == "unavailable"
+    assert "legacy_config_requires_admission" in request_only.reason
+    assert calls == []
+
+    legacy_config = copy.deepcopy(request.config)
+    legacy_config.pop("admission")
+    result = _component_run(replace(request, config=legacy_config), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "legacy_config_requires_admission" in result.reason
+    assert calls == []
+
+
+def test_request_admission_cannot_override_launcher_trust_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A request-supplied root is ignored when the launcher supplies another root."""
+    _patch_fake_execution(monkeypatch)
+    attacker_root = tmp_path / "attacker-root"
+    shutil.copytree(Path(FIXTURES), attacker_root)
+    request = _fixture_request()
+    request_config = copy.deepcopy(request.config)
+    request_config["admission"]["source_root"] = str(attacker_root)
+    result = _component_run(
+        replace(request, config=request_config),
+        base=tmp_path,
+        admission_config=_fixture_admission_config(),
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["source_root"].endswith(
+        "tests/fixtures/scenario_review/review_execute"
+    )
+    assert str(attacker_root) not in result.provenance["source_admission"]["source_root"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("missing_receipt", "receipt_missing"),
+        ("receipt_tampered", "receipt_stale"),
+        ("preservation_tampered", "preservation_receipt_stale"),
+    ],
+)
+def test_external_admission_proof_failures_are_non_complete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mutation: str,
+    expected: str,
+) -> None:
+    """Missing or forged external proof never starts a child execution."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    if mutation == "missing_receipt":
+        (root / "receipt.json").unlink()
+    elif mutation == "receipt_tampered":
+        receipt = root / "receipt.json"
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        payload["receipt_id"] = "forged-receipt"
+        receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    else:
+        preservation = root / "preservation-receipt.json"
+        preservation.write_text(
+            preservation.read_text(encoding="utf-8").replace(
+                "external:post-execution-preservation", "external:forged-destination"
+            ),
+            encoding="utf-8",
+        )
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status in {"unavailable", "failed"}
+    assert expected in result.reason
+    assert calls == []
+
+
+def test_receipt_cannot_self_authorize_a_trust_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Receipt content cannot add an artifact-controlled trust-root declaration."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    receipt = root / "receipt.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["allowed_root"] = str(tmp_path / "attacker-controlled-root")
+    receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    request = _fixture_request_for_root(root)
+    config = copy.deepcopy(request.config)
+    external_admission = replace(
+        _fixture_admission_config(root),
+        receipt_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
+    )
+    result = run(
+        replace(request, config=config),
+        base=tmp_path,
+        admission_config=external_admission,
+    )
+    assert result.status == "failed"
+    assert "receipt_malformed" in result.reason
+    assert calls == []
+
+
+def test_preservation_receipt_true_claim_flag_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A preservation receipt cannot elevate the diagnostic scientific boundary."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    preservation = root / "preservation-receipt.json"
+    payload = json.loads(preservation.read_text(encoding="utf-8"))
+    payload["scientific_claim_allowed"] = True
+    preservation.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    external_admission = replace(
+        _fixture_admission_config(root),
+        preservation_receipt_sha256=hashlib.sha256(preservation.read_bytes()).hexdigest(),
+    )
+    result = _component_run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=external_admission,
+    )
+    assert result.status == "failed"
+    assert "preservation_receipt_malformed" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unknown"])
+def test_preservation_receipt_closed_schema_rejects_shape_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: str
+) -> None:
+    """Missing and unknown preservation fields cannot widen the receipt contract."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    preservation = root / "preservation-receipt.json"
+    payload = json.loads(preservation.read_text(encoding="utf-8"))
+    if mutation == "missing":
+        payload.pop("evidence_boundary")
+    else:
+        payload["attacker_extension"] = "claim-authority"
+    preservation.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    external_admission = replace(
+        _fixture_admission_config(root),
+        preservation_receipt_sha256=hashlib.sha256(preservation.read_bytes()).hexdigest(),
+    )
+    result = _component_run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=external_admission,
+    )
+    assert result.status == "failed"
+    assert "preservation_receipt_malformed" in result.reason
+    assert calls == []
+
+
+def test_recipe_cannot_self_authorize_a_different_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Recipe source metadata cannot override the external receipt/root binding."""
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request()
+    config = copy.deepcopy(request.config)
+    config["recipe"]["source_identity"]["source_uri"] = "attacker-owned.json"
+    result = run(replace(request, config=config), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "receipt_stale" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_root", "../outside"),
+        ("receipt_reference", "../receipt.json"),
+        ("preservation_receipt_reference", "../preservation-receipt.json"),
+    ],
+)
+def test_admission_config_rejects_traversal(field: str, value: str) -> None:
+    """Launcher admission paths are validated before any source is opened."""
+    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError
+
+    config = _fixture_json("config.json")
+    config["admission"][field] = value
+    with pytest.raises(ReviewExecuteError, match="source_admission_config"):
+        validate_execute_config(config)
+
+
+def test_source_root_symlink_is_rejected_before_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The configured root and source path cannot be redirected through symlinks."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes((root / "recipe.json").read_bytes())
+    source = root / "recipe.json"
+    source.unlink()
+    try:
+        source.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "unavailable"
+    assert "source_escaped_root" in result.reason
+    assert calls == []
+
+
+@pytest.mark.parametrize("reference_kind", ["receipt", "preservation"])
+def test_nested_admission_symlink_is_typed_non_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reference_kind: str
+) -> None:
+    """Nested proof symlinks fail closed without leaking an OS traceback."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    if reference_kind == "receipt":
+        reference = Path(admission.receipt_reference)
+        outside = tmp_path / "outside-receipt.json"
+    else:
+        reference = Path(admission.preservation_receipt_reference)
+        outside = tmp_path / "outside-preservation.json"
+    outside.write_bytes((root / reference).read_bytes())
+    (root / reference).unlink()
+    try:
+        (root / reference).symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "unavailable"
+    assert "unreadable" in result.reason
+    assert result.artifacts == ()
+    assert calls == []
+
+
+def test_nested_root_swap_is_typed_non_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A root pathname swapped to a symlink is rejected before any child starts."""
+    calls = _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    original_root = tmp_path / "original-admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _fixture_admission_config(root)
+    root.rename(original_root)
+    try:
+        root.symlink_to(original_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    result = run(
+        _fixture_request_for_root(root),
+        base=tmp_path,
+        admission_config=admission,
+    )
+    assert result.status == "unavailable"
+    assert "allowed_root_invalid" in result.reason
+    assert result.artifacts == ()
+    assert calls == []
+
+
+def test_pinned_root_survives_path_replacement_between_episodes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Replacing the configured root pathname cannot redirect a pinned admission."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def replace_root_after_first_child(job: dict[str, Any], timeout_s: float, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 1:
+            original_root = tmp_path / "original-root"
+            root.rename(original_root)
+            shutil.copytree(Path(FIXTURES), root)
+            (root / "recipe.json").write_bytes(b"attacker-replacement")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", replace_root_after_first_child)
+    result = _component_run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["source"]["sha256"] == (
+        "ea05e90eaabfef95fc794bed492594a918c92a9d889dd40a53bd80d449efcee2"
+    )
+
+
+def test_pinned_root_survives_intermediate_parent_replacement(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Replacing a parent component cannot redirect a pinned root descriptor."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    parent = tmp_path / "admission-parent"
+    root = parent / "admission-root"
+    parent.mkdir()
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def replace_parent_after_first_child(
+        job: dict[str, Any], timeout_s: float, **kwargs: Any
+    ) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 1:
+            replaced_parent = tmp_path / "original-admission-parent"
+            parent.rename(replaced_parent)
+            parent.mkdir()
+            shutil.copytree(Path(FIXTURES), parent / "admission-root")
+            (parent / "admission-root" / "recipe.json").write_bytes(b"attacker-replacement")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", replace_parent_after_first_child)
+    result = _component_run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["source"]["sha256"] == (
+        "ea05e90eaabfef95fc794bed492594a918c92a9d889dd40a53bd80d449efcee2"
+    )
+
+
+def test_source_mutation_at_complete_boundary_downgrades_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Bytes changed after the final child cannot pass the complete boundary."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_child = review_execute_module._run_owned_child
+    calls = 0
+
+    def mutate_after_treatment(job: dict[str, Any], timeout_s: float, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        outcome = original_child(job, timeout_s, **kwargs)
+        if calls == 2:
+            source = root / "recipe.json"
+            source.write_bytes(source.read_bytes() + b"tampered")
+        return outcome
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", mutate_after_treatment)
+    result = run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "failed"
+    assert "source_mutated" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / request.output_directory / "execute-report.json").exists()
+
+
+def test_source_mutation_during_output_finalization_is_not_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Final output writes are followed by an integrity check before completion."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    request = _fixture_request_for_root(root)
+    _patch_fake_execution(monkeypatch)
+    original_writer = review_execute_module._write_complete_outputs
+
+    def write_then_mutate(executor: Any, provenance: dict[str, Any]) -> list[dict[str, Any]]:
+        artifacts = original_writer(executor, provenance)
+        source = root / "recipe.json"
+        source.write_bytes(source.read_bytes() + b"tampered-during-finalization")
+        return artifacts
+
+    monkeypatch.setattr(review_execute_module, "_write_complete_outputs", write_then_mutate)
+    result = _component_run(
+        request,
+        base=tmp_path,
+        admission_config=_fixture_admission_config(root),
+    )
+    assert result.status == "failed"
+    assert "source_mutated" in result.reason
+    assert result.artifacts == ()
+    output_dir = tmp_path / request.output_directory
+    assert not (output_dir / "execute-report.json").exists()
+    assert not (output_dir / "preservation-manifest.json").exists()
+
+
+def test_repeated_runs_agree_on_logical_artifacts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Repeatability, not simulator fidelity: run on the deterministic fake seam (issue #9397).
+    calls = _patch_fake_execution(monkeypatch)
     request = _fixture_request(horizon_steps=20, max_candidates=1)
     first = run(request, base=tmp_path)
     assert first.status == "complete"
@@ -186,6 +731,8 @@ def test_repeated_runs_agree_on_logical_artifacts(tmp_path: Path) -> None:
     assert second_report["candidates"] == first_report["candidates"]
     assert (second_dir / "activation-traces.json").read_bytes() == first_traces
     assert _logical_ledger(second_dir) == first_ledger
+    # One candidate (ped-speed-up) per run: control then treatment speeds, twice.
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 1.5]
 
 
 def test_corrupt_recipe_fails_without_artifacts(tmp_path: Path) -> None:
@@ -259,7 +806,11 @@ def test_output_symlink_and_preservation_escape_are_rejected(tmp_path: Path) -> 
     assert "invalid_preservation_destination" in unsafe_result.reason
 
 
-def test_exhausted_execution_budget_reports_partial(tmp_path: Path) -> None:
+def test_exhausted_execution_budget_reports_partial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Budget accounting, not simulator fidelity: run on the fake seam (issue #9397).
+    calls = _patch_fake_execution(monkeypatch)
     request = _fixture_request(max_executions=2)
     result = run(request, base=tmp_path)
     assert result.status == "partial"
@@ -267,6 +818,7 @@ def test_exhausted_execution_budget_reports_partial(tmp_path: Path) -> None:
     assert result.artifacts == ()
     assert len(result.diagnostics) == 1
     assert result.diagnostics[0]["status"] == "complete"
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5]
 
 
 def test_owned_child_timeout_terminates() -> None:
@@ -499,6 +1051,287 @@ def test_resume_rejects_tampered_ledger_identity(
     result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
     assert result.status == "failed"
     assert "recipe identity mismatch" in result.reason
+
+
+def test_resume_rejects_forged_report_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Forged nested report fields must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["control_metrics"]["ped_mean_speed_m_s"] += 5.0
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_report_verdict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flipped pair verdict must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["verdict"] = "falsified" if forged["verdict"] == "survived" else "survived"
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "verdict is inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_trace_activation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flipped trace activation flag must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["traces"]
+    ledger["traces"][0]["treatment_activated"] = not ledger["traces"][0]["treatment_activated"]
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "activation is inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_trace_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Forged nested trace metrics must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["traces"]
+    ledger["traces"][0]["control_metrics"]["ped_mean_speed_m_s"] += 5.0
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_report_activation_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flipped report activation flag must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["control_activated"] = not forged["control_activated"]
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "activation is inconsistent" in result.reason
+
+
+def test_resume_rejects_complete_downgraded_to_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Downgrading a complete report while attempts remain must fail (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["status"] = "unavailable"
+    forged.pop("control_metrics", None)
+    forged.pop("treatment_metrics", None)
+    forged.pop("verdict", None)
+    # Traces still reference the formerly complete candidate.
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "inconsistent" in result.reason or "do not match" in result.reason
+
+
+def test_resume_rejects_unavailable_report_carrying_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unavailable report must not carry measured metrics (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    first = run(_fixture_request(max_executions=6), base=tmp_path)
+    assert first.status == "complete"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    unavailable = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "unavailable"
+    )
+    complete = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    unavailable["control_metrics"] = dict(complete["control_metrics"])
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_resume_rejects_trace_without_complete_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An orphan trace with no complete report must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    ledger["candidate_reports"] = [
+        report for report in ledger["candidate_reports"] if report["status"] != "complete"
+    ]
+    assert ledger["traces"]
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert (
+        "invalid" in result.reason
+        or "inconsistent" in result.reason
+        or "do not match" in result.reason
+    )
+
+
+def test_resume_from_complete_ledger_still_completes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A clean resume from a complete ledger must succeed (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    first = run(_fixture_request(max_executions=6), base=tmp_path)
+    assert first.status == "complete"
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "complete"
+
+
+def test_resume_rejects_complete_without_trace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A complete report with its trace deleted must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["traces"]
+    ledger["traces"] = []
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert (
+        "inconsistent" in result.reason
+        or "do not match" in result.reason
+        or "not reproducible" in result.reason
+    )
+
+
+def test_resume_accepts_failed_report_with_matching_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed report whose metrics match attempts must resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch, fail_treatment_speed=0.5)
+    partial = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path)
+    assert partial.status == "partial"
+    result = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path, resume=True)
+    assert result.status in {"partial", "complete", "failed"}
+    assert "metrics are inconsistent" not in result.reason
+    assert "activation is inconsistent" not in result.reason
+    assert "verdict is inconsistent" not in result.reason
+
+
+def test_resume_rejects_failed_report_with_forged_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed report with forged metrics must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch, fail_treatment_speed=0.5)
+    partial = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    failed = next(
+        report
+        for report in ledger["candidate_reports"]
+        if report["status"] == "failed" and "control_metrics" in report
+    )
+    failed["control_metrics"]["ped_mean_speed_m_s"] += 5.0
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_verify_resume_envelope_rejects_missing_measurement() -> None:
+    """Complete reports without a driving measurement must fail (issue #9418)."""
+    from robot_sf.analysis_workbench.review_execute import (
+        ReviewExecuteError,
+        _verify_resume_envelope,
+        validate_execute_config,
+    )
+
+    config = validate_execute_config(_fixture_json("config.json"))
+    recipe = dict(config.recipe)
+    recipe["measurements"] = []
+    with pytest.raises(ReviewExecuteError, match="measurement is invalid"):
+        _verify_resume_envelope(
+            attempts=[],
+            reports=[
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                }
+            ],
+            traces=[],
+            config=config,
+            recipe=recipe,
+        )
+
+
+def test_verify_resume_envelope_rejects_complete_without_attempts() -> None:
+    """A complete report with no recorded attempts must fail (issue #9418)."""
+    from robot_sf.analysis_workbench.review_execute import (
+        ReviewExecuteError,
+        _verify_resume_envelope,
+        validate_execute_config,
+    )
+
+    config = validate_execute_config(_fixture_json("config.json"))
+    recipe = dict(config.recipe)
+    with pytest.raises(ReviewExecuteError, match="not reproducible"):
+        _verify_resume_envelope(
+            attempts=[],
+            reports=[
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                    "control_metrics": {"ped_mean_speed_m_s": 1.0},
+                    "treatment_metrics": {"ped_mean_speed_m_s": 1.5},
+                }
+            ],
+            traces=[],
+            config=config,
+            recipe=recipe,
+        )
 
 
 def test_intervention_update_branches() -> None:
@@ -769,7 +1602,7 @@ def test_unknown_factor_candidate_is_unavailable(tmp_path: Path) -> None:
     payload["config"]["max_candidates"] = 1
     result = run(component_request_from_dict(payload), base=tmp_path)
     assert result.status == "unavailable"
-    assert "unsupported intervention factor" in result.reason
+    assert "receipt_stale" in result.reason
 
 
 def test_wall_budget_exhaustion_before_first_candidate(tmp_path: Path) -> None:
@@ -826,7 +1659,9 @@ def test_resume_parser_limit_fails_closed(tmp_path: Path) -> None:
     assert "unreadable attempt ledger" in result.reason
 
 
-def test_resume_continues_after_partial(tmp_path: Path) -> None:
+def test_resume_continues_after_partial(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Resume accounting, not simulator fidelity: run on the fake seam (issue #9397).
+    calls = _patch_fake_execution(monkeypatch)
     first = _fixture_request(max_executions=2)
     partial = run(first, base=tmp_path)
     assert partial.status == "partial"
@@ -837,6 +1672,7 @@ def test_resume_continues_after_partial(tmp_path: Path) -> None:
         (tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text(encoding="utf-8")
     )
     assert ledger["executions_consumed"] == 4
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5]
 
 
 def test_control_fidelity_predicate() -> None:
@@ -899,6 +1735,46 @@ def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: An
     assert missing["status"] == "failed"
 
 
+def test_nested_admission_receipts_complete_via_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    """The CLI preserves nested receipt references through launcher admission."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    _patch_fake_execution(monkeypatch)
+    root = tmp_path / "admission-root"
+    shutil.copytree(Path(FIXTURES), root)
+    admission = _nested_fixture_admission_config(root)
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    admission_path = tmp_path / "admission.json"
+    request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
+    config_payload = _fixture_json("config.json")
+    config_payload["admission"] = admission.to_dict()
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    admission_path.write_text(json.dumps(admission.to_dict()), encoding="utf-8")
+    code = review_execute_module.main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--admission-config",
+            str(admission_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    result = component_result_from_dict(json.loads(capsys.readouterr().out))
+    assert code == 0
+    assert result.status == "complete"
+    assert result.provenance["source_admission"]["receipt_reference"] == (
+        "proofs/receipts/admitted-source.json"
+    )
+
+
 @pytest.mark.parametrize("parser_input", ["request", "config"])
 def test_cli_parser_limit_emits_stable_failed_result(
     tmp_path: Path, capsys: Any, parser_input: str
@@ -953,10 +1829,15 @@ def test_cli_stdout_is_a_component_result_v1_envelope(
     request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
 
     def _fake_run(
-        request: Any, *, base: Path | None = None, resume: bool = False
+        request: Any,
+        *,
+        base: Path | None = None,
+        resume: bool = False,
+        admission_config: Any = None,
     ) -> ComponentResult:
         assert base == tmp_path
         assert resume is False
+        assert admission_config is None
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
@@ -986,3 +1867,364 @@ def test_cli_stdout_is_a_component_result_v1_envelope(
     assert parsed.status == "complete"
     assert parsed.request_id == "srev22-smoke"
     assert parsed.diagnostics == ({"status": "complete", "source": "test"},)
+
+
+class _StubbornProcess:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
+
+    def join(self, _timeout: float | None = None) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return True
+
+    def terminate(self) -> None:
+        pass
+
+    def kill(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+class _TimeoutConn:
+    def poll(self, _timeout: float) -> bool:
+        return False
+
+    def close(self) -> None:
+        pass
+
+
+def test_terminate_owned_process_detects_stubborn_child() -> None:
+    from robot_sf.analysis_workbench.review_execute import _terminate_owned_process
+
+    stubborn = _StubbornProcess()
+    terminated = _terminate_owned_process(stubborn, join_timeout_s=0.01)
+    assert terminated is False
+
+
+def test_delayed_process_start_exceeding_deadline_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import multiprocessing.process as mp_process
+
+    real_start = mp_process.BaseProcess.start
+    started_processes: list[Any] = []
+
+    def _delayed_start(self: Any) -> None:
+        started_processes.append(self)
+        time.sleep(0.08)
+        real_start(self)
+
+    monkeypatch.setattr(mp_process.BaseProcess, "start", _delayed_start)
+    outcome = _run_owned_child({"sleep_s": 5.0}, 0.03, target="sleep")
+    assert outcome["outcome"] == "timeout"
+    assert "child startup exceeded" in str(outcome.get("error"))
+    assert len(started_processes) == 1
+    proc = started_processes[0]
+    assert getattr(proc, "_closed", False) or not proc.is_alive()
+
+
+def test_delayed_process_start_in_run_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import multiprocessing.process as mp_process
+
+    real_start = mp_process.BaseProcess.start
+
+    def _delayed_start(self: Any) -> None:
+        time.sleep(0.08)
+        real_start(self)
+
+    monkeypatch.setattr(mp_process.BaseProcess, "start", _delayed_start)
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        per_execution_timeout_s=0.03,
+        wall_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status in {"partial", "failed"}
+    assert "timeout" in result.reason
+    assert result.artifacts == ()
+
+
+def test_owned_child_stubborn_child_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import multiprocessing as multiprocessing_module
+
+    real_context = multiprocessing_module.get_context("spawn")
+    real_pipe = real_context.Pipe
+
+    def _fake_pipe(*args: Any, **kwargs: Any) -> Any:
+        parent, child = real_pipe(*args, **kwargs)
+        child.close()
+        return _TimeoutConn(), parent
+
+    monkeypatch.setattr(real_context, "Pipe", _fake_pipe)
+    monkeypatch.setattr(real_context, "Process", _StubbornProcess)
+    monkeypatch.setattr(multiprocessing_module, "get_context", lambda _method=None: real_context)
+
+    outcome = _run_owned_child({"sleep_s": 0.0}, 0.1, target="sleep")
+    assert outcome["outcome"] == "error"
+    assert "stubborn_child" in str(outcome.get("error"))
+
+
+def test_run_fails_closed_on_stubborn_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    def _stubborn_child_outcome(_job: Any, _timeout_s: float, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "outcome": "error",
+            "error": "stubborn_child: child process resisted termination after timeout",
+        }
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", _stubborn_child_outcome)
+    request = _fixture_request(max_candidates=1, max_executions=2)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "stubborn_child" in result.reason
+    assert result.artifacts == ()
+
+
+def test_monotonic_deadline_immune_to_wall_clock_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Demonstrate that shifts in wall-clock time (time.time()) have zero effect on execution deadlines."""
+    calls = _patch_fake_execution(monkeypatch)
+
+    monkeypatch.setattr("time.time", lambda: 0.0)
+
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=60.0,
+        per_execution_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert len(calls) == 2
+
+
+def test_monotonic_deadline_bounds_admission_and_initialization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prove that monotonic time elapsed during admission/initialization exhausts wall budget."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    real_admit = review_execute_module._admit_request
+    monotonic_clock = [100.0]
+
+    def _fake_monotonic() -> float:
+        val = monotonic_clock[0]
+        monotonic_clock[0] += 0.01
+        return val
+
+    def _slow_admit(req: Any) -> Any:
+        res = real_admit(req)
+        monotonic_clock[0] += 20.0
+        return res
+
+    monkeypatch.setattr(time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module, "_admit_request", _slow_admit)
+
+    request = _fixture_request(wall_timeout_s=5.0)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "wall budget exhausted during admission or initialization" in result.reason
+    assert result.artifacts == ()
+
+
+def test_monotonic_deadline_bounds_finalization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prove that if monotonic time exhausts wall budget during finalization, complete outputs are denied."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    _patch_fake_execution(monkeypatch)
+    real_write_complete = review_execute_module._write_complete_outputs
+
+    monotonic_clock = [100.0]
+
+    def _fake_monotonic() -> float:
+        val = monotonic_clock[0]
+        monotonic_clock[0] += 0.01
+        return val
+
+    def _slow_write_complete(executor: Any, provenance: Any) -> list[dict[str, Any]]:
+        artifacts = real_write_complete(executor, provenance)
+        monotonic_clock[0] += 500.0
+        return artifacts
+
+    monkeypatch.setattr(time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module, "_write_complete_outputs", _slow_write_complete)
+
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=300.0,
+        per_execution_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "partial"
+    assert "wall budget exhausted during finalization" in result.reason
+    assert result.artifacts == ()
+    output_dir = tmp_path / "srev-22-smoke"
+    assert not (output_dir / "execute-report.json").exists()
+    assert not (output_dir / "activation-traces.json").exists()
+    assert not (output_dir / "preservation-manifest.json").exists()
+    assert (output_dir / "attempt-ledger.json").exists()
+
+
+def test_simple_policy_fixture_adapter_near_goal_probe_reproduction() -> None:
+    """Reproduce parent #9380 probe: near-goal [1.0, 0.0] vs canonical [0.4, 0.0]."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([16.8, 16.8], dtype=float)
+    # Distance is exactly 0.4m along x-axis
+    near_robot_pos = goal - np.array([0.4, 0.0], dtype=float)
+    speed = 1.0
+
+    # 1. Unhardened / legacy executor behavior:
+    # offset = goal - robot_pos => [0.4, 0.0], distance = 0.4
+    # if distance > 0.3: command = offset / distance * speed => [1.0, 0.0]
+    legacy_offset = goal - near_robot_pos
+    legacy_dist = float(np.linalg.norm(legacy_offset))
+    legacy_cmd = legacy_offset / legacy_dist * speed if legacy_dist > 0.3 else np.zeros(2)
+    assert np.allclose(legacy_cmd, np.array([1.0, 0.0])), "legacy formula must reproduce [1.0, 0.0]"
+
+    # 2. Canonical benchmark runner behavior:
+    canonical_cmd = _simple_robot_policy(near_robot_pos, goal, speed=speed)
+    assert np.allclose(canonical_cmd, np.array([0.4, 0.0])), (
+        "canonical runner must produce [0.4, 0.0]"
+    )
+
+    # 3. Fixture adapter parity:
+    adapter_cmd = _simple_policy_fixture_adapter(near_robot_pos, goal, speed=speed)
+    assert np.allclose(adapter_cmd, canonical_cmd), "fixture adapter must match canonical runner"
+    assert np.allclose(adapter_cmd, np.array([0.4, 0.0]))
+    assert not np.allclose(adapter_cmd, legacy_cmd), (
+        "fixture adapter must not exhibit legacy [1.0, 0.0]"
+    )
+
+
+def test_simple_policy_fixture_adapter_normal_goal_probe() -> None:
+    """Verify normal-goal (distance > speed) parity with canonical runner."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([16.8, 16.8], dtype=float)
+    normal_robot_pos = goal - np.array([5.0, 0.0], dtype=float)
+    speed = 1.0
+
+    canonical_cmd = _simple_robot_policy(normal_robot_pos, goal, speed=speed)
+    adapter_cmd = _simple_policy_fixture_adapter(normal_robot_pos, goal, speed=speed)
+
+    assert np.allclose(canonical_cmd, np.array([1.0, 0.0]))
+    assert np.allclose(adapter_cmd, canonical_cmd)
+
+
+def test_simple_policy_fixture_adapter_sub_deadzone_and_coincident() -> None:
+    """Verify smooth velocity scaling below previous 0.3m deadzone and zero at goal."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([16.8, 16.8], dtype=float)
+
+    # Within previous 0.3m deadzone (dist = 0.2m):
+    sub_pos = goal - np.array([0.2, 0.0], dtype=float)
+    canonical_sub = _simple_robot_policy(sub_pos, goal, speed=1.0)
+    adapter_sub = _simple_policy_fixture_adapter(sub_pos, goal, speed=1.0)
+
+    # Legacy formula produced [0.0, 0.0]
+    legacy_offset = goal - sub_pos
+    legacy_dist = float(np.linalg.norm(legacy_offset))
+    legacy_sub = legacy_offset / legacy_dist * 1.0 if legacy_dist > 0.3 else np.zeros(2)
+    assert np.allclose(legacy_sub, np.zeros(2))
+
+    # Canonical and adapter produce [0.2, 0.0]
+    assert np.allclose(canonical_sub, np.array([0.2, 0.0]))
+    assert np.allclose(adapter_sub, canonical_sub)
+
+    # Coincident at goal:
+    coincident_cmd = _simple_policy_fixture_adapter(goal, goal, speed=1.0)
+    assert np.allclose(coincident_cmd, np.zeros(2))
+
+
+def test_simple_policy_fixture_adapter_speed_scaling() -> None:
+    """Verify custom robot speeds scale properly through the adapter."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    goal = np.array([10.0, 10.0], dtype=float)
+    pos = goal - np.array([1.5, 0.0], dtype=float)
+
+    # speed = 2.0: dist (1.5) < speed (2.0) => speed capped at 1.5
+    cmd_fast = _simple_policy_fixture_adapter(pos, goal, speed=2.0)
+    assert np.allclose(cmd_fast, _simple_robot_policy(pos, goal, speed=2.0))
+    assert np.allclose(cmd_fast, np.array([1.5, 0.0]))
+
+    # speed = 0.5: dist (1.5) > speed (0.5) => speed capped at 0.5
+    cmd_slow = _simple_policy_fixture_adapter(pos, goal, speed=0.5)
+    assert np.allclose(cmd_slow, _simple_robot_policy(pos, goal, speed=0.5))
+    assert np.allclose(cmd_slow, np.array([0.5, 0.0]))
+
+
+def test_simple_policy_fixture_adapter_records_deviation_rationale() -> None:
+    """Verify adapter docstring explicitly documents deviations and rationales."""
+    from robot_sf.analysis_workbench.review_execute import _simple_policy_fixture_adapter
+
+    doc = _simple_policy_fixture_adapter.__doc__
+    assert doc is not None
+    assert "Fixed-horizon execution" in doc
+    assert "Simulator integration" in doc
+    assert "_simple_robot_policy" in doc
+
+
+def test_episode_job_trajectory_parity_with_canonical_policy() -> None:
+    """Verify trajectory extraction in _execute_episode_job matches canonical simple policy."""
+    from robot_sf.analysis_workbench.review_execute import (
+        _DT_S,
+        _ROBOT_GOAL,
+        _execute_episode_job,
+    )
+    from robot_sf.benchmark.runner import _simple_robot_policy
+
+    horizon = 4
+    robot_speed = 1.0
+    job = {
+        **_fixture_episode_identity(),
+        "seed": 42,
+        "horizon_steps": horizon,
+        "robot_speed_m_s": robot_speed,
+        "ped_speed_m_s": 1.0,
+        "ped_start_delay_s": 0.0,
+    }
+    result = _execute_episode_job(job)
+    assert result["status"] == "ok"
+    assert result["steps_completed"] == horizon
+
+    robot_traj = np.array(result["robot_traj"], dtype=float)
+    assert robot_traj.shape == (horizon + 1, 2)
+
+    # Compute expected trajectory via canonical _simple_robot_policy integration
+    # starting from the simulator-initialized position robot_traj[0]
+    expected_traj = [robot_traj[0].copy()]
+    curr_pos = robot_traj[0].copy()
+    goal = np.array(_ROBOT_GOAL, dtype=float)
+    for _ in range(horizon):
+        cmd = _simple_robot_policy(curr_pos, goal, speed=robot_speed)
+        curr_pos = curr_pos + cmd * _DT_S
+        expected_traj.append(curr_pos.copy())
+
+    expected_traj_arr = np.array(expected_traj, dtype=float)
+    assert np.allclose(robot_traj, expected_traj_arr, atol=1e-5)

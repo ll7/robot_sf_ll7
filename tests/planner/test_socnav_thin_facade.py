@@ -15,6 +15,9 @@ from robot_sf.planner import (
 
 _FAMILY_EXPORTS = {
     socnav_base: (
+        "SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1",
+        "SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1",
+        "SOCIAL_FORCE_GOAL_APPROACH_VERSIONS",
         "SamplingPlannerAdapter",
         "SocNavBenchComplexPolicy",
         "SocNavPlannerConfig",

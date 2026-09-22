@@ -30,6 +30,7 @@ fixture patterns establish no population or causal conclusion.
 uv run python -m robot_sf.analysis_workbench.review_execute \
   --input tests/fixtures/scenario_review/review_execute/request.json \
   --config tests/fixtures/scenario_review/review_execute/config.json \
+  --admission-config tests/fixtures/scenario_review/review_execute/admission.json \
   --output output/scenario_review/srev-22-smoke
 ```
 
@@ -41,6 +42,54 @@ recipe, immutable config, and prior budget identity; a resumed config may
 extend a prior budget but may never reduce it. Terminal candidates are not
 retried, and a prior timeout/cancellation is settled as a failed candidate
 instead of being silently re-executed.
+
+### Source admission and preservation
+
+Every result that can be `complete` requires an additive, launcher-owned
+admission argument (`run(..., admission_config=...)` or CLI
+`--admission-config`) with `schema_version: executor-admission.v1`. It is
+external trust configuration, not request, recipe, or artifact content, and
+carries:
+
+```json
+{
+  "schema_version": "executor-admission.v1",
+  "source_root": "tests/fixtures/scenario_review/review_execute",
+  "receipt_reference": "receipt.json",
+  "receipt_sha256": "<sha256 of receipt.json>",
+  "preservation_destination": "external:post-execution-preservation",
+  "preservation_receipt_reference": "preservation-receipt.json",
+  "preservation_receipt_sha256": "<sha256 of preservation-receipt.json>",
+  "config_identity": "srev22-admitted-source-config.v1"
+}
+```
+
+The configured root must be a local directory. Receipt references are
+root-relative, traversal-free, and descriptor-relative no-follow regular
+files. Before the first child starts, before each episode, and again after
+output finalization, the executor calls the shared
+`resolve_admitted_source()` resolver against the pinned root directory FD. It
+binds the current request and recipe, source/config identities, and receipt
+digests, then rehashes the source bytes from protected descriptors. The
+runner's request projection binds the stable envelope, source declarations,
+and launcher `config_identity`; full execution controls remain bound in
+provenance and the resume ledger. The closed preservation receipt must contain
+exactly the required fields, including `evidence_boundary: diagnostic_only`
+and `scientific_claim_allowed: false`, and independently match the source
+receipt, recipe digest, config identity, and configured destination. Source,
+receipt, root, and preservation tampering therefore yields a typed
+`unavailable`/`failed` result and no complete artifacts; the recipe cannot
+nominate its own root or receipt.
+
+The checked-in positive fixture under
+`tests/fixtures/scenario_review/review_execute/` contains the source, admitted
+receipt, preservation receipt, request/runtime config, and separate launcher
+admission config. A legacy v1 request without an explicit launcher argument
+remains diagnostic-only but is returned as `unavailable` and cannot start
+execution or claim admitted completion; any request/config `admission` field
+is treated as untrusted data. Both the source and preservation receipts retain
+`scientific_claim_allowed: false`; source integrity is not scientific or
+benchmark admission.
 
 The component descriptor (`descriptor()`) declares the `bounded-execution`
 required capability and the `execute-report.v1` / `attempt-ledger.v1` /
@@ -96,8 +145,18 @@ Validation, output, or infrastructure failures are `failed`, while a recipe
 whose selected candidates are all unsupported is `unavailable`. No incomplete
 result is advertised with complete artifact references.
 
-Each execution runs in one owned child process. The parent terminates and
-reaps that child at every timeout, interruption, and normal return boundary.
+Each execution runs in one owned child process. Time budgets are tracked
+using an absolute monotonic deadline (`time.monotonic()`) rather than system
+calendar time, preventing drift from NTP adjustments or clock shifts. One
+monotonic deadline bounds the entire lifecycle: request admission, child process
+startup, IPC polling, cleanup, attempt ledger persistence, and artifact
+finalization. Child startup delay is deducted from the child execution budget;
+delayed process spawns that exhaust the budget fail closed without orphan
+execution. The parent terminates and reaps the child at every timeout,
+interruption, and normal return boundary. Stubborn child processes that resist
+termination within the cleanup allowance fail closed with typed `stubborn_child`
+diagnostics and halt further execution.
+
 The output directory must be a new relative directory beneath the caller's
 base, or an existing non-symlink directory containing a valid attempt ledger
 when `--resume` is used. Component artifacts are written atomically with
@@ -110,8 +169,8 @@ Stable reason codes include `invalid_config`, `corrupt_recipe`,
 `invalid_source_identity`, `output_collision`, `missing capabilities`,
 `incompatible_version`, `unsupported_factor`, `unsupported_measurement`,
 `control_fidelity_failure` (blocks treatment interpretation),
-`execution_budget_exhausted`, `wall_timeout`, and
-`per_execution_timeout`.
+`execution_budget_exhausted`, `wall_timeout`,
+`per_execution_timeout`, and `stubborn_child`.
 
 `single_pedestrian_start_delay_offset` candidates resolve to `unavailable`
 with `intervention_not_executable`: the canonical single-pedestrian
@@ -125,7 +184,18 @@ only in the intervened factor; activation (control motion present,
 treatment-versus-control speed change beyond tolerance) is measured from
 executed trajectories, never from requested config. Deterministic reruns
 agree on verdicts, metrics, and trace bytes; ledgers additionally record
-wall timing outside the logical digest. The `simple_policy` fixture path is
-the only dependent planner family exercised here. This component does not
-register sibling families, change benchmark coverage, or authorize any
-scientific claim.
+wall timing outside the logical digest. The `simple_policy` fixture path is the only dependent planner family exercised
+here. Fixture velocity commands are routed through the canonical
+`_simple_robot_policy` from `robot_sf.benchmark.runner` (`_simple_policy_fixture_adapter`).
+The adapter enforces canonical runner velocity scaling `min(speed, distance_to_goal)`
+across near-goal and normal-goal states without discontinuous goal deadzones.
+Adapter deviations from the benchmark runner are strictly bounded:
+1. Fixed-horizon execution: executes all requested horizon steps without early
+   termination on reaching `goal_radius` (which `runner._simulate_episode_with_policy`
+   breaks on), preserving fixed-length comparative trajectory pairs for downstream
+   telemetry metrics.
+2. Simulator integration: executes in an owned `Simulator` instance configured with the
+   SREV-22 tiny crossing map and holonomic drive using `simulator.step_once([(vx, vy)])`
+   rather than lightweight kinematic position integration `pos += vel * dt`.
+This component does not register sibling families, change benchmark coverage, or
+authorize any scientific claim.

@@ -1,0 +1,30 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev06-smoke",
+  "component_id": "srev06-review-context",
+  "sources": [
+    {
+      "artifact_id": "campaign",
+      "uri": "tests/fixtures/scenario_review/review_context/campaign.json",
+      "format": "campaign-result",
+      "schema": "campaign-result.v1",
+      "sha256": "e423fd66cbacb51279aba941b09f20eabb5fe40dc3dc4709f877b932d6e411e4",
+      "source_commit": "671308664d83399366a263637e4dcbadea386101",
+      "config_identity": "srev06-fixture-config"
+    },
+    {
+      "artifact_id": "selection",
+      "uri": "tests/fixtures/scenario_review/review_context/selection.json",
+      "format": "episode-selection",
+      "schema": "episode-selection.v1",
+      "sha256": "b02f72258dd1af7caffc5bb97449928dd0f9738606323d66f190229cab4f4a76",
+      "source_commit": "671308664d83399366a263637e4dcbadea386101",
+      "config_identity": "srev06-fixture-config"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-06-smoke",
+  "config": {},
+  "required_capabilities": [
+    "episode-selection"
+  ]
+}

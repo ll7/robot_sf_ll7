@@ -52,3 +52,19 @@ uv run python scripts/dev/terminal_label_reconcile.py \
 No bulk label apply, closure, reopen, assignment, comment, review, merge, or branch-protection
 change. Evidence/resource/type/priority/domain-review/provenance labels are preserved. A separate
 apply issue is required to execute any plan.
+
+## Apply-mode safety boundary
+
+The exact-item apply path captures one terminal pull request head/base identity for the plan,
+re-reads the item and PR identity before every requested mutation, verifies the identity after a
+successful label write, and aborts on the first failed or unverified mutation. A failed active-label
+removal therefore cannot be followed by a `state:done` addition. Terminal PR additions use the same
+guarded target and identity contract as removals; ordinary open-PR label writes remain on their
+existing guard path.
+
+GitHub's issues-labels endpoint has no conditional PR-revision or compare-and-swap write parameter.
+The PR protection is consequently a guarded check-then-act protocol, not atomic concurrency control:
+a remote writer can still interleave after the last preflight and before the REST mutation. The
+post-write identity readback detects an observable head/base/state move and the receipt records the
+observed identity, but it cannot undo a write that already happened. The local PR write lock only
+serializes writers using this checkout.

@@ -4,7 +4,7 @@ This guide covers the accepted BA-05 service slices and the diagnostic BA-06
 route. It is an offline/read-only and injected-provider guide, not a claim
 that this repository ships a production browser, live GitHub client, or live
 Codex provider setup. The full acceptance boundary is in
-[`benchmark_auditor_v1_acceptance.md`](./benchmark_auditor_v1_acceptance.md).
+[`benchmark_auditor_v1_acceptance_2026-09-22.md`](./benchmark_auditor_v1_acceptance_2026-09-22.md).
 
 ## First screen: disposable offline demo
 

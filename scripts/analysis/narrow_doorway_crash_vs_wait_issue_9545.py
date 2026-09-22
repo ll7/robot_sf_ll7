@@ -13,7 +13,8 @@ Outputs (all under --output-dir):
 - counterfactual_seed{SEED}_t{T}.jsonl: matched hold/stop continuation
 - return_table.csv: crash-vs-wait discounted/undiscounted comparison
 - sensitivity.csv: bounded reward/discount sensitivity (eval-time replay)
-- figure_trajectory.png + figure_reward_timeline.png: diagnostic figures
+- figure_trajectory.png + figure_reward_timeline.png + figure_mechanism_timeline.png:
+  deterministic diagnostic figures
 - evidence_note.md is written separately (docs/analysis/...).
 
 Evidence tiers: measured replay traces are diagnostic-only evidence, not
@@ -43,6 +44,7 @@ import yaml
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.models import resolve_model_path
@@ -53,6 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIO_YAML = "configs/scenarios/single/francis2023_narrow_doorway.yaml"
 CANONICAL_SEEDS = (225, 226, 227)
 MODEL_ID = "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v2_full"
 TRAINING_CONFIG = (
     "configs/training/ppo/ablations/"
     "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml"
@@ -84,7 +87,9 @@ BASE_ALGO_CONFIG = {
     "v_max": 2.0,
     "omega_max": 1.0,
     "fallback_to_goal": False,
-    "predictive_foresight_enabled": False,
+    "predictive_foresight_enabled": True,
+    "predictive_foresight_model_id": PREDICTIVE_MODEL_ID,
+    "predictive_foresight_device": "cpu",
 }
 
 REWARD_GIT_PATH = "robot_sf/gym_env/reward.py"
@@ -177,15 +182,25 @@ def _min_obstacle_clearance(env) -> float:
     sim = env.simulator
     rx, ry = float(sim.robot_pos[0][0]), float(sim.robot_pos[0][1])
     radius = float(getattr(env.env_config.robot_config, "radius", 1.0))
-    try:
-        obstacles = np.asarray(sim.map_def.obstacles_pysf, dtype=float)
-    except (AttributeError, TypeError, ValueError):
-        return float("nan")
     best = float("inf")
     pts = np.asarray([rx, ry], dtype=float)
-    for seg in np.asarray(obstacles).reshape(-1, 2, 2):
-        a = np.asarray(seg[0], dtype=float)
-        b = np.asarray(seg[1], dtype=float)
+    segments = getattr(sim, "iter_obstacle_segments", None)
+    if callable(segments):
+        obstacle_segments = segments()
+    else:
+        # MapDefinition.obstacles_pysf is the legacy [x1, x2, y1, y2]
+        # contract. Convert it to endpoint pairs before projecting; reshaping
+        # each row as two points fabricates diagonal segments.
+        try:
+            raw_obstacles = np.asarray(sim.map_def.obstacles_pysf, dtype=float).reshape(-1, 4)
+        except (AttributeError, TypeError, ValueError):
+            return float("nan")
+        obstacle_segments = [((row[0], row[2]), (row[1], row[3])) for row in raw_obstacles]
+    for start, end in obstacle_segments:
+        a = np.asarray(start, dtype=float).reshape(-1)[:2]
+        b = np.asarray(end, dtype=float).reshape(-1)[:2]
+        if a.size != 2 or b.size != 2:
+            return float("nan")
         ab = b - a
         denom = float(np.dot(ab, ab))
         t = float(np.dot(pts - a, ab) / denom) if denom > 0 else 0.0
@@ -232,8 +247,12 @@ def _rollout_policy(env, planner, max_steps: int, obs):
     done = False
     step_idx = 0
     while not done and step_idx < max_steps:
-        step_obs = _normalize_runner_obs(_env_obs_to_runner_obs(env, obs))
+        # Preserve the complete canonical environment dict.  The PPO adapter
+        # aligns its native MultiInput observation and predictive features from
+        # this payload; lossy reconstruction silently backfills model inputs.
+        step_obs = _normalize_runner_obs(obs)
         action_dict = planner.step(step_obs)
+        _assert_predictive_foresight_loaded(planner)
         v = float(action_dict.get("v", action_dict.get("linear_velocity", 0.0)))
         w = float(action_dict.get("omega", action_dict.get("angular_velocity", 0.0)))
         env_action = np.asarray(_to_env_action(env=env, config=config, command=(v, w)))
@@ -272,59 +291,30 @@ def _rollout_policy(env, planner, max_steps: int, obs):
     return rows
 
 
-def _env_obs_to_runner_obs(env, obs):
-    """Convert env dict obs into the map-runner normalized observation contract."""
-    get = obs.get if isinstance(obs, dict) else (lambda _k, _d=None: _d)
-    robot_pos = np.asarray(get("robot_position", [0.0, 0.0]), dtype=float).reshape(-1)
-    goal = np.asarray(get("goal_current", [0.0, 0.0]), dtype=float).reshape(-1)
-    vel = np.asarray(get("robot_velocity_xy", get("robot_speed", [0.0, 0.0])), dtype=float).reshape(
-        -1
-    )
-    if vel.size < 2:
-        vel = np.zeros(2)
-    peds_pos = np.asarray(get("pedestrians_positions", np.zeros((0, 2))), dtype=float)
-    peds_vel = np.asarray(get("pedestrians_velocities", np.zeros((0, 2))), dtype=float)
-    try:
-        dt = float(np.asarray(get("sim_timestep", [0.1])).reshape(-1)[0])
-    except (TypeError, ValueError):
-        dt = 0.1
-    agents = []
-    for i in range(peds_pos.reshape(-1, 2).shape[0]):
-        pv = peds_vel.reshape(-1, 2)[i] if peds_vel.size else np.zeros(2)
-        agents.append(
-            {
-                "position": [
-                    float(peds_pos.reshape(-1, 2)[i][0]),
-                    float(peds_pos.reshape(-1, 2)[i][1]),
-                ],
-                "velocity": [float(pv[0]), float(pv[1])],
-            }
-        )
-    heading = get("robot_heading", [0.0])
-    try:
-        heading = float(np.asarray(heading).reshape(-1)[0])
-    except (TypeError, ValueError):
-        heading = 0.0
-    return {
-        "robot": {
-            "position": [float(robot_pos[0]), float(robot_pos[1])],
-            "velocity": [float(vel[0]), float(vel[1])],
-            "goal": [float(goal[0]), float(goal[1])],
-            "heading": heading,
-            "radius": float(getattr(env.env_config.robot_config, "radius", 1.0)),
-        },
-        "goal": {"current": [float(goal[0]), float(goal[1])]},
-        "agents": agents,
-        "dt": dt,
-        "sim": {"timestep": dt},
-    }
-
-
 def _make_planner():
     """Build the bound PPO planner adapter for diagnostic replay."""
     from robot_sf.baselines.ppo import PPOPlanner
 
-    return PPOPlanner(dict(BASE_ALGO_CONFIG))
+    planner = PPOPlanner(dict(BASE_ALGO_CONFIG))
+    metadata = planner.get_metadata()
+    if metadata.get("status") != "ok":
+        raise RuntimeError(f"PPO planner did not load successfully: {metadata}")
+    return planner
+
+
+def _assert_predictive_foresight_loaded(planner) -> None:
+    """Reject replay when the configured predictive checkpoint degraded."""
+    diagnostics = planner.foresight_diagnostics()
+    provenance = diagnostics.get("foresight_prediction", {})
+    if (
+        provenance.get("load_status") != "loaded"
+        or provenance.get("effective_prediction_mode") != "predictive_foresight"
+        or provenance.get("fallback_used") is True
+    ):
+        raise RuntimeError(
+            "Diagnostic replay requires the verified predictive checkpoint; "
+            f"observed provenance={provenance}"
+        )
 
 
 def _discounted_return(rewards: list[float], gamma: float) -> float:
@@ -470,6 +460,7 @@ def run_diagnostic(
 
     _render_trajectory_figure(all_traces, out_dir / "figure_trajectory.png")
     _render_reward_timeline(all_traces, out_dir / "figure_reward_timeline.png", contact_note=True)
+    _render_mechanism_timeline(all_traces, out_dir / "figure_mechanism_timeline.png")
     return {"binding": binding, "episodes": summary_rows, "counterfactuals": counter_rows}
 
 
@@ -515,8 +506,8 @@ def _replay_branch_from_prefix(
                 cmd_v, cmd_w = 0.0, 0.0
                 action = np.asarray(_to_env_action(env=env, config=config, command=(0.0, 0.0)))
             else:
-                step_obs = _env_obs_to_runner_obs(env, obs)
-                act = planner.step(_normalize_runner_obs(step_obs))
+                act = planner.step(_normalize_runner_obs(obs))
+                _assert_predictive_foresight_loaded(planner)
                 cmd_v = float(act.get("v", act.get("linear_velocity", 0.0)))
                 cmd_w = float(act.get("omega", act.get("angular_velocity", 0.0)))
                 action = np.asarray(_to_env_action(env=env, config=config, command=(cmd_v, cmd_w)))
@@ -558,6 +549,7 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
     scenario = next(s for s in scenarios if s.get("name") == "francis2023_narrow_doorway")
     cap = int(scenario["simulation_config"]["max_episode_steps"])
     model_path = resolve_model_path(MODEL_ID)
+    predictive_model_path = resolve_model_path(PREDICTIVE_MODEL_ID)
     base_cfg = yaml.safe_load((REPO_ROOT / TRAINING_BASE_CONFIG).read_text(encoding="utf-8"))
     gamma_embedded, gamma_source = _checkpoint_gamma()
     binding = {
@@ -575,6 +567,11 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
         else "unavailable",
         "checkpoint_gamma_embedded": gamma_embedded,
         "checkpoint_gamma_source": f"SB3 data blob: {gamma_source}",
+        "predictive_checkpoint_model_id": PREDICTIVE_MODEL_ID,
+        "predictive_checkpoint_local_path": str(predictive_model_path),
+        "predictive_checkpoint_sha256": _sha256_file(Path(predictive_model_path))
+        if Path(predictive_model_path).exists()
+        else "unavailable",
         "gamma_used_for_discounted_replay": gamma,
         "gamma_training_config_declared": None,
         "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; "
@@ -596,9 +593,17 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
             "benchmark_adapter": "ppo_action_to_unicycle (mixed), feasibility projection",
             "safety_wrapper": "disabled",
             "cbf_safety_filter": "disabled",
-            "predictive_foresight": "disabled in diagnostic replay (checkpoint declares predictive keys; "
-            "PPOPlanner backfills 6 predictive_* keys with space defaults)",
+            "predictive_foresight": "enabled from the registry-pinned predictive checkpoint on CPU; "
+            "replay fails closed if model loading degrades",
+            "predictive_foresight_device": "cpu",
             "fallback_to_goal": False,
+        },
+        "observation_contract": {
+            "status": "canonical_raw_grid_socnav_with_predictive_foresight",
+            "source": "RobotEnv raw dict -> normalize_map_observation -> PPOPlanner native dict alignment",
+            "occupancy_grid_preserved": True,
+            "predictive_foresight_preserved": True,
+            "fallback_or_degraded_execution": False,
         },
         "termination_semantics": "terminated = route_complete OR timeout(timestep>=max_sim_steps) OR "
         "ped/robot/obstacle collision; RobotEnv returns truncated=False always; "
@@ -618,19 +623,22 @@ def _render_trajectory_figure(traces: dict[int, list[dict]], path: Path) -> None
     if len(traces) == 1:
         axes = [axes]
     for ax, (seed, rows) in zip(axes, sorted(traces.items()), strict=False):
+        ax.add_patch(Rectangle((0.0, 0.0), 30.0, 1.0, color="0.75", alpha=0.7))
+        ax.add_patch(Rectangle((15.0, 1.0), 1.0, 3.0, color="0.75", alpha=0.7))
+        ax.add_patch(Rectangle((15.0, 6.0), 1.0, 3.0, color="0.75", alpha=0.7))
         xs = [r["robot_x"] for r in rows]
         ys = [r["robot_y"] for r in rows]
         ax.plot(xs, ys, "-o", ms=2, label=f"seed {seed}")
-        ax.axvline(15.0, color="k", ls="--", lw=1)
-        ax.axvline(16.0, color="k", ls="--", lw=1)
         ax.set_title(f"seed {seed}: {len(rows)} steps to contact")
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
         ax.set_xlim(2, 18)
-        ax.set_ylim(2, 8)
+        ax.set_ylim(0, 8)
         ax.legend(fontsize=8)
         ax.grid(alpha=0.3)
-    fig.suptitle("Narrow-doorway PPO replay: doorway walls at x=15..16, gap y=4..6")
+    fig.suptitle(
+        "Narrow-doorway PPO replay: bottom boundary y=1 and doorway walls x=15..16 (gap y=4..6)"
+    )
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -651,6 +659,28 @@ def _render_reward_timeline(traces: dict[int, list[dict]], path: Path, contact_n
     axes[1].grid(alpha=0.3)
     if contact_note:
         fig.suptitle("Per-step reward + wall clearance to contact (measured replay)")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def _render_mechanism_timeline(traces: dict[int, list[dict]], path: Path) -> None:
+    """Render the measured progress, command, and pedestrian-distance traces."""
+    fig, axes = plt.subplots(3, 1, figsize=(9, 8), sharex=True)
+    for seed, rows in sorted(traces.items()):
+        steps = [r["step"] for r in rows]
+        progress = [r["reward_terms"].get("progress", 0.0) for r in rows]
+        axes[0].plot(steps, progress, label=f"seed {seed}")
+        axes[1].plot(steps, [r["cmd_v"] for r in rows], label=f"seed {seed}")
+        axes[2].plot(steps, [r["min_ped_distance_m"] for r in rows], label=f"seed {seed}")
+    axes[0].set_ylabel("progress term")
+    axes[1].set_ylabel("cmd_v (m/s)")
+    axes[2].set_ylabel("min ped distance (m)")
+    axes[2].set_xlabel("env step")
+    for ax in axes:
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+    fig.suptitle("Narrow-doorway PPO mechanism trace (canonical measured replay)")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)

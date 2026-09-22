@@ -5,12 +5,16 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
+import pytest
 import yaml
 
 from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     FINAL_STAGE_WEIGHTS,
     _discounted_return,
+    _min_obstacle_clearance,
     build_binding,
 )
 
@@ -52,6 +56,19 @@ def test_discounted_return_orders_crash_below_wait() -> None:
     wait = [-0.015] * 11
     crash = [0.05] * 10 + [-15.0]
     assert _discounted_return(crash, 0.99) < _discounted_return(wait, 0.99)
+
+
+def test_obstacle_clearance_parses_legacy_flat_endpoints() -> None:
+    """MapDefinition ``[x1, x2, y1, y2]`` rows must not become diagonals."""
+    simulator = SimpleNamespace(
+        robot_pos=np.array([[1.0, 2.2]], dtype=float),
+        map_def=SimpleNamespace(obstacles_pysf=[(0.0, 2.0, 1.0, 1.0)]),
+    )
+    env = SimpleNamespace(
+        simulator=simulator,
+        env_config=SimpleNamespace(robot_config=SimpleNamespace(radius=1.0)),
+    )
+    assert _min_obstacle_clearance(env) == pytest.approx(0.2)
 
 
 def test_binding_records_gamma_provenance_gap(tmp_path: Path) -> None:

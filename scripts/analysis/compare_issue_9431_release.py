@@ -77,7 +77,20 @@ def _execution_audit(row: Mapping[str, Any]) -> list[str]:
         for key in ("fallback_used", "degraded", "unavailable"):
             if metadata.get(key) is True:
                 issues.append(f"{key}=true")
-    if str(row.get("status", "")).lower() not in {"", "ok", "success", "completed"}:
+    # Outcome statuses are not execution degradation.  A valid benchmark row
+    # may finish as success, collision, timeout, or failure; only explicit
+    # runtime/error/unavailable markers are disqualifying here.
+    if str(row.get("status", "")).lower() not in {
+        "",
+        "ok",
+        "success",
+        "completed",
+        "collision",
+        "failure",
+        "timeout",
+        "timed_out",
+        "timeout_event",
+    }:
         issues.append(f"status={row.get('status')}")
     for value in _nested_values(row):
         if isinstance(value, str) and value.lower() in {"fallback", "degraded", "unavailable"}:

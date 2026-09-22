@@ -248,10 +248,13 @@ Each cycle iteration follows a fixed phase order:
    not remain authoritative.
 3. `prepare` — run the report-only open-issue audit and deterministic preparation planner. Review
    `ready`, `needs_ready_label`, `needs_spec`, parent, decision, compute, external-input, active,
-   review, covered, and wrong-owner groups separately. Run the explicit relationship audit for
-   canonical issue declarations, and keep legacy mentions and `Relates to` links review-only. Use
-   bounded dry-run/apply operations only; never relabel a whole backlog to reach a target ready-pool
-   size.
+   review, covered, and wrong-owner groups separately. Route `formalize_issue` rows through the
+   semantics-preserving repair lane (`uv run python scripts/dev/issue_contract_repair.py plan|apply`),
+   which renames only unambiguous headings with digest/CAS guards and reruns admission check-only;
+   readiness still enters only via the canonical readiness gate. Run the explicit relationship audit
+   for canonical issue declarations, and keep legacy mentions and `Relates to` links review-only.
+   Use bounded dry-run/apply operations only; never relabel a whole backlog to reach a target
+   ready-pool size.
 4. `admit/claim` — re-run the live `goal_issue_admission.py --check-only` gate for each selected
    leaf and acquire its atomic claim only after the check passes. A preparation packet or
    `state:ready` label is not a claim.

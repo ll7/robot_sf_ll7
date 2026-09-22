@@ -4,6 +4,8 @@
     "adapter_forward_intent_preserved_all_rows": true,
     "critic_worsened_toward_contact_all_seeds": true,
     "fallback_or_degraded_rows": 0,
+    "geometry_removal_lowers_actor_mean_v_all_rows": true,
+    "geometry_removal_raises_critic_value_all_rows": true,
     "static_geometry_present_all_rows": true
   },
   "claim_boundary": "diagnostic-only evidence for the bound checkpoint/scenario/states; not benchmark, training-causal, population-level, paper, or dissertation evidence",

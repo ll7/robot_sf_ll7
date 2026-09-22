@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
+from scripts.analysis import narrow_doorway_actor_response_issue_9609 as diagnostic
 from scripts.analysis.narrow_doorway_actor_response_issue_9609 import (
     OFFSETS,
     SEEDS,
@@ -64,6 +68,8 @@ def _supported_rows() -> list[dict[str, object]]:
                     "adapter_command_v": 2.0,
                     "executed_linear_speed_after": 2.0,
                     "adapter_forward_intent_preserved": True,
+                    "actor_mean_v_delta_geometry_zero_minus_canonical": -0.5,
+                    "critic_delta_geometry_zero_minus_canonical": 20.0,
                     "fallback_or_degraded": False,
                 }
             )
@@ -83,6 +89,143 @@ def test_classify_fails_closed_when_geometry_is_missing() -> None:
     rows[0]["static_geometry_present"] = False
 
     assert classify(rows)["result_classification"] == "not_identifiable"
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("actor_mean_v_delta_geometry_zero_minus_canonical", None),
+        ("critic_delta_geometry_zero_minus_canonical", float("nan")),
+        ("actor_mean_v_delta_geometry_zero_minus_canonical", 0.5),
+        ("critic_delta_geometry_zero_minus_canonical", -0.5),
+    ],
+)
+def test_classify_fails_closed_on_missing_nonfinite_or_wrong_direction_ablation(
+    field: str, replacement: float | None
+) -> None:
+    rows = _supported_rows()
+    if replacement is None:
+        del rows[0][field]
+    else:
+        rows[0][field] = replacement
+
+    summary = classify(rows)
+
+    assert summary["result_classification"] == "not_identifiable"
+
+
+def test_cli_runs_after_rollout_foresight_load_and_writes_evidence(  # noqa: C901
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Exercise main -> run -> trace so a fresh-planner pre-load assertion cannot recur."""
+
+    def observation(step: int) -> dict[str, np.ndarray]:
+        obs = _model_obs()
+        obs["diagnostic_step"] = np.asarray([step], dtype=np.float32)
+        return obs
+
+    class FakeEnv:
+        def __init__(self) -> None:
+            self.step_index = 0
+            self.env_config = SimpleNamespace()
+            self.simulator = SimpleNamespace(
+                robots=[SimpleNamespace(current_speed=np.asarray([2.0, 0.0], dtype=float))]
+            )
+
+        def reset(self, *, seed: int):
+            self.step_index = 0
+            return observation(0), {"seed": seed}
+
+        def step(self, _action: np.ndarray):
+            self.step_index += 1
+            collision = self.step_index >= 21
+            return (
+                observation(self.step_index),
+                0.0,
+                collision,
+                False,
+                {"meta": {"is_obstacle_collision": collision}},
+            )
+
+        def close(self) -> None:
+            return None
+
+    class FakePlanner:
+        def __init__(self) -> None:
+            self.loaded = False
+            self.closed = False
+
+        def _build_model_obs_dict(self, obs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+            self.loaded = True
+            return obs
+
+        def foresight_diagnostics(self) -> dict[str, object]:
+            return {
+                "foresight_prediction": {
+                    "load_status": "loaded" if self.loaded else "not_attempted",
+                    "effective_prediction_mode": (
+                        "predictive_foresight" if self.loaded else "unavailable"
+                    ),
+                    "fallback_used": False,
+                }
+            }
+
+        def _action_vec_to_dict_from_array(self, action: np.ndarray) -> dict[str, float]:
+            return {"v": float(action[0]), "omega": float(action[1])}
+
+        def close(self) -> None:
+            self.closed = True
+
+    planners: list[FakePlanner] = []
+
+    def make_planner() -> FakePlanner:
+        planner = FakePlanner()
+        planners.append(planner)
+        return planner
+
+    def policy_outputs(
+        _planner: FakePlanner, model_obs: dict[str, np.ndarray]
+    ) -> dict[str, object]:
+        step = float(model_obs["diagnostic_step"][0])
+        geometry_present = bool(np.asarray(model_obs["occupancy_grid"])[0].sum())
+        return {
+            "actor_mean": np.asarray([2.5 if geometry_present else 1.5, 0.0]),
+            "model_predict": np.asarray([2.0 if geometry_present else 1.0, 0.0]),
+            "critic_value": (-10.0 - step) if geometry_present else (10.0 - step),
+        }
+
+    monkeypatch.setattr(diagnostic, "SEEDS", (225,))
+    monkeypatch.setattr(
+        diagnostic.parent,
+        "_build_diagnostic_env",
+        lambda seed: (FakeEnv(), SimpleNamespace(seed=seed), SimpleNamespace()),
+    )
+    monkeypatch.setattr(diagnostic.parent, "_make_planner", make_planner)
+    monkeypatch.setattr(diagnostic.parent, "_normalize_runner_obs", lambda obs: obs)
+    monkeypatch.setattr(
+        diagnostic.parent, "_min_obstacle_clearance", lambda env: 4.0 - env.step_index / 10.0
+    )
+    monkeypatch.setattr(
+        diagnostic.parent,
+        "build_binding",
+        lambda _output_dir, _gamma: {"generated_at_utc": "ignored", "git_head": "ignored"},
+    )
+    monkeypatch.setattr(diagnostic, "_policy_outputs", policy_outputs)
+    monkeypatch.setattr(
+        diagnostic,
+        "policy_command_to_env_action",
+        lambda **_kwargs: np.asarray([0.0, 0.0]),
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["narrow_doorway_actor_response_issue_9609.py", "--output-dir", str(tmp_path)]
+    )
+
+    assert diagnostic.main() == 0
+    assert planners[0].loaded is True
+    assert all(planner.closed for planner in planners)
+    summary = json.loads((tmp_path / "mechanism_summary.json").read_text(encoding="utf-8"))
+    assert summary["result_classification"] == "actor_value_response_mismatch_supported"
+    assert (tmp_path / "matched_state_rows.csv.review.json").exists()
 
 
 def test_tracked_summary_has_diagnostic_claim_boundary() -> None:

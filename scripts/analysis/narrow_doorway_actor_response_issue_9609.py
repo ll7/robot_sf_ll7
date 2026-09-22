@@ -206,7 +206,11 @@ def _trace_seed(seed: int) -> tuple[list[dict[str, Any]], int]:
     rows: list[dict[str, Any]] = []
     planner = parent._make_planner()
     try:
-        parent._assert_predictive_foresight_loaded(planner)
+        # Predictive provenance is asserted on the actual rollout planner after
+        # every model-observation build above.  This second planner is used only
+        # for direct actor/critic evaluation of stored observations, so no
+        # foresight inference occurs and a load-status assertion would be both
+        # premature and unrelated to the ablation signal.
         for offset in OFFSETS:
             state_step = contact_step - offset
             if state_step < 0:
@@ -267,6 +271,24 @@ def _trace_seed(seed: int) -> tuple[list[dict[str, Any]], int]:
     return rows, contact_step
 
 
+def _all_finite_directional(rows: list[dict[str, Any]], key: str, *, direction: str) -> bool:
+    """Return whether every row carries a finite intervention delta in one direction."""
+    values: list[float] = []
+    for row in rows:
+        try:
+            value = float(row[key])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not math.isfinite(value):
+            return False
+        values.append(value)
+    if direction == "negative":
+        return bool(values) and all(value < 0.0 for value in values)
+    if direction == "positive":
+        return bool(values) and all(value > 0.0 for value in values)
+    raise ValueError(f"unsupported direction: {direction}")
+
+
 def classify(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Classify the bounded matched-state signals without broader inference."""
     by_seed: dict[int, list[dict[str, Any]]] = {}
@@ -304,7 +326,21 @@ def classify(rows: list[dict[str, Any]]) -> dict[str, Any]:
     actor_forward = all(float(row["canonical_model_predict_v"]) > 0.5 for row in rows)
     critic_worsened = all(x["critic_worsened_toward_contact"] for x in seed_summaries)
     no_degraded = all(not bool(row["fallback_or_degraded"]) for row in rows)
-    if geometry_present and adapter_preserved and actor_forward and critic_worsened and no_degraded:
+    actor_geometry_response = _all_finite_directional(
+        rows, "actor_mean_v_delta_geometry_zero_minus_canonical", direction="negative"
+    )
+    critic_geometry_response = _all_finite_directional(
+        rows, "critic_delta_geometry_zero_minus_canonical", direction="positive"
+    )
+    if (
+        geometry_present
+        and adapter_preserved
+        and actor_forward
+        and critic_worsened
+        and actor_geometry_response
+        and critic_geometry_response
+        and no_degraded
+    ):
         verdict = "actor_value_response_mismatch_supported"
     else:
         verdict = "not_identifiable"
@@ -337,6 +373,8 @@ def classify(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "adapter_forward_intent_preserved_all_rows": adapter_preserved,
             "actor_forward_all_rows": actor_forward,
             "critic_worsened_toward_contact_all_seeds": critic_worsened,
+            "geometry_removal_lowers_actor_mean_v_all_rows": actor_geometry_response,
+            "geometry_removal_raises_critic_value_all_rows": critic_geometry_response,
             "fallback_or_degraded_rows": sum(bool(row["fallback_or_degraded"]) for row in rows),
         },
         "seed_summaries": seed_summaries,

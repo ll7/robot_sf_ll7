@@ -56,6 +56,8 @@ SCENARIO_YAML = "configs/scenarios/single/francis2023_narrow_doorway.yaml"
 CANONICAL_SEEDS = (225, 226, 227)
 MODEL_ID = "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
 PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v2_full"
+DEFAULT_HOLD_START_OFFSET = 20
+DEFAULT_HOLD_STEPS = 60
 TRAINING_CONFIG = (
     "configs/training/ppo/ablations/"
     "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml"
@@ -331,8 +333,8 @@ def run_diagnostic(
     seeds: tuple[int, ...],
     out_dir: Path,
     gamma: float,
-    hold_start_offset: int = 10,
-    hold_steps: int = 60,
+    hold_start_offset: int = DEFAULT_HOLD_START_OFFSET,
+    hold_steps: int = DEFAULT_HOLD_STEPS,
     sensitivity_gammas: tuple[float, ...] = (0.95, 0.99, 0.995),
     sensitivity_collisions: tuple[float, ...] = (-5.0, -15.0, -25.0),
 ) -> dict:
@@ -605,6 +607,12 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
             "predictive_foresight_preserved": True,
             "fallback_or_degraded_execution": False,
         },
+        "counterfactual_fork": {
+            "hold_start_offset_steps": DEFAULT_HOLD_START_OFFSET,
+            "hold_horizon_steps": DEFAULT_HOLD_STEPS,
+            "rationale": "Fork early enough for the zero-command branch to decelerate before contact; "
+            "the same measured prefix is replayed for both branches.",
+        },
         "termination_semantics": "terminated = route_complete OR timeout(timestep>=max_sim_steps) OR "
         "ped/robot/obstacle collision; RobotEnv returns truncated=False always; "
         "reward timeout term fires only on non-collision, non-success timeout",
@@ -692,8 +700,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--seeds", type=str, default="225,226,227")
     parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--hold-start-offset", type=int, default=10)
-    parser.add_argument("--hold-steps", type=int, default=60)
+    parser.add_argument("--hold-start-offset", type=int, default=DEFAULT_HOLD_START_OFFSET)
+    parser.add_argument("--hold-steps", type=int, default=DEFAULT_HOLD_STEPS)
     return parser
 
 

@@ -1500,6 +1500,75 @@ def test_service_facade_codex_reconnect_deduplicates_in_flight_retry() -> None:
     assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
 
 
+def test_service_facade_codex_reconnect_blocks_parallel_operations_for_one_session() -> None:
+    """A durable session cannot be reconnected by two operation IDs at once."""
+    _service, client, facade, selected = _new_reconnect_facade()
+    client.block_reconnect = True
+    first_result: list[dict[str, Any]] = []
+
+    def run_reconnect() -> None:
+        first_result.append(
+            dict(
+                facade.codex_reconnect(
+                    codex_session_id="codex-session-private",
+                    operation_id="codex-reconnect-first",
+                    expected_selection_revision=selected["selection_revision"],
+                    expected_context_revision=4,
+                )
+            )
+        )
+
+    thread = threading.Thread(target=run_reconnect)
+    thread.start()
+    assert client.reconnect_entered.wait(timeout=5)
+
+    parallel = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-second",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert parallel["status"] == "unavailable"
+    assert "already in flight" in parallel["reason"]
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
+
+    client.release_reconnect.set()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert first_result[0]["status"] == "complete"
+
+
+def test_service_facade_codex_reconnect_cache_restores_retained_handle() -> None:
+    """Replaying an idempotent receipt restores the matching private handle."""
+    _service, client, facade, selected = _new_reconnect_facade()
+    first = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-cache-first",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    first_handle = facade._codex_session_handle
+    client.session = _FakeCodexSession(provider_session_id="provider-session-second")
+    second = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-cache-second",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert second["status"] == "complete"
+    assert facade._codex_session_handle is client.session
+
+    replay = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-cache-first",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert replay == first
+    assert facade._codex_session_handle is first_handle
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 2
+
+
 def test_service_facade_codex_reconnect_rejects_stale_or_foreign_binding() -> None:
     """A stale selection or foreign recovery receipt never hydrates a handle."""
     service = _FakeAuditService()

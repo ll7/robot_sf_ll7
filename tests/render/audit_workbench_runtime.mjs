@@ -1806,6 +1806,41 @@ assert.equal(reconnectCalls.length, 2);
 assert.equal(reconnectCalls[1].operation_id, reconnectOperationId);
 reconnectController.unmount();
 
+const retryReconnectCalls = [];
+const retryReconnectResults = [
+  { status: "unavailable", reason: "provider is temporarily unavailable" },
+  {
+    status: "complete",
+    context: { context_revision: 2, episode_id: "codex-reconnect" },
+    source: { source_revision: "source-1", source_digest: "digest-1" },
+  },
+];
+const retryReconnectFacade = {
+  next: async () => ({ status: "selected" }),
+  snapshot: async () => ({ status: "complete" }),
+  codex_start: async () => ({ status: "unavailable" }),
+  codex_read: async () => ({ status: "unavailable" }),
+  codex_cancel: async () => ({ status: "unavailable" }),
+  codex_reconnect: async (args) => {
+    retryReconnectCalls.push(args);
+    return retryReconnectResults.shift();
+  },
+};
+const retryReconnectController = new AuditWorkbenchController(
+  reconnectDocument,
+  new Element(new Document(), "main"),
+  { facade: retryReconnectFacade },
+);
+const failedReconnect = await retryReconnectController.codexReconnect();
+assert.equal(failedReconnect.status, "unavailable");
+assert.equal(failedReconnect.codex_session_id, "codex-session-runtime");
+const retriedReconnect = await retryReconnectController.codexReconnect();
+assert.equal(retriedReconnect.status, "complete");
+assert.equal(retryReconnectCalls.length, 2);
+assert.equal(retryReconnectCalls[1].codex_session_id, "codex-session-runtime");
+assert.equal(retryReconnectCalls[1].operation_id, retryReconnectCalls[0].operation_id);
+retryReconnectController.unmount();
+
 const xssActivity = Array.from({ length: 80 }, (_, index) => ({
   message: `<img src=x onerror=alert(${index})>${"x".repeat(700)}`,
   evidence_ids: ["evidence-safe"],

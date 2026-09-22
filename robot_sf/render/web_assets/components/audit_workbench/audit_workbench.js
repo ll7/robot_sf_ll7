@@ -2674,7 +2674,9 @@ export class AuditWorkbenchController {
     if (this.state.codexReconnectInFlight) return clone(this.state.codex);
     if (!this.state.selected) return this._codexUnavailable("select an audit case before reconnecting Codex");
     const source = options && typeof options === "object" ? options : {};
-    const sessionId = source.codex_session_id || this.state.codex.codex_session_id;
+    const sessionId = source.codex_session_id
+      || this.state.codex.codex_session_id
+      || this._codexReconnectSessionId;
     if (!codexOpaqueId(sessionId)) {
       return this._codexUnavailable("no durable Codex session is available to reconnect");
     }
@@ -2719,7 +2721,13 @@ export class AuditWorkbenchController {
       if (!this._codexRequestCurrent(requestEpoch, selectionEpoch, selectionRevision)) {
         return this.snapshot();
       }
-      this.state.codex = normalizeCodexResult(result);
+      const normalized = normalizeCodexResult(result);
+      // Keep the opaque request identity visible after a fail-closed provider
+      // response so the user can retry the same idempotent reconnect.  The
+      // server remains the authority; this is only local retry state.
+      normalized.operation_id ||= request.operation_id;
+      normalized.codex_session_id ||= sessionId;
+      this.state.codex = normalized;
       this.state.codexReconnectInFlight = false;
       this.render({ captureEditor: false });
       return clone(this.state.codex);

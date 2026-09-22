@@ -1387,13 +1387,9 @@ def _codex_result_binding_mismatch(  # noqa: C901, PLR0912
 
     for candidate in mappings:
         for key in ("operation_id", "last_operation_id"):
-            if (
-                operation_id is not None
-                and key in candidate
-                and candidate[key] is not None
-                and candidate[key] != operation_id
-            ):
-                return "Codex result operation binding does not match the request"
+            if key in candidate and candidate[key] is not None:
+                if operation_id is None or candidate[key] != operation_id:
+                    return "Codex result operation binding does not match the request"
 
     for candidate in mappings:
         for key in ("context", "current_context"):
@@ -2260,24 +2256,6 @@ class ServiceAuditWorkbenchFacade:
                 "unavailable", "BA-05 Codex reconnect has no authoritative source binding"
             )
         reconnect_key = (codex_session_id, operation_id)
-        with self._codex_state_lock:
-            cached = self._codex_reconnect_receipts.get(reconnect_key)
-            if cached is not None:
-                cache_matches = (
-                    cached.get("selection_epoch") == self._selection_epoch
-                    and cached.get("context_revision") == self._context_revision()
-                    and cached.get("source_revision") == expected_source_revision
-                    and cached.get("source_digest") == expected_source_digest
-                )
-                if cache_matches:
-                    cached_result = cached.get("result")
-                    if isinstance(cached_result, Mapping):
-                        return deepcopy(cached_result)
-                self._codex_reconnect_receipts.pop(reconnect_key, None)
-            if reconnect_key in self._codex_reconnect_in_flight:
-                return self._codex_local_result(
-                    "unavailable", "Codex reconnect is already in flight; retry the same operation"
-                )
         method = getattr(self._codex_client, "reconnect", None)
         if not callable(method):
             return self._codex_local_result(
@@ -2310,6 +2288,34 @@ class ServiceAuditWorkbenchFacade:
                 self._codex_reconnect_in_flight.discard(reconnect_key)
 
         with self._codex_state_lock:
+            cached = self._codex_reconnect_receipts.get(reconnect_key)
+            if cached is not None:
+                cache_matches = (
+                    cached.get("selection_epoch") == self._selection_epoch
+                    and cached.get("context_revision") == self._context_revision()
+                    and cached.get("source_revision") == expected_source_revision
+                    and cached.get("source_digest") == expected_source_digest
+                )
+                cached_handle = cached.get("session_handle")
+                cached_result = cached.get("result")
+                if (
+                    cache_matches
+                    and cached_handle is not None
+                    and isinstance(cached_result, Mapping)
+                ):
+                    self._codex_session_handle = cached_handle
+                    self._codex_operation_id = operation_id
+                    self._codex_session_context = deepcopy(authoritative_context)
+                    self._codex_session_source_revision = expected_source_revision
+                    self._codex_session_source_digest = expected_source_digest
+                    return deepcopy(cached_result)
+                self._codex_reconnect_receipts.pop(reconnect_key, None)
+            if any(
+                active_key[0] == codex_session_id for active_key in self._codex_reconnect_in_flight
+            ):
+                return self._codex_local_result(
+                    "unavailable", "Codex reconnect is already in flight; retry the same operation"
+                )
             self._codex_reconnect_in_flight.add(reconnect_key)
         try:
             raw_result = method(codex_session_id, **kwargs)
@@ -2372,6 +2378,7 @@ class ServiceAuditWorkbenchFacade:
                 "context_revision": self._context_revision(),
                 "source_revision": expected_source_revision,
                 "source_digest": expected_source_digest,
+                "session_handle": session_handle,
                 "result": deepcopy(projected),
             }
             while len(self._codex_reconnect_receipts) > 32:

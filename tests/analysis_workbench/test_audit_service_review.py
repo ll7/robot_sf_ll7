@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from robot_sf.analysis_workbench.audit_contracts import ReviewRecord
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, ScanSummary
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
     AuditService,
+    CapabilityUnavailable,
     SessionPolicy,
 )
 from robot_sf.analysis_workbench.audit_service_adapters import AuditSourceBinding, QueueNextAdapter
@@ -48,6 +51,27 @@ def _service(tmp_path: Path, *, actor: str = "human"):
         source_digest=report.audit.source_digest,
     )
     queue_path = tmp_path / "queue.json"
+
+    def queue_provider() -> AuditQueue:
+        """Rebuild BA-02 inputs from the durable review receipts named by state."""
+
+        probe = AuditQueue(dataset, state_path=queue_path, store=service.store)
+        if not probe.state.operation_record_ids:
+            return probe
+        committed = []
+        for review_id in probe.state.operation_record_ids.values():
+            stored = service.store.get(review_id)
+            if (
+                stored is None
+                or stored.record_type != "review_record"
+                or not isinstance(stored.record, ReviewRecord)
+            ):
+                raise CapabilityUnavailable("BA-02 durable review receipt is unavailable")
+            committed.append(stored)
+        committed.sort(key=lambda item: item.global_revision)
+        resumed_dataset = replace(dataset, review_records=tuple(item.record for item in committed))
+        return AuditQueue(resumed_dataset, state_path=queue_path, store=service.store)
+
     adapter = QueueNextAdapter(
         AuditSourceBinding(
             CAMPAIGN_ID,
@@ -55,7 +79,7 @@ def _service(tmp_path: Path, *, actor: str = "human"):
             session.source_digest,
             session.source_revision,
         ),
-        lambda: AuditQueue(dataset, state_path=queue_path, store=service.store),
+        queue_provider,
     )
     service.next_adapter = adapter
     service.queue_next_adapter = adapter
@@ -236,6 +260,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
 
         def observed_lock(self: QueueNextAdapter, *, context: AuditSelectionContext) -> Any:
             update_lock_attempted.set()
+            review_thread.join(timeout=10)
             return original_lock(self, context=context)
 
         monkeypatch.setattr(QueueNextAdapter, "transaction_lock", observed_lock)
@@ -260,7 +285,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
                 update_result["value"] = service.update_context(
                     session,
                     moved_context,
-                    expected_context_revision=session.context.context_revision,
+                    expected_context_revision=original_context_revision,
                     operation_id="review-context-lock-race-update",
                 )
             finally:
@@ -276,8 +301,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
         release_review.set()
         review_thread.join(timeout=10)
         update_thread.join(timeout=10)
-        assert not review_thread.is_alive()
-        assert not update_thread.is_alive()
+        assert not review_thread.is_alive() and not update_thread.is_alive()
 
         reviewed = review_result["value"]
         moved = update_result["value"]

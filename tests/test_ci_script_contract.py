@@ -2070,16 +2070,21 @@ def _make_incomplete_profile_worktree(
     return worktree, recovery_log, local_python, env
 
 
+@pytest.mark.parametrize("profile", ["core", "training"])
 def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
-    tmp_path: Path,
+    tmp_path: Path, profile: str
 ) -> None:
     """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
     worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
         tmp_path, recovery_heals=True
     )
 
+    command = [str(RUN_WORKTREE_SHARED_VENV)]
+    if profile != "core":
+        command.extend(["--profile", profile])
+    command.extend(["--", "python", "-V"])
     result = subprocess.run(
-        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        command,
         cwd=worktree,
         env=env,
         capture_output=True,
@@ -2090,11 +2095,11 @@ def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
 
     assert result.returncode == 7, result.stderr
     assert "Attempting one bounded completion sync" in result.stderr
-    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert f"Shared-venv dependency profile '{profile}' completed" in result.stderr
     assert "uv-reached" in result.stderr
     recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
     assert len(recovery_calls) == 1
-    assert "--profile core" in recovery_calls[0]
+    assert f"--profile {profile}" in recovery_calls[0]
     assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
 
 

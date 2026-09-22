@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import time
@@ -301,7 +302,7 @@ def test_shared_venv_recovery_refreshes_stale_package_in_worktree(tmp_path: Path
         assert result.returncode == 0, result.stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
         assert any(call.startswith("venv ") for call in calls)
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
         assert "run python -c print('reached')" in calls
         assert (worktree / ".venv" / "bin" / "python").is_file()
         assert not (repo / ".venv").exists()
@@ -340,7 +341,7 @@ def test_shared_venv_auto_recovers_stale_default_environment_in_worktree(
 
         assert result.returncode == 0, result.stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
         assert "run python -V" in calls
         assert (worktree / ".venv" / "bin" / "python").is_file()
         assert main_python.read_bytes() == main_python_before
@@ -479,13 +480,26 @@ def test_shared_venv_recovery_reuses_fresh_local_environment(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
-    ("profile_args", "expected_profile"),
-    [([], "core"), (["--profile", "all-extras"], "all-extras")],
+    ("profile_args", "expected_profile", "expected_sync"),
+    [
+        ([], "core", "sync --reinstall-package robot-sf --frozen"),
+        (
+            ["--profile", "all-extras"],
+            "all-extras",
+            "sync --all-extras --reinstall-package robot-sf --frozen",
+        ),
+        (
+            ["--profile", "training"],
+            "training",
+            "sync --extra training --reinstall-package robot-sf --frozen",
+        ),
+    ],
 )
 def test_recover_fast_pysf_postcondition_fails_on_incomplete_profile(
     tmp_path: Path,
     profile_args: list[str],
     expected_profile: str,
+    expected_sync: str,
 ) -> None:
     """Issue #8811: recovery must certify the requested dependency profile before success.
 
@@ -527,7 +541,7 @@ def test_recover_fast_pysf_postcondition_fails_on_incomplete_profile(
         assert "Missing optional imports: yaml" in result.stderr
         assert "bootstrap_worktree.sh" in result.stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+        assert calls.count(expected_sync) == 1
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 
@@ -634,9 +648,7 @@ def test_shared_venv_recovery_allows_external_standard_python_symlink(tmp_path: 
         )
 
         assert result.returncode == 0, result.stderr
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in capture.read_text(
-            encoding="utf-8"
-        )
+        assert "sync --reinstall-package robot-sf --frozen" in capture.read_text(encoding="utf-8")
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 
@@ -774,7 +786,7 @@ def test_shared_venv_recovery_clears_ambient_uv_project(tmp_path: Path) -> None:
 def test_shared_venv_recovery_blocks_insufficient_capacity(tmp_path: Path) -> None:
     """The worktree capacity gate blocks recovery before creating or syncing an env."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
-    env = {**env, "ROBOT_SF_WORKTREE_MIN_FREE_BYTES": str(2**63 - 1)}
+    env = {**env, "ROBOT_SF_RECOVERY_MIN_FREE_BYTES": str(2**63 - 1)}
     try:
         result = subprocess.run(
             [
@@ -791,6 +803,170 @@ def test_shared_venv_recovery_blocks_insufficient_capacity(tmp_path: Path) -> No
         assert result.returncode == 2
         diagnostic = result.stdout + result.stderr
         assert "capacity gate blocked recovery before uv started" in diagnostic
+        assert not capture.exists()
+        assert not (worktree / ".venv").exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_uses_profile_capacity_default(tmp_path: Path) -> None:
+    """Large dependency profiles use a conservative gate when no override is set."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    capacity_capture = tmp_path / "capacity-args.txt"
+    capacity_checker = worktree / "scripts" / "dev" / "check_worktree_capacity.py"
+    capacity_checker.write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['CAPACITY_CAPTURE']).write_text(' '.join(__import__('sys').argv[1:]))\n"
+        "raise SystemExit(2)\n",
+        encoding="utf-8",
+    )
+    env = {
+        **env,
+        "CAPACITY_CAPTURE": str(capacity_capture),
+        "ROBOT_SF_WORKTREE_MIN_FREE_BYTES": "",
+    }
+    try:
+        result = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
+                "--profile",
+                "all-extras",
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "capacity gate blocked recovery before uv started" in result.stderr
+        assert "--minimum-free-bytes 8589934592" in capacity_capture.read_text(encoding="utf-8")
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_recreates_environment_after_prior_state_marker(
+    tmp_path: Path,
+) -> None:
+    """A retry can recreate an env after a marker-only interrupted attempt."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    state_path = worktree / ".venv" / ".robot-sf-recovery-state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text("prior partial state\n", encoding="utf-8")
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert not state_path.exists()
+        assert "sync --reinstall-package robot-sf --frozen" in capture.read_text(encoding="utf-8")
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_failure_records_partial_environment_state(tmp_path: Path) -> None:
+    """A failed profile sync leaves an inspectable, non-certified worktree state."""
+    repo, worktree, fake_bin, capture, _, env = _linked_recovery_fixture(tmp_path)
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        fake_uv.read_text(encoding="utf-8").replace(
+            "  sync)\n",
+            '  sync)\n    if [[ "${UV_SYNC_FAIL:-0}" == "1" ]]; then exit 23; fi\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    env = {**env, "UV_SYNC_FAIL": "1"}
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        state_path = worktree / ".venv" / ".robot-sf-recovery-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["schema"] == "robot_sf.recovery_state.v1"
+        assert state["status"] == "failed"
+        assert state["dependency_profile"] == "core"
+        assert "partial environment state preserved" in result.stderr
+        assert "verified worktree-owned fast-pysf environment" not in result.stderr
+        assert capture.read_text(encoding="utf-8").splitlines()[-1] == (
+            "sync --reinstall-package robot-sf --frozen"
+        )
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_signal_preserves_partial_environment_state(
+    tmp_path: Path,
+) -> None:
+    """Interrupting a blocked sync stops its child and records actionable state."""
+    repo, worktree, _, _capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    process = subprocess.Popen(
+        [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+        cwd=worktree,
+        env={**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "30"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not sync_started.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sync_started.exists(), "recovery did not reach the bounded sync window"
+
+        process.send_signal(signal.SIGTERM)
+        _stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 143, stderr
+        state_path = worktree / ".venv" / ".robot-sf-recovery-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["status"] == "interrupted"
+        assert "partial environment state preserved" in stderr
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_rejects_unknown_profile_before_uv(tmp_path: Path) -> None:
+    """An unsupported profile cannot fall through to an unscoped all-extras sync."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    try:
+        result = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
+                "--profile",
+                "not-a-profile",
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "unsupported dependency profile: not-a-profile" in result.stderr
         assert not capture.exists()
         assert not (worktree / ".venv").exists()
     finally:
@@ -859,7 +1035,7 @@ def test_shared_venv_recovery_serializes_same_repository(tmp_path: Path) -> None
         first_stdout, first_stderr = first.communicate(timeout=30)
         assert first.returncode == 0, first_stdout + first_stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+        assert calls.count("sync --reinstall-package robot-sf --frozen") == 1
     finally:
         if first.poll() is None:
             first.kill()
@@ -915,7 +1091,7 @@ def test_shared_venv_recovery_waits_for_lock_and_succeeds_concurrently(tmp_path:
         first_stdout, first_stderr = first.communicate(timeout=30)
         assert first.returncode == 0, first_stdout + first_stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 2
+        assert calls.count("sync --reinstall-package robot-sf --frozen") == 2
     finally:
         if first.poll() is None:
             first.kill()
@@ -967,7 +1143,7 @@ def test_shared_venv_recovery_wait_times_out_and_fails_closed(tmp_path: Path) ->
         first_stdout, first_stderr = first.communicate(timeout=30)
         assert first.returncode == 0, first_stdout + first_stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+        assert calls.count("sync --reinstall-package robot-sf --frozen") == 1
     finally:
         if first.poll() is None:
             first.kill()
@@ -1078,7 +1254,7 @@ def test_run_worktree_shared_venv_concurrent_recovery_waits_safely(tmp_path: Pat
         first_stdout, first_stderr = first.communicate(timeout=30)
         assert first.returncode == 0, first_stdout + first_stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 2
+        assert calls.count("sync --reinstall-package robot-sf --frozen") == 2
     finally:
         if first.poll() is None:
             first.kill()
@@ -1171,7 +1347,7 @@ def test_shared_venv_recovery_portable_lock_succeeds_without_flock_cli(
         assert "portable lock" in result.stderr
         assert "flock is required" not in result.stderr
         calls = capture.read_text(encoding="utf-8").splitlines()
-        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+        assert calls.count("sync --reinstall-package robot-sf --frozen") == 1
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 
@@ -1559,7 +1735,7 @@ def test_recovery_publishes_checksum_keyed_seed(tmp_path: Path) -> None:
         assert receipt["dependency_profile"] == "core"
         assert receipt["source_venv"] == str(worktree_a / ".venv")
         calls = (tmp_path / "uv-a.txt").read_text(encoding="utf-8").splitlines()
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
         assert "published checksum-keyed seed environment" in result.stderr
     finally:
         _teardown_seed_fixture(repo, worktree_a, worktree_b)
@@ -1589,7 +1765,7 @@ def test_recovery_restores_matching_seed_without_materialization(
         assert result.returncode == 0, result.stderr
         calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
         assert not any(call.startswith("venv ") for call in calls)
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
         assert "restored checksum-keyed seed environment" in result.stderr
         rebound = (worktree_b / ".venv" / "bin" / "seed-tool").read_text(encoding="utf-8")
         assert str(worktree_a) not in rebound
@@ -1624,7 +1800,7 @@ def test_recovery_falls_back_to_full_sync_on_seed_mismatch(tmp_path: Path) -> No
         assert result.returncode == 0, result.stderr
         calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
         assert any(call.startswith("venv ") for call in calls)
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
     finally:
         _teardown_seed_fixture(repo, worktree_a, worktree_b)
 

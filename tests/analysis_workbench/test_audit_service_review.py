@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from robot_sf.analysis_workbench.audit_contracts import ReviewRecord
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, ScanSummary
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.analysis_workbench.audit_service import (
     AuditSelectionContext,
     AuditService,
+    CapabilityUnavailable,
     SessionPolicy,
 )
 from robot_sf.analysis_workbench.audit_service_adapters import AuditSourceBinding, QueueNextAdapter
@@ -48,6 +51,27 @@ def _service(tmp_path: Path, *, actor: str = "human"):
         source_digest=report.audit.source_digest,
     )
     queue_path = tmp_path / "queue.json"
+
+    def queue_provider() -> AuditQueue:
+        """Rebuild BA-02 inputs from the durable review receipts named by state."""
+
+        probe = AuditQueue(dataset, state_path=queue_path, store=service.store)
+        if not probe.state.operation_record_ids:
+            return probe
+        committed = []
+        for review_id in probe.state.operation_record_ids.values():
+            stored = service.store.get(review_id)
+            if (
+                stored is None
+                or stored.record_type != "review_record"
+                or not isinstance(stored.record, ReviewRecord)
+            ):
+                raise CapabilityUnavailable("BA-02 durable review receipt is unavailable")
+            committed.append(stored)
+        committed.sort(key=lambda item: item.global_revision)
+        resumed_dataset = replace(dataset, review_records=tuple(item.record for item in committed))
+        return AuditQueue(resumed_dataset, state_path=queue_path, store=service.store)
+
     adapter = QueueNextAdapter(
         AuditSourceBinding(
             CAMPAIGN_ID,
@@ -55,7 +79,7 @@ def _service(tmp_path: Path, *, actor: str = "human"):
             session.source_digest,
             session.source_revision,
         ),
-        lambda: AuditQueue(dataset, state_path=queue_path, store=service.store),
+        queue_provider,
     )
     service.next_adapter = adapter
     service.queue_next_adapter = adapter
@@ -260,7 +284,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
                 update_result["value"] = service.update_context(
                     session,
                     moved_context,
-                    expected_context_revision=session.context.context_revision,
+                    expected_context_revision=original_context_revision,
                     operation_id="review-context-lock-race-update",
                 )
             finally:
@@ -289,6 +313,55 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
         assert moved.operation.context_revision == original_context_revision + 1
         assert session.context.episode_id == moved.value.episode_id
         assert len(service.store.list_records(record_type="review_record")) == 1
+    finally:
+        service.close()
+
+
+def test_context_update_rehydrates_review_queue_after_review_commit(tmp_path: Path) -> None:
+    """A fresh queue provider admits context CAS after a durable review commit."""
+
+    service, session, _report, dataset, queue_path = _service(tmp_path)
+    try:
+        canonical_adapter = service.next_adapter
+        assert canonical_adapter is not None
+        state_revision = AuditQueue(dataset, state_path=queue_path).state_revision
+        reviewed = service.record_human_review(
+            session,
+            outcome="pass",
+            expected_context_revision=session.context.context_revision,
+            expected_queue_state_revision=state_revision,
+            expected_queue_input_revision=dataset.input_revision,
+            operation_id="review-before-context-update",
+        )
+        assert reviewed.status == "committed", reviewed.reason
+
+        moved_context = session.context.next_revision(episode_id="context-moved-after-review")
+        stale_adapter = QueueNextAdapter(
+            canonical_adapter.binding,
+            lambda: AuditQueue(dataset, state_path=queue_path, store=service.store),
+        )
+        service.next_adapter = stale_adapter
+        service.queue_next_adapter = stale_adapter
+        stale = service.update_context(
+            session,
+            moved_context,
+            expected_context_revision=session.context.context_revision,
+            operation_id="stale-provider-context-update",
+        )
+        assert stale.status == "conflict"
+        assert stale.reason == "BA-02 queue input identity changed"
+
+        service.next_adapter = canonical_adapter
+        service.queue_next_adapter = canonical_adapter
+        moved = service.update_context(
+            session,
+            moved_context,
+            expected_context_revision=session.context.context_revision,
+            operation_id="rehydrated-provider-context-update",
+        )
+        assert moved.status == "committed", moved.reason
+        assert moved.value.episode_id == "context-moved-after-review"
+        assert session.context.episode_id == moved.value.episode_id
     finally:
         service.close()
 

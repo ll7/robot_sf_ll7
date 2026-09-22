@@ -1,6 +1,6 @@
 # Issue #9431 corrected 0.0.7 worked-example traces
 
-Plain-language summary: these four tracked trace bundles are the dissertation's
+Plain-language summary: these six tracked trace bundles are the dissertation's
 bounded worked-example slice regenerated from the corrected 0.0.7 source. They
 are not a population estimate, planner ranking, or causal ablation.
 

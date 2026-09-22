@@ -260,7 +260,6 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
 
         def observed_lock(self: QueueNextAdapter, *, context: AuditSelectionContext) -> Any:
             update_lock_attempted.set()
-            review_thread.join(timeout=10)
             return original_lock(self, context=context)
 
         monkeypatch.setattr(QueueNextAdapter, "transaction_lock", observed_lock)
@@ -301,7 +300,8 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
         release_review.set()
         review_thread.join(timeout=10)
         update_thread.join(timeout=10)
-        assert not review_thread.is_alive() and not update_thread.is_alive()
+        assert not review_thread.is_alive()
+        assert not update_thread.is_alive()
 
         reviewed = review_result["value"]
         moved = update_result["value"]
@@ -313,6 +313,55 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
         assert moved.operation.context_revision == original_context_revision + 1
         assert session.context.episode_id == moved.value.episode_id
         assert len(service.store.list_records(record_type="review_record")) == 1
+    finally:
+        service.close()
+
+
+def test_context_update_rehydrates_review_queue_after_review_commit(tmp_path: Path) -> None:
+    """A fresh queue provider admits context CAS after a durable review commit."""
+
+    service, session, _report, dataset, queue_path = _service(tmp_path)
+    try:
+        canonical_adapter = service.next_adapter
+        assert canonical_adapter is not None
+        state_revision = AuditQueue(dataset, state_path=queue_path).state_revision
+        reviewed = service.record_human_review(
+            session,
+            outcome="pass",
+            expected_context_revision=session.context.context_revision,
+            expected_queue_state_revision=state_revision,
+            expected_queue_input_revision=dataset.input_revision,
+            operation_id="review-before-context-update",
+        )
+        assert reviewed.status == "committed", reviewed.reason
+
+        moved_context = session.context.next_revision(episode_id="context-moved-after-review")
+        stale_adapter = QueueNextAdapter(
+            canonical_adapter.binding,
+            lambda: AuditQueue(dataset, state_path=queue_path, store=service.store),
+        )
+        service.next_adapter = stale_adapter
+        service.queue_next_adapter = stale_adapter
+        stale = service.update_context(
+            session,
+            moved_context,
+            expected_context_revision=session.context.context_revision,
+            operation_id="stale-provider-context-update",
+        )
+        assert stale.status == "conflict"
+        assert stale.reason == "BA-02 queue input identity changed"
+
+        service.next_adapter = canonical_adapter
+        service.queue_next_adapter = canonical_adapter
+        moved = service.update_context(
+            session,
+            moved_context,
+            expected_context_revision=session.context.context_revision,
+            operation_id="rehydrated-provider-context-update",
+        )
+        assert moved.status == "committed", moved.reason
+        assert moved.value.episode_id == "context-moved-after-review"
+        assert session.context.episode_id == moved.value.episode_id
     finally:
         service.close()
 

@@ -8,11 +8,17 @@ promoted to scientific or release evidence.
 ## Post-BA-06 materialization update (2026-09-22)
 
 The bounded BA-06 materialization continuation is now merged on top of the
-accepted BA-05 package. This additive update supersedes the historical
-`current origin/main` line below for the repository's current state; the
-dated slice table and matrix retain their original receipts.
+accepted BA-05 package. This additive update records a stable acceptance base,
+not a moving `current origin/main` claim; the dated slice table and matrix
+retain their original receipts.
 
-- Current `origin/main`: `d511a8c1499e9d33eea658825de901cedafc40cf`.
+- Acceptance base before this documentation boundary receipt:
+  `346673a80e04888746e0b78abcccecffe623de47`.
+- Previous docs receipt PR #9573 exact reviewed head:
+  `6b3bc0632027094de5d4728a5f3ac9d13ec8582a`; guarded squash merge:
+  `346673a80e04888746e0b78abcccecffe623de47`.
+- PR #9573 metadata digest:
+  `62b90e7254f6de33ca96f0d5362c5d1416788f6742932b79657f6a65c113935e`.
 - PR #9571 exact reviewed head: `1aa3bb47bc60771d0511a36a201e1084c2c9c01e`.
 - PR #9571 guarded squash merge: `f231fc2faa729a5c96f732d4d690365882878feb`.
 - Final PR metadata digest: `492a32dfe252d660757c700fd9e8e9b7dab95936204ef9fa5ac1fadef0b407f3`.

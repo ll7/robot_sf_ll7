@@ -5,9 +5,13 @@ are merged; BA-06 and epic #9483 remain open.** This is an evidence receipt,
 not a benchmark or scientific result. Fallback, degraded, unavailable,
 synthetic, and diagnostic-only paths are never promoted.
 
-## Current merged boundary
+## Acceptance boundary for this packet
 
-- Current `origin/main`: `d511a8c1499e9d33eea658825de901cedafc40cf`.
+- Acceptance base before this documentation receipt:
+  `346673a80e04888746e0b78abcccecffe623de47`.
+- This is a docs-only boundary receipt. The acceptance base is intentionally
+  stable; it is not a moving claim about the squash merge that carries this
+  document.
 - BA-05 D1/D2 remain accepted bounded contracts with exact focused and hosted
   receipts recorded in the [dated full report](./benchmark_auditor_v1_acceptance_2026-09-22.md).
 - BA-06 PR #9571 exact reviewed head:
@@ -20,6 +24,11 @@ synthetic, and diagnostic-only paths are never promoted.
   `106625885543`: success; merge-queue gate `35690704033`: success.
 - Focused proof: `174 passed in 83.92 s`, Node runtime contract passed, and
   the full docs/link scan passed (`2123` Markdown files).
+- Previous docs receipt PR #9573 exact reviewed head:
+  `6b3bc0632027094de5d4728a5f3ac9d13ec8582a`; guarded squash merge:
+  `346673a80e04888746e0b78abcccecffe623de47`; hosted CI and merge-queue
+  gate passed. Its metadata digest is
+  `62b90e7254f6de33ca96f0d5362c5d1416788f6742932b79657f6a65c113935e`.
 
 ## Accepted scope and explicit gates
 

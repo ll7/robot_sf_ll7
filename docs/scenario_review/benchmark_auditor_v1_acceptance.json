@@ -1,10 +1,12 @@
 {
   "schema": "benchmark_auditor_v1_acceptance.v1",
-  "report_kind": "canonical_current_boundary",
+  "report_kind": "canonical_acceptance_boundary",
   "report_date": "2026-09-22",
   "repository": "ll7/robot_sf_ll7",
   "status": "ba05_bounded_acceptance_complete_ba06_slice_merged_epic_open",
-  "current_origin_main": "d511a8c1499e9d33eea658825de901cedafc40cf",
+  "acceptance_base_origin_main": "346673a80e04888746e0b78abcccecffe623de47",
+  "boundary_policy": "acceptance_base_is_stable_and_not_a_self-referential_current-main_claim",
+  "previous_documentation_receipt": {"pr": 9573, "exact_head": "6b3bc0632027094de5d4728a5f3ac9d13ec8582a", "merge": "346673a80e04888746e0b78abcccecffe623de47", "metadata_digest": "62b90e7254f6de33ca96f0d5362c5d1416788f6742932b79657f6a65c113935e", "hosted": "all required checks passed", "merge_queue_gate": "35692560493", "status": "docs_only_receipt"},
   "slices": {
     "ba05_d1": {"pr": 9559, "exact_head": "ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088", "merge": "6787f5b93a1023dd243f66d81b1e6a13fe6871a3", "focused": "102 passed", "hosted_run": "35655668527", "status": "accepted_bounded"},
     "ba05_d2": {"pr": 9558, "exact_head": "78fb3c818fafe1ae0ea1522c96092e55b8460e3b", "merge": "6982a2456aa98cabff6f5186d396d4f15eb72b48", "focused": "113 passed, 2 skipped", "hosted_run": "35658827492", "status": "accepted_bounded"},

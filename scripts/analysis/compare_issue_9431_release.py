@@ -15,11 +15,11 @@ import argparse
 import json
 import tarfile
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import numpy as np
-
 
 OUTCOME_KEYS = ("route_complete", "collision_event", "timeout_event")
 # A release row may be wholly native, use an explicit adapter, or combine
@@ -203,9 +203,11 @@ def compare(
     successor_root: Path,
     *,
     predecessor_sha256: str,
+    predecessor_source_sha: str,
     successor_source_sha: str,
     successor_bundle_sha256: str,
 ) -> dict[str, Any]:
+    """Pair predecessor and successor rows and derive the governed release diff."""
     old = _read_predecessor(predecessor_archive)
     new = _read_successor(successor_root)
     arms = sorted(set(old) | set(new))
@@ -270,6 +272,7 @@ def compare(
             "release": "0.0.6",
             "archive_sha256": predecessor_sha256,
             "archive": predecessor_archive.name,
+            "source_commit": predecessor_source_sha,
         },
         "successor": {
             "release": "0.0.7",
@@ -301,9 +304,10 @@ def _markdown(report: Mapping[str, Any]) -> str:
     lines = [
         "# Issue #9431 release diff: 0.0.6 → corrected 0.0.7",
         "",
-        "This report pairs rows by planner, scenario, and seed. Successor execution is admitted only when every row is native or adapter mode with no fallback/degraded row. Trace-dependent goal-adjacent timeout labels remain `unavailable` when step traces were not recorded.",
+        "This report pairs rows by planner, scenario, and seed. Successor execution is admitted only when every row is native, adapter, or mixed mode with no fallback/degraded row. Trace-dependent goal-adjacent timeout labels remain `unavailable` when step traces were not recorded.",
         "",
         f"- predecessor archive SHA-256: `{report['predecessor']['archive_sha256']}`",
+        f"- exact source range: `{report['predecessor']['source_commit']}..{report['successor']['source_commit']}`",
         f"- successor source commit: `{report['successor']['source_commit']}`",
         f"- successor publication bundle SHA-256: `{report['successor']['bundle_sha256']}`",
         f"- paired rows: **{report['paired_rows']}**; changed outcome rows: **{report['changed_episode_count']}**",
@@ -322,18 +326,36 @@ def _markdown(report: Mapping[str, Any]) -> str:
         lines.append(
             f"| `{arm}` | {values['paired_rows']} | {old.get('success', 0)} | {new.get('success', 0)} | {old.get('collision', 0)} | {new.get('collision', 0)} | {old.get('timeout', 0)} | {new.get('timeout', 0)} | old `{dict(old_goal)}`; new `{dict(new_goal)}` |"
         )
-    lines += ["", "## Seed-block bootstrap intervals", "", "The interval is a deterministic 95% percentile bootstrap over whole seed blocks (3000 replicates, seed 123). The estimand is the risk difference 0.0.7 minus 0.0.6.", "", "| arm | metric | observed delta | 95% interval | seed blocks |", "|---|---|---:|---|---:|"]
+    lines += [
+        "",
+        "## Seed-block bootstrap intervals",
+        "",
+        "The interval is a deterministic 95% percentile bootstrap over whole seed blocks (3000 replicates, seed 123). The estimand is the risk difference 0.0.7 minus 0.0.6.",
+        "",
+        "| arm | metric | observed delta | 95% interval | seed blocks |",
+        "|---|---|---:|---|---:|",
+    ]
     for key, values in sorted(report["seed_block_bootstrap"].items()):
-        lines.append(f"| `{key.split(':', 1)[0]}` | {values['metric']} | {values['observed_delta']:.6f} | [{values['ci95'][0]:.6f}, {values['ci95'][1]:.6f}] | {values['seed_block_count']} |")
-    lines += ["", "## Interpretation boundary", "", "The full release rows are outcome evidence only. Because they do not contain simulation-step traces, the goal-adjacent timeout predicate is not recomputed here and `unavailable` is not counted as false. The separately pinned 0.0.7 worked-example trace bundle supplies the bounded head-on/group-crossing diagnostic traces.", ""]
+        lines.append(
+            f"| `{key.split(':', 1)[0]}` | {values['metric']} | {values['observed_delta']:.6f} | [{values['ci95'][0]:.6f}, {values['ci95'][1]:.6f}] | {values['seed_block_count']} |"
+        )
+    lines += [
+        "",
+        "## Interpretation boundary",
+        "",
+        "The full release rows are outcome evidence only. Because they do not contain simulation-step traces, the goal-adjacent timeout predicate is not recomputed here and `unavailable` is not counted as false. The separately pinned 0.0.7 worked-example trace bundle supplies the bounded head-on/group-crossing diagnostic traces.",
+        "",
+    ]
     return "\n".join(lines)
 
 
 def main() -> int:
+    """Run the release comparator CLI and write JSON and Markdown reports."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--predecessor-archive", type=Path, required=True)
     parser.add_argument("--successor-root", type=Path, required=True)
     parser.add_argument("--predecessor-sha256", required=True)
+    parser.add_argument("--predecessor-source-sha", required=True)
     parser.add_argument("--successor-source-sha", required=True)
     parser.add_argument("--successor-bundle-sha256", required=True)
     parser.add_argument("--output-json", type=Path, required=True)
@@ -343,14 +365,28 @@ def main() -> int:
         args.predecessor_archive,
         args.successor_root,
         predecessor_sha256=args.predecessor_sha256,
+        predecessor_source_sha=args.predecessor_source_sha,
         successor_source_sha=args.successor_source_sha,
         successor_bundle_sha256=args.successor_bundle_sha256,
     )
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    args.output_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output_json.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     args.output_markdown.parent.mkdir(parents=True, exist_ok=True)
     args.output_markdown.write_text(_markdown(report), encoding="utf-8")
-    print(json.dumps({"status": "ok", "paired_rows": report["paired_rows"], "changed_episode_count": report["changed_episode_count"], "output_json": str(args.output_json), "output_markdown": str(args.output_markdown)}, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "paired_rows": report["paired_rows"],
+                "changed_episode_count": report["changed_episode_count"],
+                "output_json": str(args.output_json),
+                "output_markdown": str(args.output_markdown),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

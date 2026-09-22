@@ -77,6 +77,17 @@ class TraceRows:
     summary: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class CampaignProvenance:
+    """Release and campaign identity carried into every exported trace bundle."""
+
+    campaign_id: str = "issue4206_trace_capable_h600_rerun_20260704"
+    campaign_job: str = "13334"
+    source_commit: str | None = None
+    release_tag: str | None = None
+    config_sha256: str | None = None
+
+
 def _repo_root() -> Path:
     """Return the current git worktree root."""
     return resolve_repo_root()
@@ -322,14 +333,11 @@ def write_bundle(
     selection: SelectedEpisode,
     output_dir: Path,
     pin_generated_at: str | None = None,
-    campaign_id: str = "issue4206_trace_capable_h600_rerun_20260704",
-    campaign_job: str = "13334",
-    source_commit: str | None = None,
-    release_tag: str | None = None,
-    config_sha256: str | None = None,
+    provenance: CampaignProvenance | None = None,
 ) -> dict[str, Any]:
     """Write a trace episode bundle for one selected episode."""
     derived = derive_trace_rows(episode_record)
+    campaign = provenance or CampaignProvenance()
 
     metadata = {
         "schema_version": "issue-4891-exemplar-trace.v1",
@@ -341,11 +349,11 @@ def write_bundle(
         ),
         "generated_at_utc": pin_generated_at or datetime.now(UTC).isoformat(),
         "git_commit": _git_commit(),
-        "source_commit": source_commit or _git_commit(),
-        "campaign_id": campaign_id,
-        "campaign_job": campaign_job,
-        "release_tag": release_tag,
-        "config_sha256": config_sha256,
+        "source_commit": campaign.source_commit or _git_commit(),
+        "campaign_id": campaign.campaign_id,
+        "campaign_job": campaign.campaign_job,
+        "release_tag": campaign.release_tag,
+        "config_sha256": campaign.config_sha256,
         "planner": selection.planner,
         "scenario_id": selection.scenario_id,
         "seed": selection.seed,
@@ -511,11 +519,7 @@ def _process_planner(
     campaign_root: Path,
     output_dir: Path,
     pin_generated_at: str | None = None,
-    campaign_id: str = "issue4206_trace_capable_h600_rerun_20260704",
-    campaign_job: str = "13334",
-    source_commit: str | None = None,
-    release_tag: str | None = None,
-    config_sha256: str | None = None,
+    provenance: CampaignProvenance | None = None,
 ) -> tuple[list[SelectedEpisode], dict[str, Any] | None]:
     """Process one planner: read episodes, select exemplars, write bundles."""
     if not campaign_root.is_dir():
@@ -552,11 +556,7 @@ def _process_planner(
             selection=sel,
             output_dir=bundle_dir,
             pin_generated_at=pin_generated_at,
-            campaign_id=campaign_id,
-            campaign_job=campaign_job,
-            source_commit=source_commit,
-            release_tag=release_tag,
-            config_sha256=config_sha256,
+            provenance=provenance,
         )
         if first_metadata is None:
             first_metadata = metadata
@@ -619,6 +619,13 @@ def main() -> int:
     output_dir = args.output_dir
     if not output_dir.is_absolute():
         output_dir = repo_root / output_dir
+    provenance = CampaignProvenance(
+        campaign_id=args.campaign_id,
+        campaign_job=args.campaign_job,
+        source_commit=args.source_commit,
+        release_tag=args.release_tag,
+        config_sha256=args.config_sha256,
+    )
 
     try:
         all_selections: list[SelectedEpisode] = []
@@ -629,11 +636,7 @@ def main() -> int:
                 campaign_root,
                 output_dir,
                 pin_generated_at=args.pin_generated_at,
-                campaign_id=args.campaign_id,
-                campaign_job=args.campaign_job,
-                source_commit=args.source_commit,
-                release_tag=args.release_tag,
-                config_sha256=args.config_sha256,
+                provenance=provenance,
             )
             all_selections.extend(selections)
             if bundle_metadata is None and metadata is not None:

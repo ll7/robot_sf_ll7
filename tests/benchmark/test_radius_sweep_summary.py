@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,33 @@ from robot_sf.benchmark.radius_sweep_summary import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+_GATE1_SURFACES = (
+    "simulator_collision_geometry",
+    "obstacle_pedestrian_contact_logic",
+    "feasibility_oracle",
+    "metric_metadata_and_output_rows",
+    "planner_inputs",
+)
+_GATE1_RECEIPT_PAYLOAD = {
+    "schema": "radius_binding_canary_report.v1",
+    "canary_schema": "radius_binding_canary.v1",
+    "issue": 6641,
+    "parent_issue": 6600,
+    "radii_m": [0.5, 0.8, 1.0],
+    "go": True,
+    "verdicts": [
+        {
+            "schema": "radius_binding_canary.v1",
+            "target_radius_m": radius,
+            "go": True,
+            "surfaces": [{"surface": surface, "bound": True} for surface in _GATE1_SURFACES],
+        }
+        for radius in (0.5, 0.8, 1.0)
+    ],
+}
+_GATE1_RECEIPT_BYTES = json.dumps(_GATE1_RECEIPT_PAYLOAD).encode()
+_GATE1_RECEIPT_SHA256 = sha256(_GATE1_RECEIPT_BYTES).hexdigest()
+
 
 @pytest.fixture
 def compact_scope(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -26,6 +54,7 @@ def compact_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(composer, "EXPECTED_SCENARIO_NAMES", ("case_a", "case_b"))
     monkeypatch.setattr(composer, "EXPECTED_SEEDS", (111, 112))
     monkeypatch.setattr(composer, "EXPECTED_ROWS_PER_ARM", 4)
+    monkeypatch.setattr(composer, "EXPECTED_GATE1_RECEIPT_SHA256", _GATE1_RECEIPT_SHA256)
     monkeypatch.setattr(
         composer,
         "EXPECTED_ARM_CAMPAIGN_CONFIGS",
@@ -148,36 +177,9 @@ def _write_arm(
 
 
 def _write_gate1_receipt(parent: Path) -> Path:
+    parent.mkdir(parents=True, exist_ok=True)
     path = parent / "gate1-canary-receipt.json"
-    surfaces = (
-        "simulator_collision_geometry",
-        "obstacle_pedestrian_contact_logic",
-        "feasibility_oracle",
-        "metric_metadata_and_output_rows",
-        "planner_inputs",
-    )
-    path.write_text(
-        json.dumps(
-            {
-                "schema": "radius_binding_canary_report.v1",
-                "canary_schema": "radius_binding_canary.v1",
-                "issue": 6641,
-                "parent_issue": 6600,
-                "radii_m": [0.5, 0.8, 1.0],
-                "go": True,
-                "verdicts": [
-                    {
-                        "schema": "radius_binding_canary.v1",
-                        "target_radius_m": radius,
-                        "go": True,
-                        "surfaces": [{"surface": surface, "bound": True} for surface in surfaces],
-                    }
-                    for radius in (0.5, 0.8, 1.0)
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
+    path.write_bytes(_GATE1_RECEIPT_BYTES)
     return path
 
 
@@ -286,8 +288,43 @@ def test_composer_requires_exact_original_gate1_receipt(
     roots, receipt = _write_triplet(tmp_path)
     replay = tmp_path / "replayed-receipt.json"
     replay.write_text(receipt.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-    with pytest.raises(RadiusSweepSummaryError, match="original Gate 1 receipt bytes"):
+    with pytest.raises(RadiusSweepSummaryError, match="frozen Gate 2 receipt digest"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=replay)
+
+
+def test_composer_rejects_coordinated_gate1_receipt_and_metadata_tampering(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """Self-consistent metadata cannot replace the frozen Gate 1 artifact identity."""
+    roots, receipt = _write_triplet(tmp_path)
+    tampered_payload = {**_GATE1_RECEIPT_PAYLOAD, "generated_at": "different-replay"}
+    receipt.write_text(json.dumps(tampered_payload), encoding="utf-8")
+    tampered_digest = sha256(receipt.read_bytes()).hexdigest()
+    for root in roots:
+        for relative_path in ("campaign_manifest.json", "preflight/validate_config.json"):
+            path = root / relative_path
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["radius_binding"]["gate1_receipt_sha256"] = tampered_digest
+            path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RadiusSweepSummaryError, match="frozen Gate 2 receipt digest"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composed_summary_is_independent_of_campaign_root_paths(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """Relocating byte-identical campaign trees does not alter serialized evidence."""
+    roots, receipt = _write_triplet(tmp_path / "source")
+    relocated_parent = tmp_path / "relocated"
+    relocated_roots = []
+    for root in roots:
+        destination = relocated_parent / root.name
+        shutil.copytree(root, destination)
+        relocated_roots.append(destination)
+    first = compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+    second = compose_radius_sweep_summary(relocated_roots, gate1_canary_receipt=receipt)
+    assert first == second
+    assert all("campaign_root" not in arm for arm in first["campaign_provenance"].values())
 
 
 def test_composer_rejects_out_of_scope_episode_files(tmp_path: Path, compact_scope: None) -> None:

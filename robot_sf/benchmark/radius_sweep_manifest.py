@@ -28,6 +28,9 @@ BASELINE_RADIUS: float = 1.0
 ISSUE_6642 = 6642
 PARENT_ISSUE_6600 = 6600
 GATE1_CANARY_ISSUE = 6641
+# Frozen by the tracked Gate 2 manifest and all three arm configs. A campaign
+# declaration cannot substitute a different passing receipt for this admitted artifact.
+EXPECTED_GATE1_RECEIPT_SHA256 = "88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922"
 
 # The release roster is frozen to the 0.0.3.post1 baseline; the checker rejects a
 # sweep whose arm config does not reproduce this exact 14-key roster in order.
@@ -1275,6 +1278,7 @@ __all__ = [
     "EXPECTED_ARM_RELEASE_TAG_0P5M",
     "EXPECTED_ARM_RELEASE_TAG_0P8M",
     "EXPECTED_DT",
+    "EXPECTED_GATE1_RECEIPT_SHA256",
     "EXPECTED_HORIZON",
     "EXPECTED_KINEMATICS",
     "EXPECTED_MANIFEST_CONFIG",

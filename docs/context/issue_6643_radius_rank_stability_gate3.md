@@ -131,6 +131,9 @@ The three arm configs are intentionally different tracked treatment configs, so 
 digests must remain recorded per arm. Gate 3 requires one shared campaign commit and one shared Gate
 1 receipt digest, but it no longer incorrectly requires the three arm config digests to be equal.
 The bundle's `--config` path remains the 1.0 m baseline config and must match that arm's digest.
+The receipt must also match the frozen digest in the tracked Gate 2 manifest/config contract;
+coordinated edits to campaign metadata cannot admit a different passing receipt. Composed summaries
+record stable campaign IDs and repository-relative config paths, not host-specific campaign roots.
 
 Family feasibility is not inferred from success rates, route-clearance warnings, or the separate
 #6644/#6645 narrow-doorway diagnostics. Every campaign root must instead carry a checksum-bound

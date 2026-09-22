@@ -25,6 +25,7 @@ from robot_sf.benchmark.radius_rank_stability import (
 )
 from robot_sf.benchmark.radius_sweep_manifest import (
     EXPECTED_ARM_CAMPAIGN_CONFIGS,
+    EXPECTED_GATE1_RECEIPT_SHA256,
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_MATRIX,
     EXPECTED_SCENARIO_NAMES,
@@ -418,7 +419,12 @@ def _gate1_receipt_digest(gate1_canary_receipt: str | Path) -> str:
         raise RadiusSweepSummaryError(
             f"Gate 1 receipt is not a complete passing receipt: {receipt_path}"
         )
-    return sha256(receipt_path.read_bytes()).hexdigest()
+    digest = sha256(receipt_path.read_bytes()).hexdigest()
+    if digest != EXPECTED_GATE1_RECEIPT_SHA256:
+        raise RadiusSweepSummaryError(
+            "Gate 1 receipt bytes do not match the frozen Gate 2 receipt digest"
+        )
+    return digest
 
 
 def _validate_arm_set(arms: Sequence[_Arm], receipt_sha256: str) -> None:
@@ -477,7 +483,6 @@ def compose_radius_sweep_summary(
         provenance[radius_key] = {
             "campaign_commit": arm.campaign_commit,
             "campaign_id": arm.campaign_id,
-            "campaign_root": str(arm.root),
             "config_path": arm.config_path,
             "config_sha256": arm.config_sha256,
             "gate1_canary_receipt_sha256": arm.gate1_receipt_sha256,

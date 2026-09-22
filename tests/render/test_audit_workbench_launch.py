@@ -51,10 +51,10 @@ FIXTURE = (
 )
 # The external child has a distinct cold-start phase: importing Python and
 # connecting to the private bridge preceded the initialize response by 1.70 s
-# in local strace evidence.  Reserve a finite startup bound without widening
-# the per-request protocol bound used after initialization.
+# in local strace evidence.  Keep both startup and per-request waits finite;
+# hosted xdist contention can delay the source-bound read after initialization.
 EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS = 10.0
-EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = 3.0
+EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = 10.0
 TRACE_FIXTURE = (
     Path(__file__).resolve().parents[1]
     / "fixtures"

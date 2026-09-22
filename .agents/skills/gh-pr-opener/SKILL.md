@@ -18,7 +18,20 @@ Use this when a branch is ready for PR handoff and must follow Repository-grade 
 ## Key Guardrail
 
 Fail-closed policy: do not open a PR until scope is implemented, proof is fresh, and artifacts are
-classified.
+classified. For autonomous handoffs, refuse PR opening when the exact-diff implementation
+self-review receipt is missing, stale, malformed, bound to another head, or carries unresolved
+blocking findings:
+
+```bash
+uv run python scripts/dev/implementation_self_review.py gate --receipt-file <receipt.json> \
+  --issue <number> --expected-head-sha <head-sha> --expected-base-sha <base-sha>
+```
+
+Add `--issue-body-file <body.md>` when the issue text is at hand so the contract digest
+binds too. A non-zero gate result stops publication; it never authorizes a human override
+by itself.
+Self-review is implementation-quality proof only and never substitutes for independent
+merge-review authority.
 
 ## Preconditions
 

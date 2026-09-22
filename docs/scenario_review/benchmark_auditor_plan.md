@@ -5,7 +5,82 @@ Status: maintainer-selected requirements and implementation plan, not implemente
 Plan version: 1.0, 2026-09-17. Coordination issue: [#9483](https://github.com/ll7/robot_sf_ll7/issues/9483).
 Source snapshot inspected during preparation: `main` at `a74984e2376e55728d792787705f015b94b38e99`. Refresh current code, issue state, claims and pull requests before implementation.
 
-This initial pull request adds only this file. The implementation coordinator must review, correct and merge this documentation PR first, then deliver the complete package in independently reviewed implementation slices. Merging this plan does not close any implementation issue.
+### Additive BA-05 contract amendment (2026-09-21)
+
+The accepted BA-05 service slice uses `github-publication.v1`. It creates one
+immutable issue snapshot containing the stable finding marker, then publishes
+later finding revisions as auditor-owned comments carrying an exact semantic
+publication marker. The durable local outbox is the authority for publication
+identity, revision, digest, request operation, remote observation and
+reconciliation state. Replays therefore deduplicate by semantic publication
+key rather than by a caller's operation ID. Existing body-CAS helpers remain
+only as an explicitly selected compatibility path for test fakes; the REST
+adapter never performs a read-then-`PATCH` issue-body update.
+
+This protocol does **not** claim a GitHub compare-and-swap primitive,
+atomicity between the local journal and GitHub, or exactly-once remote
+delivery. A complete marker search is required before create or comment
+retry; incomplete pagination, a timeout that cannot be reconciled, a remote
+duplicate, or a local link-CAS conflict remains visible as ambiguous or
+conflict and blocks automatic retry. These limitations are acceptance gates,
+not reasons to promote a plausible issue body to canonical evidence. The
+acceptance report must retain the local outbox record, remote marker, exact
+head and hosted-CI receipt for every claimed publication.
+
+The service's Codex route is likewise explicit about accounting. `offline`
+is provider-free and read-only. `local_accounting` reserves finite local
+token/compute/issue-write budgets, records observed usage and overspend, and
+does not imply a provider-enforced ceiling. The opt-in
+`strict_provider_ceiling` mode requires an exact route/provider/model and a
+verified finite provider compute ceiling; it refuses admission when that
+ceiling is absent or a reservation exceeds it. A provider capability that
+does not expose a verified physical ceiling cannot be represented as strict
+mode. Missing usage, cancellation, retries, reconnects and nested sessions
+remain ledger outcomes, never silent budget resets. Hosted/live evidence must
+report the selected mode and whether a physical provider cap was actually
+verified.
+
+### Additive implementation and acceptance amendment (2026-09-22)
+
+The original plan publication was documentation-only. The current implementation
+is deliberately recorded as independently reviewed slices; this amendment does
+not replace the requirements register and does not close the epic.
+
+| Slice | Exact reviewed head | Hosted evidence | Result |
+| --- | --- | --- | --- |
+| BA-05 D1 append-only publication | PR #9559, `ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088` | run `35655668527`, accepted retry | accepted bounded slice |
+| BA-05 D2 route/accounting | PR #9558, `78fb3c818fafe1ae0ea1522c96092e55b8460e3b` | run `35658827492` | accepted bounded slice |
+| BA-06 server-held publication | PR #9561, `e2c84dd8ea75bd63a62005ecbc55ae7847d06328` | run `35667772524` | diagnostic-only slice |
+| BA-06 external MCP context | PR #9565, `2d486ed94bfc1d785e1fe576ca8232ab3bc7d880` | run `35676387775`, attempt 2 | diagnostic-only slice |
+| BA-06 runtime friction repair | PR #9569, `4833a1eb06b60f04aca78003789bdf992361c8be` | run `35683653944`; merge gate `35685480912` | merged; 64.88 s → 17.55 s |
+
+BA-05 acceptance is therefore bounded to the offline/fake-provider and route
+contracts plus the hosted evidence above. The REST transport's admissible V1
+path is append-only: one immutable issue snapshot followed by marker-bearing
+auditor comments. GitHub's ordinary issue API does not supply a proven
+cross-system compare-and-swap or exactly-once delivery boundary. Complete
+marker pagination, timeout reconciliation, duplicate-marker detection, local
+outbox recovery, and the canonical finding-link CAS remain explicit gates. A
+read-then-`PATCH` body update is not CAS and must never be promoted as live
+evidence; body-CAS helpers are compatibility fakes only.
+
+Codex accounting is likewise bounded. `offline` is provider-free and
+read-only; `local_accounting` records finite local reservations and any
+provider overspend without claiming physical enforcement; and
+`strict_provider_ceiling` refuses admission unless a finite provider ceiling
+is verified. The tested App Server exposes token telemetry but no measured
+provider compute cap, so no strict live route or premium-provider fallback is
+claimed. A future live receipt must include the selected accounting mode,
+provider/model route, verified-cap status, and before/after usage.
+
+BA-06 remains open for the full real-data/browser workflow, recovery and
+cancellation, native/source-bound diagnostics, and a live Codex/MCP receipt.
+SREV #9285/#9287/#9288 are contract/test integrated; #9296/#9299 still depend
+on admitted-source/live evidence and prerequisite #9417 enforcement. The full
+decision matrix and machine receipt are in
+[`benchmark_auditor_v1_acceptance_2026-09-22.md`](./benchmark_auditor_v1_acceptance_2026-09-22.md).
+
+Merging this plan amendment does not close #9483, #9488, or #9489.
 
 ## 1. Goal and product boundary
 

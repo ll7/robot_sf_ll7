@@ -534,6 +534,67 @@ def _operation_for(
     return operation
 
 
+def _readback_path(repo: str, *, kind: str, issue: int) -> str:
+    """Return the exact read-back endpoint path for a given relationship kind."""
+    if kind == "parent":
+        return f"repos/{repo}/issues/{issue}/parent"
+    if kind in {"blocked_by", "blocking"}:
+        return f"repos/{repo}/issues/{issue}/dependencies/{kind}"
+    return ""
+
+
+def _is_idempotent_collision_error(error: str) -> bool:
+    """Return whether a write error indicates the native relationship may already exist."""
+    lower = error.lower()
+    collision_phrases = (
+        "already been taken",
+        "already taken",
+        "already exists",
+        "already a sub-issue",
+        "already a sub issue",
+        "already linked",
+        "already added",
+        "has already been added",
+    )
+    if any(phrase in lower for phrase in collision_phrases):
+        return True
+    return "422" in lower and "already" in lower
+
+
+def _canonical_edge(kind: str, issue: int, target: int) -> tuple[str, int, int] | None:
+    """Return a canonical directed edge representation for dependency and parent relations."""
+    if kind == "blocked_by":
+        return ("dependency", target, issue)
+    if kind == "blocking":
+        return ("dependency", issue, target)
+    if kind == "parent":
+        return ("parent", target, issue)
+    return None
+
+
+def _verify_readback(
+    api: ApiRunner,
+    *,
+    repo: str,
+    kind: str,
+    issue: int,
+    target: int,
+) -> tuple[bool, str]:
+    """Verify with an exact read-back that the target issue is in the native relationship."""
+    readback_path = _readback_path(repo, kind=kind, issue=issue)
+    if not readback_path:
+        return False, f"unsupported read-back for kind {kind}"
+    payload_read, error = _read_json(
+        api, readback_path, what=f"read back {kind} for issue #{issue}"
+    )
+    if error:
+        return False, error
+    numbers = _native_numbers(payload_read)
+    if target not in numbers:
+        return False, f"read-back did not contain #{target} at {readback_path}"
+    return True, ""
+
+
 def _write_operation(  # noqa: C901 - each relation direction has distinct REST/read-back paths
     api: ApiRunner,
     *,
@@ -560,34 +621,29 @@ def _write_operation(  # noqa: C901 - each relation direction has distinct REST/
     if kind == "parent":
         path = f"repos/{repo}/issues/{target}/sub_issues"
         payload = {"sub_issue_id": current_id, "replace_parent": False}
-        readback_path = f"repos/{repo}/issues/{issue}/parent"
     elif kind == "blocked_by":
         path = f"repos/{repo}/issues/{issue}/dependencies/blocked_by"
         payload = {"issue_id": target_id}
-        readback_path = path
     elif kind == "blocking":
         path = f"repos/{repo}/issues/{target}/dependencies/blocked_by"
         payload = {"issue_id": current_id}
-        readback_path = f"repos/{repo}/issues/{issue}/dependencies/blocking"
     else:
         return "manual", "Relates to has no supported REST write path"
 
     result = api(path, payload, "POST")
     if getattr(result, "returncode", 1) != 0:
         _, error = parse_json(result, what=f"write {kind} #{issue} -> #{target}")
+        if _is_idempotent_collision_error(error):
+            verified, _ = _verify_readback(api, repo=repo, kind=kind, issue=issue, target=target)
+            if verified:
+                return (
+                    "already_applied",
+                    "native relationship already present on write; verified with read-back",
+                )
         return "failed", error
-    payload_read, error = _read_json(
-        api, readback_path, what=f"read back {kind} for issue #{issue}"
-    )
-    if error:
-        return "failed", error
-    numbers = _native_numbers(payload_read)
-    if kind == "parent":
-        verified = target in numbers
-    else:
-        verified = target in numbers
+    verified, error = _verify_readback(api, repo=repo, kind=kind, issue=issue, target=target)
     if not verified:
-        return "failed", f"read-back did not contain #{target} at {readback_path}"
+        return "failed", error
     return "applied", "native relationship added and read back"
 
 
@@ -727,11 +783,42 @@ def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audi
                 )
             else:
                 statuses: list[str] = []
+                applied_canonical_edges: set[tuple[str, int, int]] = set()
                 for operation in operations:
+                    edge = _canonical_edge(
+                        str(operation["kind"]),
+                        int(operation["issue"]),
+                        int(operation["target"]),
+                    )
                     if operation["status"] != "proposed":
                         apply_result["operations"].append(dict(operation))
                         statuses.append(operation["status"])
+                        if edge is not None and operation["status"] in {
+                            "already_present",
+                            "already_applied",
+                        }:
+                            applied_canonical_edges.add(edge)
                         continue
+
+                    # If this exact canonical edge was already applied or present in this run,
+                    # verify with exact read-back instead of calling the redundant POST endpoint.
+                    if edge is not None and edge in applied_canonical_edges:
+                        issue = int(operation["issue"])
+                        target = int(operation["target"])
+                        kind = str(operation["kind"])
+                        verified, _ = _verify_readback(
+                            api, repo=repo, kind=kind, issue=issue, target=target
+                        )
+                        if verified:
+                            applied = dict(operation)
+                            applied.update(
+                                status="already_applied",
+                                reason="reciprocal native relationship already added and read back",
+                            )
+                            apply_result["operations"].append(applied)
+                            statuses.append("already_applied")
+                            continue
+
                     status, reason = _write_operation(
                         api,
                         repo=repo,
@@ -743,8 +830,15 @@ def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audi
                     applied.update(status=status, reason=reason)
                     apply_result["operations"].append(applied)
                     statuses.append(status)
+                    if edge is not None and status in {"applied", "already_applied"}:
+                        applied_canonical_edges.add(edge)
+
                 if any(status in {"failed", "blocked"} for status in statuses):
-                    apply_result["status"] = "partial" if "applied" in statuses else "failed"
+                    apply_result["status"] = (
+                        "partial"
+                        if any(s in {"applied", "already_applied"} for s in statuses)
+                        else "failed"
+                    )
                 else:
                     apply_result["status"] = "complete"
 

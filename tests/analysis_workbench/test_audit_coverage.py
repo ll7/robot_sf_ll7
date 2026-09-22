@@ -15,6 +15,7 @@ from robot_sf.analysis_workbench import (
     DetectorRegistry,
     DetectorSpec,
     ReviewRecord,
+    deserialize_record,
     evaluate_coverage,
     is_completion_current,
     receipt_matches_identity,
@@ -617,6 +618,56 @@ def test_ba01_scan_report_uses_typed_inventory_and_detector_identity() -> None:
     assert report.identity.detector_registry_digest == scan.detector_registry.digest
     assert report.counts["detectors"]["scheduled"] == 70
     assert report.status == STATUS_INCOMPLETE
+
+
+def test_real_ba01_scan_accepts_literal_row_review_identity_and_rejects_stale_tokens() -> None:
+    source = FIXTURE_ROOT.parent / "audit_campaign_v1" / "campaign.json"
+    scan = scan_campaign(source)
+    source_identity = scan.audit.source.source_commit
+    scan_identity = scan.cache_key
+
+    def review(
+        *, source_value: str = source_identity, scan_value: str = scan_identity
+    ) -> ReviewRecord:
+        return ReviewRecord(
+            review_id="review-fixture-readable",
+            episode_id="fixture-readable",
+            scope="full_episode",
+            author_kind="human",
+            source_identity=source_value,
+            scan_identity=scan_value,
+        )
+
+    accepted_review = review()
+    serialized = record_to_dict(accepted_review)
+    assert serialized["source_identity"] == source_identity
+    assert serialized["scan_identity"] == scan_identity
+    assert deserialize_record(serialized) == accepted_review
+
+    accepted = evaluate_coverage(
+        scan,
+        identity={"release_digest": "release-1"},
+        review_records=[accepted_review],
+    )
+    assert accepted.counts["reviews"]["full_episode_human"] == 1
+    assert accepted.counts["reviews"]["full_human_ids"] == ("fixture-readable",)
+    assert accepted.counts["reviews"]["stale_or_mismatched"] == 0
+
+    stale_source = evaluate_coverage(
+        scan,
+        identity={"release_digest": "release-1"},
+        review_records=[review(source_value="stale-source")],
+    )
+    assert stale_source.counts["reviews"]["full_episode_human"] == 0
+    assert stale_source.counts["reviews"]["stale_or_mismatched"] == 1
+
+    stale_scan = evaluate_coverage(
+        scan,
+        identity={"release_digest": "release-1"},
+        review_records=[review(scan_value="stale-scan")],
+    )
+    assert stale_scan.counts["reviews"]["full_episode_human"] == 0
+    assert stale_scan.counts["reviews"]["stale_or_mismatched"] == 1
 
 
 def test_renderers_and_round_trip_are_deterministic_and_disclose_boundary() -> None:

@@ -15,7 +15,9 @@ import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import (
     ActionRecord,
+    AuditContractError,
     Reference,
+    record_from_dict,
     record_to_dict,
 )
 from robot_sf.analysis_workbench.audit_store import AuditConflictError, CommitResult
@@ -96,6 +98,31 @@ def test_source_bound_references_snap_and_distance_use_recorded_units(tmp_path: 
         for item in review_editor.build_overlay_commands(
             model, [image, image], overlays={"distances": True}
         )
+    )
+
+
+def test_annotation_reference_source_projection_keeps_ba03_source_closed(tmp_path: Path) -> None:
+    model = _model(tmp_path)
+    reference = review_editor.snap_reference(model, "actor", target_id="robot")
+    annotation = review_editor.make_full_annotation(
+        model,
+        "planner_defect",
+        observed_behavior="robot pauses",
+        references=(reference,),
+    )
+    payload = record_to_dict(annotation)
+    payload["references"][0]["source"]["admission"] = "not_evaluated"
+    with pytest.raises(AuditContractError, match="source contains unknown fields"):
+        record_from_dict(payload)
+    del payload["references"][0]["source"]["admission"]
+    payload["metadata"]["reference_source_provenance"] = {
+        reference.reference_id: {"admission": "not_evaluated", "integrity": "verified"}
+    }
+    parsed = record_from_dict(payload)
+    assert parsed.references[0].source is not None
+    assert (
+        parsed.metadata["reference_source_provenance"][reference.reference_id]["integrity"]
+        == "verified"
     )
 
 

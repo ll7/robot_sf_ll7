@@ -1587,3 +1587,14 @@ def test_contract_audit_marks_malformed_referenced_contract(tmp_path: Path) -> N
     assert audit["status"] == "findings"
     assert audit["counts"]["invalid_contract"] == 1
     assert audit["configs"][0]["status"] == "invalid_contract"
+
+
+def test_runner_map_dispatch_keeps_lazy_import_seam(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The public runner seam dispatches only when map execution is requested."""
+
+    from robot_sf.benchmark.map_runner import map_runner
+
+    expected = {"status": "stubbed"}
+    monkeypatch.setattr(map_runner, "run_map_batch", lambda *args, **kwargs: expected)
+
+    assert runner.run_map_batch("matrix.json", "episodes.jsonl", limit=1) is expected

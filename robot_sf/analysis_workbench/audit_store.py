@@ -29,6 +29,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
     AUDIT_EXPORT_SCHEMA_VERSION,
     AUDIT_JOURNAL_SCHEMA_VERSION,
     AUDIT_RECORD_SCHEMA_VERSION,
+    DETECTOR_RULE_PROPOSAL_IMMUTABLE_FIELDS,
     AuditContractError,
     canonical_json,
     record_from_dict,
@@ -438,6 +439,8 @@ class AuditStore:
         transactions: list[_JournalTransaction] = []
         operation_ids: set[str] = set()
         latest_revisions: dict[str, int] = {}
+        latest_record_types: dict[str, str] = {}
+        proposal_origins: dict[str, dict[str, Any]] = {}
         valid_offset = 0
         lines = raw.splitlines(keepends=True)
         for index, line in enumerate(lines):
@@ -489,6 +492,31 @@ class AuditStore:
                             f"{change.record_id!r}"
                         )
                     latest_revisions[change.record_id] = change.revision
+                    previous_type = latest_record_types.get(change.record_id)
+                    if previous_type is not None and previous_type != change.record_type:
+                        raise AuditCorruptionError(
+                            "canonical record type changed for "
+                            f"{change.record_id!r}: {previous_type!r} -> "
+                            f"{change.record_type!r}"
+                        )
+                    if not change.deleted:
+                        latest_record_types[change.record_id] = change.record_type
+                    elif previous_type is None and change.record_type != "unknown":
+                        raise AuditCorruptionError(
+                            "first canonical tombstone must use record type 'unknown' for "
+                            f"{change.record_id!r}"
+                        )
+                    try:
+                        self._validate_proposal_origin(
+                            proposal_origins,
+                            change.record_id,
+                            change.record,
+                        )
+                    except AuditStoreError as exc:
+                        raise AuditCorruptionError(
+                            f"invalid detector rule proposal history at canonical line "
+                            f"{index + 1}: {exc}"
+                        ) from exc
                 transactions.append(transaction)
             valid_offset += len(line)
             if index == len(lines) - 1 and not is_complete and recover:
@@ -913,6 +941,53 @@ class AuditStore:
                 raise AuditStoreError(f"transaction actor kind does not match record {field_name}")
 
     @staticmethod
+    def _proposal_origin_payload(record: Any) -> dict[str, Any] | None:
+        """Return the immutable portion of a detector-rule proposal."""
+
+        if isinstance(record, Mapping):
+            if record.get("record_type") != "detector_rule_proposal":
+                return None
+            payload = record
+        else:
+            try:
+                if record_type(record) != "detector_rule_proposal":
+                    return None
+            except AuditContractError:
+                return None
+            payload = record_to_dict(record)
+        return {
+            field_name: payload.get(field_name)
+            for field_name in DETECTOR_RULE_PROPOSAL_IMMUTABLE_FIELDS
+        }
+
+    @classmethod
+    def _validate_proposal_origin(
+        cls,
+        origins: dict[str, dict[str, Any]],
+        rid: str,
+        record: Any,
+    ) -> None:
+        """Reject changes to proposal origin fields across every journal revision."""
+
+        candidate = cls._proposal_origin_payload(record)
+        if candidate is None:
+            return
+        previous = origins.get(rid)
+        if previous is None:
+            origins[rid] = candidate
+            return
+        if canonical_json(previous) == canonical_json(candidate):
+            return
+        changed = [
+            field_name
+            for field_name in DETECTOR_RULE_PROPOSAL_IMMUTABLE_FIELDS
+            if canonical_json(previous.get(field_name)) != canonical_json(candidate.get(field_name))
+        ]
+        raise AuditStoreError(
+            "detector rule proposal immutable fields changed: " + ", ".join(changed)
+        )
+
+    @staticmethod
     def _request_digest(
         operation_id: str,
         changes: Sequence[tuple[str, str, dict[str, Any] | None, bool]],
@@ -963,7 +1038,7 @@ class AuditStore:
             actor_id=actor_id,
         )
 
-    def _commit(  # noqa: C901
+    def _commit(  # noqa: C901, PLR0912
         self,
         records: Sequence[Any],
         *,
@@ -1023,6 +1098,25 @@ class AuditStore:
         with _PathLock(self.lock_path):
             _header, transactions, _offset, _raw = self._read_journal(recover=True)
             _state, _history, operations = self._state(transactions)
+            for rid, kind, payload, _deleted in changes_input:
+                previous_type = next(
+                    (
+                        stored.record_type
+                        for stored in reversed(_history.get(rid, ()))
+                        if not stored.deleted
+                    ),
+                    None,
+                )
+                if previous_type is not None and previous_type != kind:
+                    raise AuditStoreError(
+                        f"record type is immutable for {rid!r}: {previous_type!r} -> {kind!r}"
+                    )
+                if kind != "detector_rule_proposal":
+                    continue
+                origins: dict[str, dict[str, Any]] = {}
+                for stored in _history.get(rid, ()):
+                    self._validate_proposal_origin(origins, rid, stored.record)
+                self._validate_proposal_origin(origins, rid, payload)
             previous_operation = operations.get(operation_id)
             if previous_operation is not None:
                 if previous_operation.request_digest != request_digest:
@@ -1160,6 +1254,26 @@ class AuditStore:
         with _PathLock(self.lock_path):
             self._ensure_projection_locked()
 
+    @staticmethod
+    def _stored_record_from_row(row: sqlite3.Row) -> StoredRecord:
+        """Materialize one projected row without re-reading the journal.
+
+        Returns:
+            The typed record and its projection metadata.
+        """
+
+        payload = json.loads(row["payload"]) if row["payload"] is not None else None
+        return StoredRecord(
+            record_id=row["record_id"],
+            record_type=row["record_type"],
+            revision=int(row["revision"]),
+            deleted=bool(row["deleted"]),
+            record=(record_from_dict(payload) if payload is not None else None),
+            operation_id=row["operation_id"],
+            committed_at=row["committed_at"],
+            global_revision=int(row["global_revision"]),
+        )
+
     def get(self, rid: str, *, include_deleted: bool = False) -> StoredRecord | None:
         """Read a projected record, optionally including its latest tombstone.
 
@@ -1176,17 +1290,7 @@ class AuditStore:
         ).fetchone()
         if row is None or (row["deleted"] and not include_deleted):
             return None
-        payload = json.loads(row["payload"]) if row["payload"] is not None else None
-        return StoredRecord(
-            record_id=row["record_id"],
-            record_type=row["record_type"],
-            revision=int(row["revision"]),
-            deleted=bool(row["deleted"]),
-            record=(record_from_dict(payload) if payload is not None else None),
-            operation_id=row["operation_id"],
-            committed_at=row["committed_at"],
-            global_revision=int(row["global_revision"]),
-        )
+        return self._stored_record_from_row(row)
 
     load = get
     get_record = get
@@ -1208,20 +1312,19 @@ class AuditStore:
 
         self._ensure_open()
         self._ensure_projection()
-        query = (
-            "SELECT record_id FROM records WHERE deleted = 0 ORDER BY record_id"
-            if not include_deleted
-            else "SELECT record_id FROM records ORDER BY record_id"
-        )
-        ids = [row["record_id"] for row in self._connection.execute(query)]
-        result = [
-            item
-            for rid in ids
-            if (item := self.get(rid, include_deleted=include_deleted)) is not None
-        ]
+        clauses = [] if include_deleted else ["deleted = 0"]
+        parameters: list[str] = []
         if record_type is not None:
-            result = [item for item in result if item.record_type == record_type]
-        return result
+            clauses.append("record_type = ?")
+            parameters.append(record_type)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._connection.execute(
+            "SELECT record_id, record_type, revision, deleted, payload, operation_id, "
+            "committed_at, global_revision FROM records"
+            f"{where} ORDER BY record_id",
+            parameters,
+        )
+        return [self._stored_record_from_row(row) for row in rows]
 
     records = list_records
 

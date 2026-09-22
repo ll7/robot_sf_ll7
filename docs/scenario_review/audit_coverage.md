@@ -115,9 +115,31 @@ or missing statuses remain visible as typed deficits; they require a matching
 declared exception for `complete_with_declared_exceptions`. Malformed rows are
 rejected rather than treated as successful evidence.
 
-When a source or scan revision is active, a BA-03 `ReviewRecord.source_revision`
-must carry the active revision token. Reviews with unavailable or stale
-revision provenance remain visible but cannot enter the human denominator.
+When a BA-01 source and scan identity are active, a BA-03
+`ReviewRecord.source_identity` and `ReviewRecord.scan_identity` must carry the
+exact admitted source-commit and scan/cache tokens. They are distinct from the
+integer `ReviewRecord.source_revision`, which remains the editor selection/CAS
+revision. Reviews with unavailable or stale source/scan provenance remain
+visible but cannot enter the human denominator; a source digest is not a
+substitute for either token.
+
+The BA-02 queue admits new source/scan identity pairs through the typed
+BA-01 scan-report boundary. Queue serialization retains the producer marker
+and identity-binding token for lossless reload, but a reloaded mapping is not
+an in-process scanner admission and cannot grant new review credit. A fresh
+typed scan rebind is required after reload; `QueueDataset.from_mapping()` is
+not a replacement for that scanner admission. The binding token provides
+transport integrity, not cryptographic authentication of an untrusted
+producer.
+
+The live read-only coverage adapter uses `coverage_reviews_for_scan` to
+project a durable queue review's generated `EpisodeRef` ID onto the literal
+BA-01 inventory row ID. This does not itself create a review receipt.
+It does so only from the admitted typed scan, with an exact match across all
+episode identity fields and a unique readable row. Ambiguous or unmatched
+generated IDs earn no credit; the stored review is not rewritten. BA-04 still
+checks the review's source and scan tokens after projection. Direct BA-04
+evaluation continues to require literal inventory row IDs.
 
 Missing, unavailable, invalid, duplicate, unsupported, and error states remain
 in the report. A declared exception is a closed, non-empty

@@ -153,6 +153,60 @@ operation replay queries the authoritative `AuditStore` and returns the stored
 receipt—including its original timestamp—without advancing queue state.  A
 missing authoritative receipt or changed material is an explicit conflict.
 
+## BA-05 service Next boundary
+
+`AuditService.record_human_review` is a separate explicit write; Next and
+annotations never award human coverage credit. It requires an identified
+human session, the current selected packet, matching service context and
+queue state/input revisions, and an in-process typed BA-01 scan admission.
+The BA-02 adapter holds the same durable coordination lock used by Next while
+it calls the queue's canonical `record_review`, which stores the BA-03 receipt.
+An unresolved Next lease, an agent session, or a stale/ambiguous selection
+fails closed. A crash after the queue/store write but before the service
+receipt can leave an inflight authority operation requiring reconciliation;
+this is not a cross-store atomic transaction. BA-06 browser exposure of this
+action is a separate integration step.
+
+`AuditService.next` is the authenticated BA-05 owner for advancing this queue.
+It calls the canonical `AuditQueue.select_next` through a durable sibling lock,
+and binds the campaign, source identity/revision, queue input revision, queue
+state revision, packet, and versioned service context before returning a
+selection.  A queue-side `state.json.service-next.json` coordination sidecar
+records a bounded preflight lease and the complete operation-to-selection
+envelope.  A different client is rejected while preflight is active; after a
+queue commit, the unresolved lease blocks every client for that queue, including
+another authenticated session.  Replays use the exact recorded selection ID,
+packet, explanation, queue revisions, source identity/revision, and service
+context binding rather than the latest current packet.
+The completed replay index is intentionally finite: it retains at most 512
+operation envelopes.  Once an older entry is evicted, exact replay for that
+operation is unavailable and requires the same explicit reconciliation path as
+any other missing sidecar evidence.
+If the session context advances before replay finalization, the immutable
+sidecar envelope still closes the lease, but the operation returns an explicit
+historical/unavailable status with its durable receipt; the old packet is never
+presented as the new current context.
+
+The sibling lock and sidecar serialize service clients, but they are not an
+atomic transaction across the queue JSON state and the separate BA-05
+authority store.  The sidecar is coordination metadata, not a second queue
+state owner.  If the process stops after `AuditQueue.select_next` commits but
+before the authority context or terminal operation receipt commits, the
+authority operation remains `inflight` and the lease remains
+`queue_committed`; a retry returns explicit unavailable/conflict status and
+never silently advances another packet.  If the sidecar or either store is
+malformed, stale, or unavailable, Next fails closed.  Manual reconciliation is
+required to clear an unresolved post-queue boundary; the design does not claim
+cross-store atomicity.
+
+If a process stops after the queue state commits but before the authority
+context or terminal operation receipt commits, the authority operation remains
+`inflight`.  A retry therefore returns an explicit conflict or unavailable
+result and never selects another packet.  Reconciliation must use the durable
+`current_packet`, `selection_history`, `state_revision`, `input_revision`, and
+the persisted operation/context identities; this boundary must not be
+described as cross-store atomicity.
+
 BA-03 remains the annotation backup/restore owner.  Use its canonical
 `AuditStore.export`/`AuditStore.restore` for annotation history; queue state is
 an additional local JSON snapshot and does not replace the audit journal.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from robot_sf.analysis_workbench.audit_contracts import (
     ActionRecord,
@@ -12,12 +13,14 @@ from robot_sf.analysis_workbench.audit_contracts import (
     AuditContractError,
     AuditIdentityError,
     CampaignAudit,
+    DetectorRuleProposal,
     EpisodeRef,
     ImageDisplayTransform,
     Reference,
     Signal,
     TimeInterval,
     deserialize_record,
+    load_audit_record_schema,
     record_to_dict,
     serialize_record,
     validate_record,
@@ -38,6 +41,34 @@ def _episode(**changes) -> EpisodeRef:
     }
     values.update(changes)
     return EpisodeRef(**values)
+
+
+def _proposal(**changes) -> DetectorRuleProposal:
+    values = {
+        "proposal_id": "proposal-1",
+        "proposal_kind": "threshold_change",
+        "target_detector_id": "goal_adjacent_timeout",
+        "candidate_rule": {
+            "predicate": "goal_adjacent_timeout.v1",
+            "parameters": {"tail_steps": 120, "wall_margin_m": 0.5},
+        },
+        "detector_registry_version": "audit-detector-registry.v1",
+        "detector_registry_digest": "d" * 64,
+        "campaign_digest": "a" * 64,
+        "source_identity": "source-1",
+        "source_revision": "commit-1",
+        "annotation_ids": ("annotation-1",),
+        "finding_ids": ("finding-1",),
+        "episode_ids": ("episode-1",),
+        "rationale": "The observed tail behavior warrants a bounded threshold probe.",
+        "metadata": {"evidence_boundary": "diagnostic_only"},
+        "proposer_kind": "agent",
+        "proposer_id": "agent-1",
+        "author_kind": "agent",
+        "author_id": "agent-1",
+    }
+    values.update(changes)
+    return DetectorRuleProposal(**values)
 
 
 def test_episode_identity_does_not_collapse_reruns_with_same_lookup_fields() -> None:
@@ -304,6 +335,209 @@ def test_missing_signal_is_explicit_and_records_round_trip() -> None:
     payload = record_to_dict(signal)
     validate_record(payload)
     assert deserialize_record(serialize_record(signal)) == signal
+
+
+def test_detector_rule_proposal_is_typed_strict_and_round_trips() -> None:
+    proposal = _proposal()
+    payload = record_to_dict(proposal)
+
+    validate_record(payload)
+    assert payload["record_type"] == "detector_rule_proposal"
+    assert payload["activation_status"] == "inactive"
+    assert deserialize_record(serialize_record(proposal)) == proposal
+
+
+@pytest.mark.parametrize(
+    "executable_key",
+    (
+        "callable",
+        "module",
+        "shell_command",
+        "python_expression",
+        "command",
+        "CALL-BACK",
+        "shell.command",
+        "pythonexpression",
+        "__class__",
+        "__code__",
+        "call_back",
+        "call__back",
+        "call_back_handler",
+        "class_name",
+        "code_path",
+        "c_l_a_s_s_name",
+        "c_o_d_e_path",
+        "e_xec",
+        "c_a_l_l_a_b_l_e",
+        "r_un_time",
+        "p_ython",
+        "c_ommand",
+        "e_ntrypoint",
+    ),
+)
+def test_detector_rule_proposal_rejects_executable_candidate_keys(executable_key: str) -> None:
+    with pytest.raises(AuditContractError, match="declarative|executable"):
+        _proposal(candidate_rule={"predicate": "candidate", executable_key: "run-me"})
+
+
+def test_detector_rule_proposal_schema_rejects_nested_executable_keys() -> None:
+    schema = load_audit_record_schema()
+    validator = Draft202012Validator(schema)
+    for executable_key in (
+        "CALL-BACK",
+        "shell.command",
+        "pythonexpression",
+        "call_back",
+        "call__back",
+        "call_back_handler",
+        "c_l_a_s_s_name",
+        "c_o_d_e_path",
+        "e_xec",
+        "c_a_l_l_a_b_l_e",
+        "r_un_time",
+        "p_ython",
+        "c_ommand",
+        "e_ntrypoint",
+    ):
+        payload = record_to_dict(_proposal())
+        payload["candidate_rule"] = {"outer": {"inner": {executable_key: "run-me"}}}
+        assert list(validator.iter_errors(payload))
+        with pytest.raises(AuditContractError):
+            deserialize_record(payload)
+
+
+def test_detector_rule_proposal_schema_enforces_human_decision_gate() -> None:
+    validator = Draft202012Validator(load_audit_record_schema())
+    approved = _proposal(
+        lifecycle_status="approved",
+        author_kind="human",
+        author_id="reviewer-1",
+        decided_by_kind="human",
+        decided_by_id="reviewer-1",
+        decided_at="2026-09-20T10:00:00Z",
+        decision_reason="Human review accepted this diagnostic candidate.",
+    )
+    valid = record_to_dict(approved)
+    assert list(validator.iter_errors(valid)) == []
+
+    invalid_payloads = {}
+    payload = record_to_dict(_proposal())
+    payload["lifecycle_status"] = "approved"
+    invalid_payloads["approved_missing_decision"] = payload
+    payload = record_to_dict(_proposal())
+    payload["lifecycle_status"] = "approved"
+    invalid_payloads["approved_agent_author"] = payload
+    payload = record_to_dict(_proposal())
+    payload["lifecycle_status"] = "approved"
+    payload["author_kind"] = "human"
+    invalid_payloads["approved_human_missing_fields"] = payload
+    payload = record_to_dict(_proposal())
+    payload.update(
+        {
+            "lifecycle_status": "approved",
+            "author_kind": "human",
+            "decided_by_kind": "human",
+            "decided_by_id": "   ",
+            "decided_at": "2026-09-20T10:00:00Z",
+            "decision_reason": "Human review accepted this diagnostic candidate.",
+        }
+    )
+    invalid_payloads["approved_whitespace_decider"] = payload
+    payload = record_to_dict(_proposal())
+    payload.update(
+        {
+            "lifecycle_status": "approved",
+            "author_kind": "human",
+            "decided_by_kind": "human",
+            "decided_by_id": "reviewer-1",
+            "decided_at": "   ",
+            "decision_reason": "Human review accepted this diagnostic candidate.",
+        }
+    )
+    invalid_payloads["approved_whitespace_decided_at"] = payload
+    payload = record_to_dict(_proposal())
+    payload.update(
+        {
+            "lifecycle_status": "approved",
+            "author_kind": "human",
+            "decided_by_kind": "human",
+            "decided_by_id": "reviewer-1",
+            "decided_at": "2026-09-20T10:00:00Z",
+            "decision_reason": "   ",
+        }
+    )
+    invalid_payloads["approved_whitespace_reason"] = payload
+    payload = record_to_dict(_proposal())
+    payload["rationale"] = "   "
+    invalid_payloads["whitespace_rationale"] = payload
+    payload = record_to_dict(_proposal())
+    payload["source_revision"] = "   "
+    invalid_payloads["whitespace_source_revision"] = payload
+    payload = record_to_dict(_proposal())
+    payload["metadata"] = {"   ": True}
+    invalid_payloads["whitespace_metadata_key"] = payload
+    invalid_payloads["proposed_with_decision"] = record_to_dict(_proposal())
+    payload = record_to_dict(_proposal())
+    payload.update(
+        {
+            "lifecycle_status": "rejected",
+            "author_kind": "human",
+            "author_id": "reviewer-1",
+            "decided_by_kind": "agent",
+            "decided_by_id": "agent-1",
+            "decided_at": "2026-09-20T10:00:00Z",
+            "decision_reason": "Agent cannot decide.",
+        }
+    )
+    invalid_payloads["rejected_agent_decider"] = payload
+    invalid_payloads["proposed_with_decision"]["decided_by_kind"] = "human"
+    invalid_payloads["proposed_with_decision"]["decided_by_id"] = "reviewer-1"
+    invalid_payloads["proposed_with_decision"]["decided_at"] = "2026-09-20T10:00:00Z"
+    invalid_payloads["proposed_with_decision"]["decision_reason"] = "Human decision"
+    for name, payload in invalid_payloads.items():
+        assert list(validator.iter_errors(payload)), name
+
+
+def test_detector_rule_proposal_nested_candidate_is_immutable_after_construction() -> None:
+    proposal = _proposal()
+    with pytest.raises(TypeError):
+        proposal.candidate_rule["parameters"]["tail_steps"] = 121
+    with pytest.raises(TypeError):
+        proposal.candidate_rule["parameters"]["shell.command"] = "run-me"
+    assert deserialize_record(serialize_record(proposal)) == proposal
+
+
+def test_detector_rule_proposal_requires_human_decision_and_stays_inactive() -> None:
+    with pytest.raises(AuditContractError, match="human|decision"):
+        _proposal(lifecycle_status="approved")
+    with pytest.raises(AuditContractError, match="inactive"):
+        _proposal(activation_status="active")
+    with pytest.raises(AuditContractError, match="decision fields"):
+        _proposal(decided_by_kind="human")
+    with pytest.raises(AuditContractError, match="human"):
+        _proposal(
+            lifecycle_status="rejected",
+            decided_by_kind="agent",
+            decided_by_id="agent-1",
+            decided_at="2026-09-20T10:00:00Z",
+            decision_reason="agent cannot decide",
+        )
+    with pytest.raises(AuditContractError, match="decision"):
+        _proposal(
+            lifecycle_status="approved",
+            author_kind="human",
+            decided_by_kind="human",
+            decided_by_id="reviewer-1",
+            decided_at="2026-09-20T10:00:00Z",
+            decision_reason="   ",
+        )
+
+
+def test_detector_rule_proposal_payload_rejects_unknown_root_fields() -> None:
+    payload = record_to_dict(_proposal())
+    payload["unexpected"] = True
+    with pytest.raises(AuditContractError):
+        deserialize_record(payload)
 
 
 def test_action_record_payload_validates_with_closed_root_properties() -> None:

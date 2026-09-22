@@ -162,9 +162,11 @@ const scheduler = {
   },
 };
 
+const cursorEvents = [];
 const playback = new ReviewPanelsController(model(), null, {
   now: () => now,
   scheduler,
+  onCursorChange: (cursor) => cursorEvents.push(cursor),
 });
 assert.equal(nearestSample(playback.model.streams.scene, 0.5).sample_time_s, 0);
 playback.dispatch({ type: "toggle-play" });
@@ -176,6 +178,9 @@ playback.dispatch({ type: "set-speed", speed: 2 });
 now = 1500;
 playback.tick(now);
 assert.equal(playback.state.cursorTimeS, 2);
+assert.deepEqual(cursorEvents.map((cursor) => [cursor.time_s, cursor.source]), [
+  [1, "playback"], [2, "playback"],
+]);
 
 now = 0;
 const controlClock = new ReviewPanelsController(model(), null, {

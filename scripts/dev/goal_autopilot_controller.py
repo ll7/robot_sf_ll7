@@ -42,6 +42,12 @@ A missing or drifted pass binding, or any stale lifecycle row, refuses every
 exhaustion verdict and routes ``reconcile_lifecycle``, ``reconcile_blockers``,
 or ``run_preparation`` instead of ``refresh_controller_evidence`` or a
 terminal receipt.
+
+An optional ``preparation.lifecycle_reconciliation`` block carries the
+``lifecycle_state_reconcile.v1`` summary counts (``unresolved_drift_count``
+and ``repaired_count``). When present, unresolved lifecycle drift routes the
+next action to ``reconcile_lifecycle`` and blocks terminal zero-work; when
+absent, arbitration is unchanged.
 """
 
 from __future__ import annotations
@@ -296,6 +302,33 @@ def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed e
         errors=errors,
     )
 
+    lifecycle = preparation.get("lifecycle_reconciliation")
+    lifecycle_unresolved: int | None = None
+    lifecycle_repaired: int | None = None
+    lifecycle_evidence_ok = True
+    if lifecycle is not None:
+        if not isinstance(lifecycle, Mapping):
+            errors.append("preparation.lifecycle_reconciliation_not_object")
+            lifecycle_evidence_ok = False
+        else:
+            unresolved = lifecycle.get("unresolved_drift_count")
+            repaired = lifecycle.get("repaired_count")
+            unresolved_ok = (
+                not isinstance(unresolved, bool) and isinstance(unresolved, int) and unresolved >= 0
+            )
+            repaired_ok = (
+                not isinstance(repaired, bool) and isinstance(repaired, int) and repaired >= 0
+            )
+            if not unresolved_ok:
+                errors.append("preparation.lifecycle_unresolved_drift_count_invalid")
+                lifecycle_evidence_ok = False
+            if not repaired_ok:
+                errors.append("preparation.lifecycle_repaired_count_invalid")
+                lifecycle_evidence_ok = False
+            if unresolved_ok and repaired_ok:
+                lifecycle_unresolved = unresolved
+                lifecycle_repaired = repaired
+
     optional_counts: dict[str, int | None] = {}
     for field in PREPARATION_COUNT_FIELDS:
         if field not in preparation:
@@ -371,6 +404,9 @@ def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed e
         "preparation": preparation,
         "discovery": discovery,
         "freshness": freshness,
+        "lifecycle_unresolved": lifecycle_unresolved,
+        "lifecycle_repaired": lifecycle_repaired,
+        "lifecycle_evidence_ok": lifecycle_evidence_ok,
         "counts": {
             "claimable_count": claimable_count,
             "merge_ready_count": merge_ready_count,
@@ -448,6 +484,10 @@ def _build_zero_work_proof(normalized: Mapping[str, Any]) -> dict[str, Any]:
             "formalizable_count": normalized["counts"]["formalizable_count"],
             "blocker_reconciliation_count": normalized["counts"]["blocker_reconciliation_count"],
             "blocker_reconciliation_complete": True,
+            "lifecycle_reconciliation": {
+                "unresolved_drift_count": normalized.get("lifecycle_unresolved"),
+                "repaired_count": normalized.get("lifecycle_repaired"),
+            },
             **{field: normalized["counts"][field] for field in PREPARATION_COUNT_FIELDS},
         },
         "discovery": {
@@ -491,6 +531,8 @@ def _lane_statuses(normalized: Mapping[str, Any]) -> dict[str, str]:
         and normalized["reconciliation_complete"]
         and normalized["audit_evidence_ok"]
         and normalized["reconciliation_evidence_ok"]
+        and normalized["lifecycle_evidence_ok"]
+        and (normalized["lifecycle_unresolved"] is None or normalized["lifecycle_unresolved"] == 0)
         else "preparation_queue_pending"
     )
     discovery_status = (
@@ -521,6 +563,12 @@ def _choose_next_action(  # noqa: C901, PLR0912 - precedence is the controller c
         return "recover_pr", None
     if _positive(counts, "open_count"):
         return "review", None
+    lifecycle_drift = _positive(counts, "stale_state_count") or (
+        isinstance(normalized.get("lifecycle_unresolved"), int)
+        and normalized["lifecycle_unresolved"] > 0
+    )
+    if lifecycle_drift:
+        return "reconcile_lifecycle", None
     if _positive(counts, "claimable_count"):
         return "implement", None
     if _positive(counts, "promotable_count"):
@@ -535,8 +583,6 @@ def _choose_next_action(  # noqa: C901, PLR0912 - precedence is the controller c
         return "decompose_issue", None
     if _positive(counts, "active_handoff_count"):
         return "recover_pr", None
-    if _positive(counts, "stale_state_count"):
-        return "reconcile_lifecycle", None
     if not normalized["reconciliation_evidence_ok"]:
         return "reconcile_blockers", None
     if not normalized["audit_evidence_ok"]:
@@ -574,6 +620,8 @@ def _preparation_terminal(normalized: Mapping[str, Any]) -> bool:
         and normalized["reconciliation_complete"]
         and normalized["audit_evidence_ok"]
         and normalized["reconciliation_evidence_ok"]
+        and normalized["lifecycle_evidence_ok"]
+        and (normalized["lifecycle_unresolved"] is None or normalized["lifecycle_unresolved"] == 0)
     )
 
 
@@ -773,6 +821,19 @@ def validate_zero_work_proof(  # noqa: C901, PLR0912, PLR0915 - validate every p
                 reasons.append(f"proof_{field}_drift")
         if preparation.get("blocker_reconciliation_complete") is not True:
             reasons.append("proof_blocker_reconciliation_incomplete")
+        lifecycle_proof = preparation.get("lifecycle_reconciliation")
+        if lifecycle_proof is not None:
+            if not isinstance(lifecycle_proof, Mapping):
+                reasons.append("proof_lifecycle_reconciliation_not_object")
+            else:
+                unresolved = lifecycle_proof.get("unresolved_drift_count")
+                if unresolved is not None and unresolved != 0:
+                    reasons.append("proof_lifecycle_drift_unresolved")
+                repaired = lifecycle_proof.get("repaired_count")
+                if repaired is not None and (
+                    isinstance(repaired, bool) or not isinstance(repaired, int) or repaired < 0
+                ):
+                    reasons.append("proof_lifecycle_repaired_count_invalid")
         if (
             not isinstance(preparation.get("audit_digest"), str)
             or SHA256_RE.fullmatch(preparation.get("audit_digest", "")) is None

@@ -22,8 +22,10 @@ from robot_sf.analysis_workbench.audit_contracts import (
     Signal,
     record_to_dict,
 )
+from robot_sf.analysis_workbench.audit_coverage import evaluate_coverage
 from robot_sf.analysis_workbench.audit_queue import (
     ACTIVE_WEIGHTS,
+    SCAN_IDENTITY_PRODUCER,
     ActivePolicy,
     AuditQueue,
     CoverageDeficit,
@@ -37,6 +39,7 @@ from robot_sf.analysis_workbench.audit_queue import (
     QueueStateError,
     ScanSummary,
     _packet_content_identity,
+    _review_content_identity,
     load_queue_input,
 )
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
@@ -307,6 +310,206 @@ def test_ba01_raw_report_signal_adapts_to_canonical_episode_ref() -> None:
     result = AuditQueue(dataset, policy=QueuePolicy.fixed()).rank_candidates()[0]
     assert result.explanation.priority_band == "benchmark_config_defect"
     assert result.explanation.components["signal_strength"] == 1.0
+
+
+def test_ba01_scan_identities_bind_queue_review_and_survive_reload() -> None:
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "analysis_workbench"
+        / "audit_campaign_v1"
+        / "campaign.json"
+    )
+    report = scan_campaign(fixture, root=fixture.parents[4])
+    assert report.episode_refs
+    summary = ScanSummary.from_scan_report(report)
+    episode = report.episode_refs[0]
+    queue = AuditQueue(QueueDataset((episode,), scan_summary=summary))
+
+    review = queue.record_review(
+        episode_id=episode.episode_id,
+        outcome="pass",
+        operation_id="queue-bound-review",
+    )
+    assert review.source_identity == report.audit.source.source_commit
+    assert review.scan_identity == report.cache_key
+    assert queue.dataset.source_identity == report.audit.source.source_commit
+    assert queue.dataset.scan_identity == report.cache_key
+    typed_coverage = evaluate_coverage(
+        report,
+        identity={"release_digest": "release-queue-typed"},
+        expected_rows=[
+            {
+                "episode_id": episode.episode_id,
+                "planner_id": episode.planner_id,
+                "scenario_group": episode.scenario_id,
+                "outcome": "success",
+            }
+        ],
+        review_records=(review,),
+    )
+    assert typed_coverage.counts["reviews"]["full_episode_human"] == 1
+    assert typed_coverage.counts["reviews"]["stale_or_mismatched"] == 0
+
+    restored = QueueDataset.from_mapping(queue.dataset.to_dict())
+
+    assert restored.source_identity == queue.dataset.source_identity
+    assert restored.scan_identity == queue.dataset.scan_identity
+    assert restored.scan_summary == summary
+    assert summary.identity_is_verified
+    assert restored.scan_summary is not None
+    assert not restored.scan_summary.identity_is_verified
+    assert restored.review_records == (review,)
+
+    reloaded_review = AuditQueue(restored).record_review(
+        episode_id=episode.episode_id,
+        operation_id="queue-reloaded-review",
+    )
+    assert reloaded_review.source_identity == ""
+    assert reloaded_review.scan_identity == ""
+
+    rebound = QueueDataset(
+        restored.candidates,
+        scan_summary=ScanSummary.from_scan_report(report),
+        review_records=restored.review_records,
+    )
+    rebound_review = AuditQueue(rebound).record_review(
+        episode_id=episode.episode_id,
+        operation_id="queue-rebound-review",
+    )
+    assert rebound_review.source_identity == report.audit.source.source_commit
+    assert rebound_review.scan_identity == report.cache_key
+
+
+def test_queue_review_content_identity_binds_source_and_scan_tokens() -> None:
+    review = ReviewRecord(
+        review_id="review-identity",
+        episode_id="episode-identity",
+        scope="full_episode",
+        source_identity="source-commit",
+        scan_identity="scan-cache-key",
+    )
+
+    assert _review_content_identity(review) != _review_content_identity(
+        replace(review, source_identity="other-source-commit")
+    )
+    assert _review_content_identity(review) != _review_content_identity(
+        replace(review, scan_identity="other-scan-cache-key")
+    )
+
+
+def test_queue_review_replay_rejects_changed_scan_identity() -> None:
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "analysis_workbench"
+        / "audit_campaign_v1"
+        / "campaign.json"
+    )
+    report = scan_campaign(fixture, root=fixture.parents[4])
+    changed_report = scan_campaign(
+        fixture,
+        root=fixture.parents[4],
+        include_advisory=False,
+    )
+    candidate = QueueCandidate(report.episode_refs[0])
+    queue = AuditQueue(
+        QueueDataset(
+            (candidate,),
+            scan_summary=ScanSummary.from_scan_report(report),
+        )
+    )
+    queue.record_review(episode_id=candidate.episode_id, operation_id="identity-replay")
+    queue.update_dataset(
+        QueueDataset(
+            (candidate,),
+            scan_summary=ScanSummary.from_scan_report(changed_report),
+        )
+    )
+
+    with pytest.raises(QueueOperationConflictError, match="identity-replay:action"):
+        queue.record_review(episode_id=candidate.episode_id, operation_id="identity-replay")
+
+
+def test_queue_review_identities_cannot_be_overridden_without_scan_summary() -> None:
+    candidate = _candidate("identity-boundary")
+    summary = ScanSummary(
+        "scan-summary",
+        source_identity="source-commit",
+        scan_identity="scan-cache-key",
+        identity_producer=SCAN_IDENTITY_PRODUCER,
+    )
+    untrusted_review = AuditQueue(QueueDataset((candidate,), scan_summary=summary)).record_review(
+        episode_id=candidate.episode_id, operation_id="untrusted-summary-review"
+    )
+    assert untrusted_review.source_identity == ""
+    assert untrusted_review.scan_identity == ""
+
+    with pytest.raises(QueueInputError, match="scanner-owned scan_summary"):
+        QueueDataset(
+            (candidate,),
+            source_identity="source-commit",
+            scan_identity="scan-cache-key",
+        )
+    with pytest.raises(QueueInputError, match="match scan_summary identities"):
+        QueueDataset(
+            (candidate,),
+            scan_summary=summary,
+            source_identity="untrusted-source-commit",
+            scan_identity="scan-cache-key",
+        )
+    with pytest.raises(QueueInputError, match="typed BA-01 producer binding"):
+        QueueDataset(
+            (candidate,),
+            scan_summary={
+                "summary_id": "scan-summary",
+                "source_identity": "source-commit",
+                "scan_identity": "scan-cache-key",
+            },
+        )
+
+
+def test_forged_scan_summary_mapping_cannot_mint_ba04_credit() -> None:
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "analysis_workbench"
+        / "audit_campaign_v1"
+        / "campaign.json"
+    )
+    report = scan_campaign(fixture, root=fixture.parents[4])
+    episode = report.episode_refs[0]
+    forged_summary = {
+        "summary_id": report.cache_key,
+        "campaign_digest": report.audit.campaign_digest,
+        "source_digest": report.audit.source_digest,
+        "source_identity": report.audit.source.source_commit,
+        "scan_identity": report.cache_key,
+        "identity_producer": SCAN_IDENTITY_PRODUCER,
+    }
+    queue = AuditQueue(QueueDataset((episode,), scan_summary=forged_summary))
+
+    forged_review = queue.record_review(
+        episode_id=episode.episode_id,
+        operation_id="forged-summary-review",
+    )
+    assert forged_review.source_identity == ""
+    assert forged_review.scan_identity == ""
+    forged_coverage = evaluate_coverage(
+        report,
+        identity={"release_digest": "release-forged"},
+        expected_rows=[
+            {
+                "episode_id": episode.episode_id,
+                "planner_id": episode.planner_id,
+                "scenario_group": episode.scenario_id,
+                "outcome": "success",
+            }
+        ],
+        review_records=(forged_review,),
+    )
+    assert forged_coverage.counts["reviews"]["full_episode_human"] == 0
+    assert forged_coverage.counts["reviews"]["stale_or_mismatched"] == 1
 
 
 def test_local_signal_with_unrelated_episode_id_fails_closed() -> None:

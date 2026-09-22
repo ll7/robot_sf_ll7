@@ -40,7 +40,47 @@ remain ledger outcomes, never silent budget resets. Hosted/live evidence must
 report the selected mode and whether a physical provider cap was actually
 verified.
 
-This initial pull request adds only this file. The implementation coordinator must review, correct and merge this documentation PR first, then deliver the complete package in independently reviewed implementation slices. Merging this plan does not close any implementation issue.
+### Additive implementation and acceptance amendment (2026-09-22)
+
+The original plan publication was documentation-only. The current implementation
+is deliberately recorded as independently reviewed slices; this amendment does
+not replace the requirements register and does not close the epic.
+
+| Slice | Exact reviewed head | Hosted evidence | Result |
+| --- | --- | --- | --- |
+| BA-05 D1 append-only publication | PR #9559, `ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088` | run `35655668527`, accepted retry | accepted bounded slice |
+| BA-05 D2 route/accounting | PR #9558, `78fb3c818fafe1ae0ea1522c96092e55b8460e3b` | run `35658827492` | accepted bounded slice |
+| BA-06 server-held publication | PR #9561, `e2c84dd8ea75bd63a62005ecbc55ae7847d06328` | run `35667772524` | diagnostic-only slice |
+| BA-06 external MCP context | PR #9565, `2d486ed94bfc1d785e1fe576ca8232ab3bc7d880` | run `35676387775`, attempt 2 | diagnostic-only slice |
+| BA-06 runtime friction repair | PR #9569, `4833a1eb06b60f04aca78003789bdf992361c8be` | run `35683653944`; merge gate `35685480912` | merged; 64.88 s → 17.55 s |
+
+BA-05 acceptance is therefore bounded to the offline/fake-provider and route
+contracts plus the hosted evidence above. The REST transport's admissible V1
+path is append-only: one immutable issue snapshot followed by marker-bearing
+auditor comments. GitHub's ordinary issue API does not supply a proven
+cross-system compare-and-swap or exactly-once delivery boundary. Complete
+marker pagination, timeout reconciliation, duplicate-marker detection, local
+outbox recovery, and the canonical finding-link CAS remain explicit gates. A
+read-then-`PATCH` body update is not CAS and must never be promoted as live
+evidence; body-CAS helpers are compatibility fakes only.
+
+Codex accounting is likewise bounded. `offline` is provider-free and
+read-only; `local_accounting` records finite local reservations and any
+provider overspend without claiming physical enforcement; and
+`strict_provider_ceiling` refuses admission unless a finite provider ceiling
+is verified. The tested App Server exposes token telemetry but no measured
+provider compute cap, so no strict live route or premium-provider fallback is
+claimed. A future live receipt must include the selected accounting mode,
+provider/model route, verified-cap status, and before/after usage.
+
+BA-06 remains open for the full real-data/browser workflow, recovery and
+cancellation, native/source-bound diagnostics, and a live Codex/MCP receipt.
+SREV #9285/#9287/#9288 are contract/test integrated; #9296/#9299 still depend
+on admitted-source/live evidence and prerequisite #9417 enforcement. The full
+decision matrix and machine receipt are in
+[`benchmark_auditor_v1_acceptance_2026-09-22.md`](./benchmark_auditor_v1_acceptance_2026-09-22.md).
+
+Merging this plan amendment does not close #9483, #9488, or #9489.
 
 ## 1. Goal and product boundary
 

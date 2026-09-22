@@ -5,6 +5,29 @@ are not complete.** The report is an evidence receipt, not a benchmark result.
 Fallback, degraded, unavailable, synthetic, and diagnostic-only paths are not
 promoted to scientific or release evidence.
 
+## Post-BA-06 materialization update (2026-09-22)
+
+The bounded BA-06 materialization continuation is now merged on top of the
+accepted BA-05 package. This additive update supersedes the historical
+`current origin/main` line below for the repository's current state; the
+dated slice table and matrix retain their original receipts.
+
+- Current `origin/main`: `f231fc2faa729a5c96f732d4d690365882878feb`.
+- PR #9571 exact reviewed head: `1aa3bb47bc60771d0511a36a201e1084c2c9c01e`.
+- PR #9571 guarded squash merge: `f231fc2faa729a5c96f732d4d690365882878feb`.
+- Final PR metadata digest: `492a32dfe252d660757c700fd9e8e9b7dab95936204ef9fa5ac1fadef0b407f3`.
+- Hosted CI run `35688989382` passed; changed-coverage job `106625885543`
+  passed; merge-queue gate `35690704033` passed.
+- Focused proof: runtime contract passed; render/launch/server tests `174
+  passed in 83.92 s`; full docs/link scan passed for `2123` Markdown files.
+
+The slice exposes one revision-bound, server-held materialization action and
+keeps the result diagnostic-only. It does not accept live GitHub CAS,
+exactly-once delivery, a physical provider ceiling, retained media, native
+source diagnostics, live Codex, real-data browser execution, or recovery.
+BA-06 issue #9489 and epic #9483 remain open; this report does not declare
+either complete.
+
 ## Current revision and acceptance boundary
 
 - Repository: `ll7/robot_sf_ll7`.

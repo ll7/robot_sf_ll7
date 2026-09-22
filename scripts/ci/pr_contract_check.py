@@ -119,6 +119,79 @@ def _find_closed_references(text: str) -> list[tuple[str | None, str]]:
     return references
 
 
+GITHUB_CLOSING_PARITY_TAG = "[github-closing-parity]"
+
+
+def find_github_parity_closing_mentions(text: str) -> list[tuple[str | None, str, str]]:
+    """Extract raw closing-keyword mentions as GitHub parses them.
+
+    GitHub matches closing keywords (close/fix/resolve + issue reference)
+    without negation awareness, so prose such as ``does not close #123``
+    still registers ``#123`` in ``closingIssuesReferences`` and auto-closes
+    it on merge (observed in issue #9566 via PR #9565). This helper returns
+    ``(target_repo, issue_number, matched_text)`` triples for every raw
+    pattern match, before negation filtering, so callers can flag mentions
+    the repository parser excuses but GitHub honors.
+    """
+    mentions: list[tuple[str | None, str, str]] = []
+    for match in CLOSING_PATTERN.finditer(text):
+        target_repo = match.group("qualified_repo") or match.group("url_repo")
+        issue = match.group("qualified_issue") or match.group("issue") or match.group("url_issue")
+        if issue:
+            mentions.append((target_repo, issue, match.group(0)))
+    return mentions
+
+
+def check_github_closing_parity(
+    body: str,
+    repo: str,
+    *,
+    commit_messages: str | None = None,
+    commit_messages_checked: bool = False,
+) -> list[str]:
+    """Rule 1b: fail closed when prose closing mentions diverge from repo parsing.
+
+    Any closing-keyword + issue reference that GitHub honors but the
+    negation-aware repository parser excuses (e.g. ``does not close #123``)
+    auto-closes the issue on merge. Intentional ``Closes #123`` references
+    appear in both parses and remain governed by closes-discipline; only the
+    divergent (negated/prose) mentions are flagged here. The author must
+    rephrase without a closing keyword (e.g. ``leaves #123 open``).
+    """
+    blockers: list[str] = []
+    sources = [("PR body", body)]
+    if commit_messages_checked:
+        if not isinstance(commit_messages, str) or not commit_messages.strip():
+            blockers.append(
+                f"BLOCKER: {GITHUB_CLOSING_PARITY_TAG} Could not verify PR commit messages before "
+                "evaluating GitHub closing-keyword parity. The check fails closed; retry when "
+                "GitHub commit metadata is available."
+            )
+        else:
+            sources.append(("PR commit message", commit_messages))
+
+    local_repo = repo.strip().lower()
+    seen_issues: set[str] = set()
+    for source_name, source_text in sources:
+        excused = set(_find_closed_references(source_text))
+        for target_repo, issue, snippet in find_github_parity_closing_mentions(source_text):
+            if target_repo is not None and target_repo.lower() != local_repo:
+                continue
+            if (target_repo, issue) in excused:
+                continue
+            if issue in seen_issues:
+                continue
+            seen_issues.add(issue)
+            blockers.append(
+                f"BLOCKER: {GITHUB_CLOSING_PARITY_TAG} {source_name} contains prose closing mention "
+                f"'{snippet.strip()}' targeting #{issue}, which GitHub parses as a closing reference "
+                f"even when negated (see issue #9566: 'does not close #9489' auto-closed the parent). "
+                f"Rephrase without a closing keyword (e.g. 'leaves #{issue} open') so only explicit "
+                f"'Closes #{issue}' declarations close issues."
+            )
+    return blockers
+
+
 def find_closed_issues(body: str, repo: str | None = None) -> list[str]:
     """Extract issue numbers that this PR claims to close.
 
@@ -1247,7 +1320,7 @@ def run_all_checks(
     added_files: set[str] | None = None,
     historical_numstat: object = _UNSET_NUMSTAT,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 9 contract checks."""
+    """Run all 10 contract checks."""
     blockers = []
     warnings = []
     infos = []
@@ -1265,6 +1338,17 @@ def run_all_checks(
         commit_messages_checked=commit_messages_checked,
     )
     blockers.extend(closes_blockers)
+
+    # 1b. GitHub closing-keyword parity (issue #9566): negated prose closing
+    # mentions auto-close on merge even though the repo parser excuses them.
+    blockers.extend(
+        check_github_closing_parity(
+            body,
+            repo,
+            commit_messages=commit_messages,
+            commit_messages_checked=commit_messages_checked,
+        )
+    )
 
     # 2. Closure declaration
     closure_warnings = check_closure_declaration(title, body)

@@ -27,6 +27,12 @@ ROOT = Path(__file__).resolve().parents[2]
 # incident in #8414 before the two-green reconciler criterion was established.
 KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
 
+# PRs #9565/#9569 are the known pre-guard regressions for issue #9566: their
+# bodies contain negated prose ("does not close #9489") that GitHub parsed as
+# a closing reference and auto-closed parent #9489 on merge. The parity guard
+# must keep flagging these historical bodies while future PRs stay clean.
+KNOWN_HISTORICAL_GITHUB_PARITY_HITS = {9565: {"9489"}, 9569: {"9489"}}
+
 
 # Keep this mapping deliberately narrow: entries must identify one merged PR,
 # one linked issue, and the immutable GitHub file-stat totals that prove the
@@ -700,6 +706,42 @@ def test_check_closes_discipline_fails_closed_when_commit_source_unavailable(
 def test_check_closes_discipline_allows_non_closing_reference() -> None:
     """``Refs`` keeps GitHub from closing an incident before reconciliation."""
     assert not pr_contract_check.check_closes_discipline("Refs #8414", "ll7/robot_sf_ll7")
+
+
+def test_github_closing_parity_flags_negated_prose_mention() -> None:
+    """Regression for issue #9566: negated prose still auto-closes on GitHub."""
+    body = (
+        "The result is diagnostic integration evidence only; it does not close #9489 or epic #9483."
+    )
+    # The negation-aware repo parser excuses the mention ...
+    assert pr_contract_check._find_closed_references(body) == []
+    assert not pr_contract_check.check_closes_discipline(body, "ll7/robot_sf_ll7")
+    # ... but GitHub honors it, so the parity guard must fail closed.
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "#9489" in blockers[0]
+    assert "leaves #9489 open" in blockers[0]
+
+
+def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
+    """``Refs`` never closes; intentional ``Closes`` stays with closes-discipline."""
+    assert pr_contract_check.check_github_closing_parity("Refs #9489", "ll7/robot_sf_ll7") == []
+    assert pr_contract_check.check_github_closing_parity("Closes #9489", "ll7/robot_sf_ll7") == []
+    assert (
+        pr_contract_check.check_github_closing_parity("leaves #9489 open", "ll7/robot_sf_ll7") == []
+    )
+
+
+def test_github_closing_parity_scans_commit_messages() -> None:
+    """Squash-merge commit prose receives the same parity protection as the body."""
+    blockers = pr_contract_check.check_github_closing_parity(
+        "Adds a repair without a body closing keyword.",
+        "ll7/robot_sf_ll7",
+        commit_messages="Implement repair\n\nit does not close #9489\n",
+        commit_messages_checked=True,
+    )
+    assert len(blockers) == 1
+    assert "PR commit message" in blockers[0]
 
 
 _OVERRIDE_NUMSTAT = "\n".join(f"300\t0\tscripts/dev/file_{index}.py" for index in range(5)) + "\n"
@@ -2178,10 +2220,20 @@ def test_regression_last_20_merged_prs() -> None:
             assert any(f"incident issue #{issue}" in blocker for blocker in blockers), (
                 f"PR #{number} no longer exposes its known historical guard hit"
             )
+        expected_parity_issues = KNOWN_HISTORICAL_GITHUB_PARITY_HITS.get(number, set())
+        for issue in expected_parity_issues:
+            assert any(
+                "github-closing-parity" in blocker and f"#{issue}" in blocker
+                for blocker in blockers
+            ), f"PR #{number} no longer exposes its known historical parity hit"
         unexpected_blockers = [
             blocker
             for blocker in blockers
             if not any(f"incident issue #{issue}" in blocker for issue in expected_incident_issues)
+            and not any(
+                "github-closing-parity" in blocker and f"#{issue}" in blocker
+                for issue in expected_parity_issues
+            )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
         ]
         assert not unexpected_blockers, (

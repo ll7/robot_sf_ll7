@@ -272,7 +272,9 @@ class _FakeCodexClient:
         self.foreign_start_binding = False
         self.foreign_cancel_binding = False
         self.foreign_reconnect_binding = False
+        self.foreign_reconnect_operation_binding = False
         self.missing_reconnect_binding = False
+        self.partial_reconnect_source_binding = False
         self.conflicting_nested_start_binding = False
         self.conflicting_nested_cancel_binding = False
         self.conflicting_nested_reconnect_binding = False
@@ -362,11 +364,23 @@ class _FakeCodexClient:
                 "source_revision": "source-revision-1",
                 "source_digest": "source-digest-1",
             },
+            "receipt": {
+                "operation_id": (
+                    "foreign-operation"
+                    if self.foreign_reconnect_operation_binding
+                    else operation_id
+                ),
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
             "provider_session_id": self.session.provider_session_id,
         }
         if self.missing_reconnect_binding:
             result.pop("context")
             result.pop("source")
+        if self.partial_reconnect_source_binding:
+            result["source"] = {"source_digest": "source-digest-1"}
+            result["receipt"].pop("source_revision")
         if self.conflicting_nested_reconnect_binding:
             result["session"] = {
                 "session_id": codex_session_id,
@@ -1442,6 +1456,41 @@ def test_service_facade_codex_reconnect_requires_explicit_bindings() -> None:
     assert "authoritative context binding" in result["reason"]
     assert facade._codex_session_handle is None
     assert facade._codex_operation_id is None
+
+
+def test_service_facade_codex_reconnect_rejects_foreign_operation_and_partial_source() -> None:
+    """A reconnect receipt must bind the new operation and both source identities."""
+    service = _FakeAuditService()
+    client = _FakeCodexClient(service)
+    facade = ServiceAuditWorkbenchFacade(
+        service, _FakeSession(), token=_FakeSession.session_token, codex_client=client
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-receipt")
+    client.foreign_reconnect_operation_binding = True
+
+    foreign_operation = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-foreign-operation",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert foreign_operation["status"] == "conflict"
+    assert "operation binding" in foreign_operation["reason"]
+    assert facade._codex_session_handle is None
+
+    client.foreign_reconnect_operation_binding = False
+    client.partial_reconnect_source_binding = True
+    partial_source = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-partial-source",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert partial_source["status"] == "conflict"
+    assert "source binding is incomplete" in partial_source["reason"]
+    assert facade._codex_session_handle is None
 
 
 @pytest.mark.parametrize(

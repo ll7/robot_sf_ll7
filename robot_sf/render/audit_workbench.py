@@ -1435,6 +1435,7 @@ def _codex_result_binding_mismatch(  # noqa: C901, PLR0912
 def _codex_result_context_binding_mismatch(  # noqa: C901, PLR0912
     value: Any,
     *,
+    expected_operation_id: str,
     expected_context: Any,
     expected_source_revision: Any,
     expected_source_digest: Any,
@@ -1469,6 +1470,8 @@ def _codex_result_context_binding_mismatch(  # noqa: C901, PLR0912
     add_mapping(raw)
     saw_context = False
     saw_source = False
+    saw_source_revision = False
+    saw_source_digest = False
     while pending:
         candidate = pending.pop(0)
         for nested_key in ("session", "receipt", "operation", "result"):
@@ -1492,6 +1495,10 @@ def _codex_result_context_binding_mismatch(  # noqa: C901, PLR0912
             if not source_mapping:
                 return "recovered Codex session source binding is malformed"
             add_mapping(source_mapping)
+        for key in ("operation_id",):
+            if key in candidate and candidate[key] is not None:
+                if candidate[key] != expected_operation_id:
+                    return "recovered Codex session operation binding does not match"
         if any(
             key in candidate and candidate[key] is not None
             for key in ("source_revision", "source_digest", "digest")
@@ -1510,13 +1517,19 @@ def _codex_result_context_binding_mismatch(  # noqa: C901, PLR0912
             and candidate.get("source_revision") != expected_source_revision
         ):
             return "recovered Codex session source revision does not match the selection"
+        if candidate.get("source_revision") is not None:
+            saw_source_revision = True
         for key in ("source_digest", "digest"):
             if candidate.get(key) is not None and candidate.get(key) != expected_source_digest:
                 return "recovered Codex session source identity does not match the selection"
+            if candidate.get(key) is not None:
+                saw_source_digest = True
     if not saw_context:
         return "recovered Codex session result has no authoritative context binding"
     if not saw_source:
         return "recovered Codex session result has no authoritative source binding"
+    if not saw_source_revision or not saw_source_digest:
+        return "recovered Codex session source binding is incomplete"
     return None
 
 
@@ -2221,6 +2234,7 @@ class ServiceAuditWorkbenchFacade:
             return self._codex_local_result("unavailable", "Codex provider reconnect failed")
         binding_failure = _codex_result_context_binding_mismatch(
             raw_result,
+            expected_operation_id=operation_id,
             expected_context=authoritative_context,
             expected_source_revision=expected_source_revision,
             expected_source_digest=expected_source_digest,

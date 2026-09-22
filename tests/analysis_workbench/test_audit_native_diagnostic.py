@@ -63,6 +63,55 @@ def _base_runner_input() -> dict[str, Any]:
     return runner_input
 
 
+class _ReadyOnlyConnection:
+    def __init__(self, poll_budgets: list[float]) -> None:
+        self.poll_budgets = poll_budgets
+
+    def poll(self, timeout: float) -> bool:
+        self.poll_budgets.append(timeout)
+        return len(self.poll_budgets) == 1
+
+    def recv(self) -> dict[str, str]:
+        return {"status": "ready"}
+
+    def close(self) -> None:
+        pass
+
+
+class _BoundedFakeProcess:
+    pid = 1
+
+    def __init__(self) -> None:
+        self.alive = True
+        self.terminated = False
+
+    def start(self) -> None:
+        pass
+
+    def join(self, _timeout: float) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return self.alive
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.alive = False
+
+
+class _BoundedFakeContext:
+    def __init__(self, process: _BoundedFakeProcess, poll_budgets: list[float]) -> None:
+        self.process = process
+        self.poll_budgets = poll_budgets
+
+    def Pipe(self, *, duplex: bool) -> tuple[_ReadyOnlyConnection, _ReadyOnlyConnection]:
+        assert duplex is False
+        return _ReadyOnlyConnection(self.poll_budgets), _ReadyOnlyConnection([])
+
+    def Process(self, **_kwargs: Any) -> _BoundedFakeProcess:
+        return self.process
+
+
 def _make_case(
     tmp_path: Path,
     original: dict[str, Any],
@@ -1148,3 +1197,28 @@ def test_native_child_deadline_terminates_owned_process(native_case: dict[str, A
         marker in result["reason"] for marker in ("per_execution_timeout", "child_startup_timeout")
     )
     assert result["settled"] is True
+
+
+def test_native_child_startup_budget_is_separate_from_execution_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    poll_budgets: list[float] = []
+    process = _BoundedFakeProcess()
+    context = _BoundedFakeContext(process, poll_budgets)
+    monotonic_values = iter((100.0, 100.0, 101.0, 101.0005, 101.002, 101.003))
+    monkeypatch.setattr(native.multiprocessing, "get_context", lambda _method: context)
+    monkeypatch.setattr(native.time, "monotonic", lambda: next(monotonic_values))
+
+    result = native._run_bounded(
+        _base_runner_input(),
+        robot_goal=(4.0, 0.0),
+        provenance={"test": "separate-startup-budget"},
+        timeout_s=0.001,
+    )
+
+    assert poll_budgets[0] == pytest.approx(0.05)
+    assert poll_budgets[1] == pytest.approx(0.0005)
+    assert result["status"] == native.STATUS_UNAVAILABLE
+    assert result["reason"] == "per_execution_timeout: owned child terminated"
+    assert result["settled"] is True
+    assert process.terminated is True

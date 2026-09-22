@@ -2713,6 +2713,17 @@ cancellation churn fills that window it fails closed to `stale` instead of
 reading further back. Callers that need the decisive verdict behind a
 cancelled-run flood use the paginated reader below.
 
+Manual CI recovery dispatches use a separate ownership gate before any full
+matrix job starts. GitHub can replace a pending run in a shared concurrency
+group even when `cancel-in-progress` is false, so each `workflow_dispatch` run
+has a unique workflow concurrency identity and the serialized
+`dispatch-ownership` job elects the oldest active run for the exact main SHA.
+Followers wait for that owner: they mirror only a completed exact-head
+success/failure, or take ownership if the prior run becomes stale or
+cancelled. Set the `retry_failed` workflow input only for one justified retry;
+the run title is its idempotent receipt. Repeated ordinary watcher dispatches
+therefore cannot cancel the owner or start duplicate full matrices.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or

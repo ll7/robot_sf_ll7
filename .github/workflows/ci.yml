@@ -12,18 +12,26 @@ on:
       - "**/*.md"
       - "docs/**"
   workflow_dispatch:
+    inputs:
+      retry_failed:
+        description: Retry one completed exact-head failure (recorded and deduplicated)
+        required: false
+        default: false
+        type: boolean
+
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('CI manual recovery retry_failed={0}', inputs.retry_failed) || github.event.head_commit.message || github.event.pull_request.title || github.workflow }}
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
-  # Pushes and pull-request updates retain latest-main-wins supersession. A
-  # workflow_dispatch is the monitor/recovery path: repeated same-head
-  # dispatches must not cancel the one decisive run already in progress
-  # (issue #9340). The watcher decides whether to dispatch; this expression
-  # prevents a duplicate dispatch from destroying its evidence.
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  # Pushes and pull-request updates retain latest-main-wins supersession.
+  # Manual recovery runs use a unique pending identity because GitHub replaces
+  # an existing pending run even when cancel-in-progress is false. The
+  # dispatch-ownership job below deduplicates expensive same-head matrices.
+  group: ${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}-dispatch-{2}', github.workflow, github.ref, github.run_id) || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -37,7 +45,48 @@ env:
   COVERAGE_CORE: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ctrace' || 'sysmon' }}
 
 jobs:
+  dispatch-ownership:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    concurrency:
+      group: ci-dispatch-owner-${{ github.sha }}
+      cancel-in-progress: false
+    outputs:
+      run_full_ci: ${{ steps.decision.outputs.run_full_ci }}
+    steps:
+      - name: Checkout gate source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Elect exact-head full-matrix owner
+        id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETRY_FAILED: ${{ inputs.retry_failed || false }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+            echo "run_full_ci=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          retry_args=()
+          if [[ "${RETRY_FAILED}" == "true" ]]; then
+            retry_args+=(--retry-failed)
+          fi
+          python scripts/dev/main_ci_is_green.py \
+            --dispatch-gate \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow ci.yml \
+            --target-sha "${GITHUB_SHA}" \
+            --current-run-id "${GITHUB_RUN_ID}" \
+            --github-output "${GITHUB_OUTPUT}" \
+            "${retry_args[@]}"
+
   fast-feedback:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Split every event across four runners. Pull requests retain their fast-only
@@ -305,6 +354,8 @@ jobs:
           include-hidden-files: true
 
   compat-matrix:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -337,6 +388,8 @@ jobs:
           -q -m "not slow"
 
   fast-pysf-compat:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -360,6 +413,8 @@ jobs:
         run: uv lock --check --directory fast-pysf
 
   smoke-artifacts:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -423,6 +478,8 @@ jobs:
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
   scenario-validation:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -451,7 +508,10 @@ jobs:
   reproducibility-check:
     # Run on pull requests so hosted reproducibility evidence is green rather
     # than skipped; retain manual dispatch for standalone diagnostics.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: dispatch-ownership
+    if: >-
+      needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -513,6 +573,8 @@ jobs:
           if-no-files-found: warn
 
   xdist-scratch-isolation:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     # Shared all-extras setup can take ~19 minutes before the guard runs (#8631).
     timeout-minutes: 30
@@ -536,6 +598,8 @@ jobs:
             tests/validation/test_predictive_success_campaign_tags.py::test_main_writes_failure_summary_for_malformed_jsonl
 
   wheel-smoke-install:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     # Leave smoke-test headroom after an observed ~18-minute setup (#8631).
     timeout-minutes: 30
@@ -564,6 +628,8 @@ jobs:
           if-no-files-found: warn
 
   examples-smoke:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -616,6 +682,8 @@ jobs:
         run: scripts/dev/ci_driver.sh examples-smoke
 
   notebooks-smoke:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -721,6 +789,8 @@ jobs:
     # timed test never downloads a model inside its loop. The test itself
     # monkeypatches the downloader to fail-closed if any in-loop fetch is
     # attempted.
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -759,6 +829,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
+      - dispatch-ownership
       - fast-feedback
       - changed-coverage-gate
       - coverage-gate
@@ -776,11 +847,14 @@ jobs:
     steps:
       - name: Checkout for duration-cache update
         id: checkout_duration_cache
-        if: ${{ always() }}
+        if: ${{ always() && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check split job results
+        if: >-
+          ${{ always() && (needs.dispatch-ownership.result != 'success' ||
+          needs.dispatch-ownership.outputs.run_full_ci == 'true') }}
         env:
           CI_NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
@@ -788,6 +862,12 @@ jobs:
             --event-name "${{ github.event_name }}" \
             --treat-cancelled-as-superseded \
             --results "$CI_NEEDS_JSON"
+
+      - name: Record observed exact-head verdict
+        if: >-
+          ${{ always() && needs.dispatch-ownership.result == 'success' &&
+          needs.dispatch-ownership.outputs.run_full_ci == 'false' }}
+        run: echo "The dispatch gate observed a decisive exact-head CI run; no duplicate matrix launched."
 
       - name: Download test-duration shards
         if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}

@@ -35,8 +35,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, NamedTuple
 from urllib.parse import quote, urlencode
@@ -54,6 +56,8 @@ DEFAULT_WORKFLOW = "CI"
 REST_PAGE_SIZE = 100
 DEFAULT_MAX_PAGES = 10
 REST_RUN_TIMEOUT = 90
+DISPATCH_GATE_SCHEMA_VERSION = "main_ci_dispatch_gate.v1"
+DISPATCH_ACTIVE_STATUSES = frozenset({"queued", "in_progress", "requested", "pending"})
 
 
 def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -211,13 +215,56 @@ def normalize_actions_run(row: Mapping[str, Any], *, index: int) -> dict[str, An
     head_sha = row.get("head_sha")
     if head_sha is not None and not isinstance(head_sha, str):
         raise MainCiRunFetchError(f"Actions run row {index} has a malformed head_sha")
+    event = row.get("event")
+    if event is not None and not isinstance(event, str):
+        raise MainCiRunFetchError(f"Actions run row {index} has a malformed event")
+    display_title = row.get("display_title")
+    if display_title is not None and not isinstance(display_title, str):
+        raise MainCiRunFetchError(f"Actions run row {index} has a malformed display_title")
     return {
         "databaseId": run_id,
         "status": status,
         "conclusion": conclusion,
         "headSha": head_sha,
         "createdAt": created_at,
+        "event": event,
+        "displayTitle": display_title,
     }
+
+
+def fetch_dispatch_run_window(
+    repo: str = DEFAULT_REPO,
+    workflow: str = DEFAULT_WORKFLOW,
+    *,
+    runner: Callable[..., Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Read one complete recent run page for the workflow-dispatch ownership gate."""
+    rest_runner = runner or _default_rest_runner
+    selector = resolve_workflow_selector(
+        repo=repo,
+        workflow=workflow,
+        max_pages=DEFAULT_MAX_PAGES,
+        runner=rest_runner,
+    )
+    endpoint = (
+        f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
+        f"?{urlencode({'branch': 'main', 'per_page': REST_PAGE_SIZE, 'page': 1})}"
+    )
+    payload = _rest_json(
+        endpoint,
+        runner=rest_runner,
+        operation="recent main-CI dispatch ownership window",
+    )
+    if not isinstance(payload, Mapping):
+        raise MainCiRunFetchError("main-CI dispatch ownership window returned a non-object payload")
+    rows = payload.get("workflow_runs")
+    if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
+        raise MainCiRunFetchError("main-CI dispatch ownership window returned malformed rows")
+    return [
+        normalize_actions_run(row, index=index)
+        for index, row in enumerate(rows)
+        if isinstance(row, Mapping)
+    ]
 
 
 def count_decisive_runs(runs: Sequence[Any]) -> int:
@@ -403,6 +450,130 @@ def dispatch_decision(
     return {"action": "dispatch", "reason": "no_same_head_decisive_run", "head_sha": target}
 
 
+def dispatch_gate_decision(
+    target_sha: str,
+    current_run_id: int,
+    runs: Sequence[Mapping[str, Any]],
+    *,
+    retry_failed: bool = False,
+) -> dict[str, Any]:
+    """Elect one exact-head run to launch the full CI matrix.
+
+    GitHub permits only one pending run in a shared concurrency group and
+    replaces that pending run even when ``cancel-in-progress`` is false.  The
+    workflow therefore gives manual dispatches unique concurrency identities
+    and uses this deterministic gate to keep only the oldest active exact-head
+    run as the full-matrix owner.  Followers wait for that owner rather than
+    reporting an unproved success.
+    """
+    target = target_sha.strip().lower()
+    if not target:
+        raise ValueError("target_sha must not be empty")
+    current_id = _positive_int(current_run_id, field="current workflow run id")
+    exact = [
+        run
+        for run in runs
+        if isinstance(run, Mapping) and str(run.get("headSha") or "").lower() == target
+    ]
+    active_ids = {current_id}
+    for index, run in enumerate(exact):
+        if str(run.get("status") or "").lower() not in DISPATCH_ACTIVE_STATUSES:
+            continue
+        active_ids.add(_positive_int(run.get("databaseId"), field=f"active run row {index} id"))
+    owner_id = min(active_ids)
+    if owner_id != current_id:
+        return {
+            "action": "wait",
+            "reason": "older_same_head_run_active",
+            "head_sha": target,
+            "owner_run_id": owner_id,
+            "current_run_id": current_id,
+        }
+
+    completed = [
+        run
+        for run in exact
+        if str(run.get("status") or "").lower() == "completed"
+        and _positive_int(run.get("databaseId"), field="completed run id") != current_id
+    ]
+    retry_receipt_seen = any(
+        str(run.get("event") or "") == "workflow_dispatch"
+        and str(run.get("displayTitle") or "").endswith("retry_failed=true")
+        and classify(run.get("conclusion")) in {"green", "red"}
+        for run in completed
+    )
+    policy = dispatch_decision(
+        target,
+        completed,
+        retry_failed=retry_failed,
+        retry_receipt_seen=retry_receipt_seen,
+    )
+    if policy["action"] == "dispatch":
+        return {
+            "action": "run_full_ci",
+            "reason": policy["reason"],
+            "head_sha": target,
+            "owner_run_id": current_id,
+            "current_run_id": current_id,
+            "retry_receipt_seen": retry_receipt_seen,
+        }
+    reason = str(policy["reason"])
+    action = "observe_success" if reason == "same_head_success" else "observe_failure"
+    return {
+        "action": action,
+        "reason": reason,
+        "head_sha": target,
+        "owner_run_id": current_id,
+        "current_run_id": current_id,
+        "retry_receipt_seen": retry_receipt_seen,
+    }
+
+
+def wait_for_dispatch_gate(  # noqa: PLR0913 - explicit polling/test seams are intentional.
+    target_sha: str,
+    current_run_id: int,
+    *,
+    repo: str = DEFAULT_REPO,
+    workflow: str = DEFAULT_WORKFLOW,
+    retry_failed: bool = False,
+    poll_seconds: float = 30.0,
+    max_wait_seconds: float = 3000.0,
+    fetcher: Callable[[], list[dict[str, Any]]] | None = None,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Wait until this dispatch owns the matrix or an exact-head verdict exists."""
+    if poll_seconds <= 0:
+        raise ValueError("poll_seconds must be positive")
+    if max_wait_seconds < 0:
+        raise ValueError("max_wait_seconds must not be negative")
+    read_runs = fetcher or (lambda: fetch_dispatch_run_window(repo, workflow))
+    deadline = time.monotonic() + max_wait_seconds
+    while True:
+        decision = dispatch_gate_decision(
+            target_sha,
+            current_run_id,
+            read_runs(),
+            retry_failed=retry_failed,
+        )
+        if decision["action"] != "wait":
+            return decision
+        if time.monotonic() >= deadline:
+            return {
+                **decision,
+                "action": "timeout",
+                "reason": "older_same_head_run_did_not_finish_within_budget",
+            }
+        sleeper(min(poll_seconds, max(0.0, deadline - time.monotonic())))
+
+
+def _write_dispatch_gate_output(path: str | None, *, run_full_ci: bool) -> None:
+    """Append the gate output using the GitHub Actions output-file contract."""
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as stream:
+        stream.write(f"run_full_ci={'true' if run_full_ci else 'false'}\n")
+
+
 # The main-signal schema consumed by the red-main merge-hold gate (issue #5571).
 # ``status`` is one of green / red / stale, matching :func:`classify`; a stale
 # verdict (no decisive completed run in the window) still fails closed to not
@@ -477,7 +648,7 @@ def fetch_runs(
     return data
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI entry: exit 0 if main CI is green, 1 otherwise.
 
     Default and ``--quiet`` modes print the human-readable line (and use the
@@ -491,12 +662,55 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=5)
     ap.add_argument("--quiet", action="store_true", help="suppress the human line")
     ap.add_argument(
+        "--dispatch-gate",
+        action="store_true",
+        help="elect or observe the one exact-head manual run allowed to launch full CI",
+    )
+    ap.add_argument("--target-sha", default=os.environ.get("GITHUB_SHA"))
+    ap.add_argument("--current-run-id", type=int, default=os.environ.get("GITHUB_RUN_ID"))
+    ap.add_argument("--retry-failed", action="store_true")
+    ap.add_argument("--poll-seconds", type=float, default=30.0)
+    ap.add_argument("--max-wait-seconds", type=float, default=3000.0)
+    ap.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
+    ap.add_argument(
         "--json",
         dest="as_json",
         action="store_true",
         help="emit the machine-readable main-signal JSON (green/red/stale schema)",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+
+    if args.dispatch_gate:
+        if not args.target_sha or args.current_run_id is None:
+            ap.error("--dispatch-gate requires --target-sha and --current-run-id")
+        try:
+            decision = wait_for_dispatch_gate(
+                args.target_sha,
+                args.current_run_id,
+                repo=args.repo,
+                workflow=args.workflow,
+                retry_failed=args.retry_failed,
+                poll_seconds=args.poll_seconds,
+                max_wait_seconds=args.max_wait_seconds,
+            )
+        except (MainCiRunFetchError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            _write_dispatch_gate_output(args.github_output, run_full_ci=False)
+            print(
+                json.dumps(
+                    {
+                        "schema_version": DISPATCH_GATE_SCHEMA_VERSION,
+                        "action": "error",
+                        "reason": str(exc),
+                        "head_sha": str(args.target_sha).lower(),
+                        "current_run_id": args.current_run_id,
+                    }
+                )
+            )
+            return 1
+        run_full_ci = decision["action"] == "run_full_ci"
+        _write_dispatch_gate_output(args.github_output, run_full_ci=run_full_ci)
+        print(json.dumps({"schema_version": DISPATCH_GATE_SCHEMA_VERSION, **decision}))
+        return 0 if decision["action"] in {"run_full_ci", "observe_success"} else 1
 
     try:
         runs = fetch_runs(args.repo, args.workflow, args.limit)

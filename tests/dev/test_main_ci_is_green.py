@@ -21,9 +21,12 @@ from scripts.dev.main_ci_is_green import (
     classify,
     decide,
     dispatch_decision,
+    dispatch_gate_decision,
+    fetch_dispatch_run_window,
     fetch_run_window,
     fetch_runs,
     latest_completed_run,
+    wait_for_dispatch_gate,
 )
 
 
@@ -175,6 +178,276 @@ def test_dispatch_policy_handles_success_failure_and_moved_head() -> None:
         [{"headSha": "a" * 40, "status": "completed", "conclusion": "success"}],
     )
     assert moved["action"] == "dispatch"
+
+
+def test_dispatch_gate_waits_for_recorded_queued_aggregate_with_running_jobs() -> None:
+    """A queued aggregate remains the owner when some of its jobs already run (#9340)."""
+    sha = "a" * 40
+    decision = dispatch_gate_decision(
+        sha,
+        35730131902,
+        [
+            {
+                "databaseId": 35729609257,
+                "headSha": sha,
+                "status": "queued",
+                "conclusion": None,
+                "createdAt": "2026-09-22T12:50:16Z",
+                "jobs": [{"name": "compat-matrix (macos-latest, 3.11)", "status": "in_progress"}],
+            },
+            {
+                "databaseId": 35730131902,
+                "headSha": sha,
+                "status": "queued",
+                "conclusion": None,
+                "createdAt": "2026-09-22T12:55:17Z",
+            },
+        ],
+    )
+
+    assert decision == {
+        "action": "wait",
+        "reason": "older_same_head_run_active",
+        "head_sha": sha,
+        "owner_run_id": 35729609257,
+        "current_run_id": 35730131902,
+    }
+
+
+def test_dispatch_gate_observes_decisive_result_without_unlocking_matrix() -> None:
+    """A follower may mirror exact-head evidence but cannot launch duplicate jobs."""
+    sha = "b" * 40
+    success = dispatch_gate_decision(
+        sha,
+        20,
+        [
+            {
+                "databaseId": 10,
+                "headSha": sha,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+    )
+    failure = dispatch_gate_decision(
+        sha,
+        21,
+        [
+            {
+                "databaseId": 10,
+                "headSha": sha,
+                "status": "completed",
+                "conclusion": "failure",
+            }
+        ],
+    )
+
+    assert success["action"] == "observe_success"
+    assert failure["action"] == "observe_failure"
+
+
+def test_dispatch_gate_failed_retry_receipt_is_idempotent() -> None:
+    """A completed explicit retry is a receipt that prevents another retry."""
+    sha = "c" * 40
+    failed_retry = {
+        "databaseId": 11,
+        "headSha": sha,
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "workflow_dispatch",
+        "displayTitle": "CI manual recovery retry_failed=true",
+    }
+
+    decision = dispatch_gate_decision(sha, 20, [failed_retry], retry_failed=True)
+
+    assert decision["action"] == "observe_failure"
+    assert decision["retry_receipt_seen"] is True
+
+
+def test_dispatch_gate_allows_first_explicit_failed_retry() -> None:
+    """One explicit failed retry owns the matrix before a receipt exists."""
+    sha = "e" * 40
+    decision = dispatch_gate_decision(
+        sha,
+        20,
+        [
+            {
+                "databaseId": 11,
+                "headSha": sha,
+                "status": "completed",
+                "conclusion": "failure",
+                "event": "push",
+            }
+        ],
+        retry_failed=True,
+    )
+
+    assert decision["action"] == "run_full_ci"
+    assert decision["reason"] == "explicit_failed_retry"
+    assert decision["retry_receipt_seen"] is False
+
+
+def test_dispatch_gate_follower_takes_ownership_after_stale_owner() -> None:
+    """A follower starts full CI only after its older owner becomes stale."""
+    sha = "d" * 40
+    windows = iter(
+        [
+            [
+                {
+                    "databaseId": 10,
+                    "headSha": sha,
+                    "status": "queued",
+                    "conclusion": None,
+                }
+            ],
+            [
+                {
+                    "databaseId": 10,
+                    "headSha": sha,
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                }
+            ],
+        ]
+    )
+
+    decision = wait_for_dispatch_gate(
+        sha,
+        20,
+        poll_seconds=1,
+        max_wait_seconds=10,
+        fetcher=lambda: next(windows),
+        sleeper=lambda _seconds: None,
+    )
+
+    assert decision["action"] == "run_full_ci"
+    assert decision["reason"] == "no_same_head_decisive_run"
+
+
+def test_dispatch_gate_timeout_is_fail_closed() -> None:
+    """An owner that exceeds the wait budget never unlocks duplicate work."""
+    sha = "f" * 40
+    decision = wait_for_dispatch_gate(
+        sha,
+        20,
+        poll_seconds=1,
+        max_wait_seconds=0,
+        fetcher=lambda: [
+            {
+                "databaseId": 10,
+                "headSha": sha,
+                "status": "in_progress",
+                "conclusion": None,
+            }
+        ],
+    )
+
+    assert decision["action"] == "timeout"
+    assert decision["owner_run_id"] == 10
+
+
+def test_fetch_dispatch_window_preserves_event_and_retry_receipt_title() -> None:
+    """The ownership reader retains fields needed for retry deduplication."""
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            body = {"workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]}
+        else:
+            assert path.endswith("actions/workflows/77/runs?branch=main&per_page=100&page=1")
+            body = {
+                "workflow_runs": [
+                    {
+                        "id": 11,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "head_sha": "a" * 40,
+                        "created_at": "2026-09-22T12:50:16Z",
+                        "event": "workflow_dispatch",
+                        "display_title": "CI manual recovery retry_failed=true",
+                    }
+                ]
+            }
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps(body), "")
+
+    runs = fetch_dispatch_run_window(runner=fake_runner)
+
+    assert runs[0]["event"] == "workflow_dispatch"
+    assert runs[0]["displayTitle"].endswith("retry_failed=true")
+
+
+@pytest.mark.parametrize(
+    ("action", "expected_rc", "expected_output"),
+    [
+        ("run_full_ci", 0, "run_full_ci=true\n"),
+        ("observe_success", 0, "run_full_ci=false\n"),
+        ("observe_failure", 1, "run_full_ci=false\n"),
+    ],
+)
+def test_dispatch_gate_cli_writes_boolean_job_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+    action: str,
+    expected_rc: int,
+    expected_output: str,
+) -> None:
+    """The workflow CLI maps each decision to a stable job output and exit status."""
+    output = tmp_path / "github-output"
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "wait_for_dispatch_gate",
+        lambda *_args, **_kwargs: {
+            "action": action,
+            "reason": "fixture",
+            "head_sha": "a" * 40,
+            "current_run_id": 20,
+        },
+    )
+
+    rc = main_ci_is_green.main(
+        [
+            "--dispatch-gate",
+            "--target-sha",
+            "a" * 40,
+            "--current-run-id",
+            "20",
+            "--github-output",
+            str(output),
+        ]
+    )
+
+    assert rc == expected_rc
+    assert output.read_text(encoding="utf-8") == expected_output
+    assert json.loads(capsys.readouterr().out)["action"] == action
+
+
+def test_dispatch_gate_cli_fails_closed_on_unreadable_run_window(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An API failure writes false and cannot unlock the expensive matrix."""
+    output = tmp_path / "github-output"
+
+    def fail(*_args: object, **_kwargs: object) -> dict:
+        raise MainCiRunFetchError("fixture API failure")
+
+    monkeypatch.setattr(main_ci_is_green, "wait_for_dispatch_gate", fail)
+
+    rc = main_ci_is_green.main(
+        [
+            "--dispatch-gate",
+            "--target-sha",
+            "a" * 40,
+            "--current-run-id",
+            "20",
+            "--github-output",
+            str(output),
+        ]
+    )
+
+    assert rc == 1
+    assert output.read_text(encoding="utf-8") == "run_full_ci=false\n"
+    assert json.loads(capsys.readouterr().out)["action"] == "error"
 
 
 def test_unsorted_input_still_picks_newest_completed() -> None:

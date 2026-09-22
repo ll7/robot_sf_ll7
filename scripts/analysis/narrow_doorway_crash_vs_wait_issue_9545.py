@@ -105,6 +105,14 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def _portable_path(path: Path) -> str:
+    """Render a repository-local artifact path without leaking worktree roots."""
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT.resolve()))
+    except ValueError:
+        return str(path)
+
+
 def _checkpoint_gamma() -> tuple[float | None, str]:
     """Read embedded gamma from the SB3 checkpoint data blob without torch."""
     for cand in (
@@ -448,15 +456,15 @@ def run_diagnostic(
                 )
 
     with (out_dir / "return_table.csv").open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(counter_rows[0].keys()))
+        writer = csv.DictWriter(fh, fieldnames=list(counter_rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(counter_rows)
     with (out_dir / "sensitivity.csv").open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(sens_rows[0].keys()))
+        writer = csv.DictWriter(fh, fieldnames=list(sens_rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(sens_rows)
     with (out_dir / "episode_summary.csv").open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(summary_rows[0].keys()))
+        writer = csv.DictWriter(fh, fieldnames=list(summary_rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(summary_rows)
 
@@ -563,14 +571,14 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
         "scenario_cap_steps": cap,
         "scenario_seeds": list(scenario.get("seeds", [])),
         "checkpoint_model_id": MODEL_ID,
-        "checkpoint_local_path": str(model_path),
+        "checkpoint_local_path": _portable_path(Path(model_path)),
         "checkpoint_sha256": _sha256_file(Path(model_path))
         if Path(model_path).exists()
         else "unavailable",
         "checkpoint_gamma_embedded": gamma_embedded,
         "checkpoint_gamma_source": f"SB3 data blob: {gamma_source}",
         "predictive_checkpoint_model_id": PREDICTIVE_MODEL_ID,
-        "predictive_checkpoint_local_path": str(predictive_model_path),
+        "predictive_checkpoint_local_path": _portable_path(Path(predictive_model_path)),
         "predictive_checkpoint_sha256": _sha256_file(Path(predictive_model_path))
         if Path(predictive_model_path).exists()
         else "unavailable",

@@ -50,6 +50,12 @@ FIXTURE = (
     / "audit_campaign_v1"
     / "campaign.json"
 )
+# The external child has a distinct cold-start phase: importing Python and
+# connecting to the private bridge preceded the initialize response by 1.70 s
+# in local strace evidence.  Keep both startup and per-request waits finite;
+# hosted xdist contention can delay the source-bound read after initialization.
+EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS = 10.0
+EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = 10.0
 TRACE_FIXTURE = (
     Path(__file__).resolve().parents[1]
     / "fixtures"
@@ -621,11 +627,18 @@ def _run_external_mcp_launch_smoke(
         )
         assert external_process.stdin is not None and external_process.stdout is not None
 
-        def external_exchange(message: dict[str, object]) -> dict[str, object]:
+        def external_exchange(
+            message: dict[str, object], *, phase: str, timeout_seconds: float
+        ) -> dict[str, object]:
             external_process.stdin.write(json.dumps(message).encode() + b"\n")
             external_process.stdin.flush()
-            ready, _, _ = select.select([external_process.stdout], [], [], 3.0)
-            assert ready, "external MCP client did not return a bounded response"
+            ready, _, _ = select.select([external_process.stdout], [], [], timeout_seconds)
+            if not ready:
+                raise AssertionError(
+                    "external MCP client did not return a bounded "
+                    f"{phase} response within {timeout_seconds:.1f}s "
+                    f"(returncode={external_process.poll()!r})"
+                )
             line = external_process.stdout.readline()
             assert line
             return json.loads(line)
@@ -640,7 +653,9 @@ def _run_external_mcp_launch_smoke(
                     "capabilities": {},
                     "clientInfo": {"name": "external-launch-smoke", "version": "1"},
                 },
-            }
+            },
+            phase="initialize",
+            timeout_seconds=EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS,
         )
         assert initialized["result"]["serverInfo"]["name"] == "robot-sf-audit"
         external_process.stdin.write(
@@ -651,7 +666,9 @@ def _run_external_mcp_launch_smoke(
         )
         external_process.stdin.flush()
         listed = external_exchange(
-            {"jsonrpc": "2.0", "id": "external-list", "method": "tools/list", "params": {}}
+            {"jsonrpc": "2.0", "id": "external-list", "method": "tools/list", "params": {}},
+            phase="tools/list",
+            timeout_seconds=EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS,
         )
         listed_tools = listed["result"]["tools"]
         assert {tool["name"] for tool in listed_tools} == set(audit_mcp_stdio.AUDIT_MCP_TOOLS)
@@ -668,7 +685,9 @@ def _run_external_mcp_launch_smoke(
                     "name": "read_episode",
                     "arguments": {"episode_id": episode_id},
                 },
-            }
+            },
+            phase="read_episode",
+            timeout_seconds=EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS,
         )
         mcp_payload = called["result"]["structuredContent"]
         mcp_result = mcp_payload["result"]
@@ -789,6 +808,20 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
         assert started["route_id"] == route.route_id
         assert started["usage"]["total_tokens"] == 7
         assert started["usage"]["measured_compute"] == 1.0
+        assert isinstance(started.get("codex_session_id"), str)
+        reconnected = post(
+            "codex_reconnect",
+            {
+                "codex_session_id": started["codex_session_id"],
+                "operation_id": "live-codex-reconnect",
+                "expected_selection_revision": selected["selection_revision"],
+                "expected_context_revision": selected["context_revision"],
+            },
+        )
+        assert reconnected["status"] == "complete", reconnected
+        assert reconnected["codex_session_id"] == started["codex_session_id"]
+        assert reconnected["context"]["episode_id"] == started["context"]["episode_id"]
+        assert service_session.session_token not in json.dumps(reconnected)
         assert service_session.session_token not in json.dumps(started)
         _run_external_mcp_launch_smoke(bridge, service_session, selected, started)
 

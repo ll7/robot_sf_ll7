@@ -20,6 +20,7 @@ from robot_sf.render.audit_workbench import (
     AuditWorkbenchUnavailableError,
     FixtureAuditService,
     ServiceAuditWorkbenchFacade,
+    _codex_result_context_binding_mismatch,
     _safe_service_value,
     build_audit_workbench_document,
     fixture_document,
@@ -269,10 +270,18 @@ class _FakeCodexClient:
         self.start_entered = threading.Event()
         self.release_start = threading.Event()
         self.block_start = False
+        self.reconnect_entered = threading.Event()
+        self.release_reconnect = threading.Event()
+        self.block_reconnect = False
         self.foreign_start_binding = False
         self.foreign_cancel_binding = False
+        self.foreign_reconnect_binding = False
+        self.foreign_reconnect_operation_binding = False
+        self.missing_reconnect_binding = False
+        self.partial_reconnect_source_binding = False
         self.conflicting_nested_start_binding = False
         self.conflicting_nested_cancel_binding = False
+        self.conflicting_nested_reconnect_binding = False
         self.reason_text: str | None = None
         self.activity_text: str | None = None
 
@@ -337,6 +346,57 @@ class _FakeCodexClient:
             result["reason"] = self.reason_text
         return result
 
+    def reconnect(
+        self, codex_session_id: str, *, operation_id: str, audit_token: str
+    ) -> dict[str, Any]:
+        self.calls.append(
+            (
+                "reconnect",
+                codex_session_id,
+                {"operation_id": operation_id, "audit_token": audit_token},
+            )
+        )
+        if self.block_reconnect:
+            self.reconnect_entered.set()
+            assert self.release_reconnect.wait(timeout=5)
+        result: dict[str, Any] = {
+            "status": "complete",
+            "session": self.session,
+            "codex_session_id": (
+                "foreign-session" if self.foreign_reconnect_binding else codex_session_id
+            ),
+            "operation_id": operation_id,
+            "context": self.service.context,
+            "source": {
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+            "receipt": {
+                "operation_id": (
+                    "foreign-operation"
+                    if self.foreign_reconnect_operation_binding
+                    else operation_id
+                ),
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+            "provider_session_id": self.session.provider_session_id,
+        }
+        if self.missing_reconnect_binding:
+            result.pop("context")
+            result.pop("source")
+        if self.partial_reconnect_source_binding:
+            result["source"] = {"source_digest": "source-digest-1"}
+            result["receipt"].pop("source_revision")
+        if self.conflicting_nested_reconnect_binding:
+            result["session"] = {
+                "session_id": codex_session_id,
+                "context": _FakeContext(context_revision=99, episode_id="foreign-episode"),
+                "source_revision": "foreign-source-revision",
+                "source_digest": "foreign-source-digest",
+            }
+        return result
+
     def cancel(self, session: Any, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("cancel", session, kwargs))
         result: dict[str, Any] = {
@@ -368,6 +428,25 @@ class _FakeCodexClient:
                 "last_operation_id": "foreign-operation",
             }
         return result
+
+
+def _new_reconnect_facade(
+    *,
+    service: _FakeAuditService | None = None,
+    token: str | None = _FakeSession.session_token,
+    with_client: bool = True,
+) -> tuple[_FakeAuditService, _FakeCodexClient | None, ServiceAuditWorkbenchFacade, dict[str, Any]]:
+    """Build a selected facade for the guarded reconnect negative paths."""
+    bound_service = service or _FakeAuditService()
+    client = _FakeCodexClient(bound_service) if with_client else None
+    facade = ServiceAuditWorkbenchFacade(
+        bound_service,
+        _FakeSession(),
+        token=token,
+        codex_client=client,
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-guards")
+    return bound_service, client, facade, selected
 
 
 def test_service_facade_projects_typed_next_and_preserves_missingness() -> None:
@@ -1315,6 +1394,684 @@ def test_service_facade_codex_start_rejects_stale_selection_revision() -> None:
     assert not any(call[0] == "read_context" for call in service.calls)
 
 
+def test_service_facade_codex_reconnect_rehydrates_durable_session() -> None:
+    """Recovery retains only the opaque session handle after authority revalidation."""
+    service = _FakeAuditService()
+    service.context = _FakeContext(episode_id="episode-real")
+    client = _FakeCodexClient(service)
+    token = _FakeSession.session_token
+    facade = ServiceAuditWorkbenchFacade(service, _FakeSession(), token=token, codex_client=client)
+    selected = facade.next(operation_id="next-codex-reconnect")
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-1",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "complete"
+    assert result["operation_id"] == "codex-reconnect-1"
+    assert result["codex_session_id"] == "codex-session-private"
+    assert result["context"]["episode_id"] == "episode-real"
+    assert result["source"] == {
+        "source_revision": "source-revision-1",
+        "source_digest": "source-digest-1",
+    }
+    result_json = json.dumps(result, sort_keys=True)
+    assert token not in result_json
+    assert "provider-session-private" not in result_json
+    assert [call[0] for call in client.calls] == ["reconnect"]
+    action, session_id, kwargs = client.calls[0]
+    assert action == "reconnect"
+    assert session_id == "codex-session-private"
+    assert kwargs["operation_id"] == "codex-reconnect-1"
+    assert kwargs["audit_token"] == token
+    assert facade._codex_session_handle is client.session
+    assert facade._codex_operation_id == "codex-reconnect-1"
+
+
+def test_service_facade_codex_reconnect_keeps_selection_queue_cas_after_snapshot() -> None:
+    """A fresh snapshot cannot replace the queue identity captured by Next."""
+    service, client, facade, selected = _new_reconnect_facade()
+    service.queue_state_revision += 1
+    service.queue_input_revision += 1
+    service.queue_input_identity = "queue-input-new"
+
+    snapshot = facade.snapshot()
+    assert snapshot["queue_state_revision"] == service.queue_state_revision
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-queue-race",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "conflict"
+    assert "queue selection is stale" in result["reason"]
+    assert not client.calls
+
+
+def test_service_facade_codex_reconnect_deduplicates_in_flight_retry() -> None:
+    """A double-click waits for one provider call and replays its receipt."""
+    _service, client, facade, selected = _new_reconnect_facade()
+    client.block_reconnect = True
+    first_result: list[dict[str, Any]] = []
+
+    def run_reconnect() -> None:
+        first_result.append(
+            dict(
+                facade.codex_reconnect(
+                    codex_session_id="codex-session-private",
+                    operation_id="codex-reconnect-idempotent",
+                    expected_selection_revision=selected["selection_revision"],
+                    expected_context_revision=4,
+                )
+            )
+        )
+
+    thread = threading.Thread(target=run_reconnect)
+    thread.start()
+    assert client.reconnect_entered.wait(timeout=5)
+
+    duplicate = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-idempotent",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert duplicate["status"] == "unavailable"
+    assert "already in flight" in duplicate["reason"]
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
+
+    client.release_reconnect.set()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert first_result[0]["status"] == "complete"
+
+    replay = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-idempotent",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert replay == first_result[0]
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
+
+
+def test_service_facade_codex_reconnect_blocks_parallel_operations_for_one_session() -> None:
+    """A durable session cannot be reconnected by two operation IDs at once."""
+    _service, client, facade, selected = _new_reconnect_facade()
+    client.block_reconnect = True
+    first_result: list[dict[str, Any]] = []
+
+    def run_reconnect() -> None:
+        first_result.append(
+            dict(
+                facade.codex_reconnect(
+                    codex_session_id="codex-session-private",
+                    operation_id="codex-reconnect-first",
+                    expected_selection_revision=selected["selection_revision"],
+                    expected_context_revision=4,
+                )
+            )
+        )
+
+    thread = threading.Thread(target=run_reconnect)
+    thread.start()
+    assert client.reconnect_entered.wait(timeout=5)
+
+    parallel = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-second",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert parallel["status"] == "unavailable"
+    assert "already in flight" in parallel["reason"]
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
+
+    client.release_reconnect.set()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert first_result[0]["status"] == "complete"
+
+
+def test_service_facade_codex_reconnect_cache_restores_retained_handle() -> None:
+    """Replaying an idempotent receipt restores the matching private handle."""
+    _service, client, facade, selected = _new_reconnect_facade()
+    first = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-cache-first",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    first_handle = facade._codex_session_handle
+    client.session = _FakeCodexSession(provider_session_id="provider-session-second")
+    second = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-cache-second",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert second["status"] == "complete"
+    assert facade._codex_session_handle is client.session
+
+    replay = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-cache-first",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert replay == first
+    assert facade._codex_session_handle is first_handle
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 2
+
+
+def test_service_facade_codex_reconnect_rejects_stale_or_foreign_binding() -> None:
+    """A stale selection or foreign recovery receipt never hydrates a handle."""
+    service = _FakeAuditService()
+    client = _FakeCodexClient(service)
+    facade = ServiceAuditWorkbenchFacade(
+        service, _FakeSession(), token=_FakeSession.session_token, codex_client=client
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-stale")
+    stale = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-stale",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=3,
+    )
+    assert stale["status"] == "conflict"
+    assert not client.calls
+
+    client.foreign_reconnect_binding = True
+    foreign = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-foreign",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert foreign["status"] == "conflict"
+    assert facade._codex_session_handle is None
+    assert facade._codex_operation_id is None
+    assert len(client.calls) == 1
+
+
+def test_service_facade_codex_reconnect_requires_explicit_bindings() -> None:
+    """A provider result without context/source proof cannot hydrate a handle."""
+    service = _FakeAuditService()
+    client = _FakeCodexClient(service)
+    facade = ServiceAuditWorkbenchFacade(
+        service, _FakeSession(), token=_FakeSession.session_token, codex_client=client
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-missing")
+    client.missing_reconnect_binding = True
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-missing",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "conflict"
+    assert "authoritative context binding" in result["reason"]
+    assert facade._codex_session_handle is None
+    assert facade._codex_operation_id is None
+
+
+def test_service_facade_codex_reconnect_rejects_foreign_operation_and_partial_source() -> None:
+    """A reconnect receipt must bind the new operation and both source identities."""
+    service = _FakeAuditService()
+    client = _FakeCodexClient(service)
+    facade = ServiceAuditWorkbenchFacade(
+        service, _FakeSession(), token=_FakeSession.session_token, codex_client=client
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-receipt")
+    client.foreign_reconnect_operation_binding = True
+
+    foreign_operation = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-foreign-operation",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert foreign_operation["status"] == "conflict"
+    assert "operation binding" in foreign_operation["reason"]
+    assert facade._codex_session_handle is None
+
+    client.foreign_reconnect_operation_binding = False
+    client.partial_reconnect_source_binding = True
+    partial_source = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-partial-source",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert partial_source["status"] == "conflict"
+    assert "source binding is incomplete" in partial_source["reason"]
+    assert facade._codex_session_handle is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_source_digest", "reason"),
+    [
+        pytest.param(
+            {},
+            "",
+            "no authoritative source identity",
+            id="missing-expected-source-digest",
+        ),
+        pytest.param({}, "source-digest-1", "no authoritative context binding", id="empty-result"),
+        pytest.param(
+            {"context": "malformed"},
+            "source-digest-1",
+            "context binding is malformed",
+            id="malformed-context",
+        ),
+        pytest.param(
+            {
+                "context": _FakeContext(episode_id="foreign-episode"),
+                "source": {
+                    "source_revision": "source-revision-1",
+                    "source_digest": "source-digest-1",
+                },
+            },
+            "source-digest-1",
+            "context does not match",
+            id="foreign-context",
+        ),
+        pytest.param(
+            {"context": _FakeContext(), "source": "malformed"},
+            "source-digest-1",
+            "source binding is malformed",
+            id="malformed-source",
+        ),
+        pytest.param(
+            {
+                "context": _FakeContext(),
+                "context_revision": 5,
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+            "source-digest-1",
+            "context revision does not match",
+            id="foreign-context-revision",
+        ),
+        pytest.param(
+            {
+                "context": _FakeContext(),
+                "source_revision": "foreign-source-revision",
+                "source_digest": "source-digest-1",
+            },
+            "source-digest-1",
+            "source revision does not match",
+            id="foreign-source-revision",
+        ),
+        pytest.param(
+            {
+                "context": _FakeContext(),
+                "source_revision": "source-revision-1",
+                "source_digest": "foreign-source-digest",
+            },
+            "source-digest-1",
+            "source identity does not match",
+            id="foreign-source-digest",
+        ),
+        pytest.param(
+            {"context": _FakeContext()},
+            "source-digest-1",
+            "no authoritative source binding",
+            id="missing-source-binding",
+        ),
+    ],
+)
+def test_codex_reconnect_binding_helper_rejects_unproven_context(
+    value: Any,
+    expected_source_digest: str,
+    reason: str,
+) -> None:
+    result = _codex_result_context_binding_mismatch(
+        value,
+        expected_operation_id="codex-reconnect-test",
+        expected_context=_FakeContext(),
+        expected_source_revision="source-revision-1",
+        expected_source_digest=expected_source_digest,
+    )
+
+    assert result is not None
+    assert reason in result
+
+
+def test_service_facade_codex_reconnect_rejects_missing_token() -> None:
+    _, client, facade, _ = _new_reconnect_facade(token=None)
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-no-token",
+        expected_selection_revision=0,
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "denied"
+    assert client is not None and not client.calls
+
+
+def test_service_facade_codex_reconnect_rejects_unbound_or_missing_client() -> None:
+    service, client, facade, selected = _new_reconnect_facade()
+    assert client is not None
+    facade._codex_client = None
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-no-client",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert result["status"] == "unavailable"
+
+    bound_client = _FakeCodexClient(service)
+    del bound_client.service
+    facade = ServiceAuditWorkbenchFacade(
+        service,
+        _FakeSession(),
+        token=_FakeSession.session_token,
+        codex_client=bound_client,
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-unbound")
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-unbound",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert result["status"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    (
+        "session_id",
+        "operation_id",
+        "expected_selection_revision",
+        "expected_context_revision",
+        "reason",
+    ),
+    [
+        pytest.param("", "codex-reconnect-valid", 1, 4, "session ID is invalid", id="session"),
+        pytest.param(
+            "codex-session-private",
+            "",
+            1,
+            4,
+            "operation_id is invalid",
+            id="operation",
+        ),
+        pytest.param(
+            "codex-session-private",
+            "codex-reconnect-invalid-revision",
+            True,
+            4,
+            "reconnect revisions are invalid",
+            id="selection-bool",
+        ),
+        pytest.param(
+            "codex-session-private",
+            "codex-reconnect-invalid-context-revision",
+            1,
+            -1,
+            "reconnect revisions are invalid",
+            id="context-negative",
+        ),
+    ],
+)
+def test_service_facade_codex_reconnect_rejects_invalid_arguments(
+    session_id: str,
+    operation_id: str,
+    expected_selection_revision: Any,
+    expected_context_revision: Any,
+    reason: str,
+) -> None:
+    _, client, facade, selected = _new_reconnect_facade()
+    if expected_selection_revision == 1 and not isinstance(expected_selection_revision, bool):
+        expected_selection_revision = selected["selection_revision"]
+    result = facade.codex_reconnect(
+        codex_session_id=session_id,
+        operation_id=operation_id,
+        expected_selection_revision=expected_selection_revision,
+        expected_context_revision=expected_context_revision,
+    )
+
+    assert result["status"] == "failed"
+    assert reason in result["reason"]
+    assert client is not None
+    assert not client.calls
+
+
+def test_service_facade_codex_reconnect_rejects_stale_selection_and_inflight_start() -> None:
+    _, client, facade, selected = _new_reconnect_facade()
+    stale = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-stale-selection",
+        expected_selection_revision=selected["selection_revision"] + 1,
+        expected_context_revision=4,
+    )
+    assert stale["status"] == "conflict"
+    assert client is not None and not client.calls
+
+    facade._codex_start_in_flight = True
+    deferred = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-inflight",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert deferred["status"] == "unavailable"
+    assert "in flight" in deferred["reason"]
+
+
+def test_service_facade_codex_reconnect_handles_authority_and_source_gaps() -> None:
+    service, client, facade, selected = _new_reconnect_facade()
+    service.read_context = lambda session, **kwargs: _FakeResult(
+        "failed", reason="context unavailable", context=None
+    )  # type: ignore[method-assign]
+    failed = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-no-context",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert failed["status"] == "unavailable"
+    assert "revalidate" in failed["reason"]
+    assert client is not None and not client.calls
+
+    source_gap_service = _FakeAuditService()
+    source_gap_service.context = _FakeContext(source_identity="")
+    _, source_client, source_facade, source_selected = _new_reconnect_facade(
+        service=source_gap_service
+    )
+    unavailable = source_facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-no-source",
+        expected_selection_revision=source_selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert unavailable["status"] == "unavailable"
+    assert "source binding" in unavailable["reason"]
+    assert source_client is not None and not source_client.calls
+
+
+@pytest.mark.parametrize("mode", ["missing-method", "no-operation-boundary", "no-token-boundary"])
+def test_service_facade_codex_reconnect_requires_provider_boundaries(mode: str) -> None:
+    _, client, facade, selected = _new_reconnect_facade()
+    assert client is not None
+    provider_calls: list[tuple[Any, ...]] = []
+    if mode == "missing-method":
+        client.reconnect = None  # type: ignore[method-assign]
+    elif mode == "no-operation-boundary":
+
+        def reconnect(session_id: str, *, audit_token: str) -> dict[str, Any]:
+            provider_calls.append((session_id, audit_token))
+            return {}
+
+        client.reconnect = reconnect  # type: ignore[method-assign]
+    else:
+
+        def reconnect(session_id: str, *, operation_id: str) -> dict[str, Any]:
+            provider_calls.append((session_id, operation_id))
+            return {}
+
+        client.reconnect = reconnect  # type: ignore[method-assign]
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id=f"codex-reconnect-{mode}",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "unavailable"
+    assert "boundary" in result["reason"] or "unavailable" in result["reason"]
+    assert provider_calls == []
+
+
+@pytest.mark.parametrize("signature", ["token", "kwargs"])
+def test_service_facade_codex_reconnect_supports_provider_token_signatures(signature: str) -> None:
+    _, client, facade, selected = _new_reconnect_facade()
+    assert client is not None
+    provider_calls: list[tuple[Any, ...]] = []
+    if signature == "token":
+
+        def reconnect(session_id: str, *, operation_id: str, token: str) -> dict[str, Any]:
+            provider_calls.append((session_id, operation_id, token))
+            return {
+                "status": "complete",
+                "session": client.session,
+                "operation_id": operation_id,
+                "context": facade._context,
+                "source": {
+                    "source_revision": "source-revision-1",
+                    "source_digest": "source-digest-1",
+                },
+            }
+    else:
+
+        def reconnect(session_id: str, *, operation_id: str, **kwargs: Any) -> dict[str, Any]:
+            provider_calls.append((session_id, operation_id, kwargs))
+            return {
+                "status": "complete",
+                "session": client.session,
+                "operation_id": operation_id,
+                "context": facade._context,
+                "source": {
+                    "source_revision": "source-revision-1",
+                    "source_digest": "source-digest-1",
+                },
+            }
+
+    client.reconnect = reconnect  # type: ignore[method-assign]
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id=f"codex-reconnect-{signature}",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "complete"
+    assert provider_calls
+    assert provider_calls[0][0] == "codex-session-private"
+    assert provider_calls[0][1] == f"codex-reconnect-{signature}"
+    if signature == "token":
+        assert provider_calls[0][2] == _FakeSession.session_token
+    else:
+        assert provider_calls[0][2]["audit_token"] == _FakeSession.session_token
+
+
+def test_service_facade_codex_reconnect_rejects_provider_failure_and_missing_status() -> None:
+    _, client, facade, selected = _new_reconnect_facade()
+    assert client is not None
+
+    def raising_reconnect(
+        session_id: str, *, operation_id: str, audit_token: str
+    ) -> dict[str, Any]:
+        raise RuntimeError("provider unavailable")
+
+    client.reconnect = raising_reconnect  # type: ignore[method-assign]
+    failed = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-provider-error",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert failed["status"] == "unavailable"
+    assert "provider reconnect failed" in failed["reason"]
+
+    def no_status_reconnect(
+        session_id: str, *, operation_id: str, audit_token: str
+    ) -> dict[str, Any]:
+        return {
+            "status": "pending",
+            "session": client.session,
+            "operation_id": operation_id,
+            "context": facade._context,
+            "source": {
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+        }
+
+    client.reconnect = no_status_reconnect  # type: ignore[method-assign]
+    projected = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-pending",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert projected["status"] == "pending"
+    assert facade._codex_session_handle is None
+
+
+def test_service_facade_codex_reconnect_requires_durable_session_and_exact_handle() -> None:
+    _, client, facade, selected = _new_reconnect_facade()
+    assert client is not None
+
+    def no_session_reconnect(
+        session_id: str, *, operation_id: str, audit_token: str
+    ) -> dict[str, Any]:
+        return {
+            "status": "complete",
+            "operation_id": operation_id,
+            "context": facade._context,
+            "source": {
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+        }
+
+    client.reconnect = no_session_reconnect  # type: ignore[method-assign]
+    missing = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-no-handle",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert missing["status"] == "unavailable"
+    assert "no durable session" in missing["reason"]
+
+    del client.reconnect
+    client.session = _FakeCodexSession(session_id="foreign-session")
+    foreign = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-foreign-handle",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert foreign["status"] == "conflict"
+    assert "foreign session" in foreign["reason"]
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -1565,6 +2322,58 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
         assert forbidden not in result_json
     read_call = next(call for call in service.calls if call[0] == "read_codex_activity")
     assert read_call[1][0] is facade._session
+    assert read_call[2]["token"] == _FakeSession.session_token
+    assert read_call[2]["context"] == service.context
+
+
+def test_service_facade_codex_read_rejects_foreign_post_reconnect_binding() -> None:
+    """A read after reconnect cannot project a foreign nested session."""
+    service, _client, facade, selected = _new_reconnect_facade()
+    facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-read-binding",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    foreign_context = _FakeContext(context_revision=99, episode_id="foreign-episode")
+
+    def read_codex_activity(
+        session: Any,
+        *,
+        token: str,
+        operation_id: str | None = None,
+        codex_session_id: str | None = None,
+        context: Any = None,
+    ) -> dict[str, Any]:
+        service._record(
+            "read_codex_activity",
+            session,
+            token=token,
+            operation_id=operation_id,
+            codex_session_id=codex_session_id,
+            context=context,
+        )
+        return {
+            "status": "complete",
+            "context": service.context,
+            "source": {
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+            "session": {
+                "context": foreign_context,
+                "source_revision": "foreign-source-revision",
+                "source_digest": "foreign-source-digest",
+            },
+        }
+
+    service.read_codex_activity = read_codex_activity
+    result = facade.codex_read(operation_id="codex-read-foreign-binding")
+
+    assert result["status"] == "conflict"
+    assert "context binding does not match" in result["reason"]
+    assert "foreign-episode" not in json.dumps(result, sort_keys=True)
+    read_call = next(call for call in service.calls if call[0] == "read_codex_activity")
     assert read_call[2]["token"] == _FakeSession.session_token
     assert read_call[2]["context"] == service.context
 

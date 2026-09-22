@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from scripts.dev import autopilot_recovery_cycle as cycle
 
@@ -161,3 +162,50 @@ def test_receipt_is_json_stable() -> None:
     second = cycle.run_cycle(repo="o/r", origin_main_sha=ORIGIN, runner=runner)
 
     assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+
+
+def test_default_staging_uses_helper_owned_temporary_directory(tmp_path: Path, monkeypatch) -> None:
+    """Default runs expose the audit only to preparation and never dirty the caller's CWD."""
+    monkeypatch.chdir(tmp_path)
+    base_runner = _runner_for(_queue(), _prep())
+    staged_paths: list[Path] = []
+
+    def runner(command):
+        if any("prepare_open_issue_contracts" in part for part in command):
+            audit_path = Path(command[command.index("--audit-json") + 1])
+            assert json.loads(audit_path.read_text(encoding="utf-8")) == {"complete": True}
+            staged_paths.append(audit_path)
+        return base_runner(command)
+
+    cycle.run_cycle(repo="o/r", origin_main_sha=ORIGIN, runner=runner)
+
+    assert not (tmp_path / "recovery_cycle_audit.json").exists()
+    assert len(staged_paths) == 1
+    assert not staged_paths[0].exists()
+
+
+def test_explicit_work_dir_preserves_staged_audit(tmp_path: Path) -> None:
+    """An explicit work directory retains the caller-owned audit artifact for inspection."""
+    runner = _runner_for(_queue(), _prep())
+
+    cycle.run_cycle(repo="o/r", origin_main_sha=ORIGIN, runner=runner, work_dir=tmp_path)
+
+    audit_path = tmp_path / "recovery_cycle_audit.json"
+    assert json.loads(audit_path.read_text(encoding="utf-8")) == {"complete": True}
+
+
+def test_temporary_staging_failure_does_not_fall_back_to_cwd(tmp_path: Path, monkeypatch) -> None:
+    """Unavailable helper-owned scratch fails closed instead of writing in the caller's CWD."""
+    monkeypatch.chdir(tmp_path)
+    runner = _runner_for(_queue(), _prep())
+
+    def fail_temporary_directory(*args, **kwargs):
+        raise OSError("scratch unavailable")
+
+    monkeypatch.setattr(cycle.tempfile, "TemporaryDirectory", fail_temporary_directory)
+    receipt = cycle.run_cycle(repo="o/r", origin_main_sha=ORIGIN, runner=runner)
+
+    assert receipt["next_action"] == "run_preparation"
+    assert receipt["terminal_refused"] is True
+    assert receipt["lane_errors"] == ["preparation_audit_staging_failed: scratch unavailable"]
+    assert not (tmp_path / "recovery_cycle_audit.json").exists()

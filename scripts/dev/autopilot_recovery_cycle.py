@@ -28,6 +28,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -207,16 +208,23 @@ class LaneBundle:
                 {"lane": "preparation", "reason": "skipped without contract audit payload"}
             )
             return
-        scratch = Path(work_dir) if work_dir is not None else Path.cwd()
-        audit_path = scratch / "recovery_cycle_audit.json"
         try:
-            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            if work_dir is not None:
+                self._stage_preparation_from(run, audit, Path(work_dir))
+                return
+            with tempfile.TemporaryDirectory(prefix="robot_sf_recovery_cycle_") as scratch:
+                self._stage_preparation_from(run, audit, Path(scratch))
         except OSError as exc:
-            self.errors.append(f"preparation_audit_write_failed: {exc}")
+            self.results["preparation"] = LaneResult(ok=False, error=f"audit_staging_failed: {exc}")
+            self.errors.append(f"preparation_audit_staging_failed: {exc}")
             self.skipped.append(
                 {"lane": "preparation", "reason": "cannot stage audit payload locally"}
             )
-            return
+
+    def _stage_preparation_from(self, run: Runner, audit: Mapping[str, Any], scratch: Path) -> None:
+        """Invoke preparation while its staged audit remains available to the runner."""
+        audit_path = scratch / "recovery_cycle_audit.json"
+        audit_path.write_text(json.dumps(audit), encoding="utf-8")
         self.preparation = self.collect(
             run,
             "preparation",

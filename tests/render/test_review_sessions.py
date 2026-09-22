@@ -984,10 +984,30 @@ def test_start_and_stop_race_serializes_the_inactive_owner_branch(tmp_path: Path
         for item in starts + stops
     )
     assert {starts[0].status, stops[0].status} <= {"cancelled", "failed", "complete"}
-    if starts[0].status == "complete":
-        assert stops[0].status == "complete"
-    else:
-        assert "session_owner_active" in starts[0].reason or stops[0].status == "cancelled"
+    failures = [item for item in starts + stops if item.status == "failed"]
+    assert all(
+        "session_owner_active" in item.reason or "stop_before_start" in item.reason
+        for item in failures
+    )
+    if not failures:
+        assert starts[0].status == stops[0].status
+
+
+def test_stop_before_start_settles_before_a_later_start(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    session = review_sessions.ReviewSession(
+        request,
+        base=tmp_path,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, request),
+    )
+
+    stopped = session.stop()
+    started = session.start()
+
+    assert stopped.status == "failed"
+    assert "stop_before_start" in stopped.reason
+    assert started.status == "complete"
 
 
 def test_distinct_controllers_do_not_replace_fresh_lifecycle_lease(tmp_path: Path) -> None:

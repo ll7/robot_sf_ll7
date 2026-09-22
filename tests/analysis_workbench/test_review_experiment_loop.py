@@ -2598,9 +2598,8 @@ def test_post_result_cancellation_precedes_recipe_terminal_marker(tmp_path: Path
 def test_post_result_wall_deadline_precedes_recipe_terminal_marker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real_monotonic = time.monotonic
-    clock = {"jump": 0.0}
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+    clock = _FakeMonotonicClock()
+    monkeypatch.setattr(time, "monotonic", clock)
 
     class TerminalTreatment(FakeExecutor):
         def execute(
@@ -2614,7 +2613,7 @@ def test_post_result_wall_deadline_precedes_recipe_terminal_marker(
             result = super().execute(operation_id, candidate, kind, spec, attempt)
             result["terminal"] = True
             if kind == "treatment":
-                clock["jump"] = 1.0
+                clock.advance(1.0)
             return result
 
     recipe = _recipe(max_candidates=1, max_executions=2)

@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Issue relationship contract and migration audit:
+[issue_relationships.md](issue_relationships.md).
+
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA
 `09f6b1beeff71b4ee30deae7cc2504c0c7310729`) and the release/audit workflow around it.

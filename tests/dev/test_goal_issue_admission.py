@@ -559,3 +559,40 @@ def test_module_import_preserves_sys_path() -> None:
     before = list(sys.path)
     importlib.reload(goal_issue_admission)
     assert sys.path == before
+
+
+def test_compact_admission_surfaces_heading_suggestions_when_needs_spec() -> None:
+    """compact_admission includes heading suggestion hints in reasons on needs_spec."""
+    payload = compact_admission(
+        {
+            "ok": False,
+            "outcome": "not_admitted",
+            "write_attempted": False,
+            "source_ref": "origin/main",
+            "preflight": {
+                "classification": "needs_spec",
+                "reasons": ["missing implementation-contract fields: inputs"],
+                "ready": False,
+                "write_allowed": False,
+                "contract": {
+                    "missing_fields": ["inputs"],
+                    "heading_suggestions": {
+                        "input contract": {
+                            "field": "inputs",
+                            "alias": "inputs",
+                            "score": 1.0,
+                        }
+                    },
+                },
+                "claim": {
+                    "ok": True,
+                    "claimed": False,
+                    "claim_ref": "agent-claims/issue-9501",
+                    "sha": None,
+                },
+            },
+        }
+    )
+
+    assert payload["classification"] == "needs_spec"
+    assert any("heading suggestion: 'input contract' -> 'inputs'" in r for r in payload["reasons"])

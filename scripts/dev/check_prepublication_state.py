@@ -26,6 +26,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -1058,6 +1059,52 @@ def _load_snapshot(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _snapshot_from_stdin() -> dict[str, Any]:
+    """Load a baseline snapshot or capture payload piped over standard input."""
+    try:
+        raw = sys.stdin.read()
+    except OSError as exc:
+        raise GateError(f"cannot read snapshot from stdin: {exc}") from exc
+    try:
+        payload = json.loads(raw or "null")
+    except json.JSONDecodeError as exc:
+        raise GateError(f"snapshot on stdin is not valid JSON: {exc.msg}") from exc
+    if (
+        isinstance(payload, dict)
+        and payload.get("kind") == "capture"
+        and isinstance(payload.get("snapshot"), dict)
+    ):
+        payload = payload["snapshot"]
+    if not isinstance(payload, dict):
+        raise GateError("snapshot on stdin is not a JSON object")
+    if payload.get("schema") != SCHEMA or payload.get("kind") != "snapshot":
+        raise GateError("snapshot on stdin has an unsupported schema")
+    return payload
+
+
+def _snapshot_from_arg(value: str | None) -> tuple[dict[str, Any], Path]:
+    """Load a baseline from a path or stdin for the check and sync commands.
+
+    Returns the baseline mapping and the snapshot path used for refreshed
+    records. A ``-`` value reads a snapshot (or capture payload wrapping one)
+    document from stdin; refreshed records then fall back to the branch
+    default path, exactly as a capture run without ``--snapshot-path``.
+    """
+    if value is None:
+        raise GateError(
+            "snapshot path is required: capture a baseline first, for example "
+            "`check_prepublication_state.py capture --repo OWNER/REPO --issue 123 "
+            "--branch my-branch --snapshot-path /tmp/x.json` and then "
+            "`check_prepublication_state.py check --snapshot-path /tmp/x.json`, "
+            "or pipe `capture ... | check --snapshot-path -`"
+        )
+    if value != "-":
+        snapshot_path = Path(value)
+        return _load_snapshot(snapshot_path), snapshot_path
+    baseline = _snapshot_from_stdin()
+    return baseline, _default_snapshot_path(str(baseline.get("branch") or ""))
+
+
 def _write_error(path: Path | None, error: str) -> dict[str, Any]:
     """Build a fail-closed error record."""
     payload = {
@@ -1167,7 +1214,13 @@ def _integrate_targets(
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(
-        description="Fail-closed remote-state gate for issue-to-PR publication."
+        description=(
+            "Fail-closed remote-state gate for issue-to-PR publication. "
+            "Roundtrip: capture a baseline to a file and check it back "
+            "(capture --snapshot-path /tmp/x.json, then check --snapshot-path "
+            "/tmp/x.json), or pipe the two commands "
+            "(capture ... | check --snapshot-path -)."
+        )
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1211,7 +1264,17 @@ def _parser() -> argparse.ArgumentParser:
         ("sync", "integrate changed remote refs and capture a refreshed baseline"),
     ):
         command = subparsers.add_parser(name, help=help_text)
-        command.add_argument("--snapshot-path", required=True)
+        command.add_argument(
+            "--snapshot-path",
+            required=False,
+            default=None,
+            help=(
+                "baseline snapshot file captured earlier, or - to read a "
+                "snapshot (or capture payload wrapping one) from stdin, e.g. "
+                "capture ... | check --snapshot-path -. Refreshed records "
+                "fall back to the branch default path."
+            ),
+        )
         command.add_argument("--decision-path")
         command.add_argument(
             "--max-pr-pages",
@@ -1284,38 +1347,6 @@ def _handle_capture(args: argparse.Namespace) -> int:
         payload["closing_prs"] = snapshot.get("closing_prs")
     print(json.dumps(payload, indent=2, sort_keys=True))
     return _exit_code(decision)
-
-
-def _handle_check_or_sync(args: argparse.Namespace) -> int:
-    """Handle the check and sync commands."""
-    snapshot_path = Path(args.snapshot_path)
-    baseline = _load_snapshot(snapshot_path)
-    baseline["base_ref"] = _normalize_base_ref(
-        str(baseline["base_ref"]), remote=str(baseline["remote"])
-    )
-    repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
-    max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
-    decision_path = _decision_path(snapshot_path, args.decision_path)
-    declaration_text = str(baseline.get("stack_declaration") or "")
-    current = collect_live_state(
-        repo=repo,
-        issue=_issue_number(baseline["issue"]),
-        branch=str(baseline["branch"]),
-        base_ref=str(baseline["base_ref"]),
-        remote=str(baseline["remote"]),
-        max_pr_pages=max_pr_pages,
-        declaration_text=declaration_text,
-    )
-    decision = evaluate_state(baseline, current)
-    if (
-        args.command == "check"
-        or decision["decision"] != "refresh-required"
-        or not getattr(args, "integrate", False)
-    ):
-        decision["decision_path"] = str(decision_path)
-        _write_json(decision_path, decision)
-        print(json.dumps(decision, indent=2, sort_keys=True))
-        return _exit_code(str(decision["decision"]))
 
 
 def _build_integration_targets(
@@ -1526,8 +1557,7 @@ def _evaluate_post_integration(
 
 def _handle_check_or_sync(args: argparse.Namespace) -> int:
     """Handle the check and sync commands."""
-    snapshot_path = Path(args.snapshot_path)
-    baseline = _load_snapshot(snapshot_path)
+    baseline, snapshot_path = _snapshot_from_arg(args.snapshot_path)
     baseline["base_ref"] = _normalize_base_ref(
         str(baseline["base_ref"]), remote=str(baseline["remote"])
     )
@@ -1604,7 +1634,11 @@ def main(argv: list[str] | None = None) -> int:
     except GateError as exc:
         decision_path: Path | None = None
         if args.command in {"check", "sync"}:
-            decision_path = _decision_path(Path(args.snapshot_path), args.decision_path)
+            raw_snapshot_path = getattr(args, "snapshot_path", None)
+            if raw_snapshot_path not in (None, "-"):
+                decision_path = _decision_path(Path(raw_snapshot_path), args.decision_path)
+            elif getattr(args, "decision_path", None):
+                decision_path = Path(args.decision_path)
         payload = _write_error(decision_path, str(exc))
         print(json.dumps(payload, indent=2, sort_keys=True))
         return EXIT_CODES["blocked"]

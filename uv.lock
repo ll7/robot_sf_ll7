@@ -5395,6 +5395,7 @@ all = [
     { name = "cma" },
     { name = "duckdb" },
     { name = "geopandas" },
+    { name = "imageio-ffmpeg" },
     { name = "matplotlib" },
     { name = "moviepy" },
     { name = "opencv-python-headless" },
@@ -5473,6 +5474,7 @@ training = [
     { name = "wandb" },
 ]
 viz = [
+    { name = "imageio-ffmpeg" },
     { name = "matplotlib" },
     { name = "moviepy" },
     { name = "pillow" },
@@ -5526,6 +5528,8 @@ requires-dist = [
     { name = "geopandas", marker = "extra == 'all'", specifier = ">=1.1.4" },
     { name = "geopandas", marker = "extra == 'maps'", specifier = ">=1.1.4" },
     { name = "gymnasium", specifier = ">=0.29,<1.2" },
+    { name = "imageio-ffmpeg", marker = "extra == 'all'", specifier = ">=0.6.0" },
+    { name = "imageio-ffmpeg", marker = "extra == 'viz'", specifier = ">=0.6.0" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.11.1" },

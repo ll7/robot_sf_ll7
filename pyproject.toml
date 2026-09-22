@@ -58,6 +58,7 @@ viz = [
     "matplotlib>=3.11.1",
     "pillow>=10.4.0",
     "moviepy>=2.0.0",
+    "imageio-ffmpeg>=0.6.0",
     "seaborn>=0.13.2",
 ]
 maps = [
@@ -731,6 +732,10 @@ robot-sf-carla-docker-runtime = "robot_sf_carla_bridge.cli:carla_docker_runtime_
 robot-sf-carla-parity-bundle-preflight = "robot_sf_carla_bridge.cli:preflight_carla_parity_bundle_main"
 robot-sf-carla-replay-diagnostics = "scripts.carla_bridge.diagnose_replay_semantics:main"
 robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
+
+[project.entry-points."robot_sf.scenario_review"]
+srev29-example-analyzer = "examples.scenario_review.components.episode_analyzer:DESCRIPTOR"
+srev29-example-renderer = "examples.scenario_review.components.telemetry_renderer:DESCRIPTOR"
 
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
 

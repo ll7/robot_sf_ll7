@@ -60,6 +60,17 @@ def _init_classes() -> dict[str, Any]:
             super().__init__(observation_space, features_dim=total_features)
 
             def padding(kernel_size: int) -> int:
+                """Return symmetric padding for an odd-width convolution kernel.
+
+                Args:
+                    kernel_size: Convolution kernel width; must be odd.
+
+                Returns:
+                    The ``(kernel_size - 1) / 2`` padding used by each conv block.
+
+                Raises:
+                    ValueError: If ``kernel_size`` is even.
+                """
                 if kernel_size % 2 == 0:
                     raise ValueError("kernel size must be odd!")
                 return int((kernel_size - 1) / 2)
@@ -67,6 +78,17 @@ def _init_classes() -> dict[str, Any]:
             def conv_block(
                 in_channels: int, out_channels: int, kernel_size: int, dropout_rate: float
             ) -> list[nn.Module]:
+                """Build a stride-two convolution followed by activation and dropout.
+
+                Args:
+                    in_channels: Number of input channels for the convolution.
+                    out_channels: Number of output channels for the convolution.
+                    kernel_size: Odd convolution kernel width.
+                    dropout_rate: Dropout probability applied after activation.
+
+                Returns:
+                    The ordered modules of one ray-convolution block.
+                """
                 return [
                     nn.Conv1d(in_channels, out_channels, kernel_size, 2, padding(kernel_size)),
                     nn.ReLU(),
@@ -93,10 +115,13 @@ def _init_classes() -> dict[str, Any]:
             self.drive_state_extractor = nn.Sequential(nn.Flatten())
 
         def forward(self, obs: dict) -> th.Tensor:
-            """Extract features from observation.
+            """Extract and concatenate flattened ray and drive-state features.
+
+            Args:
+                obs: Observation dict with ``rays`` and ``drive_state`` entries.
 
             Returns:
-                th.Tensor: Extracted feature tensor.
+                Concatenated feature tensor of shape ``(batch, features_dim)``.
             """
             ray_x = self.ray_extractor(obs[OBS_RAYS])
             drive_x = self.drive_state_extractor(obs[OBS_DRIVE_STATE])

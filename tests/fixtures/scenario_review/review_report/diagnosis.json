@@ -1,0 +1,15 @@
+{
+  "schema_version": "failure_diagnosis.v1",
+  "diagnosis_id": "diag_srev14_001",
+  "failure_type": "near_miss",
+  "failure_level": "interaction",
+  "confidence": "high",
+  "evidence_mode": "heuristic",
+  "onset_time_s": 0.5,
+  "severity": 0.8,
+  "causal_evidence": {
+    "predicate_id": "pred_near_miss_001",
+    "time_interval": [0.0, 0.5],
+    "actors": ["ped_1"]
+  }
+}

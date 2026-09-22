@@ -274,7 +274,11 @@ def _resolve_single_file_release_hydration(
             allow_download=True,
             cache_dir=cache_dir,
         )
-    if cache_dir is not None and not resolved.resolve().is_relative_to(cache_dir.resolve()):
+        # The registry resolver may return a relative cache path after a fresh
+        # download. Normalize it before leaving the temporary cwd so callers
+        # using an explicit repo root from another cwd can still open it.
+        resolved = resolved.resolve()
+    if cache_dir is not None and not resolved.is_relative_to(cache_dir.resolve()):
         raise ValueError(
             f"release hydration resolved outside the requested cache {cache_dir}: {resolved}"
         )

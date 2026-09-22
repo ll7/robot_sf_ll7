@@ -1,0 +1,46 @@
+{
+  "schema_version": "review-bundle.v1",
+  "bundle_id": "srev04-fixture-bundle",
+  "episodes": [
+    {
+      "episode_id": "ep-1",
+      "references": [
+        {
+          "artifact_id": "a1",
+          "uri": "tests/fixtures/scenario_review/review_package/payload-a.json",
+          "format": "episode-json",
+          "schema": "episode.fixture",
+          "sha256": "4723c055461bc035ad87eb9073ece21280e4e79b773c0aa69591598e67ec900f",
+          "source_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "map"
+        },
+        {
+          "artifact_id": "b1",
+          "uri": "tests/fixtures/scenario_review/review_package/payload-b.json",
+          "format": "episode-json",
+          "schema": "episode.fixture",
+          "sha256": "a356e90afa6eee20aecfcfb517e3d7f4245a68763dd5226103886fc884439745",
+          "source_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "map"
+        }
+      ]
+    },
+    {
+      "episode_id": "ep-2",
+      "references": [
+        {
+          "artifact_id": "a2",
+          "uri": "tests/fixtures/scenario_review/review_package/payload-a.json",
+          "format": "episode-json",
+          "schema": "episode.fixture",
+          "sha256": "4723c055461bc035ad87eb9073ece21280e4e79b773c0aa69591598e67ec900f",
+          "source_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "map"
+        }
+      ]
+    }
+  ]
+}

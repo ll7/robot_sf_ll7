@@ -26,11 +26,14 @@ selection broadly.
 
 1. Prepare:
    - read `docs/project_prioritization.md` and `docs/context/issue_713_batch_first_issue_workflow.md`,
+   - read `docs/context/issue_relationships.md` before using issue dependencies in queue decisions,
    - resolve project/field IDs once for the session,
    - check `gh api rate_limit` when batch size is large.
 2. Inspect queue:
    - list Project #5 items and issue metadata,
    - use REST for issue fields when GraphQL is constrained.
+   - inspect explicit native Blocked by/Blocking links and the canonical issue-body mirror; a
+     prose mention is not a dependency edge.
 3. Resolve blockers first:
    - route ambiguous issues to `gh-issue-clarifier`,
    - route implausible priorities to `gh-issue-priority-assessor`,
@@ -78,6 +81,8 @@ only an ordering preference, do not invent new priority-score inputs.
 - Do not ask a priority question when the next issue is already clear, when a blocker/clarification
   question is really needed instead, or when the tradeoff is only agent convenience.
 - Use follow-up handoffs rather than retry loops when quotas are temporarily exhausted.
+- Keep relationship writes separate from queue ordering: only explicit, reviewed Parent/Blocked by/
+  Blocking declarations may affect readiness, and `Relates to` remains informational/manual.
 
 ## Output
 

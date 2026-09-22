@@ -1,0 +1,11 @@
+{
+  "mode": "execute",
+  "target_component_id": "srev29-example-analyzer",
+  "target_config": {},
+  "conformance_probe": {
+    "sources": [
+      {"artifact_id": "trace-srev29-smoke", "uri": "tests/fixtures/scenario_review/review_registry/trace.json", "format": "episode-trace.fixture"}
+    ],
+    "config": {}
+  }
+}

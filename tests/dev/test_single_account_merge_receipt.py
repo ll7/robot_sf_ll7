@@ -819,6 +819,9 @@ def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailab
 ) -> None:
     """Quota recovery emits an auditable blocked receipt instead of an opaque error."""
     snapshot = _snapshot_with_provenance()
+    # Keep this quota-path unit test on the current base. A stale base exercises
+    # the separate ordinary-CAS path, which otherwise queries live PR files.
+    snapshot["base_sha"] = CURRENT_BASE_SHA
     monkeypatch.setattr(
         "scripts.dev.merge_queue_gate.fetch_pr_snapshot",
         lambda *args, **kwargs: (snapshot, None),
@@ -847,6 +850,7 @@ def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailab
         "diagnostic": "GitHub GraphQL quota exhausted",
     }
     assert evidence["thread_resolution"]["status"] == "unavailable"
+    assert evidence["ordinary_cas"]["status"] == "not_required"
     assert evidence["gate_audit"]["closing_discipline_status"] == "blocked"
     assert "closing_discipline_blocked" in evidence["gate_audit"]["reasons"]
     assert evidence["gate_audit"]["thread_resolution"] == "not_evaluated"

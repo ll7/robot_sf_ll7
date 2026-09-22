@@ -63,6 +63,12 @@ and does not establish that the merge succeeded or authorize a retry.
 Before treating CI or targeted tests as sufficient, compare the PR against the linked issue,
 design note, PR body, changed behavior, tests, docs, and stated claims.
 
+For issue-linked PRs, also compare the PR's `## Issue Relationship Mirror` with the linked issue's
+fresh canonical `## Relationships` block and native Parent/Blocked by/Blocking state. A stale or
+missing mirror is a handoff blocker, not evidence that a relationship may be inferred from prose.
+Relationship writes belong to the owning writable worktree; review worktrees only inspect and report
+drift. See [Explicit Issue Relationships](context/issue_relationships.md).
+
 Reviewers should explicitly classify the result:
 
 - `aligned`: implementation behavior, tests, docs, and claims satisfy the intended design or issue

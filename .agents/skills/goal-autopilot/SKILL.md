@@ -25,8 +25,8 @@ Use this skill for a continuous issue-to-merge-to-discovery loop.
 
 It orchestrates:
 - `goal-issue-implementation` — select, implement, validate, and open PRs.
-- `goal-pr-review` — review, fix, and apply `merge-ready`.
-- `gh-pr-merger` — merge approved PRs.
+- `goal-pr-review` — review, fix, and apply `merge-ready` or `merge-if-ci-green` while CI is pending.
+- `gh-pr-merger` — promote reviewed PRs after green CI and merge approved PRs.
 - `goal-issue-discovery` — discover new improvement opportunities.
 
 It does not define child-skill mechanics; it standardizes cycle policy, preflight
@@ -184,6 +184,7 @@ Do not use it for:
 - `docs/dev_guide.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
 - `docs/context/issue_713_batch_first_issue_workflow.md`
+- `docs/context/issue_relationships.md`
 - `.agents/skills/goal-issue-implementation/SKILL.md`
 - `.agents/skills/goal-pr-review/SKILL.md`
 - `.agents/skills/gh-pr-merger/SKILL.md`
@@ -211,7 +212,8 @@ Do not retry preflight without fixing the identified gap.
 Record at start:
 - Cycle scope: eligible issues, open PRs, and discovery lanes.
 - Write permissions: branch/commit/PR/project/merge writes allowed by default.
-- Stop condition: all eligible issues processed, no merge-ready PRs remain, discovery
+- Stop condition: all eligible issues processed, no merge-ready or
+  merge-if-ci-green PRs remain, discovery
   saturated, or user stop.
 - Queue truth: a label-filtered row is a candidate, not claimable work; only a successful live
   `goal_issue_admission.py --check-only` result is claimable.
@@ -237,23 +239,48 @@ Each cycle iteration follows a fixed phase order:
    issues are routed to closure, not scored. A failure here is non-fatal: log it and proceed with the
    existing ordering.
 2. `reconcile` — refresh project permission and worker-route status, then reconcile satisfied
-   blockers and stale lifecycle labels. Missing `read:project` is a non-fatal priority limitation;
-   it does not authorize treating the candidate queue as claimable. Route status is also non-fatal
-   for local work, but a prior failed route probe expires and must not remain authoritative.
+   blockers and stale lifecycle labels. Run the deterministic lifecycle reconciler in report mode
+   first (`uv run python scripts/dev/lifecycle_state_reconcile.py --report --json`); repair only
+   through its drift-checked apply mode and feed its `unresolved_drift_count` into the controller
+   receipt so terminal zero-work cannot ignore lifecycle drift. Missing `read:project` is a
+   non-fatal priority limitation; it does not authorize treating the candidate queue as claimable.
+   Route status is also non-fatal for local work, but a prior failed route probe expires and must
+   not remain authoritative.
 3. `prepare` — run the report-only open-issue audit and deterministic preparation planner. Review
    `ready`, `needs_ready_label`, `needs_spec`, parent, decision, compute, external-input, active,
-   review, covered, and wrong-owner groups separately. Use bounded dry-run/apply operations only;
-   never relabel a whole backlog to reach a target ready-pool size.
+   review, covered, and wrong-owner groups separately. Route `formalize_issue` rows through the
+   semantics-preserving repair lane (`uv run python scripts/dev/issue_contract_repair.py plan|apply`),
+   which renames only unambiguous headings with digest/CAS guards and reruns admission check-only;
+   readiness still enters only via the canonical readiness gate. Run the explicit relationship audit
+   for canonical issue declarations, and keep legacy mentions and `Relates to` links review-only.
+   Use bounded dry-run/apply operations only; never relabel a whole backlog to reach a target
+   ready-pool size.
 4. `admit/claim` — re-run the live `goal_issue_admission.py --check-only` gate for each selected
    leaf and acquire its atomic claim only after the check passes. A preparation packet or
    `state:ready` label is not a claim.
 5. `implement` — delegate to `goal-issue-implementation` for one admitted issue.
 6. `review` — delegate to `goal-pr-review` for all merge-eligible PRs, prioritizing exact-head
    domain-review backlog before new evidence-bearing implementation work.
-7. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
+7. `merge` — delegate to `gh-pr-merger` for all `merge-ready` and
+   `merge-if-ci-green` PRs. A conditional label routes CI readback and promotion;
+   it does not bypass the guarded merge gate or trigger another review.
 8. `discover` — delegate to `goal-issue-discovery` for one bounded, unsaturated discovery lane.
 
 ### Reconciliation and empty-queue policy
+
+Prefer the executable driver for the whole sequence (issue #9534). It composes
+the canonical owners, refuses terminal output, and emits a versioned receipt
+that doubles as the compact resume surface:
+
+```bash
+uv run python scripts/dev/autopilot_recovery_cycle.py \
+  --repo ll7/robot_sf_ll7 --json
+```
+
+Receipt schema: `autopilot_recovery_cycle_receipt.v1` (lanes evaluated, lane
+errors, skipped lanes with reasons, every lane count, `next_action`,
+`terminal_refused`, stale lifecycle rows, discovery decision). The driver is
+report-only; it never writes labels, issues, or claims.
 
 When the candidate queue has no claimable leaf, run the following bounded recovery sequence before
 declaring zero work:
@@ -309,7 +336,7 @@ head-bound zero-work proof covering:
 
 1. an authoritative complete ready-candidate scan and admission-reason
    histogram;
-2. zero merge-ready, review-eligible, and recoverable active PRs;
+2. zero merge-ready, merge-if-ci-green, review-eligible, and recoverable active PRs;
 3. zero safely promotable or formalizable issue contracts;
 4. a completed blocker reconciliation pass;
 5. an unsaturated discovery pass followed by readiness gating, or a
@@ -319,7 +346,11 @@ The proof schema is `goal_autopilot_zero_work_proof.v1`. It binds
 `origin_main_sha`, issue labels/bodies, atomic claims, PR heads, the preparation
 audit digest, and discovery-relevant paths. Any drift invalidates the receipt.
 An open issue count is neither positive nor negative zero-work evidence. A zero
-claimable issue count proves only implementation-lane exhaustion.
+claimable issue count proves only implementation-lane exhaustion. A capped
+snapshot reporting `truncated: true` never satisfies the complete-scan
+requirement: raise the queue limit until the snapshot returns
+`truncated: false` before emitting the proof, since the queue refills faster
+than lanes drain it and eligible `ready` issues hide below narrow cutoffs.
 
 For each issue created during discovery, `readiness_outcomes` must contain the
 canonical gate result object (at minimum a non-empty `outcome` and boolean
@@ -403,6 +434,11 @@ Before each phase, run a delegation checkpoint:
   machine-checkable state classification and next-action decisions under a loop budget. Use
   `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a bounded
   issue context capsule instead of rediscovering files with broad search.
+- Before declaring the `implement` phase zero-work, re-pull a fresh wide
+  `snapshot_issue_batch --claimable --limit 100` snapshot: the queue refills
+  faster than lanes drain it, and a narrow or stale window hides eligible
+  `ready` issues below the cutoff. A truncated snapshot is route evidence
+  only, never proof of queue exhaustion.
 - For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
   evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
   incomplete and retry with an explicit local timeout + heartbeat plan.
@@ -461,10 +497,14 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
    failures, stale-head state, terminal status, and the expected head SHA.
 
 3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
-   `merge-ready` PRs, or run bounded discovery. Do not mutate the waiting PR branch or resolve its
+   `merge-ready` PRs, promote green `merge-if-ci-green` PRs through `gh-pr-merger`,
+   or run bounded discovery. Do not mutate the waiting PR branch or resolve its
    final readiness while its monitor is active.
-4. When the monitor returns, the main agent must review the result against the current PR head SHA
-   before applying `merge-ready`, merging, or reporting completion.
+4. When the monitor returns, the main agent checks the result against the live
+   PR head SHA and conditional label, then routes a green, unchanged head to
+   `gh-pr-merger` for promotion. This CI readback is not a new implementation
+   review. A moved head or substantive new finding returns to normal review
+   triage before any readiness label, merge, or completion report.
 
 The polling helper prints queued, in-progress, failed, and passed check summaries. With `--json`,
 each poll payload includes compact `monitor` metadata: expected head SHA, SHA-match result, attempt
@@ -795,6 +835,9 @@ Each delegate skill may fail. Handle failures per phase:
 
 - `merge` failure:
   - If merge conflict: report conflict, leave PR open, continue.
+  - If CI is pending for a PR carrying `merge-if-ci-green`: leave the conditional
+    label in place and revisit the same head after checks settle, without a
+    routine waiting comment or repeat review.
   - If CI status check fails: leave PR in `merge-ready` (CI is async), report
     the failing check, continue.
   - If branch protection rejects: record rejection reason, continue.
@@ -829,7 +872,8 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
   reached, stop new evidence implementations, prioritize exact-head review/merge work, and permit
   only local support changes that do not add another domain-review obligation.
 - After implementation, review all open non-draft PRs that are not blocked.
-- Merge all PRs carrying the `merge-ready` label.
+- Process all PRs carrying `merge-if-ci-green` for green-CI promotion, then merge
+  all PRs carrying `merge-ready` through the guarded merger.
 - Run one bounded discovery pass after merge.
 - End the cycle only when the parent arbiter proves that every controller lane
   is empty and discovery is head-bound saturated.

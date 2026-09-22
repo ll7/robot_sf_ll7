@@ -1,0 +1,4 @@
+{
+  "metric_order": ["clearance_m", "success_rate"],
+  "report_title": "SREV-25 recorded-results fixture comparison"
+}

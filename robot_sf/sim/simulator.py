@@ -25,7 +25,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from math import atan2, ceil, cos, isfinite, pi, sin
+from math import atan2, cos, isfinite, pi, sin
 from random import sample, uniform
 from typing import TYPE_CHECKING, Any
 
@@ -61,8 +61,17 @@ if TYPE_CHECKING:
     from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
     from robot_sf.robot.robot_state import Robot
 
-from robot_sf.nav.map_config import MapDefinition, SocialGroupDefinition
-from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    MapDefinition,
+    SocialGroupDefinition,
+    normalize_goal_completion_policy,
+)
+from robot_sf.nav.navigation import (
+    RouteNavigator,
+    get_prepared_obstacles,
+    sample_route,
+)
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForce,
@@ -419,6 +428,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config = PySFSimConfig()
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
+    # Set this before PedState construction so delayed behaviors cache the configured cap.
+    pysf_config.scene_config.max_speed_multiplier = config.peds_speed_mult
     pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
     pysf_config.obstacle_force_config._obstacle_force_law_resolution_mode = getattr(
         config,
@@ -487,6 +498,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
     )
     pysf_sim.peds.max_speed_multiplier = config.peds_speed_mult
     _enforce_ped_desired_speeds(pysf_sim.peds, config)
+    for behavior in peds_behaviors:
+        if isinstance(behavior, SinglePedestrianBehavior):
+            behavior.bind_pysf_peds(pysf_sim.peds)
 
     return pysf_sim, pysf_state, groups, peds_behaviors, pedestrian_response_multipliers
 
@@ -523,6 +537,7 @@ class Simulator:
     robots: list[Robot]
     goal_proximity_threshold: float
     random_start_pos: bool
+    goal_completion_policy: str = field(init=False)
     robot_navs: list[RouteNavigator] = field(init=False)
     pysf_sim: PySFSimulator = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
@@ -585,6 +600,12 @@ class Simulator:
             )
             self.peds_have_obstacle_forces = False
 
+        configured_policy = getattr(self.config, "goal_completion_policy", None)
+        map_policy = getattr(self.map_def, "goal_completion_policy", None)
+        self.goal_completion_policy = normalize_goal_completion_policy(
+            configured_policy if configured_policy is not None else map_policy
+        )
+
         self.sampler_capture = self._new_sampler_capture()
         (
             self.pysf_sim,
@@ -612,7 +633,11 @@ class Simulator:
         )
 
         self.robot_navs = [
-            RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
+            RouteNavigator(
+                proximity_threshold=self.goal_proximity_threshold,
+                completion_policy=self.goal_completion_policy,
+            )
+            for _ in self.robots
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
@@ -682,6 +707,16 @@ class Simulator:
                 ),
             )
         return dict(metadata_fn())
+
+    def goal_completion_metadata(self) -> dict[str, Any]:
+        """Return versioned success-definition and route-binding runtime metadata."""
+        if self.goal_completion_policy == GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1:
+            return {}
+        return {
+            "schema_version": "success_definition_runtime.v1",
+            "policy": self.goal_completion_policy,
+            "robots": [nav.completion_metadata() for nav in self.robot_navs],
+        }
 
     def _oracle_route_indices(self) -> tuple[int | None, ...]:
         """Return best-effort route indices aligned with simulator pedestrian rows."""
@@ -1611,8 +1646,18 @@ class Simulator:
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:], start_pos=waypoints[0])
+                waypoints = sample_route(
+                    self.map_def,
+                    None if self.random_start_pos else i,
+                    completion_policy=self.goal_completion_policy,
+                )
+                nav.new_route(
+                    waypoints[1:],
+                    start_pos=waypoints[0],
+                    goal_zone=getattr(waypoints, "goal_zone", None),
+                    spawn_id=getattr(waypoints, "spawn_id", None),
+                    goal_id=getattr(waypoints, "goal_id", None),
+                )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: list[RobotAction]) -> None:
@@ -1693,6 +1738,32 @@ class Simulator:
         ]
 
 
+def split_robot_counts(num_robots: int, num_start_pos: int) -> list[int]:
+    """Split ``num_robots`` across simulators of capacity ``num_start_pos``.
+
+    Every simulator except possibly the last receives a full
+    ``num_start_pos`` complement; the last receives the exact remainder so the
+    counts always sum to ``num_robots`` (issue #9344: the previous inline
+    ``max(1, num_robots % num_start_pos)`` remainder dropped robots whenever
+    ``num_robots`` was an exact multiple of ``num_start_pos``).
+
+    Returns:
+        Per-simulator robot counts whose sum equals ``num_robots``.
+
+    Raises:
+        ValueError: If either count is not a positive integer.
+    """
+    if not isinstance(num_robots, int) or isinstance(num_robots, bool) or num_robots < 1:
+        raise ValueError(f"num_robots must be a positive integer, got {num_robots!r}")
+    if not isinstance(num_start_pos, int) or isinstance(num_start_pos, bool) or num_start_pos < 1:
+        raise ValueError(f"num_start_pos must be a positive integer, got {num_start_pos!r}")
+    full, rest = divmod(num_robots, num_start_pos)
+    counts = [num_start_pos] * full
+    if rest:
+        counts.append(rest)
+    return counts
+
+
 def init_simulators(
     env_config: EnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
@@ -1724,7 +1795,8 @@ def init_simulators(
             "and that spawn/goal zones plus routes are present.",
         )
 
-    num_sims = ceil(num_robots / map_def.num_start_pos)
+    robot_counts = split_robot_counts(num_robots, map_def.num_start_pos)
+    num_sims = len(robot_counts)
 
     # Calculate the proximity to the goal based on the robot radius and goal radius
     goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
@@ -1735,11 +1807,7 @@ def init_simulators(
     # Create the required number of simulators
     for i in range(num_sims):
         # Determine the number of robots for this simulator
-        n = (
-            map_def.num_start_pos
-            if i < num_sims - 1
-            else max(1, num_robots % map_def.num_start_pos)
-        )
+        n = robot_counts[i]
 
         # Create the robots for this simulator
         sim_robots = [env_config.robot_factory() for _ in range(n)]
@@ -1810,6 +1878,12 @@ class PedSimulator(Simulator):
         ego pedestrian state, initializes the physics simulator with pedestrian
         forces and robot interactions, and prepares robot navigation paths.
         """
+        configured_policy = getattr(self.config, "goal_completion_policy", None)
+        map_policy = getattr(self.map_def, "goal_completion_policy", None)
+        self.goal_completion_policy = normalize_goal_completion_policy(
+            configured_policy if configured_policy is not None else map_policy
+        )
+
         # NOTE (issue #4618 R2): the pedestrian-centric simulator intentionally
         # diverges from Simulator's heterogeneous-population wiring, and the
         # divergence is preserved (not unified) per issue #6465. It OMITS the
@@ -1844,7 +1918,11 @@ class PedSimulator(Simulator):
         )
 
         self.robot_navs = [
-            RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
+            RouteNavigator(
+                proximity_threshold=self.goal_proximity_threshold,
+                completion_policy=self.goal_completion_policy,
+            )
+            for _ in self.robots
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
@@ -1934,8 +2012,18 @@ class PedSimulator(Simulator):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:], start_pos=waypoints[0])
+                waypoints = sample_route(
+                    self.map_def,
+                    None if self.random_start_pos else i,
+                    completion_policy=self.goal_completion_policy,
+                )
+                nav.new_route(
+                    waypoints[1:],
+                    start_pos=waypoints[0],
+                    goal_zone=getattr(waypoints, "goal_zone", None),
+                    spawn_id=getattr(waypoints, "spawn_id", None),
+                    goal_id=getattr(waypoints, "goal_id", None),
+                )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
         # Ego_pedestrian reset
         if self.spawn_near_robot:

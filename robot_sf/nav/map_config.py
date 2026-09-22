@@ -8,10 +8,7 @@ from dataclasses import dataclass, field
 from math import isfinite, sqrt
 from typing import Any
 
-import matplotlib.axes
-import matplotlib.patches as mpl_patches
 from loguru import logger
-from matplotlib.path import Path as MplPath
 from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
@@ -22,6 +19,47 @@ from robot_sf.nav.nav_types import (
     SemanticBoundary,
 )
 from robot_sf.nav.obstacle import Obstacle
+
+# Success-definition identifiers are intentionally versioned.  The legacy policy is
+# the default so maps/configurations that predate the goal-zone policy retain their
+# historical waypoint-radius semantics.
+GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1 = "waypoint_radius_v1"
+GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1 = "goal_zone_entry_v1"
+SUPPORTED_GOAL_COMPLETION_POLICIES = frozenset(
+    {
+        GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+        GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    }
+)
+
+
+def normalize_goal_completion_policy(value: object | None) -> str:
+    """Validate and normalize a versioned goal-completion policy identifier.
+
+    ``None`` is deliberately interpreted as the historical waypoint-radius policy;
+    callers that opt into a different definition must name its version explicitly.
+    Unknown, empty, or non-string values fail closed instead of silently reverting
+    to legacy semantics.
+
+    Returns:
+        str: Canonical versioned policy identifier.
+
+    Raises:
+        ValueError: If ``value`` is not a supported versioned identifier.
+    """
+    if value is None:
+        return GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1
+    if not isinstance(value, str):
+        raise ValueError(
+            f"goal_completion_policy must be a versioned string identifier; got {value!r}"
+        )
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_GOAL_COMPLETION_POLICIES:
+        raise ValueError(
+            "Unknown goal_completion_policy "
+            f"{value!r}; supported policies are {sorted(SUPPORTED_GOAL_COMPLETION_POLICIES)}"
+        )
+    return normalized
 
 
 @dataclass
@@ -677,6 +715,14 @@ class MapDefinition:
     Rows from different contracts must never be pooled as comparable evidence.
     """
 
+    goal_completion_policy: str = GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1
+    """Versioned success definition used for robot route completion.
+
+    ``waypoint_radius_v1`` preserves the historical final-waypoint distance
+    predicate.  ``goal_zone_entry_v1`` is an explicit opt-in that completes a
+    route when the robot centre enters the bound route goal rectangle.
+    """
+
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
@@ -715,6 +761,7 @@ class MapDefinition:
                 f"Unknown svg_geometry_contract {self.svg_geometry_contract!r}. "
                 f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
             )
+        self.goal_completion_policy = normalize_goal_completion_policy(self.goal_completion_policy)
 
         if not self.robot_spawn_zones:
             logger.error("Robot spawn zones mustn't be empty!")
@@ -950,6 +997,13 @@ class MapDefinition:
         Raises:
             TypeError: If ax is not a matplotlib.axes.Axes object.
         """
+
+        # Keep plotting optional for canonical simulation/runner imports.  In
+        # particular, native diagnostics must not pay Matplotlib's first-use
+        # font-cache cost before their bounded execution deadline starts.
+        import matplotlib.axes  # noqa: PLC0415
+        import matplotlib.patches as mpl_patches  # noqa: PLC0415
+        from matplotlib.path import Path as MplPath  # noqa: PLC0415
 
         if not isinstance(ax, matplotlib.axes.Axes):
             raise TypeError("ax must be a matplotlib.axes.Axes object")
@@ -1575,10 +1629,17 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         ped_routes,
         single_pedestrians,
         infrastructure_zones=infrastructure_zones,
+        goal_completion_policy=map_structure.get(
+            "goal_completion_policy",
+            GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+        ),
     )
 
 
 __all__ = [
+    "GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1",
+    "GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1",
+    "SUPPORTED_GOAL_COMPLETION_POLICIES",
     "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
@@ -1587,6 +1648,7 @@ __all__ = [
     "PedestrianWaitRule",
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
+    "normalize_goal_completion_policy",
     "parse_social_group_definitions",
     "serialize_map",
 ]

@@ -53,6 +53,14 @@ def _init_classes() -> dict[str, Any]:
             self.output_proj = nn.Linear(embed_dim, embed_dim)
 
         def forward(self, x: th.Tensor) -> th.Tensor:
+            """Project, attend, and re-project a batch of embedded sequences.
+
+            Args:
+                x: Input of shape ``(batch, seq_len, embed_dim)``.
+
+            Returns:
+                Context features of the same shape ``(batch, seq_len, embed_dim)``.
+            """
             batch_size, seq_len, embed_dim = x.shape
 
             Q = (
@@ -133,6 +141,16 @@ def _init_classes() -> dict[str, Any]:
             self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
 
         def forward(self, obs: dict) -> th.Tensor:
+            """Embed LiDAR rays, refine them with self-attention, and fuse drive state.
+
+            Args:
+                obs: Observation dict with ``rays`` ``(batch, timesteps, num_rays)``
+                    and ``drive_state`` entries.
+
+            Returns:
+                Concatenated attended-ray and drive-state features of shape
+                ``(batch, features_dim)``.
+            """
             rays = obs[OBS_RAYS]
             rays_transposed = rays.transpose(1, 2)
             ray_embeddings = self.ray_embedding(rays_transposed)

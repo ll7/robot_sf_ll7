@@ -1,0 +1,10 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev29-smoke",
+  "component_id": "srev29-review-registry",
+  "sources": [
+    {"artifact_id": "trace-srev29-smoke", "uri": "tests/fixtures/scenario_review/review_registry/trace.json", "format": "episode-trace.fixture"}
+  ],
+  "config": {},
+  "output_directory": "srev-29-smoke"
+}

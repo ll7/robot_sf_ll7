@@ -9,7 +9,7 @@ all five re-exported classes.
 import os
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from math import atan2, pi
 from pathlib import Path
@@ -36,6 +36,115 @@ _SOCNAV_ASSET_SETUP_CMD = "uv run python scripts/tools/prepare_socnav_assets.py"
 _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 _PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
 _SOCNAV_IMPORT_LOCK = threading.Lock()
+
+# Goal-approach correction versions are deliberately separate from the
+# obstacle-force law versions.  The default is the historical planner path;
+# callers must opt in to a correction explicitly so old traces remain
+# reproducible (issue #9428).
+SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1 = "legacy_v1"
+SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1 = "terminal_goal_v1"
+SOCIAL_FORCE_GOAL_APPROACH_VERSIONS = frozenset(
+    {
+        SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+        SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+    }
+)
+SOCIAL_FORCE_GOAL_APPROACH_VERSION_SELECTOR_KEYS = (
+    "goal_approach_version",
+    "social_force_goal_approach_version",
+    "version",
+)
+
+
+class _ResolvedSocialForceGoalApproachVersion(str):
+    """String-compatible goal-approach version retaining selector provenance."""
+
+    resolution_mode: str
+
+    def __new__(cls, value: str, resolution_mode: str) -> "_ResolvedSocialForceGoalApproachVersion":
+        instance = super().__new__(cls, value)
+        instance.resolution_mode = resolution_mode
+        return instance
+
+    def __reduce_ex__(
+        self, protocol: int
+    ) -> tuple[type["_ResolvedSocialForceGoalApproachVersion"], tuple[str, str]]:
+        """Keep resolution provenance when the config is copied.
+
+        Returns:
+            tuple: Constructor and arguments used to recreate this value.
+        """
+        del protocol
+        return type(self), (str(self), self.resolution_mode)
+
+
+def _resolve_social_force_goal_approach_version_value(value: Any) -> tuple[str, str]:
+    """Resolve one goal-approach selector and retain how it was supplied.
+
+    Returns:
+        tuple[str, str]: Canonical version and selector-resolution mode.
+    """
+    if isinstance(value, _ResolvedSocialForceGoalApproachVersion):
+        return str(value), value.resolution_mode
+    if value is None:
+        return SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1, "defaulted_missing"
+    if not isinstance(value, str):
+        raise TypeError("social-force goal-approach version must be a string or None")
+    resolved = value.strip()
+    if not resolved:
+        return SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1, "historical_unversioned"
+    if resolved not in SOCIAL_FORCE_GOAL_APPROACH_VERSIONS:
+        supported = ", ".join(sorted(SOCIAL_FORCE_GOAL_APPROACH_VERSIONS))
+        raise ValueError(
+            f"unsupported social-force goal-approach version {resolved!r}; "
+            f"expected one of {supported}"
+        )
+    return resolved, "explicit"
+
+
+def resolve_social_force_goal_approach_version_with_mode(
+    value: Any = None,
+) -> tuple[str, str]:
+    """Resolve a versioned goal-approach selector with compatibility aliases.
+
+    Returns:
+        tuple[str, str]: Canonical version and selector-resolution mode.
+    """
+    if not isinstance(value, Mapping):
+        resolved, mode = _resolve_social_force_goal_approach_version_value(value)
+        return _ResolvedSocialForceGoalApproachVersion(resolved, mode), mode
+
+    selectors = [
+        (key, value[key])
+        for key in SOCIAL_FORCE_GOAL_APPROACH_VERSION_SELECTOR_KEYS
+        if key in value
+    ]
+    if not selectors:
+        return (
+            _ResolvedSocialForceGoalApproachVersion(
+                SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+                "defaulted_missing",
+            ),
+            "defaulted_missing",
+        )
+
+    resolved_selectors: list[tuple[str, Any, str, str]] = []
+    for key, candidate in selectors:
+        resolved, mode = _resolve_social_force_goal_approach_version_value(candidate)
+        resolved_selectors.append((key, candidate, resolved, mode))
+    resolved_versions = {resolved for _key, _candidate, resolved, _mode in resolved_selectors}
+    if len(resolved_versions) > 1:
+        details = ", ".join(f"{key}={candidate!r}" for key, candidate, *_ in resolved_selectors)
+        raise ValueError(
+            "conflicting social-force goal-approach version selectors; "
+            "provide one consistent selector: " + details
+        )
+
+    resolved = resolved_selectors[0][2]
+    mode = "historical_unversioned"
+    if any(selector[3] == "explicit" for selector in resolved_selectors):
+        mode = "explicit"
+    return _ResolvedSocialForceGoalApproachVersion(resolved, mode), mode
 
 
 @dataclass
@@ -196,13 +305,23 @@ class SocNavPlannerConfig:
     forecast_variant_dt_s: float = 0.1
     forecast_variant_risk_distance_m: float = 3.0
     social_force_obstacle_law: Any = None
+    social_force_goal_approach_version: Any = None
+    social_force_goal_approach_radius: float = 4.0
+    social_force_goal_approach_stop_distance: float = 1.75
+    social_force_goal_approach_max_speed: float = 0.75
+    social_force_goal_approach_clearance: float = 0.25
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Resolve law assignments immediately and retain selector provenance."""
+        """Resolve versioned force selectors immediately and retain provenance."""
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
             object.__setattr__(self, "_obstacle_force_law_resolution_mode", mode)
+            return
+        if name == "social_force_goal_approach_version":
+            resolved, mode = resolve_social_force_goal_approach_version_with_mode(value)
+            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, "_social_force_goal_approach_resolution_mode", mode)
             return
         object.__setattr__(self, name, value)
 
@@ -220,6 +339,13 @@ class SocNavPlannerConfig:
     def social_force_obstacle_law_version(self, value: Any) -> None:
         """Set the obstacle law through the explicit versioned alias."""
         self.social_force_obstacle_law = value
+
+    @property
+    def social_force_goal_approach_resolution_mode(self) -> str:
+        """Return how the goal-approach version was resolved."""
+        return getattr(
+            self, "_social_force_goal_approach_resolution_mode", "historical_unversioned"
+        )
 
 
 class TrivialReferencePlannerAdapter(OccupancyAwarePlannerMixin):

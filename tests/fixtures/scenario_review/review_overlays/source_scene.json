@@ -1,0 +1,152 @@
+{
+  "schema_version": "threejs-viewer.v1",
+  "episode_id": 101,
+  "map": {
+    "width": 10.0,
+    "height": 8.0,
+    "bounds": [
+      [0.0, 10.0, 0.0, 0.0],
+      [0.0, 10.0, 8.0, 8.0],
+      [0.0, 0.0, 0.0, 8.0],
+      [10.0, 10.0, 0.0, 8.0]
+    ],
+    "obstacles": [
+      {
+        "vertices": [
+          [2.0, 2.0],
+          [4.0, 2.0],
+          [4.0, 4.0],
+          [2.0, 4.0]
+        ]
+      }
+    ],
+    "zones": {
+      "robot_spawn": [
+        [1.0, 1.0],
+        [2.0, 1.0],
+        [2.0, 2.0],
+        [1.0, 2.0]
+      ],
+      "robot_goal": [
+        [8.0, 6.0],
+        [9.0, 6.0],
+        [9.0, 7.0],
+        [8.0, 7.0]
+      ]
+    }
+  },
+  "frames": [
+    {
+      "frame_idx": 0,
+      "timestep": 0,
+      "t_s": 0.0,
+      "robot": {
+        "position": [1.0, 1.5],
+        "yaw": 0.0,
+        "radius": 0.3,
+        "speed": 0.5,
+        "action": [0.5, 0.0],
+        "goal": [8.0, 6.0],
+        "clearance_m": 1.5
+      },
+      "pedestrians": [
+        {
+          "id": "ped-01",
+          "position": [2.5, 1.8],
+          "yaw": 0.0,
+          "speed": 0.4
+        }
+      ]
+    },
+    {
+      "frame_idx": 1,
+      "timestep": 1,
+      "t_s": 0.1,
+      "robot": {
+        "position": [2.0, 2.0],
+        "yaw": 0.2,
+        "radius": 0.3,
+        "speed": 0.7,
+        "action": [0.7, 0.2],
+        "goal": [8.0, 6.0],
+        "clearance_m": 1.2
+      },
+      "pedestrians": [
+        {
+          "id": "ped-01",
+          "position": [2.8, 2.2],
+          "yaw": 0.1,
+          "speed": 0.4
+        }
+      ]
+    },
+    {
+      "frame_idx": 2,
+      "timestep": 2,
+      "t_s": 0.2,
+      "robot": {
+        "position": [3.5, 3.0],
+        "yaw": 0.4,
+        "radius": 0.3,
+        "speed": 0.9,
+        "action": [0.9, 0.4],
+        "goal": [8.0, 6.0],
+        "clearance_m": 0.85
+      },
+      "pedestrians": [
+        {
+          "id": "ped-01",
+          "position": [3.2, 2.8],
+          "yaw": 0.2,
+          "speed": 0.4
+        }
+      ]
+    },
+    {
+      "frame_idx": 3,
+      "timestep": 3,
+      "t_s": 0.3,
+      "robot": {
+        "position": [5.0, 4.0],
+        "yaw": 0.4,
+        "radius": 0.3,
+        "speed": 1.0,
+        "action": [1.0, 0.0],
+        "goal": [8.0, 6.0],
+        "clearance_m": 1.4
+      },
+      "pedestrians": []
+    },
+    {
+      "frame_idx": 4,
+      "timestep": 4,
+      "t_s": 0.4,
+      "robot": {
+        "position": [7.0, 5.5],
+        "yaw": 0.5,
+        "radius": 0.3,
+        "speed": 1.1,
+        "action": [1.1, 0.1],
+        "goal": [8.0, 6.0],
+        "clearance_m": 2.0
+      },
+      "pedestrians": []
+    }
+  ],
+  "trajectory": [
+    [1.0, 1.5],
+    [2.0, 2.0],
+    [3.5, 3.0],
+    [5.0, 4.0],
+    [7.0, 5.5]
+  ],
+  "events": [
+    {
+      "event_id": "evt-001",
+      "type": "checkpoint",
+      "t_s": 0.2,
+      "position": [3.5, 3.0],
+      "description": "WayPoint Alpha reached"
+    }
+  ]
+}

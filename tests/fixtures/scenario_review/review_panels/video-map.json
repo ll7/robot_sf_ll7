@@ -1,0 +1,9 @@
+{
+  "schema_version": "media-mapping.v1",
+  "source_identity": {"episode_id": "episode-17", "execution_id": "exec-17", "camera_id": "cam-a"},
+  "frames": [
+    {"frame_index": 0, "pts_s": 0.0, "source_time_s": 10.1, "available": true},
+    {"frame_index": 1, "pts_s": 0.2, "source_time_s": 10.9, "available": true},
+    {"frame_index": 2, "pts_s": 0.4, "source_time_s": 12.2, "available": true}
+  ]
+}

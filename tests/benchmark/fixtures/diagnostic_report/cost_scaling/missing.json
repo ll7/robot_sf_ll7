@@ -1,0 +1,22 @@
+[
+  {
+    "row_id": "cost-missing",
+    "planner_id": "nominal_social_force",
+    "sim_step": 3,
+    "sim_time_s": 0.3,
+    "observation_source_time_s": 0.3,
+    "planner_available_time_s": 0.35,
+    "logging_time_s": 0.4,
+    "observation_version": 2,
+    "consumed_observation_version": 2,
+    "candidates": null,
+    "cost_scale": null,
+    "cost_units": null,
+    "commanded_control": [0.5, 0.0],
+    "executed_control": [0.5, 0.0],
+    "saturation_flag": null,
+    "collision_event": false,
+    "unsupported_narrative": null,
+    "provenance": {"artifact_digest": "digest-cost-missing", "source_row": "cost_scaling/missing.json#0"}
+  }
+]

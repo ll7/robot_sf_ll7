@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.nav.map_config import GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
 from robot_sf.training import scenario_loader
 from robot_sf.training.scenario_loader import (
     _coerce_positive_float,
@@ -389,6 +390,33 @@ def test_build_robot_config_applies_action_latency_overrides(tmp_path: Path) -> 
 
     assert step_config.sim_config.resolved_action_latency_steps == 2
     assert ms_config.sim_config.resolved_action_latency_steps == 3
+
+
+def test_build_robot_config_applies_goal_completion_policy_override(tmp_path: Path) -> None:
+    """Scenario YAML must preserve the explicitly selected success-definition version."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "goal-zone-entry-runtime-smoke",
+            "simulation_config": {
+                "goal_completion_policy": GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+            },
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert config.sim_config.goal_completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
+
+
+def test_build_robot_config_rejects_unknown_goal_completion_policy(tmp_path: Path) -> None:
+    """Unknown success-definition versions must fail closed during scenario loading."""
+    with pytest.raises(ValueError, match="Unknown goal_completion_policy"):
+        build_robot_config_from_scenario(
+            {
+                "name": "unknown-goal-policy-runtime-smoke",
+                "simulation_config": {"goal_completion_policy": "goal_zone_entry_v9"},
+            },
+            scenario_path=tmp_path / "scenario.yaml",
+        )
 
 
 def test_build_robot_config_applies_oracle_force_trace_override(tmp_path: Path) -> None:

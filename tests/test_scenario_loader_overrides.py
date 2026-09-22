@@ -5,9 +5,15 @@ from __future__ import annotations
 import pytest
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    MapDefinition,
+    MapDefinitionPool,
+    SinglePedestrianDefinition,
+)
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.training.scenario_loader import (
+    _apply_simulation_overrides,
     _apply_single_pedestrian_overrides,
     _apply_social_group_overrides,
     apply_single_pedestrian_overrides,
@@ -202,3 +208,23 @@ def test_social_group_overrides_reject_unresolved_member():
     ]
     with pytest.raises(ValueError, match="unknown"):
         _apply_social_group_overrides(config, overrides)
+
+
+def test_simulation_override_binds_versioned_goal_completion_policy():
+    """Scenario simulation overrides expose the explicit zone-entry policy."""
+    config = RobotSimulationConfig()
+
+    _apply_simulation_overrides(
+        config,
+        {"goal_completion_policy": GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1},
+    )
+
+    assert config.sim_config.goal_completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
+
+
+def test_simulation_override_rejects_unknown_goal_completion_policy():
+    """Malformed success-definition identifiers fail during scenario loading."""
+    config = RobotSimulationConfig()
+
+    with pytest.raises(ValueError, match="Unknown goal_completion_policy"):
+        _apply_simulation_overrides(config, {"goal_completion_policy": "zone_entry_v9"})

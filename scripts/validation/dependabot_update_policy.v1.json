@@ -170,6 +170,7 @@
         "carla",
         "duckdb",
         "geopandas",
+        "imageio-ffmpeg",
         "imitation",
         "matplotlib",
         "moviepy",

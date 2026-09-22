@@ -11,6 +11,7 @@ import json
 import math
 import re
 import secrets
+import sys
 import threading
 import time
 from collections.abc import Mapping
@@ -1332,20 +1333,23 @@ def make_audit_workbench_server(  # noqa: C901 - bounded HTTP verb guards live h
         def _send(
             self, status: HTTPStatus, body: bytes, content_type: str, *, issue_cookie: bool = False
         ) -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
-            if issue_cookie:
-                self.send_header(
-                    "Set-Cookie",
-                    f"{SESSION_COOKIE}={browser_session}; HttpOnly; SameSite=Strict; "
-                    f"Path=/api/audit; Max-Age={SESSION_LIFETIME_SECONDS}",
-                )
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Referrer-Policy", "no-referrer")
+                if issue_cookie:
+                    self.send_header(
+                        "Set-Cookie",
+                        f"{SESSION_COOKIE}={browser_session}; HttpOnly; SameSite=Strict; "
+                        f"Path=/api/audit; Max-Age={SESSION_LIFETIME_SECONDS}",
+                    )
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True
 
         def _json(self, status: HTTPStatus, value: dict[str, Any]) -> None:
             encoded = json.dumps(value, allow_nan=False, sort_keys=True).encode("utf-8")
@@ -1403,6 +1407,9 @@ def make_audit_workbench_server(  # noqa: C901 - bounded HTTP verb guards live h
                 payload = json.loads(self.rfile.read(size))
             except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
                 self._json(HTTPStatus.BAD_REQUEST, {"status": "failed"})
+                return
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True
                 return
             if not isinstance(payload, dict) or set(payload) != {"operation", "arguments"}:
                 self._json(HTTPStatus.BAD_REQUEST, {"status": "failed"})
@@ -1594,7 +1601,16 @@ def make_audit_workbench_server(  # noqa: C901 - bounded HTTP verb guards live h
                 result = dict(result)
             self._json(HTTPStatus.OK, result)
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    class _WorkbenchHTTPServer(ThreadingHTTPServer):
+        def handle_error(self, request: Any, client_address: Any) -> None:
+            exc_type, _, _ = sys.exc_info()
+            if exc_type is not None and issubclass(
+                exc_type, (BrokenPipeError, ConnectionResetError)
+            ):
+                return
+            super().handle_error(request, client_address)
+
+    server = _WorkbenchHTTPServer(("127.0.0.1", 0), Handler)
     # Do not let a caller close the SQLite-backed service while an in-flight
     # request still owns the facade. ``ThreadingHTTPServer`` defaults to
     # daemon request threads, which makes ``server_close()`` return while a

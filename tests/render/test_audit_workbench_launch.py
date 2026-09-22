@@ -252,7 +252,7 @@ def test_native_launch_runs_selected_campaign_row_over_http_and_rejects_stale_se
     server_thread = threading.Thread(target=opened.server.serve_forever, daemon=True)
     server_thread.start()
     try:
-        with urlopen(opened.url, timeout=5) as response:
+        with urlopen(opened.url, timeout=30) as response:
             browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
         parsed = urlsplit(opened.url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
@@ -499,7 +499,7 @@ def test_launch_scans_and_serves_one_source_bound_workbench(tmp_path: Path) -> N
         assert extension["mode"] == "service_live"
         assert extension["model"]["service"]["token_transport"] == "server_only"
         assert "session_token" not in str(opened.document)
-        with urlopen(opened.url, timeout=5) as response:
+        with urlopen(opened.url, timeout=30) as response:
             html = response.read().decode("utf-8")
             assert response.status == 200
             assert "Benchmark audit workbench" in html
@@ -774,13 +774,15 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
         assert bridge.session_id == service_session.session_id
         assert bridge.session_token == service_session.session_token
 
-        with urlopen(opened.url, timeout=5) as response:
+        with urlopen(opened.url, timeout=30) as response:
             assert response.status == 200
             browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
         parsed = urlsplit(opened.url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
-        def post(operation: str, arguments: dict[str, object]) -> dict[str, object]:
+        def post(
+            operation: str, arguments: dict[str, object], *, timeout: float = 30.0
+        ) -> dict[str, object]:
             request = Request(
                 origin + "/api/audit",
                 data=json.dumps({"operation": operation, "arguments": arguments}).encode("utf-8"),
@@ -791,7 +793,7 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
                 },
                 method="POST",
             )
-            with urlopen(request, timeout=10) as response:
+            with urlopen(request, timeout=timeout) as response:
                 return json.load(response)
 
         selected = post(

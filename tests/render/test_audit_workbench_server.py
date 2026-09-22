@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import pytest
@@ -1461,3 +1462,34 @@ def test_live_route_related_cases_requires_selection_and_rejects_unsafe_envelope
     assert (bad_status, bad_status_body) == (500, {"status": "failed"})
     assert (bad_schema, bad_schema_body) == (500, {"status": "failed"})
     assert (malformed_status, malformed_status_body) == (500, {"status": "failed"})
+
+
+def test_server_handles_client_disconnect_without_broken_pipe_crash() -> None:
+    def configure(facade, _calls, _secret):
+        def slow_next(**kwargs):
+            time.sleep(0.05)
+            return {"status": "complete", "value": {}}
+
+        facade.next = slow_next
+
+    with _server(configure=configure) as (url, _calls, _document, _secret, cookie):
+        request = Request(
+            f"{url}/api/audit",
+            data=json.dumps(
+                {"operation": "next", "arguments": {"expected_selection_revision": 0}}
+            ).encode(),
+            headers={"Content-Type": "application/json", "Origin": url, "Cookie": cookie},
+            method="POST",
+        )
+        with pytest.raises((TimeoutError, URLError)):
+            urlopen(request, timeout=0.0001)
+        time.sleep(0.1)
+
+        status, body = _post(
+            url,
+            {"operation": "next", "arguments": {"expected_selection_revision": 0}},
+            origin=url,
+            cookie=cookie,
+        )
+        assert status == 200
+        assert body["status"] == "complete"

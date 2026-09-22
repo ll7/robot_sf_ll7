@@ -601,7 +601,10 @@ def _run_external_mcp_launch_smoke(
         def external_exchange(message: dict[str, object]) -> dict[str, object]:
             external_process.stdin.write(json.dumps(message).encode() + b"\n")
             external_process.stdin.flush()
-            ready, _, _ = select.select([external_process.stdout], [], [], 3.0)
+            # Source-bound episode reads can exceed three seconds under the
+            # full xdist shard; retain a finite bound without racing the
+            # service's legitimate diagnostic work.
+            ready, _, _ = select.select([external_process.stdout], [], [], 10.0)
             assert ready, "external MCP client did not return a bounded response"
             line = external_process.stdout.readline()
             assert line

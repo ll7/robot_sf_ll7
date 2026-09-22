@@ -651,6 +651,35 @@ def test_tombstone_history_and_undo_keep_all_revisions(tmp_path) -> None:
         assert [item.revision for item in store.history("a")] == [1, 2, 3]
 
 
+def test_list_records_materializes_projection_without_refresh_per_row(
+    tmp_path, monkeypatch
+) -> None:
+    """Listing rows performs one projection check, not one journal scan per ID."""
+
+    with AuditStore(tmp_path) as store:
+        store.save(_annotation("a"), operation_id="op-a", expected_revision=0)
+        store.save(_annotation("b"), operation_id="op-b", expected_revision=0)
+        store.delete("b", operation_id="op-delete", expected_revision=1)
+
+        original = store._ensure_projection
+        calls = 0
+
+        def counted_projection() -> None:
+            nonlocal calls
+            calls += 1
+            original()
+
+        monkeypatch.setattr(store, "_ensure_projection", counted_projection)
+
+        visible = store.list_records(record_type="annotation")
+        all_rows = store.list_records(record_type="annotation", include_deleted=True)
+
+    assert calls == 2
+    assert [item.record_id for item in visible] == ["a"]
+    assert [item.record_id for item in all_rows] == ["a", "b"]
+    assert all_rows[-1].deleted
+
+
 def test_projection_failure_after_journal_commit_recovers_on_reopen(tmp_path) -> None:
     with pytest.raises(ProjectionError):
         AuditStore(tmp_path, fail_after_journal_once=True).save(

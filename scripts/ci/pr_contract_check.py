@@ -142,6 +142,18 @@ def find_github_parity_closing_mentions(text: str) -> list[tuple[str | None, str
     return mentions
 
 
+def _canonical_parity_target(target_repo: str | None, local_repo: str) -> str:
+    """Normalize an issue reference target for parity comparison.
+
+    GitHub treats an unqualified reference and a qualified reference for this
+    repository as the same closing target. Foreign qualified and URL targets
+    remain distinct so each potentially closable repository is checked.
+    """
+    if target_repo is None:
+        return local_repo
+    return target_repo.strip().casefold()
+
+
 def check_github_closing_parity(
     body: str,
     repo: str,
@@ -170,24 +182,27 @@ def check_github_closing_parity(
         else:
             sources.append(("PR commit message", commit_messages))
 
-    local_repo = repo.strip().lower()
-    seen_issues: set[str] = set()
+    local_repo = repo.strip().casefold()
+    seen_references: set[tuple[str, str]] = set()
     for source_name, source_text in sources:
-        excused = set(_find_closed_references(source_text))
+        excused = {
+            (_canonical_parity_target(target_repo, local_repo), issue)
+            for target_repo, issue in _find_closed_references(source_text)
+        }
         for target_repo, issue, snippet in find_github_parity_closing_mentions(source_text):
-            if target_repo is not None and target_repo.lower() != local_repo:
+            reference = (_canonical_parity_target(target_repo, local_repo), issue)
+            if reference in excused:
                 continue
-            if (target_repo, issue) in excused:
+            if reference in seen_references:
                 continue
-            if issue in seen_issues:
-                continue
-            seen_issues.add(issue)
+            seen_references.add(reference)
+            target_label = f"{target_repo}#{issue}" if target_repo else f"#{issue}"
             blockers.append(
                 f"BLOCKER: {GITHUB_CLOSING_PARITY_TAG} {source_name} contains prose closing mention "
-                f"'{snippet.strip()}' targeting #{issue}, which GitHub parses as a closing reference "
+                f"'{snippet.strip()}' targeting {target_label}, which GitHub parses as a closing reference "
                 f"even when negated (see issue #9566: 'does not close #9489' auto-closed the parent). "
-                f"Rephrase without a closing keyword (e.g. 'leaves #{issue} open') so only explicit "
-                f"'Closes #{issue}' declarations close issues."
+                f"Rephrase without a closing keyword (e.g. 'leaves {target_label} open') so only explicit "
+                f"'Closes {target_label}' declarations close issues."
             )
     return blockers
 
@@ -1400,32 +1415,35 @@ def build_comment_body(
         f"| 1. Closes-discipline | {get_status_str(any(CLOSES_DISCIPLINE_TAG in b.lower() for b in blockers))} | Demand Refs #N for epic issues and main-CI incidents |"
     )
     rows.append(
-        f"| 2. Closure declaration | {get_status_str(bool(warnings), is_blocker=False)} | Require Closes/Refs for title issues |"
+        f"| 2. GitHub closing-keyword parity | {get_status_str(any(GITHUB_CLOSING_PARITY_TAG in b.lower() for b in blockers))} | Fail closed when GitHub closing references diverge from repository parsing |"
     )
     rows.append(
-        f"| 3. State-refresh-only | {get_status_str(any('state-refresh-only' in b.lower() for b in blockers))} | Reject docs/context state updates |"
+        f"| 3. Closure declaration | {get_status_str(bool(warnings), is_blocker=False)} | Require Closes/Refs for title issues |"
     )
     rows.append(
-        f"| 4. Evidence hygiene | {get_status_str(any('evidence' in b.lower() for b in blockers))} | Checks markers and provenance fields |"
+        f"| 4. State-refresh-only | {get_status_str(any('state-refresh-only' in b.lower() for b in blockers))} | Reject docs/context state updates |"
     )
     rows.append(
-        f"| 5. Evidence writer usage | {get_status_str(any('evidence-writer' in b.lower() for b in blockers))} | Require the shared marked writer path |"
+        f"| 5. Evidence hygiene | {get_status_str(any('evidence' in b.lower() for b in blockers))} | Checks markers and provenance fields |"
     )
     rows.append(
-        f"| 6. Successor discipline | {get_status_str(any('successor' in w.lower() for w in warnings), is_blocker=False)} | Require successor statement on multi-PR issues |"
+        f"| 6. Evidence writer usage | {get_status_str(any('evidence-writer' in b.lower() for b in blockers))} | Require the shared marked writer path |"
+    )
+    rows.append(
+        f"| 7. Successor discipline | {get_status_str(any('successor' in w.lower() for w in warnings), is_blocker=False)} | Require successor statement on multi-PR issues |"
     )
 
     lane_detected = "Added 'cheap-lane' label" in "".join(infos)
     rows.append(
-        f"| 7. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
+        f"| 8. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
     )
     rows.append(
-        f"| 8. Placeholder docstring ratchet | "
+        f"| 9. Placeholder docstring ratchet | "
         f"{get_status_str(any('placeholder docstring' in b.lower() for b in blockers))} | "
         f"Reject NEW TODO/empty docstrings in added diff lines |"
     )
     rows.append(
-        f"| 9. Issue line/file budget | "
+        f"| 10. Issue line/file budget | "
         f"{get_status_str(any('exceeds the budget declared' in b.lower() for b in blockers))} | "
         f"Enforce declared caps unless 'budget-override: <reason>' is present |"
     )

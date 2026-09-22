@@ -732,6 +732,50 @@ def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("body", "target"),
+    (
+        ("it does not close other-org/other-repo#9489", "other-org/other-repo#9489"),
+        ("it does not close ll7/robot_sf_ll7#9489", "ll7/robot_sf_ll7#9489"),
+        (
+            "it does not close https://github.com/other-org/other-repo/issues/9489",
+            "other-org/other-repo#9489",
+        ),
+        (
+            "it does not close https://github.com/ll7/robot_sf_ll7/issues/9489",
+            "ll7/robot_sf_ll7#9489",
+        ),
+    ),
+)
+def test_github_closing_parity_flags_qualified_and_url_mentions(body: str, target: str) -> None:
+    """Negated qualified and URL forms remain GitHub-closing parity blockers."""
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+
+    assert len(blockers) == 1
+    assert target in blockers[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "Closes other-org/other-repo#9489",
+        "Closes ll7/robot_sf_ll7#9489",
+        "Closes https://github.com/other-org/other-repo/issues/9489",
+        "Closes https://github.com/ll7/robot_sf_ll7/issues/9489",
+    ),
+)
+def test_github_closing_parity_allows_explicit_qualified_and_url_closes(body: str) -> None:
+    """Explicit local and cross-repository closes remain intentional references."""
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
+def test_github_closing_parity_normalizes_local_qualified_target() -> None:
+    """An explicit local close excuses an equivalent qualified prose mention."""
+    body = "Closes #9489\nThe note does not close ll7/robot_sf_ll7#9489."
+
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
 def test_github_closing_parity_scans_commit_messages() -> None:
     """Squash-merge commit prose receives the same parity protection as the body."""
     blockers = pr_contract_check.check_github_closing_parity(
@@ -1482,6 +1526,30 @@ def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
     )
     comment = pr_contract_check.build_comment_body([blocker], [], [], "🔴 FAILED")
     assert "| 1. Closes-discipline | ❌ FAILED |" in comment
+
+
+@pytest.mark.parametrize(
+    ("blockers", "expected_status"),
+    (
+        ([], "✅ PASSED"),
+        (
+            [
+                f"BLOCKER: {pr_contract_check.GITHUB_CLOSING_PARITY_TAG} "
+                "PR body contains a prose closing mention."
+            ],
+            "❌ FAILED",
+        ),
+    ),
+)
+def test_build_comment_body_renders_github_closing_parity_row(
+    blockers: list[str], expected_status: str
+) -> None:
+    """The summary exposes parity status independently and keeps ten rows numbered."""
+    comment = pr_contract_check.build_comment_body(blockers, [], [], "🔴 FAILED")
+
+    assert f"| 2. GitHub closing-keyword parity | {expected_status} |" in comment
+    assert "| 3. Closure declaration | ✅ PASSED |" in comment
+    assert "| 10. Issue line/file budget | ✅ PASSED |" in comment
 
 
 def test_check_closure_declaration() -> None:

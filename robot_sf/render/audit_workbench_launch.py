@@ -333,7 +333,7 @@ def _native_launch_preflight(
 
     try:
         from robot_sf.analysis_workbench import audit_native_diagnostic as native  # noqa: PLC0415
-    except (ImportError, ModuleNotFoundError) as exc:
+    except ImportError as exc:
         raise CapabilityUnavailable("native diagnostic adapter is unavailable") from exc
     binding = service._native_campaign_binding_for_session(session)
     descriptor = binding.campaign_row

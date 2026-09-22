@@ -1,8 +1,8 @@
 """Shared exact historical evidence binding resolver.
 
 The resolver is used by both runtime evidence consumers and the evidence
-registry linter. It validates only the two explicit manifest occurrences and
-fails closed when the required Git history, object identities, or JSON pointer
+registry linter. It validates only the explicit manifest occurrences and fails
+closed when the required Git history, object identities, or JSON pointer
 bindings cannot be proven.
 """
 
@@ -611,7 +611,7 @@ def _load_historical_bindings(  # noqa: C901
     tracked_paths: set[str] | None = None,
     authority_ref: str = "HEAD",
 ) -> tuple[dict[tuple[str, str, str], dict[str, str]], dict[str, Any]]:
-    """Load and verify the tracked two-record historical binding manifest.
+    """Load and verify the tracked three-record historical binding manifest.
 
     Returns:
         The validated bindings keyed by consumer/reference identity and a report.
@@ -672,8 +672,8 @@ def _load_historical_bindings(  # noqa: C901
     ):
         raise _historical_binding_error("reviewed_ancestry_anchor must be a full commit SHA-1")
     bindings = value.get("bindings")
-    if not isinstance(bindings, list) or len(bindings) != 2:
-        raise _historical_binding_error("bindings must contain exactly two records")
+    if not isinstance(bindings, list) or len(bindings) != 3:
+        raise _historical_binding_error("bindings must contain exactly three records")
     validated: dict[tuple[str, str, str], dict[str, str]] = {}
     for index, binding in enumerate(bindings):
         key, checked = _validate_historical_binding_entry(

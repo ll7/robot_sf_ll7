@@ -1,0 +1,40 @@
+{
+  "schema_version": "threejs-viewer.v1",
+  "source_identity": {
+    "campaign_id": "fixture-campaign",
+    "execution_id": "exec-17",
+    "episode_id": "episode-17",
+    "scenario_id": "corridor",
+    "planner_id": "fixture-planner",
+    "seed": 17,
+    "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "config_identity": "config-fixture",
+    "coordinate_frame": "world",
+    "units": "seconds/metres/radians"
+  },
+  "goal": {"point": [4.0, 1.0]},
+  "completion_boundary": {"type": "circle", "radius_m": 0.35},
+  "frames": [
+    {
+      "frame_index": 0,
+      "time_s": 10.0,
+      "robot": {"actor_id": "robot", "position": [0.0, 0.0], "velocity": [1.0, 0.0], "heading": 0.0},
+      "pedestrians": [{"actor_id": "ped-0", "position": [2.0, 1.0]}],
+      "event_id": "start"
+    },
+    {
+      "frame_index": 1,
+      "time_s": 10.5,
+      "robot": {"actor_id": "robot", "position": [0.5, 0.0], "velocity": [1.0, 0.0], "heading": 0.1},
+      "pedestrians": [{"actor_id": "ped-0", "position": [1.8, 1.0]}]
+    },
+    {
+      "frame_index": 2,
+      "time_s": 12.0,
+      "robot": {"actor_id": "robot", "position": [2.0, 0.0], "velocity": [0.5, 0.0], "heading": 0.2},
+      "pedestrians": [],
+      "event": "near_miss",
+      "event_id": "nm-17"
+    }
+  ]
+}

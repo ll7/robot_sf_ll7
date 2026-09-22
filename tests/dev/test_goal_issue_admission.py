@@ -251,6 +251,74 @@ def test_changed_label_with_state_qualifier_uses_blocker_semantics() -> None:
     acquire.assert_not_called()
 
 
+READY_BODY = """## Objective
+Repair one bounded workflow defect.
+
+## Scope
+Change one helper. Do not change scientific semantics.
+
+## Candidate paths
+- `scripts/dev/example.py`
+
+## Acceptance criteria
+- [ ] The regression passes.
+
+## Validation
+```bash
+uv run pytest -q tests/dev/test_example.py
+```
+"""
+
+
+def test_reference_only_open_pr_blocks_admission_before_claim_write() -> None:
+    """Live admission refuses a covered issue even when the PR only references it (#9208)."""
+    issue = {
+        "number": 8449,
+        "title": "fix: bounded workflow repair",
+        "body": READY_BODY,
+        "state": "OPEN",
+        "url": "https://github.test/issues/8449",
+        "labels": ["state:ready"],
+        "assignees": [],
+    }
+    with (
+        patch(
+            "scripts.dev.goal_issue_admission.issue_implementability.fetch_live_issue",
+            return_value=issue,
+        ),
+        patch(
+            "scripts.dev.goal_issue_admission.issue_implementability.issue_claim.status_issue",
+            return_value={"ok": True, "claimed": False, "claim_ref": None, "sha": None},
+        ),
+        patch(
+            "scripts.dev.goal_issue_admission.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value={
+                "ok": True,
+                "covering_prs": [8450],
+                "truncated": False,
+                "source": "graphql",
+                "error": None,
+            },
+        ),
+        patch("scripts.dev.goal_issue_admission.issue_claim.acquire_issue") as acquire,
+    ):
+        payload = admit_issue(
+            8449,
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            source_ref="origin/main",
+            check_only=False,
+        )
+
+    assert payload["outcome"] == "not_admitted"
+    assert payload["write_attempted"] is False
+    assert payload["preflight"]["classification"] == "covering_pr_open"
+    assert payload["preflight"]["admission_reason"] == "covering_pr_open"
+    assert payload["preflight"]["write_allowed"] is False
+    assert "#8450" in " ".join(payload["preflight"]["reasons"])
+    acquire.assert_not_called()
+
+
 def test_compact_admission_preserves_claim_and_write_boundary() -> None:
     """Queue projections must retain the canonical admission and claim outcomes."""
     payload = compact_admission(
@@ -491,3 +559,40 @@ def test_module_import_preserves_sys_path() -> None:
     before = list(sys.path)
     importlib.reload(goal_issue_admission)
     assert sys.path == before
+
+
+def test_compact_admission_surfaces_heading_suggestions_when_needs_spec() -> None:
+    """compact_admission includes heading suggestion hints in reasons on needs_spec."""
+    payload = compact_admission(
+        {
+            "ok": False,
+            "outcome": "not_admitted",
+            "write_attempted": False,
+            "source_ref": "origin/main",
+            "preflight": {
+                "classification": "needs_spec",
+                "reasons": ["missing implementation-contract fields: inputs"],
+                "ready": False,
+                "write_allowed": False,
+                "contract": {
+                    "missing_fields": ["inputs"],
+                    "heading_suggestions": {
+                        "input contract": {
+                            "field": "inputs",
+                            "alias": "inputs",
+                            "score": 1.0,
+                        }
+                    },
+                },
+                "claim": {
+                    "ok": True,
+                    "claimed": False,
+                    "claim_ref": "agent-claims/issue-9501",
+                    "sha": None,
+                },
+            },
+        }
+    )
+
+    assert payload["classification"] == "needs_spec"
+    assert any("heading suggestion: 'input contract' -> 'inputs'" in r for r in payload["reasons"])

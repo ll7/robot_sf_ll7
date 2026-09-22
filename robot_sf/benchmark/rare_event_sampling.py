@@ -254,7 +254,15 @@ class SampledScenarioRow:
 
 @dataclass(frozen=True, slots=True)
 class ImportanceSamplingEstimate:
-    """Importance-sampling estimator output for a binary rare event."""
+    """Importance-sampling estimator output for a binary rare event.
+
+    ``naive_monte_carlo_estimate`` is a legacy label for the unweighted event
+    frequency under the *proposal* samples (see ``proposal_event_frequency``);
+    it is not an independently sampled base-distribution reference.
+    ``warnings`` flags degenerate outputs (zero weighted events, weight
+    degeneracy, undefined variance ratio) that must not be read as certainty
+    or as variance-reduction proof.
+    """
 
     schema_version: str
     objective_event: str
@@ -265,11 +273,13 @@ class ImportanceSamplingEstimate:
     confidence_level: float
     effective_sample_size: float
     naive_monte_carlo_estimate: float
+    proposal_event_frequency: float
     importance_sampling_variance: float
     naive_monte_carlo_variance: float
     variance_ratio_vs_naive: float | None
     event_count: int
     weight_sum: float
+    warnings: tuple[str, ...] = ()
 
     def to_payload(self) -> dict[str, Any]:
         """Return a stable JSON-serializable estimate payload."""
@@ -284,11 +294,13 @@ class ImportanceSamplingEstimate:
             "confidence_level": self.confidence_level,
             "effective_sample_size": self.effective_sample_size,
             "naive_monte_carlo_estimate": self.naive_monte_carlo_estimate,
+            "proposal_event_frequency": self.proposal_event_frequency,
             "importance_sampling_variance": self.importance_sampling_variance,
             "naive_monte_carlo_variance": self.naive_monte_carlo_variance,
             "variance_ratio_vs_naive": self.variance_ratio_vs_naive,
             "event_count": self.event_count,
             "weight_sum": self.weight_sum,
+            "warnings": list(self.warnings),
         }
 
 
@@ -381,6 +393,39 @@ def apply_sampled_scenario_mutation(
     return scenario
 
 
+def proposal_support_status(spec: RareEventSamplingSpec) -> tuple[str, str]:
+    """Return whether the proposal support covers the base support for every knob.
+
+    Returns:
+        ``("full_support", detail)`` when every proposal covers its base support,
+        otherwise ``("restricted_support", detail)`` naming the uncovered knobs.
+        Restricted proposals render event probability outside their support
+        invisible to the estimator; callers must justify the restriction or widen
+        the proposal before presenting base-measure probabilities. Normal base
+        and proposal distributions have infinite support and always cover.
+    """
+
+    uncovered: list[str] = []
+    for param in spec.parameters:
+        if param.base != "uniform":
+            continue
+        if param.low is None or param.high is None:
+            raise RareEventSamplingError(f"parameters.{param.name}: uniform bounds missing")
+        proposal_low, proposal_high = param.proposal_bounds
+        if proposal_low > param.low or proposal_high < param.high:
+            uncovered.append(
+                f"{param.name}: proposal [{proposal_low}, {proposal_high}] does not "
+                f"cover base [{param.low}, {param.high}]"
+            )
+    if uncovered:
+        return (
+            "restricted_support",
+            "; ".join(uncovered) + "; event probability outside the proposal support is invisible "
+            "to the estimator",
+        )
+    return ("full_support", "proposal covers base support for every knob")
+
+
 def estimate_failure_probability(
     rows: list[SampledScenarioRow],
     events: list[bool],
@@ -436,6 +481,22 @@ def estimate_failure_probability(
         if naive_monte_carlo_variance > 0.0
         else None
     )
+    warnings: list[str] = []
+    if estimate == 0.0:
+        warnings.append(
+            "zero_weighted_events: no weighted event mass observed; the 0 estimate "
+            "and collapsed interval are uninformative, not evidence of impossibility"
+        )
+    if samples > 1 and effective_sample_size <= 1.0:
+        warnings.append(
+            "weight_degeneracy: at most one effective sample; the estimate is "
+            "dominated by a single observation"
+        )
+    if samples > 1 and naive_monte_carlo_variance == 0.0:
+        warnings.append(
+            "variance_ratio_undefined: unweighted proposal frequency is degenerate "
+            "(0 or 1); no variance-reduction comparison is possible"
+        )
 
     return ImportanceSamplingEstimate(
         schema_version=SCHEMA_VERSION,
@@ -447,11 +508,13 @@ def estimate_failure_probability(
         confidence_level=confidence_level,
         effective_sample_size=effective_sample_size,
         naive_monte_carlo_estimate=naive_monte_carlo_estimate,
+        proposal_event_frequency=naive_monte_carlo_estimate,
         importance_sampling_variance=importance_sampling_variance,
         naive_monte_carlo_variance=naive_monte_carlo_variance,
         variance_ratio_vs_naive=variance_ratio_vs_naive,
         event_count=sum(bool(event) for event in events),
         weight_sum=weight_sum,
+        warnings=tuple(warnings),
     )
 
 
@@ -475,6 +538,7 @@ def build_sampling_summary(
         objective_event=spec.objective_event,
         confidence_level=confidence_level,
     )
+    support_status, support_detail = proposal_support_status(spec)
     summary: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "proposal": spec.proposal,
@@ -482,6 +546,7 @@ def build_sampling_summary(
         "samples": spec.samples,
         "seed": spec.seed,
         "estimator": estimate.to_payload(),
+        "support_status": {"status": support_status, "detail": support_detail},
         "sample_provenance": {
             "row_count": len(rows),
             "parameter_vector_hashes": [row.parameter_vector_hash for row in rows],

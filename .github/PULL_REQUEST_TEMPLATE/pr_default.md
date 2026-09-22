@@ -12,6 +12,17 @@ the scheduled reconciler closes them only after two newer, consecutive decisive 
 - Refs #<id>
 - Relates to #<id>
 
+## Issue Relationship Mirror
+
+<!-- The linked issue's native GitHub relationships are canonical. Mirror only intentional
+same-repository graph edges here so the PR remains auditable from its owning worktree. Use `none`
+when a field does not apply; do not infer a relationship from a mention or a closing reference.
+See `docs/context/issue_relationships.md` for the workflow. -->
+- Parent issue: none
+- Blocked by: none
+- Blocking: none
+- Relates to: none
+
 ## Stack / Dependency
 
 - Base dependency: none, `PR #<id>`, or branch `<name>`.

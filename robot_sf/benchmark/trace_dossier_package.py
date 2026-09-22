@@ -7,7 +7,6 @@ it never runs a simulator, submits compute, or promotes a trace to benchmark evi
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections import Counter
@@ -25,6 +24,7 @@ from robot_sf.analysis_workbench.trace_dossier_renderer import (
     validate_trace_dossier_manifest,
 )
 from robot_sf.benchmark.candidate_trace_resolution import resolve_episode_source
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.trace_dossier_cell_binding import build_trace_dossier_cell_binding
 from robot_sf.benchmark.trace_dossier_selection import select_representative
 from scripts.tools.export_trace_dossier import export_trace_dossier
@@ -466,14 +466,6 @@ def _write_package_checksums(output_dir: Path) -> None:
 def _write_canonical_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dict(payload), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _same_path_or_text(expected: str, observed: str) -> bool:

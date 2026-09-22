@@ -1,0 +1,6 @@
+# Runtime smoke variant for the versioned goal-zone completion policy.
+includes:
+  - francis2023_blind_corner.yaml
+scenario_overrides:
+  simulation_config:
+    goal_completion_policy: goal_zone_entry_v1

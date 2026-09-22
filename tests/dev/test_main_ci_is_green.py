@@ -20,6 +20,7 @@ from scripts.dev.main_ci_is_green import (
     build_signal,
     classify,
     decide,
+    dispatch_decision,
     fetch_run_window,
     fetch_runs,
     latest_completed_run,
@@ -136,6 +137,44 @@ def test_no_completed_runs_is_not_green() -> None:
     assert run is None
 
     assert latest_completed_run([]) is None
+
+
+def test_dispatch_policy_observes_queued_and_in_progress_same_head() -> None:
+    """The watcher must not replace a queued or active decisive run."""
+    for status in ("queued", "in_progress"):
+        decision = dispatch_decision(
+            "a" * 40,
+            [{"headSha": "a" * 40, "status": status, "conclusion": None}],
+        )
+        assert decision["action"] == "observe"
+        assert decision["reason"] == "same_head_run_active"
+
+
+def test_dispatch_policy_handles_success_failure_and_moved_head() -> None:
+    """Success/failure/moved-head fixtures are deterministic and idempotent."""
+    success = dispatch_decision(
+        "a" * 40,
+        [{"headSha": "a" * 40, "status": "completed", "conclusion": "success"}],
+    )
+    assert success["action"] == "observe"
+    failed = dispatch_decision(
+        "a" * 40,
+        [{"headSha": "a" * 40, "status": "completed", "conclusion": "failure"}],
+        retry_failed=True,
+    )
+    assert failed["action"] == "dispatch"
+    deduped = dispatch_decision(
+        "a" * 40,
+        [{"headSha": "a" * 40, "status": "completed", "conclusion": "failure"}],
+        retry_failed=True,
+        retry_receipt_seen=True,
+    )
+    assert deduped["action"] == "observe"
+    moved = dispatch_decision(
+        "b" * 40,
+        [{"headSha": "a" * 40, "status": "completed", "conclusion": "success"}],
+    )
+    assert moved["action"] == "dispatch"
 
 
 def test_unsorted_input_still_picks_newest_completed() -> None:

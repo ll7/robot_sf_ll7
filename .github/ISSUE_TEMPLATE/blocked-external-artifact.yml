@@ -51,6 +51,18 @@ body:
     validations:
       required: true
   - type: textarea
+    id: relationships
+    attributes:
+      label: Relationships
+      description: Declare explicit same-repository issue links. Keep external blockers in the fields below and do not fabricate an issue number. Set matching Parent, Blocked by, or Blocking links in GitHub's Relationships panel after creation. Use `none` when not applicable.
+      placeholder: |
+        Parent issue: none
+        Blocked by: none
+        Blocking: none
+        Relates to: none
+    validations:
+      required: true
+  - type: textarea
     id: goal
     attributes:
       label: Goal / Problem

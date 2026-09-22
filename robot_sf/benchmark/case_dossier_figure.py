@@ -33,6 +33,7 @@ from robot_sf.analysis_workbench.interaction_coordinates import (
 )
 from robot_sf.benchmark.case_portfolio import validate_ch7_worked_example_portfolio
 from robot_sf.benchmark.figure_qa import assert_clean
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _file_sha256
 
 CASE_DOSSIER_INPUT_SCHEMA_VERSION = "case_dossier_input.v1"
 CASE_DOSSIER_MANIFEST_SCHEMA_VERSION = "case_dossier_manifest.v1"
@@ -182,10 +183,6 @@ def _canonical_sha256(payload: Any) -> str:
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def _file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _git_commit() -> str:

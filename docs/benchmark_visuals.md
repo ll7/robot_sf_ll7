@@ -10,6 +10,7 @@
 
 ## Table of Contents
 - [Table of Contents](#table-of-contents)
+- [Presentation Video Packs](#presentation-video-packs)
 - [Real Visualization Generation (Feature 133)](#real-visualization-generation-feature-133)
   - [Plot Generation](#plot-generation)
   - [Video Generation](#video-generation)
@@ -88,6 +89,56 @@ but new code should migrate to the Full Classic pipeline.
 - Video generation: < 60 seconds per scenario
 - Memory usage: Scales with episode count and trajectory length
 
+## Presentation Video Packs
+
+For a talk or demo, prepare a small local pack from an existing native-runtime
+recording and its episode newline-delimited JSON (JSONL) file:
+
+Prerequisites: install the `viz` extra for Pillow (`uv sync --extra viz`) and
+make `ffmpeg` and `ffprobe` available on `PATH`. This tool uses Pillow and the
+FFmpeg command-line tools directly; it does not use MoviePy. The command below
+uses the canonical Full Classic output layout, where episode records are under
+`episodes/episodes.jsonl`:
+
+```bash
+uv run python scripts/tools/prepare_presentation_video_pack.py \
+  --episodes output/benchmarks/<run>/episodes/episodes.jsonl \
+  --videos output/recordings/<run> \
+  --output output/presentation_video_pack/<run>
+```
+
+The tool accepts any existing JSONL file supplied with `--episodes`, including
+older runs that use a flat `episodes.jsonl` path; pass the path that actually
+exists for those runs.
+
+The tool deterministically selects a compact mixture of successful and
+collision episodes, decodes the source videos, rejects very short or blank
+clips, adds 16:9 labels, and writes a `contact_sheet.png` plus a
+`presentation_video_pack.json` provenance/QA manifest. The generated media is
+intentionally local and untracked under `output/`; the manifest marks the pack
+as `presentation_only_not_benchmark_evidence`. It does not rerun the benchmark
+or change episode records. Selection accepts local paths only and rejects
+URL/URI references without network access. The manifest uses portable filenames,
+records `redistribution-unknown` with a `local-only-byo` basis, and does not
+claim rights clearance. Use the source run's native runtime videos; replay
+fallback or synthetic videos should remain clearly labeled as illustrative.
+The contact-sheet input is temporary and removed after generation, so no source
+JSONL cache is left in the output directory. The manifest hashes the complete
+input JSONL, records the actual CLI invocation when run from the command line,
+and ties source git/config hashes to each selected clip where available. A clip
+must decode end-to-end and
+show visible content in at least two of the three deterministic samples.
+Filename fallback resolution also requires an unambiguous scenario/seed/policy
+identity; when multiple planner recordings could match, the tool leaves the row
+unresolved instead of choosing a lexicographic first result. The optional
+`--no-polish` mode requires both an `.mp4` suffix and ffprobe confirmation of an
+MP4 container with a video stream. It fails closed for mislabeled or non-MP4
+sources instead of relabeling their bytes as MP4. Omit that option to encode
+non-MP4 sources into a presentation MP4. If an output path is inside a Git
+checkout, it must be covered by that checkout's ignore rules; this check is
+based on the input/output paths and does not depend on the process working
+directory. External output paths are allowed and remain caller-owned.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -110,8 +161,11 @@ uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline(
 
 #### Videos Not Generating
 **Symptoms**: No MP4 files created, or placeholder videos
+This section covers legacy trajectory-to-video rendering. The presentation-pack
+tool above reads existing recordings and has separate Pillow and FFmpeg
+requirements.
 **Causes**:
-- Missing moviepy: run `uv sync --all-extras`
+- Missing moviepy for legacy rendering: run `uv sync --all-extras`
 - No trajectory data: Episodes lack position/time data
 - Environment issues: Factory functions unavailable
 
@@ -127,6 +181,11 @@ ep = json.loads(open('episodes.jsonl').readline())
 print('Trajectory data:', 'trajectory_data' in ep)
 "
 ```
+
+For the presentation-pack tool above, MoviePy is not required: install the
+`viz` extra for Pillow and verify `ffmpeg` and `ffprobe` are available on
+`PATH`. It reads existing recordings and does not generate videos from
+trajectory data.
 
 #### Validation Failures
 **Symptoms**: Manifest validation fails (`ROBOT_SF_VALIDATE_VISUALS=1`) or `validate_visual_artifacts()` returns failed artifacts

@@ -133,7 +133,12 @@ def test_batch_contract_rejects_read_only_output() -> None:
 
 def test_coordinator_fails_closed_for_heterogeneous_ray_counts() -> None:
     """Rollout coordination must reject incompatible rows instead of using scalar fallback."""
-    coordinator = range_sensor.LidarBatchCoordinator(2, timeout_seconds=1.0)
+    # The timeout only bounds hang-waiting: both rows are submitted immediately,
+    # so rendezvous must not depend on CI thread-scheduling latency. A tight
+    # timeout (1.0 s) flaked under hosted xdist load with "did not receive every
+    # environment" (issue #9438); the heterogeneity rejection below is asserted
+    # deterministically once both workers rendezvous.
+    coordinator = range_sensor.LidarBatchCoordinator(2, timeout_seconds=30.0)
 
     def _submit(env_index: int, num_rays: int) -> None:
         coordinator.submit(
@@ -149,3 +154,18 @@ def test_coordinator_fails_closed_for_heterogeneous_ray_counts() -> None:
         for future in futures:
             with pytest.raises(RuntimeError, match="coordinated LiDAR batch failed"):
                 future.result()
+
+
+def test_coordinator_timeout_is_fail_closed_without_all_environments() -> None:
+    """A batch that can never rendezvous must fail closed on timeout (issue #9438)."""
+    # Only one of two workers ever submits, so the barrier can never fill and
+    # the lone waiter must observe the timeout path deterministically.
+    coordinator = range_sensor.LidarBatchCoordinator(2, timeout_seconds=1.0)
+    with pytest.raises(RuntimeError, match="did not receive every environment"):
+        coordinator.submit(
+            0,
+            np.full(4, np.inf, dtype=np.float64),
+            np.zeros(2, dtype=np.float64),
+            np.empty((0, 4), dtype=np.float64),
+            np.zeros(4, dtype=np.float64),
+        )

@@ -20,6 +20,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.research_answerability import answerability_from_manifest
+from scripts.dev.git_common import resolve_repo_root
 
 REQUIRED_SECTIONS = (
     "campaign",
@@ -49,7 +50,8 @@ class RunnerOptions:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the current Git repository root."""
+    return resolve_repo_root()
 
 
 def _json_default(value: object) -> str:

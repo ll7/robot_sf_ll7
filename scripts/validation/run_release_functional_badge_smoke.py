@@ -13,13 +13,10 @@ import json
 import sys
 import tarfile
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
-def _utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from scripts.dev.time_utils import utc_now_iso as _utc_now_iso
 
 
 def sha256_file(path: Path) -> str:

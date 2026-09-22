@@ -20,7 +20,8 @@ maintainer has supplied an exact answer that must be applied to GitHub. The
 autonomous cleanup path is issue-audit-autonomous. Read the shared contract in
 docs/context/issue_audit_contract.md and use the shared classifier and envelope
 builder in scripts/dev/issue_audit_core.py; do not recreate its label or
-evidence rules in this prompt.
+evidence rules in this prompt. For relationship decisions, also read
+`docs/context/issue_relationships.md` and keep native-link writes explicit.
 
 ## Workflow
 
@@ -43,8 +44,11 @@ evidence rules in this prompt.
    evidence without asking a question that depends on it.
 5. On the next turn, treat only the exact answer format
    `#<issue-number>: <option-token>` as authorization for that stated decision.
-   Apply the smallest required issue-body, label, or comment change. Record the
-   answer source and preserve uncertainty outside the answered choice.
+   Apply the smallest required issue-body, label, or comment change. If the
+   answer changes a Parent, Blocked by, or Blocking relation, require the
+   canonical issue reference, set the native link, and read it back. Keep
+   `Relates to` manual. Record the answer source and preserve uncertainty
+   outside the answered choice.
 6. Read back the issue through REST and verify the body marker or comment,
    labels, state, and any explicitly requested Project field. Rerun the shared
    classifier after the answer. Report the next queue item, but do not ask a
@@ -67,6 +71,8 @@ evidence rules in this prompt.
   scripts/dev/gh_comment.sh or a body file.
 - If the queue or inventory is partial, preserve the issue and report the
   missing evidence instead of asking a question that depends on it.
+- Never infer a relationship from a mention, label, Project field, or PR title;
+  legacy relationship prose remains review-only.
 - Never fabricate an option list when the issue body and comments do not
   document the available choices.
 

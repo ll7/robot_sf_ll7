@@ -45,6 +45,9 @@ parallel tests, and diff-based quality gates.
    - Follow `AGENTS.md` "Worktree Teardown And Preservation" before removing or pruning anything.
    - Inspect `output/` and other ignored local artifacts before cleanup; classify them as
      disposable, ignored-cache, tracked-manifest, durable-required, or handoff-needed.
+   - If this worktree owns an issue or PR handoff, verify the relationship mirror and native
+     relationship readback before teardown using `docs/context/issue_relationships.md`; preserve
+     the issue/PR/head-SHA evidence with the handoff.
 
 ## Guardrails
 

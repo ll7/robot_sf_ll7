@@ -17,8 +17,10 @@ from scripts.coverage.check_changed_files_coverage import (
     _declaration_only_class_base_requirements,
     _declaration_proofs_from_test_source,
     _has_declaration_only_test_proof,
+    _has_rename_only_reuse_proof,
     _is_doc_or_comment_only_python_change,
     _no_changed_files_message,
+    _rename_only_callee_swaps,
     _resolve_comparison,
     _run_check,
 )
@@ -476,3 +478,196 @@ def test_renamed_and_substantially_modified_file_stays_gated(tmp_path: Path) -> 
     # Only executable changed lines count toward the scope label (line 8 is the
     # single executable statement among the newly added lines 6-8).
     assert details[1] == "changed executable lines 1/1"
+
+
+def _rename_fixture_repo(tmp_path: Path, *, after_text: str) -> tuple[Path, str, str, Path]:
+    """Create a two-commit repo with a helper module and a call-site module."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "coverage@example.invalid")
+    _git(repo, "config", "user.name", "coverage-fixture")
+    helper = repo / "robot_sf" / "common" / "helpers.py"
+    helper.parent.mkdir(parents=True)
+    helper.write_text(
+        "def legacy(left: float, right: float) -> float:\n    return abs(left - right)\n\n"
+        "def point_distance(left: float, right: float) -> float:\n"
+        "    gap = left - right\n"
+        "    return abs(gap)\n",
+        encoding="utf-8",
+    )
+    call_site = repo / "robot_sf" / "analysis" / "align.py"
+    call_site.parent.mkdir(parents=True)
+    call_site.write_text(
+        "from robot_sf.common.helpers import legacy\n\n"
+        "def delta(left: float, right: float) -> float:\n"
+        "    return legacy(left, right)\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = _git(repo, "rev-parse", "HEAD")
+    call_site.write_text(after_text, encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "rename call site")
+    head_sha = _git(repo, "rev-parse", "HEAD")
+    return repo, base_sha, head_sha, Path("robot_sf/analysis/align.py")
+
+
+_RENAME_AFTER = (
+    "from robot_sf.common.helpers import point_distance\n\n"
+    "def delta(left: float, right: float) -> float:\n"
+    "    return point_distance(left, right)\n"
+)
+
+
+def test_rename_only_callee_swap_detects_pure_call_site_rename() -> None:
+    """A pure callee swap plus its import change must report the rename map."""
+    before = (
+        "from robot_sf.common.helpers import legacy\n\n"
+        "def delta(left: float, right: float) -> float:\n"
+        "    return legacy(left, right)\n"
+    )
+    result = _rename_only_callee_swaps(before, _RENAME_AFTER)
+    assert result is not None
+    swaps, swapped_lines = result
+    assert swaps == {"legacy": "point_distance"}
+    assert swapped_lines == {4}
+
+
+def test_rename_only_callee_swap_rejects_extra_logic_change() -> None:
+    """Any non-rename executable change must fail the rename-only proof."""
+    before = "def delta(left: float, right: float) -> float:\n    return legacy(left, right)\n"
+    after = (
+        "def delta(left: float, right: float) -> float:\n"
+        "    return point_distance(left, right) + 1.0\n"
+    )
+    assert _rename_only_callee_swaps(before, after) is None
+
+
+def test_rename_only_reuse_proof_accepts_covered_target(tmp_path: Path) -> None:
+    """Missing lines on a pure rename onto a covered callee must prove out (issue #9238)."""
+    repo, base_sha, head_sha, rel = _rename_fixture_repo(tmp_path, after_text=_RENAME_AFTER)
+    missing = [4]
+    coverage_data = {
+        "robot_sf/common/helpers.py": {"executed_lines": [5, 6, 7], "missing_lines": [2]},
+    }
+    assert _has_rename_only_reuse_proof(rel, base_sha, repo, coverage_data, missing, head=head_sha)
+
+
+def test_rename_only_reuse_proof_rejects_uncovered_target(tmp_path: Path) -> None:
+    """A rename onto an untested callee must stay gated (issue #9238)."""
+    repo, base_sha, head_sha, rel = _rename_fixture_repo(tmp_path, after_text=_RENAME_AFTER)
+    coverage_data = {
+        "robot_sf/common/helpers.py": {"executed_lines": [2], "missing_lines": [5, 6, 7]},
+    }
+    assert not _has_rename_only_reuse_proof(rel, base_sha, repo, coverage_data, [4], head=head_sha)
+
+
+def test_rename_only_reuse_proof_rejects_unresolvable_import(tmp_path: Path) -> None:
+    """A rename onto an unknown name must fail closed (issue #9238)."""
+    repo, base_sha, head_sha, rel = _rename_fixture_repo(
+        tmp_path,
+        after_text=(
+            "from robot_sf.common.helpers import missing_name\n\n"
+            "def delta(left: float, right: float) -> float:\n"
+            "    return missing_name(left, right)\n"
+        ),
+    )
+    coverage_data = {
+        "robot_sf/common/helpers.py": {"executed_lines": [2, 5, 6, 7], "missing_lines": []},
+    }
+    assert not _has_rename_only_reuse_proof(rel, base_sha, repo, coverage_data, [4], head=head_sha)
+
+
+def test_rename_only_reuse_proof_passes_gate_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A pure rename onto a covered callee must pass the gate (issue #9238).
+
+    Reproduces closed PR #9233: the call-site lines are uncovered in the
+    artifact, but the change only renames onto an executed helper, so the row
+    earns the auditable exemption instead of failing the minimum.
+    """
+    repo, base_sha, head_sha, rel = _rename_fixture_repo(tmp_path, after_text=_RENAME_AFTER)
+    coverage_path = repo / "coverage.json"
+    coverage_path.write_text(
+        json.dumps(
+            {
+                "files": {
+                    "robot_sf/analysis/align.py": {
+                        "executed_lines": [1, 3],
+                        "missing_lines": [4],
+                        "summary": {"percent_covered": 50.0},
+                    },
+                    "robot_sf/common/helpers.py": {
+                        "executed_lines": [5, 6, 7],
+                        "missing_lines": [2],
+                        "summary": {"percent_covered": 75.0},
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    report_path = repo / "changed-coverage.json"
+    monkeypatch.setattr("scripts.coverage.check_changed_files_coverage._repo_root", lambda: repo)
+    args = SimpleNamespace(
+        base="origin/main",
+        base_sha=base_sha,
+        head_sha=head_sha,
+        event_name="pull_request",
+        coverage=str(coverage_path),
+        min=80.0,
+        goal=100.0,
+        include=[],
+        exclude=[],
+        show_skipped=False,
+        json_output=report_path,
+        json=False,
+    )
+
+    assert _run_check(args) == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["verdict"] == "passed"
+    rows = [row for row in report["files"] if row["file"] == rel.as_posix()]
+    assert len(rows) == 1
+    assert rows[0]["scope"] == "rename-only reuse proof"
+    assert rows[0]["rename_only_proof"] is True
+    assert rows[0]["missing_changed_lines"] == [4]
+
+
+def test_rename_only_callee_swap_tolerates_removed_dead_helper() -> None:
+    """Deleting the swapped-out helper's own def must not void the proof (issue #9238).
+
+    Closed PR #9233 removed the local ``_distance`` body along with renaming its
+    call sites; a deletion adds no coverage debt.
+    """
+    before = (
+        "from robot_sf.common.helpers import legacy\n\n"
+        "def delta(left: float, right: float) -> float:\n"
+        "    return legacy(left, right)\n\n\n"
+        "def legacy(left: float, right: float) -> float:\n"
+        "    return abs(left - right)\n"
+    )
+    result = _rename_only_callee_swaps(before, _RENAME_AFTER)
+    assert result is not None
+    assert result[0] == {"legacy": "point_distance"}
+
+
+def test_rename_only_callee_swap_rejects_live_helper_removal() -> None:
+    """Removing a still-referenced helper must fail the proof (issue #9238)."""
+    before = (
+        "def delta(left: float, right: float) -> float:\n"
+        "    return legacy(left, right) + kept(left)\n\n\n"
+        "def legacy(left: float, right: float) -> float:\n"
+        "    return abs(left - right)\n\n\n"
+        "def kept(left: float) -> float:\n"
+        "    return abs(left)\n"
+    )
+    after = (
+        "def delta(left: float, right: float) -> float:\n"
+        "    return point_distance(left, right) + kept(left)\n"
+    )
+    assert _rename_only_callee_swaps(before, after) is None

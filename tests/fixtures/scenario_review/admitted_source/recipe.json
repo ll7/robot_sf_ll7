@@ -1,0 +1,44 @@
+{
+  "schema_version": "experiment-recipe.v1",
+  "recipe_id": "srev22-admitted-source-smoke",
+  "hypothesis": "A source-bound fixture is resolved before diagnostic execution.",
+  "source_identity": {
+    "scenario_id": "srev22-tiny-crossing",
+    "kind": "fixture",
+    "origin": "synthetic-constructed",
+    "source_uri": "source.json",
+    "source_format": "fixture-json",
+    "source_schema": "fixture-source.v1",
+    "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
+    "config_identity": "srev22-admitted-source-config.v1",
+    "units": "metres",
+    "coordinate_frame": "world",
+    "evidence_boundary": "diagnostic_only",
+    "scientific_claim_allowed": false,
+    "dependent_family_status": "standalone_fixture_only"
+  },
+  "interventions": [
+    {
+      "intervention_id": "control",
+      "factor": "source_integrity",
+      "priority": 1
+    }
+  ],
+  "control_conditions": {
+    "fixture": true
+  },
+  "measurements": [
+    {
+      "name": "source_bytes",
+      "units": "bytes"
+    }
+  ],
+  "budget": {
+    "max_candidates": 1
+  },
+  "stop_rules": [
+    "source_verified"
+  ],
+  "preservation_destination": "fixture:srev22-admitted-source",
+  "admission_reference": "srev22-admitted-source-receipt"
+}

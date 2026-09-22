@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    normalize_goal_completion_policy,
+)
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 
 if TYPE_CHECKING:
@@ -30,6 +34,7 @@ class DummySimulator:
         seed: int = 0,
         step_dt: float = 0.1,
         goal_proximity_threshold: float = 1.0,
+        goal_completion_policy: str | None = None,
     ):
         """Initialize the deterministic dummy simulator.
 
@@ -38,15 +43,25 @@ class DummySimulator:
             seed: Seed used to reset the dummy random-number generator.
             step_dt: Fixed dummy timestep in seconds.
             goal_proximity_threshold: Goal completion tolerance.
+            goal_completion_policy: Optional versioned route-success policy override.
         """
         self.map_def = map_def
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.step_dt = float(step_dt)
         self.goal_proximity_threshold = float(goal_proximity_threshold)
+        map_policy = getattr(map_def, "goal_completion_policy", None)
+        self.goal_completion_policy = normalize_goal_completion_policy(
+            goal_completion_policy if goal_completion_policy is not None else map_policy
+        )
         self.timestep = 0
         self.robots = [_MockRobot()]
-        self.robot_navs = [RouteNavigator(proximity_threshold=self.goal_proximity_threshold)]
+        self.robot_navs = [
+            RouteNavigator(
+                proximity_threshold=self.goal_proximity_threshold,
+                completion_policy=self.goal_completion_policy,
+            )
+        ]
         self._ped_pos = np.empty((0, 2), dtype=float)
         self.ped_radii = np.empty((0,), dtype=float)
         self.reset_state()
@@ -55,9 +70,19 @@ class DummySimulator:
         """Reset simulator to initial state."""
         self.timestep = 0
         self.rng = np.random.default_rng(self.seed)
-        route = sample_route(self.map_def, None)
+        route = sample_route(
+            self.map_def,
+            None,
+            completion_policy=self.goal_completion_policy,
+        )
         navigator = self.robot_navs[0]
-        navigator.new_route(route[1:], start_pos=route[0])
+        navigator.new_route(
+            route[1:],
+            start_pos=route[0],
+            goal_zone=getattr(route, "goal_zone", None),
+            spawn_id=getattr(route, "spawn_id", None),
+            goal_id=getattr(route, "goal_id", None),
+        )
         self.robots[0].reset_state((route[0], navigator.initial_orientation))
 
     def step_once(self, actions) -> None:
@@ -91,6 +116,16 @@ class DummySimulator:
     def next_goal_pos(self) -> list[tuple[float, float] | None]:
         """Return next goal waypoints when present."""
         return [navigator.next_waypoint for navigator in self.robot_navs]
+
+    def goal_completion_metadata(self) -> dict[str, object]:
+        """Return versioned success-definition metadata for runtime consumers."""
+        if self.goal_completion_policy == GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1:
+            return {}
+        return {
+            "schema_version": "success_definition_runtime.v1",
+            "policy": self.goal_completion_policy,
+            "robots": [navigator.completion_metadata() for navigator in self.robot_navs],
+        }
 
     def get_obstacle_lines(self) -> np.ndarray:
         """Return flat obstacle segments for occupancy checks."""
@@ -157,6 +192,7 @@ def dummy_factory(env_config: EnvSettings, map_def: MapDefinition, _peds: bool) 
         seed=seed,
         step_dt=getattr(sim_settings, "time_per_step_in_secs", 0.1),
         goal_proximity_threshold=getattr(sim_settings, "goal_radius", 1.0),
+        goal_completion_policy=getattr(sim_settings, "goal_completion_policy", None),
     )
 
 

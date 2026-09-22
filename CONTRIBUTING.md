@@ -79,7 +79,7 @@ issue is ready for a worker to start on.
 
 **`state:ready` is the sole positive dispatch signal.** An issue is dispatchable when it carries
 `state:ready` and no contradictory state label (for example, not also `state:running`,
-`state:blocked`, or `parked`). Two consequences that are easy to read backwards:
+`state:blocked`, or `state:parked`). Two consequences that are easy to read backwards:
 
 - **Absence of `state:blocked` implies nothing.** An issue with no `state:*` label at all is *not*
   workable — it is undispatchable and unlabeled, not a free issue. An empty state column reads as
@@ -94,7 +94,7 @@ Worked examples (re-check the labels on GitHub before acting):
 |---|---|
 | `state:ready` and no contradictory `state:*` label | Yes. For example, an open `resource:slurm` issue carrying `state:ready` with no contradictory state label is dispatchable — verify current labels with the live issue query before acting. |
 | `state:running` | No — already in progress. |
-| `state:blocked`, `parked`, or any single non-`ready` state label | No. |
+| `state:blocked`, `state:parked`, or any single non-`ready` state label | No. |
 | no `state:*` label at all | No — undispatchable, not free work. |
 
 ### The authoritative gate lives in the orchestrator repository

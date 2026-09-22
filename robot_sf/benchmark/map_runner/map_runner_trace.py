@@ -15,6 +15,15 @@ CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 
 
+def _optional_trace_float(value: Any) -> float | None:
+    """Return a finite float for trace export, or ``None`` when not a finite number."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _scenario_id(scenario: dict[str, Any]) -> str:
     """Resolve a scenario identifier from common manifest fields.
 
@@ -69,7 +78,7 @@ def _observation_heading(obs: Any, *, default: float = 0.0) -> float:
     return default
 
 
-def _trace_pedestrians(  # noqa: C901
+def _trace_pedestrians(  # noqa: C901, PLR0913 - positional frame inputs mirror the caller.
     positions: np.ndarray,
     previous_positions: np.ndarray | None,
     dt_seconds: float,
@@ -78,8 +87,15 @@ def _trace_pedestrians(  # noqa: C901
     robot_position: np.ndarray | None = None,
     robot_velocity: np.ndarray | None = None,
     actor_ids: list[Any] | None = None,
+    headings: np.ndarray | None = None,
+    surface_clearances: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Build trace-export pedestrian frames from simulator position buffers.
+
+    Optional per-row ``headings`` (radians, simulator-tracked) and
+    ``surface_clearances`` (metres, robot surface to pedestrian surface) are
+    attached verbatim when supplied; non-finite entries become ``None`` rather
+    than guesses.
 
     Returns:
         Renderer-neutral pedestrian frame entries.
@@ -112,6 +128,14 @@ def _trace_pedestrians(  # noqa: C901
             "id": actor_id if actor_id is not None else int(ped_idx),
             "position": [float(ped_pos[0]), float(ped_pos[1])],
             "velocity": [float(velocity[0]), float(velocity[1])],
+            "heading": _optional_trace_float(
+                headings[ped_idx] if headings is not None and ped_idx < len(headings) else None
+            ),
+            "surface_clearance_m": _optional_trace_float(
+                surface_clearances[ped_idx]
+                if surface_clearances is not None and ped_idx < len(surface_clearances)
+                else None
+            ),
         }
         if actor_id is not None:
             frame["actor_id"] = str(actor_id)

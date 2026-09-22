@@ -1,0 +1,56 @@
+{
+  "executor_config": {
+    "activation_speed_tolerance_m_s": 0.05,
+    "horizon_steps": 60,
+    "intervention_parameters": {
+      "ped-speed-down": {"speed_delta_m_s": -0.5},
+      "ped-speed-up": {"speed_delta_m_s": 0.5},
+      "ped-start-delay": {"dt_s": 1.0}
+    },
+    "motion_epsilon_m": 0.05,
+    "per_execution_timeout_s": 120.0,
+    "planner": "simple_policy",
+    "robot_speed_m_s": 1.0,
+    "seed": 7
+  },
+  "max_candidates": 2,
+  "max_executions": 4,
+  "wall_timeout_s": 600,
+  "recipe": {
+    "admission_reference": "srev22-review-execute-receipt",
+    "budget": {"max_candidates": 3, "max_executions": 6, "wall_timeout_s": 600},
+    "control_conditions": {"ped_speed_m_s": 1.0, "ped_start_delay_s": 0.0},
+    "hypothesis": "Raising the crossing pedestrian speed increases the minimum robot-pedestrian distance on the tiny fixture crossing.",
+    "interventions": [
+      {"factor": "single_pedestrian_speed_offset", "intervention_id": "ped-speed-up", "priority": 1},
+      {"factor": "single_pedestrian_speed_offset", "intervention_id": "ped-speed-down", "priority": 2},
+      {"factor": "single_pedestrian_start_delay_offset", "intervention_id": "ped-start-delay", "priority": 3}
+    ],
+    "measurements": [
+      {"expected_direction": "increase", "name": "min_robot_ped_distance_m", "units": "metres"}
+    ],
+    "preservation_destination": "external:post-execution-preservation",
+    "recipe_id": "srev22-smoke",
+    "schema_version": "experiment-recipe.v1",
+    "source_identity": {
+      "config_identity": "srev22-admitted-source-config.v1",
+      "dependent_family_status": "standalone_fixture_only",
+      "evidence_boundary": "diagnostic_only",
+      "kind": "fixture",
+      "origin": "synthetic-constructed",
+      "scenario_id": "srev22-tiny-crossing",
+      "scientific_claim_allowed": false,
+      "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
+      "source_format": "experiment-recipe.v1",
+      "source_ref": {"artifact_id": "recipe-srev22-smoke", "format": "experiment-recipe.v1", "uri": "recipe.json"},
+      "source_schema": "experiment-recipe.v1",
+      "source_uri": "recipe.json"
+    },
+    "stop_rules": [
+      "exhausted_candidates",
+      "execution_budget_exhausted",
+      "wall_timeout",
+      "control_fidelity_failure_blocks_treatment"
+    ]
+  }
+}

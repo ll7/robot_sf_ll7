@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import atan2, cos, pi, sin
+from math import acos, atan2, cos, hypot, pi, sin
 
 import numpy as np
 
@@ -74,3 +74,14 @@ def normalize_angle_atan2(angle: float) -> float:
     """
     value = float(angle)
     return float(atan2(sin(value), cos(value)))
+
+
+def point_distance(left: tuple[float, float], right: tuple[float, float]) -> float:
+    """Return the Euclidean distance between two 2D points."""
+    return hypot(left[0] - right[0], left[1] - right[1])
+
+
+def angle_between_unit(left: tuple[float, float], right: tuple[float, float]) -> float:
+    """Return the unsigned angle between two unit direction vectors."""
+    dot = max(-1.0, min(1.0, left[0] * right[0] + left[1] * right[1]))
+    return acos(dot)

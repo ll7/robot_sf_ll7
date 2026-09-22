@@ -1,0 +1,25 @@
+{
+  "schema": "offline_cold_load_manifest.v1",
+  "manifest_version": 1,
+  "fixture_id": "synthetic_ppo_v1",
+  "claim_boundary": "loader-contract smoke-only; source/config lineage unavailable; not benchmark or scientific/model evidence",
+  "artifact": {
+    "checkpoint": {"path": "synthetic_ppo_policy.zip", "sha256": "6c0a926dfdf8cb1559fae716dcda7b692f7ed6b3c5812003645cd23eae3100c7", "size_bytes": 18701},
+    "normalizer": {"path": "normalizer.json", "sha256": "316885bb2d77edf37f1bb40980e12605b8a1b65c6bad31f4758204cd986a1e8a", "size_bytes": 153}
+  },
+  "model": {"model_id": "offline_synthetic_ppo_v1", "algorithm_class": "stable_baselines3.ppo.ppo.PPO", "policy_class": "stable_baselines3.common.policies.ActorCriticPolicy", "policy_alias": "MlpPolicy", "feature_extractor_class": "stable_baselines3.common.torch_layers.FlattenExtractor"},
+  "normalizer": {"schema": "normalizer_state.v1", "path": "normalizer.json", "sha256": "316885bb2d77edf37f1bb40980e12605b8a1b65c6bad31f4758204cd986a1e8a", "dtype": "float32", "shape": [4]},
+  "observation": {"schema": "synthetic_observation.v1", "dtype": "float32", "shape": [4], "low": [-1.0, -1.0, -1.0, -1.0], "high": [1.0, 1.0, 1.0, 1.0]},
+  "action": {"schema": "synthetic_action.v1", "dtype": "float32", "shape": [2], "low": [-1.0, -1.0], "high": [1.0, 1.0]},
+  "inference": {"deterministic": true, "observation": [0.0, 0.0, 0.0, 0.0]},
+  "loader": {"qualified_name": "stable_baselines3.ppo.ppo.PPO.load", "load_mode": "direct_sb3", "allow_download": false},
+  "registry": {"model_id": "offline_synthetic_ppo_v1", "local_only": true, "tags": ["synthetic", "smoke-only", "not-for-benchmark"]},
+  "dependencies": [
+    {"distribution": "stable-baselines3", "import": "stable_baselines3", "version": "2.9.0"},
+    {"distribution": "torch", "import": "torch", "version": "2.13.0"},
+    {"distribution": "gymnasium", "import": "gymnasium", "version": "1.1.1"}
+  ],
+  "fixture_rights": {"status": "project-authored", "license": "repository", "basis": "project-authored synthetic test fixture; no external weights or data", "evidence": ["scripts/validation/asset_rights_inventory.v1.yaml", "LICENSE"]},
+  "source_config": {"status": "unavailable", "reason": "No source/config receipt was retained with this synthetic checkpoint; no commit or training lineage is inferred."},
+  "aliases": {"canonical": "synthetic_ppo_v1", "accepted": ["synthetic_ppo_v1"], "stale": ["latest", "best-success"]}
+}

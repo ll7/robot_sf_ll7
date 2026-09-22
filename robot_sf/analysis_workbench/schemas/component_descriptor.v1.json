@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/component_descriptor.v1.json",
+  "$title": "Robot SF Component Descriptor v1",
+  "description": "Self-contained capability descriptor for a review-contract component. Unsupported capabilities are never synthesized.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "component_id",
+    "component_version",
+    "supported_input_versions",
+    "output_types"
+  ],
+  "properties": {
+    "schema_version": {"const": "component-descriptor.v1"},
+    "component_id": {"type": "string", "minLength": 1},
+    "component_version": {"type": "string", "minLength": 1},
+    "supported_input_versions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "required_capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "optional_capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "output_types": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  }
+}

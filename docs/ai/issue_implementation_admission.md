@@ -21,6 +21,9 @@ An implementation worker may acquire `agent-claims/issue-<number>` only when the
   `state:blocked-no-code-slice` as non-claimable holds rather than treating them as ready;
 - has no unknown `state:*` label until that label is classified in the shared taxonomy;
 - is unassigned and has no existing atomic claim;
+- has no open PR that references it; reference-only prose such as `Refs #N` or `Relates to #N`
+  counts as coverage, while an explicitly non-covering statement such as `does not close #N` does
+  not, and closed or merged covering PRs keep their existing terminal-state handling;
 - is not a parent, epic, decision, review, active-work, compute, campaign, external-input, or blocked issue;
 - contains non-empty sections for the objective, scope, inputs or affected surfaces, acceptance criteria, and verification.
 
@@ -87,6 +90,8 @@ uv run python scripts/dev/issue_implementability.py 1 \
 - `parent`: dispatch a bounded child, not the tracker.
 - `human_decision`: obtain the named ruling before implementation.
 - `needs_compute`: route through the compute owner, not the local implementation lane.
+- `covering_pr_open`: an open PR already references the issue, including reference-only
+  `Refs #N`/`Relates to #N` prose; do not start another implementation worker.
 - `blocked`, `working`, `review`, `assigned`, or `already_claimed`: do not start another implementation worker.
 - `wrong_owner_repo`, `state_conflict`, or `stale_running`: reconcile repository ownership or
   lifecycle state before considering the issue again.

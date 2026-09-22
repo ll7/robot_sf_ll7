@@ -4,7 +4,12 @@ from math import dist
 
 import pytest
 
-from robot_sf.nav.navigation import RouteNavigator
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+)
+from robot_sf.nav.navigation import RouteNavigator, sample_route
+from robot_sf.nav.svg_map_parser import convert_map
 
 
 def west_east_route():
@@ -33,6 +38,7 @@ def test_can_detect_when_destination_reached():
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((6.5, 1.5))
+    assert navi.completion_policy == GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1
     assert navi.reached_destination
 
 
@@ -109,3 +115,85 @@ def test_initial_orientation_uses_spawn_reference_for_single_waypoint_routes():
     navi.new_route([(4.0, 1.0)], start_pos=(1.0, 1.0))
 
     assert navi.initial_orientation == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("position", [(4.0, 1.0), (4.1, 1.9)])
+def test_goal_zone_entry_completion_accepts_rectangle_boundary_and_interior(position):
+    """The versioned zone policy completes on entry, even away from the sampled point."""
+    goal_zone = ((4.0, 0.0), (6.0, 0.0), (6.0, 2.0))
+    navi = RouteNavigator(
+        [(0.0, 0.0), (10.0, 10.0)],
+        proximity_threshold=0.1,
+        completion_policy=GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+        goal_zone=goal_zone,
+    )
+
+    navi.update_position(position)
+
+    assert navi.reached_destination
+
+
+def test_goal_zone_entry_completion_rejects_outside_position():
+    """The zone policy does not complete until the robot enters its bound rectangle."""
+    goal_zone = ((4.0, 0.0), (6.0, 0.0), (6.0, 2.0))
+    navi = RouteNavigator(
+        [(0.0, 0.0), (10.0, 10.0)],
+        completion_policy=GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+        goal_zone=goal_zone,
+    )
+
+    navi.update_position((3.9, 1.0))
+
+    assert not navi.reached_destination
+
+
+def test_legacy_waypoint_policy_ignores_degenerate_goal_zone_placeholder():
+    """Legacy replay payloads keep waypoint-radius semantics with point placeholders."""
+    placeholder = ((7.0, 5.0), (7.0, 5.0), (7.0, 5.0))
+    navi = RouteNavigator(
+        [(0.0, 0.0), (7.0, 5.0)],
+        goal_zone=placeholder,
+    )
+
+    navi.new_route([(0.0, 0.0), (7.0, 5.0)], goal_zone=placeholder)
+    navi.update_position((7.0, 5.0))
+
+    assert navi.goal_zone is None
+    assert navi.reached_destination
+
+
+def test_goal_completion_policy_fails_closed_for_unknown_or_missing_goal_zone():
+    """Unknown policies and unbound goal-zone policies must not silently downgrade."""
+    with pytest.raises(ValueError, match="Unknown goal_completion_policy"):
+        RouteNavigator(completion_policy="goal_zone_entry_v9")
+
+    with pytest.raises(ValueError, match="requires a goal_zone"):
+        RouteNavigator(
+            [(0.0, 0.0), (1.0, 1.0)],
+            completion_policy=GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+        )
+
+
+def test_sampled_route_binds_source_goal_zone_to_navigator_metadata():
+    """A sampled route carries the exact source goal-zone and route identifiers."""
+    map_def = convert_map("tests/fixtures/test_maps/simple_corridor.svg")
+    route = sample_route(map_def, spawn_id=0)
+    navigator = RouteNavigator(
+        completion_policy=GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    )
+    navigator.new_route(
+        route[1:],
+        start_pos=route[0],
+        goal_zone=route.goal_zone,
+        spawn_id=route.spawn_id,
+        goal_id=route.goal_id,
+    )
+
+    metadata = navigator.completion_metadata()
+
+    assert metadata["policy"] == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
+    assert metadata["route_binding"] == {
+        "spawn_id": 0,
+        "goal_id": 0,
+        "goal_zone": [[17.0, 4.0], [18.5, 4.0], [18.5, 5.5]],
+    }

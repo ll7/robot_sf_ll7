@@ -26,10 +26,16 @@ CLAIM_PREFIX = "agent-claims"
 ISSUE_RE = re.compile(r"^[1-9][0-9]*$")
 ISSUE_COVERAGE_REFERENCE = re.compile(
     r"(?i)\b(?P<verb>refs?|references?|close(?:s|d)?|fix(?:es|ed)?|"
-    r"resolve(?:s|d)?|implement(?:s|ed)?)\s*:?[ \t]*`?#(?P<issue>\d+)\b`?"
+    r"resolve(?:s|d)?|implement(?:s|ed)?|relat(?:es?|ed|ing)\s+to)\s*:?[ \t]*"
+    r"`?#(?P<issue>\d+)\b`?"
 )
+COVERAGE_NEGATION_PATTERN = re.compile(
+    r"(?i)\b(?:cannot|can'?t|won'?t|doesn'?t|don'?t|didn'?t|isn'?t|not|never|without|"
+    r"no longer|nor)\s*$"
+)
+COVERAGE_NEGATION_WINDOW = 16
 CLAIM_REF_RE = re.compile(r"^refs/heads/agent-claims/issue-(?P<issue>[1-9][0-9]*)$")
-TERMINAL_RELEASE_REASONS = frozenset({"merged", "closed", "abandoned"})
+TERMINAL_RELEASE_REASONS = frozenset({"merged", "closed", "abandoned", "handoff"})
 RECONCILIATION_LIMIT = 100
 PR_SNAPSHOT_LIMIT = 500
 PR_REST_PAGE_SIZE = 100
@@ -311,6 +317,24 @@ def _run_bounded_pr_rest_snapshot(
     )
 
 
+def _specifies_issue_coverage(*texts: str, issue_number: int) -> bool:
+    """Return whether any text explicitly claims coverage of one issue.
+
+    A coverage verb immediately preceded by a negation (for example
+    ``does not close #123``) is an explicitly non-covering reference and must
+    not count as coverage even though the verb matcher fires.
+    """
+    for text in texts:
+        for match in ISSUE_COVERAGE_REFERENCE.finditer(text):
+            if int(match.group("issue")) != issue_number:
+                continue
+            prefix = text[max(0, match.start() - COVERAGE_NEGATION_WINDOW) : match.start()]
+            if COVERAGE_NEGATION_PATTERN.search(prefix.rstrip()):
+                continue
+            return True
+    return False
+
+
 def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
     """Parse one authoritative open-PR response for explicit issue coverage."""
     payload, decode_error = _decode_pr_pages(result, empty_error="open PR response is empty")
@@ -333,10 +357,7 @@ def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dic
                 "error": validated["error"],
             }
         number = validated["number"]
-        text = f"{validated['body']} {validated['title']}"
-        if any(
-            int(match.group("issue")) == target for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
-        ):
+        if _specifies_issue_coverage(validated["body"], validated["title"], issue_number=target):
             covering.add(number)
     return {
         "ok": True,
@@ -367,15 +388,32 @@ def _open_prs_covering_issue_with_fallback(*, repo: str, issue_number: int) -> d
     return fallback
 
 
+def open_prs_covering_issue(*, repo: str, issue_number: int) -> dict[str, Any]:
+    """Return open PRs that explicitly reference one issue.
+
+    This is the canonical coverage read shared by the terminal claim-release
+    guard and the live admission preflight. Reference-only prose such as
+    ``Refs #N`` or ``Relates to #N`` counts as coverage, while an explicitly
+    non-covering statement such as ``does not close #N`` does not.
+    """
+    return _open_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)
+
+
 def _parse_claim_snapshot(
-    result: CommandResult, *, issue_number: int | None, limit: int
+    result: CommandResult, *, issue_number: int | None, limit: int, offset: int = 0
 ) -> dict[str, Any]:
-    """Parse a bounded claim-ref listing without treating malformed refs as absent."""
+    """Parse a bounded claim-ref window without treating malformed refs as absent.
+
+    The full remote listing is sorted, then sliced to ``[offset:offset + limit]``
+    so callers resume with a larger offset while ``truncated`` remains true.
+    Rows outside the window are never classified or released by this run.
+    """
     if result.returncode != 0:
         return {
             "ok": False,
             "claims": [],
             "truncated": False,
+            "offset": offset,
             "error": (result.stderr or result.stdout).strip() or "claim ref snapshot failed",
         }
 
@@ -405,20 +443,22 @@ def _parse_claim_snapshot(
         )
 
     claims.sort(key=lambda row: (row["issue"], row["claim_ref"]))
-    truncated = len(claims) > limit
-    if truncated:
-        claims = claims[:limit]
+    truncated = len(claims) > offset + limit
+    if truncated or offset:
+        claims = claims[offset : offset + limit]
     if malformed:
         return {
             "ok": False,
             "claims": claims,
             "truncated": truncated,
+            "offset": offset,
             "error": f"malformed claim ref row(s): {', '.join(malformed[:3])}",
         }
     return {
         "ok": True,
         "claims": claims,
         "truncated": truncated,
+        "offset": offset,
         "error": None,
     }
 
@@ -527,10 +567,8 @@ def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict
                 "truncated": False,
                 "error": validated["error"],
             }
-        text = f"{validated['body']} {validated['title']}"
-        if not any(
-            int(match.group("issue")) == issue_number
-            for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
+        if not _specifies_issue_coverage(
+            validated["body"], validated["title"], issue_number=issue_number
         ):
             continue
         if validated["state"] == "OPEN":
@@ -749,10 +787,18 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
     repo: str,
     issue_number: int | None = None,
     limit: int = RECONCILIATION_LIMIT,
+    offset: int = 0,
     release_stale: bool = False,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    """Report stale claim candidates and optionally release only revalidated rows."""
+    """Report stale claim candidates and optionally release only revalidated rows.
+
+    ``offset``/``limit`` select a resume window over the sorted claim listing;
+    resume with a larger offset while ``truncated`` remains true. Releases are
+    safe under truncation because every released row is revalidated
+    (claim SHA, issue state, PR coverage) inside ``_release_reconciled_claim``
+    immediately before the compare-and-delete.
+    """
     if limit <= 0:
         return {
             "schema": "issue_claim_reconciliation.v1",
@@ -761,7 +807,19 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
             "read_only": not release_stale,
             "claims": [],
             "candidate_count": 0,
+            "offset": offset,
             "errors": ["limit must be positive"],
+        }
+    if offset < 0:
+        return {
+            "schema": "issue_claim_reconciliation.v1",
+            "action": "reconcile",
+            "ok": False,
+            "read_only": not release_stale,
+            "claims": [],
+            "candidate_count": 0,
+            "offset": offset,
+            "errors": ["offset must be zero or positive"],
         }
     if release_stale and reason not in TERMINAL_RELEASE_REASONS:
         return {
@@ -771,6 +829,7 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
             "read_only": False,
             "claims": [],
             "candidate_count": 0,
+            "offset": offset,
             "errors": ["--release-stale requires an explicit terminal --reason"],
         }
 
@@ -778,6 +837,7 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
         _run(build_claim_snapshot_command(remote=remote)),
         issue_number=issue_number,
         limit=limit,
+        offset=offset,
     )
     errors = [snapshot["error"]] if snapshot.get("error") else []
     if snapshot.get("truncated"):
@@ -843,7 +903,11 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
         ]
 
     releases: list[dict[str, Any]] = []
-    if release_stale and not errors:
+    # Snapshot truncation only bounds which rows this window considers: every
+    # release revalidates its row (claim SHA, issue state, PR coverage) inside
+    # _release_reconciled_claim immediately before compare-and-delete, so
+    # in-window safe rows release while out-of-window rows stay retained.
+    if release_stale:
         for row in rows:
             if row.get("safe_to_release"):
                 releases.append(
@@ -858,6 +922,7 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
         "remote": remote,
         "repo": repo,
         "limit": limit,
+        "offset": snapshot.get("offset", offset),
         "truncated": bool(snapshot.get("truncated")),
         "claims": rows,
         "candidate_count": sum(1 for row in rows if row.get("safe_to_release")),
@@ -972,12 +1037,91 @@ def acquire_issue(issue_number: int, *, repo: str, remote: str, source_ref: str)
     }
 
 
-def release_issue(
+def _release_handoff_claim(
+    issue_number: int,
+    *,
+    remote: str,
+    repo: str,
+    reason: str | None,
+    handoff_pr: int | None,
+    status: dict[str, Any],
+    observed_sha: str,
+    coverage: dict[str, Any],
+) -> dict[str, Any]:
+    """Release a delivered-into-shared-PR claim after verifying named-PR coverage."""
+    coverage_provenance = {
+        "coverage_source": coverage.get("source"),
+        "coverage_fallback_reason": coverage.get("fallback_reason"),
+    }
+    if not (isinstance(handoff_pr, int) and handoff_pr > 0):
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "",
+            "error": "handoff_pr_required; a handoff release must name the receiving PR",
+            "release_class": None,
+            "reason": reason,
+        }
+    if handoff_pr not in (coverage.get("covering_prs") or []):
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "",
+            "error": "handoff_pr_not_covering_issue; retain the claim",
+            "release_class": None,
+            "reason": reason,
+            "handoff_pr": handoff_pr,
+            "covering_prs": coverage["covering_prs"],
+            **coverage_provenance,
+        }
+    result = _run(build_release_command(issue_number, remote=remote, expected_sha=observed_sha))
+    ok = result.returncode == 0
+    return {
+        "schema": "issue_claim.v1",
+        "action": "release",
+        "ok": ok,
+        "claimed": False if ok else None,
+        "issue": issue_number,
+        "remote": remote,
+        "repo": repo,
+        "claim_ref": short_claim_ref(issue_number),
+        "command": list(result.command),
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+        "error": None
+        if ok
+        else "claim_ref_release_failed; inspect remote branch state before retrying",
+        "release_class": "terminal" if ok else None,
+        "reason": reason,
+        "handoff_pr": handoff_pr,
+        "covering_prs": coverage["covering_prs"],
+        **coverage_provenance,
+    }
+
+
+def release_issue(  # noqa: C901 - explicit fail-closed release branches.
     issue_number: int,
     *,
     remote: str,
     repo: str = DEFAULT_REPO,
     reason: str | None = None,
+    handoff_pr: int | None = None,
 ) -> dict[str, Any]:
     """Release a claim only after a terminal lifecycle reason is supplied."""
     status = status_issue(issue_number, remote=remote)
@@ -1033,6 +1177,18 @@ def release_issue(
             "release_class": None,
             "reason": reason,
         }
+
+    if reason == "handoff" and not (isinstance(handoff_pr, int) and handoff_pr > 0):
+        return _release_handoff_claim(
+            issue_number,
+            remote=remote,
+            repo=repo,
+            reason=reason,
+            handoff_pr=handoff_pr,
+            status=status,
+            observed_sha="",
+            coverage={"covering_prs": [], "source": None, "fallback_reason": None},
+        )
 
     observed_sha = status.get("sha")
     if not isinstance(observed_sha, str) or not observed_sha:
@@ -1116,6 +1272,19 @@ def release_issue(
             "covering_prs": coverage["covering_prs"],
             **coverage_provenance,
         }
+    if reason == "handoff":
+        # The fix is delivered into a named open PR driven by another lane. The named PR must
+        # verifiably reference this issue; otherwise the claim is retained.
+        return _release_handoff_claim(
+            issue_number,
+            remote=remote,
+            repo=repo,
+            reason=reason,
+            handoff_pr=handoff_pr,
+            status=status,
+            observed_sha=observed_sha,
+            coverage=coverage,
+        )
     if coverage["covering_prs"]:
         # An open covering PR normally blocks release. But if another covering PR
         # already MERGED, the issue is verifiably delivered and the open PR is a
@@ -1222,10 +1391,26 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Terminal lifecycle reason required when releasing a claimed ref.",
     )
     parser.add_argument(
+        "--handoff-pr",
+        type=int,
+        default=None,
+        help="Receiving PR number required with --reason handoff.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=RECONCILIATION_LIMIT,
         help="Maximum claim refs to inspect during reconciliation.",
+    )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help=(
+            "Claim refs to skip before the reconcile window. Resume with a "
+            "larger offset while the report stays truncated; rows outside the "
+            "window are retained, never classified or released."
+        ),
     )
     parser.add_argument(
         "--release-stale",
@@ -1299,6 +1484,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=args.repo,
             issue_number=args.issue,
             limit=args.limit,
+            offset=args.offset,
             release_stale=args.release_stale,
             reason=args.reason,
         )
@@ -1331,6 +1517,7 @@ def main(argv: list[str] | None = None) -> int:
             remote=args.remote,
             repo=args.repo,
             reason=args.reason,
+            handoff_pr=args.handoff_pr,
         )
 
     _dump_json(payload)

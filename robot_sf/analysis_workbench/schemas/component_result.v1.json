@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/component_result.v1.json",
+  "$title": "Robot SF Component Result v1",
+  "description": "Result envelope for a review-contract component invocation. Partial or failed outputs cannot carry complete status.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "component_id", "status"],
+  "properties": {
+    "schema_version": {"const": "component-result.v1"},
+    "request_id": {"type": "string", "minLength": 1},
+    "component_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["complete", "partial", "unavailable", "failed", "cancelled"]},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "uri", "sha256"],
+        "properties": {
+          "artifact_id": {"type": "string", "minLength": 1},
+          "uri": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
+        }
+      }
+    },
+    "diagnostics": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
+    "provenance": {"type": "object", "additionalProperties": true},
+    "reason": {"type": "string"}
+  }
+}

@@ -56,6 +56,20 @@ def test_stale_package_fails_before_pytest_collection(tmp_path: Path) -> None:
     assert "uv sync --all-extras --reinstall-package robot-sf" in result.stderr
 
 
+def test_refusal_names_environment_evidence(tmp_path: Path) -> None:
+    """A stale-package refusal names the venv, digests, and timestamps (issue #9449)."""
+    result = _run_with_fake_package(
+        tmp_path,
+        "def social_force_gil_releasing_context():\n    return None\n",
+    )
+
+    assert result.returncode == 1
+    assert "installed pysocialforce package is stale" in result.stderr
+    assert "evidence: checked_at=" in result.stderr
+    assert f"venv={sys.prefix}" in result.stderr
+    assert "venv_mtime=" in result.stderr
+
+
 def test_import_error_reports_environment_repair(tmp_path: Path) -> None:
     """An import failure reports the deterministic environment repair command."""
     result = _run_with_fake_package(tmp_path, "raise ImportError('dependency missing')\n")

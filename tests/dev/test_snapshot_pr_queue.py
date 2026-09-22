@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev.merge_queue_gate import evaluate_merge_gate
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
@@ -315,6 +316,21 @@ def test_snapshot_preserves_merged_at_for_external_merge_classification() -> Non
 
     assert pr["state"] == "CLOSED"
     assert pr["merged_at"] == "2026-08-18T15:40:53Z"
+
+
+def test_review_complete_conditional_label_routes_green_ci_to_promotion() -> None:
+    """A green reviewed PR is sent to promotion without a new review cycle."""
+    pr_data = _base_freshness_pr(number=9388)
+    pr_data["labels"] = [{"name": "merge-if-ci-green"}]
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=9388,
+        expected_head_sha="head-sha",
+    )
+    assert pr["next_action"] == "promote_merge_if_ci_green"
+    assert pr["attention"] == "merge_attention"
 
 
 def test_base_freshness_stale_blocks_merge_ready_action() -> None:
@@ -1429,6 +1445,63 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
     assert f"gate-verdict: accepted @ {sha}" not in excerpt
 
 
+def test_compact_snapshot_ignores_inline_gate_verdict_prose() -> None:
+    """Compact normalization must preserve the canonical line-level gate parser."""
+    sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+    body = "final body"
+    digest = metadata_digest("compact gate parser PR", body)
+    pr_data = {
+        "number": 9325,
+        "title": "compact gate parser PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/9325",
+        "labels": [{"name": "merge-ready"}],
+        "headRefName": "feature",
+        "headRefOid": sha,
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {"name": "ci", "status": "completed", "conclusion": "success"},
+        ],
+        "reviews": [
+            {
+                "state": "COMMENTED",
+                "author": {"login": "ll7"},
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {sha}",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": sha},
+            },
+            {
+                "state": "COMMENTED",
+                "author": {"login": "ll7"},
+                "authorAssociation": "OWNER",
+                "body": "Keep `gate-verdict: hold @ " + sha + "`; do not apply merge-ready.",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": sha},
+            },
+        ],
+        "comments": [],
+        "body": body,
+    }
+
+    snapshot = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=9325,
+        expected_head_sha=sha,
+    )
+    snapshot["changed_coverage"] = {"status": "success", "head_sha": sha}
+    snapshot["metadata_verdicts"] = [metadata_trailer(digest)]
+    snapshot["closing_discipline"] = {"status": "passed", "blockers": []}
+
+    assert snapshot["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
+    assert snapshot["gate_verdict_status"] == "accepted"
+    audit = evaluate_merge_gate(snapshot, main_sha="main-sha", threads_resolved=True)
+    assert audit.gate_verdict_status == "accepted"
+
+
 # Issue #6564: GraphQL quota exhaustion REST fallback tests (deterministic, no live GitHub).
 
 from scripts.dev.snapshot_pr_queue import _is_graphql_quota_error, fetch_pr  # noqa: E402
@@ -2247,3 +2320,109 @@ def test_fetch_pr_classifies_stdout_quota_as_graphql_quota_fallback(returncode: 
     assert payload["error_kind"] == "graphql_quota_exhausted"
     assert payload["data_source"] == "rest_fallback_graphql_quota"
     assert payload["review_threads"] == "unknown_graphql_quota"
+
+
+def _two_row_pr_list() -> list[dict[str, object]]:
+    """Return a canned two-row ``gh pr list`` payload for budget tests."""
+    return [
+        {
+            "number": 2681,
+            "title": "active PR",
+            "state": "OPEN",
+            "isDraft": False,
+            "url": "https://github.test/pull/2681",
+            "labels": [{"name": "merge-ready"}],
+            "headRefName": "feature",
+            "headRefOid": "cafe00",
+            "mergeable": "MERGEABLE",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+            "comments": [],
+        },
+        {
+            "number": 2682,
+            "title": "second PR",
+            "state": "OPEN",
+            "isDraft": False,
+            "url": "https://github.test/pull/2682",
+            "labels": [],
+            "headRefName": "feat2",
+            "headRefOid": "cafe01",
+            "mergeable": "MERGEABLE",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+            "comments": [],
+        },
+    ]
+
+
+def _expired_clock() -> object:
+    """Return a monotonic clock that is already past any positive deadline."""
+    calls = {"count": 0}
+
+    def _tick() -> float:
+        calls["count"] += 1
+        return 0.0 if calls["count"] == 1 else 10_000.0
+
+    return MagicMock(side_effect=_tick)
+
+
+def test_snapshot_active_prs_wall_budget_reports_truncated_fast() -> None:
+    """An expired wall budget stops fan-out with zero row fetches (issue #9469)."""
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("time.monotonic", _expired_clock()),
+        patch("scripts.dev.snapshot_pr_queue._pr_payload_from_dict") as mock_row,
+    ):
+        mock_gh.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(_two_row_pr_list()), stderr=""
+        )
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2, max_wall_seconds=5.0)
+
+    assert payload["truncated"] is True
+    assert "wall budget" in payload["truncation_note"]
+    assert payload["prs"] == []
+    mock_row.assert_not_called()
+
+
+def test_snapshot_active_prs_generous_budget_keeps_all_rows() -> None:
+    """A generous wall budget preserves the existing unbounded behavior."""
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(_two_row_pr_list()), stderr=""
+        )
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2, max_wall_seconds=100.0)
+
+    assert payload["truncated"] is True  # at-cap rows stay informational
+    assert "wall budget" not in payload["truncation_note"]
+    assert len(payload["prs"]) == 2
+
+
+def test_snapshot_active_rest_fallback_wall_budget_skips_row_fetch() -> None:
+    """The REST fallback honors the same deadline without per-PR calls."""
+    requested: list[str] = []
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        requested.append(path)
+        if path == "pulls?state=open&per_page=2&page=1":
+            return [
+                {"number": 42, "head": {"sha": "head-42"}},
+                {"number": 43, "head": {"sha": "head-43"}},
+            ]
+        raise AssertionError(f"unexpected REST path after budget: {path}")
+
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+        patch("time.monotonic", _expired_clock()),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2, max_wall_seconds=5.0)
+
+    assert payload["truncated"] is True
+    assert "wall budget" in payload["truncation_note"]
+    assert payload["prs"] == []
+    assert not any(path.startswith("pulls/42") for path in requested)

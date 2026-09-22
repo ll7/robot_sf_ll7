@@ -1,0 +1,20 @@
+{
+  "schema_version": "admitted-source-receipt.v1",
+  "receipt_id": "srev22-admitted-source-receipt",
+  "source": {
+    "uri": "source.json",
+    "format": "fixture-json",
+    "schema": "fixture-source.v1",
+    "sha256": "77696526596919e710379206d29c041141e4588e761705ecda195e780fe4bb8a",
+    "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
+    "config_identity": "srev22-admitted-source-config.v1",
+    "units": "metres",
+    "coordinate_frame": "world"
+  },
+  "request_sha256": "88d3ddc1a859a67bc3bc8ae253ae9e9301a0d02b5638f2dea89e2814172f8208",
+  "recipe_sha256": "50a7e377ee4ad6a5543379d93a47f21518505fc4c82b014817d324013d3c6d47",
+  "status": "admitted",
+  "source_kind": "fixture",
+  "evidence_boundary": "diagnostic_only",
+  "scientific_claim_allowed": false
+}

@@ -1,0 +1,1308 @@
+"""Offline comparison of recorded experiment outcomes for scenario review.
+
+The component deliberately consumes recorded results instead of importing an
+executor.  It makes effects conditional on a valid control and keeps
+falsified, contradictory, and inconclusive observations visible alongside
+survived observations.  A shared parent identifies one dependent family; the
+report never treats its branches as independent samples.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import html
+import json
+import math
+import os
+import re
+import stat
+import tempfile
+from collections.abc import Mapping
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from robot_sf.analysis_workbench.review_contracts import (
+    COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
+    COMPONENT_REQUEST_SCHEMA_VERSION,
+    COMPONENT_RESULT_SCHEMA_VERSION,
+    ComponentDescriptor,
+    ComponentRequest,
+    ComponentResult,
+    ReviewContractsValidationError,
+    component_request_from_dict,
+)
+from robot_sf.errors import RobotSfError
+
+EXPERIMENT_RESULTS_SCHEMA_VERSION = "experiment-results.v1"
+EXPERIMENT_COMPARISON_SCHEMA_VERSION = "experiment-comparison.v1"
+EXPERIMENT_COMPARISON_HTML_TYPE = "experiment-comparison-html.v1"
+COMPONENT_ID = "srev25-experiment-report"
+COMPONENT_VERSION = "1.0.0"
+RECORDED_RESULTS_CAPABILITY = "recorded-experiment-results"
+ACTIVATION_CAPABILITY = "activation-status"
+JSON_ARTIFACT_NAME = "experiment-comparison.json"
+HTML_ARTIFACT_NAME = "experiment-comparison.html"
+EVIDENCE_BOUNDARY = "diagnostic-only recorded-results comparison; not benchmark or paper evidence"
+OUTCOMES = ("survived", "falsified", "inconclusive", "contradictory")
+VALID_GATE_STATUSES = ("pass", "fail", "missing", "unknown", "not_applicable")
+VALID_EXPECTED_DIRECTIONS = ("increase", "decrease")
+VALID_SOURCE_KINDS = ("fixture", "recorded_results")
+VALID_SOURCE_EXECUTION_MODES = ("recorded_results_only", "native", "adapter", "mixed")
+VALID_SOURCE_READINESS_STATUSES = (
+    "verified",
+    "missing",
+    "fallback",
+    "degraded",
+    "unavailable",
+)
+VALID_SOURCE_AVAILABILITY_STATUSES = ("available", "partial-failure", "failed", "not_available")
+_ALLOWED_CONFIG_KEYS = {"metric_order", "report_title"}
+_SOURCE_IDENTITY_KEYS = frozenset(
+    {
+        "availability_status",
+        "execution_mode",
+        "generator",
+        "readiness_status",
+        "source_commit",
+        "source_kind",
+    }
+)
+_REQUIRED_SOURCE_IDENTITY_KEYS = frozenset(
+    {"availability_status", "execution_mode", "readiness_status", "source_commit", "source_kind"}
+)
+_COUNT_UNITS = {
+    "family_count": "dependent_family_by_shared_parent_id",
+    "condition_count": "condition_record_including_control_and_treatment",
+    "outcome_counts": "condition_record_including_control_and_treatment",
+    "effect_counts": "treatment_metric_comparison_record",
+    "negative_finding_count": "condition_record_with_non_survived_outcome",
+}
+_MAX_JSON_NESTING_DEPTH = 1000
+MAX_SOURCE_BYTES = 8 * 1024 * 1024
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+class _DuplicateJsonObjectName(ValueError):
+    """Raised when a JSON object contains an ambiguous repeated member."""
+
+
+def _reject_duplicate_json_object_names(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a JSON object while rejecting duplicate member names.
+
+    Returns:
+        The object represented by ``pairs`` when all names are unique.
+    """
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJsonObjectName
+        result[key] = value
+    return result
+
+
+class ExperimentReportError(RobotSfError, ValueError):
+    """Raised when a recorded-results report cannot be built safely."""
+
+    def __init__(self, code: str, message: str):
+        """Store a stable machine-readable code and human-readable detail."""
+
+        self.code = code
+        super().__init__(f"{code}: {message}")
+
+
+class _UnavailableReportError(ExperimentReportError):
+    """Raised when the component cannot support a requested input."""
+
+
+DESCRIPTOR = ComponentDescriptor(
+    component_id=COMPONENT_ID,
+    component_version=COMPONENT_VERSION,
+    supported_input_versions=(COMPONENT_REQUEST_SCHEMA_VERSION,),
+    output_types=(EXPERIMENT_COMPARISON_SCHEMA_VERSION, EXPERIMENT_COMPARISON_HTML_TYPE),
+    required_capabilities=(RECORDED_RESULTS_CAPABILITY,),
+    optional_capabilities=(ACTIVATION_CAPABILITY,),
+)
+
+
+def component_descriptor() -> dict[str, Any]:
+    """Return the versioned descriptor for this standalone component."""
+
+    payload = asdict(DESCRIPTOR)
+    for field_name in (
+        "supported_input_versions",
+        "output_types",
+        "required_capabilities",
+        "optional_capabilities",
+    ):
+        payload[field_name] = list(payload[field_name])
+    return {"schema_version": COMPONENT_DESCRIPTOR_SCHEMA_VERSION, **payload}
+
+
+def descriptor() -> dict[str, Any]:
+    """Return the component descriptor for callers using the short alias.
+
+    Returns:
+        JSON-safe component descriptor.
+    """
+
+    return component_descriptor()
+
+
+def _result(
+    request: ComponentRequest,
+    status: str,
+    *,
+    reason: str = "",
+    artifacts: tuple[dict[str, Any], ...] = (),
+    provenance: Mapping[str, Any] | None = None,
+) -> ComponentResult:
+    return ComponentResult(
+        request_id=_safe_request_identity(request.request_id, fallback="unknown"),
+        component_id=_safe_request_identity(request.component_id, fallback=COMPONENT_ID),
+        status=status,
+        artifacts=artifacts,
+        reason=reason,
+        provenance=dict(provenance or {}),
+    )
+
+
+def _finite_number(value: Any, *, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ExperimentReportError("invalid_input", f"{path} must be a finite number")
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        raise ExperimentReportError("invalid_input", f"{path} must be a finite number") from None
+    if not math.isfinite(number):
+        raise ExperimentReportError("invalid_input", f"{path} must be a finite number")
+    return number
+
+
+def _non_empty_string(value: Any, *, path: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ExperimentReportError("invalid_input", f"{path} must be a non-empty string")
+    _validate_unicode_string(value, path=path)
+    return value
+
+
+def _mapping(value: Any, *, path: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ExperimentReportError("invalid_input", f"{path} must be an object")
+    return value
+
+
+def _validate_unicode_string(value: str, *, path: str) -> None:
+    """Reject malformed Unicode and C0/C1 controls in retained text."""
+    index = 0
+    while index < len(value):
+        codepoint = ord(value[index])
+        if 0xD800 <= codepoint <= 0xDBFF:
+            if index + 1 >= len(value) or not 0xDC00 <= ord(value[index + 1]) <= 0xDFFF:
+                raise ExperimentReportError(
+                    "invalid_input", f"{path} contains an unpaired Unicode surrogate"
+                )
+            index += 2
+        elif 0xDC00 <= codepoint <= 0xDFFF:
+            raise ExperimentReportError(
+                "invalid_input", f"{path} contains an unpaired Unicode surrogate"
+            )
+        elif codepoint == 0:
+            raise ExperimentReportError("invalid_input", f"{path} contains an embedded NUL byte")
+        elif codepoint < 0x20 or 0x7F <= codepoint <= 0x9F:
+            raise ExperimentReportError(
+                "invalid_input", f"{path} contains a disallowed control character"
+            )
+        else:
+            index += 1
+
+
+def _validate_request_text(value: Any, *, path: str) -> None:
+    """Reject unsafe request text before it reaches output or filesystem APIs."""
+
+    if not isinstance(value, str) or not value:
+        raise ExperimentReportError("invalid_input", f"{path} must be a non-empty string")
+    try:
+        _validate_unicode_string(value, path=path)
+    except ExperimentReportError as error:
+        if "unpaired Unicode surrogate" in str(error):
+            raise ExperimentReportError(
+                "invalid_input", f"{path} contains invalid Unicode text"
+            ) from None
+        raise
+
+
+def _safe_request_identity(value: Any, *, fallback: str) -> str:
+    """Keep failure envelopes serializable when a request identity is malformed.
+
+    Returns:
+        The original value when it is safe to retain, otherwise ``fallback``.
+    """
+
+    if not isinstance(value, str) or not value:
+        return fallback
+    try:
+        _validate_unicode_string(value, path="/identity")
+    except ExperimentReportError:
+        return fallback
+    return value
+
+
+def _validate_request(request: ComponentRequest) -> None:
+    """Validate every request string retained by the report or its failure envelope."""
+
+    _validate_request_text(request.request_id, path="/request_id")
+    _validate_request_text(request.component_id, path="/component_id")
+    _validate_request_text(request.output_directory, path="/output_directory")
+    for index, source_ref in enumerate(request.sources):
+        _validate_request_text(source_ref.artifact_id, path=f"/sources/{index}/artifact_id")
+        _validate_request_text(source_ref.uri, path=f"/sources/{index}/uri")
+        _validate_request_text(source_ref.format, path=f"/sources/{index}/format")
+        if source_ref.sha256 and (
+            not isinstance(source_ref.sha256, str)
+            or _SHA256_RE.fullmatch(source_ref.sha256) is None
+        ):
+            raise ExperimentReportError(
+                "invalid_input", f"/sources/{index}/sha256 must be a 64-hex SHA-256"
+            )
+        if source_ref.source_commit and (
+            not isinstance(source_ref.source_commit, str)
+            or _SHA40_RE.fullmatch(source_ref.source_commit) is None
+        ):
+            raise ExperimentReportError(
+                "invalid_input", f"/sources/{index}/source_commit must be a 40-hex commit SHA"
+            )
+    for index, capability in enumerate(request.required_capabilities):
+        _validate_request_text(capability, path=f"/required_capabilities/{index}")
+
+
+def _validate_strict_json(value: Any, *, path: str = "/source", depth: int = 0) -> None:
+    """Reject JSON parser extensions that would make artifacts non-canonical."""
+
+    if depth >= _MAX_JSON_NESTING_DEPTH:
+        subject = "config" if path.startswith("/config") else "source"
+        raise ExperimentReportError(
+            "invalid_input", f"{subject} JSON exceeds the supported nesting depth"
+        )
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ExperimentReportError("invalid_input", f"{path} contains a non-finite number")
+    elif isinstance(value, str):
+        _validate_unicode_string(value, path=path)
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                raise ExperimentReportError("invalid_input", f"{path} has a non-string object key")
+            _validate_unicode_string(key, path=f"{path}/<key>")
+            _validate_strict_json(child, path=f"{path}/{key}", depth=depth + 1)
+    elif type(value) is list:
+        for index, child in enumerate(value):
+            _validate_strict_json(child, path=f"{path}/{index}", depth=depth + 1)
+
+
+def _list(value: Any, *, path: str) -> list[Any]:
+    if type(value) is not list:
+        raise ExperimentReportError("invalid_input", f"{path} must be an array")
+    return value
+
+
+def _validate_config(config: Mapping[str, Any]) -> tuple[list[str], str | None]:
+    _validate_strict_json(config, path="/config")
+    unknown = sorted(set(config) - _ALLOWED_CONFIG_KEYS)
+    if unknown:
+        raise ExperimentReportError(
+            "invalid_config", f"unsupported config keys: {', '.join(unknown)}"
+        )
+    metric_order_value = config.get("metric_order", [])
+    metric_order = _list(metric_order_value, path="/config/metric_order")
+    if any(not isinstance(item, str) or not item.strip() for item in metric_order):
+        raise ExperimentReportError(
+            "invalid_config", "/config/metric_order must contain non-empty strings"
+        )
+    if len(set(metric_order)) != len(metric_order):
+        raise ExperimentReportError("invalid_config", "/config/metric_order must be unique")
+    report_title = config.get("report_title")
+    if report_title is not None:
+        report_title = _non_empty_string(report_title, path="/config/report_title")
+    return list(metric_order), report_title
+
+
+def _validate_gate(gate: Any, *, path: str) -> dict[str, Any]:
+    payload = _mapping(gate, path=path)
+    status = _non_empty_string(payload.get("status"), path=f"{path}/status")
+    if status not in VALID_GATE_STATUSES:
+        raise ExperimentReportError(
+            "invalid_input",
+            f"{path}/status must be one of {', '.join(VALID_GATE_STATUSES)}",
+        )
+    result = {"status": status}
+    for key in sorted(payload):
+        if key != "status":
+            result[key] = payload[key]
+    return result
+
+
+def _validate_measurements(measurements: Any, *, path: str) -> dict[str, dict[str, Any]]:
+    payload = _mapping(measurements, path=path)
+    result: dict[str, dict[str, Any]] = {}
+    for metric_name in sorted(payload):
+        if not isinstance(metric_name, str) or not metric_name.strip():
+            raise ExperimentReportError("invalid_input", f"{path} has an invalid metric name")
+        measurement = _mapping(payload[metric_name], path=f"{path}/{metric_name}")
+        units = _non_empty_string(measurement.get("units"), path=f"{path}/{metric_name}/units")
+        if "value" not in measurement:
+            raise ExperimentReportError(
+                "invalid_input", f"{path}/{metric_name}/value is required; use null when missing"
+            )
+        value = measurement["value"]
+        if value is not None:
+            value = _finite_number(value, path=f"{path}/{metric_name}/value")
+        item: dict[str, Any] = {"units": units, "value": value}
+        if "expected_direction" in measurement:
+            expected = measurement["expected_direction"]
+            if not isinstance(expected, str) or expected not in VALID_EXPECTED_DIRECTIONS:
+                raise ExperimentReportError(
+                    "invalid_input",
+                    f"{path}/{metric_name}/expected_direction must be one of "
+                    f"{', '.join(VALID_EXPECTED_DIRECTIONS)}",
+                )
+            item["expected_direction"] = expected
+        result[metric_name] = item
+    return result
+
+
+def _validate_source(payload: Any) -> dict[str, Any]:  # noqa: C901
+    _validate_strict_json(payload)
+    source = _mapping(payload, path="/source")
+    schema_version = _non_empty_string(source.get("schema_version"), path="/source/schema_version")
+    if schema_version != EXPERIMENT_RESULTS_SCHEMA_VERSION:
+        raise _UnavailableReportError(
+            "incompatible_version",
+            f"source schema {schema_version!r} is not supported; expected "
+            f"{EXPERIMENT_RESULTS_SCHEMA_VERSION}",
+        )
+    experiment_id = _non_empty_string(source.get("experiment_id"), path="/source/experiment_id")
+    hypothesis = _non_empty_string(source.get("hypothesis"), path="/source/hypothesis")
+    source_identity = _validate_source_identity(source.get("source_identity"))
+    families = _list(source.get("families"), path="/source/families")
+    if not families:
+        raise ExperimentReportError("invalid_input", "/source/families must not be empty")
+
+    normalized_families: list[dict[str, Any]] = []
+    seen_family_ids: set[str] = set()
+    seen_shared_parent_ids: set[str] = set()
+    for family_index, family_value in enumerate(families):
+        family = _mapping(family_value, path=f"/source/families/{family_index}")
+        family_id = _non_empty_string(
+            family.get("family_id"), path=f"/source/families/{family_index}/family_id"
+        )
+        if family_id in seen_family_ids:
+            raise ExperimentReportError("invalid_input", f"duplicate family_id: {family_id}")
+        seen_family_ids.add(family_id)
+        shared_parent_id = _non_empty_string(
+            family.get("shared_parent_id"),
+            path=f"/source/families/{family_index}/shared_parent_id",
+        )
+        if shared_parent_id in seen_shared_parent_ids:
+            raise ExperimentReportError(
+                "invalid_input",
+                f"shared_parent_id must identify one family: {shared_parent_id}",
+            )
+        seen_shared_parent_ids.add(shared_parent_id)
+        control_id = _non_empty_string(
+            family.get("control_condition_id"),
+            path=f"/source/families/{family_index}/control_condition_id",
+        )
+        conditions = _list(
+            family.get("conditions"), path=f"/source/families/{family_index}/conditions"
+        )
+        if not conditions:
+            raise ExperimentReportError(
+                "invalid_input", f"/source/families/{family_index}/conditions must not be empty"
+            )
+        normalized_conditions: list[dict[str, Any]] = []
+        seen_condition_ids: set[str] = set()
+        control_count = 0
+        for condition_index, condition_value in enumerate(conditions):
+            condition = _mapping(
+                condition_value,
+                path=f"/source/families/{family_index}/conditions/{condition_index}",
+            )
+            condition_path = f"/source/families/{family_index}/conditions/{condition_index}"
+            condition_id = _non_empty_string(
+                condition.get("condition_id"), path=f"{condition_path}/condition_id"
+            )
+            if condition_id in seen_condition_ids:
+                raise ExperimentReportError(
+                    "invalid_input", f"duplicate condition_id in {family_id}: {condition_id}"
+                )
+            seen_condition_ids.add(condition_id)
+            label = _non_empty_string(condition.get("label"), path=f"{condition_path}/label")
+            role = _non_empty_string(condition.get("role"), path=f"{condition_path}/role")
+            if role not in {"control", "treatment"}:
+                raise ExperimentReportError(
+                    "invalid_input", f"{condition_path}/role must be control or treatment"
+                )
+            if role == "control":
+                control_count += 1
+            outcome = _non_empty_string(condition.get("outcome"), path=f"{condition_path}/outcome")
+            if outcome not in OUTCOMES:
+                raise ExperimentReportError(
+                    "invalid_input",
+                    f"{condition_path}/outcome must be one of {', '.join(OUTCOMES)}",
+                )
+            normalized_conditions.append(
+                {
+                    "condition_id": condition_id,
+                    "label": label,
+                    "role": role,
+                    "outcome": outcome,
+                    "fidelity": _validate_gate(
+                        condition.get("fidelity"), path=f"{condition_path}/fidelity"
+                    ),
+                    "activation": _validate_gate(
+                        condition.get("activation"), path=f"{condition_path}/activation"
+                    ),
+                    "measurements": _validate_measurements(
+                        condition.get("measurements"), path=f"{condition_path}/measurements"
+                    ),
+                }
+            )
+        if control_count != 1:
+            raise ExperimentReportError(
+                "invalid_input",
+                f"family {family_id} must contain exactly one control condition",
+            )
+        if control_id not in seen_condition_ids:
+            raise ExperimentReportError(
+                "invalid_input", f"control condition {control_id} is missing in {family_id}"
+            )
+        control_condition = next(
+            condition
+            for condition in normalized_conditions
+            if condition["condition_id"] == control_id
+        )
+        if control_condition["role"] != "control":
+            raise ExperimentReportError(
+                "invalid_input",
+                f"control_condition_id {control_id} must identify the role=control condition "
+                f"in {family_id}",
+            )
+        normalized_families.append(
+            {
+                "family_id": family_id,
+                "shared_parent_id": shared_parent_id,
+                "control_condition_id": control_id,
+                "conditions": normalized_conditions,
+            }
+        )
+    return {
+        "schema_version": schema_version,
+        "experiment_id": experiment_id,
+        "hypothesis": hypothesis,
+        "source_identity": source_identity,
+        "families": normalized_families,
+    }
+
+
+def _validate_source_identity(value: Any) -> dict[str, str]:
+    """Validate the closed source provenance and readiness contract.
+
+    Returns:
+        Normalized source identity with explicit readiness and availability status.
+    """
+
+    payload = _mapping(value, path="/source/source_identity")
+    missing = sorted(_REQUIRED_SOURCE_IDENTITY_KEYS - set(payload))
+    if missing:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity is missing required keys: " + ", ".join(missing),
+        )
+    unknown = sorted(set(payload) - _SOURCE_IDENTITY_KEYS)
+    if unknown:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity has unsupported keys: " + ", ".join(unknown),
+        )
+    normalized: dict[str, str] = {}
+    for key in sorted(payload):
+        normalized[key] = _non_empty_string(payload[key], path=f"/source/source_identity/{key}")
+    readiness_status = normalized["readiness_status"]
+    if readiness_status not in VALID_SOURCE_READINESS_STATUSES:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/readiness_status must be one of "
+            + ", ".join(VALID_SOURCE_READINESS_STATUSES),
+        )
+    availability_status = normalized["availability_status"]
+    if availability_status not in VALID_SOURCE_AVAILABILITY_STATUSES:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/availability_status must be one of "
+            + ", ".join(VALID_SOURCE_AVAILABILITY_STATUSES),
+        )
+    source_kind = normalized["source_kind"]
+    if source_kind not in VALID_SOURCE_KINDS:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/source_kind must be one of " + ", ".join(VALID_SOURCE_KINDS),
+        )
+    execution_mode = normalized["execution_mode"]
+    if execution_mode not in VALID_SOURCE_EXECUTION_MODES:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/execution_mode must be one of "
+            + ", ".join(VALID_SOURCE_EXECUTION_MODES),
+        )
+    source_commit = normalized["source_commit"]
+    if _SHA40_RE.fullmatch(source_commit) is None:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/source_commit must be a 40-hex commit SHA",
+        )
+    return normalized
+
+
+def _ordered_metrics(
+    control: Mapping[str, Any], treatment: Mapping[str, Any], configured: list[str]
+) -> list[str]:
+    names = set(control) | set(treatment)
+    return [name for name in configured if name in names] + sorted(names - set(configured))
+
+
+def _gate_ready(gate: Mapping[str, Any]) -> bool:
+    return gate.get("status") == "pass"
+
+
+def _source_effect_reason(source_identity: Mapping[str, str]) -> str | None:
+    if source_identity["readiness_status"] != "verified":
+        return "source_readiness_not_verified"
+    if source_identity["availability_status"] != "available":
+        return "source_availability_not_verified"
+    return None
+
+
+def _effect_reason(
+    control: Mapping[str, Any], treatment: Mapping[str, Any], *, metric: str
+) -> str | None:
+    if not _gate_ready(control["fidelity"]):
+        return "control_fidelity_not_verified"
+    if not _gate_ready(control["activation"]):
+        return "control_activation_not_verified"
+    if not _gate_ready(treatment["fidelity"]):
+        return "treatment_fidelity_not_verified"
+    if not _gate_ready(treatment["activation"]):
+        return "treatment_activation_not_verified"
+    if metric not in control["measurements"] or metric not in treatment["measurements"]:
+        return "measurement_missing_in_one_condition"
+    control_measurement = control["measurements"][metric]
+    treatment_measurement = treatment["measurements"][metric]
+    if control_measurement["units"] != treatment_measurement["units"]:
+        return "measurement_units_mismatch"
+    if control_measurement["value"] is None or treatment_measurement["value"] is None:
+        return "measurement_value_missing"
+    return None
+
+
+def _build_effects(
+    control: Mapping[str, Any],
+    treatment: Mapping[str, Any],
+    configured: list[str],
+    *,
+    source_effect_reason: str | None,
+) -> list[dict[str, Any]]:
+    effects: list[dict[str, Any]] = []
+    for metric in _ordered_metrics(control["measurements"], treatment["measurements"], configured):
+        control_measurement = control["measurements"].get(metric)
+        treatment_measurement = treatment["measurements"].get(metric)
+        units = None
+        if control_measurement is not None:
+            units = control_measurement["units"]
+        elif treatment_measurement is not None:
+            units = treatment_measurement["units"]
+        effect: dict[str, Any] = {
+            "metric": metric,
+            "units": units,
+            "control_value": control_measurement["value"] if control_measurement else None,
+            "treatment_value": treatment_measurement["value"] if treatment_measurement else None,
+            "status": "blocked",
+            "reason": None,
+        }
+        reason = source_effect_reason or _effect_reason(control, treatment, metric=metric)
+        if reason is None:
+            control_value = float(control_measurement["value"])
+            treatment_value = float(treatment_measurement["value"])
+            delta = treatment_value - control_value
+            if not math.isfinite(delta):
+                raise ExperimentReportError(
+                    "invalid_input", f"difference for {metric} must be finite"
+                )
+            effect.update(
+                {
+                    "status": "interpretable",
+                    "delta": delta,
+                    "direction": "increase"
+                    if delta > 0
+                    else "decrease"
+                    if delta < 0
+                    else "no_change",
+                }
+            )
+        else:
+            effect["reason"] = reason
+        effects.append(effect)
+    return effects
+
+
+def _condition_summary(condition: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "condition_id": condition["condition_id"],
+        "label": condition["label"],
+        "role": condition["role"],
+        "outcome": condition["outcome"],
+        "fidelity": dict(condition["fidelity"]),
+        "activation": dict(condition["activation"]),
+        "measurements": {
+            metric: dict(measurement)
+            for metric, measurement in sorted(condition["measurements"].items())
+        },
+    }
+
+
+def _build_report(
+    source: Mapping[str, Any],
+    *,
+    request: ComponentRequest,
+    source_ref: Mapping[str, Any],
+    source_sha256: str,
+    metric_order: list[str],
+    report_title: str | None,
+) -> dict[str, Any]:
+    outcome_counts = dict.fromkeys(OUTCOMES, 0)
+    effect_counts = {"interpretable": 0, "blocked": 0}
+    negative_findings: list[dict[str, Any]] = []
+    families: list[dict[str, Any]] = []
+    condition_count = 0
+    source_identity = source["source_identity"]
+    source_effect_reason = _source_effect_reason(source_identity)
+    for family in source["families"]:
+        conditions = family["conditions"]
+        condition_by_id = {condition["condition_id"]: condition for condition in conditions}
+        control = condition_by_id[family["control_condition_id"]]
+        treatment_reports: list[dict[str, Any]] = []
+        family_effects: list[dict[str, Any]] = []
+        for condition in conditions:
+            outcome_counts[condition["outcome"]] += 1
+            condition_count += 1
+            if condition["outcome"] != "survived":
+                negative_findings.append(
+                    {
+                        "family_id": family["family_id"],
+                        "shared_parent_id": family["shared_parent_id"],
+                        "condition_id": condition["condition_id"],
+                        "outcome": condition["outcome"],
+                        "finding": "outcome_retained_without_positive_claim",
+                    }
+                )
+            if condition["role"] == "treatment":
+                effects = _build_effects(
+                    control,
+                    condition,
+                    metric_order,
+                    source_effect_reason=source_effect_reason,
+                )
+                family_effects.extend(effects)
+                treatment_reports.append(
+                    {
+                        "condition": _condition_summary(condition),
+                        "effects": effects,
+                    }
+                )
+        for effect in family_effects:
+            effect_counts[effect["status"]] += 1
+        control_ready = (
+            source_effect_reason is None
+            and _gate_ready(control["fidelity"])
+            and _gate_ready(control["activation"])
+        )
+        families.append(
+            {
+                "family_id": family["family_id"],
+                "shared_parent_id": family["shared_parent_id"],
+                "sample_unit": "dependent_family_by_shared_parent_id",
+                "control": _condition_summary(control),
+                "treatments": treatment_reports,
+                "all_conditions": [_condition_summary(condition) for condition in conditions],
+                "control_prerequisites": {
+                    "fidelity_status": control["fidelity"]["status"],
+                    "activation_status": control["activation"]["status"],
+                    "effect_interpretation_allowed": control_ready,
+                },
+                "effect_interpretation": "allowed" if control_ready else "blocked",
+                "effects": family_effects,
+            }
+        )
+    report: dict[str, Any] = {
+        "schema_version": EXPERIMENT_COMPARISON_SCHEMA_VERSION,
+        "report_id": f"{source['experiment_id']}-comparison",
+        "component_id": request.component_id,
+        "request_id": request.request_id,
+        "title": report_title or f"Experiment comparison: {source['experiment_id']}",
+        "hypothesis": source["hypothesis"],
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "source": {
+            "artifact_id": source_ref["artifact_id"],
+            "uri": source_ref["uri"],
+            "format": source_ref["format"],
+            "sha256": source_sha256,
+            "schema_version": source["schema_version"],
+            "identity": dict(source["source_identity"]),
+            "readiness_status": source_identity["readiness_status"],
+            "availability_status": source_identity["availability_status"],
+        },
+        "families": families,
+        "negative_findings": negative_findings,
+        "summary": {
+            "family_count": len(families),
+            "condition_count": condition_count,
+            "outcome_counts": outcome_counts,
+            "effect_counts": effect_counts,
+            "negative_finding_count": len(negative_findings),
+            "count_units": dict(_COUNT_UNITS),
+            "sample_unit": "dependent_family_by_shared_parent_id",
+            "independence": {
+                "status": "not_validated",
+                "count_published": False,
+                "reason": "no independence contract was supplied or validated",
+            },
+            "source_readiness_status": source_identity["readiness_status"],
+            "source_availability_status": source_identity["availability_status"],
+            "recorded_results_only": True,
+            "executor_required": False,
+        },
+        "provenance": {
+            "component_version": COMPONENT_VERSION,
+            "input_schema": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+            "execution_mode": "recorded_results_only",
+            "source_execution_mode": source_identity["execution_mode"],
+            "source_readiness_status": source_identity["readiness_status"],
+            "source_availability_status": source_identity["availability_status"],
+            "evidence_tier": "diagnostic",
+            "evidence_boundary": EVIDENCE_BOUNDARY,
+            "metric_order": metric_order,
+            "source_sha256": source_sha256,
+            "source_identity": dict(source["source_identity"]),
+        },
+        "comparison_status": "verified" if source_effect_reason is None else "diagnostic_tainted",
+    }
+    return report
+
+
+def _render_html(report: Mapping[str, Any]) -> str:
+    """Render a dependency-free, deterministic HTML report.
+
+    Returns:
+        Complete UTF-8 HTML document.
+    """
+
+    def safe(value: Any) -> str:
+        return html.escape(str(value))
+
+    family_sections: list[str] = []
+    for family in report["families"]:
+        rows: list[str] = []
+        for condition in family["all_conditions"]:
+            rows.append(
+                "<tr>"
+                f"<td>{safe(condition['label'])}</td>"
+                f"<td>{safe(condition['role'])}</td>"
+                f"<td>{safe(condition['outcome'])}</td>"
+                f"<td>{safe(condition['fidelity']['status'])}</td>"
+                f"<td>{safe(condition['activation']['status'])}</td>"
+                "</tr>"
+            )
+        effect_rows = []
+        for effect in family["effects"]:
+            effect_rows.append(
+                "<tr>"
+                f"<td>{safe(effect['metric'])}</td>"
+                f"<td>{safe(effect['units'])}</td>"
+                f"<td>{safe(effect['status'])}</td>"
+                f"<td>{safe(effect.get('delta', '—'))}</td>"
+                f"<td>{safe(effect.get('reason', ''))}</td>"
+                "</tr>"
+            )
+        family_sections.append(
+            f"<section><h2>Family {safe(family['family_id'])}</h2>"
+            f"<p>Shared parent: <code>{safe(family['shared_parent_id'])}</code>; "
+            f"sample unit: <code>{safe(family['sample_unit'])}</code>; "
+            f"effect interpretation: <strong>{safe(family['effect_interpretation'])}</strong>.</p>"
+            "<h3>Recorded outcomes and prerequisites</h3>"
+            "<table><thead><tr><th>Condition</th><th>Role</th><th>Outcome</th>"
+            "<th>Fidelity</th><th>Activation</th></tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table>"
+            "<h3>Effects</h3>"
+            "<table><thead><tr><th>Metric</th><th>Units</th><th>Status</th>"
+            "<th>Delta</th><th>Reason</th></tr></thead><tbody>"
+            + "".join(effect_rows)
+            + "</tbody></table></section>"
+        )
+    outcome_items = "".join(
+        f"<li>{safe(outcome)}: {safe(count)} "
+        f"({safe(report['summary']['count_units']['outcome_counts'])})</li>"
+        for outcome, count in report["summary"]["outcome_counts"].items()
+    )
+    finding_items = "".join(
+        "<li>"
+        f"<code>{safe(finding['family_id'])}</code> / "
+        f"<code>{safe(finding['condition_id'])}</code>: "
+        f"{safe(finding['outcome'])}</li>"
+        for finding in report["negative_findings"]
+    )
+    return (
+        "<!doctype html>\n"
+        '<html lang="en"><head><meta charset="utf-8">'
+        f"<title>{safe(report['title'])}</title>"
+        "<style>body{font-family:sans-serif;max-width:1100px;margin:2rem auto;line-height:1.4}"
+        "table{border-collapse:collapse;margin:1rem 0;width:100%}"
+        "th,td{border:1px solid #bbb;padding:.35rem;text-align:left}"
+        "th{background:#eee}code{white-space:nowrap}"
+        ".boundary{border-left:4px solid #c33;padding:.5rem 1rem;background:#fff4f4}</style>"
+        "</head><body>"
+        f"<h1>{safe(report['title'])}</h1>"
+        f"<p>{safe(report['hypothesis'])}</p>"
+        f'<p class="boundary"><strong>Evidence boundary:</strong> '
+        f"{safe(report['evidence_boundary'])}</p>"
+        '<p class="authority"><strong>Authoritative detail:</strong> The JSON artifact is '
+        "authoritative for complete measurement values, units, expected directions, and source "
+        f"provenance; see <code>{safe(JSON_ARTIFACT_NAME)}</code>. This HTML is a human-readable "
+        "summary.</p>"
+        f"<p>Families: {safe(report['summary']['family_count'])} "
+        f"({safe(report['summary']['count_units']['family_count'])}); "
+        f"conditions: {safe(report['summary']['condition_count'])} "
+        f"({safe(report['summary']['count_units']['condition_count'])}); "
+        f"negative findings: {safe(report['summary']['negative_finding_count'])} "
+        f"({safe(report['summary']['count_units']['negative_finding_count'])}); "
+        f"source readiness: <code>{safe(report['source']['readiness_status'])}</code>; "
+        f"source availability: <code>{safe(report['source']['availability_status'])}</code>; "
+        f"independence: <code>{safe(report['summary']['independence']['status'])}</code>. "
+        "comparison uses recorded results only and requires no executor.</p>"
+        f"<h2>Outcome inventory</h2><ul>{outcome_items}</ul>"
+        f"<h2>Negative findings</h2><ul>{finding_items or '<li>None recorded</li>'}</ul>"
+        + "".join(family_sections)
+        + "</body></html>\n"
+    )
+
+
+def _resolve_inside(root: Path, value: str, *, path: str) -> Path:
+    _validate_request_text(value, path=path)
+    try:
+        candidate = (root / value).resolve()
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        raise ExperimentReportError("invalid_input", f"{path} cannot be resolved safely") from None
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise ExperimentReportError(
+            "invalid_input", f"{path} resolves outside the component base"
+        ) from error
+    return candidate
+
+
+def _read_source(  # noqa: C901
+    root: Path, request: ComponentRequest
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    if not request.sources:
+        raise ExperimentReportError(
+            "invalid_input", "at least one recorded-results source is required"
+        )
+    if len(request.sources) != 1:
+        raise ExperimentReportError(
+            "invalid_input", "exactly one recorded-results source is supported"
+        )
+    source_ref = asdict(request.sources[0])
+    if source_ref["format"] != EXPERIMENT_RESULTS_SCHEMA_VERSION:
+        raise _UnavailableReportError(
+            "incompatible_version",
+            f"source format {source_ref['format']!r} is not supported; expected "
+            f"{EXPERIMENT_RESULTS_SCHEMA_VERSION}",
+        )
+    source_path = _resolve_inside(root, source_ref["uri"], path="/sources/0/uri")
+    raw = _read_source_bytes(source_path, source_uri=source_ref["uri"])
+    source_sha256 = hashlib.sha256(raw).hexdigest()
+    try:
+        decoded = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ExperimentReportError(
+            "invalid_input", f"source is not valid UTF-8 JSON: {error}"
+        ) from error
+    try:
+        payload = json.loads(decoded, object_pairs_hook=_reject_duplicate_json_object_names)
+    except _DuplicateJsonObjectName:
+        raise ExperimentReportError(
+            "invalid_input", "source JSON contains duplicate object names"
+        ) from None
+    except RecursionError:
+        raise ExperimentReportError(
+            "invalid_input", "source JSON exceeds the supported nesting depth"
+        ) from None
+    except ValueError as error:
+        raise ExperimentReportError(
+            "invalid_input", f"source is not valid UTF-8 JSON: {error}"
+        ) from error
+    try:
+        normalized = _validate_source(payload)
+    except RecursionError:
+        raise ExperimentReportError(
+            "invalid_input", "source JSON exceeds the supported nesting depth"
+        ) from None
+    declared_sha256 = source_ref["sha256"]
+    if declared_sha256 and declared_sha256.lower() != source_sha256:
+        raise ExperimentReportError(
+            "source_integrity", "declared source sha256 does not match observed source bytes"
+        )
+    declared_source_commit = source_ref["source_commit"]
+    if (
+        declared_source_commit
+        and declared_source_commit.lower() != normalized["source_identity"]["source_commit"].lower()
+    ):
+        raise ExperimentReportError(
+            "source_integrity", "declared source_commit does not match source identity"
+        )
+    return normalized, source_ref, source_sha256
+
+
+def _validate_source_stat(source_stat: os.stat_result) -> None:
+    """Reject special files and files exceeding the bounded source contract."""
+
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise _UnavailableReportError("source_unavailable", "source path must be a regular file")
+    if source_stat.st_size > MAX_SOURCE_BYTES:
+        raise ExperimentReportError(
+            "source_too_large",
+            f"source exceeds the {MAX_SOURCE_BYTES}-byte limit",
+        )
+
+
+def _read_source_bytes(source_path: Path, *, source_uri: str) -> bytes:
+    """Read a regular source file after stat and descriptor size checks.
+
+    Returns:
+        The bounded source bytes.
+    """
+
+    try:
+        source_stat = source_path.stat()
+    except OSError as error:
+        raise _UnavailableReportError(
+            "source_unavailable", f"cannot read source {source_uri!r}: {error}"
+        ) from error
+    _validate_source_stat(source_stat)
+    try:
+        with source_path.open("rb") as source_file:
+            opened_stat = os.fstat(source_file.fileno())
+            _validate_source_stat(opened_stat)
+            raw = source_file.read(MAX_SOURCE_BYTES + 1)
+    except (_UnavailableReportError, ExperimentReportError):
+        raise
+    except OSError as error:
+        raise _UnavailableReportError(
+            "source_unavailable", f"cannot read source {source_uri!r}: {error}"
+        ) from error
+    if len(raw) > MAX_SOURCE_BYTES:
+        raise ExperimentReportError(
+            "source_too_large",
+            f"source exceeds the {MAX_SOURCE_BYTES}-byte limit",
+        )
+    return raw
+
+
+def _write_artifact(path: Path, content: str) -> str:
+    try:
+        raw = content.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise ExperimentReportError(
+            "invalid_input", "report contains invalid Unicode text"
+        ) from error
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(raw)
+    temporary.replace(path)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _reserve_output_directory(output_dir: Path) -> None:
+    """Atomically reserve a previously absent output directory."""
+
+    try:
+        output_dir.mkdir()
+    except FileExistsError as error:
+        raise ExperimentReportError(
+            "output_collision", f"output directory already exists: {output_dir}"
+        ) from error
+
+
+def _cleanup_owned_output_directory(output_dir: Path, published_paths: list[Path]) -> None:
+    """Remove only artifacts published into this call's owned reservation."""
+
+    for path in published_paths:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+    try:
+        output_dir.rmdir()
+    except OSError:
+        pass
+
+
+def _write_artifacts(output_dir: Path, artifacts: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
+    """Write all report artifacts before publishing their output directory.
+
+    Returns:
+        SHA-256 digests in the same order as ``artifacts``.
+    """
+
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        dir=output_dir.parent, prefix=f".{output_dir.name}.staging-"
+    ) as staging_name:
+        staging_dir = Path(staging_name)
+        digests = tuple(
+            _write_artifact(staging_dir / artifact_name, content)
+            for artifact_name, content in artifacts
+        )
+        _reserve_output_directory(output_dir)
+        published_paths: list[Path] = []
+        try:
+            for artifact_name, _ in artifacts:
+                staged_path = staging_dir / artifact_name
+                output_path = output_dir / artifact_name
+                os.link(staged_path, output_path)
+                published_paths.append(output_path)
+                staged_path.unlink()
+        except BaseException:
+            _cleanup_owned_output_directory(output_dir, published_paths)
+            raise
+    return digests
+
+
+def _resolve_output_directory(root: Path, request: ComponentRequest) -> Path:
+    output_dir = _resolve_inside(root, request.output_directory, path="/output_directory")
+    if output_dir.exists():
+        raise ExperimentReportError(
+            "output_collision", f"output directory already exists: {request.output_directory}"
+        )
+    return output_dir
+
+
+def _unsupported_capabilities(request: ComponentRequest) -> list[str]:
+    supported = set(DESCRIPTOR.required_capabilities) | set(DESCRIPTOR.optional_capabilities)
+    return sorted(name for name in request.required_capabilities if name not in supported)
+
+
+def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
+    """Compare one recorded-results source without starting an executor.
+
+    Args:
+        request: Validated shared component request.
+        base: Directory against which source and output paths are resolved.
+
+    Returns:
+        A verified complete or diagnostic partial result with JSON/HTML artifacts,
+        or a status-bearing result with no artifacts when the request cannot be
+        supported safely.
+    """
+
+    try:
+        _validate_request(request)
+    except ExperimentReportError as error:
+        return _result(request, "failed", reason=str(error))
+
+    if request.component_id != COMPONENT_ID:
+        return _result(
+            request,
+            "unavailable",
+            reason=f"unsupported_component: {request.component_id}",
+        )
+    missing = _unsupported_capabilities(request)
+    if missing:
+        return _result(
+            request,
+            "unavailable",
+            reason=f"missing_capability: {', '.join(missing)}",
+        )
+    try:
+        root = (base if base is not None else Path.cwd()).resolve()
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        return _result(request, "failed", reason="invalid_input: base cannot be resolved safely")
+    try:
+        output_dir = _resolve_output_directory(root, request)
+        metric_order, report_title = _validate_config(request.config)
+        source, source_ref, source_sha256 = _read_source(root, request)
+        report = _build_report(
+            source,
+            request=request,
+            source_ref=source_ref,
+            source_sha256=source_sha256,
+            metric_order=metric_order,
+            report_title=report_title,
+        )
+        json_text = json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n"
+        html_text = _render_html(report)
+        json_digest, html_digest = _write_artifacts(
+            output_dir,
+            (
+                (JSON_ARTIFACT_NAME, json_text),
+                (HTML_ARTIFACT_NAME, html_text),
+            ),
+        )
+        artifacts = (
+            {
+                "artifact_id": JSON_ARTIFACT_NAME,
+                "uri": str(Path(request.output_directory) / JSON_ARTIFACT_NAME),
+                "sha256": json_digest,
+            },
+            {
+                "artifact_id": HTML_ARTIFACT_NAME,
+                "uri": str(Path(request.output_directory) / HTML_ARTIFACT_NAME),
+                "sha256": html_digest,
+            },
+        )
+        result_status = "complete" if report["comparison_status"] == "verified" else "partial"
+        return _result(
+            request,
+            result_status,
+            artifacts=artifacts,
+            provenance=report["provenance"],
+        )
+    except _UnavailableReportError as error:
+        return _result(request, "unavailable", reason=str(error))
+    except ExperimentReportError as error:
+        return _result(request, "failed", reason=str(error))
+    except RecursionError:
+        return _result(
+            request,
+            "failed",
+            reason="invalid_input: report input exceeds the supported nesting depth",
+        )
+    except OSError as error:
+        return _result(request, "failed", reason=f"output_write_error: {error}")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Compare recorded Robot SF experiment results offline."
+    )
+    parser.add_argument("--input", required=True, help="Component request JSON file.")
+    parser.add_argument("--config", default=None, help="Optional validated config JSON file.")
+    parser.add_argument("--output", required=True, help="Output directory; it must not exist.")
+    parser.add_argument("--base", default=None, help="Base directory for source/output paths.")
+    return parser
+
+
+def _result_document(result: ComponentResult) -> dict[str, Any]:
+    """Serialize a component result with its shared versioned envelope.
+
+    Returns:
+        JSON-safe component-result.v1 payload.
+    """
+
+    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+
+
+def _cli_identity(payload: Any) -> tuple[str, str]:
+    """Return safe identity fields for a failure emitted before request validation."""
+
+    if not isinstance(payload, Mapping):
+        return "unknown", COMPONENT_ID
+    request_id = payload.get("request_id")
+    component_id = payload.get("component_id")
+    return (
+        _safe_request_identity(request_id, fallback="unknown"),
+        _safe_request_identity(component_id, fallback=COMPONENT_ID),
+    )
+
+
+def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
+    """Print a contract-valid failed result for pre-request CLI errors.
+
+    Returns:
+        Non-success CLI exit code.
+    """
+
+    request_id, component_id = _cli_identity(payload)
+    result = ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status="failed",
+        reason=reason,
+    )
+    print(json.dumps(_result_document(result), indent=2, sort_keys=True))  # noqa: T201
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the component CLI and print its shared result envelope.
+
+    Returns:
+        Zero when the report is complete, otherwise one.
+    """
+
+    args = _build_parser().parse_args(argv)
+    try:
+        payload = json.loads(
+            Path(args.input).read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_object_names,
+        )
+    except _DuplicateJsonObjectName:
+        return _print_cli_failure("invalid_input: request JSON contains duplicate object names")
+    except (OSError, ValueError, RecursionError):
+        return _print_cli_failure("invalid_input: request JSON cannot be parsed safely")
+    if not isinstance(payload, dict):
+        return _print_cli_failure("invalid_input: request must be a JSON object")
+    request_id, component_id = _cli_identity(payload)
+    if args.config is not None:
+        try:
+            config = json.loads(
+                Path(args.config).read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_json_object_names,
+            )
+        except _DuplicateJsonObjectName:
+            return _print_cli_failure(
+                "invalid_input: config JSON contains duplicate object names", payload=payload
+            )
+        except (OSError, ValueError, RecursionError):
+            return _print_cli_failure(
+                "invalid_input: config JSON cannot be parsed safely", payload=payload
+            )
+        if not isinstance(config, dict):
+            return _print_cli_failure(
+                "invalid_input: config must be a JSON object", payload=payload
+            )
+        existing_config = payload.get("config", {})
+        if not isinstance(existing_config, dict):
+            return _print_cli_failure(
+                "invalid_input: request config must be a JSON object", payload=payload
+            )
+        payload = {**payload, "config": {**existing_config, **config}}
+    payload = {**payload, "output_directory": args.output}
+    try:
+        request = component_request_from_dict(payload, source=args.input)
+    except (ReviewContractsValidationError, RecursionError):
+        return _print_cli_failure(
+            "invalid_input: request does not satisfy component-request.v1",
+            payload={"request_id": request_id, "component_id": component_id},
+        )
+    result = run(request, base=Path(args.base) if args.base is not None else None)
+    print(json.dumps(_result_document(result), indent=2, sort_keys=True))  # noqa: T201
+    return 0 if result.status == "complete" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

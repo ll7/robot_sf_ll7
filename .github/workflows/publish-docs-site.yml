@@ -1,0 +1,123 @@
+name: Publish docs site
+
+# First-version public site for issue #9085 (option 3 staged into option 1):
+# minimal static landing page plus the strict curated Sphinx build on GitHub Pages.
+# Requires Pages to be enabled with source "GitHub Actions" (one-time repo setting);
+# the deploy job fails closed until then. No analytics, no custom domain.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "site/**"
+      - "scripts/dev/sphinx_curated_build.py"
+      - "scripts/dev/sphinx_strict_build.sh"
+      - ".github/workflows/publish-docs-site.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "site/**"
+      - "scripts/dev/sphinx_curated_build.py"
+      - "scripts/dev/sphinx_strict_build.sh"
+      - ".github/workflows/publish-docs-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+        with:
+          sync-args: "--group docs --frozen"
+          install-system-packages: "false"
+          migrate-artifacts: "false"
+
+      - name: Strict curated Sphinx build
+        env:
+          # The build script parses Sphinx warning lines; force plain output so
+          # ANSI color codes can never leak into parsed file paths (issue #9085).
+          NO_COLOR: "1"
+          FORCE_COLOR: "0"
+        run: |
+          set -euo pipefail
+          scripts/dev/sphinx_strict_build.sh --output-dir site/docs
+
+      - name: Stage landing page
+        run: |
+          set -euo pipefail
+          test -f site/index.html
+          touch site/.nojekyll
+
+      - name: Redaction scan
+        run: |
+          set -euo pipefail
+          # Fail closed on private infrastructure data in the staged bundle
+          # (claim policy, issue #9085). Patterns are intentionally narrow to
+          # avoid prose false positives. site/docs/_static/ holds only
+          # Sphinx/RTD-vendored theme assets (jquery.js trips the password
+          # pattern), so it is excluded; all authored pages and _sources stay
+          # in scope.
+          if grep -rEI --exclude-dir=.git --exclude-dir=_static -n \
+            -e '/home/[^ /"'"'"']+' \
+            -e '/Users/[^ /"'"'"']+' \
+            -e 'BEGIN [A-Z ]*PRIVATE KEY' \
+            -e '[Pp]assword[[:space:]]*[:=][[:space:]]*[^[:space:]]+' \
+            -e 'ghp_[A-Za-z0-9]+' \
+            -e 'github_pat_[A-Za-z0-9_]+' \
+            site/; then
+            echo "publish-docs-site: redaction scan found private data above" >&2
+            exit 1
+          fi
+          echo "publish-docs-site: redaction scan clean"
+
+      - name: Verify staged landing links
+        run: |
+          set -euo pipefail
+          # Every relative docs/ link on the landing page must resolve inside
+          # the staged bundle (built Sphinx output uses <page>.html names).
+          missing=0
+          while IFS= read -r href; do
+            if [ ! -e "site/$href" ]; then
+              echo "publish-docs-site: staged link target missing: $href" >&2
+              missing=1
+            fi
+          done < <(grep -oE 'href="docs/[^"]+"' site/index.html | cut -d'"' -f2)
+          exit "$missing"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: site/
+
+  deploy-site:
+    if: github.ref == 'refs/heads/main'
+    needs: build-site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

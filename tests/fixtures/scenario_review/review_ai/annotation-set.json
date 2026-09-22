@@ -1,0 +1,48 @@
+{
+  "schema_version": "trace_annotation_set.v1",
+  "annotation_set_id": "srev-26-smoke-annotations",
+  "timeline": {
+    "path": "trace-export.json",
+    "schema_version": "simulation_trace_export.v1",
+    "trace_id": "trace-0000"
+  },
+  "provenance": {
+    "kind": "tracked_fixture",
+    "source_issue": "#9297",
+    "author": "srev-26 fixture",
+    "created_at": "2026-09-15",
+    "evidence_boundary": "analysis_workbench_qualitative_only"
+  },
+  "annotations": [
+    {
+      "annotation_id": "ann-0000",
+      "category": "interaction",
+      "evidence_type": "observed",
+      "anchor": {
+        "frame_start": 1,
+        "frame_end": 2,
+        "event_ids": ["evt-0001"],
+        "entities": [
+          {"type": "robot", "id": "robot"},
+          {"type": "pedestrian", "id": "ped-0000"}
+        ]
+      },
+      "summary": "Robot decelerates while ped-0000 crosses within two metres."
+    },
+    {
+      "annotation_id": "ann-0001",
+      "category": "safety_margin",
+      "evidence_type": "commentary",
+      "anchor": {
+        "frame_start": 2,
+        "frame_end": 2,
+        "event_ids": [],
+        "entities": [
+          {"type": "pedestrian", "id": "ped-0000"}
+        ]
+      },
+      "summary": "Minimum separation stays above the fixture stop threshold.",
+      "details": "Draft commentary only; no measurement claim is made here."
+    }
+  ]
+}

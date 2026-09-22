@@ -15,6 +15,17 @@ evidence_tier:
 linked_policy:
 ```
 
+## Relationships
+
+<!-- Native GitHub relationships are canonical. Mirror every intentional link here for review and
+auditability. Use `none` when a relationship does not apply; do not infer a relationship from a
+mention in another section. Set Parent, Blocked by, and Blocking in GitHub's Relationships panel
+after creating the issue. -->
+- Parent issue: none
+- Blocked by: none
+- Blocking: none
+- Relates to: none
+
 ## Goal / Problem
 
 <!-- Provide a clear and concise description of the capability to add -->

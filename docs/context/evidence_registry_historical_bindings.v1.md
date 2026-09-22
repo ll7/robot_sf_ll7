@@ -1,6 +1,6 @@
 # Historical evidence registry bindings
 
-This manifest records two narrowly reviewed historical references that remain
+This manifest records three narrowly reviewed historical references that remain
 valid for the current evidence records after the referenced source files moved
 in the repository history. The linter verifies each record against immutable
 Git commit, tree, blob, parent, and ancestry identities before it can suppress

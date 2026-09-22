@@ -1,0 +1,35 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev02-smoke",
+  "component_id": "srev02-review-import",
+  "sources": [
+    {
+      "artifact_id": "episodes",
+      "uri": "tests/fixtures/scenario_review/review_import/episode.jsonl",
+      "format": "episode-jsonl"
+    },
+    {
+      "artifact_id": "analysis",
+      "uri": "tests/fixtures/scenario_review/review_import/analysis-trace.json",
+      "format": "analysis-trace"
+    },
+    {
+      "artifact_id": "simtrace",
+      "uri": "tests/fixtures/scenario_review/review_import/simulation-trace.json",
+      "format": "simulation-trace"
+    },
+    {
+      "artifact_id": "dossier",
+      "uri": "tests/fixtures/scenario_review/review_import/dossier.json",
+      "format": "trace-dossier"
+    },
+    {
+      "artifact_id": "video",
+      "uri": "tests/fixtures/scenario_review/review_import/video-metadata.json",
+      "format": "video-metadata"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-02-smoke",
+  "config": {},
+  "required_capabilities": []
+}

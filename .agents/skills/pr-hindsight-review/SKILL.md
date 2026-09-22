@@ -36,6 +36,8 @@ For each reviewed PR, collect and report:
 - `state`: `merged`, `closed-unmerged`, or `open`.
 - `merged_at`: merge timestamp when available.
 - `linked_issues`: issue numbers named by PR body, branch, commits, or explicit references.
+- `relationship_mirror`: the PR's `## Issue Relationship Mirror` fields and whether they match the
+  linked issue's native state under `docs/context/issue_relationships.md`.
 - `route_source`: why this PR was selected, such as ready queue rank, maintainer request, review follow-up, or opportunistic cleanup.
 - `scope_summary`: smallest factual summary of the merged diff.
 - `validation_evidence`: commands, checks, or review evidence recorded by the PR.
@@ -91,7 +93,8 @@ Queue and scout policy should exclude completed parent issues, but it may route 
 
 1. Confirm the caller's authorization and keep the review read-only unless mutation is explicitly authorized.
 2. Fetch or inspect each PR packet: PR body, changed files, commits, linked issues, labels, merge state, validation evidence, and explicit exclusions.
-3. Inspect linked issue state only as needed to decide full, partial, duplicate, or successor disposition.
+3. Inspect linked issue state, including its canonical relationship block and native Parent/Blocked
+   by/Blocking links, only as needed to decide full, partial, duplicate, or successor disposition.
 4. Classify the PR using the verdict taxonomy, original routing label, and successor judgment.
 5. For partial work, name the remaining bounded slice explicitly. If the parent issue remains open, prefer `partial_existing_parent` over a new successor recommendation.
 6. Record caveats when the PR body or issue text is incomplete, compressed, or ambiguous.
@@ -105,6 +108,8 @@ Queue and scout policy should exclude completed parent issues, but it may route 
 - Do not create successor issues by default; recommend draft packets only.
 - Do not close parent issues or edit queue metadata during hindsight review.
 - Do not invent linked issue closure when the PR body says the work is support-only, partial, or leaves existing issues open.
+- Do not infer relationship edges from branch names, commit messages, or incidental issue mentions;
+  report a missing or stale PR mirror as an evidence gap.
 - Keep confidence explicit when issue bodies, PR bodies, or validation logs are unavailable.
 
 ## Output

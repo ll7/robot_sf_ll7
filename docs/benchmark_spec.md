@@ -363,6 +363,17 @@ Full details live in
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 
+**Operational quantities for external cost models (opt-in, diagnostic-only)**
+* `robot_sf/benchmark/operational_quantities.py` (issue #9350) exposes simulator-measured
+  quantities (distance, simulated/active/idle time, goal result, exposure, IDs) as typed inputs
+  to an optional external total-cost model. Queue time stays unknown (no simulator timer);
+  productive distance, orders, passenger load, prices, and supervision are external assumptions
+  with currency, period, source/date, provenance, and uncertainty.
+* Missing inputs block with named reasons instead of implicit zeros; trajectory-only data
+  cannot produce a numeric total. Results are a sensitivity surface, not a market-price
+  forecast, and never enter planner rankings. Postprocessor:
+  `scripts/analysis/extract_operational_quantities_issue_9350.py`.
+
 ## Expected Schema & Provenance
 
 Each episode record is schema-validated against
@@ -399,6 +410,22 @@ records from `_run_map_episode`) includes:
 For aggregation, use the utilities in `robot_sf/benchmark/aggregate.py` or the CLI
 ( `robot_sf_bench aggregate` ) to compute mean/median/p95 and optional bootstrap CIs.
 Aggregation validates threshold-profile consistency and rejects mixed profiles.
+Consumers that need to trace one numeric aggregate cell should construct
+`AggregateCellIdentity(group_identity, metric_id, statistic)` and call
+`resolve_aggregate_cell_provenance` from `robot_sf.benchmark.aggregate`. The reader returns the
+exact eligible episode IDs from the same eligibility, grouping, observation-track, and statistic
+path as `compute_aggregates`. Canonical aliases and derived IDs are resolved per episode by
+`resolve_canonical_metric_value` in the metric-layer owner, and are exposed only in this
+provenance reader; no fields are added to serialized aggregate output. Metric IDs must be exact
+keys from `robot_sf.benchmark.metric_layers.CANONICAL_METRICS`. Use `resolve_metric_source_binding`
+to retrieve their canonical episode field paths, owner, reduction, direction, and source kind.
+For derived metrics, those paths enumerate every canonical input consulted by the resolver; the
+per-episode selected source identifies the decisive input (collision before timeout before route
+completion for `failure_to_progress_rate`). The resolver validates the route-completion flag before
+applying collision or timeout exclusions, so malformed or non-finite outcomes remain unavailable
+instead of being inferred from partial metadata.
+Unit or source-channel metadata that the registry does not own remains explicitly `unavailable` or
+`unsupported`; display-name matching and inferred aliases fail closed.
 When bootstrap sampling is enabled, aggregate output also includes an additive
 `pairwise_contrasts` block when at least two planner groups share paired episode identities. The
 contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is

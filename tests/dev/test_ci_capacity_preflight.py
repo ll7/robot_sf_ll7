@@ -493,6 +493,11 @@ def test_shared_venv_recovery_reuses_fresh_local_environment(tmp_path: Path) -> 
             "training",
             "sync --extra training --reinstall-package robot-sf --frozen",
         ),
+        (
+            ["--profile", "orca"],
+            "orca",
+            "sync --reinstall-package robot-sf --frozen",
+        ),
     ],
 )
 def test_recover_fast_pysf_postcondition_fails_on_incomplete_profile(
@@ -918,11 +923,25 @@ def test_shared_venv_recovery_signal_preserves_partial_environment_state(
     tmp_path: Path,
 ) -> None:
     """Interrupting a blocked sync stops its child and records actionable state."""
-    repo, worktree, _, _capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    repo, worktree, fake_bin, _capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        fake_uv.read_text(encoding="utf-8").replace(
+            "  sync)\n",
+            '  sync)\n    if [[ "${UV_SYNC_IGNORE_TERM:-0}" == "1" ]]; then trap "" TERM; fi\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
     process = subprocess.Popen(
         [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
         cwd=worktree,
-        env={**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "30"},
+        env={
+            **env,
+            "UV_SYNC_IGNORE_TERM": "1",
+            "UV_SYNC_STARTED": str(sync_started),
+            "UV_SYNC_SLEEP": "30",
+        },
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -939,6 +958,7 @@ def test_shared_venv_recovery_signal_preserves_partial_environment_state(
         state_path = worktree / ".venv" / ".robot-sf-recovery-state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert state["status"] == "interrupted"
+        assert "recovery child ignored SIGTERM; sending SIGKILL" in stderr
         assert "partial environment state preserved" in stderr
     finally:
         if process.poll() is None:

@@ -220,7 +220,9 @@ fi
 
 sync_args=(sync)
 case "$dependency_profile" in
-  core)
+  # ORCA's rvo2 import is provided by the core path dependency, so its
+  # optional-import profile does not correspond to a pyproject extra.
+  core|orca)
     ;;
   all-extras)
     sync_args+=(--all-extras)
@@ -370,12 +372,67 @@ run_recovery_command() {
 terminate_recovery_command() {
   local child_pid="$recovery_child_pid"
   [[ -n "$child_pid" ]] || return 0
+
+  recovery_process_alive() {
+    local process_pid="$1" process_state=""
+    if ! kill -0 "$process_pid" 2>/dev/null; then
+      return 1
+    fi
+    if command -v ps >/dev/null 2>&1; then
+      process_state="$(ps -o stat= -p "$process_pid" 2>/dev/null | tr -d '[:space:]')"
+      [[ "$process_state" == Z* ]] && return 1
+    fi
+    return 0
+  }
+
+  recovery_process_group_alive() {
+    local process_group_id="$1" process_state=""
+    if ! kill -0 -- "-$process_group_id" 2>/dev/null; then
+      return 1
+    fi
+    if command -v ps >/dev/null 2>&1; then
+      while read -r process_state; do
+        [[ -z "$process_state" || "$process_state" == Z* ]] || return 0
+      done < <(ps -o stat= -g "$process_group_id" 2>/dev/null)
+      return 1
+    fi
+    return 0
+  }
+
+  recovery_wait_for_exit() {
+    local process_pid="$1" attempts=0
+    while (( attempts < 100 )); do
+      if ! recovery_process_alive "$process_pid" &&
+        ! recovery_process_group_alive "$process_pid"; then
+        return 0
+      fi
+      sleep 0.05
+      attempts=$((attempts + 1))
+    done
+    return 1
+  }
+
   if [[ "$recovery_child_uses_session" -eq 1 ]]; then
     kill -TERM -- "-$child_pid" 2>/dev/null || true
   else
     kill -TERM "$child_pid" 2>/dev/null || true
   fi
-  wait "$child_pid" 2>/dev/null || true
+  if ! recovery_wait_for_exit "$child_pid"; then
+    echo "recover_fast_pysf_worktree: recovery child ignored SIGTERM; sending SIGKILL" >&2
+    if [[ "$recovery_child_uses_session" -eq 1 ]]; then
+      kill -KILL -- "-$child_pid" 2>/dev/null || true
+    else
+      kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+    if ! recovery_wait_for_exit "$child_pid"; then
+      kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+  fi
+  if ! recovery_process_alive "$child_pid"; then
+    wait "$child_pid" 2>/dev/null || true
+  else
+    echo "recover_fast_pysf_worktree: recovery child cleanup remains unverified" >&2
+  fi
   recovery_child_pid=""
   recovery_child_uses_session=0
 }

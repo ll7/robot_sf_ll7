@@ -194,6 +194,22 @@ class FakeExecutor:
         return self.results.get(operation_id)
 
 
+class _FakeMonotonicClock:
+    """Deterministic monotonic clock for phase-boundary deadline tests."""
+
+    def __init__(self) -> None:
+        """Start the clock at the beginning of the test."""
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        """Return the current synthetic monotonic time."""
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        """Advance time only at the phase boundary under test."""
+        self.value += seconds
+
+
 def _run_injected(
     request: ComponentRequest,
     *,
@@ -2460,9 +2476,8 @@ def test_resume_rejects_reordered_self_consistent_operation_list(tmp_path: Path)
 def test_wall_deadline_between_control_and_treatment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real_monotonic = time.monotonic
-    clock = {"jump": 0.0}
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+    clock = _FakeMonotonicClock()
+    monkeypatch.setattr(time, "monotonic", clock)
 
     class SlowControl(FakeExecutor):
         def execute(
@@ -2474,7 +2489,7 @@ def test_wall_deadline_between_control_and_treatment(
             attempt: int,
         ):
             if kind == "control":
-                clock["jump"] = 1.0
+                clock.advance(1.0)
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2))
@@ -2495,9 +2510,8 @@ def test_wall_deadline_between_control_and_treatment(
 def test_wall_deadline_resume_dispatches_remaining_treatment_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real_monotonic = time.monotonic
-    clock = {"jump": 0.0}
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+    clock = _FakeMonotonicClock()
+    monkeypatch.setattr(time, "monotonic", clock)
 
     class SlowControl(FakeExecutor):
         def execute(
@@ -2509,7 +2523,7 @@ def test_wall_deadline_resume_dispatches_remaining_treatment_only(
             attempt: int,
         ):
             if kind == "control":
-                clock["jump"] = 1.0
+                clock.advance(1.0)
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2), output="wall-resume")

@@ -925,6 +925,11 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Maneuver-candidate portfolio and adversarial boundary tests are
+    # deterministic planner-contract coverage for the changed producer; keep
+    # both focused files in the exact-head fast lane.
+    "test_maneuver_candidates.py",
+    "test_maneuver_candidates_counterexamples.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as

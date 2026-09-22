@@ -22,7 +22,10 @@ import numpy as np
 
 
 OUTCOME_KEYS = ("route_complete", "collision_event", "timeout_event")
-EXECUTION_MODES = {"native", "adapter"}
+# A release row may be wholly native, use an explicit adapter, or combine
+# native and adapter components (for example a guarded PPO wrapper).  All
+# three are contract-valid; fallback/degraded flags remain disqualifying.
+EXECUTION_MODES = {"native", "adapter", "mixed"}
 BOOTSTRAP_SAMPLES = 3000
 BOOTSTRAP_SEED = 123
 

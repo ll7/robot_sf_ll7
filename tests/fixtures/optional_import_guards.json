@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 124,
+  "total_guards": 132,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -102,14 +102,21 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 87,
-      "has_as_count": 25,
-      "pragma_no_cover_count": 25,
+      "count_ceiling": 95,
+      "has_as_count": 26,
+      "pragma_no_cover_count": 28,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
         "robot_sf/__init__.py:12",
         "robot_sf/adversarial/certification.py:76",
+        "robot_sf/analysis_workbench/audit_authority.py:41",
+        "robot_sf/analysis_workbench/audit_codex.py:1150",
+        "robot_sf/analysis_workbench/audit_codex.py:1196",
+        "robot_sf/analysis_workbench/audit_codex.py:1431",
+        "robot_sf/analysis_workbench/audit_codex.py:1317",
+        "robot_sf/analysis_workbench/audit_github.py:65",
+        "robot_sf/analysis_workbench/audit_service_adapters.py:60",
         "robot_sf/analysis_workbench/review_registry.py:290",
         "robot_sf/analysis_workbench/review_registry.py:312",
         "robot_sf/baselines/dr_mpc.py:109",
@@ -185,6 +192,7 @@
         "robot_sf/planner/socnav.py:106",
         "robot_sf/planner/socnav_prediction.py:129",
         "robot_sf/planner/theta_star_v2.py:34",
+        "robot_sf/render/audit_workbench_launch.py:336",
         "robot_sf/render/lazy_sim_view.py:44",
         "robot_sf/render/presentation_style.py:200",
         "robot_sf/render/review_media_qa.py:625",

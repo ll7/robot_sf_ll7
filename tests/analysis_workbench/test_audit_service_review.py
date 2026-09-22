@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from robot_sf.analysis_workbench import audit_service_adapters
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, ScanSummary
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.analysis_workbench.audit_service import (
@@ -24,6 +25,14 @@ FIXTURE = (
     / "campaign.json"
 )
 CAMPAIGN_ID = "audit-fixture-campaign"
+
+
+@contextmanager
+def _observed_lock(lock: Any, event: threading.Event, *, observe: bool):
+    if observe:
+        event.set()
+    with lock:
+        yield
 
 
 def _service(tmp_path: Path, *, actor: str = "human"):
@@ -212,7 +221,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
     try:
         state_revision = AuditQueue(dataset, state_path=queue_path).state_revision
         original_review = QueueNextAdapter.record_human_review
-        original_lock = QueueNextAdapter.transaction_lock
+        original_next_lock = audit_service_adapters._next_lock
         preflight_passed = threading.Event()
         update_lock_attempted = threading.Event()
         release_review = threading.Event()
@@ -233,12 +242,6 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
             return original_review(self, **request)
 
         monkeypatch.setattr(QueueNextAdapter, "record_human_review", paused_review)
-
-        def observed_lock(self: QueueNextAdapter, *, context: AuditSelectionContext) -> Any:
-            update_lock_attempted.set()
-            return original_lock(self, context=context)
-
-        monkeypatch.setattr(QueueNextAdapter, "transaction_lock", observed_lock)
 
         original_episode_id = session.context.episode_id
         original_context_revision = session.context.context_revision
@@ -266,8 +269,18 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
             finally:
                 update_finished.set()
 
+        def observed_next_lock(path: Path):
+            return _observed_lock(
+                original_next_lock(path),
+                update_lock_attempted,
+                observe=threading.current_thread() is update_thread,
+            )
+
         review_thread = threading.Thread(target=review_worker)
         update_thread = threading.Thread(target=update_worker)
+        # Observe the inner file-lock boundary after transaction_lock has
+        # snapshotted the queue; observing method entry races that snapshot.
+        monkeypatch.setattr(audit_service_adapters, "_next_lock", observed_next_lock)
         review_thread.start()
         assert preflight_passed.wait(10), "review preflight did not run"
         update_thread.start()

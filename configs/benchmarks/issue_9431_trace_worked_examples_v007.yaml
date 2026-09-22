@@ -1,9 +1,9 @@
 # Issue #9431 worked-example trace rerun for the corrected 0.0.7 release.
 #
 # This is a bounded diagnostic acquisition, not a replacement for the 14-arm
-# S30/H600 release campaign.  It uses the successor goal-zone policy, the
-# release source checkout, and the worked-example seeds named by dissertation
-# issue #2729 so the trace bundle can be regenerated from one exact input.
+# S30/H600 release campaign. It uses the successor goal-zone policy and the
+# worked-example seeds named by issue #9431 so the trace bundle can be
+# regenerated from one exact input.
 name: issue_9431_trace_worked_examples_v007
 paper_facing: false
 paper_profile_version: paper-matrix-v1
@@ -59,6 +59,8 @@ export_publication_bundle: false
 include_videos_in_publication: false
 overwrite_publication_bundle: false
 repository_url: https://github.com/ll7/robot_sf_ll7
+# This tag identifies the accepted aggregate release campaign. The runtime
+# source commit and this config's hash are recorded separately for every rerun.
 release_tag: paper-matrix-v2-h600-s30-2026-09-07f7e8d43084de748915e1b1eb8b2a1603357c6e
 doi: null
 paper_interpretation_profile: diagnostic-trace-reexport-only

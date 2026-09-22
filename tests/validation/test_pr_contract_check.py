@@ -751,6 +751,22 @@ def test_github_closing_parity_allows_explicit_close_after_unrelated_negation(
 
 
 @pytest.mark.parametrize(
+    "body",
+    (
+        "It does-not-close #9489",
+        "It don't-close #9489",
+        "It never-close #9489",
+    ),
+)
+def test_github_closing_parity_preserves_hyphenated_negation(body: str) -> None:
+    """A hyphen inside a negated phrase is not a clause boundary."""
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+
+    assert len(blockers) == 1
+    assert "#9489" in blockers[0]
+
+
+@pytest.mark.parametrize(
     ("body", "target"),
     (
         ("it does not close other-org/other-repo#9489", "other-org/other-repo#9489"),

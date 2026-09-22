@@ -93,7 +93,7 @@ def is_negated(text: str, match_start: int) -> bool:
     # an unrelated sentence such as ``does not affect runtime. Closes #123``
     # suppresses the intentional closing declaration merely because ``not`` is
     # inside the historical 30-character lookback window.
-    prefix = re.split(r"[-–—,.;:!?()\n]", prefix)[-1]
+    prefix = re.split(r"[,.;:!?()\n]|\s[-–—]\s", prefix)[-1]
     negations = [
         r"\bnot\b",
         r"\bno\b",

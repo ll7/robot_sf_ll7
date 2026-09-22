@@ -61,7 +61,7 @@ files:
   sha256: 1b593d77ae37ced9d137348ccd2bc39b0007bb659c89625c4d1dad24899a242b
   role: focused recurrent metric and checkpoint-selection validation
 - path: uv.lock
-  sha256: bda5e47dd0621d06a6d3d7253bba03b688a70eb4803caf49db9796f0f12a0798
+  sha256: d6105d0696940f5574ff4cbf6afd30e6dd4ad7956bdf0fdf3169a1a3905c6689
   role: locked dependency resolution
 - path: configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml
   sha256: 3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482

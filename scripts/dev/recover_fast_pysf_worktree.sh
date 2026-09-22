@@ -27,7 +27,8 @@ be reported as a successful recovery.
 This is an explicit recovery operation. It refuses the main checkout, refuses
 dirty dependency inputs, serializes recovery per repository with a kernel-backed
 lock, and fails closed when the worktree or effective uv-cache filesystem is below the
-ROBOT_SF_WORKTREE_MIN_FREE_BYTES threshold (default: 2 GiB).
+ROBOT_SF_WORKTREE_MIN_FREE_BYTES threshold (default: 2 GiB for core and 8 GiB for
+named/all-extras profiles).
 
 Options:
   --profile NAME         Dependency import profile the postcondition must certify
@@ -50,8 +51,10 @@ Environment:
                          overrides ROBOT_SF_WORKTREE_MIN_FREE_BYTES for the recovery gate. If
                          neither variable is set, core uses 2 GiB and named/all-extras profiles
                          use 8 GiB to account for larger dependency materialization.
-  UV_CACHE_DIR           Effective uv cache path checked before materialization when set;
-                         otherwise the helper checks XDG_CACHE_HOME/uv or $HOME/.cache/uv.
+  UV_CACHE_DIR           Explicit uv cache override. The effective cache path is resolved with
+                         `uv cache dir` under the same config and environment as the sync;
+                         UV_NO_CACHE is therefore checked on its temporary-storage filesystem.
+  UV_CONFIG_FILE         Optional uv configuration path honored by `uv cache dir`.
   ROBOT_SF_VENV_SEED_CACHE
                          Directory holding checksum-keyed reusable recovery environments
                          (default: $XDG_CACHE_HOME/robot-sf/worktree-venv-seeds or
@@ -959,18 +962,23 @@ if [[ -z "$recovery_minimum_free_bytes" && -z "${ROBOT_SF_WORKTREE_MIN_FREE_BYTE
       ;;
   esac
 fi
-uv_cache_dir="${UV_CACHE_DIR:-}"
-if [[ -z "$uv_cache_dir" ]]; then
-  if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
-    uv_cache_dir="$XDG_CACHE_HOME/uv"
-  elif [[ -n "${HOME:-}" ]]; then
-    uv_cache_dir="$HOME/.cache/uv"
-  fi
-fi
-if [[ -z "$uv_cache_dir" ]]; then
-  echo "recover_fast_pysf_worktree: could not determine the effective uv cache directory" >&2
-  echo "Set UV_CACHE_DIR or HOME, then retry the explicit recovery." >&2
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "recover_fast_pysf_worktree: uv is required for explicit environment recovery" >&2
   exit 2
+fi
+
+uv_cache_dir=""
+if ! uv_cache_dir="$(
+  env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
+    UV_PROJECT_ENVIRONMENT="$local_venv" uv cache dir --directory "$repo_root" 2>/dev/null
+)" || [[ -z "$uv_cache_dir" ]]; then
+  echo "recover_fast_pysf_worktree: could not determine the effective uv cache directory" >&2
+  echo "uv cache dir failed; inspect UV_CONFIG_FILE, UV_CACHE_DIR, or UV_NO_CACHE, then retry." >&2
+  exit 2
+fi
+if [[ "$uv_cache_dir" != /* ]]; then
+  uv_cache_dir="$repo_root/$uv_cache_dir"
 fi
 
 for capacity_path in "$local_venv" "$uv_cache_dir"; do
@@ -981,16 +989,11 @@ for capacity_path in "$local_venv" "$uv_cache_dir"; do
   echo "recover_fast_pysf_worktree: capacity preflight for dependency profile '$dependency_profile' at $capacity_path" >&2
   if ! capacity_report="$(python3 "$capacity_checker" "${capacity_args[@]}" 2>&1)"; then
     printf '%s\n' "$capacity_report" >&2
-    echo "recover_fast_pysf_worktree: capacity gate blocked recovery before uv started at $capacity_path" >&2
+    echo "recover_fast_pysf_worktree: capacity gate blocked recovery before materialization at $capacity_path" >&2
     exit 2
   fi
   printf '%s\n' "$capacity_report" >&2
 done
-
-if ! command -v uv >/dev/null 2>&1; then
-  echo "recover_fast_pysf_worktree: uv is required for explicit environment recovery" >&2
-  exit 2
-fi
 
 sync_needed=1
 if [[ -x "$local_venv/bin/python" ]]; then

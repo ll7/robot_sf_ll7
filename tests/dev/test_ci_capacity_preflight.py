@@ -215,6 +215,12 @@ def _linked_recovery_fixture(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         'if [[ -n "${UV_ENV_CAPTURE:-}" ]]; then printf "UV_PROJECT=%s\\n" "${UV_PROJECT-<unset>}" >> "$UV_ENV_CAPTURE"; fi\n'
+        'if [[ "${1:-}" == "cache" && "${2:-}" == "dir" ]]; then\n'
+        '  if [[ -n "${UV_CACHE_CAPTURE:-}" ]]; then printf "%s\\n" "$*" >> "$UV_CACHE_CAPTURE"; fi\n'
+        '  if [[ -f "uv.toml" ]]; then sed -n \'s/^cache-dir[[:space:]]*=[[:space:]]*"\\(.*\\)"$/\\1/p\' uv.toml; exit 0; fi\n'
+        '  printf "%s\\n" "${UV_CACHE_DIR_OUTPUT:-${UV_CACHE_DIR:-$PWD/.uv-cache}}"\n'
+        "  exit 0\n"
+        "fi\n"
         'printf \'%s\\n\' "$*" >> "$UV_CAPTURE"\n'
         'case "${1:-}" in\n'
         "  venv)\n"
@@ -807,7 +813,7 @@ def test_shared_venv_recovery_blocks_insufficient_capacity(tmp_path: Path) -> No
 
         assert result.returncode == 2
         diagnostic = result.stdout + result.stderr
-        assert "capacity gate blocked recovery before uv started" in diagnostic
+        assert "capacity gate blocked recovery before materialization" in diagnostic
         assert not capture.exists()
         assert not (worktree / ".venv").exists()
     finally:
@@ -847,7 +853,7 @@ def test_shared_venv_recovery_uses_profile_capacity_default(tmp_path: Path) -> N
         )
 
         assert result.returncode == 2
-        assert "capacity gate blocked recovery before uv started" in result.stderr
+        assert "capacity gate blocked recovery before materialization" in result.stderr
         assert "--minimum-free-bytes 8589934592" in capacity_capture.read_text(encoding="utf-8")
         assert not capture.exists()
     finally:
@@ -855,7 +861,7 @@ def test_shared_venv_recovery_uses_profile_capacity_default(tmp_path: Path) -> N
 
 
 def test_shared_venv_recovery_blocks_distinct_low_capacity_uv_cache(tmp_path: Path) -> None:
-    """A low-capacity cache filesystem blocks materialization before uv starts."""
+    """A low-capacity cache filesystem blocks materialization before downloads."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
     cache_root = tmp_path / "distinct-uv-cache"
     capacity_log = tmp_path / "capacity-paths.txt"
@@ -893,12 +899,64 @@ def test_shared_venv_recovery_blocks_distinct_low_capacity_uv_cache(tmp_path: Pa
 
         assert result.returncode == 2
         assert "simulated low cache capacity" in result.stderr
-        assert f"capacity gate blocked recovery before uv started at {cache_root}" in result.stderr
+        assert (
+            f"capacity gate blocked recovery before materialization at {cache_root}"
+            in result.stderr
+        )
         assert capacity_log.read_text(encoding="utf-8").splitlines() == [
             str(worktree / ".venv"),
             str(cache_root),
         ]
         assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_uses_uv_configured_cache_path(tmp_path: Path) -> None:
+    """Capacity follows uv.toml's effective cache path instead of guessing XDG/HOME."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    configured_cache = worktree / "configured-cache"
+    uv_cache_capture = tmp_path / "uv-cache-calls.txt"
+    capacity_log = tmp_path / "capacity-paths.txt"
+    (worktree / "uv.toml").write_text('cache-dir = "configured-cache"\n', encoding="utf-8")
+    capacity_checker = worktree / "scripts" / "dev" / "check_worktree_capacity.py"
+    capacity_checker.write_text(
+        "import os\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "path = Path(args[args.index('--path') + 1])\n"
+        "with Path(os.environ['CAPACITY_LOG']).open('a', encoding='utf-8') as stream:\n"
+        "    stream.write(f'{path}\\n')\n",
+        encoding="utf-8",
+    )
+    env = {
+        **env,
+        "CAPACITY_LOG": str(capacity_log),
+        "UV_CACHE_CAPTURE": str(uv_cache_capture),
+        "ROBOT_SF_RECOVERY_MIN_FREE_BYTES": "0",
+    }
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert uv_cache_capture.read_text(encoding="utf-8").splitlines() == [
+            f"cache dir --directory {worktree}"
+        ]
+        assert capacity_log.read_text(encoding="utf-8").splitlines() == [
+            str(worktree / ".venv"),
+            str(configured_cache),
+        ]
+        assert configured_cache.as_posix() in result.stderr
+        assert "sync --reinstall-package robot-sf --frozen" in capture.read_text(encoding="utf-8")
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 
@@ -1730,6 +1788,10 @@ def _seed_recovery_fixture(
         fake_bin / "uv",
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        'if [[ "${1:-}" == "cache" && "${2:-}" == "dir" ]]; then\n'
+        '  printf "%s\\n" "${UV_CACHE_DIR_OUTPUT:-${UV_CACHE_DIR:-$PWD/.uv-cache}}"\n'
+        "  exit 0\n"
+        "fi\n"
         'printf \'%s\\n\' "$*" >> "$UV_CAPTURE"\n'
         'case "${1:-}" in\n'
         "  venv)\n"

@@ -733,6 +733,22 @@ def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
 
 
 @pytest.mark.parametrize(
+    "body",
+    (
+        "This does not affect runtime. Closes #9566",
+        "This does not affect runtime, closes #9566",
+        "This does not affect runtime; resolves #9566",
+    ),
+)
+def test_github_closing_parity_allows_explicit_close_after_unrelated_negation(
+    body: str,
+) -> None:
+    """An earlier prose clause cannot negate an intentional closing declaration."""
+    assert pr_contract_check._find_closed_references(body) == [(None, "9566")]
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
+@pytest.mark.parametrize(
     ("body", "target"),
     (
         ("it does not close other-org/other-repo#9489", "other-org/other-repo#9489"),

@@ -89,6 +89,11 @@ PLACEHOLDER_DOCSTRING_PATTERNS = [
 def is_negated(text: str, match_start: int) -> bool:
     """Check if the matched word is negated in the preceding context."""
     prefix = text[max(0, match_start - 30) : match_start].lower()
+    # Negation applies only within the same prose clause. Without this boundary,
+    # an unrelated sentence such as ``does not affect runtime. Closes #123``
+    # suppresses the intentional closing declaration merely because ``not`` is
+    # inside the historical 30-character lookback window.
+    prefix = re.split(r"[,.;:!?()\n]", prefix)[-1]
     negations = [
         r"\bnot\b",
         r"\bno\b",

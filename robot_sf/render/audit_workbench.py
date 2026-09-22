@@ -158,6 +158,9 @@ class AuditCodexClientProtocol(Protocol):
     ) -> Any:
         """Cancel one already-returned Codex session."""
 
+    def recover_session(self, codex_session_id: str, *, audit_token: str) -> Any:
+        """Hydrate one durable Codex session after a browser/service restart."""
+
 
 _SENSITIVE_KEYS = frozenset(
     {
@@ -1298,6 +1301,12 @@ def _codex_result_projection(  # noqa: C901, PLR0912, PLR0915
     operation_reference = _codex_reference(operation_id, secret=secret)
     if operation_reference is not None:
         projected["operation_id"] = operation_reference
+    codex_session_id = session.get("session_id")
+    if codex_session_id is None:
+        codex_session_id = raw.get("codex_session_id")
+    session_reference = _codex_reference(codex_session_id, secret=secret)
+    if session_reference is not None:
+        projected["codex_session_id"] = session_reference
     context = _codex_context(context_value, secret=secret)
     if context:
         projected["context"] = context
@@ -1423,6 +1432,77 @@ def _codex_result_binding_mismatch(  # noqa: C901, PLR0912
     return None
 
 
+def _codex_result_context_binding_mismatch(  # noqa: C901
+    value: Any,
+    *,
+    expected_context: Any,
+    expected_source_revision: Any,
+    expected_source_digest: Any,
+) -> str | None:
+    """Validate recovered Codex context without treating its old operation as current.
+
+    Recovery returns the durable session's last operation identity, which is
+    intentionally different from the new browser reconnect operation.  The
+    source/context binding still has to match exactly before the recovered
+    handle is retained by the server facade.
+
+    Returns:
+        A bounded conflict reason, or ``None`` when the binding matches.
+    """
+
+    raw = _codex_raw_mapping(value)
+    mappings = [
+        raw,
+        _codex_raw_mapping(raw.get("session")),
+        _codex_raw_mapping(raw.get("receipt")),
+        _codex_raw_mapping(raw.get("operation")),
+    ]
+    for candidate in tuple(mappings):
+        nested = _codex_raw_mapping(candidate.get("session"))
+        if nested:
+            mappings.append(nested)
+        for key in ("context", "current_context"):
+            result_context = candidate.get(key)
+            if result_context is not None and not _context_matches_request(
+                expected_context, result_context
+            ):
+                return "recovered Codex session context does not match the selected case"
+    expected_context_revision = _service_attr(expected_context, "context_revision")
+    for candidate in mappings:
+        if (
+            candidate.get("context_revision") is not None
+            and candidate.get("context_revision") != expected_context_revision
+        ):
+            return "recovered Codex session context revision does not match the selection"
+        if (
+            candidate.get("source_revision") is not None
+            and candidate.get("source_revision") != expected_source_revision
+        ):
+            return "recovered Codex session source revision does not match the selection"
+        for key in ("source_digest", "digest"):
+            if candidate.get(key) is not None and candidate.get(key) != expected_source_digest:
+                return "recovered Codex session source identity does not match the selection"
+        for key in ("source", "current_source"):
+            source = candidate.get(key)
+            if source is None:
+                continue
+            source_mapping = _codex_raw_mapping(source)
+            if not source_mapping:
+                return "recovered Codex session source binding is malformed"
+            if (
+                source_mapping.get("source_revision") is not None
+                and source_mapping.get("source_revision") != expected_source_revision
+            ):
+                return "recovered Codex session source revision does not match the selection"
+            if any(
+                source_mapping.get(key) is not None
+                and source_mapping.get(key) != expected_source_digest
+                for key in ("source_digest", "digest")
+            ):
+                return "recovered Codex session source identity does not match the selection"
+    return None
+
+
 class ServiceAuditWorkbenchFacade:
     """Server-held BA-05 service adapter for the audit workbench.
 
@@ -1506,6 +1586,7 @@ class ServiceAuditWorkbenchFacade:
             self.codex_start = self._codex_start  # type: ignore[attr-defined]
             self.codex_read = self._codex_read  # type: ignore[attr-defined]
             self.codex_cancel = self._codex_cancel  # type: ignore[attr-defined]
+            self.codex_reconnect = self._codex_reconnect  # type: ignore[attr-defined]
         if callable(getattr(self._service, "read_codex_activity", None)):
             self.codex_read = self._codex_read  # type: ignore[attr-defined]
 
@@ -2005,6 +2086,132 @@ class ServiceAuditWorkbenchFacade:
                 "unavailable", "BA-05 Codex activity read returned no status"
             )
         )
+
+    def _codex_reconnect(  # noqa: C901, PLR0912
+        self,
+        *,
+        codex_session_id: str,
+        operation_id: str,
+        expected_selection_revision: int,
+        expected_context_revision: int,
+    ) -> Mapping[str, Any]:
+        """Recover a durable Codex session without widening its authority.
+
+        The browser supplies only the opaque durable Codex session ID and
+        compare-and-swap selection revisions.  The server-held client supplies
+        the audit token and revalidates the persisted route/source through the
+        BA-05 authority ledger.
+
+        Returns:
+            A projected recovered-session result or an explicit conflict,
+            unavailable, or failed status.
+        """
+
+        if self._token is None:
+            return self._denied()
+        if self._codex_client is None or not self._codex_client_is_bound():
+            return self._codex_local_result("unavailable", "BA-05 Codex capability is unavailable")
+        if (
+            not isinstance(codex_session_id, str)
+            or not _CODEX_OPERATION_ID.fullmatch(codex_session_id)
+            or self._token in codex_session_id
+        ):
+            return self._codex_local_result("failed", "Codex session ID is invalid")
+        if (
+            not isinstance(operation_id, str)
+            or not _CODEX_OPERATION_ID.fullmatch(operation_id)
+            or self._token in operation_id
+        ):
+            return self._codex_local_result("failed", "operation_id is invalid")
+        if (
+            isinstance(expected_selection_revision, bool)
+            or not isinstance(expected_selection_revision, int)
+            or expected_selection_revision < 0
+            or isinstance(expected_context_revision, bool)
+            or not isinstance(expected_context_revision, int)
+            or expected_context_revision < 0
+        ):
+            return self._codex_local_result("failed", "Codex reconnect revisions are invalid")
+        if expected_selection_revision != self._selection_epoch:
+            return self._codex_local_result(
+                "conflict",
+                "Codex reconnect selection revision is stale",
+                conflict={
+                    "expected_revision": expected_selection_revision,
+                    "actual_revision": self._selection_epoch,
+                },
+            )
+        if expected_context_revision != self._context_revision():
+            return self._codex_local_result(
+                "conflict",
+                "Codex reconnect context revision is stale",
+                conflict={
+                    "expected_revision": expected_context_revision,
+                    "actual_revision": self._context_revision(),
+                },
+            )
+        if self._codex_start_in_flight:
+            return self._codex_local_result(
+                "unavailable", "Codex start is in flight; reconnect is deferred"
+            )
+        authoritative_context, failure = self._codex_start_binding(
+            operation_id=f"{operation_id}:bind",
+            expected_selection_revision=expected_selection_revision,
+        )
+        if failure is not None or authoritative_context is None:
+            return failure or self._codex_local_result(
+                "conflict", "Codex reconnect has no authoritative context"
+            )
+        method = getattr(self._codex_client, "recover_session", None)
+        if not callable(method):
+            method = getattr(self._codex_client, "reconnect_session", None)
+        if not callable(method):
+            return self._codex_local_result("unavailable", "BA-05 Codex recovery is unavailable")
+        parameters, accepts_kwargs = self._codex_signature(method)
+        kwargs: dict[str, Any] = {}
+        token_name = "audit_token" if "audit_token" in parameters or accepts_kwargs else "token"
+        if token_name not in parameters and not accepts_kwargs:
+            return self._codex_local_result(
+                "unavailable", "BA-05 Codex recovery has no authenticated token boundary"
+            )
+        kwargs[token_name] = self._token
+        try:
+            raw_result = method(codex_session_id, **kwargs)
+        except Exception:  # noqa: BLE001 - provider/authority details stay server-side
+            return self._codex_local_result("unavailable", "Codex session recovery failed")
+        binding_failure = _codex_result_context_binding_mismatch(
+            raw_result,
+            expected_context=authoritative_context,
+            expected_source_revision=self._source_revision(),
+            expected_source_digest=_service_attr(authoritative_context, "source_identity"),
+        )
+        if binding_failure is not None:
+            return self._codex_local_result("conflict", binding_failure)
+        projected = _codex_result_projection(raw_result, secret=self._token)
+        status = projected.get("status")
+        if status not in {"complete", "committed", "ok", "saved", "cancelled"}:
+            return projected or self._codex_local_result(
+                "unavailable", "Codex session recovery returned no status"
+            )
+        session_handle = _service_attr(raw_result, "session")
+        if session_handle is None:
+            return self._codex_local_result(
+                "unavailable", "Codex session recovery returned no durable session"
+            )
+        with self._codex_state_lock:
+            self._codex_session_handle = session_handle
+            self._codex_operation_id = operation_id
+            self._codex_session_context = deepcopy(authoritative_context)
+            self._codex_session_source_revision = self._source_revision()
+            self._codex_session_source_digest = _service_attr(
+                authoritative_context, "source_identity"
+            )
+        projected.setdefault("operation_id", operation_id)
+        projected.setdefault("context", _codex_context(authoritative_context, secret=self._token))
+        projected.setdefault(
+            "codex_session_id", _service_attr(session_handle, "session_id", codex_session_id)
+        )
+        return projected
 
     def _codex_cancel(  # noqa: C901
         self,

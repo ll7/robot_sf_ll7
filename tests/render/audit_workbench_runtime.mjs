@@ -1467,6 +1467,13 @@ await serviceFacade.codex_start({
   provider_path: "/private/provider",
 });
 await serviceFacade.codex_read({ operation_id: "codex-http", session_id: "forged" });
+await serviceFacade.codex_reconnect({
+  codex_session_id: "codex-session-http",
+  operation_id: "codex-reconnect-http",
+  expected_selection_revision: 1,
+  expected_context_revision: 2,
+  token: "must-not-cross-browser-boundary",
+});
 await serviceFacade.codex_cancel({ reason: "post-turn", operation_id: "codex-http", path: "/private" });
 await serviceFacade.run_native_diagnostic({
   ...nativeArguments,
@@ -1492,6 +1499,10 @@ assert.deepEqual(serviceCalls, [
     arguments: { prompt: "service prompt", operation_id: "codex-http", token_budget: 64, compute_budget: 1 },
   },
   { operation: "codex_read", arguments: { operation_id: "codex-http" } },
+  { operation: "codex_reconnect", arguments: {
+    codex_session_id: "codex-session-http", operation_id: "codex-reconnect-http",
+    expected_selection_revision: 1, expected_context_revision: 2,
+  } },
   { operation: "codex_cancel", arguments: { reason: "post-turn", operation_id: "codex-http" } },
   { operation: "run_native_diagnostic", arguments: nativeArguments },
   { operation: "materialize_selected", arguments: {

@@ -271,8 +271,10 @@ class _FakeCodexClient:
         self.block_start = False
         self.foreign_start_binding = False
         self.foreign_cancel_binding = False
+        self.foreign_recover_binding = False
         self.conflicting_nested_start_binding = False
         self.conflicting_nested_cancel_binding = False
+        self.conflicting_nested_recover_binding = False
         self.reason_text: str | None = None
         self.activity_text: str | None = None
 
@@ -335,6 +337,40 @@ class _FakeCodexClient:
             }
         if self.reason_text is not None:
             result["reason"] = self.reason_text
+        return result
+
+    def recover_session(self, codex_session_id: str, *, audit_token: str) -> dict[str, Any]:
+        self.calls.append(("recover", codex_session_id, {"audit_token": audit_token}))
+        result: dict[str, Any] = {
+            "status": "complete",
+            "session": self.session,
+            "codex_session_id": (
+                "foreign-session" if self.foreign_recover_binding else codex_session_id
+            ),
+            "context": (
+                _FakeContext(context_revision=99, episode_id="foreign-episode")
+                if self.foreign_recover_binding
+                else self.service.context
+            ),
+            "source": {
+                "source_revision": (
+                    "foreign-source-revision"
+                    if self.foreign_recover_binding
+                    else "source-revision-1"
+                ),
+                "source_digest": (
+                    "foreign-source-digest" if self.foreign_recover_binding else "source-digest-1"
+                ),
+            },
+            "provider_session_id": self.session.provider_session_id,
+        }
+        if self.conflicting_nested_recover_binding:
+            result["session"] = {
+                "session_id": codex_session_id,
+                "context": _FakeContext(context_revision=99, episode_id="foreign-episode"),
+                "source_revision": "foreign-source-revision",
+                "source_digest": "foreign-source-digest",
+            }
         return result
 
     def cancel(self, session: Any, **kwargs: Any) -> dict[str, Any]:
@@ -1313,6 +1349,72 @@ def test_service_facade_codex_start_rejects_stale_selection_revision() -> None:
     assert result["status"] == "conflict"
     assert not client.calls
     assert not any(call[0] == "read_context" for call in service.calls)
+
+
+def test_service_facade_codex_reconnect_rehydrates_durable_session() -> None:
+    """Recovery retains only the opaque session handle after authority revalidation."""
+    service = _FakeAuditService()
+    service.context = _FakeContext(episode_id="episode-real")
+    client = _FakeCodexClient(service)
+    token = _FakeSession.session_token
+    facade = ServiceAuditWorkbenchFacade(service, _FakeSession(), token=token, codex_client=client)
+    selected = facade.next(operation_id="next-codex-reconnect")
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-1",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "complete"
+    assert result["operation_id"] == "codex-reconnect-1"
+    assert result["codex_session_id"] == "codex-session-private"
+    assert result["context"]["episode_id"] == "episode-real"
+    assert result["source"] == {
+        "source_revision": "source-revision-1",
+        "source_digest": "source-digest-1",
+    }
+    result_json = json.dumps(result, sort_keys=True)
+    assert token not in result_json
+    assert "provider-session-private" not in result_json
+    assert [call[0] for call in client.calls] == ["recover"]
+    action, session_id, kwargs = client.calls[0]
+    assert action == "recover"
+    assert session_id == "codex-session-private"
+    assert kwargs["audit_token"] == token
+    assert facade._codex_session_handle is client.session
+    assert facade._codex_operation_id == "codex-reconnect-1"
+
+
+def test_service_facade_codex_reconnect_rejects_stale_or_foreign_binding() -> None:
+    """A stale selection or foreign recovery receipt never hydrates a handle."""
+    service = _FakeAuditService()
+    client = _FakeCodexClient(service)
+    facade = ServiceAuditWorkbenchFacade(
+        service, _FakeSession(), token=_FakeSession.session_token, codex_client=client
+    )
+    selected = facade.next(operation_id="next-codex-reconnect-stale")
+    stale = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-stale",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=3,
+    )
+    assert stale["status"] == "conflict"
+    assert not client.calls
+
+    client.foreign_recover_binding = True
+    foreign = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-foreign",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert foreign["status"] == "conflict"
+    assert facade._codex_session_handle is None
+    assert facade._codex_operation_id is None
+    assert len(client.calls) == 1
 
 
 @pytest.mark.parametrize(

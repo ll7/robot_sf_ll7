@@ -766,6 +766,20 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
         assert started["route_id"] == route.route_id
         assert started["usage"]["total_tokens"] == 7
         assert started["usage"]["measured_compute"] == 1.0
+        assert isinstance(started.get("codex_session_id"), str)
+        reconnected = post(
+            "codex_reconnect",
+            {
+                "codex_session_id": started["codex_session_id"],
+                "operation_id": "live-codex-reconnect",
+                "expected_selection_revision": selected["selection_revision"],
+                "expected_context_revision": selected["context_revision"],
+            },
+        )
+        assert reconnected["status"] == "complete", reconnected
+        assert reconnected["codex_session_id"] == started["codex_session_id"]
+        assert reconnected["context"]["episode_id"] == started["context"]["episode_id"]
+        assert service_session.session_token not in json.dumps(reconnected)
         assert service_session.session_token not in json.dumps(started)
         _run_external_mcp_launch_smoke(bridge, service_session, selected, started)
 

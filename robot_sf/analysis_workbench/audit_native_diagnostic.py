@@ -1601,6 +1601,12 @@ def _terminate_child(process: Any) -> bool:
     return not process.is_alive()
 
 
+def _child_startup_timeout_s(_execution_timeout_s: float) -> float:
+    """Keep bounded child import startup separate from episode execution."""
+
+    return MAX_TIMEOUT_S
+
+
 def _run_bounded(
     runner_input: Mapping[str, Any],
     *,
@@ -1629,7 +1635,11 @@ def _run_bounded(
         # caller's timeout to actual runner execution.  This preserves the
         # fail-closed process boundary while avoiding a platform-dependent
         # import penalty (notably on macOS).
-        startup_timeout_s = min(MAX_TIMEOUT_S, max(5.0, timeout_s))
+        # Child startup is an adapter-owned import boundary, not episode
+        # execution.  Keep it bounded by the adapter ceiling without shrinking
+        # it to the caller's per-execution deadline: macOS ``spawn`` can spend
+        # longer importing the simulator stack before reporting readiness.
+        startup_timeout_s = _child_startup_timeout_s(timeout_s)
         deadline = started + startup_timeout_s
         ready = False
         while True:

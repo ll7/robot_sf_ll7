@@ -1148,3 +1148,9 @@ def test_native_child_deadline_terminates_owned_process(native_case: dict[str, A
         marker in result["reason"] for marker in ("per_execution_timeout", "child_startup_timeout")
     )
     assert result["settled"] is True
+
+
+def test_native_child_startup_budget_is_separate_from_execution_deadline() -> None:
+    assert native._child_startup_timeout_s(0.001) == native.MAX_TIMEOUT_S
+    assert native._child_startup_timeout_s(30.0) == native.MAX_TIMEOUT_S
+    assert native._child_startup_timeout_s(native.MAX_TIMEOUT_S) == native.MAX_TIMEOUT_S

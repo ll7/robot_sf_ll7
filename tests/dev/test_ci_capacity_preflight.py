@@ -854,6 +854,55 @@ def test_shared_venv_recovery_uses_profile_capacity_default(tmp_path: Path) -> N
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+def test_shared_venv_recovery_blocks_distinct_low_capacity_uv_cache(tmp_path: Path) -> None:
+    """A low-capacity cache filesystem blocks materialization before uv starts."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    cache_root = tmp_path / "distinct-uv-cache"
+    capacity_log = tmp_path / "capacity-paths.txt"
+    capacity_checker = worktree / "scripts" / "dev" / "check_worktree_capacity.py"
+    capacity_checker.write_text(
+        "import os\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "path = Path(args[args.index('--path') + 1])\n"
+        "with Path(os.environ['CAPACITY_LOG']).open('a', encoding='utf-8') as stream:\n"
+        "    stream.write(f'{path}\\n')\n"
+        "if str(path) == os.environ['LOW_CACHE_PATH']:\n"
+        "    print('simulated low cache capacity')\n"
+        "    raise SystemExit(2)\n",
+        encoding="utf-8",
+    )
+    env = {
+        **env,
+        "CAPACITY_LOG": str(capacity_log),
+        "LOW_CACHE_PATH": str(cache_root),
+        "ROBOT_SF_RECOVERY_MIN_FREE_BYTES": "0",
+        "UV_CACHE_DIR": str(cache_root),
+    }
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "simulated low cache capacity" in result.stderr
+        assert f"capacity gate blocked recovery before uv started at {cache_root}" in result.stderr
+        assert capacity_log.read_text(encoding="utf-8").splitlines() == [
+            str(worktree / ".venv"),
+            str(cache_root),
+        ]
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
 def test_shared_venv_recovery_recreates_environment_after_prior_state_marker(
     tmp_path: Path,
 ) -> None:

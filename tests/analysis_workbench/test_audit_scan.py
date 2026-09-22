@@ -130,6 +130,64 @@ def test_scan_marks_only_derived_config_digest_as_adapter_default() -> None:
     assert "config_digest" not in claimed_row.get("_audit_scan_identity_defaults", {})
 
 
+def test_jsonl_admits_distinct_row_config_hashes_without_inventing_source_identity(
+    tmp_path: Path,
+) -> None:
+    """A multi-run JSONL keeps each row hash instead of collapsing it at source scope."""
+
+    source = tmp_path / "episodes.jsonl"
+    rows = [
+        {
+            "episode_id": "run-a",
+            "scenario_id": "scenario-a",
+            "algo": "goal",
+            "seed": 1,
+            "git_hash": "a" * 40,
+            "config_hash": "1" * 16,
+            "metrics": {"success": False, "collisions": 1},
+        },
+        {
+            "episode_id": "run-b",
+            "scenario_id": "scenario-a",
+            "algo": "goal",
+            "seed": 2,
+            "git_hash": "a" * 40,
+            "config_hash": "2" * 16,
+            "metrics": {"success": True, "collisions": 0},
+        },
+    ]
+    source.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    report = scan_campaign(source, root=tmp_path)
+
+    assert [item.status for item in report.inventory] == ["readable", "readable"]
+    assert report.audit.source is not None
+    assert report.audit.source.config_identity == ""
+    assert [ref.config_digest for ref in report.episode_refs] == [
+        hashlib.sha256(("1" * 16).encode()).hexdigest(),
+        hashlib.sha256(("2" * 16).encode()).hexdigest(),
+    ]
+
+    pinned = scan_campaign(
+        source,
+        root=tmp_path,
+        source_ref=SourceRef(
+            artifact_id=source.name,
+            uri=source.name,
+            format="episode-jsonl",
+            schema="episode-jsonl.v1",
+            sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+            source_commit="a" * 40,
+            config_identity="1" * 16,
+        ),
+    )
+    assert [(item.episode_id, item.status) for item in pinned.inventory] == [
+        ("run-a", "readable"),
+        ("run-b", "invalid"),
+    ]
+    assert "config_identity conflicts" in pinned.inventory[1].reason
+
+
 @pytest.mark.parametrize(
     "container", ["config", "result_provenance", "cell_context", "algorithm_metadata"]
 )

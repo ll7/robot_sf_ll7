@@ -142,6 +142,18 @@ the summary-only fixture has no playable scene and therefore no such button.
 Fresh snapshots read the durable queue and coverage again after a review;
 reopening the queue reconstructs only review receipts named by its own state.
 
+A tracked 400-row JSONL extracted from a real campaign is also exercised
+through the scanner/service composition in
+`tests/render/test_audit_workbench_retained_campaign.py`. The proof retains
+distinct row-level configuration hashes, queues a collision row beside a
+same-scenario/same-planner successful control, selects the collision row,
+persists a proposed finding, and reports incomplete coverage. The slimmed
+artifact has no admitted runner input, checkpoint, or complete configuration
+bundle, so native execution remains explicitly unavailable and
+`diagnostic_only`; the test is not a native replay, benchmark result, or
+planner comparison. The browser launcher command above still requires its
+documented campaign JSON envelope.
+
 On 2026-09-22, the live launch smoke also started the launch-owned private
 bridge command as an external MCP stdio client. It completed `initialize`,
 `tools/list`, and `read_episode` after the fake Codex route selected a packet;

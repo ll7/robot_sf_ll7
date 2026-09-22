@@ -106,11 +106,14 @@ def _read_predecessor(archive: Path) -> dict[str, dict[tuple[str, int], dict[str
     result: dict[str, dict[tuple[str, int], dict[str, Any]]] = {}
     with tarfile.open(archive, "r:gz") as handle:
         members = sorted(
-            member
-            for member in handle.getmembers()
-            if member.isfile()
-            and member.name.endswith("/episodes.jsonl")
-            and "/payload/runs/" in member.name
+            (
+                member
+                for member in handle.getmembers()
+                if member.isfile()
+                and member.name.endswith("/episodes.jsonl")
+                and "/payload/runs/" in member.name
+            ),
+            key=lambda member: member.name,
         )
         if not members:
             raise ValueError(f"predecessor archive has no payload run rows: {archive}")

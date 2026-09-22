@@ -680,10 +680,16 @@ def _paired_observation_blockers(
     return blockers
 
 
-def _campaign_provenance_blockers(
+def _campaign_provenance_blockers(  # noqa: C901
     sweep_summary: Mapping[str, object], radii: Sequence[float]
-) -> tuple[list[str], tuple[str, str, str] | None]:
-    """Validate the per-arm Gate 2 commit, config digest, and Gate 1 receipt binding.
+) -> tuple[list[str], tuple[str, dict[float, str], str] | None]:
+    """Validate per-arm config digests under one commit and Gate 1 receipt binding.
+
+    The Gate 2 treatment intentionally uses one tracked config per radius arm, so their
+    config digests are expected to differ.  What must remain common is the immutable
+    campaign commit and Gate 1 receipt.  The returned binding retains every per-arm
+    config digest so the bundle writer can bind its supplied baseline config to the
+    1.0 m arm without weakening the other arms' provenance.
 
     Returns:
         Fail-closed blockers and the shared immutable binding when all arms match.
@@ -693,7 +699,7 @@ def _campaign_provenance_blockers(
         return ["missing_campaign_provenance"], None
     provenance_by_radius = _float_keyed(raw_provenance)
     blockers = _radius_mapping_blockers(raw_provenance, radii, "campaign_provenance")
-    bindings: list[tuple[str, str, str]] = []
+    bindings: list[tuple[float, str, str, str]] = []
     for radius in radii:
         arm_provenance = provenance_by_radius.get(radius)
         if not isinstance(arm_provenance, Mapping):
@@ -713,14 +719,17 @@ def _campaign_provenance_blockers(
             and _is_hex_digest(config_sha256, length=64)
             and _is_hex_digest(canary_receipt_sha256, length=64)
         ):
-            bindings.append((campaign_commit, config_sha256, canary_receipt_sha256))
+            bindings.append((radius, campaign_commit, config_sha256, canary_receipt_sha256))
     if bindings and len(bindings) != len(radii):
         blockers.append("incomplete_campaign_provenance")
-    if len(set(bindings)) > 1:
+    common_bindings = {(commit, canary) for _, commit, _, canary in bindings}
+    if len(common_bindings) > 1:
         blockers.append("mixed_campaign_provenance")
-    return blockers, bindings[0] if len(bindings) == len(radii) and len(
-        set(bindings)
-    ) == 1 else None
+    if len(bindings) != len(radii) or len(common_bindings) != 1:
+        return blockers, None
+    campaign_commit, canary_receipt_sha256 = next(iter(common_bindings))
+    config_by_radius = {radius: config for radius, _, config, _ in bindings}
+    return blockers, (campaign_commit, config_by_radius, canary_receipt_sha256)
 
 
 def _read_json_mapping(path: Path | None) -> Mapping[str, object] | None:
@@ -2157,7 +2166,10 @@ def build_evidence_provenance(
     )
     source_campaign_commit = source_config_sha256 = source_canary_receipt_sha256 = None
     if source_binding is not None and not provenance_blockers:
-        source_campaign_commit, source_config_sha256, source_canary_receipt_sha256 = source_binding
+        source_campaign_commit, source_config_by_radius, source_canary_receipt_sha256 = (
+            source_binding
+        )
+        source_config_sha256 = source_config_by_radius.get(1.0)
     provenance_verified = bool(
         source_binding
         and not provenance_blockers

@@ -103,3 +103,63 @@ dissertation claim from issue closure.
 3. The Gate 1 receipt, config checksum, campaign commit, and summary provenance match.
 4. Rerun the scientific command, review the durable bundle, and post the one verdict plus
    the Issue #3207 propagation comment.
+
+## Gate 2 summary composer contract (2026-09-22)
+
+The deterministic composer reads exactly three complete camera-ready campaign roots and writes the
+`issue_6642_radius_sweep_summary.v1` input expected by Gate 3:
+
+```bash
+uv run python scripts/benchmark/compose_radius_sweep_summary_issue_6643.py \
+  --campaign-root <complete-0.5m-campaign-root> \
+  --campaign-root <complete-0.8m-campaign-root> \
+  --campaign-root <complete-1.0m-campaign-root> \
+  --gate1-canary-receipt <exact-original-gate1-receipt.json> \
+  --output <gate2-sweep-summary.json>
+```
+
+Each root must contain its canonical `campaign_manifest.json`,
+`preflight/validate_config.json`, `reports/campaign_summary.json`, and one complete
+`runs/<planner>__differential_drive/episodes.jsonl` for every frozen planner. The composer verifies
+the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
+derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
+Typed collisions mean the recorded `ped_collision_count + obstacle_collision_count`; the composer
+requires that sum to equal `total_collision_count` on every episode rather than reinterpreting the
+untyped CSV collision column.
+
+The three arm configs are intentionally different tracked treatment configs, so their SHA-256
+digests must remain recorded per arm. Gate 3 requires one shared campaign commit and one shared Gate
+1 receipt digest, but it no longer incorrectly requires the three arm config digests to be equal.
+The bundle's `--config` path remains the 1.0 m baseline config and must match that arm's digest.
+
+Family feasibility is not inferred from success rates, route-clearance warnings, or the separate
+#6644/#6645 narrow-doorway diagnostics. Every campaign root must instead carry a checksum-bound
+`reports/radius_family_feasibility.json` receipt with the same explicit definition and family
+roster across arms:
+
+```json
+{
+  "schema_version": "issue_6642_family_feasibility.v1",
+  "radius_m": 0.5,
+  "source_campaign_id": "<exact campaign id>",
+  "source_campaign_commit": "<exact 40-character campaign commit>",
+  "source_config_sha256": "<exact radius-arm config SHA-256>",
+  "definition": "<approved preregistered aggregation rule>",
+  "families": {
+    "narrow_doorway": "feasible"
+  }
+}
+```
+
+Statuses are limited to `feasible` and `infeasible`, and `narrow_doorway` is mandatory. The current
+preserved job 15504 (complete 0.5/0.8 m arms) and recovery job 15516 (complete 1.0 m arm) do not
+contain this authoritative block, so the composer fails closed before writing a summary. The exact
+original Gate 1 receipt bytes whose declared SHA-256 is
+`88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922` are also absent from the
+preserved campaign trees. A source replay can test the canary behavior, but a byte-different replay
+cannot replace that receipt for promoted provenance.
+
+Therefore the remaining unblock inputs are: (1) an owner-approved, preregistered family-feasibility
+aggregation and checksum-bound per-arm mappings produced from the preserved rows, and (2) recovery
+of the exact original passing Gate 1 receipt bytes. Until both exist, no Gate 3 scientific verdict
+or downstream propagation is valid.

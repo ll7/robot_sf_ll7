@@ -1152,14 +1152,49 @@ def test_analyze_radius_sensitivity_rejects_missing_or_mixed_campaign_commits() 
     assert "mixed_campaign_provenance" in mixed_report.verdict.reasons
 
 
-def test_analyze_radius_sensitivity_rejects_mismatched_config_or_canary_receipt() -> None:
-    """All arm provenance must bind the same campaign config and Gate 1 receipt."""
+def test_analyze_radius_sensitivity_allows_distinct_arm_configs_but_rejects_mixed_canary() -> None:
+    """Arm configs differ by treatment; the Gate 1 receipt must remain shared."""
     summary = _sweep_summary(_stable_tables())
     summary["campaign_provenance"]["0.8"]["config_sha256"] = "a" * 64
+    config_report = analyze_radius_sensitivity(summary)
+    assert config_report.verdict.verdict == VERDICT_STABLE
+
     summary["campaign_provenance"]["0.5"]["gate1_canary_receipt_sha256"] = "b" * 64
     report = analyze_radius_sensitivity(summary)
     assert report.verdict.verdict == VERDICT_INVALID
     assert "mixed_campaign_provenance" in report.verdict.reasons
+
+
+def test_evidence_provenance_binds_supplied_config_to_baseline_arm(tmp_path: Path) -> None:
+    """The bundle config is the 1.0 m baseline config, not another arm config."""
+    config_path = tmp_path / "baseline.yaml"
+    config_path.write_text("radius: 1.0\n", encoding="utf-8")
+    canary_receipt_path = tmp_path / "canary.json"
+    _write_gate1_receipt(canary_receipt_path)
+    summary = _sweep_summary(_stable_tables())
+    summary["campaign_provenance"] = _campaign_provenance(
+        canary_receipt_sha256=hashlib.sha256(canary_receipt_path.read_bytes()).hexdigest()
+    )
+    summary["campaign_provenance"]["0.5"]["config_sha256"] = "a" * 64
+    summary["campaign_provenance"]["0.8"]["config_sha256"] = "b" * 64
+    summary["campaign_provenance"]["1.0"]["config_sha256"] = hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    provenance = build_evidence_provenance(
+        analyze_radius_sensitivity(summary),
+        config_path=str(config_path),
+        command="cmd",
+        campaign_commit="c" * 40,
+        input_paths={
+            "sweep_summary.json": summary_path,
+            "gate1_canary_receipt.json": canary_receipt_path,
+        },
+        sweep_summary=summary,
+    )
+    assert provenance.campaign_provenance_verified is True
 
 
 # --- evidence tier ---------------------------------------------------------

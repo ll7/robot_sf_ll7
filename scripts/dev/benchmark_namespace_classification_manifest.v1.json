@@ -56,6 +56,7 @@
     "counterfactual_pair.py",
     "critical_intervals.py",
     "cross_benchmark_metrics.py",
+    "diagnostic_report.py",
     "distributions.py",
     "doctor.py",
     "dwa_diagnostic_harness.py",

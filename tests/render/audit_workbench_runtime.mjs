@@ -1473,6 +1473,12 @@ await serviceFacade.run_native_diagnostic({
   source_path: "/private/source",
   runner_identity: "must-not-cross-browser-boundary",
 });
+await serviceFacade.materialize_selected({
+  operation_id: "materialize-http",
+  expected_selection_revision: 1,
+  expected_context_revision: 2,
+  output_root: "/private/output",
+});
 await serviceFacade.recordHumanReview("pass", {
   expected_selection_revision: 1,
   expected_context_revision: 2,
@@ -1488,6 +1494,10 @@ assert.deepEqual(serviceCalls, [
   { operation: "codex_read", arguments: { operation_id: "codex-http" } },
   { operation: "codex_cancel", arguments: { reason: "post-turn", operation_id: "codex-http" } },
   { operation: "run_native_diagnostic", arguments: nativeArguments },
+  { operation: "materialize_selected", arguments: {
+    operation_id: "materialize-http", expected_selection_revision: 1,
+    expected_context_revision: 2,
+  } },
   { operation: "record_human_review", arguments: {
     outcome: "pass", expected_selection_revision: 1, expected_context_revision: 2,
     expected_queue_state_revision: 3, expected_queue_input_revision: 4,
@@ -1552,6 +1562,38 @@ assert.deepEqual(nativeCalls, [{
 }]);
 assert.doesNotMatch(JSON.stringify(nativeCalls), /private|runner|token/i);
 assert.match(renderedText(nativeController.root), /Native diagnostic complete/);
+
+const materializationCalls = [];
+const materializationFacade = {
+  next: async () => ({ status: "empty" }),
+  snapshot: async () => ({ status: "complete" }),
+  materialize_selected: async (args) => {
+    materializationCalls.push(args);
+    return {
+      status: "complete",
+      reason: "retained state rendered",
+      classification: "derived_render",
+      fidelity: "unverifiable",
+    };
+  },
+};
+const materializationController = new AuditWorkbenchController(
+  nativeModel, new Element(new Document(), "main"), { facade: materializationFacade },
+);
+assert.match(renderedText(materializationController.root), /Materialize selected artifact/);
+const materializationResult = await materializationController.materializeSelected({
+  operation_id: "materialize-controller-1",
+});
+assert.equal(materializationResult.materialization.status, "available");
+assert.equal(materializationResult.materialization.classification, "derived_render");
+assert.equal(materializationResult.materialization.fidelity, "unverifiable");
+assert.deepEqual(materializationCalls, [{
+  operation_id: "materialize-controller-1",
+  expected_selection_revision: 1,
+  expected_context_revision: 1,
+}]);
+assert.equal(materializationController.snapshot().materialization_in_flight, false);
+materializationController.unmount();
 
 const nativeLiveRegions = findElements(
   nativeController.root,

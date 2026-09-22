@@ -6,6 +6,54 @@ that this repository ships a production browser, live GitHub client, or live
 Codex provider setup. The full acceptance boundary is in
 [`benchmark_auditor_v1_acceptance_2026-09-22.md`](./benchmark_auditor_v1_acceptance_2026-09-22.md).
 
+## First screen: disposable offline demo
+
+The smallest tested launch generates a disposable fixture and serves it only
+on loopback. It does not contact GitHub, Codex, or an external MCP server:
+
+```bash
+fixture_root="$(mktemp -d /dev/shm/benchmark-auditor-fixture.XXXXXX)"
+.venv/bin/python -c 'from pathlib import Path; from robot_sf.render.audit_workbench import write_fixture_workbench; write_fixture_workbench(Path("'"$fixture_root"'/fixture"))'
+python -m http.server 8765 --bind 127.0.0.1 --directory "$fixture_root/fixture"
+```
+
+Open `http://127.0.0.1:8765/audit-workbench.v1.html`. The first screen is
+headed **Benchmark audit workbench** and shows `Queue Next`, queue/selected
+case state, declared media PTS, coverage, and the diagnostic-only boundary.
+The fixture's missing-recording case stays reviewable and reports
+`recording_not_present`; it is not promoted to native or benchmark evidence.
+The command was checked by fetching the page over loopback and asserting the
+title on 2026-09-22.
+
+## One-command local service launch
+
+For a source-bound campaign, use the canonical server-held launcher. This is
+the exact command shape exercised by the launch tests; all three paths must be
+absolute and the campaign must be inside `--source-root`:
+
+```bash
+.venv/bin/python -m robot_sf.render.audit_workbench_launch \
+  --campaign /absolute/path/to/campaign.json \
+  --source-root /absolute/path/to \
+  --store-root /absolute/path/to/private-audit-store \
+  --materialization-output-root /absolute/path/to/private-materialization-output \
+  --materialization-compute-budget 1.0
+```
+
+The process prints an ephemeral `http://127.0.0.1:<port>/` URL. The browser
+receives only an HTTP-only transport cookie. After `Queue Next`, a configured
+service facade exposes **Materialize selected artifact** in the queue pane;
+the request carries the selected episode, selection revision, context
+revision, and one operation ID. A stale selection or context is rejected by
+the server, and only the safe diagnostic status (never source/output paths)
+returns to the browser.
+
+For a real campaign, replace the three absolute roots with the admitted source
+and private store/output roots. Do not infer source identity from a filename:
+the scanner must admit the campaign and exact source/config/checkpoint first.
+If that admission or the retained media is unavailable, the launcher reports
+`unavailable`/`blocked_external` and does not synthesize a successful audit.
+
 ## Preconditions and evidence modes
 
 Use a clean worktree based on current `origin/main`, a repository-local

@@ -420,6 +420,33 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=("#9350",),
     ),
+    (
+        "robot_sf/analysis_workbench/audit_service.py",
+        "AuditService._native_campaign_binding_for_session",
+        "row is not None",
+    ): _review(
+        "The candidate filter keeps only bindings with a non-None campaign row and the empty/ambiguous branches raise before assignment; reaching the native-identity check narrows the row for URI/digest comparison.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9489",),
+    ),
+    (
+        "robot_sf/benchmark/diagnostic_report.py",
+        "_check_cost_scale",
+        "isinstance(candidates, list) and isinstance(scale, Mapping)",
+    ): _review(
+        "The missing-cost-input gate returns early when candidates/scale are absent; reaching the scorer narrows both mappings for candidate-order comparison.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9489",),
+    ),
+    (
+        "robot_sf/render/audit_workbench_launch.py",
+        "_load_native_diagnostic_config",
+        "selected is not None",
+    ): _review(
+        "The config coercion returns None only for unselected native configs and the validated mapping path assigns a config; reaching the return narrows the selected native diagnostic config.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9489",),
+    ),
 }
 
 

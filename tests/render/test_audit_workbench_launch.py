@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import hashlib
 import json
 import os
@@ -337,6 +338,28 @@ def test_native_launch_rejects_stale_campaign_binding_before_server(
             policy=policy,
             native_diagnostic_config=native_config,
         )
+
+
+def test_native_launch_preflight_reports_missing_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing optional native adapter fails as an unavailable capability."""
+
+    real_import = builtins.__import__
+
+    def unavailable_import(
+        name: str,
+        global_scope: dict[str, Any] | None = None,
+        local_scope: dict[str, Any] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> Any:
+        if name == "robot_sf.analysis_workbench" and "audit_native_diagnostic" in fromlist:
+            raise ModuleNotFoundError(name)
+        return real_import(name, global_scope, local_scope, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", unavailable_import)
+
+    with pytest.raises(CapabilityUnavailable, match="native diagnostic adapter is unavailable"):
+        launch_module._native_launch_preflight(None, None, None, None)
 
 
 def test_native_launch_rejects_ambiguous_campaign_rows_before_server(

@@ -90,8 +90,6 @@ class _NeverReadyConnection:
 
     def close(self) -> None:
         pass
-
-
 class _BoundedFakeProcess:
     pid = 1
 
@@ -146,8 +144,6 @@ class _StartupBudgetFakeContext:
 
     def Process(self, **_kwargs: Any) -> _BoundedFakeProcess:
         return self.process
-
-
 def _make_case(
     tmp_path: Path,
     original: dict[str, Any],

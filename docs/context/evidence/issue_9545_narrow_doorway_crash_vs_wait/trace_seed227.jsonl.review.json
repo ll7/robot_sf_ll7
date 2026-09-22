@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait/trace_seed227.jsonl",
-  "artifact_sha256": "b32ccbba929872bee1ca307b1769113ab03e04d148af0d7d2a100c7cec172a19",
+  "artifact_sha256": "3183828384546e76541404ff48f11d348b7bece62eba1af121528874edc43a47",
   "claim_boundary": "diagnostic-only evidence for issue #9545; not benchmark evidence and not admitted to the dissertation",
   "dissertation_admission_status": "not_admitted",
   "domain_approval_status": "not_granted",

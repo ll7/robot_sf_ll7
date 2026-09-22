@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait/figure_reward_timeline.png",
-  "artifact_sha256": "f00b858eb8f2eda5f584dc1d04282169e28c20d620ffecc8517e1eeed1b1863c",
+  "artifact_sha256": "ea70ac684f0d53e4b27f679350bc11be2e60912d0e354a7ae50be349fe576e9a",
   "claim_boundary": "diagnostic-only evidence for issue #9545; not benchmark evidence and not admitted to the dissertation",
   "dissertation_admission_status": "not_admitted",
   "domain_approval_status": "not_granted",

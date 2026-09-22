@@ -5,12 +5,27 @@
   "checkpoint_local_path": "output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
   "checkpoint_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
   "checkpoint_sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+  "counterfactual_fork": {
+    "hold_horizon_steps": 60,
+    "hold_start_offset_steps": 20,
+    "rationale": "Fork early enough for the zero-command branch to decelerate before contact; the same measured prefix is replayed for both branches."
+  },
   "eval_reward_note": "Per-step rewards are recomputed live by route_completion_v3 with the final-stage weights; valid as evaluation-time replay under the bound objective, not as a recovered training-time return without training-log corroboration.",
   "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
   "gamma_training_config_declared": null,
   "gamma_used_for_discounted_replay": 0.99,
-  "generated_at_utc": "2026-09-21T10:55:25.534600+00:00",
-  "git_head": "96d1d3fe362abf73b2f33412aa8bbcde15750aa2",
+  "generated_at_utc": "2026-09-22T08:57:23.157386+00:00",
+  "git_head": "bc6b807e7ecbec0ea57164d83655f730c3113162",
+  "observation_contract": {
+    "fallback_or_degraded_execution": false,
+    "occupancy_grid_preserved": true,
+    "predictive_foresight_preserved": true,
+    "source": "RobotEnv raw dict -> normalize_map_observation -> PPOPlanner native dict alignment",
+    "status": "canonical_raw_grid_socnav_with_predictive_foresight"
+  },
+  "predictive_checkpoint_local_path": "output/model_cache/predictive_proxy_selected_v2_full/predictive_proxy_selected_v2_full-predictive_model.pt",
+  "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
+  "predictive_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
   "reward_curriculum": "2 stages; stage0 until_episodes=100 (progress/collision/timeout/terminal only); final stage = full weights above. Checkpoint at ~10M steps is past stage 0; stage-at-checkpoint is inferred, not logged.",
   "reward_impl": "robot_sf/gym_env/reward.py:route_completion_v3_reward",
   "reward_impl_git_blob_sha": "73d9315ad48a0f9da55389088275c760f140b081",
@@ -43,7 +58,8 @@
     "benchmark_adapter": "ppo_action_to_unicycle (mixed), feasibility projection",
     "cbf_safety_filter": "disabled",
     "fallback_to_goal": false,
-    "predictive_foresight": "disabled in diagnostic replay (checkpoint declares predictive keys; PPOPlanner backfills 6 predictive_* keys with space defaults)",
+    "predictive_foresight": "enabled from the registry-pinned predictive checkpoint on CPU; replay fails closed if model loading degrades",
+    "predictive_foresight_device": "cpu",
     "safety_wrapper": "disabled"
   }
 }

@@ -110,6 +110,25 @@ function relatedCasesArguments(value = {}, options = {}) {
   return result;
 }
 
+function materializationArguments(value = {}, options = {}) {
+  const source = { ...options, ...(value || {}) };
+  const operation = String(source.operation_id || operationId("materialize"))
+    .slice(0, CODEX_MAX_OPERATION_ID_LENGTH);
+  if (!CODEX_OPAQUE_ID.test(operation)) throw new Error("operation_id must be opaque");
+  const revision = (name) => {
+    const value = source[name];
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`${name} must be a non-negative integer`);
+    }
+    return value;
+  };
+  return {
+    operation_id: operation,
+    expected_selection_revision: revision("expected_selection_revision"),
+    expected_context_revision: revision("expected_context_revision"),
+  };
+}
+
 function nativeDiagnosticSource(value = {}, options = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ...options };
@@ -237,6 +256,9 @@ export function createServiceFacade(endpoint = "/api/audit") {
   const runNativeDiagnostic = (value = {}, options = {}) => call(
     "run_native_diagnostic", nativeDiagnosticArguments(value, options),
   );
+  const materializeSelected = (value = {}, options = {}) => call(
+    "materialize_selected", materializationArguments(value, options),
+  );
   const codexStart = (value, options = {}) => call("codex_start", codexStartArguments(value, options));
   const codexRead = (value = {}) => call("codex_read", codexReadArguments(value));
   const codexCancel = (value, options = {}) => call("codex_cancel", codexCancelArguments(value, options));
@@ -247,6 +269,7 @@ export function createServiceFacade(endpoint = "/api/audit") {
     syncFinding, sync_finding: syncFinding,
     recordHumanReview, record_human_review: recordHumanReview,
     relatedCases, related_cases: relatedCases,
+    materializeSelected, materialize_selected: materializeSelected,
     runNativeDiagnostic, run_native_diagnostic: runNativeDiagnostic,
     snapshot: () => call("snapshot"),
     codexStart, codex_start: codexStart,
@@ -610,7 +633,7 @@ const ARTIFACT_FIDELITIES = new Set([
   "verified", "diverged", "unverifiable", "unavailable",
 ]);
 const ARTIFACT_RESULT_STATUSES = new Set([
-  "complete", "committed", "ok", "selected", "conflict", "unavailable",
+  "complete", "partial", "committed", "ok", "selected", "conflict", "unavailable",
   "denied", "failed", "cancelled",
 ]);
 const ARTIFACT_SENSITIVE_TEXT = /(?:token|secret|credential|bearer|password|private)/i;
@@ -908,6 +931,33 @@ function artifactStatusResultProjection(result, expectedBinding = {}) {
       } : {}),
     },
   };
+}
+
+function materializationResultProjection(result, expectedBinding = {}, currentStatus = {}) {
+  const status = [
+    "complete", "partial", "committed", "ok", "selected", "conflict",
+    "unavailable", "denied", "failed", "cancelled",
+  ].includes(result?.status) ? result.status : "failed";
+  const reason = artifactReason(result?.reason, "materialization result is unavailable");
+  const classification = typeof result?.classification === "string"
+    && ARTIFACT_CLASSIFICATIONS.has(result.classification) ? result.classification : null;
+  const fidelity = typeof result?.fidelity === "string"
+    && ARTIFACT_FIDELITIES.has(result.fidelity) ? result.fidelity : null;
+  const successful = ["complete", "partial", "committed", "ok", "selected"].includes(status)
+    && classification !== null && fidelity !== null;
+  const materialization = {
+    status: successful ? "available" : "unavailable",
+    reason: successful ? reason : (reason || "materialization result is unavailable"),
+    diagnostic_only: true,
+    classification: successful ? classification : null,
+    fidelity: successful ? fidelity : null,
+    ...(status !== "failed" ? { result_status: status } : {}),
+  };
+  return normalizeArtifactStatus({
+    ...expectedBinding,
+    materialization,
+    native_diagnostic: currentStatus?.native_diagnostic,
+  }, expectedBinding?.episode_id, expectedBinding, true);
 }
 
 function artifactStatusSummary(status) {
@@ -1372,6 +1422,7 @@ export class AuditWorkbenchController {
       codex: normalizeCodexResult(this.model.codex || this.model.codex_activity || null),
       codexPrompt: "",
       codexStartInFlight: false,
+      materializationInFlight: false,
       next: clone(this.model.next || null),
       artifactStatus: normalizeArtifactStatus(
         this.model.artifact_status || this.model.service_snapshot?.artifact_status,
@@ -1411,6 +1462,7 @@ export class AuditWorkbenchController {
     this.state.nativeDiagnosticInFlight = false;
     this._codexRequestEpoch += 1;
     this.state.codexStartInFlight = false;
+    this.state.materializationInFlight = false;
     this.panels?.unmount?.();
     this.panels = null;
     this.editor?.unmount?.();
@@ -1450,6 +1502,7 @@ export class AuditWorkbenchController {
       native_diagnostic_input: clone(this.state.nativeDiagnosticInput),
       codex: clone(this.state.codex),
       codex_start_in_flight: this.state.codexStartInFlight,
+      materialization_in_flight: this.state.materializationInFlight,
       related_cases: clone(this.state.relatedCases),
       panes: clone(this.state.panes),
       editor: this.editor?.snapshot?.() || null,
@@ -1924,6 +1977,7 @@ export class AuditWorkbenchController {
       this.state.presentationStatus = result.presentation_status || result.status;
       this.state.inspectionStatus = result.inspection_status || null;
       this.state.inspectionReason = result.inspection_reason || result.reason || "";
+      this.state.materializationInFlight = false;
       if (result.status === "empty") {
         this.state.selected = null;
         this.state.artifactStatus = normalizeArtifactStatus(null);
@@ -2311,6 +2365,96 @@ export class AuditWorkbenchController {
     return this.snapshot();
   }
 
+  _materializationMethod() {
+    const method = this.facade?.materialize_selected || this.facade?.materializeSelected;
+    return typeof method === "function" ? method.bind(this.facade) : null;
+  }
+
+  _materializationUnavailable(reason = "Materialization capability is unavailable") {
+    const binding = this._artifactStatusBinding(this.state.selected?.episode_id, {
+      context: this._serviceCas.context,
+      packet: this.state.selected,
+    });
+    this.state.artifactStatus = normalizeArtifactStatus({
+      ...binding,
+      materialization: { status: "unavailable", reason },
+      native_diagnostic: this.state.artifactStatus.native_diagnostic,
+    }, this.state.selected?.episode_id, binding, true);
+    this.render({ captureEditor: false });
+    return clone(this.state.artifactStatus);
+  }
+
+  async materializeSelected(options = {}) {
+    const method = this._materializationMethod();
+    if (!method) return this._materializationUnavailable();
+    const selectedEpisodeId = this.state.selected?.episode_id;
+    if (!selectedEpisodeId) return this._materializationUnavailable("select an audit case before materializing");
+    if (this.state.materializationInFlight) {
+      return clone(this.state.artifactStatus);
+    }
+    const selectionEpoch = this._selectionEpoch;
+    const selectionRevision = this.state.selectionRevision;
+    const contextRevision = this._serviceCas.contextRevision
+      ?? this.state.selected?.context_revision
+      ?? this.state.selected?.editor_model?.context?.context_revision;
+    if (!Number.isInteger(contextRevision) || contextRevision < 0) {
+      return this._materializationUnavailable("selected artifact context revision is unavailable");
+    }
+    const source = options && typeof options === "object" ? options : {};
+    const request = materializationArguments({
+      ...source,
+      operation_id: source.operation_id || operationId("materialize"),
+      expected_selection_revision: selectionRevision,
+      expected_context_revision: contextRevision,
+    });
+    this.state.materializationInFlight = true;
+    this.render({ captureEditor: false });
+    try {
+      const result = await method(request);
+      if (selectionEpoch !== this._selectionEpoch
+        || selectionRevision !== this.state.selectionRevision
+        || selectedEpisodeId !== this.state.selected?.episode_id) {
+        return this.snapshot();
+      }
+      const binding = this._artifactStatusBinding(selectedEpisodeId, {
+        context: this._serviceCas.context,
+        packet: this.state.selected,
+      });
+      this.state.artifactStatus = materializationResultProjection(
+        result, binding, this.state.artifactStatus,
+      );
+      this.render({ captureEditor: false });
+      return clone(this.state.artifactStatus);
+    } catch (error) {
+      if (selectionEpoch !== this._selectionEpoch
+        || selectionRevision !== this.state.selectionRevision
+        || selectedEpisodeId !== this.state.selected?.episode_id) throw error;
+      const status = error?.status === 409 || error?.status === "conflict"
+        ? "conflict" : (error?.status === 501 || error?.status === "unavailable"
+          ? "unavailable" : "failed");
+      const binding = this._artifactStatusBinding(selectedEpisodeId, {
+        context: this._serviceCas.context,
+        packet: this.state.selected,
+      });
+      this.state.artifactStatus = materializationResultProjection({
+        status, reason: error?.message || "materialization failed",
+      }, binding, this.state.artifactStatus);
+      this.render({ captureEditor: false });
+      throw serviceError(error, "materialization failed");
+    } finally {
+      if (selectionEpoch === this._selectionEpoch
+        && selectionRevision === this.state.selectionRevision
+        && selectedEpisodeId === this.state.selected?.episode_id) {
+        this.state.materializationInFlight = false;
+        this.render({ captureEditor: false });
+      }
+    }
+  }
+
+  materialize_selected(options = {}) {
+    return this.materializeSelected(options);
+  }
+
   _codexMethod(snakeName, camelName) {
     const method = this.facade?.[snakeName] || this.facade?.[camelName];
     return typeof method === "function" ? method.bind(this.facade) : null;
@@ -2613,6 +2757,30 @@ export class AuditWorkbenchController {
       this._refs.queueNext = text(documentRef, "p", "");
       queuePane.body.appendChild(this._refs.queueNext);
       this._renderQueueSummary();
+
+      const materialize = this._materializationMethod();
+      if (materialize) {
+        const materializationButton = button(
+          documentRef,
+          this.state.materializationInFlight
+            ? "Materialization in progress" : "Materialize selected artifact",
+          () => this.materializeSelected().catch(() => {}),
+          { "aria-label": "Materialize selected artifact" },
+        );
+        materializationButton.disabled = this.state.materializationInFlight;
+        if (materializationButton.disabled) materializationButton.setAttribute?.("disabled", "");
+        else materializationButton.removeAttribute?.("disabled");
+        queuePane.body.appendChild(materializationButton);
+        const materializationStatus = this.state.materializationInFlight
+          ? "Materialization is running; the selected case remains bound to its current context."
+          : `Materialization action: ${this.state.artifactStatus.materialization.status} — ${this.state.artifactStatus.materialization.reason}`;
+        queuePane.body.appendChild(text(
+          documentRef,
+          "p",
+          materializationStatus,
+          this.state.materializationInFlight ? "audit-status" : "audit-warning",
+        ));
+      }
 
       const nativeSection = documentRef.createElement("section");
       nativeSection.className = "audit-native-diagnostic";

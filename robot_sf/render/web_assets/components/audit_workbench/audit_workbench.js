@@ -1418,6 +1418,8 @@ export class AuditWorkbenchController {
     this._serviceCas = {};
     this._nativeDiagnosticRequestEpoch = 0;
     this._codexRequestEpoch = 0;
+    this._codexReconnectOperationId = null;
+    this._codexReconnectSessionId = null;
     this._recordProjection = clone(
       this.model.record_projection || this.model.service_snapshot?.record_projection || null,
     );
@@ -1450,6 +1452,7 @@ export class AuditWorkbenchController {
       codex: normalizeCodexResult(this.model.codex || this.model.codex_activity || null),
       codexPrompt: "",
       codexStartInFlight: false,
+      codexReconnectInFlight: false,
       materializationInFlight: false,
       next: clone(this.model.next || null),
       artifactStatus: normalizeArtifactStatus(
@@ -1490,6 +1493,9 @@ export class AuditWorkbenchController {
     this.state.nativeDiagnosticInFlight = false;
     this._codexRequestEpoch += 1;
     this.state.codexStartInFlight = false;
+    this.state.codexReconnectInFlight = false;
+    this._codexReconnectOperationId = null;
+    this._codexReconnectSessionId = null;
     this.state.materializationInFlight = false;
     this.panels?.unmount?.();
     this.panels = null;
@@ -1530,6 +1536,7 @@ export class AuditWorkbenchController {
       native_diagnostic_input: clone(this.state.nativeDiagnosticInput),
       codex: clone(this.state.codex),
       codex_start_in_flight: this.state.codexStartInFlight,
+      codex_reconnect_in_flight: this.state.codexReconnectInFlight,
       materialization_in_flight: this.state.materializationInFlight,
       related_cases: clone(this.state.relatedCases),
       panes: clone(this.state.panes),
@@ -2560,6 +2567,9 @@ export class AuditWorkbenchController {
   _resetCodexForSelection(reason = "Codex activity is bound to the selected case") {
     this._codexRequestEpoch += 1;
     this.state.codexStartInFlight = false;
+    this.state.codexReconnectInFlight = false;
+    this._codexReconnectOperationId = null;
+    this._codexReconnectSessionId = null;
     this.state.codexPrompt = "";
     this.state.codex = normalizeCodexResult({ status: "unavailable", reason }, reason);
   }
@@ -2571,6 +2581,9 @@ export class AuditWorkbenchController {
   async codexStart(prompt = "", options = {}) {
     const method = this._codexMethod("codex_start", "codexStart");
     if (!method) return this._codexUnavailable();
+    if (this.state.codexReconnectInFlight) {
+      return this._codexUnavailable("A Codex reconnect is already in flight");
+    }
     if (this.state.codexStartInFlight) {
       return this._codexUnavailable("A Codex turn is already in flight");
     }
@@ -2622,7 +2635,7 @@ export class AuditWorkbenchController {
   async codexRead(options = {}) {
     const method = this._codexMethod("codex_read", "codexRead");
     if (!method) return this._codexUnavailable();
-    if (this.state.codexStartInFlight) {
+    if (this.state.codexStartInFlight || this.state.codexReconnectInFlight) {
       return clone(this.state.codex);
     }
     const selectionEpoch = this._selectionEpoch;
@@ -2658,6 +2671,7 @@ export class AuditWorkbenchController {
   async codexReconnect(options = {}) {
     const method = this._codexMethod("codex_reconnect", "codexReconnect");
     if (!method) return this._codexUnavailable("Codex reconnect capability is unavailable");
+    if (this.state.codexReconnectInFlight) return clone(this.state.codex);
     if (!this.state.selected) return this._codexUnavailable("select an audit case before reconnecting Codex");
     const source = options && typeof options === "object" ? options : {};
     const sessionId = source.codex_session_id || this.state.codex.codex_session_id;
@@ -2673,24 +2687,40 @@ export class AuditWorkbenchController {
     const selectionEpoch = this._selectionEpoch;
     const selectionRevision = this.state.selectionRevision;
     const requestEpoch = ++this._codexRequestEpoch;
+    const pendingOperationId = this._codexReconnectSessionId === sessionId
+      ? this._codexReconnectOperationId : null;
     let request;
     try {
       request = codexReconnectArguments({
         ...source,
         codex_session_id: sessionId,
-        operation_id: source.operation_id || operationId("codex-reconnect"),
+        operation_id: source.operation_id || pendingOperationId || operationId("codex-reconnect"),
         expected_selection_revision: selectionRevision,
         expected_context_revision: contextRevision,
       });
     } catch (error) {
       return this._codexUnavailable(error?.message || "Codex reconnect request is invalid");
     }
+    this._codexReconnectOperationId = request.operation_id;
+    this._codexReconnectSessionId = sessionId;
+    this.state.codexReconnectInFlight = true;
+    this.state.codex = normalizeCodexResult({
+      ...this.state.codex,
+      status: "running",
+      operation_id: request.operation_id,
+      codex_session_id: sessionId,
+      reason: "Codex reconnect is in flight; retrying uses the same operation",
+    });
+    this.render({ captureEditor: false });
+    const selectionIsCurrent = () => selectionEpoch === this._selectionEpoch
+      && selectionRevision === this.state.selectionRevision;
     try {
       const result = await method(request);
       if (!this._codexRequestCurrent(requestEpoch, selectionEpoch, selectionRevision)) {
         return this.snapshot();
       }
       this.state.codex = normalizeCodexResult(result);
+      this.state.codexReconnectInFlight = false;
       this.render({ captureEditor: false });
       return clone(this.state.codex);
     } catch (error) {
@@ -2701,8 +2731,14 @@ export class AuditWorkbenchController {
         operation_id: request.operation_id,
         codex_session_id: sessionId,
       });
+      this.state.codexReconnectInFlight = false;
       this.render({ captureEditor: false });
       throw serviceError(error, "Codex reconnect failed");
+    } finally {
+      if (selectionIsCurrent()) {
+        this.state.codexReconnectInFlight = false;
+        this.render({ captureEditor: false });
+      }
     }
   }
 
@@ -3199,7 +3235,8 @@ export class AuditWorkbenchController {
         () => this.codexStart(prompt.value).catch(() => {}),
         { "aria-label": "Start Codex diagnostic turn" },
       );
-      startButton.disabled = this.state.codexStartInFlight || !this.state.selected;
+      startButton.disabled = this.state.codexStartInFlight
+        || this.state.codexReconnectInFlight || !this.state.selected;
       if (startButton.disabled) startButton.setAttribute?.("disabled", "");
       agentPane.body.appendChild(startButton);
       const readButton = button(
@@ -3208,17 +3245,19 @@ export class AuditWorkbenchController {
         () => this.codexRead().catch(() => {}),
         { "aria-label": "Refresh Codex activity" },
       );
-      readButton.disabled = this.state.codexStartInFlight;
+      readButton.disabled = this.state.codexStartInFlight || this.state.codexReconnectInFlight;
       if (readButton.disabled) readButton.setAttribute?.("disabled", "");
       agentPane.body.appendChild(readButton);
       if (codexReconnect && codex.codex_session_id) {
         const reconnectButton = button(
           documentRef,
-          "Reconnect Codex session",
+          this.state.codexReconnectInFlight
+            ? "Reconnecting Codex session" : "Reconnect Codex session",
           () => this.codexReconnect().catch(() => {}),
           { "aria-label": "Reconnect Codex session" },
         );
-        reconnectButton.disabled = this.state.codexStartInFlight || !this.state.selected;
+        reconnectButton.disabled = this.state.codexStartInFlight
+          || this.state.codexReconnectInFlight || !this.state.selected;
         if (reconnectButton.disabled) reconnectButton.setAttribute?.("disabled", "");
         agentPane.body.appendChild(reconnectButton);
       }
@@ -3228,7 +3267,8 @@ export class AuditWorkbenchController {
         () => this.codexCancel().catch(() => {}),
         { "aria-label": "Cancel settled Codex turn" },
       );
-      cancelButton.disabled = this.state.codexStartInFlight || !codex.operation_id;
+      cancelButton.disabled = this.state.codexStartInFlight
+        || this.state.codexReconnectInFlight || !codex.operation_id;
       if (cancelButton.disabled) cancelButton.setAttribute?.("disabled", "");
       agentPane.body.appendChild(cancelButton);
       if (this.state.codexStartInFlight) {

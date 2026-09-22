@@ -1359,7 +1359,7 @@ def _codex_result_projection(  # noqa: C901, PLR0912, PLR0915
 def _codex_result_binding_mismatch(  # noqa: C901, PLR0912
     value: Any,
     *,
-    operation_id: str,
+    operation_id: str | None,
     expected_context: Any,
     expected_source_revision: Any,
     expected_source_digest: Any,
@@ -1387,7 +1387,12 @@ def _codex_result_binding_mismatch(  # noqa: C901, PLR0912
 
     for candidate in mappings:
         for key in ("operation_id", "last_operation_id"):
-            if key in candidate and candidate[key] is not None and candidate[key] != operation_id:
+            if (
+                operation_id is not None
+                and key in candidate
+                and candidate[key] is not None
+                and candidate[key] != operation_id
+            ):
                 return "Codex result operation binding does not match the request"
 
     for candidate in mappings:
@@ -1575,6 +1580,8 @@ class ServiceAuditWorkbenchFacade:
         self._codex_client = codex_client
         self._codex_state_lock = threading.RLock()
         self._codex_start_in_flight = False
+        self._codex_reconnect_in_flight: set[tuple[str, str]] = set()
+        self._codex_reconnect_receipts: dict[tuple[str, str], dict[str, Any]] = {}
         self._codex_session_handle: Any = None
         self._codex_operation_id: str | None = None
         self._codex_session_context: Any = None
@@ -1607,6 +1614,10 @@ class ServiceAuditWorkbenchFacade:
         ).hexdigest()[:24]
         self._selection_epoch = 0
         self._queue_revisions: dict[str, Any] = {}
+        # This identity is fixed by the successful queue selection.  Snapshot
+        # reads may refresh ``_queue_revisions`` for presentation, but they
+        # must never replace the CAS baseline used for a Codex admission.
+        self._selection_queue_revisions: dict[str, Any] = {}
         selected_episode = _service_attr(self._context, "episode_id")
         self._selected_episode_id = str(selected_episode) if selected_episode else None
         if self._codex_client is not None:
@@ -1865,7 +1876,9 @@ class ServiceAuditWorkbenchFacade:
         initial_selection = self._selection_epoch
         initial_context = deepcopy(self._context)
         initial_source_revision = self._source_revision()
-        initial_queue = self._codex_queue_revisions(self._queue_revisions, require_complete=True)
+        initial_queue = self._codex_queue_revisions(
+            self._selection_queue_revisions, require_complete=True
+        )
         if not _is_revision(self._context_revision()) or initial_source_revision is None:
             return None, self._codex_local_result(
                 "unavailable", "Codex start requires an authoritative context and source"
@@ -2061,7 +2074,9 @@ class ServiceAuditWorkbenchFacade:
             with self._codex_state_lock:
                 self._codex_start_in_flight = False
 
-    def _codex_read(self, *, operation_id: str | None = None) -> Mapping[str, Any]:  # noqa: C901
+    def _codex_read(  # noqa: C901, PLR0912
+        self, *, operation_id: str | None = None
+    ) -> Mapping[str, Any]:
         """Read only the authenticated BA-05 activity projection, when accepted.
 
         Returns:
@@ -2086,6 +2101,37 @@ class ServiceAuditWorkbenchFacade:
             or self._token in operation_id
         ):
             return self._codex_local_result("failed", "operation_id is invalid")
+        retained_session = self._codex_session_handle is not None
+        expected_context = deepcopy(self._context)
+        if retained_session:
+            binding_failure = self._codex_session_binding_failure(expected_context)
+            if binding_failure is not None:
+                return self._codex_local_result("conflict", binding_failure)
+            context_operation_id = self._codex_operation_id or operation_id or "codex-read"
+            context_result = self._call_service(
+                "read_context", operation_id=f"{context_operation_id}:context"
+            )
+            returned_context = _service_attr(context_result, "context")
+            candidate_context = _service_attr(context_result, "value")
+            if (
+                returned_context is None
+                and _service_attr(candidate_context, "context_revision") is not None
+            ):
+                returned_context = candidate_context
+            if not _result_succeeded(context_result) or returned_context is None:
+                return self._codex_local_result(
+                    "unavailable", "BA-05 Codex read could not revalidate the audit context"
+                )
+            if not _context_matches_request(expected_context, returned_context):
+                return self._codex_binding_conflict(
+                    "Codex read selection context is stale",
+                    expected_context=expected_context,
+                    actual_context=returned_context,
+                )
+            expected_context = deepcopy(returned_context)
+            binding_failure = self._codex_session_binding_failure(expected_context)
+            if binding_failure is not None:
+                return self._codex_local_result("conflict", binding_failure)
         parameters, _accepts_kwargs = self._codex_signature(method)
         token_name = (
             "audit_token" if "audit_token" in parameters and "token" not in parameters else "token"
@@ -2101,13 +2147,24 @@ class ServiceAuditWorkbenchFacade:
         if session_id is not None and "codex_session_id" in parameters:
             kwargs["codex_session_id"] = session_id
         if "context" in parameters:
-            kwargs["context"] = deepcopy(self._context)
+            kwargs["context"] = deepcopy(expected_context)
         if "limit" in parameters:
             kwargs["limit"] = 64
         try:
             raw_result = method(self._session, **kwargs)
         except Exception:  # noqa: BLE001 - activity-read details stay server-side
             return self._codex_local_result("unavailable", "BA-05 Codex activity read failed")
+        if retained_session:
+            expected_read_operation_id = operation_id or self._codex_operation_id
+            result_binding_failure = _codex_result_binding_mismatch(
+                raw_result,
+                operation_id=expected_read_operation_id,
+                expected_context=expected_context,
+                expected_source_revision=self._source_revision(),
+                expected_source_digest=_service_attr(expected_context, "source_identity"),
+            )
+            if result_binding_failure is not None:
+                return self._codex_local_result("conflict", result_binding_failure)
         projected = _codex_result_projection(raw_result, secret=self._token)
         return (
             projected
@@ -2117,7 +2174,7 @@ class ServiceAuditWorkbenchFacade:
             )
         )
 
-    def _codex_reconnect(  # noqa: C901, PLR0912
+    def _codex_reconnect(  # noqa: C901, PLR0912, PLR0915
         self,
         *,
         codex_session_id: str,
@@ -2202,6 +2259,25 @@ class ServiceAuditWorkbenchFacade:
             return self._codex_local_result(
                 "unavailable", "BA-05 Codex reconnect has no authoritative source binding"
             )
+        reconnect_key = (codex_session_id, operation_id)
+        with self._codex_state_lock:
+            cached = self._codex_reconnect_receipts.get(reconnect_key)
+            if cached is not None:
+                cache_matches = (
+                    cached.get("selection_epoch") == self._selection_epoch
+                    and cached.get("context_revision") == self._context_revision()
+                    and cached.get("source_revision") == expected_source_revision
+                    and cached.get("source_digest") == expected_source_digest
+                )
+                if cache_matches:
+                    cached_result = cached.get("result")
+                    if isinstance(cached_result, Mapping):
+                        return deepcopy(cached_result)
+                self._codex_reconnect_receipts.pop(reconnect_key, None)
+            if reconnect_key in self._codex_reconnect_in_flight:
+                return self._codex_local_result(
+                    "unavailable", "Codex reconnect is already in flight; retry the same operation"
+                )
         method = getattr(self._codex_client, "reconnect", None)
         if not callable(method):
             return self._codex_local_result(
@@ -2228,9 +2304,17 @@ class ServiceAuditWorkbenchFacade:
             "operation_id": operation_id,
             token_name: self._token,
         }
+
+        def release_reconnect() -> None:
+            with self._codex_state_lock:
+                self._codex_reconnect_in_flight.discard(reconnect_key)
+
+        with self._codex_state_lock:
+            self._codex_reconnect_in_flight.add(reconnect_key)
         try:
             raw_result = method(codex_session_id, **kwargs)
         except Exception:  # noqa: BLE001 - provider/authority details stay server-side
+            release_reconnect()
             return self._codex_local_result("unavailable", "Codex provider reconnect failed")
         binding_failure = _codex_result_context_binding_mismatch(
             raw_result,
@@ -2240,20 +2324,24 @@ class ServiceAuditWorkbenchFacade:
             expected_source_digest=expected_source_digest,
         )
         if binding_failure is not None:
+            release_reconnect()
             return self._codex_local_result("conflict", binding_failure)
         projected = _codex_result_projection(raw_result, secret=self._token)
         status = projected.get("status")
         if status not in {"complete", "committed", "ok", "saved", "cancelled"}:
+            release_reconnect()
             return projected or self._codex_local_result(
                 "unavailable", "Codex session recovery returned no status"
             )
         session_handle = _service_attr(raw_result, "session")
         if session_handle is None:
+            release_reconnect()
             return self._codex_local_result(
                 "unavailable", "Codex provider reconnect returned no durable session"
             )
         returned_session_id = _service_attr(session_handle, "session_id")
         if returned_session_id != codex_session_id:
+            release_reconnect()
             return self._codex_local_result(
                 "conflict", "Codex provider reconnect returned a foreign session"
             )
@@ -2262,6 +2350,7 @@ class ServiceAuditWorkbenchFacade:
             returned_result_session_id is not None
             and returned_result_session_id != codex_session_id
         ):
+            release_reconnect()
             return self._codex_local_result(
                 "conflict", "Codex provider reconnect returned a foreign session binding"
             )
@@ -2271,11 +2360,23 @@ class ServiceAuditWorkbenchFacade:
             self._codex_session_context = deepcopy(authoritative_context)
             self._codex_session_source_revision = expected_source_revision
             self._codex_session_source_digest = expected_source_digest
-        projected.setdefault("operation_id", operation_id)
-        projected.setdefault("context", _codex_context(authoritative_context, secret=self._token))
-        projected.setdefault(
-            "codex_session_id", _service_attr(session_handle, "session_id", codex_session_id)
-        )
+            projected.setdefault("operation_id", operation_id)
+            projected.setdefault(
+                "context", _codex_context(authoritative_context, secret=self._token)
+            )
+            projected.setdefault(
+                "codex_session_id", _service_attr(session_handle, "session_id", codex_session_id)
+            )
+            self._codex_reconnect_receipts[reconnect_key] = {
+                "selection_epoch": self._selection_epoch,
+                "context_revision": self._context_revision(),
+                "source_revision": expected_source_revision,
+                "source_digest": expected_source_digest,
+                "result": deepcopy(projected),
+            }
+            while len(self._codex_reconnect_receipts) > 32:
+                self._codex_reconnect_receipts.pop(next(iter(self._codex_reconnect_receipts)))
+        release_reconnect()
         return projected
 
     def _codex_cancel(  # noqa: C901
@@ -2729,6 +2830,7 @@ class ServiceAuditWorkbenchFacade:
             # also makes a subsequent browser write fail closed.
             self._selected_packet = None
             self._selected_episode_id = None
+            self._selection_queue_revisions = {}
             self._last_episode = None
             self._last_next = None
             self._last_queue = None
@@ -2763,6 +2865,7 @@ class ServiceAuditWorkbenchFacade:
             for key, item in self._queue_revisions.items()
             if item is not None
         }
+        self._selection_queue_revisions = dict(self._queue_revisions)
         # Queue/browser payloads are selection hints, not trace authority.
         self._attach_retained_scene(packet, episode_result, operation_id=operation_id)
         envelope["value"] = _safe_service_value(value, secret=self._token)
@@ -4175,6 +4278,10 @@ class ServiceAuditWorkbenchFacade:
             for key, item in queue_revisions.items()
             if item is not None
         }
+        # Keep the snapshot's fresh read available to generic service CAS
+        # writes, but leave the selected queue identity immutable until the
+        # next successful queue selection.  Otherwise a read between the
+        # selection and Codex admission could silently move the CAS baseline.
         self._queue_revisions.update(queue_revisions)
         snapshot: dict[str, Any] = {
             "schema_version": AUDIT_SERVICE_WORKBENCH_SCHEMA_VERSION,

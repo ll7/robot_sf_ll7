@@ -270,6 +270,9 @@ class _FakeCodexClient:
         self.start_entered = threading.Event()
         self.release_start = threading.Event()
         self.block_start = False
+        self.reconnect_entered = threading.Event()
+        self.release_reconnect = threading.Event()
+        self.block_reconnect = False
         self.foreign_start_binding = False
         self.foreign_cancel_binding = False
         self.foreign_reconnect_binding = False
@@ -353,6 +356,9 @@ class _FakeCodexClient:
                 {"operation_id": operation_id, "audit_token": audit_token},
             )
         )
+        if self.block_reconnect:
+            self.reconnect_entered.set()
+            assert self.release_reconnect.wait(timeout=5)
         result: dict[str, Any] = {
             "status": "complete",
             "session": self.session,
@@ -1425,6 +1431,75 @@ def test_service_facade_codex_reconnect_rehydrates_durable_session() -> None:
     assert facade._codex_operation_id == "codex-reconnect-1"
 
 
+def test_service_facade_codex_reconnect_keeps_selection_queue_cas_after_snapshot() -> None:
+    """A fresh snapshot cannot replace the queue identity captured by Next."""
+    service, client, facade, selected = _new_reconnect_facade()
+    service.queue_state_revision += 1
+    service.queue_input_revision += 1
+    service.queue_input_identity = "queue-input-new"
+
+    snapshot = facade.snapshot()
+    assert snapshot["queue_state_revision"] == service.queue_state_revision
+
+    result = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-queue-race",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+
+    assert result["status"] == "conflict"
+    assert "queue selection is stale" in result["reason"]
+    assert not client.calls
+
+
+def test_service_facade_codex_reconnect_deduplicates_in_flight_retry() -> None:
+    """A double-click waits for one provider call and replays its receipt."""
+    _service, client, facade, selected = _new_reconnect_facade()
+    client.block_reconnect = True
+    first_result: list[dict[str, Any]] = []
+
+    def run_reconnect() -> None:
+        first_result.append(
+            dict(
+                facade.codex_reconnect(
+                    codex_session_id="codex-session-private",
+                    operation_id="codex-reconnect-idempotent",
+                    expected_selection_revision=selected["selection_revision"],
+                    expected_context_revision=4,
+                )
+            )
+        )
+
+    thread = threading.Thread(target=run_reconnect)
+    thread.start()
+    assert client.reconnect_entered.wait(timeout=5)
+
+    duplicate = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-idempotent",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert duplicate["status"] == "unavailable"
+    assert "already in flight" in duplicate["reason"]
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
+
+    client.release_reconnect.set()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert first_result[0]["status"] == "complete"
+
+    replay = facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-idempotent",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    assert replay == first_result[0]
+    assert len([call for call in client.calls if call[0] == "reconnect"]) == 1
+
+
 def test_service_facade_codex_reconnect_rejects_stale_or_foreign_binding() -> None:
     """A stale selection or foreign recovery receipt never hydrates a handle."""
     service = _FakeAuditService()
@@ -2178,6 +2253,58 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
         assert forbidden not in result_json
     read_call = next(call for call in service.calls if call[0] == "read_codex_activity")
     assert read_call[1][0] is facade._session
+    assert read_call[2]["token"] == _FakeSession.session_token
+    assert read_call[2]["context"] == service.context
+
+
+def test_service_facade_codex_read_rejects_foreign_post_reconnect_binding() -> None:
+    """A read after reconnect cannot project a foreign nested session."""
+    service, _client, facade, selected = _new_reconnect_facade()
+    facade.codex_reconnect(
+        codex_session_id="codex-session-private",
+        operation_id="codex-reconnect-read-binding",
+        expected_selection_revision=selected["selection_revision"],
+        expected_context_revision=4,
+    )
+    foreign_context = _FakeContext(context_revision=99, episode_id="foreign-episode")
+
+    def read_codex_activity(
+        session: Any,
+        *,
+        token: str,
+        operation_id: str | None = None,
+        codex_session_id: str | None = None,
+        context: Any = None,
+    ) -> dict[str, Any]:
+        service._record(
+            "read_codex_activity",
+            session,
+            token=token,
+            operation_id=operation_id,
+            codex_session_id=codex_session_id,
+            context=context,
+        )
+        return {
+            "status": "complete",
+            "context": service.context,
+            "source": {
+                "source_revision": "source-revision-1",
+                "source_digest": "source-digest-1",
+            },
+            "session": {
+                "context": foreign_context,
+                "source_revision": "foreign-source-revision",
+                "source_digest": "foreign-source-digest",
+            },
+        }
+
+    service.read_codex_activity = read_codex_activity
+    result = facade.codex_read(operation_id="codex-read-foreign-binding")
+
+    assert result["status"] == "conflict"
+    assert "context binding does not match" in result["reason"]
+    assert "foreign-episode" not in json.dumps(result, sort_keys=True)
+    read_call = next(call for call in service.calls if call[0] == "read_codex_activity")
     assert read_call[2]["token"] == _FakeSession.session_token
     assert read_call[2]["context"] == service.context
 

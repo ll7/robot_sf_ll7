@@ -1761,6 +1761,51 @@ assert.equal(staleCodexController.snapshot().selected.episode_id, "codex-new");
 assert.equal(staleCodexController.snapshot().codex.status, "unavailable");
 staleCodexController.unmount();
 
+const reconnectGate = deferred();
+const reconnectCalls = [];
+const reconnectDocument = {
+  ...document,
+  packet: { ...caseValue("codex-reconnect", false), context_revision: 2 },
+  selection_revision: 1,
+  context: { context_revision: 2, episode_id: "codex-reconnect" },
+  codex: { status: "complete", codex_session_id: "codex-session-runtime" },
+};
+const reconnectFacade = {
+  next: async () => ({ status: "selected" }),
+  snapshot: async () => ({ status: "complete" }),
+  codex_start: async () => ({ status: "unavailable" }),
+  codex_read: async () => ({ status: "unavailable" }),
+  codex_cancel: async () => ({ status: "unavailable" }),
+  codex_reconnect: async (args) => {
+    reconnectCalls.push(args);
+    return reconnectGate.promise;
+  },
+};
+const reconnectController = new AuditWorkbenchController(
+  reconnectDocument,
+  new Element(new Document(), "main"),
+  { facade: reconnectFacade },
+);
+const firstReconnect = reconnectController.codexReconnect();
+await Promise.resolve();
+assert.equal(reconnectController.snapshot().codex_reconnect_in_flight, true);
+const duplicateReconnect = await reconnectController.codexReconnect();
+assert.equal(duplicateReconnect.status, "running");
+assert.equal(reconnectCalls.length, 1);
+const reconnectOperationId = reconnectCalls[0].operation_id;
+reconnectGate.resolve({
+  status: "complete",
+  operation_id: reconnectOperationId,
+  codex_session_id: "codex-session-runtime",
+  context: { context_revision: 2, episode_id: "codex-reconnect" },
+});
+await firstReconnect;
+assert.equal(reconnectController.snapshot().codex_reconnect_in_flight, false);
+await reconnectController.codexReconnect();
+assert.equal(reconnectCalls.length, 2);
+assert.equal(reconnectCalls[1].operation_id, reconnectOperationId);
+reconnectController.unmount();
+
 const xssActivity = Array.from({ length: 80 }, (_, index) => ({
   message: `<img src=x onerror=alert(${index})>${"x".repeat(700)}`,
   evidence_ids: ["evidence-safe"],

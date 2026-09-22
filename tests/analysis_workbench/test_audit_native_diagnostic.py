@@ -78,6 +78,20 @@ class _ReadyOnlyConnection:
         pass
 
 
+class _NeverReadyConnection:
+    def __init__(self, poll_budgets: list[float], cancel_event: threading.Event) -> None:
+        self.poll_budgets = poll_budgets
+        self.cancel_event = cancel_event
+
+    def poll(self, timeout: float) -> bool:
+        self.poll_budgets.append(timeout)
+        self.cancel_event.set()
+        return False
+
+    def close(self) -> None:
+        pass
+
+
 class _BoundedFakeProcess:
     pid = 1
 
@@ -107,6 +121,28 @@ class _BoundedFakeContext:
     def Pipe(self, *, duplex: bool) -> tuple[_ReadyOnlyConnection, _ReadyOnlyConnection]:
         assert duplex is False
         return _ReadyOnlyConnection(self.poll_budgets), _ReadyOnlyConnection([])
+
+    def Process(self, **_kwargs: Any) -> _BoundedFakeProcess:
+        return self.process
+
+
+class _StartupBudgetFakeContext:
+    def __init__(
+        self,
+        process: _BoundedFakeProcess,
+        poll_budgets: list[float],
+        cancel_event: threading.Event,
+    ) -> None:
+        self.process = process
+        self.poll_budgets = poll_budgets
+        self.cancel_event = cancel_event
+
+    def Pipe(self, *, duplex: bool) -> tuple[_NeverReadyConnection, _ReadyOnlyConnection]:
+        assert duplex is False
+        return (
+            _NeverReadyConnection(self.poll_budgets, self.cancel_event),
+            _ReadyOnlyConnection([]),
+        )
 
     def Process(self, **_kwargs: Any) -> _BoundedFakeProcess:
         return self.process
@@ -1199,9 +1235,11 @@ def test_native_child_deadline_terminates_owned_process(native_case: dict[str, A
     assert result["settled"] is True
 
 
-def test_native_child_startup_budget_is_separate_from_execution_deadline(
+def test_native_child_execution_deadline_starts_after_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Prove the caller deadline starts after child import readiness."""
+
     poll_budgets: list[float] = []
     process = _BoundedFakeProcess()
     context = _BoundedFakeContext(process, poll_budgets)
@@ -1220,5 +1258,36 @@ def test_native_child_startup_budget_is_separate_from_execution_deadline(
     assert poll_budgets[1] == pytest.approx(0.0005)
     assert result["status"] == native.STATUS_UNAVAILABLE
     assert result["reason"] == "per_execution_timeout: owned child terminated"
+    assert result["settled"] is True
+    assert process.terminated is True
+
+
+def test_native_child_startup_budget_is_not_shrunk_to_execution_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Protect the macOS startup allowance from the historical 30-second shrink."""
+
+    poll_budgets: list[float] = []
+    cancel_event = threading.Event()
+    process = _BoundedFakeProcess()
+    context = _StartupBudgetFakeContext(process, poll_budgets, cancel_event)
+    # At 31 seconds, the historical formula had already exhausted the caller's
+    # 30-second deadline.  The adapter-owned 60-second startup ceiling must
+    # still permit polling until cancellation is observed.
+    monotonic_values = iter((100.0, 131.0, 131.5))
+    monkeypatch.setattr(native.multiprocessing, "get_context", lambda _method: context)
+    monkeypatch.setattr(native.time, "monotonic", lambda: next(monotonic_values))
+
+    result = native._run_bounded(
+        _base_runner_input(),
+        robot_goal=(4.0, 0.0),
+        provenance={"test": "startup-budget-not-shrunk"},
+        timeout_s=30.0,
+        cancel_event=cancel_event,
+    )
+
+    assert poll_budgets == [pytest.approx(0.05)]
+    assert result["status"] == native.STATUS_CANCELLED
+    assert result["reason"] == "cancelled_by_user: owned child terminated"
     assert result["settled"] is True
     assert process.terminated is True

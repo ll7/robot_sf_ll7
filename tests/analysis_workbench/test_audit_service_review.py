@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from robot_sf.analysis_workbench import audit_service_adapters
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, ScanSummary
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
 from robot_sf.analysis_workbench.audit_service import (
@@ -62,6 +63,24 @@ def _service(tmp_path: Path, *, actor: str = "human"):
     selected = service.next(session, operation_id="select-for-review")
     assert selected.status == "complete", selected.reason
     return service, session, report, dataset, queue_path
+
+
+def _observed_next_lock(original_next_lock: Any, update_lock_attempted: threading.Event) -> Any:
+    def observed_next_lock(path: Path) -> Any:
+        lock = original_next_lock(path)
+
+        @contextmanager
+        def observed() -> Any:
+            if threading.current_thread().name == "context-update":
+                # transaction_lock has already completed _stable_queue here.
+                # Observe the durable lock boundary rather than method entry.
+                update_lock_attempted.set()
+            with lock:
+                yield
+
+        return observed()
+
+    return observed_next_lock
 
 
 def test_human_review_commits_only_selected_scan_bound_episode(tmp_path: Path) -> None:
@@ -212,7 +231,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
     try:
         state_revision = AuditQueue(dataset, state_path=queue_path).state_revision
         original_review = QueueNextAdapter.record_human_review
-        original_lock = QueueNextAdapter.transaction_lock
+        original_next_lock = audit_service_adapters._next_lock
         preflight_passed = threading.Event()
         update_lock_attempted = threading.Event()
         release_review = threading.Event()
@@ -234,11 +253,11 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
 
         monkeypatch.setattr(QueueNextAdapter, "record_human_review", paused_review)
 
-        def observed_lock(self: QueueNextAdapter, *, context: AuditSelectionContext) -> Any:
-            update_lock_attempted.set()
-            return original_lock(self, context=context)
-
-        monkeypatch.setattr(QueueNextAdapter, "transaction_lock", observed_lock)
+        monkeypatch.setattr(
+            audit_service_adapters,
+            "_next_lock",
+            _observed_next_lock(original_next_lock, update_lock_attempted),
+        )
 
         original_episode_id = session.context.episode_id
         original_context_revision = session.context.context_revision
@@ -267,7 +286,7 @@ def test_context_cas_serializes_with_review_queue_commit(tmp_path: Path, monkeyp
                 update_finished.set()
 
         review_thread = threading.Thread(target=review_worker)
-        update_thread = threading.Thread(target=update_worker)
+        update_thread = threading.Thread(target=update_worker, name="context-update")
         review_thread.start()
         assert preflight_passed.wait(10), "review preflight did not run"
         update_thread.start()

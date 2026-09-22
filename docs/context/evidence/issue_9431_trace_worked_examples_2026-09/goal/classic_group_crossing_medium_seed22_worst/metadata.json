@@ -1,0 +1,32 @@
+{
+  "campaign_id": "issue9431_worked_traces_0_0_7_20260922",
+  "campaign_job": "15716",
+  "claim_boundary": "exemplar trace episode from retained campaign data; illustrative group-crossing interaction only; no statistical, benchmark, or dissertation claim",
+  "config_sha256": "dcaf87a46182e1cb64283a7b2442b02ce5fec86d33e9d72df2bcc6a04ee19806",
+  "distance_convention": "center_center",
+  "episode_id": "classic_group_crossing_medium--22--b5435eeb359163c7",
+  "episode_status": "success",
+  "generated_at_utc": "2026-09-22T00:00:00Z",
+  "git_commit": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "issue": "https://github.com/ll7/robot_sf_ll7/issues/4848",
+  "planner": "goal",
+  "release_tag": "paper-matrix-v2-h600-s30-2026-09-07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "scenario_id": "classic_group_crossing_medium",
+  "schema_version": "issue-4848-exemplar-trace.v1",
+  "seed": 22,
+  "selection_metric": "path_efficiency",
+  "selection_metric_value": 1.0,
+  "selection_mode": "worst",
+  "source_commit": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "summary": {
+    "episode_status": "success",
+    "global_min_distance_step": 105,
+    "global_min_robot_ped_distance_m": 3.3253263650808105,
+    "planner": "goal",
+    "scenario_id": "classic_group_crossing_medium",
+    "seed": 22,
+    "step_count": 168,
+    "termination_reason": "success"
+  }
+}

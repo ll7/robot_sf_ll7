@@ -1329,7 +1329,22 @@ class PedestrianTrackingDiagnostics:
 
 @dataclass(frozen=True, slots=True)
 class PedestrianTrackingResult:
-    """Immutable result of one tracker update."""
+    """Immutable result of one tracker update.
+
+    ``reset_epoch`` is a deterministic per-instance counter owned by the
+    producing tracker: it starts at zero and advances by exactly one on each
+    ``PedestrianTracker.reset()``.  Composite ``(reset_epoch, track_id)``
+    identity is available only for producer-supplied integer epochs; ``None``
+    means producer provenance is unavailable for legacy or manual
+    construction that omits an epoch, and no epoch is manufactured in that
+    case.  Within one tracker instance lifecycle with an integer epoch, the
+    numeric ``track_id`` restarts at one after reset while the epoch
+    distinguishes the resulting generations.  Independent tracker instances
+    are not separated by epoch alone: callers that correlate results from
+    more than one tracker must supply their own namespace.  Epochs never
+    encode tracker-goal adapter IDs, simulator indices, observation-row
+    identity, object addresses, or physical-person claims.
+    """
 
     timestamp_s: float
     step_index: int
@@ -1337,8 +1352,9 @@ class PedestrianTrackingResult:
     associations: tuple[TrackAssociation, ...]
     diagnostics: PedestrianTrackingDiagnostics
     history_order: str = HISTORY_ORDER
+    reset_epoch: int | None = None
 
-    def __post_init__(self) -> None:  # noqa: C901
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         """Validate deterministic output ordering."""
         timestamp = _finite_scalar(self.timestamp_s, "timestamp_s")
         if timestamp < 0.0:
@@ -1346,6 +1362,10 @@ class PedestrianTrackingResult:
         object.__setattr__(self, "timestamp_s", timestamp)
         if type(self.step_index) is not int or self.step_index < 0:
             raise ValueError("step_index must be a non-negative integer")
+        if self.reset_epoch is not None and (
+            type(self.reset_epoch) is not int or self.reset_epoch < 0
+        ):
+            raise ValueError("reset_epoch must be None or a non-negative integer")
         tracks = tuple(self.tracks)
         associations = tuple(self.associations)
         if not isinstance(self.diagnostics, PedestrianTrackingDiagnostics):
@@ -1588,6 +1608,7 @@ class PedestrianTracker:
             self.config = PedestrianTrackingConfig.from_mapping(config)
         self._tracks: dict[int, _TrackState] = {}
         self._next_track_id = 1
+        self._reset_epoch = 0
         self._last_timestamp_s: float | None = None
         self._last_step_index: int | None = None
 
@@ -1598,19 +1619,32 @@ class PedestrianTracker:
             self._public_track(self._tracks[track_id]) for track_id in sorted(self._tracks)
         )
 
+    @property
+    def reset_epoch(self) -> int:
+        """Return the current per-instance reset epoch carried by results."""
+        return self._reset_epoch
+
     def reset(self) -> None:
-        """Reset all estimator memory and restart episode-local IDs at one."""
+        """Reset estimator memory, restart episode-local IDs, and advance the epoch.
+
+        The numeric ID restart is preserved for compatibility; the epoch is the
+        producer-owned discriminator that lets a retained consumer separate
+        post-reset births from pre-reset identities via ``(reset_epoch,
+        track_id)`` within this instance's lifecycle.
+        """
         self._tracks.clear()
         self._next_track_id = 1
+        self._reset_epoch += 1
         self._last_timestamp_s = None
         self._last_step_index = None
 
     def update(self, snapshot: PedestrianObservationSnapshot) -> PedestrianTrackingResult:
         """Consume one snapshot atomically and return deterministic tracking output.
 
-        A failed update must not consume a temporal cursor, track ID, or partial
-        mutable track transition. This keeps the same snapshot retryable after
-        an internal estimator or result-construction failure.
+        A failed update must not consume a temporal cursor, track ID, advance
+        the reset epoch, or leave a partial mutable track transition. This
+        keeps the same snapshot retryable after an internal estimator or
+        result-construction failure.
 
         Returns:
             An immutable tracking result for the snapshot timestamp.
@@ -1619,6 +1653,7 @@ class PedestrianTracker:
             track_id: _clone_track_state(state) for track_id, state in self._tracks.items()
         }
         next_track_id = self._next_track_id
+        reset_epoch = self._reset_epoch
         last_timestamp_s = self._last_timestamp_s
         last_step_index = self._last_step_index
         try:
@@ -1626,6 +1661,7 @@ class PedestrianTracker:
         except Exception:
             self._tracks = state_snapshot
             self._next_track_id = next_track_id
+            self._reset_epoch = reset_epoch
             self._last_timestamp_s = last_timestamp_s
             self._last_step_index = last_step_index
             raise
@@ -1659,6 +1695,7 @@ class PedestrianTracker:
                 tracks=(),
                 associations=(),
                 diagnostics=diagnostics,
+                reset_epoch=self._reset_epoch,
             )
         if self._last_timestamp_s is not None and snapshot.timestamp_s < self._last_timestamp_s:
             raise ValueError("timestamp_s must be monotonically non-decreasing")
@@ -1793,6 +1830,7 @@ class PedestrianTracker:
             tracks=output_tracks,
             associations=tuple(sorted(associations, key=lambda association: association.track_id)),
             diagnostics=diagnostics,
+            reset_epoch=self._reset_epoch,
         )
         self._last_timestamp_s = snapshot.timestamp_s
         self._last_step_index = snapshot.step_index

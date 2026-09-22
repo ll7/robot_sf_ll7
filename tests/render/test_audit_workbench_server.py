@@ -950,9 +950,27 @@ def test_live_route_dispatches_only_bounded_codex_facade_methods() -> None:
             calls.append(("codex_cancel", kwargs))
             return {"status": "cancelled", "operation_id": kwargs["operation_id"]}
 
+        def codex_reconnect(**kwargs):
+            calls.append(("codex_reconnect", kwargs))
+            return {
+                "status": "complete",
+                "operation_id": kwargs["operation_id"],
+                "codex_session_id": kwargs["codex_session_id"],
+                "context": {
+                    "context_revision": kwargs["expected_context_revision"],
+                    "episode_id": "episode-codex",
+                },
+                "source": {
+                    "source_revision": "source-7",
+                    "source_digest": "d" * 64,
+                },
+                "provider_session_id": "private-provider-session",
+            }
+
         facade.codex_start = codex_start
         facade.codex_read = codex_read
         facade.codex_cancel = codex_cancel
+        facade.codex_reconnect = codex_reconnect
 
     with _server(configure=configure) as (url, calls, _document, secret, cookie):
         start_arguments = {
@@ -1012,6 +1030,27 @@ def test_live_route_dispatches_only_bounded_codex_facade_methods() -> None:
         )
         assert status == 200
         assert body == {"operation_id": "codex-test-1", "status": "complete"}
+        reconnect_arguments = {
+            "codex_session_id": "codex-session-private",
+            "operation_id": "codex-reconnect-1",
+            "expected_selection_revision": 1,
+            "expected_context_revision": 7,
+        }
+        status, body = _post(
+            url,
+            {"operation": "codex_reconnect", "arguments": reconnect_arguments},
+            origin=url,
+            cookie=cookie,
+        )
+        assert status == 200
+        assert body == {
+            "codex_session_id": "codex-session-private",
+            "context": {"context_revision": 7, "episode_id": "episode-codex"},
+            "operation_id": "codex-reconnect-1",
+            "source": {"source_digest": "d" * 64, "source_revision": "source-7"},
+            "status": "complete",
+        }
+        assert calls[-1] == ("codex_reconnect", reconnect_arguments)
         status, body = _post(
             url,
             {
@@ -1023,6 +1062,19 @@ def test_live_route_dispatches_only_bounded_codex_facade_methods() -> None:
         )
         assert status == 200
         assert body == {"operation_id": "codex-test-1", "status": "cancelled"}
+        for bad_arguments in (
+            {**reconnect_arguments, "codex_session_id": "provider/session"},
+            {**reconnect_arguments, "session_id": "forged"},
+            {**reconnect_arguments, "expected_context_revision": -1},
+        ):
+            bad_status, bad_body = _post(
+                url,
+                {"operation": "codex_reconnect", "arguments": bad_arguments},
+                origin=url,
+                cookie=cookie,
+            )
+            assert bad_status in {400, 403}
+            assert bad_body.get("status") in {"failed", "denied"}
         assert (
             _post(
                 url,

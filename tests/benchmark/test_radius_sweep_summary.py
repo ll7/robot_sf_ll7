@@ -64,6 +64,11 @@ def compact_scope(monkeypatch: pytest.MonkeyPatch) -> None:
             "r1p0": "configs/arm_1p0.yaml",
         },
     )
+    monkeypatch.setattr(
+        composer,
+        "EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256",
+        {"r0p5": "1" * 64, "r0p8": "2" * 64, "r1p0": "3" * 64},
+    )
 
 
 def _write_arm(
@@ -122,6 +127,11 @@ def _write_arm(
                 "readiness_status": "native",
                 "failed_jobs": 0,
                 "episodes": composer.EXPECTED_ROWS_PER_ARM,
+                "success_mean": "0.5000",
+                "ped_collision_count_mean": "0.5000",
+                "obstacle_collision_count_mean": "0.0000",
+                "total_collision_count_mean": "0.5000",
+                "snqi_mean": f"{radius + 0.1115:.4f}",
             }
         ],
     }
@@ -278,6 +288,49 @@ def test_composer_rejects_duplicate_episode_identity(tmp_path: Path, compact_sco
     lines[-1] = lines[0]
     episodes.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with pytest.raises(RadiusSweepSummaryError, match="duplicate row identity"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "success_mean",
+        "ped_collision_count_mean",
+        "obstacle_collision_count_mean",
+        "total_collision_count_mean",
+        "snqi_mean",
+    ],
+)
+def test_composer_rejects_planner_aggregate_contradictions(
+    tmp_path: Path, compact_scope: None, field: str
+) -> None:
+    """Every camera-ready mean must reconcile with the admitted episode population."""
+    roots, receipt = _write_triplet(tmp_path)
+    summary_path = roots[0] / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["planner_rows"][0][field] = "9.9999"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    with pytest.raises(RadiusSweepSummaryError, match=f"aggregate mismatch:{field}"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_rejects_coordinated_config_digest_tampering(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """A family receipt cannot echo an arbitrary replacement arm-config digest."""
+    roots, receipt = _write_triplet(tmp_path)
+    replacement_digest = "f" * 64
+    for root in roots:
+        preflight_path = root / "preflight/validate_config.json"
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+        preflight["config_sha256"] = replacement_digest
+        preflight_path.write_text(json.dumps(preflight), encoding="utf-8")
+
+        family_path = root / "reports/radius_family_feasibility.json"
+        family = json.loads(family_path.read_text(encoding="utf-8"))
+        family["source_config_sha256"] = replacement_digest
+        family_path.write_text(json.dumps(family), encoding="utf-8")
+    with pytest.raises(RadiusSweepSummaryError, match="frozen campaign config bytes"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 

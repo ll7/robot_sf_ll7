@@ -80,6 +80,14 @@ EXPECTED_ARM_CAMPAIGN_CONFIGS: dict[str, str] = {
     "r0p8": EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M,
     "r1p0": EXPECTED_ARM_CAMPAIGN_CONFIG,
 }
+# SHA-256 of the exact tracked arm config bytes at the immutable #6642 campaign
+# commit (aabad2e2a82cd8dcca93cc78a01493ec6ead5212). These independently anchor
+# each campaign preflight receipt; a self-consistent replacement digest is not evidence.
+EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256: dict[str, str] = {
+    "r0p5": "bbf309868951cff5f4bb299acbcc3b01f2e37bd54ef72fb138e5b7d99073883f",
+    "r0p8": "ac4006522e77a02306cb34064bc11a151e56fcd2f1f9409bcdb50440c436dda3",
+    "r1p0": "b4855e6ec51729a35ee87af487ad8c3154ccb32a0691b0e1f9d92d5186321a5b",
+}
 EXPECTED_ARM_RELEASE_TAGS: dict[str, str] = {
     "r0p5": EXPECTED_ARM_RELEASE_TAG_0P5M,
     "r0p8": EXPECTED_ARM_RELEASE_TAG_0P8M,
@@ -1273,6 +1281,7 @@ __all__ = [
     "EXPECTED_ARM_CAMPAIGN_CONFIGS",
     "EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M",
     "EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M",
+    "EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256",
     "EXPECTED_ARM_RELEASE_TAG",
     "EXPECTED_ARM_RELEASE_TAGS",
     "EXPECTED_ARM_RELEASE_TAG_0P5M",

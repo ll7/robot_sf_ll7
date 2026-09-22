@@ -24,6 +24,7 @@ from robot_sf.benchmark.radius_rank_stability import (
     _gate1_canary_receipt_is_passing,
 )
 from robot_sf.benchmark.radius_sweep_manifest import (
+    EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
     EXPECTED_ARM_CAMPAIGN_CONFIGS,
     EXPECTED_GATE1_RECEIPT_SHA256,
     EXPECTED_ROWS_PER_ARM,
@@ -52,6 +53,8 @@ class _Episode:
     scenario: str
     seed: int
     success: float
+    pedestrian_collisions: float
+    obstacle_collisions: float
     typed_collisions: float
     snqi: float
 
@@ -137,7 +140,9 @@ def _validate_campaign_status(summary: Mapping[str, Any], radius: float) -> None
         raise RadiusSweepSummaryError(f"radius {radius:g} campaign integrity is not valid")
 
 
-def _validate_planner_rows(summary: Mapping[str, Any], radius: float) -> None:
+def _validate_planner_rows(
+    summary: Mapping[str, Any], radius: float
+) -> dict[str, Mapping[str, Any]]:
     rows = summary.get("planner_rows")
     if not isinstance(rows, list):
         raise RadiusSweepSummaryError(f"radius {radius:g} planner_rows must be a list")
@@ -162,6 +167,42 @@ def _validate_planner_rows(summary: Mapping[str, Any], radius: float) -> None:
             raise RadiusSweepSummaryError(
                 f"radius {radius:g} planner {key!r} is not complete benchmark evidence"
             )
+    return by_key
+
+
+def _camera_ready_mean(values: Sequence[float]) -> str:
+    """Return the canonical camera-ready four-decimal serialization of a mean."""
+    return f"{sum(values) / len(values):.4f}"
+
+
+def _validate_planner_aggregates(
+    planner_rows: Mapping[str, Mapping[str, Any]],
+    episodes: Sequence[_Episode],
+    radius: float,
+) -> None:
+    """Reconcile summary means against the exact admitted episode population."""
+    by_planner: dict[str, list[_Episode]] = defaultdict(list)
+    for episode in episodes:
+        by_planner[episode.planner].append(episode)
+    metric_sources = {
+        "success_mean": "success",
+        "ped_collision_count_mean": "pedestrian_collisions",
+        "obstacle_collision_count_mean": "obstacle_collisions",
+        "total_collision_count_mean": "typed_collisions",
+        "snqi_mean": "snqi",
+    }
+    for planner in RELEASE_PLANNER_KEYS:
+        row = planner_rows[planner]
+        planner_episodes = by_planner[planner]
+        for field, attribute in metric_sources.items():
+            expected = _camera_ready_mean(
+                [getattr(episode, attribute) for episode in planner_episodes]
+            )
+            if row.get(field) != expected:
+                raise RadiusSweepSummaryError(
+                    f"radius {radius:g} planner {planner!r} aggregate mismatch:{field}; "
+                    f"reported={row.get(field)!r}, episode-derived={expected!r}"
+                )
 
 
 def _family_feasibility(
@@ -265,6 +306,8 @@ def _episode_from_record(
         scenario=scenario,
         seed=seed_raw,
         success=float(success_raw),
+        pedestrian_collisions=pedestrian,
+        obstacle_collisions=obstacle,
         typed_collisions=total,
         snqi=_finite(metrics.get("snqi"), "episode SNQI"),
     )
@@ -349,9 +392,14 @@ def _load_arm(root: Path) -> _Arm:
         raise RadiusSweepSummaryError(f"radius {radius:g} manifest/preflight binding mismatch")
     commit = _hex(_mapping(manifest.get("git"), "manifest git").get("commit"), 40, "commit")
     config_sha = _hex(preflight.get("config_sha256"), 64, "config_sha256")
+    expected_config_sha = EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[RADIUS_TO_ARM_KEY[radius]]
+    if config_sha != expected_config_sha:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} config digest does not match the frozen campaign config bytes"
+        )
     receipt_sha = _hex(binding.get("gate1_receipt_sha256"), 64, "Gate 1 receipt digest")
     _validate_campaign_status(summary, radius)
-    _validate_planner_rows(summary, radius)
+    planner_rows = _validate_planner_rows(summary, radius)
     campaign = _mapping(summary.get("campaign"), "campaign summary header")
     campaign_id = str(manifest.get("campaign_id") or "")
     if (
@@ -370,6 +418,8 @@ def _load_arm(root: Path) -> _Arm:
         campaign_commit=commit,
         config_sha256=config_sha,
     )
+    episodes = _load_episodes(root, radius, commit)
+    _validate_planner_aggregates(planner_rows, episodes, radius)
     return _Arm(
         radius=radius,
         root=root,
@@ -381,7 +431,7 @@ def _load_arm(root: Path) -> _Arm:
         family_feasibility_definition=family_definition,
         family_feasibility=family_feasibility,
         family_feasibility_sha256=family_sha256,
-        episodes=_load_episodes(root, radius, commit),
+        episodes=episodes,
     )
 
 

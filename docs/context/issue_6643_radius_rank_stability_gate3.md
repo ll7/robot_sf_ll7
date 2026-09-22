@@ -123,6 +123,9 @@ Each root must contain its canonical `campaign_manifest.json`,
 `runs/<planner>__differential_drive/episodes.jsonl` for every frozen planner. The composer verifies
 the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
 derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
+It also reconciles each planner row's serialized success, pedestrian-collision,
+obstacle-collision, total-collision, and SNQI means against those same records at the camera-ready
+four-decimal precision; status/count metadata alone is insufficient.
 Typed collisions mean the recorded `ped_collision_count + obstacle_collision_count`; the composer
 requires that sum to equal `total_collision_count` on every episode rather than reinterpreting the
 untyped CSV collision column.
@@ -131,6 +134,8 @@ The three arm configs are intentionally different tracked treatment configs, so 
 digests must remain recorded per arm. Gate 3 requires one shared campaign commit and one shared Gate
 1 receipt digest, but it no longer incorrectly requires the three arm config digests to be equal.
 The bundle's `--config` path remains the 1.0 m baseline config and must match that arm's digest.
+Each per-arm digest is independently pinned to the exact tracked config bytes at the immutable
+campaign commit; a coordinated replacement in preflight and family-feasibility metadata is rejected.
 The receipt must also match the frozen digest in the tracked Gate 2 manifest/config contract;
 coordinated edits to campaign metadata cannot admit a different passing receipt. Composed summaries
 record stable campaign IDs and repository-relative config paths, not host-specific campaign roots.

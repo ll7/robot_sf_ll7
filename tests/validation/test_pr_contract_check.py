@@ -738,6 +738,8 @@ def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
         "This does not affect runtime. Closes #9566",
         "This does not affect runtime, closes #9566",
         "This does not affect runtime; resolves #9566",
+        "No changes - Closes #9566",
+        "No changes — Closes #9566",
     ),
 )
 def test_github_closing_parity_allows_explicit_close_after_unrelated_negation(

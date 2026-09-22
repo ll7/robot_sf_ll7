@@ -5500,6 +5500,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9609_narrow_doorway_actor_response
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/raycast_numba_toggle_2026-08-14
   status: evidence
   freshness: evidence

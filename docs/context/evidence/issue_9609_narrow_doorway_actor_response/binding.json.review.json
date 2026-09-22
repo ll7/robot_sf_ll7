@@ -1,0 +1,11 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9609_narrow_doorway_actor_response/binding.json",
+  "artifact_sha256": "e1555233a905f9e5af4835dc354fa405d2174239f39fc35374991f98804157e2",
+  "claim_boundary": "diagnostic-only evidence for the bound checkpoint/scenario/states; not benchmark, training-causal, population-level, paper, or dissertation evidence",
+  "dissertation_admission_status": "not_admitted",
+  "domain_approval_status": "not_granted",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs_independent_review",
+  "schema_version": "evidence-review-marker.v1"
+}

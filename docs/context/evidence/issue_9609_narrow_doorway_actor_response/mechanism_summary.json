@@ -1,0 +1,80 @@
+{
+  "checks": {
+    "actor_forward_all_rows": true,
+    "adapter_forward_intent_preserved_all_rows": true,
+    "critic_worsened_toward_contact_all_seeds": true,
+    "fallback_or_degraded_rows": 0,
+    "static_geometry_present_all_rows": true
+  },
+  "claim_boundary": "diagnostic-only evidence for the bound checkpoint/scenario/states; not benchmark, training-causal, population-level, paper, or dissertation evidence",
+  "evidence_tier": "diagnostic-only",
+  "issue": 9609,
+  "limitations": [
+    "Three deterministic seeds and twelve matched states do not establish a population-level mechanism.",
+    "Static-geometry removal is an out-of-distribution diagnostic intervention, not a safe policy alternative.",
+    "Evaluation-time actor/critic outputs do not identify the training-time optimization cause.",
+    "The probe identifies the decision boundary, not a policy repair."
+  ],
+  "mechanism_activation": {
+    "activated": true,
+    "activation_count": 12,
+    "changed_command_source": false,
+    "changed_outcome": "unknown",
+    "likely_failure_reason": "At the tested states, static doorway geometry is present and the critic assigns increasingly poor value, while the actor and adapter preserve forward motion."
+  },
+  "offsets_before_contact": [
+    20,
+    10,
+    5,
+    1
+  ],
+  "parent_issue": 9545,
+  "result_classification": "actor_value_response_mismatch_supported",
+  "row_count": 12,
+  "schema": "issue_9609_actor_response_summary.v1",
+  "seed_summaries": [
+    {
+      "contact_step": 62,
+      "critic_value_early": -11.30892562866211,
+      "critic_value_late": -15.353869438171387,
+      "critic_worsened_toward_contact": true,
+      "minimum_adapter_command_v": 1.8548345565795898,
+      "minimum_executed_speed_after": 1.8548345565795898,
+      "minimum_model_predict_v": 1.8548345565795898,
+      "nearest_forward_obstacle_early_m": 4.301162852820984,
+      "nearest_forward_obstacle_late_m": 1.0295629368113974,
+      "seed": 225
+    },
+    {
+      "contact_step": 59,
+      "critic_value_early": -11.43143367767334,
+      "critic_value_late": -14.481678009033203,
+      "critic_worsened_toward_contact": true,
+      "minimum_adapter_command_v": 1.298597812652588,
+      "minimum_executed_speed_after": 1.8097371101379394,
+      "minimum_model_predict_v": 1.298597812652588,
+      "nearest_forward_obstacle_early_m": 4.527692847168013,
+      "nearest_forward_obstacle_late_m": 1.1401757766601592,
+      "seed": 226
+    },
+    {
+      "contact_step": 57,
+      "critic_value_early": -11.490489959716797,
+      "critic_value_late": -14.137529373168945,
+      "critic_worsened_toward_contact": true,
+      "minimum_adapter_command_v": 2.0,
+      "minimum_executed_speed_after": 2.0,
+      "minimum_model_predict_v": 2.5022292137145996,
+      "nearest_forward_obstacle_early_m": 2.9017234388879323,
+      "nearest_forward_obstacle_late_m": 1.272792225101912,
+      "seed": 227
+    }
+  ],
+  "seeds": [
+    225,
+    226,
+    227
+  ],
+  "source_pr": 9546,
+  "source_pr_head": "59949b0cac2fd35988e2d8947c55ab1dac2c70d3"
+}

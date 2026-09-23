@@ -220,6 +220,7 @@
     "radius_rank_stability.py",
     "radius_sensitivity_gate0_audit.py",
     "radius_sweep_manifest.py",
+    "radius_sweep_summary.py",
     "rank_metrics.py",
     "ranking.py",
     "rare_event_sampling.py",

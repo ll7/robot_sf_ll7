@@ -155,6 +155,19 @@ def test_interval_endpoints_and_first_terminal_frames(tmp_path: Path) -> None:
     assert mapping["segments"][-1]["presentation_end_s"] == pytest.approx(2.0)
 
 
+def test_require_imageio_fails_closed_when_backend_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The encoder reports a clear unavailable dependency without importing it directly."""
+
+    from robot_sf.common import optional_import
+
+    monkeypatch.setattr(optional_import, "try_import", lambda _name: None)
+
+    with pytest.raises(ImportError, match="review encode requires imageio"):
+        review_encode._require_imageio()
+
+
 def test_encoded_video_uses_actual_source_pixels(tmp_path: Path) -> None:
     """The encoder must consume decoded fixture pixels instead of synthetic frames."""
 

@@ -28,6 +28,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -64,7 +65,14 @@ class LaneResult:
 
 
 def _subprocess_runner(command: Sequence[str], *, timeout: int = 300) -> LaneResult:
-    """Run one canonical CLI and parse its JSON stdout payload."""
+    """Run one canonical CLI and parse its JSON stdout payload.
+
+    Stdout is parsed on any exit code: several canonical owners emit a valid
+    evidence payload while reporting findings via nonzero exit (for example
+    the lifecycle hygiene guard exits 1 when candidates exist).  A Mapping
+    payload is self-describing evidence; only unreadable output fails the
+    lane.
+    """
     try:
         completed = subprocess.run(
             [sys.executable, *command],
@@ -75,17 +83,21 @@ def _subprocess_runner(command: Sequence[str], *, timeout: int = 300) -> LaneRes
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return LaneResult(ok=False, error=f"runner_failed: {exc}")
-    if completed.returncode != 0:
-        return LaneResult(
-            ok=False,
-            error=f"exit_{completed.returncode}: {completed.stderr.strip()[:300]}",
-        )
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
-        return LaneResult(ok=False, error=f"payload_not_json: {exc}")
+        return LaneResult(
+            ok=False,
+            error=f"exit_{completed.returncode}_payload_not_json:"
+            f" {completed.stderr.strip()[:200] or exc}",
+        )
     if not isinstance(payload, Mapping):
-        return LaneResult(ok=False, error="payload_not_object")
+        return LaneResult(ok=False, error=f"exit_{completed.returncode}_payload_not_object")
+    # Exit code is deliberately ignored once a valid payload exists: several
+    # canonical owners report findings via nonzero exit while the payload's
+    # own ok/error fields carry the verdict (e.g. lifecycle hygiene exits 1
+    # when candidates exist).  The payload is returned pristine so downstream
+    # digests and file staging stay clean.
     return LaneResult(ok=True, payload=payload)
 
 
@@ -207,16 +219,23 @@ class LaneBundle:
                 {"lane": "preparation", "reason": "skipped without contract audit payload"}
             )
             return
-        scratch = Path(work_dir) if work_dir is not None else Path.cwd()
-        audit_path = scratch / "recovery_cycle_audit.json"
         try:
-            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            if work_dir is not None:
+                self._stage_preparation_from(run, audit, Path(work_dir))
+                return
+            with tempfile.TemporaryDirectory(prefix="robot_sf_recovery_cycle_") as scratch:
+                self._stage_preparation_from(run, audit, Path(scratch))
         except OSError as exc:
-            self.errors.append(f"preparation_audit_write_failed: {exc}")
+            self.results["preparation"] = LaneResult(ok=False, error=f"audit_staging_failed: {exc}")
+            self.errors.append(f"preparation_audit_staging_failed: {exc}")
             self.skipped.append(
                 {"lane": "preparation", "reason": "cannot stage audit payload locally"}
             )
-            return
+
+    def _stage_preparation_from(self, run: Runner, audit: Mapping[str, Any], scratch: Path) -> None:
+        """Invoke preparation while its staged audit remains available to the runner."""
+        audit_path = scratch / "recovery_cycle_audit.json"
+        audit_path.write_text(json.dumps(audit), encoding="utf-8")
         self.preparation = self.collect(
             run,
             "preparation",
@@ -238,6 +257,8 @@ def _collect_lanes(
     issue_limit: int,
     pr_limit: int,
     audit_item_limit: int,
+    audit_max_pages: int,
+    audit_page_size: int,
     work_dir: Path | None,
 ) -> LaneBundle:
     """Run every canonical owner once and bundle the lane payloads."""
@@ -283,6 +304,10 @@ def _collect_lanes(
             "json",
             "--item-limit",
             str(audit_item_limit),
+            "--max-pages",
+            str(audit_max_pages),
+            "--page-size",
+            str(audit_page_size),
         ],
         skip_reason="contract audit unavailable; preparation counts unknown",
     )
@@ -375,7 +400,7 @@ def _build_controller_snapshot(bundle: LaneBundle, *, origin_main_sha: str) -> d
     }
 
 
-def run_cycle(
+def run_cycle(  # noqa: PLR0913 - parameters map 1:1 to CLI lane budgets
     *,
     repo: str,
     origin_main_sha: str,
@@ -383,6 +408,8 @@ def run_cycle(
     issue_limit: int = 100,
     pr_limit: int = 50,
     audit_item_limit: int = 100,
+    audit_max_pages: int = 5,
+    audit_page_size: int = 100,
     work_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Run one report-only recovery cycle and return the versioned receipt."""
@@ -393,6 +420,8 @@ def run_cycle(
         issue_limit=issue_limit,
         pr_limit=pr_limit,
         audit_item_limit=audit_item_limit,
+        audit_max_pages=audit_max_pages,
+        audit_page_size=audit_page_size,
         work_dir=work_dir,
     )
     stale_rows = _stale_lifecycle_rows(bundle.queue) if bundle.queue else []
@@ -455,6 +484,30 @@ def _fallback_counts(bundle: LaneBundle, stale_rows: Sequence[Mapping[str, Any]]
     }
 
 
+def _lifecycle_notes(bundle: LaneBundle) -> tuple[int | None, list[str]]:
+    """Summarize the hygiene payload without failing its lane.
+
+    The guard exits nonzero exactly when candidates exist, so a payload with
+    ``ok: false`` and rows is healthy evidence.  Surface the candidate count
+    and any tool-level error as notes instead.
+    """
+    notes: list[str] = []
+    payload = bundle.results.get("lifecycle")
+    if payload is None or not payload.ok:
+        return None, notes
+    body = payload.payload
+    count = body.get("candidate_count")
+    candidates = count if isinstance(count, int) and count >= 0 else None
+    if body.get("ok") is False:
+        if isinstance(body.get("error"), str) and body["error"]:
+            notes.append(f"lifecycle_hygiene_tool_error: {body['error'][:200]}")
+        elif candidates:
+            notes.append(f"lifecycle_hygiene_reports_candidates: {candidates}")
+    if body.get("complete_for_open_issues") is False:
+        notes.append("lifecycle_hygiene_coverage_incomplete")
+    return candidates, notes
+
+
 def _finalize_receipt(
     bundle: LaneBundle,
     decision: Mapping[str, Any],
@@ -488,12 +541,15 @@ def _finalize_receipt(
                 "reason": "arbiter omitted counts; lane-derived fallback used",
             }
         )
+    lifecycle_candidates, notes = _lifecycle_notes(bundle)
     return {
         "schema": RECEIPT_SCHEMA,
         "origin_main_sha": origin_main_sha,
         "lanes_evaluated": sorted(lanes.keys()),
         "lane_errors": list(errors),
         "skipped": skipped,
+        "notes": notes,
+        "lifecycle_candidates": lifecycle_candidates,
         "counts": dict(decision_counts),
         "next_action": next_action,
         "stop_reason": stop_reason,
@@ -515,6 +571,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--issue-limit", type=int, default=100)
     parser.add_argument("--pr-limit", type=int, default=50)
     parser.add_argument("--audit-item-limit", type=int, default=100)
+    parser.add_argument("--audit-max-pages", type=int, default=5)
+    parser.add_argument("--audit-page-size", type=int, default=100)
     parser.add_argument("--receipt-out", type=Path, default=None)
     parser.add_argument("--work-dir", type=Path, default=None)
     parser.add_argument("--json", action="store_true", help="Emit JSON (the default)")
@@ -548,6 +606,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             issue_limit=args.issue_limit,
             pr_limit=args.pr_limit,
             audit_item_limit=args.audit_item_limit,
+            audit_max_pages=args.audit_max_pages,
+            audit_page_size=args.audit_page_size,
             work_dir=args.work_dir,
         )
     except (OSError, ValueError) as exc:

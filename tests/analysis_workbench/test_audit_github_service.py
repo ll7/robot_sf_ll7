@@ -19,6 +19,10 @@ from robot_sf.analysis_workbench.audit_github import (
     SearchResult,
     render_finding_issue,
 )
+from robot_sf.analysis_workbench.audit_github_rest import (
+    GitHubRESTProvider,
+    HttpResponse,
+)
 from robot_sf.analysis_workbench.audit_mcp import (
     AuditMCPDispatcher,
     AuditMCPRequest,
@@ -264,6 +268,133 @@ def test_service_sync_uses_canonical_finding_and_durable_replay(tmp_path: Path) 
         assert replay.status == "committed"
         assert replay.operation is not None and replay.operation.replayed
         assert len(provider.create_calls) == 1
+    finally:
+        service.close()
+
+
+def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
+    tmp_path: Path,
+) -> None:
+    class NoPostHTTP:
+        """Injected REST transport proving the unsupported path is read-only."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, body, timeout
+            self.calls.append((method, url))
+            assert method == "GET"
+            return HttpResponse(
+                200,
+                {"total_count": 0, "incomplete_results": False, "items": []},
+            )
+
+    http = NoPostHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, finding, revision, _provider = _setup(tmp_path, provider=provider)
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-unsupported-create",
+        )
+
+        assert result.status == "unavailable"
+        assert result.value is not None and result.value.status == "unavailable"
+        assert result.value.remote_write == "none"
+        assert result.value.outbox is not None
+        assert result.value.outbox.state == "failed"
+        assert [method for method, _url in http.calls] == ["GET"]
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+    finally:
+        service.close()
+
+
+def test_service_rest_post_timeout_remains_ambiguous_and_charged(tmp_path: Path) -> None:
+    class PostTimeoutHTTP:
+        """Injected transport observes a POST before its outcome is lost."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, body, timeout
+            self.calls.append((method, url))
+            if method == "POST":
+                raise TimeoutError("response lost after POST began")
+            assert method == "GET"
+            return HttpResponse(
+                200,
+                {"total_count": 0, "incomplete_results": False, "items": []},
+            )
+
+    class RevisionAwareRESTProvider(GitHubRESTProvider):
+        """Injected reservation seam delegating the mutation to the REST adapter."""
+
+        def create_issue_with_finding_revision(
+            self,
+            repository: str,
+            *,
+            finding_id: str,
+            expected_finding_revision: int,
+            title: str,
+            body: str,
+            labels: tuple[str, ...],
+        ) -> Any:
+            assert finding_id
+            assert expected_finding_revision >= 0
+            return self.create_issue(repository, title=title, body=body, labels=labels)
+
+    http = PostTimeoutHTTP()
+    provider = RevisionAwareRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, finding, revision, _provider = _setup(tmp_path, provider=provider)
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-post-timeout",
+        )
+
+        assert result.status == "unavailable"
+        assert result.value is not None and result.value.status == "ambiguous"
+        assert result.value.remote_write == "ambiguous"
+        assert result.value.outbox is not None
+        assert result.value.outbox.state == "ambiguous"
+        assert [method for method, _url in http.calls].count("POST") == 1
+        assert service.get_session(session).usage.issue_writes == 1
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
     finally:
         service.close()
 
@@ -925,6 +1056,9 @@ def test_service_reconciles_timeout_after_create_without_duplicate_issue(tmp_pat
         )
         assert first.status == "unavailable"
         assert first.value is not None and first.value.status == "ambiguous"
+        assert first.value.remote_write == "ambiguous"
+        assert first.value.outbox is not None and first.value.outbox.state == "ambiguous"
+        assert service.get_session(session).usage.issue_writes == 1
         assert len(provider.create_calls) == 1
 
         provider.search_complete = True

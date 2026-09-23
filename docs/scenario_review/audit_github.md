@@ -37,6 +37,16 @@ time-of-check-to-time-of-use (TOCTOU) race on behalf of a live adapter. The supp
 fake provider only; they do not require
 credentials or mutate GitHub.
 
+The REST adapter's callable `create_issue_with_finding_revision` is an explicit unsupported
+capability: it raises before constructing an HTTP request. `GitHubSync` records that pre-write
+boundary as `unavailable` with `remote_write: none` and a failed outbox entry. The authenticated
+service releases the reserved issue-write unit, so its durable issue-write usage is unchanged.
+This classification applies only while no mutating `POST` has begun. Once a provider begins a
+`POST`, a timeout or unreadable outcome remains `ambiguous`, retains the ambiguous outbox/claim
+state, and consumes the reserved issue-write unit even when a later read is incomplete. A known
+existing canonical issue still follows the append-only comment path; the create-capability guard
+does not disable revision comments.
+
 `AuditService.sync_finding` is the service-owned entry point. It accepts a finding ID rather than a
 caller-owned finding object, reads the canonical `FindingStore` revision, authenticates the session
 token, checks the exact selection/source context and repository allowlist, and reserves the finite

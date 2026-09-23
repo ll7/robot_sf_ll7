@@ -781,29 +781,26 @@ def _parse_json(stdout: str) -> tuple[Any, str | None]:
 
 
 def _select_current_gate(gate_checks: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Select the newest gate while retaining fail-closed handling for a current malformed row.
+    """Select the newest gate only when every candidate can be ordered.
 
-    Timestamped records are ordered by the shared check-run key.  For records that have no
-    usable ``startedAt``, the rollup's response order is the only remaining evidence about whether
-    they precede or follow an orderable record.  An unorderable row before the newest orderable row
-    is therefore historical noise; an unorderable row after it is treated as current and validated
-    by the caller instead of being allowed to hide behind older green evidence.
+    GitHub's GraphQL status-check rollup does not document a chronological ordering guarantee, so
+    response position cannot prove that an unorderable record predates a timestamped one. Keep any
+    such candidate current; the caller will classify it as unknown rather than trusting older
+    success.
     """
     if not gate_checks:
         return None
     orderable = [
         (index, check) for index, check in enumerate(gate_checks) if _check_run_order_key(check)[-1]
     ]
-    if not orderable:
-        return gate_checks[-1]
-    current_index, current_gate = max(
+    unorderable = [check for check in gate_checks if not _check_run_order_key(check)[-1]]
+    if unorderable:
+        return unorderable[-1]
+    _current_index, current_gate = max(
         orderable,
         key=lambda item: (_check_run_order_key(item[1]), item[0]),
     )
-    unorderable_after = [
-        check for check in gate_checks[current_index + 1 :] if not _check_run_order_key(check)[-1]
-    ]
-    return unorderable_after[-1] if unorderable_after else current_gate
+    return current_gate
 
 
 def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901

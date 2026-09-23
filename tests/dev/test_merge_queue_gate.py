@@ -787,8 +787,8 @@ def test_rollup_ignores_superseded_malformed_gate_identity() -> None:
     assert merge_queue_gate_module._rollup_overall(rollup) == "success"
 
 
-def test_rollup_ignores_older_unordered_gate_record() -> None:
-    """An older gate without an ordering key cannot block a newer valid gate."""
+def test_rollup_rejects_unordered_gate_record_before_newer_valid_gate() -> None:
+    """Response order cannot prove an unorderable gate is historical."""
     rollup = [
         {
             "__typename": "CheckRun",
@@ -816,7 +816,7 @@ def test_rollup_ignores_older_unordered_gate_record() -> None:
         },
     ]
 
-    assert merge_queue_gate_module._rollup_overall(rollup) == "success"
+    assert merge_queue_gate_module._rollup_overall(rollup) == "unknown"
 
 
 def test_rollup_rejects_newer_malformed_gate_identity() -> None:

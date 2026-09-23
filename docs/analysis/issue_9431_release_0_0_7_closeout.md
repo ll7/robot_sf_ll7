@@ -88,10 +88,11 @@ archive and successor publication bundle using
 The comparator verifies both archive checksums, the predecessor source identity
 inside its resolved manifest, and exact successor row-byte equality with the
 pinned bundle. It requires the exact canonical 14-arm × 48-scenario × 30-seed
-Cartesian identity (20,160 rows), checks the scenario IDs against the versioned
-source manifest and planner arms/seeds against the release manifest, and checks
-each successor row's source and execution metadata. Runtime fallback/degraded
-markers use the release-acceptance filter, so declarative config fields are not
+Cartesian identity (20,160 rows). A focused consistency test binds those frozen
+scenario IDs, planner arms, and seeds to the versioned scenario/release manifests
+and verifies the scenario-manifest SHA. At run time the comparator checks each
+successor row's source and execution metadata. Runtime fallback/degraded markers
+use the release-acceptance filter, so declarative config fields are not
 misclassified as runtime execution. The generated report binds its campaign ID
 to the pinned bundle's campaign manifest and records both matrix digests. After
 retrieving the exact archives and extracting the successor bundle's `payload/`

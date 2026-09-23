@@ -182,6 +182,9 @@ request cannot take over a different newer succeeded request for the same findin
 initial-create receipt belongs to a different immutable finding snapshot and a complete marker search
 finds no issue, the service remains `ambiguous` and refuses to send a new body under the old receipt;
 reconciliation must establish whether that original create applied first.
+An initial-publication receipt already marked `conflict` remains a conflict when a complete marker
+search finds no issue; ordinary replay never authorizes a replacement create from that terminal
+receipt. A validated existing issue may still be reconciled without replacing it.
 The optional `FindingStore` adapter binds the issue URL/number, marker, source revision, and
 auditor-block digest to the current finding revision.
 

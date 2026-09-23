@@ -2453,6 +2453,18 @@ class GitHubSync:
                 return _stale(str(exc), remote)
 
         if remote is None:
+            if entry.state == "conflict":
+                return self._append_result(
+                    "conflict",
+                    repository,
+                    finding,
+                    operation_id,
+                    entry,
+                    _issue_from_entry(entry),
+                    finding,
+                    reason=entry.reason or "initial publication receipt is terminally conflicted",
+                    replayed=True,
+                )
             if entry.state in {"in_flight", "ambiguous"} and not retry_ambiguous:
                 return _ambiguous(
                     "create remains ambiguous; exact marker is absent and retry was not authorized"

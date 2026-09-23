@@ -634,6 +634,52 @@ def test_append_only_create_receipt_survives_failed_post_create_readback(
     assert len(provider.create_calls) == 1
 
 
+def test_append_only_conflicted_initial_receipt_does_not_recreate_missing_issue(
+    tmp_path: Path,
+) -> None:
+    class MissingAfterCreateReadbackProvider(AppendOnlyProvider):
+        def get_issue(self, repository: str, number: int) -> GitHubIssue:
+            if self.create_calls:
+                self.get_issue_calls.append((repository, number))
+                raise GitHubIssueMissing("issue disappeared after create")
+            return super().get_issue(repository, number)
+
+    finding = _finding("append-conflict-does-not-recreate")
+    provider = MissingAfterCreateReadbackProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        sync = GitHubSync(provider, outbox)
+        first = sync.sync(
+            REPOSITORY,
+            finding,
+            operation_id="append-conflict-does-not-recreate",
+        )
+        assert first.status == "conflict"
+        assert first.outbox is not None and first.outbox.issue is not None
+        first_issue = first.outbox.issue
+        provider.issues = []
+
+        replay = sync.sync(
+            REPOSITORY,
+            finding,
+            operation_id="append-conflict-does-not-recreate",
+        )
+        retained = outbox.find_publication_kind(
+            REPOSITORY,
+            finding.finding_id,
+            "initial_issue",
+        )
+        claim = outbox.get_claim(REPOSITORY, finding.finding_id)
+
+    assert replay.status == "conflict"
+    assert replay.outbox is not None and replay.outbox.state == "conflict"
+    assert replay.outbox.issue == first_issue
+    assert retained is not None and retained.state == "conflict"
+    assert retained.issue == first_issue
+    assert claim is not None and claim.state == "conflict"
+    assert provider.issues == []
+    assert len(provider.create_calls) == 1
+
+
 @pytest.mark.parametrize(
     ("failure", "expected_status"),
     [

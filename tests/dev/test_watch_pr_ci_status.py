@@ -41,6 +41,17 @@ def _status(overall: str, *, head_sha: str = "abc123") -> dict[str, object]:
     }
 
 
+def _merged_pr_metadata(
+    *, merge_sha: str = "merge123", head_sha: str = "prhead456", merged: bool = True
+) -> dict[str, object]:
+    """Return a compact merged-PR identity for exact-commit status tests."""
+    return {
+        "merged": merged,
+        "merge_commit_sha": merge_sha,
+        "head": {"sha": head_sha},
+    }
+
+
 def test_fetch_exact_commit_ci_status_summarizes_matching_check_runs() -> None:
     """The exact-commit helper should bind the result to the requested SHA."""
     fetch_check_runs = MagicMock(
@@ -56,7 +67,12 @@ def test_fetch_exact_commit_ci_status_summarizes_matching_check_runs() -> None:
         }
     )
 
-    result = fetch_exact_commit_ci_status("merge123", fetch_check_runs=fetch_check_runs)
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=fetch_check_runs,
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
+    )
 
     assert result["status"] == "ok"
     assert result["head_sha"] == "merge123"
@@ -64,6 +80,164 @@ def test_fetch_exact_commit_ci_status_summarizes_matching_check_runs() -> None:
     assert result["target_kind"] == "merge_commit"
     assert result["checks"]["overall"] == "success"  # type: ignore[index]
     fetch_check_runs.assert_called_once_with("merge123")
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected_error"),
+    [
+        (None, "could not fetch metadata"),
+        (_merged_pr_metadata(merged=False), "not confirmed merged"),
+        (_merged_pr_metadata(merge_sha="other456"), "merge commit SHA did not match"),
+        ({"merged": True, "merge_commit_sha": "merge123"}, "no head SHA"),
+    ],
+    ids=["metadata-api-error", "not-merged", "different-merge-sha", "missing-head-sha"],
+)
+def test_fetch_exact_commit_ci_status_requires_matching_merged_pr(
+    metadata: object, expected_error: str
+) -> None:
+    """Exact-commit polling must be tied to merged metadata for the supplied PR."""
+    fetch_check_runs = MagicMock(return_value={"check_runs": []})
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=fetch_check_runs,
+        fetch_pr_metadata=MagicMock(return_value=metadata),
+    )
+
+    assert result["status"] == "error"
+    assert expected_error in result["error"]
+    fetch_check_runs.assert_not_called()
+
+
+def test_fetch_exact_commit_ci_status_requires_pr_number() -> None:
+    """An exact SHA without its PR cannot establish merge ownership."""
+    fetch_pr_metadata = MagicMock(return_value=_merged_pr_metadata())
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        fetch_pr_metadata=fetch_pr_metadata,
+    )
+
+    assert result["status"] == "error"
+    assert result["error"] == "post-merge PR number is required to verify the merge commit"
+    fetch_pr_metadata.assert_not_called()
+
+
+def test_fetch_exact_commit_ci_status_applies_docs_only_to_verified_pr_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing required jobs may pass only with green exact checks and complete docs scope."""
+    inventory = MagicMock(return_value=(["docs/dev/local_ci.md"], None))
+    monkeypatch.setattr(ci_status, "_fetch_pr_changed_files", inventory)
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=MagicMock(
+            return_value={
+                "check_runs": [
+                    {
+                        "name": "CodeRabbit",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "head_sha": "merge123",
+                    }
+                ]
+            }
+        ),
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata(head_sha="source-head-789")),
+    )
+
+    assert result["checks"]["overall"] == "success"  # type: ignore[index]
+    assert result["checks"]["success_reason"] == "ci_not_required_docs_only"  # type: ignore[index]
+    assert result["checks"]["docs_only"]["status"] == "proven"  # type: ignore[index]
+    inventory.assert_called_once_with(
+        "42",
+        repo="",
+        head_sha="source-head-789",
+        cache=None,
+    )
+
+
+def test_fetch_exact_commit_ci_status_keeps_code_changes_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A complete inventory containing code cannot skip missing runtime checks."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        MagicMock(return_value=(["docs/dev/local_ci.md", "robot_sf/nav/planner.py"], None)),
+    )
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=MagicMock(return_value={"check_runs": []}),
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
+    )
+
+    assert result["checks"]["overall"] == "pending"  # type: ignore[index]
+    assert result["checks"]["docs_only"]["status"] == "not_applicable"  # type: ignore[index]
+
+
+def test_fetch_exact_commit_ci_status_incomplete_inventory_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable or truncated file inventory cannot authorize docs-only success."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        MagicMock(return_value=(None, "changed-file inventory reached GitHub's 3000-file cap")),
+    )
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=MagicMock(return_value={"check_runs": []}),
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
+    )
+
+    assert result["checks"]["overall"] == "pending"  # type: ignore[index]
+    assert result["checks"]["docs_only"]["status"] == "unavailable"  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("run_status", "run_conclusion", "expected_overall"),
+    [("in_progress", None, "pending"), ("completed", "failure", "failure")],
+    ids=["pending-check", "failed-check"],
+)
+def test_fetch_exact_commit_ci_status_does_not_skip_applicable_non_green_checks(
+    monkeypatch: pytest.MonkeyPatch,
+    run_status: str,
+    run_conclusion: str | None,
+    expected_overall: str,
+) -> None:
+    """Pending or failed exact-SHA checks cannot be overridden by docs-only scope."""
+    inventory = MagicMock(return_value=(["README.md"], None))
+    monkeypatch.setattr(ci_status, "_fetch_pr_changed_files", inventory)
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=MagicMock(
+            return_value={
+                "check_runs": [
+                    {
+                        "name": "CodeRabbit",
+                        "status": run_status,
+                        "conclusion": run_conclusion,
+                        "head_sha": "merge123",
+                    }
+                ]
+            }
+        ),
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
+    )
+
+    assert result["checks"]["overall"] == expected_overall  # type: ignore[index]
+    assert result["checks"].get("success_reason") != "ci_not_required_docs_only"  # type: ignore[index]
+    inventory.assert_not_called()
 
 
 def test_fetch_exact_commit_ci_status_suppresses_cancelled_replacement() -> None:
@@ -99,7 +273,12 @@ def test_fetch_exact_commit_ci_status_suppresses_cancelled_replacement() -> None
         return None
 
     with patch("scripts.dev.check_pr_ci_status._rest_api_get", side_effect=fake_rest_api_get):
-        result = fetch_exact_commit_ci_status("merge123", fetch_check_runs=fetch_check_runs)
+        result = fetch_exact_commit_ci_status(
+            "merge123",
+            pr_number="42",
+            fetch_check_runs=fetch_check_runs,
+            fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
+        )
 
     assert result["checks"]["overall"] == "pending"  # type: ignore[index]
     assert result["checks"]["superseded"] == 1  # type: ignore[index]
@@ -156,8 +335,10 @@ def test_fetch_exact_commit_ci_status_waits_for_unmaterialized_replacement(
     ):
         result = fetch_exact_commit_ci_status(
             "merge123",
+            pr_number="42",
             fetch_check_runs=fetch_check_runs,
             fetch_workflow_runs=fetch_workflow_runs,
+            fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
         )
 
     assert result["checks"]["overall"] == "pending"  # type: ignore[index]
@@ -218,8 +399,10 @@ def test_fetch_exact_commit_ci_status_orders_materialization_by_run_id_when_time
     ):
         result = fetch_exact_commit_ci_status(
             "merge123",
+            pr_number="42",
             fetch_check_runs=fetch_check_runs,
             fetch_workflow_runs=fetch_workflow_runs,
+            fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
         )
 
     assert result["checks"]["overall"] == "pending"  # type: ignore[index]
@@ -304,8 +487,10 @@ def test_fetch_exact_commit_ci_status_preserves_materialized_replacement_authori
     ):
         result = fetch_exact_commit_ci_status(
             "merge123",
+            pr_number="42",
             fetch_check_runs=fetch_check_runs,
             fetch_workflow_runs=fetch_workflow_runs,
+            fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
         )
 
     checks = result["checks"]
@@ -464,8 +649,10 @@ def test_fetch_exact_commit_ci_status_keeps_lone_cancellation_as_failure() -> No
     ):
         result = fetch_exact_commit_ci_status(
             "merge123",
+            pr_number="42",
             fetch_check_runs=fetch_check_runs,
             fetch_workflow_runs=fetch_workflow_runs,
+            fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
         )
 
     assert result["checks"]["overall"] == "failure"  # type: ignore[index]
@@ -478,6 +665,7 @@ def test_fetch_exact_commit_ci_status_rejects_mismatched_check_run_sha() -> None
     """A response containing another commit must never be treated as exact evidence."""
     result = fetch_exact_commit_ci_status(
         "merge123",
+        pr_number="42",
         fetch_check_runs=MagicMock(
             return_value={
                 "check_runs": [
@@ -490,6 +678,7 @@ def test_fetch_exact_commit_ci_status_rejects_mismatched_check_run_sha() -> None
                 ]
             }
         ),
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
     )
 
     assert result["status"] == "error"
@@ -518,7 +707,7 @@ def test_post_merge_success_ignores_terminal_pr_state() -> None:
     assert result.target_sha == "merge123"
     assert result.expected_head_sha == "merge123"
     fetch_status.assert_not_called()
-    fetch_commit_status.assert_called_once_with("merge123")
+    fetch_commit_status.assert_called_once_with("merge123", pr_number="42", changed_files_cache={})
 
 
 def test_post_merge_mismatched_sha_fails_closed() -> None:

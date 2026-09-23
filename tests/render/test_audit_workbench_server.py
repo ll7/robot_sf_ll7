@@ -1492,9 +1492,7 @@ def test_server_handles_client_disconnect_without_broken_pipe_crash() -> None:
             "Connection: close\r\n"
             f"Content-Length: {len(body)}\r\n\r\n"
         ).encode() + body
-        client = socket.create_connection(
-            (parsed_url.hostname, parsed_url.port), timeout=5
-        )
+        client = socket.create_connection((parsed_url.hostname, parsed_url.port), timeout=5)
         try:
             client.sendall(request)
             assert handler_entered.wait(timeout=5), "request did not reach the audit facade"

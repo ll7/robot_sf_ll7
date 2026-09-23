@@ -5796,7 +5796,7 @@ def test_pr_ready_check_isolates_audit_launch_smoke_from_optional_xdist() -> Non
 
     assert script_text.count(f'optional_audit_launch_smoke="{node}"') == 1
     serial_lane = script_text.split("run_pr_ready_lane optional_launch_smoke env", 1)[1].split(
-        'optional_parallel_pytest_addopts=', 1
+        "optional_parallel_pytest_addopts=", 1
     )[0]
     parallel_lane = script_text.split("run_pr_ready_lane optional env", 1)[1].split(
         "else\n  if [[ ${#optional_changed_files[@]}", 1

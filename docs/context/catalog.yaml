@@ -7611,3 +7611,43 @@ entries:
   status: historical
   freshness: dated
   area: training
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/goal/classic_group_crossing_medium_seed22_worst
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/goal
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/orca/classic_head_on_corridor_medium_seed23_worst
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/orca
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/social_force/classic_group_crossing_medium_seed22_best
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/social_force
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

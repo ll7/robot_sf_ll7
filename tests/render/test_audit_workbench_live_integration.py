@@ -668,7 +668,8 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
             },
             method="POST",
         )
-        with urlopen(native_request, timeout=60) as response:
+        # Two sequential child runs each allow 60s startup plus 30s execution.
+        with urlopen(native_request, timeout=210.0) as response:
             native_result = json.load(response)
         assert native_result["status"] == "complete", native_result
         assert native_result["diagnostic_only"] is True

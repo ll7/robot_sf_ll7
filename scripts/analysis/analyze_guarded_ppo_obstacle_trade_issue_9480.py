@@ -23,8 +23,9 @@ import json
 import math
 import re
 import statistics
+import tarfile
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
@@ -111,6 +112,107 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _archive_member_relative_path(member: tarfile.TarInfo) -> str | None:
+    """Validate an archive member path and return its bundle-relative file path."""
+    member_path = PurePosixPath(member.name)
+    if (
+        "\\" in member.name
+        or member_path.is_absolute()
+        or ".." in member_path.parts
+        or not member_path.parts
+        or member_path.parts[0] != EXPECTED_BUNDLE_NAME
+    ):
+        raise ValueError(f"Unexpected archive member path: {member.name!r}")
+    if member.isdir():
+        return None
+    relative_parts = member_path.parts[1:]
+    if not member.isfile() or not relative_parts:
+        raise ValueError(f"Unsupported archive member type: {member.name!r}")
+    return PurePosixPath(*relative_parts).as_posix()
+
+
+def _archive_member_identity(
+    archive: tarfile.TarFile,
+    member: tarfile.TarInfo,
+) -> tuple[str, int]:
+    """Hash one regular file without extracting it to the filesystem."""
+    member_stream = archive.extractfile(member)
+    if member_stream is None:
+        raise ValueError(f"Unable to read archive member: {member.name!r}")
+    digest = hashlib.sha256()
+    size = 0
+    with member_stream:
+        for chunk in iter(lambda: member_stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    if size != member.size:
+        raise ValueError(f"Truncated archive member: {member.name!r}")
+    return digest.hexdigest(), size
+
+
+def _archive_file_identities(archive_path: Path) -> dict[str, tuple[str, int]]:
+    """Read and hash every regular member beneath the expected archive root."""
+    archived_files: dict[str, tuple[str, int]] = {}
+    try:
+        with tarfile.open(archive_path, mode="r|*") as archive:
+            for member in archive:
+                relative = _archive_member_relative_path(member)
+                if relative is None:
+                    continue
+                if relative in archived_files:
+                    raise ValueError(f"Duplicate archive member: {relative!r}")
+                archived_files[relative] = _archive_member_identity(archive, member)
+    except (OSError, tarfile.TarError, EOFError) as exc:
+        raise ValueError(f"Unable to read release archive {archive_path}: {exc}") from exc
+    if not archived_files:
+        raise ValueError("Release archive contains no regular files")
+    return archived_files
+
+
+def _bundle_root_file_identities(root: Path) -> dict[str, tuple[str, int]]:
+    """Hash all regular bundle files while rejecting links and special entries."""
+    root_files: dict[str, tuple[str, int]] = {}
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ValueError(f"Symbolic links are not allowed in bundle root: {path}")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError(f"Unsupported filesystem entry in bundle root: {path}")
+        relative = path.relative_to(root).as_posix()
+        root_files[relative] = (_sha256(path), path.stat().st_size)
+    return root_files
+
+
+def _verify_archive_matches_bundle_root(
+    bundle_archive: Path,
+    bundle_root: Path,
+) -> dict[str, tuple[str, int]]:
+    """Verify that every extracted bundle file is byte-identical to the release archive."""
+    if bundle_archive.is_symlink():
+        raise ValueError("Release archive must not be a symbolic link")
+    if bundle_root.is_symlink():
+        raise ValueError("Bundle root must not be a symbolic link")
+    archive_path = bundle_archive.resolve(strict=True)
+    root = bundle_root.resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError(f"Bundle root is not a directory: {root}")
+    archived_files = _archive_file_identities(archive_path)
+    root_files = _bundle_root_file_identities(root)
+
+    missing = sorted(archived_files.keys() - root_files.keys())
+    extra = sorted(root_files.keys() - archived_files.keys())
+    if missing or extra:
+        raise ValueError(
+            "Bundle root file set does not match release archive "
+            f"(missing={missing[:3]!r}, extra={extra[:3]!r})"
+        )
+    for relative, archive_identity in archived_files.items():
+        if root_files[relative] != archive_identity:
+            raise ValueError(f"Bundle root file does not match release archive: {relative}")
+    return archived_files
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -892,10 +994,17 @@ def _validate_arm(  # noqa: PLR0915 - fixed campaign provenance requires explici
 def _validate_bundle(
     bundle_root: Path,
     *,
-    bundle_archive: Path | None = None,
+    bundle_archive: Path,
 ) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
     """Validate all selected bundle inputs and return identity, rows, and arm reports."""
+    if bundle_root.is_symlink():
+        raise ValueError("Bundle root must not be a symbolic link")
+    if bundle_archive.is_symlink():
+        raise ValueError("Release archive must not be a symbolic link")
+    archive_sha = _sha256(bundle_archive.resolve(strict=True))
+    _require_equal(archive_sha, EXPECTED_RELEASE_ASSET_SHA256, "release asset SHA")
     bundle_root = bundle_root.resolve()
+    archived_files = _verify_archive_matches_bundle_root(bundle_archive, bundle_root)
     identity, scenarios = _validate_identity_documents(bundle_root)
     campaign_manifest = _read_json(bundle_root / "payload/campaign_manifest.json")
     rows_by_arm: dict[str, list[dict[str, Any]]] = {}
@@ -909,12 +1018,11 @@ def _validate_bundle(
         )
         rows_by_arm[arm] = rows
         arm_reports[arm] = report
-    archive_sha = None
-    if bundle_archive is not None:
-        archive_sha = _sha256(bundle_archive.resolve())
-        _require_equal(archive_sha, EXPECTED_RELEASE_ASSET_SHA256, "release asset SHA")
     identity["release_asset_sha256"] = EXPECTED_RELEASE_ASSET_SHA256
-    identity["release_asset_sha256_verified"] = bundle_archive is not None
+    identity["release_asset_sha256_verified"] = True
+    identity["release_archive_content_bound_to_bundle_root"] = True
+    identity["release_archive_file_count"] = len(archived_files)
+    identity["release_archive_total_bytes"] = sum(size for _, size in archived_files.values())
     identity["arms"] = arm_reports
     return identity, rows_by_arm, arm_reports
 
@@ -1138,10 +1246,11 @@ def _render_note(  # noqa: PLR0913 - report sections are explicit evidence input
         f"- Seeds: `{identity['seed_set']}` = {identity['resolved_seeds'][0]}–{identity['resolved_seeds'][-1]};",
         f"  horizon/dt: `{identity['horizon_steps']}` steps / `{identity['dt_s']}` s.",
         f"- Payload checksums: `{identity['payload_checksum_files']}` files / `{identity['payload_checksum_bytes']}` bytes",
-        "  verified against `publication_manifest.json` totals. The top-level publication manifest itself is",
-        "  not in `checksums.sha256`; its authenticity is not independently checksum-covered here.",
-        f"- Release asset declared SHA-256: `{identity['release_asset_sha256']}`; local archive verification: "
-        f"`{'verified' if identity['release_asset_sha256_verified'] else 'not supplied'}`.",
+        "  verified against `publication_manifest.json` totals. The top-level publication manifest is not",
+        "  in `checksums.sha256`, but every extracted bundle file was matched byte-for-byte to the",
+        "  SHA-256-verified release archive.",
+        f"- Release asset SHA-256: `{identity['release_asset_sha256']}`; archive/root binding: verified",
+        f"  (`{identity['release_archive_file_count']}` files / `{identity['release_archive_total_bytes']}` bytes).",
         f"- Arms: `{GUARDED_ARM}` (BR-06 v3 checkpoint behind the runtime guard) and",
         f"  `{BASE_ARM}` (different checkpoint, no guard) — descriptive comparison only,",
         "  not a clean guard ablation because the checkpoints differ.",
@@ -1282,7 +1391,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the verified bundle analysis and write figures, table, and note."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle-root", type=Path, required=True)
-    parser.add_argument("--bundle-archive", type=Path)
+    parser.add_argument("--bundle-archive", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--table-output", type=Path)
     parser.add_argument("--figure-dir", type=Path, required=True)

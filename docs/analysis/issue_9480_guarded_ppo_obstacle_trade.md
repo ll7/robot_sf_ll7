@@ -14,9 +14,11 @@ paper, or benchmark-success claim follows.
 - Seeds: `paper_eval_s30` = 111–140;
   horizon/dt: `600` steps / `0.1` s.
 - Payload checksums: `111` files / `740933980` bytes
-  verified against `publication_manifest.json` totals. The top-level publication manifest itself is
-  not in `checksums.sha256`; its authenticity is not independently checksum-covered here.
-- Release asset declared SHA-256: `61b865fdde65455a39a68221d7c65b0eff315bfa51b4c0bfe34aed3c5d4f3e8e`; local archive verification: `verified`.
+  verified against `publication_manifest.json` totals. The top-level publication manifest is not
+  in `checksums.sha256`, but every extracted bundle file was matched byte-for-byte to the
+  SHA-256-verified release archive.
+- Release asset SHA-256: `61b865fdde65455a39a68221d7c65b0eff315bfa51b4c0bfe34aed3c5d4f3e8e`; archive/root binding: verified
+  (`114` files / `740978856` bytes).
 - Arms: `guarded_ppo__differential_drive` (BR-06 v3 checkpoint behind the runtime guard) and
   `ppo__differential_drive` (different checkpoint, no guard) — descriptive comparison only,
   not a clean guard ablation because the checkpoints differ.

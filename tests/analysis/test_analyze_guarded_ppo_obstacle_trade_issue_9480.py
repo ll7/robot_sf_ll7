@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
+import tarfile
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,11 +13,14 @@ import pytest
 from scripts.analysis.analyze_guarded_ppo_obstacle_trade_issue_9480 import (
     BASE_ARM,
     EXPECTED_ARMS,
+    EXPECTED_BUNDLE_NAME,
     GUARDED_ARM,
     _contact_step,
     _contact_table_row,
     _decision_is_substitution,
     _validate_runtime_row,
+    _verify_archive_matches_bundle_root,
+    main,
     verify_bundle_checksums,
 )
 
@@ -137,6 +142,126 @@ def test_payload_checksum_verifier_fails_closed(tmp_path: Path) -> None:
     corrupted.write_bytes(b"tampered payload\n")
     with pytest.raises(ValueError, match="Checksum mismatch"):
         verify_bundle_checksums(tmp_path)
+
+
+def test_release_archive_must_match_the_analyzed_bundle_root(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "bundle"
+    bundle_root.mkdir()
+    episode_bytes = b"{}\n"
+    checksum_bytes = (
+        f"{hashlib.sha256(episode_bytes).hexdigest()}  payload/episodes.jsonl\n".encode()
+    )
+    payload = {
+        "README.md": b"Frozen release bundle\n",
+        "publication_manifest.json": b"{}\n",
+        "checksums.sha256": checksum_bytes,
+        "payload/episodes.jsonl": episode_bytes,
+    }
+    for relative, content in payload.items():
+        target = bundle_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+    archive_path = tmp_path / "release.tar.gz"
+    with tarfile.open(archive_path, mode="w:gz") as archive:
+        root_member = tarfile.TarInfo(f"{EXPECTED_BUNDLE_NAME}/")
+        root_member.type = tarfile.DIRTYPE
+        archive.addfile(root_member)
+        for relative, content in payload.items():
+            member = tarfile.TarInfo(f"{EXPECTED_BUNDLE_NAME}/{relative}")
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
+
+    archived_files = _verify_archive_matches_bundle_root(archive_path, bundle_root)
+    assert set(archived_files) == set(payload)
+    assert verify_bundle_checksums(bundle_root) == (1, len(episode_bytes))
+
+    tampered_episode = b'{"different":true}\n'
+    (bundle_root / "payload/episodes.jsonl").write_bytes(tampered_episode)
+    (bundle_root / "checksums.sha256").write_text(
+        f"{hashlib.sha256(tampered_episode).hexdigest()}  payload/episodes.jsonl\n",
+        encoding="utf-8",
+    )
+    assert verify_bundle_checksums(bundle_root) == (1, len(tampered_episode))
+    with pytest.raises(ValueError, match="does not match release archive"):
+        _verify_archive_matches_bundle_root(archive_path, bundle_root)
+
+    (bundle_root / "payload/episodes.jsonl").write_bytes(episode_bytes)
+    (bundle_root / "checksums.sha256").write_bytes(checksum_bytes)
+    (bundle_root / "unexpected.txt").write_text("not in the archive", encoding="utf-8")
+    with pytest.raises(ValueError, match="file set does not match"):
+        _verify_archive_matches_bundle_root(archive_path, bundle_root)
+
+
+def test_archive_binding_rejects_duplicate_and_unsafe_members(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "bundle"
+    bundle_root.mkdir()
+    (bundle_root / "readme.txt").write_text("trusted", encoding="utf-8")
+    archive_path = tmp_path / "release.tar"
+
+    with tarfile.open(archive_path, mode="w") as archive:
+        for _ in range(2):
+            member = tarfile.TarInfo(f"{EXPECTED_BUNDLE_NAME}/readme.txt")
+            member.size = 7
+            archive.addfile(member, io.BytesIO(b"trusted"))
+    with pytest.raises(ValueError, match="Duplicate archive member"):
+        _verify_archive_matches_bundle_root(archive_path, bundle_root)
+
+    with tarfile.open(archive_path, mode="w") as archive:
+        unsafe_member = tarfile.TarInfo(f"{EXPECTED_BUNDLE_NAME}/../escape.txt")
+        unsafe_member.size = 6
+        archive.addfile(unsafe_member, io.BytesIO(b"escape"))
+    with pytest.raises(ValueError, match="Unexpected archive member path"):
+        _verify_archive_matches_bundle_root(archive_path, bundle_root)
+
+
+def test_archive_binding_rejects_linked_roots_and_archive_links(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "bundle"
+    target = tmp_path / "target"
+    bundle_root.mkdir()
+    target.write_text("not part of the bundle", encoding="utf-8")
+    archive_path = tmp_path / "release.tar"
+    archive_path.write_bytes(b"unused because the root link is rejected first")
+    linked_root = tmp_path / "linked-bundle"
+    linked_root.symlink_to(bundle_root, target_is_directory=True)
+    with pytest.raises(ValueError, match="Bundle root must not be a symbolic link"):
+        _verify_archive_matches_bundle_root(archive_path, linked_root)
+
+    with tarfile.open(archive_path, mode="w") as archive:
+        link_member = tarfile.TarInfo(f"{EXPECTED_BUNDLE_NAME}/linked.txt")
+        link_member.type = tarfile.SYMTYPE
+        link_member.linkname = "../../target"
+        archive.addfile(link_member)
+    with pytest.raises(ValueError, match="Unsupported archive member type"):
+        _verify_archive_matches_bundle_root(archive_path, bundle_root)
+
+    kept_file = bundle_root / "kept.txt"
+    kept_file.write_text("kept", encoding="utf-8")
+    with tarfile.open(archive_path, mode="w") as archive:
+        file_member = tarfile.TarInfo(f"{EXPECTED_BUNDLE_NAME}/kept.txt")
+        file_member.size = 4
+        archive.addfile(file_member, io.BytesIO(b"kept"))
+    (bundle_root / "dangling-link").symlink_to(target)
+    with pytest.raises(ValueError, match="Symbolic links are not allowed"):
+        _verify_archive_matches_bundle_root(archive_path, bundle_root)
+
+
+def test_cli_requires_release_archive_before_analysis(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [
+                "--bundle-root",
+                str(tmp_path / "bundle"),
+                "--output",
+                str(tmp_path / "report.md"),
+                "--figure-dir",
+                str(tmp_path / "figures"),
+            ]
+        )
+    assert exit_info.value.code == 2
+    assert "--bundle-archive" in capsys.readouterr().err
 
 
 def test_base_contact_table_keeps_guard_fields_na() -> None:

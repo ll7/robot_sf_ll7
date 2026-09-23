@@ -18,10 +18,15 @@ from robot_sf.analysis_workbench.audit_github import (
     GITHUB_PUBLICATION_SCHEMA_VERSION,
     GitHubFindingClaim,
     GitHubIssue,
+    GitHubIssueMissing,
     GitHubOutbox,
     GitHubSync,
+    GitHubTransportError,
     GitHubValidationError,
     SearchResult,
+    _comment_payload_without_request_marker,
+    _parse_publication_marker,
+    _publication_request_marker,
     render_finding_issue,
 )
 from robot_sf.analysis_workbench.audit_github_rest import auditor_request_marker
@@ -236,6 +241,46 @@ def test_append_only_conflicting_comment_readback_is_retained_not_raised(
 def test_initial_publication_body_carries_immutable_revision_identity() -> None:
     rendered = render_finding_issue(_finding("body-marker"), repository=REPOSITORY)
     assert "robot_sf_audit_finding:v1" in rendered.body
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (None, "source must be text"),
+        ("<!-- robot_sf_audit_publication:v1 malformed -->", "malformed"),
+        (
+            "<!-- robot_sf_audit_publication:v1 finding_id=x revision=0 -->\n"
+            "<!-- robot_sf_audit_publication:v1 finding_id=x revision=0 -->",
+            "duplicate",
+        ),
+        ("<!-- robot_sf_audit_publication:v1 finding_id=x revision=0 extra=x -->", "malformed"),
+    ],
+)
+def test_publication_marker_parser_rejects_malformed_or_duplicate_tokens(
+    value: Any,
+    message: str,
+) -> None:
+    with pytest.raises(GitHubValidationError, match=message):
+        _parse_publication_marker(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (None, "body must be text"),
+        ("no request marker", "one exact request marker"),
+        ("forged prefix\n{marker}\n\nbody", "leading marker"),
+        ("{marker}\n\n", "payload is empty"),
+    ],
+)
+def test_comment_request_marker_parser_rejects_invalid_envelopes(
+    value: Any,
+    message: str,
+) -> None:
+    marker = _publication_request_marker("a" * 64)
+    body = value if value is None else value.format(marker=marker)
+    with pytest.raises(GitHubValidationError, match=message):
+        _comment_payload_without_request_marker(body, publication_digest="a" * 64)
 
 
 def test_append_only_search_failures_and_incomplete_reads_fail_closed(tmp_path: Path) -> None:
@@ -538,6 +583,106 @@ def test_append_only_changed_finding_does_not_reuse_ambiguous_initial_payload(
     assert receipt is not None
     assert receipt.body != render_finding_issue(changed, repository=REPOSITORY).body
     assert retry.finding is not None and retry.finding.github_issue is None
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    [
+        ("missing", "conflict"),
+        ("transport", "ambiguous"),
+        ("identity", "conflict"),
+    ],
+)
+def test_append_only_create_receipt_survives_failed_post_create_readback(
+    tmp_path: Path,
+    failure: str,
+    expected_status: str,
+) -> None:
+    class FailedCreateReadbackProvider(AppendOnlyProvider):
+        def get_issue(self, repository: str, number: int) -> GitHubIssue:
+            if self.create_calls:
+                self.get_issue_calls.append((repository, number))
+                if failure == "missing":
+                    raise GitHubIssueMissing("issue disappeared after create")
+                if failure == "transport":
+                    raise GitHubTransportError("post-create reread is unavailable")
+                issue = super().get_issue(repository, number)
+                return replace(issue, body="remote issue identity changed")
+            return super().get_issue(repository, number)
+
+    provider = FailedCreateReadbackProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            _finding(f"create-readback-{failure}"),
+            operation_id=f"create-readback-{failure}",
+        )
+
+    assert result.status == expected_status
+    assert result.remote_write == "applied"
+    assert result.outbox is not None
+    assert result.outbox.state == expected_status
+    assert result.outbox.issue is not None
+    assert len(provider.create_calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    [
+        ("missing", "conflict"),
+        ("transport", "ambiguous"),
+        ("missing_comment", "conflict"),
+        ("forged_comment", "conflict"),
+    ],
+)
+def test_append_only_comment_receipt_survives_failed_final_readback(
+    tmp_path: Path,
+    failure: str,
+    expected_status: str,
+) -> None:
+    class FailedCommentReadbackProvider(AppendOnlyProvider):
+        def get_issue(self, repository: str, number: int) -> GitHubIssue:
+            if self.comment_calls:
+                self.get_issue_calls.append((repository, number))
+                if failure == "missing":
+                    raise GitHubIssueMissing("issue disappeared after comment")
+                if failure == "transport":
+                    raise GitHubTransportError("comment reread is unavailable")
+                issue = super().get_issue(repository, number)
+                if failure == "missing_comment":
+                    return replace(issue, comments=issue.comments[:-1])
+                comments = list(issue.comments)
+                forged = dict(comments[-1])
+                forged["body"] = str(forged["body"]).replace(
+                    "robot_sf_audit_publication:v1",
+                    "robot_sf_audit_publication:forged",
+                    1,
+                )
+                comments[-1] = forged
+                return replace(issue, comments=tuple(comments))
+            return super().get_issue(repository, number)
+
+    provider = FailedCommentReadbackProvider()
+    finding = _finding(f"comment-readback-{failure}")
+    revised = replace(finding, observations=("new observation",))
+    with GitHubOutbox(tmp_path) as outbox:
+        initial = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id=f"initial-{failure}",
+        )
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id=f"comment-{failure}",
+        )
+
+    assert initial.status == "created"
+    assert result.status == expected_status
+    assert result.remote_write == "applied"
+    assert result.outbox is not None
+    assert result.outbox.state == expected_status
+    assert len(provider.comment_calls) == 1
 
 
 def test_append_only_current_comment_link_id_mismatch_is_conflict(tmp_path: Path) -> None:

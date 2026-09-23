@@ -1654,3 +1654,161 @@ def test_recovery_seed_cache_off_disables_publish_and_restore(tmp_path: Path) ->
         assert any(call.startswith("venv ") for call in calls)
     finally:
         _teardown_seed_fixture(repo, worktree_a, worktree_b)
+
+
+def test_recovery_refuses_seed_restore_when_seed_entry_points_stale(
+    tmp_path: Path,
+) -> None:
+    """Issue #9591: a seed with stale entry points is rejected, falling back to full sync."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        first = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a.txt", "--profile", "core")
+        assert first.returncode == 0, first.stderr
+
+        (seed_dir,) = [
+            entry for entry in seed_cache.iterdir() if entry.is_dir() and entry.name[0] != "."
+        ]
+        # Sabotage the seed's python to fail the entry point check
+        seed_python = seed_dir / "bin" / "python"
+        seed_python.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+            '  printf "fast-pysf runtime preflight passed\\n"\n'
+            "  exit 0\n"
+            "fi\n"
+            'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+            '  printf "Entry-point metadata (robot-sf): missing_entry_points\\n" >&2\n'
+            "  exit 2\n"
+            "fi\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        seed_python.chmod(0o755)
+
+        result = _run_seed_recovery(worktree_b, env, tmp_path / "uv-b.txt", "--profile", "core")
+        assert result.returncode == 0, result.stderr
+        assert "seed environment lacks dependency profile 'core'; using full sync" in result.stderr
+        calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
+        assert any(call.startswith("venv ") for call in calls)
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)
+
+
+def test_recovery_refuses_early_seed_publish_when_entry_points_stale(
+    tmp_path: Path,
+) -> None:
+    """Issue #9591: existing local environment with stale entry points is refreshed before seed publish."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        # Pre-create local .venv in worktree_a with coherent fast-pysf but failing entry points
+        local_python = worktree_a / ".venv" / "bin" / "python"
+        local_python.parent.mkdir(parents=True)
+        local_python.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+            '  printf "fast-pysf runtime preflight passed\\n"\n'
+            "  exit 0\n"
+            "fi\n"
+            'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+            '  printf "Entry-point metadata (robot-sf): missing_entry_points\\n" >&2\n'
+            "  exit 2\n"
+            "fi\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        local_python.chmod(0o755)
+
+        # Update fake uv so sync repairs the environment
+        fake_uv = Path(env["PATH"].split(os.pathsep)[0]) / "uv"
+        fake_uv.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'printf \'%s\\n\' "$*" >> "$UV_CAPTURE"\n'
+            'case "${1:-}" in\n'
+            "  venv)\n"
+            '    target="${2:?missing venv path}"\n'
+            '    mkdir -p "$target/bin"\n'
+            "    cat > \"$target/bin/python\" <<'PY'\n"
+            "#!/usr/bin/env bash\n"
+            'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+            '  printf "fast-pysf runtime preflight passed\\n"\n'
+            "fi\n"
+            "exit 0\n"
+            "PY\n"
+            '    chmod +x "$target/bin/python"\n'
+            "    ;;\n"
+            "  sync)\n"
+            '    if [[ -n "${UV_PROJECT_ENVIRONMENT:-}" ]]; then\n'
+            '      mkdir -p "$UV_PROJECT_ENVIRONMENT/bin"\n'
+            "      cat > \"$UV_PROJECT_ENVIRONMENT/bin/python\" <<'PY'\n"
+            "#!/usr/bin/env bash\n"
+            'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+            '  printf "fast-pysf runtime preflight passed\\n"\n'
+            "fi\n"
+            "exit 0\n"
+            "PY\n"
+            '      chmod +x "$UV_PROJECT_ENVIRONMENT/bin/python"\n'
+            "    fi\n"
+            "    ;;\n"
+            "  run)\n"
+            "    ;;\n"
+            '  *) printf "unexpected uv invocation: %s\\n" "$*" >&2; exit 9 ;;\n'
+            "esac\n",
+            encoding="utf-8",
+        )
+        fake_uv.chmod(0o755)
+
+        result = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a.txt", "--profile", "core")
+        assert result.returncode == 0, result.stderr
+        assert (
+            "existing local environment is missing dependency profile 'core'; refreshing it"
+            in result.stderr
+        )
+        calls = (tmp_path / "uv-a.txt").read_text(encoding="utf-8").splitlines()
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        # And after successful recovery, seed was published
+        assert any(
+            entry.is_dir() and (entry / "seed-receipt.json").is_file()
+            for entry in seed_cache.iterdir()
+        )
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)
+
+
+def test_recovery_post_sync_fails_when_entry_points_remain_stale(
+    tmp_path: Path,
+) -> None:
+    """Issue #9591: if post-sync entry points remain incomplete, recovery fails closed."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        # Pre-create local .venv in worktree_a with coherent fast-pysf but failing entry points
+        local_python = worktree_a / ".venv" / "bin" / "python"
+        local_python.parent.mkdir(parents=True)
+        local_python.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+            '  printf "fast-pysf runtime preflight passed\\n"\n'
+            "  exit 0\n"
+            "fi\n"
+            'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+            '  printf "Entry-point metadata (robot-sf): missing_entry_points\\n" >&2\n'
+            "  exit 2\n"
+            "fi\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        local_python.chmod(0o755)
+
+        # fake uv sync leaves local_python as is (unrepaired)
+        result = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a.txt", "--profile", "core")
+        assert result.returncode == 2, result.stderr
+        assert "post-sync dependency profile 'core' is incomplete in" in result.stderr
+        assert (
+            "No wrapped command was started because the requested dependency profile is incomplete."
+            in result.stderr
+        )
+        # Seed cache must NOT have published any seed
+        assert not seed_cache.exists() or not any(seed_cache.iterdir())
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)

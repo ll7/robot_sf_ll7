@@ -3074,7 +3074,7 @@ def _load_request(input_path: Path) -> ComponentRequest:
                 [f"request exceeds {MAX_REQUEST_BYTES} bytes"], source=input_path
             )
         payload = json.loads(input_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise ReviewContractsValidationError(
             [f"cannot read request: {type(error).__name__}"],
             source=input_path,
@@ -3099,7 +3099,7 @@ def _load_config(config_path: Path | None) -> dict[str, Any]:
                 [f"config exceeds {MAX_CONFIG_BYTES} bytes"], source=config_path
             )
         payload = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise ReviewContractsValidationError(
             [f"cannot read config: {type(error).__name__}"],
             source=config_path,

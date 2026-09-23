@@ -1310,6 +1310,59 @@ def test_cli_main_oversized_config_in_process(
     assert "exceeds" in envelope["reason"]
 
 
+@pytest.mark.parametrize("nested_input", ["request", "config"])
+def test_cli_deeply_nested_json_returns_schema_valid_failure(
+    tmp_path: Path, nested_input: str
+) -> None:
+    """The subprocess CLI turns parser recursion limits into its failure envelope."""
+    input_path = _write_cli_input(tmp_path)
+    config_path = tmp_path / "nested-config.json"
+    nested_array = "[" * 10_000 + "0" + "]" * 10_000
+    arguments = [
+        sys.executable,
+        "-m",
+        "robot_sf.render.review_encode",
+        "--input",
+        str(input_path),
+    ]
+    expected_source = "request"
+
+    if nested_input == "request":
+        input_text = input_path.read_text(encoding="utf-8")
+        original_config = '"config": {}'
+        assert original_config in input_text
+        input_path.write_text(
+            input_text.replace(original_config, f'"config": {{"deep": {nested_array}}}'),
+            encoding="utf-8",
+        )
+        assert input_path.stat().st_size <= review_encode.MAX_REQUEST_BYTES
+    else:
+        config_path.write_text(f'{{"deep": {nested_array}}}\n', encoding="utf-8")
+        assert config_path.stat().st_size <= review_encode.MAX_CONFIG_BYTES
+        arguments.extend(["--config", str(config_path)])
+        expected_source = "config"
+
+    completed = subprocess.run(
+        [
+            *arguments,
+            "--output",
+            "nested-cli-out",
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stdout)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+    assert f"cannot read {expected_source}: RecursionError" in envelope["reason"]
+
+
 def test_cli_main_malformed_request_in_process(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

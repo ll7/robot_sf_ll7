@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from robot_sf.analysis_workbench.audit_contracts import Annotation
+from robot_sf.analysis_workbench.audit_contracts import Annotation, EpisodeRef
 from robot_sf.analysis_workbench.audit_coverage import evaluate_coverage
 from robot_sf.analysis_workbench.audit_queue import AuditQueue, QueueDataset, ScanSummary
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
@@ -31,6 +31,13 @@ FAILURE_ID = "classic_doorway_low--112--7633cbd1b58e0be6"
 CONTROL_ID = "classic_doorway_low--114--7e1e0bb0f634327f"
 
 
+def _assert_same_scenario_and_planner(failure: EpisodeRef, control: EpisodeRef) -> None:
+    assert failure.scenario_id
+    assert failure.planner_id
+    assert failure.scenario_id == control.scenario_id
+    assert failure.planner_id == control.planner_id
+
+
 def test_retained_real_campaign_reaches_queue_and_fails_closed_without_native_bundle(
     tmp_path: Path,
 ) -> None:
@@ -47,6 +54,7 @@ def test_retained_real_campaign_reaches_queue_and_fails_closed_without_native_bu
     assert inventory[FAILURE_ID].row["metrics"] == {"success": False, "collisions": 1}
     assert inventory[CONTROL_ID].row["metrics"] == {"success": True, "collisions": 0}
     assert references[FAILURE_ID].config_digest != references[CONTROL_ID].config_digest
+    _assert_same_scenario_and_planner(references[FAILURE_ID], references[CONTROL_ID])
     assert references[FAILURE_ID].checkpoint_digest == ""
     assert references[CONTROL_ID].checkpoint_digest == ""
 

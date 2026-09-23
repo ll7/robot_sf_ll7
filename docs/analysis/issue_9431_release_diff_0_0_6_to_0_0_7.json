@@ -11567,8 +11567,9 @@
     }
   },
   "successor": {
+    "bundle": "issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_bundle.tar.gz",
     "bundle_sha256": "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f",
-    "campaign_root": "payload",
+    "campaign_root": "issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922",
     "release": "0.0.7",
     "source_commit": "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
   }

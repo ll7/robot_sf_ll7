@@ -83,6 +83,7 @@ class CampaignProvenance:
     source_commit: str | None = None
     release_tag: str | None = None
     config_sha256: str | None = None
+    issue_url: str = "https://github.com/ll7/robot_sf_ll7/issues/4848"
 
 
 def _repo_root() -> Path:
@@ -288,7 +289,7 @@ def write_bundle(
 
     metadata = {
         "schema_version": "issue-4848-exemplar-trace.v1",
-        "issue": "https://github.com/ll7/robot_sf_ll7/issues/4848",
+        "issue": campaign.issue_url,
         "claim_boundary": (
             "exemplar trace episode from retained campaign data; "
             "illustrative group-crossing interaction only; "
@@ -339,8 +340,9 @@ def write_bundle(
 def _write_readme(output_dir: Path, metadata: dict[str, Any]) -> None:
     """Write the human-facing evidence bundle README."""
     date = extract_marker_date(metadata)
-    readme = f"""{review_marker("robot_sf#4848", marker_date=date)}
-# Issue #4848 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
+    issue_number = metadata["issue"].rstrip("/").rsplit("/", 1)[-1]
+    readme = f"""{review_marker(f"robot_sf#{issue_number}", marker_date=date)}
+# Issue #{issue_number} Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
 
 Plain-language summary: this directory contains one exemplar trace episode from the
 retained `{metadata["campaign_id"]}` campaign (job {metadata["campaign_job"]}).

@@ -96,6 +96,7 @@ BASE_ALGO_CONFIG = {
 
 REWARD_GIT_PATH = "robot_sf/gym_env/reward.py"
 PEDESTRIAN_TTC_SCHEMA = "physical-pedestrian-ttc.v1"
+PEDESTRIAN_TTC_NONFINITE_REASON = "non_finite_computed_ttc"
 PEDESTRIAN_TTC_DEFINITION = (
     "First t >= 0 satisfying ||(pedestrian_position - robot_position) + "
     "(pedestrian_velocity - robot_velocity) * t|| <= robot_radius + pedestrian_radius, "
@@ -295,7 +296,10 @@ def _disc_contact_time(relative_position: np.ndarray, relative_velocity: np.ndar
 
     The horizon is unbounded (t >= 0), so every finite nonzero closing speed
     remains eligible for an estimate. Normalize velocity before solving the
-    distance-to-contact quadratic to avoid a speed-squared cutoff.
+    distance-to-contact quadratic to avoid a speed-squared cutoff. If the
+    resulting time cannot be represented as a finite float, return the
+    internal ``non_finite`` classification for the caller to expose as an
+    unavailable trace value.
     """
     c = float(np.dot(relative_position, relative_position) - radius**2)
     if c <= 1e-12:
@@ -315,7 +319,10 @@ def _disc_contact_time(relative_position: np.ndarray, relative_velocity: np.ndar
     else:
         contact_distances = [stable_root, c / stable_root]
     future_times = [distance / relative_speed for distance in contact_distances if distance >= 0.0]
-    return (min(future_times), "estimated") if future_times else (None, None)
+    finite_times = [time_s for time_s in future_times if math.isfinite(time_s)]
+    if finite_times:
+        return min(finite_times), "estimated"
+    return (None, "non_finite") if future_times else (None, None)
 
 
 def _physical_pedestrian_ttc(
@@ -332,6 +339,9 @@ def _physical_pedestrian_ttc(
     This geometric estimate is deliberately independent of ``ttc_risk`` reward
     decomposition. Missing or malformed simulator inputs produce a null estimate with
     an explicit status; non-intersecting trajectories are not encoded as infinity.
+    A mathematically valid but non-finite contact time is also unavailable, with
+    ``reason`` set to the stable ``non_finite_computed_ttc`` code so trace rows
+    remain standards-compliant JSON instead of emitting ``Infinity``.
     """
     result = {
         "schema_version": PEDESTRIAN_TTC_SCHEMA,
@@ -377,18 +387,22 @@ def _physical_pedestrian_ttc(
         combined_radius_m=combined_radius,
     )
     candidates: list[tuple[float, int, str]] = []
+    non_finite_candidate = False
     for index, (ped_pos, ped_vel) in enumerate(zip(ped_positions, ped_velocities, strict=True)):
         relative_position = ped_pos - robot_pos
         relative_velocity = ped_vel - robot_vel
         estimate, status = _disc_contact_time(relative_position, relative_velocity, combined_radius)
+        non_finite_candidate = non_finite_candidate or status == "non_finite"
         if estimate is not None and status is not None:
             candidates.append((estimate, index, status))
 
     if not candidates:
         result.update(
-            status="no_intercept",
+            status="unavailable" if non_finite_candidate else "no_intercept",
             reason=(
-                "no pedestrian's constant-velocity relative trajectory intersects the "
+                PEDESTRIAN_TTC_NONFINITE_REASON
+                if non_finite_candidate
+                else "no pedestrian's constant-velocity relative trajectory intersects the "
                 "combined-radius disc for t >= 0"
             ),
         )
@@ -445,6 +459,11 @@ def _step_trace_state(simulator) -> dict:
         "robot_velocity_mps": None if robot_velocity is None else robot_velocity.tolist(),
         "pedestrian_ttc": ttc,
     }
+
+
+def _serialize_trace_row(row: dict) -> str:
+    """Serialize a trace row as standards-compliant JSON and fail closed."""
+    return json.dumps(row, allow_nan=False)
 
 
 def _normalize_runner_obs(step_obs):
@@ -571,7 +590,7 @@ def run_diagnostic(
         all_traces[seed] = rows
         with (out_dir / f"trace_seed{seed}.jsonl").open("w", encoding="utf-8") as fh:
             for row in rows:
-                fh.write(json.dumps(row) + "\n")
+                fh.write(_serialize_trace_row(row) + "\n")
         contact_idx = next(
             (i for i, r in enumerate(rows) if r["is_obstacle_collision"] or r["terminated"]),
             None,
@@ -606,7 +625,7 @@ def run_diagnostic(
                 "w", encoding="utf-8"
             ) as fh:
                 for row in branch:
-                    fh.write(json.dumps(row) + "\n")
+                    fh.write(_serialize_trace_row(row) + "\n")
             counter_rows.append(
                 {
                     "seed": seed,

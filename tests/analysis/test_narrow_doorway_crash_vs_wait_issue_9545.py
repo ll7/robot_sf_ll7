@@ -19,6 +19,7 @@ from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     _replay_branch_from_prefix,
     _rollout_policy,
     _serialize_env_action,
+    _serialize_trace_row,
     _step_trace_state,
     build_binding,
 )
@@ -119,6 +120,37 @@ def test_physical_pedestrian_ttc_estimates_finite_slow_closing_motion() -> None:
         pedestrian_radius=0.5,
     )
     assert ttc["estimate_s"] == pytest.approx(40_000_000.0)
+    assert ttc["status"] == "estimated"
+
+
+def test_physical_pedestrian_ttc_fails_closed_on_non_finite_contact_time() -> None:
+    """Unrepresentable finite-speed contact times stay null and standards-compliant."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[[5.0, 0.0]],
+        pedestrian_velocities=[[-1e-308, 0.0]],
+        pedestrian_radius=0.5,
+    )
+    assert ttc["estimate_s"] is None
+    assert ttc["status"] == "unavailable"
+    assert ttc["reason"] == "non_finite_computed_ttc"
+    assert json.loads(_serialize_trace_row({"pedestrian_ttc": ttc})) == {"pedestrian_ttc": ttc}
+
+
+def test_physical_pedestrian_ttc_keeps_finite_first_root() -> None:
+    """A finite first contact remains estimated when a later root overflows."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[[1.0, 0.0]],
+        pedestrian_velocities=[[-1e-308, 0.0]],
+        pedestrian_radius=0.499,
+    )
+    assert ttc["estimate_s"] == pytest.approx(1e305)
+    assert np.isfinite(ttc["estimate_s"])
     assert ttc["status"] == "estimated"
 
 
@@ -240,7 +272,7 @@ class _FakeTraceEnv:
             ped_pos=np.asarray([[pedestrian_x, 0.0]]),
             ped_vel=np.asarray([[pedestrian_speed, 0.0]]),
             config=SimpleNamespace(ped_radius=0.5),
-            iter_obstacle_segments=lambda: [],
+            iter_obstacle_segments=lambda: [((0.0, 0.0), (0.0, 10.0))],
         )
 
     def reset(self, *, seed: int):
@@ -307,6 +339,7 @@ def test_measured_trace_row_binds_executed_action_to_post_step_telemetry(monkeyp
     assert row["ped_velocities_mps"] == [[-0.25, 0.0]]
     assert row["pedestrian_ttc"]["estimate_s"] == pytest.approx(2.0)
     assert row["pedestrian_ttc"]["status"] == "estimated"
+    assert json.loads(_serialize_trace_row(row)) == row
 
 
 def test_counterfactual_trace_row_binds_executed_action_to_post_step_telemetry(monkeypatch) -> None:
@@ -353,6 +386,7 @@ def test_counterfactual_trace_row_binds_executed_action_to_post_step_telemetry(m
     assert row["ped_velocities_mps"] == [[-0.05, 0.0]]
     assert row["pedestrian_ttc"]["estimate_s"] == pytest.approx(10.0)
     assert row["pedestrian_ttc"]["status"] == "estimated"
+    assert json.loads(_serialize_trace_row(row)) == row
     assert env.closed
 
 

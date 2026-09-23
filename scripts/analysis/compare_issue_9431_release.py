@@ -34,7 +34,7 @@ EXECUTION_MODES = {"native", "adapter", "mixed"}
 # Frozen from the accepted issue #9431 S30/H600 campaign identity. Counts alone
 # are not enough: each arm must contain this exact planner × scenario × seed
 # Cartesian product. The scenario IDs resolve from the pinned 0.0.7 source
-# matrix (configs/scenarios/classic_interactions_francis2023.yaml).
+# matrix (configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml).
 EXPECTED_ARM_KEYS = frozenset(
     {
         "goal",
@@ -106,9 +106,15 @@ EXPECTED_SCENARIO_IDS = frozenset(
     }
 )
 EXPECTED_SEEDS = frozenset(range(111, 141))
-EXPECTED_SCENARIO_MATRIX_SHA256 = "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
-EXPECTED_SCENARIO_MANIFEST_SHA256 = (
+EXPECTED_PREDECESSOR_SCENARIO_MANIFEST = "configs/scenarios/classic_interactions_francis2023.yaml"
+EXPECTED_PREDECESSOR_SCENARIO_MANIFEST_SHA256 = (
     "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+)
+EXPECTED_SUCCESSOR_SCENARIO_MANIFEST = (
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
+)
+EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256 = (
+    "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
 )
 EXPECTED_ARM_COUNT = len(EXPECTED_ARM_KEYS)
 EXPECTED_ROWS_PER_ARM = len(EXPECTED_SCENARIO_IDS) * len(EXPECTED_SEEDS)
@@ -283,10 +289,10 @@ def _read_predecessor(archive: Path) -> dict[str, dict[tuple[str, int], dict[str
     return result
 
 
-def _archive_source_commit(archive: Path) -> str:
-    """Read the source identity from the publication archive's resolved manifest."""
+def _bundle_resolved_release_manifest(bundle: Path) -> Mapping[str, Any]:
+    """Read the unique resolved release manifest from a publication bundle."""
     manifest_suffix = "/payload/release/release_manifest.resolved.json"
-    with tarfile.open(archive, "r:gz") as handle:
+    with tarfile.open(bundle, "r:gz") as handle:
         matches = [
             member
             for member in handle.getmembers()
@@ -294,17 +300,70 @@ def _archive_source_commit(archive: Path) -> str:
         ]
         if len(matches) != 1:
             raise ValueError(
-                "publication archive must contain exactly one resolved release manifest; "
+                "publication bundle must contain exactly one resolved release manifest; "
                 f"found {len(matches)}"
             )
         extracted = handle.extractfile(matches[0])
         if extracted is None:
             raise ValueError(f"cannot read resolved release manifest {matches[0].name}")
         manifest = json.load(extracted)
+    if not isinstance(manifest, Mapping):
+        raise ValueError("resolved release manifest must be a JSON object")
+    return manifest
+
+
+def _archive_source_commit(archive: Path) -> str:
+    """Read the source identity from the publication archive's resolved manifest."""
+    manifest = _bundle_resolved_release_manifest(archive)
     source_commit = manifest.get("source_sha") or manifest.get("source_commit")
     if not isinstance(source_commit, str) or not source_commit:
         raise ValueError("resolved release manifest is missing a source commit")
     return source_commit
+
+
+def _bundle_scenario_identity(bundle: Path) -> dict[str, str]:
+    """Read the scenario source path and digest pinned by a publication bundle."""
+    manifest = _bundle_resolved_release_manifest(bundle)
+    scenario = manifest.get("scenario")
+    if not isinstance(scenario, Mapping):
+        raise ValueError("resolved release manifest is missing scenario identity")
+    matrix_path = scenario.get("matrix_path")
+    matrix_sha256 = scenario.get("matrix_sha256")
+    if not isinstance(matrix_path, str) or not matrix_path.strip():
+        raise ValueError("resolved release manifest scenario is missing matrix_path")
+    if not isinstance(matrix_sha256, str):
+        raise ValueError("resolved release manifest scenario is missing matrix_sha256")
+    return {
+        "manifest": matrix_path,
+        "sha256": _normalize_sha256(matrix_sha256, label="scenario manifest SHA-256"),
+    }
+
+
+def _release_scenario_identities(
+    predecessor_archive: Path, successor_bundle: Path
+) -> dict[str, dict[str, str]]:
+    """Require and return the two expected release-specific scenario identities."""
+    identities = {
+        "predecessor": _bundle_scenario_identity(predecessor_archive),
+        "successor": _bundle_scenario_identity(successor_bundle),
+    }
+    expected = {
+        "predecessor": {
+            "manifest": EXPECTED_PREDECESSOR_SCENARIO_MANIFEST,
+            "sha256": EXPECTED_PREDECESSOR_SCENARIO_MANIFEST_SHA256,
+        },
+        "successor": {
+            "manifest": EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
+            "sha256": EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
+        },
+    }
+    for release, identity in identities.items():
+        if identity != expected[release]:
+            raise ValueError(
+                f"{release} scenario identity mismatch: "
+                f"expected {expected[release]}, got {identity}"
+            )
+    return identities
 
 
 def _bundle_campaign_id(bundle: Path) -> str:
@@ -536,6 +595,10 @@ def compare(
         )
     old = _read_predecessor(predecessor_archive)
     new = _read_successor(successor_root)
+    scenario_identities = _release_scenario_identities(predecessor_archive, successor_bundle)
+    scenario_definitions_identical = (
+        scenario_identities["predecessor"] == scenario_identities["successor"]
+    )
     _validate_matrix(old, new)
     _validate_successor_rows(new, successor_source_sha=successor_source_sha)
     arms = sorted(old)
@@ -612,17 +675,18 @@ def compare(
             "seeds": sorted(EXPECTED_SEEDS),
             "episodes_per_arm": EXPECTED_ROWS_PER_ARM,
             "total_episodes": EXPECTED_TOTAL_ROWS,
-            "scenario_manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
-            "scenario_manifest_sha256": EXPECTED_SCENARIO_MANIFEST_SHA256,
-            "scenario_matrix_sha256": EXPECTED_SCENARIO_MATRIX_SHA256,
+            "scenario_manifests": scenario_identities,
+            "scenario_definitions_identical": scenario_definitions_identical,
         },
         "comparison_design": {
             "classification": "descriptive multi-change release comparison",
             "causal_ablation": False,
+            "scenario_definitions_identical": scenario_definitions_identical,
             "note": (
-                "The source range includes the social-force goal-approach repair, the goal-zone "
-                "success-definition repair, and runtime-admission corrections; it does not "
-                "isolate one causal change."
+                "Rows are matched by planner, scenario ID, and seed, but the predecessor and "
+                "successor scenario definitions differ. The source range includes the "
+                "social-force goal-approach repair, the goal-zone success-definition repair, "
+                "and runtime-admission corrections; it does not isolate one causal change."
             ),
         },
         "arms": arm_reports,
@@ -651,10 +715,10 @@ def _markdown(report: Mapping[str, Any]) -> str:
         "",
         "This report pairs rows by planner, scenario, and seed. Successor execution is admitted only when every row is native, adapter, or mixed mode with no fallback/degraded row. Trace-dependent goal-adjacent timeout labels remain `unavailable` when step traces were not recorded.",
         "",
-        "This is a **descriptive multi-change release comparison**, not a single-change causal ablation. The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections.",
+        "This is a **descriptive multi-change release comparison**, not a single-change causal ablation. Rows match by planner, scenario ID, and seed, but the scenario definitions differ between releases. The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections.",
         "",
         f"- validated matrix: **{len(report['matrix_identity']['planner_arms'])} arms × {len(report['matrix_identity']['scenario_ids'])} scenarios × {len(report['matrix_identity']['seeds'])} seeds** = {report['matrix_identity']['total_episodes']} rows",
-        f"- scenario-matrix SHA-256: `{report['matrix_identity']['scenario_matrix_sha256']}`; source manifest `{report['matrix_identity']['scenario_manifest']}` SHA-256: `{report['matrix_identity']['scenario_manifest_sha256']}`",
+        f"- scenario sources: 0.0.6 `{report['matrix_identity']['scenario_manifests']['predecessor']['manifest']}` (SHA-256 `{report['matrix_identity']['scenario_manifests']['predecessor']['sha256']}`) → 0.0.7 `{report['matrix_identity']['scenario_manifests']['successor']['manifest']}` (SHA-256 `{report['matrix_identity']['scenario_manifests']['successor']['sha256']}`); definitions identical: **{'yes' if report['matrix_identity']['scenario_definitions_identical'] else 'no'}**",
         "",
         f"- predecessor archive SHA-256: `{report['predecessor']['archive_sha256']}`",
         f"- exact source range: `{report['predecessor']['source_commit']}..{report['successor']['source_commit']}`",

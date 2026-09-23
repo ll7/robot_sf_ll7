@@ -10,12 +10,16 @@ from pathlib import Path
 import pytest
 import yaml
 
+import scripts.analysis.compare_issue_9431_release as release_diff
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_ARM_KEYS,
+    EXPECTED_PREDECESSOR_SCENARIO_MANIFEST,
+    EXPECTED_PREDECESSOR_SCENARIO_MANIFEST_SHA256,
     EXPECTED_SCENARIO_IDS,
-    EXPECTED_SCENARIO_MANIFEST_SHA256,
     EXPECTED_SEEDS,
+    EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
+    EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
     _bundle_campaign_id,
     _execution_audit,
     _markdown,
@@ -155,9 +159,11 @@ def test_markdown_records_exact_source_range_and_execution_modes() -> None:
             "total_episodes": len(EXPECTED_ARM_KEYS)
             * len(EXPECTED_SCENARIO_IDS)
             * len(EXPECTED_SEEDS),
-            "scenario_matrix_sha256": "matrix-sha",
-            "scenario_manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
-            "scenario_manifest_sha256": "manifest-sha",
+            "scenario_manifests": {
+                "predecessor": {"manifest": "old.yaml", "sha256": "old-sha"},
+                "successor": {"manifest": "new.yaml", "sha256": "new-sha"},
+            },
+            "scenario_definitions_identical": False,
         },
     }
 
@@ -167,6 +173,9 @@ def test_markdown_records_exact_source_range_and_execution_modes() -> None:
     assert "native, adapter, or mixed mode" in rendered
     assert "descriptive multi-change release comparison" in rendered
     assert "not a single-change causal ablation" in rendered
+    assert "scenario definitions differ between releases" in rendered
+    assert "old.yaml" in rendered
+    assert "new.yaml" in rendered
 
 
 def test_markdown_keeps_missing_goal_adjacent_labels_explicitly_unavailable() -> None:
@@ -196,9 +205,11 @@ def test_markdown_keeps_missing_goal_adjacent_labels_explicitly_unavailable() ->
             "total_episodes": len(EXPECTED_ARM_KEYS)
             * len(EXPECTED_SCENARIO_IDS)
             * len(EXPECTED_SEEDS),
-            "scenario_matrix_sha256": "matrix-sha",
-            "scenario_manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
-            "scenario_manifest_sha256": "manifest-sha",
+            "scenario_manifests": {
+                "predecessor": {"manifest": "old.yaml", "sha256": "old-sha"},
+                "successor": {"manifest": "new.yaml", "sha256": "new-sha"},
+            },
+            "scenario_definitions_identical": False,
         },
     }
 
@@ -240,6 +251,24 @@ def test_bundle_campaign_id_comes_from_pinned_campaign_manifest(tmp_path) -> Non
     assert _bundle_campaign_id(bundle) == "issue9431_release_campaign"
 
 
+def test_bundle_scenario_identity_comes_from_resolved_release_manifest(tmp_path) -> None:
+    bundle = tmp_path / "bundle.tar.gz"
+    manifest_bytes = (
+        b'{"scenario":{"matrix_path":"configs/scenarios/successor.yaml",'
+        b'"matrix_sha256":"'
+        b'03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"}}'
+    )
+    with tarfile.open(bundle, "w:gz") as archive:
+        member = tarfile.TarInfo("release/payload/release/release_manifest.resolved.json")
+        member.size = len(manifest_bytes)
+        archive.addfile(member, BytesIO(manifest_bytes))
+
+    assert release_diff._bundle_scenario_identity(bundle) == {
+        "manifest": "configs/scenarios/successor.yaml",
+        "sha256": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    }
+
+
 def test_matrix_validation_rejects_equal_sized_noncanonical_scenario_seed_set() -> None:
     expected_scenarios = {"scenario-a", "scenario-b"}
     expected_seeds = {22, 23}
@@ -262,16 +291,29 @@ def test_matrix_validation_rejects_equal_sized_noncanonical_scenario_seed_set() 
 
 def test_frozen_matrix_matches_the_versioned_issue_9431_sources() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    scenario_manifest = repo_root / "configs/scenarios/classic_interactions_francis2023.yaml"
-    release_manifest = (
-        repo_root / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
+    predecessor_scenario_manifest = repo_root / EXPECTED_PREDECESSOR_SCENARIO_MANIFEST
+    successor_scenario_manifest = repo_root / EXPECTED_SUCCESSOR_SCENARIO_MANIFEST
+    campaign_template = (
+        repo_root
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
     )
+    seed_sets = repo_root / "configs/benchmarks/seed_sets_v1.yaml"
 
-    assert sha256(scenario_manifest.read_bytes()).hexdigest() == EXPECTED_SCENARIO_MANIFEST_SHA256
-    resolved_scenarios = load_scenarios(scenario_manifest)
-    scenario_ids = {str(row["name"]) for row in resolved_scenarios}
-    resolved_release = yaml.safe_load(release_manifest.read_text(encoding="utf-8"))
+    assert (
+        sha256(predecessor_scenario_manifest.read_bytes()).hexdigest()
+        == EXPECTED_PREDECESSOR_SCENARIO_MANIFEST_SHA256
+    )
+    assert (
+        sha256(successor_scenario_manifest.read_bytes()).hexdigest()
+        == EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256
+    )
+    predecessor_ids = {str(row["name"]) for row in load_scenarios(predecessor_scenario_manifest)}
+    successor_ids = {str(row["name"]) for row in load_scenarios(successor_scenario_manifest)}
+    resolved_template = yaml.safe_load(campaign_template.read_text(encoding="utf-8"))
+    resolved_seed_sets = yaml.safe_load(seed_sets.read_text(encoding="utf-8"))
 
-    assert scenario_ids == EXPECTED_SCENARIO_IDS
-    assert set(resolved_release["planners"]["keys"]) == EXPECTED_ARM_KEYS
-    assert set(resolved_release["seed_policy"]["resolved_seeds"]) == EXPECTED_SEEDS
+    assert predecessor_ids == EXPECTED_SCENARIO_IDS
+    assert successor_ids == EXPECTED_SCENARIO_IDS
+    assert resolved_template["scenario_matrix"] == EXPECTED_SUCCESSOR_SCENARIO_MANIFEST
+    assert {row["key"] for row in resolved_template["planners"]} == EXPECTED_ARM_KEYS
+    assert set(resolved_seed_sets[resolved_template["seed_policy"]["seed_set"]]) == EXPECTED_SEEDS

@@ -62,9 +62,6 @@ PROFILE_IMPORTS = frozenset(
         "pygame",
         "matplotlib",
         "PIL",
-        # MoviePy's viz dependency closure (review-encode uses imageio
-        # directly for bounded MP4 encode/decode verification).
-        "imageio",
         # Maps extra (tests/unit/test_geojson_map_builder.py).
         "geopandas",
         "osmnx",

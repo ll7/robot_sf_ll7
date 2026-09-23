@@ -120,7 +120,7 @@ states: `prefers_crash` is False in all 27 cells. This is diagnostic replay arit
 not retraining evidence; it does not establish a released-policy causal mechanism or a
 population-level claim.
 
-## 5. Why this refutes the reward hypothesis
+## 5. Observed 60-step return contrast
 
 The tested explanation — that the training objective makes wall contact preferable to
 waiting — predicts crash return ≥ wait return under the bound objective. The matched
@@ -130,11 +130,10 @@ retains the observed per-step reward terms, and does not trigger the −6.5 time
 within that window. No full-horizon wait-return extrapolation is made: later smoothness
 and terminal/timeout rewards are not evaluated by these 60-step traces. The policy
 nevertheless drives forward into the wall on all three seeds without any pedestrian,
-time, or deadlock trigger. The reward did not incentivize this contact at the bound
-evaluation objective over the measured window;
-the mechanism is a systematic geometry/obstacle-handling failure (persistent forward
-drive and steering into doorway geometry), with the reward gradient, if followed,
-pointing toward waiting instead.
+time, or deadlock trigger. Across these logged windows, the hold branch has the higher
+discounted return. This result is limited to the observed 60-step return contrast; no
+policy-gradient or reward-gradient inference, or full-horizon return preference, was
+tested.
 
 ## 6. What remains unidentified
 
@@ -145,8 +144,9 @@ pointing toward waiting instead.
   model cache, but it remains one scenario and three seeds. It does not establish a
   released-policy mechanism outside this evaluation boundary.
 - Training-time incentives: eval-time replay cannot prove what the optimizer saw
-  (curriculum stage, vec-env wrappers, training gamma). The refutation is scoped to the
-  bound evaluation objective; no broader paper or dissertation claim is admitted here.
+  (curriculum stage, vec-env wrappers, training gamma). The observed return contrast is
+  scoped to the bound evaluation objective; no broader paper or dissertation claim is
+  admitted here.
 - Pedestrian-reactive divergence in counterfactuals is documented but unmaterialized
   here (pedestrian >8 m away, `behavior: none`).
 

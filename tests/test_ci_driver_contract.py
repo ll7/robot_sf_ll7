@@ -142,7 +142,10 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
     jobs = workflow["jobs"]
     gate = jobs["dispatch-ownership"]
     assert gate["concurrency"] == {
-        "group": "ci-dispatch-owner-${{ github.sha }}",
+        "group": (
+            "ci-dispatch-owner-${{ github.event_name == 'workflow_dispatch' && "
+            "github.sha || github.run_id }}"
+        ),
         "cancel-in-progress": False,
     }
     assert gate["outputs"]["run_full_ci"] == "${{ steps.decision.outputs.run_full_ci }}"

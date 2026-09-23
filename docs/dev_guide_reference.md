@@ -2726,7 +2726,11 @@ those refs point to the same SHA. Followers wait for that owner: they mirror
 only a completed exact-head success/failure, or take ownership if the prior run
 becomes stale or cancelled. Set the `retry_failed` workflow input only for one justified retry;
 the run title is its idempotent receipt. Repeated ordinary watcher dispatches
-therefore cannot cancel the owner or start duplicate full matrices.
+therefore cannot cancel the owner or start duplicate full matrices. The job-level
+election concurrency key is shared only by manual runs for the same SHA; push,
+pull-request, and merge-group bypass gates use their unique run IDs, so a manual
+follower cannot hold the election slot while waiting for a push gate that needs
+to bypass the election.
 
 ### Scheduled main-CI incident reconciliation
 

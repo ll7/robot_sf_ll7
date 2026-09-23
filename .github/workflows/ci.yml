@@ -49,7 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     concurrency:
-      group: ci-dispatch-owner-${{ github.sha }}
+      # Serialize same-head manual elections only. Push, PR, and merge_group
+      # bypass gates must not hold the slot that a manual follower waits on.
+      group: ci-dispatch-owner-${{ github.event_name == 'workflow_dispatch' && github.sha || github.run_id }}
       cancel-in-progress: false
     outputs:
       run_full_ci: ${{ steps.decision.outputs.run_full_ci }}

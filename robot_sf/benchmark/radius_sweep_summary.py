@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import posixpath
 import subprocess
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
@@ -23,6 +24,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
+from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
 from robot_sf.benchmark.radius_rank_stability import (
     SWEEP_SUMMARY_SCHEMA,
     _gate1_canary_receipt_is_passing,
@@ -521,19 +523,24 @@ def _episode_from_record(
     record: Mapping[str, Any],
     *,
     planner: str,
-    planner_identity: _PlannerIdentity,
+    planner_identities: Mapping[str, Mapping[str, _PlannerIdentity]],
     radius: float,
     commit: str,
 ) -> _Episode:
-    _validate_episode_planner_identity(
-        record,
-        planner=planner,
-        expected=planner_identity,
-        radius=radius,
-    )
     scenario = str(record.get("scenario_id") or "")
     if scenario not in EXPECTED_SCENARIO_NAMES:
         raise RadiusSweepSummaryError(f"radius {radius:g} has unexpected scenario {scenario!r}")
+    planner_identities_for_scenario = planner_identities.get(planner)
+    if planner_identities_for_scenario is None or scenario not in planner_identities_for_scenario:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} has no frozen planner identity for {planner!r}/{scenario!r}"
+        )
+    _validate_episode_planner_identity(
+        record,
+        planner=planner,
+        expected=planner_identities_for_scenario[scenario],
+        radius=radius,
+    )
     seed_raw = record.get("seed")
     if (
         isinstance(seed_raw, bool)
@@ -584,7 +591,7 @@ def _load_episodes(
     root: Path,
     radius: float,
     commit: str,
-    planner_identities: Mapping[str, _PlannerIdentity],
+    planner_identities: Mapping[str, Mapping[str, _PlannerIdentity]],
 ) -> tuple[_Episode, ...]:
     episodes: list[_Episode] = []
     identities: set[tuple[str, str, int]] = set()
@@ -619,7 +626,7 @@ def _load_episodes(
             episode = _episode_from_record(
                 record,
                 planner=planner,
-                planner_identity=planner_identities[planner],
+                planner_identities=planner_identities,
                 radius=radius,
                 commit=commit,
             )
@@ -669,6 +676,80 @@ def _committed_config_blob(commit: str, config_path: str) -> bytes:
     return result.stdout
 
 
+def _committed_blob_exists(commit: str, config_path: str) -> bool:
+    """Return whether a relative path is a blob in the pinned Git tree."""
+    parsed_path = PurePosixPath(config_path)
+    if parsed_path.is_absolute() or ".." in parsed_path.parts or not parsed_path.parts:
+        raise RadiusSweepSummaryError(f"invalid committed config path: {config_path!r}")
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(SOURCE_REPOSITORY_ROOT),
+                "cat-file",
+                "-e",
+                f"{commit}:{config_path}",
+            ],
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RadiusSweepSummaryError(
+            f"cannot inspect frozen config path: {commit}:{config_path}"
+        ) from exc
+    return result.returncode == 0
+
+
+def _committed_manifest_reference_path(
+    commit: str, manifest_path: str, raw_path: object
+) -> str | None:
+    """Resolve a policy-manifest reference using map-runner path precedence.
+
+    Returns:
+        A repository-relative committed path, or ``None`` for an absent reference.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    parsed_raw = PurePosixPath(raw_path)
+    if parsed_raw.is_absolute():
+        raise RadiusSweepSummaryError(
+            f"absolute policy config paths cannot be resolved from a frozen commit: {raw_path!r}"
+        )
+
+    candidates = (
+        posixpath.normpath(str(PurePosixPath(manifest_path).parent / parsed_raw)),
+        posixpath.normpath(raw_path),
+    )
+    for candidate in candidates:
+        if candidate in {".", ".."} or candidate.startswith("../"):
+            continue
+        if _committed_blob_exists(commit, candidate):
+            return candidate
+    raise RadiusSweepSummaryError(
+        f"frozen policy config reference is unavailable from {commit}:{manifest_path}: {raw_path!r}"
+    )
+
+
+def _committed_manifest_reference_yaml(
+    commit: str,
+    manifest_path: str,
+    raw_path: object,
+    *,
+    label: str,
+) -> Mapping[str, Any]:
+    """Read one policy-manifest reference from the same immutable source tree.
+
+    Returns:
+        Parsed mapping from the resolved Git blob.
+    """
+    resolved_path = _committed_manifest_reference_path(commit, manifest_path, raw_path)
+    if resolved_path is None:
+        return {}
+    return _committed_yaml_mapping(commit, resolved_path, label)
+
+
 def _committed_config_sha256(commit: str, config_path: str) -> str:
     """Hash config bytes from the source commit, never from a mutable worktree file.
 
@@ -700,13 +781,13 @@ def _committed_yaml_mapping(commit: str, config_path: str, label: str) -> Mappin
     return payload
 
 
-def _committed_planner_identities(
+def _committed_planner_identities(  # noqa: C901
     commit: str, campaign_config_path: str
-) -> dict[str, _PlannerIdentity]:
-    """Bind roster keys to the algorithm and config recorded by map-runner episodes.
+) -> dict[str, dict[str, _PlannerIdentity]]:
+    """Bind roster keys and scenarios to map-runner's resolved algorithm/config.
 
     Returns:
-        Frozen planner identities in campaign roster order.
+        Frozen per-scenario planner identities in campaign roster order.
     """
     campaign_config = _committed_yaml_mapping(
         commit, campaign_config_path, "radius-sweep campaign config"
@@ -717,12 +798,12 @@ def _committed_planner_identities(
             f"committed radius-sweep config has no planner roster: {campaign_config_path}"
         )
 
-    identities: dict[str, _PlannerIdentity] = {}
+    resolved: dict[str, dict[str, tuple[str, str]]] = {}
     for index, raw_planner in enumerate(raw_planners):
         planner = _mapping(raw_planner, f"committed planner roster row {index}")
         key = planner.get("key")
         algorithm = planner.get("algo")
-        if not isinstance(key, str) or not key.strip() or key in identities:
+        if not isinstance(key, str) or not key.strip() or key in resolved:
             raise RadiusSweepSummaryError(
                 f"committed planner roster row {index} has an invalid or duplicate key"
             )
@@ -730,43 +811,73 @@ def _committed_planner_identities(
             raise RadiusSweepSummaryError(f"committed planner {key!r} has no configured algorithm")
 
         algo_config_path = planner.get("algo_config")
+        manifest_path: str | None
         if algo_config_path is None:
-            algo_config: Mapping[str, Any] = {}
+            manifest: Mapping[str, Any] = {}
+            manifest_path = None
         elif isinstance(algo_config_path, str) and algo_config_path.strip():
-            algo_config = _committed_yaml_mapping(
+            manifest_path = algo_config_path
+            manifest = _committed_yaml_mapping(
                 commit, algo_config_path, f"planner {key!r} algorithm config"
             )
         else:
             raise RadiusSweepSummaryError(
                 f"committed planner {key!r} has an invalid algo_config path"
             )
-        try:
-            config_hash = _config_hash(dict(algo_config))
-            canonical_algorithm = canonical_algorithm_name(algorithm)
-        except (TypeError, ValueError) as exc:
-            raise RadiusSweepSummaryError(
-                f"cannot resolve committed algorithm/config identity for planner {key!r}"
-            ) from exc
-        identities[key] = _PlannerIdentity(
-            algorithm=canonical_algorithm,
-            algo_config_hash=config_hash,
-        )
+        reference_cache: dict[str, Mapping[str, Any]] = {}
 
-    if tuple(identities) != RELEASE_PLANNER_KEYS:
+        def load_config(raw_path: object) -> dict[str, Any]:
+            if manifest_path is None:
+                return {}
+            if isinstance(raw_path, str) and raw_path.strip() in reference_cache:
+                return dict(reference_cache[raw_path.strip()])
+            loaded = _committed_manifest_reference_yaml(
+                commit,
+                manifest_path,
+                raw_path,
+                label=f"planner {key!r} referenced algorithm config",
+            )
+            if isinstance(raw_path, str) and raw_path.strip():
+                reference_cache[raw_path.strip()] = loaded
+            return dict(loaded)
+
+        resolved[key] = {}
+        for scenario in EXPECTED_SCENARIO_NAMES:
+            try:
+                effective_algorithm, effective_config = resolve_candidate_manifest_runtime(
+                    default_algo=algorithm,
+                    manifest=dict(manifest),
+                    scenario={"name": scenario},
+                    load_config=load_config,
+                )
+                canonical_algorithm = canonical_algorithm_name(effective_algorithm)
+                config_hash = _config_hash(effective_config)
+            except (TypeError, ValueError) as exc:
+                raise RadiusSweepSummaryError(
+                    "cannot resolve committed algorithm/config identity for planner "
+                    f"{key!r}/{scenario!r}"
+                ) from exc
+            resolved[key][scenario] = (canonical_algorithm, config_hash)
+
+    if tuple(resolved) != RELEASE_PLANNER_KEYS:
         raise RadiusSweepSummaryError(
             "committed planner algorithm/config roster does not match the frozen release keys"
         )
 
-    counts: dict[tuple[str, str], int] = defaultdict(int)
-    for identity in identities.values():
-        counts[(identity.algorithm, identity.algo_config_hash)] += 1
+    counts: dict[tuple[str, str, str], int] = defaultdict(int)
+    for planner_identities in resolved.values():
+        for scenario, (algorithm, config_hash) in planner_identities.items():
+            counts[(scenario, algorithm, config_hash)] += 1
     return {
-        key: _PlannerIdentity(
-            algorithm=identity.algorithm,
-            algo_config_hash=identity.algo_config_hash,
-            planner_key_required=counts[(identity.algorithm, identity.algo_config_hash)] > 1,
-        )
-        for key, identity in identities.items()
+        key: {
+            scenario: _PlannerIdentity(
+                algorithm=algorithm,
+                algo_config_hash=config_hash,
+                planner_key_required=counts[(scenario, algorithm, config_hash)] > 1,
+            )
+            for scenario, (algorithm, config_hash) in planner_identities.items()
+        }
+        for key, planner_identities in resolved.items()
     }
 
 

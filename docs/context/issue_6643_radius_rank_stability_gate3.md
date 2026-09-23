@@ -124,14 +124,27 @@ Each root must contain its canonical `campaign_manifest.json`,
 the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
 derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
 Each episode's algorithm fields (`algo`, `scenario_params.algo`, and any
-`algorithm_metadata.algorithm` / `canonical_algorithm`) must canonicalize to the algorithm frozen
-for that planner key in the campaign config at the pinned source commit. Its
-`scenario_params.algo_config_hash` must match the loaded per-arm algorithm-config mapping at that
-same commit, so distinct planner keys that share an algorithm remain distinguishable. Any explicit
-planner-key carrier (`planner_key`, `scenario_params.planner_key`, or
-`result_provenance.planner_key`) must exactly match the run-directory planner key; a shared
-algorithm/config identity without a key carrier is rejected. Missing, conflicting, or mismatched
-identity inputs fail closed.
+`algorithm_metadata.algorithm` / `canonical_algorithm`) must canonicalize to the algorithm resolved
+for that planner key and scenario from the campaign config at the pinned source commit.
+`scenario_params.algo_config_hash` must match the effective per-scenario runtime config hash from
+that same commit: candidate base config plus `params`, then family/scenario overrides, or the
+scenario-level algorithm override where present. The resolver is shared with map-runner so raw
+candidate-manifest hashes are not mistaken for the config identities recorded in episode rows.
+Any explicit planner-key carrier (`planner_key`, `scenario_params.planner_key`, or
+`result_provenance.planner_key`) must exactly match the run-directory planner key. If two roster
+keys resolve to the same algorithm and config for a scenario, a planner-key carrier is mandatory;
+missing, conflicting, or mismatched identity inputs fail closed.
+
+The frozen #6642 hybrid manifests contain real effective-identity collisions. In particular, the
+`scenario_adaptive_hybrid_orca_v1` and `scenario_adaptive_hybrid_orca_v2_collision_guard` rows both
+resolve to the same ORCA algorithm/config for `francis2023_leave_group`. They share the same
+effective identity on 47 of the 48 frozen scenarios; `classic_merging_low` is the sole scenario
+where the v2 guard override distinguishes them. The current map-runner episode JSONL producer does
+not serialize a planner-key carrier (the camera-ready campaign adds it only to in-memory
+annotations), so those rows cannot be disambiguated from episode bytes and are rejected by the
+composer. This is an identity-provenance gap, not a claim that their measured outcomes are invalid.
+Recovering authoritative row-level keys or producing new episodes with a serialized key is required
+before those ambiguous rows can enter a Gate 3 summary.
 It also reconciles each planner row's serialized success, pedestrian-collision,
 obstacle-collision, total-collision, and SNQI means against those same records at the camera-ready
 four-decimal precision; status/count metadata alone is insufficient.

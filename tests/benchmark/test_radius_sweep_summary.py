@@ -472,21 +472,31 @@ def test_frozen_hybrid_roster_algorithms_and_configs_bind_each_alias(
     identities = composer._committed_planner_identities(
         git_config_fixture.commit, _FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH
     )
+    scenario_id = composer.EXPECTED_SCENARIO_NAMES[0]
 
     assert tuple(identities) == planner_keys
-    assert {identity.algorithm for identity in identities.values()} == {"hybrid_rule_local_planner"}
-    assert len({identity.algo_config_hash for identity in identities.values()}) == len(planner_keys)
+    assert {
+        identity.algorithm
+        for planner_identities in identities.values()
+        for identity in planner_identities.values()
+    } == {"hybrid_rule_local_planner"}
+    assert len(
+        {
+            planner_identities[scenario_id].algo_config_hash
+            for planner_identities in identities.values()
+        }
+    ) == len(planner_keys)
 
-    def episode_row(planner_key: str) -> dict[str, object]:
-        identity = identities[planner_key]
+    def episode_row(planner_key: str, scenario: str = scenario_id) -> dict[str, object]:
+        identity = identities[planner_key][scenario]
         return {
-            "algo": "hybrid_rule_local_planner",
+            "algo": identity.algorithm,
             "algorithm_metadata": {
-                "algorithm": "hybrid_rule_local_planner",
-                "canonical_algorithm": "hybrid_rule_local_planner",
+                "algorithm": identity.algorithm,
+                "canonical_algorithm": identity.algorithm,
             },
             "scenario_params": {
-                "algo": "hybrid_rule_local_planner",
+                "algo": identity.algorithm,
                 "algo_config_hash": identity.algo_config_hash,
             },
             "result_provenance": {"planner_key": planner_key},
@@ -496,14 +506,14 @@ def test_frozen_hybrid_roster_algorithms_and_configs_bind_each_alias(
         composer._validate_episode_planner_identity(
             episode_row(planner_key),
             planner=planner_key,
-            expected=identities[planner_key],
+            expected=identities[planner_key][scenario_id],
             radius=1.0,
         )
 
     first_key, second_key = planner_keys[:2]
     shared_identity = composer._PlannerIdentity(
-        algorithm=identities[first_key].algorithm,
-        algo_config_hash=identities[first_key].algo_config_hash,
+        algorithm=identities[first_key][scenario_id].algorithm,
+        algo_config_hash=identities[first_key][scenario_id].algo_config_hash,
         planner_key_required=True,
     )
     no_key_row = episode_row(first_key)
@@ -520,7 +530,7 @@ def test_frozen_hybrid_roster_algorithms_and_configs_bind_each_alias(
         composer._validate_episode_planner_identity(
             episode_row(second_key),
             planner=first_key,
-            expected=identities[first_key],
+            expected=identities[first_key][scenario_id],
             radius=1.0,
         )
 
@@ -530,7 +540,111 @@ def test_frozen_hybrid_roster_algorithms_and_configs_bind_each_alias(
         composer._validate_episode_planner_identity(
             wrong_key_row,
             planner=first_key,
-            expected=identities[first_key],
+            expected=identities[first_key][scenario_id],
+            radius=1.0,
+        )
+
+
+def test_frozen_hybrid_manifests_resolve_per_scenario_runtime_identity() -> None:
+    """Pinned hybrid manifests use runtime merges, overrides, and fail-closed alias checks."""
+    commit = composer.EXPECTED_CAMPAIGN_GIT_COMMIT
+    campaign_path = composer.EXPECTED_ARM_CAMPAIGN_CONFIGS["r1p0"]
+    identities = composer._committed_planner_identities(commit, campaign_path)
+    v1_key = "scenario_adaptive_hybrid_orca_v1"
+    v2_key = "scenario_adaptive_hybrid_orca_v2_collision_guard"
+    v1_manifest_path = "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml"
+    v1_manifest = composer._committed_yaml_mapping(commit, v1_manifest_path, "fixture manifest")
+
+    ordinary_scenario = "francis2023_narrow_doorway"
+    ordinary_identity = identities[v1_key][ordinary_scenario]
+    assert ordinary_identity.algorithm == "hybrid_rule_local_planner"
+    base_config = composer._committed_manifest_reference_yaml(
+        commit,
+        v1_manifest_path,
+        v1_manifest.get("base_config_path"),
+        label="fixture base config",
+    )
+    expected_config = dict(base_config)
+    expected_config.update(v1_manifest["params"])
+    assert ordinary_identity.algo_config_hash == composer._config_hash(expected_config)
+
+    overridden_scenario = "francis2023_perpendicular_traffic"
+    overridden_identity = identities[v1_key][overridden_scenario]
+    expected_override_config = dict(expected_config)
+    expected_override_config.update(v1_manifest["scenario_overrides"][overridden_scenario])
+    assert overridden_identity.algorithm == "hybrid_rule_local_planner"
+    assert overridden_identity.algo_config_hash == composer._config_hash(expected_override_config)
+    assert overridden_identity.algo_config_hash != ordinary_identity.algo_config_hash
+
+    orca_scenario = "francis2023_leave_group"
+    v1_orca_identity = identities[v1_key][orca_scenario]
+    v2_orca_identity = identities[v2_key][orca_scenario]
+    orca_override = v1_manifest["scenario_algo_overrides"][orca_scenario]
+    orca_base = composer._committed_manifest_reference_yaml(
+        commit,
+        v1_manifest_path,
+        orca_override.get("base_config_path"),
+        label="fixture ORCA base config",
+    )
+    expected_orca_config = dict(orca_base)
+    expected_orca_config.update(orca_override["params"])
+    expected_orca_hash = composer._config_hash(expected_orca_config)
+    assert v1_orca_identity.algorithm == v2_orca_identity.algorithm == "orca"
+    assert v1_orca_identity.algo_config_hash == v2_orca_identity.algo_config_hash
+    assert v1_orca_identity.algo_config_hash == expected_orca_hash
+    assert v1_orca_identity.planner_key_required
+    assert v2_orca_identity.planner_key_required
+    assert (
+        identities[v1_key][ordinary_scenario].algo_config_hash
+        == identities[v2_key][ordinary_scenario].algo_config_hash
+    )
+    assert identities[v1_key][ordinary_scenario].planner_key_required
+    assert identities[v2_key][ordinary_scenario].planner_key_required
+    shared_scenarios = [
+        scenario
+        for scenario in composer.EXPECTED_SCENARIO_NAMES
+        if (
+            identities[v1_key][scenario].algorithm,
+            identities[v1_key][scenario].algo_config_hash,
+        )
+        == (
+            identities[v2_key][scenario].algorithm,
+            identities[v2_key][scenario].algo_config_hash,
+        )
+    ]
+    assert len(shared_scenarios) == len(composer.EXPECTED_SCENARIO_NAMES) - 1
+    assert "classic_merging_low" not in shared_scenarios
+    assert not identities[v1_key]["classic_merging_low"].planner_key_required
+    assert not identities[v2_key]["classic_merging_low"].planner_key_required
+
+    missing_key_row = {
+        "algo": "orca",
+        "scenario_params": {"algo_config_hash": v1_orca_identity.algo_config_hash},
+    }
+    with pytest.raises(RadiusSweepSummaryError, match="no embedded planner_key carrier"):
+        composer._validate_episode_planner_identity(
+            missing_key_row,
+            planner=v1_key,
+            expected=v1_orca_identity,
+            radius=1.0,
+        )
+
+    distinct_key = "hybrid_rule_v3_fast_progress_static_escape"
+    assert (
+        identities[distinct_key][ordinary_scenario].algo_config_hash
+        != ordinary_identity.algo_config_hash
+    )
+    swapped_row = {
+        "algo": identities[distinct_key][ordinary_scenario].algorithm,
+        "scenario_params": {
+            "algo_config_hash": identities[distinct_key][ordinary_scenario].algo_config_hash
+        },
+    }
+    with pytest.raises(RadiusSweepSummaryError, match="algo_config_hash"):
+        composer._validate_episode_planner_identity(
+            swapped_row,
+            planner=v1_key,
+            expected=ordinary_identity,
             radius=1.0,
         )
 

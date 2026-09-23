@@ -723,6 +723,55 @@ def test_github_closing_parity_flags_negated_prose_mention() -> None:
     assert "leaves #9489 open" in blockers[0]
 
 
+@pytest.mark.parametrize(
+    "body",
+    (
+        "cannot close #1",
+        "can't close #1",
+        "couldn't close #1",
+        "didn't close #1",
+        "won't close #1",
+        "shouldn't close #1",
+        "wouldn't close #1",
+        "mustn't close #1",
+        "isn't close #1",
+        "isn't closed #1",
+        "wasn't closed #1",
+        "hasn't closed #1",
+        "haven't closed #1",
+        "unable to close #1",
+        "without close #1",
+        "fails to close #1",
+        "refuses to close #1",
+    ),
+)
+def test_github_closing_parity_flags_common_negated_closing_forms(body: str) -> None:
+    """Common negative constructions remain GitHub-closing parity blockers."""
+    assert pr_contract_check._find_closed_references(body) == []
+    assert not pr_contract_check.check_closes_discipline(body, "ll7/robot_sf_ll7")
+
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "#1" in blockers[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "cannot reproduce. Closes #9566",
+        "can't reproduce, Closes #9566",
+        "wouldn't reproduce; Closes #9566",
+        "without changes! Closes #9566",
+        "fails to reproduce? Closes #9566",
+        "refuses to reproduce—Closes #9566",
+    ),
+)
+def test_github_closing_parity_preserves_explicit_close_after_negation(body: str) -> None:
+    """Clause-delimited intentional closes remain valid after negative prose."""
+    assert pr_contract_check._find_closed_references(body) == [(None, "9566")]
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
 def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
     """``Refs`` never closes; intentional ``Closes`` stays with closes-discipline."""
     assert pr_contract_check.check_github_closing_parity("Refs #9489", "ll7/robot_sf_ll7") == []
@@ -740,6 +789,8 @@ def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
         "This does not affect runtime; resolves #9566",
         "No changes - Closes #9566",
         "No changes — Closes #9566",
+        "No changes–Closes #9566",
+        "No changes—Closes #9566",
     ),
 )
 def test_github_closing_parity_allows_explicit_close_after_unrelated_negation(

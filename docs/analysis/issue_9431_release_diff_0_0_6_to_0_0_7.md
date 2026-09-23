@@ -13,20 +13,20 @@ This report pairs rows by planner, scenario, and seed. Successor execution is ad
 
 | arm | paired | 0.0.6 success | 0.0.7 success | 0.0.6 collisions | 0.0.7 collisions | 0.0.6 timeouts | 0.0.7 timeouts | goal-adjacent labels |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `goal` | 1440 | 561 | 561 | 843 | 843 | 36 | 36 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `guarded_ppo` | 1440 | 329 | 332 | 506 | 513 | 605 | 595 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `hybrid_rule_v3_fast_progress_static_escape` | 1440 | 1281 | 1277 | 73 | 74 | 86 | 89 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `hybrid_rule_v3_fast_progress_static_escape_continuous` | 1440 | 1279 | 1275 | 50 | 50 | 111 | 115 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `orca` | 1440 | 1209 | 1206 | 194 | 197 | 37 | 37 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `ppo` | 1440 | 796 | 714 | 609 | 685 | 35 | 41 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `prediction_planner` | 1440 | 799 | 790 | 617 | 622 | 24 | 28 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `predictive_mppi` | 1440 | 157 | 96 | 977 | 1001 | 306 | 343 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `risk_dwa` | 1440 | 101 | 57 | 1253 | 1294 | 86 | 89 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `sacadrl` | 1440 | 448 | 445 | 990 | 993 | 2 | 2 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `scenario_adaptive_hybrid_orca_v2_bottleneck_yield` | 1440 | 1279 | 1277 | 72 | 73 | 89 | 90 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `scenario_adaptive_hybrid_orca_v2_collision_guard` | 1440 | 1281 | 1277 | 72 | 73 | 87 | 90 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `social_force` | 1440 | 51 | 30 | 785 | 782 | 604 | 628 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
-| `socnav_sampling` | 1440 | 500 | 497 | 940 | 940 | 0 | 3 | old `{'unavailable': 1440}`; new `{'unavailable': 1440}` |
+| `goal` | 1440 | 561 | 561 | 843 | 843 | 36 | 36 | old `unavailable=1440`; new `unavailable=1440` |
+| `guarded_ppo` | 1440 | 329 | 332 | 506 | 513 | 605 | 595 | old `unavailable=1440`; new `unavailable=1440` |
+| `hybrid_rule_v3_fast_progress_static_escape` | 1440 | 1281 | 1277 | 73 | 74 | 86 | 89 | old `unavailable=1440`; new `unavailable=1440` |
+| `hybrid_rule_v3_fast_progress_static_escape_continuous` | 1440 | 1279 | 1275 | 50 | 50 | 111 | 115 | old `unavailable=1440`; new `unavailable=1440` |
+| `orca` | 1440 | 1209 | 1206 | 194 | 197 | 37 | 37 | old `unavailable=1440`; new `unavailable=1440` |
+| `ppo` | 1440 | 796 | 714 | 609 | 685 | 35 | 41 | old `unavailable=1440`; new `unavailable=1440` |
+| `prediction_planner` | 1440 | 799 | 790 | 617 | 622 | 24 | 28 | old `unavailable=1440`; new `unavailable=1440` |
+| `predictive_mppi` | 1440 | 157 | 96 | 977 | 1001 | 306 | 343 | old `unavailable=1440`; new `unavailable=1440` |
+| `risk_dwa` | 1440 | 101 | 57 | 1253 | 1294 | 86 | 89 | old `unavailable=1440`; new `unavailable=1440` |
+| `sacadrl` | 1440 | 448 | 445 | 990 | 993 | 2 | 2 | old `unavailable=1440`; new `unavailable=1440` |
+| `scenario_adaptive_hybrid_orca_v2_bottleneck_yield` | 1440 | 1279 | 1277 | 72 | 73 | 89 | 90 | old `unavailable=1440`; new `unavailable=1440` |
+| `scenario_adaptive_hybrid_orca_v2_collision_guard` | 1440 | 1281 | 1277 | 72 | 73 | 87 | 90 | old `unavailable=1440`; new `unavailable=1440` |
+| `social_force` | 1440 | 51 | 30 | 785 | 782 | 604 | 628 | old `unavailable=1440`; new `unavailable=1440` |
+| `socnav_sampling` | 1440 | 500 | 497 | 940 | 940 | 0 | 3 | old `unavailable=1440`; new `unavailable=1440` |
 
 ## Seed-block bootstrap intervals
 

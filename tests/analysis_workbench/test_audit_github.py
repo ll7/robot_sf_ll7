@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from threading import Barrier, Event, Thread
+from threading import Barrier, Event
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -297,7 +298,7 @@ def test_concurrent_workers_do_not_create_two_marker_issues(tmp_path: Path) -> N
 
     def blocking_create(*args, **kwargs):
         create_started.set()
-        assert release_create.wait(timeout=5)
+        assert release_create.wait(timeout=30)
         return original_create(*args, **kwargs)
 
     provider.create_issue = blocking_create  # type: ignore[method-assign]
@@ -317,17 +318,19 @@ def test_concurrent_workers_do_not_create_two_marker_issues(tmp_path: Path) -> N
                 )
             )
 
-        thread = Thread(target=first_worker)
-        thread.start()
-        assert create_started.wait(timeout=5)
-        second = second_sync.sync(
-            REPOSITORY,
-            finding,
-            operation_id="sync-concurrent",
-            evidence={"campaign_id": "campaign", "source_digest": "digest"},
-        )
-        release_create.set()
-        thread.join(timeout=5)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(first_worker)
+            try:
+                assert create_started.wait(timeout=30)
+                second = second_sync.sync(
+                    REPOSITORY,
+                    finding,
+                    operation_id="sync-concurrent",
+                    evidence={"campaign_id": "campaign", "source_digest": "digest"},
+                )
+            finally:
+                release_create.set()
+            future.result()
 
     assert second.status == "ambiguous"
     assert len(provider.create_calls) == 1
@@ -341,7 +344,7 @@ def test_different_operations_share_one_finding_wide_claim(tmp_path: Path) -> No
 
     def synchronized_search(repository: str, *, marker: str) -> SearchResult:
         result = original_search(repository, marker=marker)
-        search_barrier.wait(timeout=5)
+        search_barrier.wait(timeout=30)
         return result
 
     provider.search_issues = synchronized_search  # type: ignore[method-assign]
@@ -358,14 +361,13 @@ def test_different_operations_share_one_finding_wide_claim(tmp_path: Path) -> No
                 evidence={"campaign_id": "campaign", "source_digest": "digest"},
             )
 
-    threads = [
-        Thread(target=run, args=("wide-claim-0",)),
-        Thread(target=run, args=("wide-claim-1",)),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=5)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(run, "wide-claim-0"),
+            executor.submit(run, "wide-claim-1"),
+        ]
+        for future in futures:
+            future.result()
     with GitHubOutbox(tmp_path) as outbox:
         claim = outbox.get_claim(REPOSITORY, finding.finding_id)
 

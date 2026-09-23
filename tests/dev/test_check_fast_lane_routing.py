@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 from pathlib import Path
@@ -24,6 +25,26 @@ def _policy(*fast_files: str) -> FastLanePolicy:
         fast_file_prefixes=(),
         slow_file_overrides=frozenset(),
     )
+
+
+def test_helper_source_has_no_backslash_in_fstring_expressions() -> None:
+    """The routing helper must stay importable on supported Python 3.11 (issue #9503).
+
+    Python 3.11 rejects backslashes inside f-string expressions (PEP 701
+    lifted this only in 3.12), and ``ast.parse(..., feature_version=(3, 11))``
+    does not gate tokenizer behavior on newer interpreters, so walk the
+    formatted values directly instead.
+    """
+    helper = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_fast_lane_routing.py"
+    source = helper.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(helper))
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FormattedValue):
+            segment = ast.get_source_segment(source, node)
+            if segment is not None and "\\" in segment:
+                offenders.append(segment)
+    assert not offenders, offenders
 
 
 def _git(repo: Path, *args: str) -> str:

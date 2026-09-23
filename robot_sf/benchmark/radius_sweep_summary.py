@@ -405,7 +405,7 @@ def _require_family_feasibility_evaluator_match(
         evaluated_definition, evaluated_families = evaluator(
             root, radius, episodes, definition_id, authority_sha256
         )
-    except Exception as exc:
+    except RadiusSweepSummaryError as exc:
         raise RadiusSweepSummaryError(
             f"radius {radius:g} family-feasibility evaluator failed: {exc}"
         ) from exc

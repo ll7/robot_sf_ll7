@@ -526,6 +526,43 @@ def test_family_evaluator_rejects_receipt_result_mismatch(
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
+def test_family_evaluator_wraps_declared_summary_errors(
+    tmp_path: Path,
+    compact_scope: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expected evaluator validation failures retain radius context."""
+    roots, receipt = _write_triplet(tmp_path)
+
+    def fail_with_contract_error(*_args: object) -> tuple[str, dict[str, str]]:
+        raise RadiusSweepSummaryError("source rows are invalid")
+
+    monkeypatch.setattr(composer, "_FAMILY_FEASIBILITY_EVALUATOR", fail_with_contract_error)
+
+    with pytest.raises(
+        RadiusSweepSummaryError,
+        match=r"radius 0\.5 family-feasibility evaluator failed: source rows are invalid",
+    ):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_family_evaluator_does_not_mask_unexpected_exceptions(
+    tmp_path: Path,
+    compact_scope: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected evaluator bugs propagate instead of being normalized as data errors."""
+    roots, receipt = _write_triplet(tmp_path)
+
+    def fail_with_bug(*_args: object) -> tuple[str, dict[str, str]]:
+        raise RuntimeError("fixture evaluator bug")
+
+    monkeypatch.setattr(composer, "_FAMILY_FEASIBILITY_EVALUATOR", fail_with_bug)
+
+    with pytest.raises(RuntimeError, match="fixture evaluator bug"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
 def test_composer_rejects_campaign_commit_outside_frozen_source(
     tmp_path: Path, compact_scope: None
 ) -> None:

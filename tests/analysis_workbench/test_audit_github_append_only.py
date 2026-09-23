@@ -16,6 +16,7 @@ from robot_sf.analysis_workbench.audit_findings import (
 )
 from robot_sf.analysis_workbench.audit_github import (
     GITHUB_PUBLICATION_SCHEMA_VERSION,
+    GitHubConflictError,
     GitHubFindingClaim,
     GitHubIssue,
     GitHubIssueMissing,
@@ -24,9 +25,13 @@ from robot_sf.analysis_workbench.audit_github import (
     GitHubTransportError,
     GitHubValidationError,
     SearchResult,
+    _coerce_comment_write,
     _comment_payload_without_request_marker,
+    _find_exact_publication_comment,
+    _linked_issue_identity,
     _parse_publication_marker,
     _publication_request_marker,
+    _select_marker_issue,
     render_finding_issue,
 )
 from robot_sf.analysis_workbench.audit_github_rest import auditor_request_marker
@@ -934,3 +939,192 @@ def test_append_only_claim_repair_settles_crash_left_initial_claim(tmp_path: Pat
     assert result.replayed
     assert provider.comment_calls == []
     assert repaired is not None and repaired.state == "succeeded"
+
+
+@pytest.mark.parametrize(
+    ("scenario", "error_type"),
+    (
+        ("unknown-status", GitHubValidationError),
+        ("missing-comment", GitHubValidationError),
+        ("boolean-comment-id", GitHubValidationError),
+        ("non-text-body", GitHubValidationError),
+        ("missing-request-marker", GitHubValidationError),
+        ("duplicate-request-marker", GitHubValidationError),
+        ("misplaced-request-marker", GitHubValidationError),
+        ("empty-payload", GitHubValidationError),
+        ("missing-publication-marker", GitHubValidationError),
+        ("wrong-payload", GitHubConflictError),
+    ),
+)
+def test_append_only_comment_write_rejects_unverifiable_provider_responses(
+    scenario: str,
+    error_type: type[Exception],
+) -> None:
+    finding_id = "comment-response-finding"
+    publication_digest = "b" * 64
+    request_marker = _publication_request_marker(publication_digest)
+    payload = (
+        f"<!-- robot_sf_audit_publication:v1 finding_id={finding_id} "
+        f"revision=2 digest={publication_digest} -->\nAuditor comment"
+    )
+    exact_body = f"{request_marker}\n{payload}"
+    comment: dict[str, Any] = {"id": 7, "body": exact_body}
+    expected_body: str | None = payload
+
+    if scenario == "unknown-status":
+        response: Any = {"status": "pending", "comment": comment}
+    elif scenario == "missing-comment":
+        response = {"status": "created", "comment": None}
+    elif scenario == "boolean-comment-id":
+        response = {"status": "created", "comment": {**comment, "id": True}}
+    elif scenario == "non-text-body":
+        response = {"status": "created", "comment": {**comment, "body": None}}
+    elif scenario == "missing-request-marker":
+        response = {"status": "created", "comment": {**comment, "body": payload}}
+    elif scenario == "duplicate-request-marker":
+        response = {
+            "status": "created",
+            "comment": {**comment, "body": f"{request_marker}\n{request_marker}\n{payload}"},
+        }
+    elif scenario == "misplaced-request-marker":
+        response = {
+            "status": "created",
+            "comment": {**comment, "body": f"prefix\n{request_marker}\n{payload}"},
+        }
+    elif scenario == "empty-payload":
+        response = {"status": "created", "comment": {**comment, "body": request_marker}}
+    elif scenario == "missing-publication-marker":
+        response = {
+            "status": "created",
+            "comment": {**comment, "body": f"{request_marker}\nplain text"},
+        }
+        expected_body = None
+    else:
+        response = {"status": "created", "comment": comment}
+        expected_body = "different request body"
+
+    with pytest.raises(error_type):
+        _coerce_comment_write(
+            response,
+            publication_digest=publication_digest,
+            expected_body=expected_body,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error_type"),
+    (
+        ("schema_version", "unknown", GitHubValidationError),
+        ("repository", "other/repository", GitHubConflictError),
+        ("number", True, GitHubValidationError),
+        ("marker", "forged marker", GitHubConflictError),
+        ("url", "file:///private/path", GitHubValidationError),
+        ("publication_digest", "not-a-digest", GitHubValidationError),
+        ("publication_kind", "future-kind", GitHubValidationError),
+        ("publication_revision", True, GitHubValidationError),
+        ("comment_id", True, GitHubValidationError),
+    ),
+)
+def test_append_only_canonical_link_rejects_malformed_identity_fields(
+    field: str,
+    value: Any,
+    error_type: type[Exception],
+) -> None:
+    finding = _finding("malformed-link-finding")
+    rendered = render_finding_issue(finding, repository=REPOSITORY)
+    link = {
+        "repository": REPOSITORY,
+        "number": 10,
+        "marker": rendered.marker,
+    }
+    link[field] = value
+
+    with pytest.raises(error_type):
+        _linked_issue_identity(replace(finding, github_issue=link), REPOSITORY, rendered.marker)
+
+
+def test_append_only_marker_search_rejects_wrong_repository_and_conflicting_markers() -> None:
+    finding = _finding("marker-search-finding")
+    rendered = render_finding_issue(finding, repository=REPOSITORY)
+    matching_issue = GitHubIssue(
+        repository=REPOSITORY,
+        number=10,
+        url=f"https://github.com/{REPOSITORY}/issues/10",
+        title=rendered.title,
+        body=rendered.body,
+        labels=rendered.labels,
+    )
+    wrong_repository = replace(matching_issue, repository="other/repository")
+    with pytest.raises(GitHubValidationError, match="wrong repository"):
+        _select_marker_issue(
+            SearchResult((wrong_repository,), complete=True),
+            repository=REPOSITORY,
+            finding_id=finding.finding_id,
+        )
+
+    other = render_finding_issue(_finding("other-finding"), repository=REPOSITORY)
+    conflicting_issue = replace(matching_issue, number=11, body=other.body)
+    with pytest.raises(GitHubConflictError, match="conflicting finding marker"):
+        _select_marker_issue(
+            SearchResult((conflicting_issue,), complete=True),
+            repository=REPOSITORY,
+            finding_id=finding.finding_id,
+        )
+
+    duplicate_issue = replace(matching_issue, number=12)
+    with pytest.raises(GitHubConflictError, match="more than one"):
+        _select_marker_issue(
+            SearchResult((matching_issue, duplicate_issue), complete=True),
+            repository=REPOSITORY,
+            finding_id=finding.finding_id,
+        )
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_error"),
+    (
+        ("missing-request-marker", GitHubConflictError),
+        ("newer-revision", GitHubConflictError),
+        ("same-revision-digest", GitHubConflictError),
+        ("duplicate-request-marker", GitHubConflictError),
+    ),
+)
+def test_append_only_exact_comment_lookup_rejects_forged_or_newer_comments(
+    tmp_path: Path,
+    tamper: str,
+    expected_error: type[Exception],
+) -> None:
+    finding = _finding(f"exact-comment-{tamper}")
+    revised = replace(finding, observations=("published comment",))
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        GitHubSync(provider, outbox).sync(REPOSITORY, finding, operation_id="initial")
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id="revision",
+        )
+    assert published.outbox is not None and published.outbox.comment is not None
+    issue = provider.issues[0]
+    comment = dict(issue.comments[0])
+    body = str(comment["body"])
+    request_marker, payload = body.split("\n", 1)
+    digest = published.outbox.publication_digest
+    if tamper == "missing-request-marker":
+        comment["body"] = payload
+    elif tamper == "newer-revision":
+        comment["body"] = f"{request_marker}\n{payload.replace('revision=0', 'revision=1', 1)}"
+    elif tamper == "same-revision-digest":
+        comment["body"] = f"{request_marker}\n{payload.replace(digest, '0' * 64, 1)}"
+    else:
+        comment["body"] = f"{request_marker}\n{request_marker}\n{payload}"
+    issue_with_tampered_comment = replace(issue, comments=(comment,))
+
+    with pytest.raises(expected_error):
+        _find_exact_publication_comment(
+            issue_with_tampered_comment,
+            finding_id=finding.finding_id,
+            finding_revision=0,
+            publication_digest=digest,
+            expected_body=payload.lstrip("\n"),
+        )

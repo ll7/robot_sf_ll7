@@ -1,0 +1,35 @@
+{
+  "artifact_verification_receipt_sha256": "0fa17a7ac8bfb718ce0d5b9ef1000847f7ed6d3c84e27e91b64b858193d8b8cf",
+  "bundle_generated_at_utc": "2026-09-23T06:49:01Z",
+  "campaign_id": "issue9431_trace_18ep_0_0_7_2e87f9de0523_20260922",
+  "claim_boundary": "bounded worked-example simulation, action, and force traces only; not statistical, ranking, release-matrix, or causal evidence",
+  "cold_restore_report_sha256": "f9529356b7018aa1dc2e5e5e6ff6e6aceca2232be4043446b9414391b0bca7ec",
+  "config_path": "configs/benchmarks/issue_9431_trace_worked_examples_v007.yaml",
+  "config_sha256": "9d0ddf20842e1d959a1f7428a4efb998ccab48e33d992b51bceeabb5781d90b5",
+  "effective_config_hash": "b63b47930c13da87",
+  "episode_jsonl_sha256": {
+    "goal": "45db0ec6e15468296cae84b998c982c59272c240c862665f6c0934de282c5d62",
+    "orca": "15ad46b2ee3a0b5f684de369c68e43883d9d59cb6babd372c7e4cca9f2ff6b18",
+    "social_force": "49aaf0782d8a43740bcbb35b7ed8f000bca159f47faeb30c3f4ea32e3d8f951d"
+  },
+  "episode_rows": 18,
+  "exporter_commit": "f39bbcc7d49026c490d5cbda8bb1bdcfb18f8233",
+  "execution_modes": {
+    "goal": "native",
+    "orca": "adapter",
+    "social_force": "adapter"
+  },
+  "job_id": "15724",
+  "preservation_artifact": "wandb://ll7/robot_sf/campaign-issue9431_trace_18ep_0_0_7_2e87f9de0523_20260922:v0",
+  "preservation_manifest_digest": "sha256:6827dc8527528e8e81055d4ccb152fa67b3481e2be950d01dbf5b1856a8d68e5",
+  "producer_sha256sums_sha256": "c29f6571eb3a14a76c28d6f4ffb21b9145135b698f8503194326c7d44c46512d",
+  "release_tag": "paper-matrix-v2-h600-s30-2026-09-07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "scenario_matrix_path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+  "scenario_matrix_sha256": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+  "schema_version": "issue-9431-trace-campaign-provenance.v2",
+  "source_commit": "2e87f9de0523ef977bce19b40189ea0a74c61e13",
+  "specialized_planner_internal_decisions": "unavailable_for_baseline_planners",
+  "startup_admission_receipt_gap": "CPU wrapper omitted startup.json and admission.json in result tree; separate canonical admission, submission-intent, watcher, terminal, run_meta, and execution-context records bind run identity",
+  "terminal_state": "COMPLETED",
+  "terminal_exit_code": "0:0"
+}

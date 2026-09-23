@@ -49,6 +49,8 @@ DEFAULT_MULTIPLIER = 1.3
 DEFAULT_POLL_INTERVAL_SECONDS = 120
 DEFAULT_WORKFLOW = "CI"
 DEFAULT_SAMPLE_LIMIT = 10
+EXACT_COMMIT_CHECK_RUNS_PAGE_SIZE = 100
+EXACT_COMMIT_CHECK_RUNS_MAX_PAGES = 30
 
 
 def _fetch_pr_status_with_cache(
@@ -227,8 +229,33 @@ def _build_drift_sample(
 
 
 def _fetch_exact_commit_check_runs(commit_sha: str) -> Any:
-    """Fetch check runs for one exact commit through the repository REST endpoint."""
-    return _rest_api_get(f"commits/{commit_sha}/check-runs?per_page=100")
+    """Fetch a complete bounded check-run inventory for one exact commit."""
+    check_runs: list[dict[str, Any]] = []
+    total_count: int | None = None
+    for page in range(1, EXACT_COMMIT_CHECK_RUNS_MAX_PAGES + 1):
+        payload = _rest_api_get(
+            f"commits/{commit_sha}/check-runs?"
+            f"per_page={EXACT_COMMIT_CHECK_RUNS_PAGE_SIZE}&page={page}"
+        )
+        if not isinstance(payload, dict):
+            return None
+        page_runs = payload.get("check_runs")
+        if not isinstance(page_runs, list) or any(not isinstance(run, dict) for run in page_runs):
+            return None
+        page_total = payload.get("total_count")
+        if type(page_total) is not int or page_total < 0:
+            return None
+        if total_count is not None and page_total != total_count:
+            return None
+        total_count = page_total
+        check_runs.extend(page_runs)
+        if len(check_runs) > total_count:
+            return None
+        if len(check_runs) == total_count:
+            return {"total_count": total_count, "check_runs": check_runs}
+        if len(page_runs) < EXACT_COMMIT_CHECK_RUNS_PAGE_SIZE:
+            return None
+    return None
 
 
 def _fetch_exact_commit_pr_metadata(pr_number: str | int) -> Any:

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.dev import check_pr_ci_status as ci_status
+from scripts.dev import watch_pr_ci_status as ci_watcher
 from scripts.dev.check_pr_ci_status import _latest_check_runs_with_evidence
 from scripts.dev.watch_pr_ci_status import (
     DEFAULT_BASELINE_SECONDS,
@@ -50,6 +51,57 @@ def _merged_pr_metadata(
         "merge_commit_sha": merge_sha,
         "head": {"sha": head_sha},
     }
+
+
+def test_fetch_exact_commit_check_runs_paginates_to_reported_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exact-commit status must include every page before summarizing checks."""
+    first_page = [{"id": index} for index in range(100)]
+    second_page = [{"id": 100}]
+    rest_api_get = MagicMock(
+        side_effect=[
+            {"total_count": 101, "check_runs": first_page},
+            {"total_count": 101, "check_runs": second_page},
+        ]
+    )
+    monkeypatch.setattr(ci_watcher, "_rest_api_get", rest_api_get)
+
+    result = ci_watcher._fetch_exact_commit_check_runs("merge123")
+
+    assert result == {"total_count": 101, "check_runs": first_page + second_page}
+    assert [call.args[0] for call in rest_api_get.call_args_list] == [
+        "commits/merge123/check-runs?per_page=100&page=1",
+        "commits/merge123/check-runs?per_page=100&page=2",
+    ]
+
+
+def test_fetch_exact_commit_ci_status_rejects_incomplete_check_run_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An incomplete exact-SHA check inventory cannot authorize docs-only success."""
+    first_page = [{"id": index} for index in range(100)]
+    rest_api_get = MagicMock(
+        side_effect=[
+            {"total_count": 101, "check_runs": first_page},
+            {"total_count": 101, "check_runs": []},
+        ]
+    )
+    monkeypatch.setattr(ci_watcher, "_rest_api_get", rest_api_get)
+    changed_files = MagicMock(return_value=(["docs/dev/local_ci.md"], None))
+    monkeypatch.setattr(ci_status, "_fetch_pr_changed_files", changed_files)
+
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        pr_number="42",
+        fetch_check_runs=ci_watcher._fetch_exact_commit_check_runs,
+        fetch_pr_metadata=MagicMock(return_value=_merged_pr_metadata()),
+    )
+
+    assert result["status"] == "error"
+    assert "could not fetch check runs" in result["error"]
+    assert rest_api_get.call_count == 2
+    changed_files.assert_not_called()
 
 
 def test_fetch_exact_commit_ci_status_summarizes_matching_check_runs() -> None:

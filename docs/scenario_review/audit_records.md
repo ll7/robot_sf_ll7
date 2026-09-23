@@ -68,6 +68,44 @@ similarity and agent suggestions never promote membership or causal status.
 Finding states are `proposed`, `under_investigation`, `supported`, `refuted`,
 and `resolved`.
 
+## Detector-rule proposals
+
+`DetectorRuleProposal` is the separate BA V1 governance record for a candidate
+detector change. It is not a `Finding`, detector implementation, registry entry,
+or benchmark result. The record retains a closed proposal kind (`new_rule`,
+`threshold_change`, `parameter_change`, or `cohort_change`), target detector ID,
+bounded declarative `candidate_rule` data, detector-registry version/digest,
+campaign/source provenance, evidence IDs, rationale, proposer/author identity,
+and a bounded metadata mapping. Candidate data is strict JSON and rejects
+callable, module, command, shell, Python, expression, and other execution keys.
+
+The V1 lifecycle is `proposed`, `approved`, `rejected`, or `withdrawn`.
+Non-proposed states require a human decision identity, timestamp, and reason;
+the original proposer remains unchanged when a human updates the record. Every
+V1 proposal has `activation_status: inactive`, including approved proposals.
+Candidate-rule keys use a bounded lower-`snake_case` declarative grammar; they
+cannot name callbacks, commands, modules, code, or other execution mechanisms.
+The proposal origin—candidate rule, proposer, rationale/metadata, registry
+version/digest, campaign/source identity and revision, and evidence IDs—is
+immutable across compare-and-swap, force-save, replay, and projection rebuild;
+only lifecycle, decision, current-author, and update-audit fields may change.
+Record IDs are type-stable, so a proposal cannot be replaced by another audit
+record type at the same durable ID.
+The published JSON Schema is a wire-level structural precheck; typed
+reconstruction remains authoritative for recursive depth/node bounds and
+canonical normalization. Schema-only consumers must route records through
+`record_from_dict`/`deserialize_record` before persistence or treat them as
+untrusted input.
+Saving the record uses the same canonical journal, typed reconstruction, and
+compare-and-swap revision contract as the other audit records. No proposal is
+loaded into the BA-01 default detector registry or applied automatically.
+The BA-05 service exposes a source/context/actor-bound agent proposal write and
+source-bound reads through the same projection. Human approve/reject/withdraw
+decisions require an identified human session and an expected revision; MCP
+exposes the proposal write/read path but never decision authority. Every
+decision remains `activation_status: inactive`, and no service path mutates the
+BA-01 detector registry.
+
 `find_similar_cases` supports named modes for same-scenario/cross-planner,
 same-planner/cross-seed, symptom, anomaly signature, geometry, outcome, metric,
 and existing-finding retrieval. Each result includes matched features,

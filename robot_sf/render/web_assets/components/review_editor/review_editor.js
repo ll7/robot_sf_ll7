@@ -15,6 +15,7 @@ export const EDITOR_MODEL_SCHEMA_VERSION = "review-editor.v1";
 export const STORYBOARD_SCHEMA_VERSION = "review-storyboard-edit.v1";
 export const AUDIT_RECORD_SCHEMA_VERSION = "audit-record.v1";
 export const ANNOTATION_SPEEDS = ["one_click", "quick", "full"];
+export const REFERENCE_TARGETS = ["actor", "goal", "waypoint", "map", "event", "metric"];
 export const TRIAGE_CLASSIFICATIONS = Object.freeze({
   normal: "normal",
   suspicious: "interesting_valid",
@@ -250,11 +251,405 @@ function assertCanonicalStoryboardRecordId(recordId, canonicalRecordId, label) {
   }
 }
 
-function sourceEntry(model) {
+function sourceEntries(model) {
   const identity = sourceIdentity(model);
   const sources = identity.sources && typeof identity.sources === "object" ? identity.sources : {};
-  const first = Object.values(sources).find((item) => item && typeof item === "object");
-  return first || null;
+  const entries = Object.values(sources).filter((item) => item && typeof item === "object");
+  if (entries.length) return entries;
+  // Some admitted panel models expose one source identity directly rather
+  // than under ``sources``.  Treat it as a candidate only when it has the
+  // stable artifact fields required by SourceRef.
+  return identity.artifact_id ? [identity] : [];
+}
+
+const SOURCE_REF_FIELDS = Object.freeze([
+  "artifact_id",
+  "uri",
+  "format",
+  "schema",
+  "sha256",
+  "source_commit",
+  "config_identity",
+  "units",
+  "coordinate_frame",
+]);
+
+const MEDIA_SOURCE_FORMATS = new Set([
+  "video",
+  "video-mp4.v1",
+  "video-frames.v1",
+  "media-mapping",
+  "media-mapping.v1",
+  "video-sync",
+  "video-sync.v1",
+  "image",
+  "image/jpeg",
+  "image/png",
+  "image-frames.v1",
+]);
+
+function sourceFormat(entry) {
+  return String(entry?.format || entry?.schema || "").trim().toLowerCase();
+}
+
+function sourceIsMedia(entry) {
+  const token = sourceFormat(entry);
+  return MEDIA_SOURCE_FORMATS.has(token)
+    || token.startsWith("video-")
+    || token.startsWith("video/")
+    || token.startsWith("media-mapping")
+    || token.startsWith("image/");
+}
+
+function canonicalSourceRef(entry) {
+  if (!entry || typeof entry !== "object") return undefined;
+  if (typeof entry.artifact_id !== "string" || !entry.artifact_id
+    || typeof entry.uri !== "string" || !entry.uri
+    || typeof entry.format !== "string" || !entry.format) return undefined;
+  const projected = {};
+  for (const field of SOURCE_REF_FIELDS) {
+    let value = entry[field];
+    // Native panel identities may retain declared/computed digests beside the
+    // canonical SourceRef.  Promote one digest only into the canonical field;
+    // the remaining evidence is kept in annotation metadata below.
+    if (field === "sha256" && !value) {
+      value = entry.declared_sha256 || entry.computed_sha256 || "";
+    }
+    if (typeof value === "string" && value !== "") projected[field] = value;
+  }
+  return projected;
+}
+
+function sourceProvenance(entry) {
+  if (!entry || typeof entry !== "object") return {};
+  const extras = {};
+  for (const [key, value] of Object.entries(entry)) {
+    if (!SOURCE_REF_FIELDS.includes(key)) extras[key] = clone(value);
+  }
+  return extras;
+}
+
+function sourceEntry(model, kind = "any") {
+  const entries = sourceEntries(model);
+  if (!entries.length) return null;
+  if (kind === "media") return entries.find(sourceIsMedia) || null;
+  if (kind === "scene") {
+    return entries.find((item) => String(item?.coordinate_frame || "").toLowerCase() === "world")
+      || entries.find((item) => /scene|threejs|simulation/i.test(sourceFormat(item)))
+      || entries.find((item) => !sourceIsMedia(item))
+      || null;
+  }
+  return entries[0] || null;
+}
+
+function stream(model, name) {
+  return model?.streams?.[name]
+    || model?.panel_model?.streams?.[name]
+    || model?.panels?.[name]
+    || null;
+}
+
+function pointValue(value) {
+  if (Array.isArray(value) && value.length >= 2) {
+    const point = [finite(value[0]), finite(value[1])];
+    return point.every((item) => item !== null) ? point : null;
+  }
+  if (value && typeof value === "object") {
+    return pointValue(value.position || value.point || value.value);
+  }
+  return null;
+}
+
+function nearestReferenceSample(source, time) {
+  const samples = Array.isArray(source?.samples) ? source.samples : [];
+  if (source?.status === "unavailable") {
+    return { status: "unavailable", reason: String(source.reason || "stream_unavailable") };
+  }
+  if (!samples.length) return { status: "unavailable", reason: "samples_missing" };
+  let selected = null;
+  let error = Infinity;
+  for (const sample of samples) {
+    const sampleTime = finite(sample?.time_s);
+    if (sampleTime === null) continue;
+    const candidateError = Math.abs(sampleTime - time);
+    if (candidateError < error || (candidateError === error && sampleTime < finite(selected?.time_s, Infinity))) {
+      selected = sample;
+      error = candidateError;
+    }
+  }
+  const resolution = finite(source?.resolution_s);
+  if (!selected) return { status: "unavailable", reason: "samples_missing" };
+  if (resolution !== null && error > resolution + 1e-12) {
+    return {
+      status: "unavailable",
+      reason: "outside_declared_resolution",
+      sample_time_s: finite(selected.time_s, time),
+      temporal_error_s: error,
+    };
+  }
+  const missing = selected.missing === true
+    || selected.available === false
+    || selected.value === null
+    || selected.missing_reason;
+  if (missing) {
+    return {
+      ...selected,
+      status: "unavailable",
+      reason: String(selected.missing_reason || "sample_missing"),
+      sample_time_s: finite(selected.time_s, time),
+      temporal_error_s: error,
+    };
+  }
+  return {
+    ...selected,
+    status: "available",
+    sample_time_s: finite(selected.time_s, time),
+    temporal_error_s: error,
+  };
+}
+
+function imageCalibration(model) {
+  const candidate = model?.image_transform
+    || model?.media_calibration
+    || stream(model, "video")?.calibration
+    || stream(model, "video")?.image_transform;
+  if (!candidate || typeof candidate !== "object") return null;
+  const required = ["source_width", "source_height", "display_width", "display_height"];
+  if (!required.every((key) => finite(candidate[key]) !== null && finite(candidate[key]) > 0)) return null;
+  const result = {};
+  for (const key of [...required, "crop_x", "crop_y", "crop_width", "crop_height"]) {
+    if (candidate[key] !== undefined) {
+      const value = finite(candidate[key], null);
+      if (value !== null) result[key] = value;
+    }
+  }
+  return result;
+}
+
+function sourceFrame(model, entry) {
+  return String(entry?.coordinate_frame || sourceIdentity(model).coordinate_frame || "").toLowerCase();
+}
+
+function canUseWorldReference(model, entry) {
+  const frame = sourceFrame(model, entry);
+  if (sourceIsMedia(entry)) {
+    // This UI has no world-calibration editor.  Refuse media-world points
+    // until a verified transform is already present in the canonical model.
+    // In particular, do not reinterpret image pixels as metres.
+    return false;
+  }
+  return frame === "world" || frame === "" || frame === "map"
+    || (!sourceIsMedia(entry) && frame !== "image");
+}
+
+function referenceSource(model, kind) {
+  const entry = sourceEntry(model, kind);
+  return canonicalSourceRef(entry);
+}
+
+function sceneValueAt(model, timestamp) {
+  const sample = nearestReferenceSample(stream(model, "scene"), timestamp);
+  return sample?.status === "available"
+    ? { sample, value: sample.value && typeof sample.value === "object" ? sample.value : {} }
+    : null;
+}
+
+function actorPoint(value, actorId) {
+  const robot = value?.robot && typeof value.robot === "object" ? value.robot : null;
+  if (robot && String(robot.actor_id || robot.id || "robot") === String(actorId)) {
+    return pointValue(robot.position || robot.point);
+  }
+  const pedestrians = Array.isArray(value?.pedestrians) ? value.pedestrians : [];
+  const actor = pedestrians.find((item) => item && String(item.actor_id || item.id || "") === String(actorId));
+  return pointValue(actor?.position || actor?.point);
+}
+
+function goalPoint(model) {
+  const goal = model?.goal_geometry || model?.goal;
+  return pointValue(goal?.goal_point || goal?.point || goal?.active_goal || goal?.final_goal);
+}
+
+function surfaceItems(model, kind) {
+  const surface = model?.scene_surface || model?.panel_model?.scene_surface || {};
+  const map = surface.map && typeof surface.map === "object" ? surface.map : {};
+  const values = surface[kind] || map[kind] || [];
+  return Array.isArray(values) ? values : [];
+}
+
+function referenceTargetOptions(model, target, timestamp = currentTime(model)) {
+  if (target === "actor") {
+    const value = sceneValueAt(model, timestamp)?.value || {};
+    const actors = [];
+    const robot = value.robot;
+    if (robot && pointValue(robot.position || robot.point)) {
+      actors.push({ id: String(robot.actor_id || robot.id || "robot"), label: "robot" });
+    }
+    for (const actor of Array.isArray(value.pedestrians) ? value.pedestrians : []) {
+      if (pointValue(actor?.position || actor?.point)) {
+        const id = String(actor.actor_id || actor.id || "");
+        if (id) actors.push({ id, label: id });
+      }
+    }
+    return actors;
+  }
+  if (target === "goal") return goalPoint(model) ? [{ id: "goal", label: "goal" }] : [];
+  if (target === "waypoint" || target === "map") {
+    return surfaceItems(model, target === "waypoint" ? "waypoints" : "objects").flatMap((item) => {
+      const id = String(item?.id || item?.object_id || "");
+      return id && pointValue(item?.point || item?.position) ? [{ id, label: id }] : [];
+    });
+  }
+  if (target === "event") {
+    const events = model?.events || model?.panel_model?.events || model?.intervals || [];
+    return Array.isArray(events) ? events.flatMap((item) => {
+      const id = String(item?.event_id || item?.interval_id || "");
+      return id ? [{ id, label: id }] : [];
+    }) : [];
+  }
+  if (target === "metric") {
+    return Object.entries(model?.metrics || model?.panel_model?.metrics || {}).flatMap(([key, item]) => {
+      const id = String(item?.metric_id || item?.id || key);
+      return id ? [{ id, label: `${item?.label || id}${item?.unit ? ` (${item.unit})` : ""}` }] : [];
+    });
+  }
+  return [];
+}
+
+function makeReference(model, point, options = {}) {
+  const timestamp = finite(options.timestamp_s, currentTime(model));
+  if (!validSourceInterval(model, timestamp, timestamp)) {
+    throw new Error("reference timestamp is outside the recorded source time range");
+  }
+  const coordinateFrame = options.coordinate_frame || "world";
+  const chartSpace = options.chart_space === true;
+  const sourceCandidate = options.source
+    || referenceSource(model, coordinateFrame === "image" && !chartSpace ? "media" : "scene");
+  const source = canonicalSourceRef(sourceCandidate);
+  if (coordinateFrame === "image" && !source) {
+    throw new Error("image reference requires a recorded media source identity");
+  }
+  if (coordinateFrame === "world" && sourceIsMedia(source) && !canUseWorldReference(model, source)) {
+    throw new Error("world reference requires verified scene geometry or calibration");
+  }
+  const sourceRevisionValue = options.source_revision
+    || source?.source_commit
+    || context(model).source_revision
+    || "";
+  const sourceRevisionToken = sourceRevisionValue === null || sourceRevisionValue === undefined
+    ? "" : String(sourceRevisionValue);
+  const reference = {
+    reference_id: options.reference_id || newId("reference"),
+    coordinate_frame: coordinateFrame,
+    point: [...point],
+    source: source ? clone(source) : undefined,
+    timestamp_s: timestamp,
+    source_revision: sourceRevisionToken,
+    // Metric references use the image enum for the existing Reference
+    // contract, but their point is chart (time,value) space.  Never attach a
+    // media display transform to those coordinates.
+    calibration: coordinateFrame === "image" && !chartSpace ? imageCalibration(model) : null,
+    source_point: coordinateFrame === "image" ? [...point] : null,
+    seek_identity: String(context(model).execution_id || ""),
+    actor_id: options.actor_id || "",
+    object_id: options.object_id || "",
+    goal_id: options.goal_id || "",
+    waypoint_id: options.waypoint_id || "",
+    metric_id: options.metric_id || "",
+    event_id: options.event_id || "",
+  };
+  // Keep undefined SourceRef fields absent so a Python BA-03 adapter can
+  // validate the same closed Reference shape without browser-only metadata.
+  if (!reference.source) delete reference.source;
+  if (!reference.calibration) delete reference.calibration;
+  if (!reference.source_point) delete reference.source_point;
+  return reference;
+}
+
+export function snapReference(model, target, options = {}) {
+  const normalizedTarget = String(target || "").trim().toLowerCase();
+  if (!REFERENCE_TARGETS.includes(normalizedTarget)) {
+    throw new Error(`snap target must be one of ${REFERENCE_TARGETS.join(", ")}`);
+  }
+  const timestamp = finite(options.timestamp_s, currentTime(model));
+  const targetId = String(options.target_id || "");
+  if (normalizedTarget === "actor") {
+    const sampleResult = nearestReferenceSample(stream(model, "scene"), timestamp);
+    const sample = sampleResult?.status === "available"
+      ? { sample: sampleResult, value: sampleResult.value && typeof sampleResult.value === "object" ? sampleResult.value : {} }
+      : null;
+    const actorId = targetId || String(context(model).actor_id || "robot");
+    const point = actorPoint(sample?.value, actorId);
+    if (!point) throw new Error(`recorded actor geometry unavailable: ${actorId} (${sampleResult?.reason || "sample_unavailable"})`);
+    const sceneSource = sourceEntry(model, "scene");
+    if (!canUseWorldReference(model, sceneSource)) {
+      throw new Error("recorded actor geometry has no verified world transform");
+    }
+    return makeReference(model, point, {
+      ...options, timestamp_s: sample.sample.sample_time_s, actor_id: actorId,
+    });
+  }
+  if (normalizedTarget === "goal") {
+    const point = goalPoint(model);
+    if (!point) throw new Error("recorded goal geometry unavailable");
+    const sceneSource = sourceEntry(model, "scene");
+    if (!canUseWorldReference(model, sceneSource)) {
+      throw new Error("recorded goal geometry has no verified world transform");
+    }
+    return makeReference(model, point, { ...options, goal_id: targetId || "goal" });
+  }
+  if (normalizedTarget === "waypoint" || normalizedTarget === "map") {
+    const item = surfaceItems(model, normalizedTarget === "waypoint" ? "waypoints" : "objects")
+      .find((candidate) => String(candidate?.id || candidate?.object_id || "") === targetId);
+    const point = pointValue(item?.point || item?.position);
+    if (!point) throw new Error(`recorded ${normalizedTarget} geometry unavailable: ${targetId}`);
+    const sceneSource = sourceEntry(model, "scene");
+    if (!canUseWorldReference(model, sceneSource)) {
+      throw new Error(`recorded ${normalizedTarget} geometry has no verified world transform`);
+    }
+    return makeReference(model, point, {
+      ...options,
+      waypoint_id: normalizedTarget === "waypoint" ? targetId : "",
+      object_id: normalizedTarget === "map" ? targetId : "",
+    });
+  }
+  if (normalizedTarget === "event") {
+    const event = (model?.events || model?.panel_model?.events || model?.intervals || [])
+      .find((candidate) => String(candidate?.event_id || candidate?.interval_id || "") === targetId);
+    const eventTime = finite(event?.seek_time_s ?? event?.start_s, timestamp);
+    const eventPoint = pointValue(event?.point || event?.position);
+    if (eventPoint) {
+      return makeReference(model, eventPoint, { ...options, timestamp_s: eventTime, event_id: targetId });
+    }
+    const actorId = Array.isArray(event?.actor_ids) ? String(event.actor_ids[0] || "") : "";
+    const sampleResult = nearestReferenceSample(stream(model, "scene"), eventTime);
+    const sample = sampleResult?.status === "available"
+      ? { sample: sampleResult, value: sampleResult.value && typeof sampleResult.value === "object" ? sampleResult.value : {} }
+      : null;
+    const actorPointValue = actorPoint(sample?.value, actorId);
+    if (!actorPointValue) throw new Error(`recorded event geometry unavailable: ${targetId} (${sampleResult?.reason || "sample_unavailable"})`);
+    return makeReference(model, actorPointValue, {
+      ...options, timestamp_s: eventTime, event_id: targetId, actor_id: actorId,
+    });
+  }
+  const metric = (model?.metrics || model?.panel_model?.metrics || {})[targetId];
+  const metricStream = metric?.stream || stream(model, `metric:${targetId}`) || metric;
+  const sample = nearestReferenceSample(metricStream, timestamp);
+  const rawValue = sample?.value && typeof sample.value === "object" ? sample.value.value : sample?.value;
+  const value = finite(rawValue);
+  if (!sample || sample.status !== "available" || value === null) {
+    throw new Error(`recorded metric sample unavailable: ${targetId} (${sample?.reason || "sample_unavailable"})`);
+  }
+  const metricSource = options.source
+    || referenceSource(model, "scene")
+    || referenceSource(model, "media");
+  return makeReference(model, [sample.sample_time_s, value], {
+    ...options,
+    coordinate_frame: "image",
+    chart_space: true,
+    source: metricSource,
+    timestamp_s: sample.sample_time_s,
+    metric_id: targetId,
+  });
 }
 
 function sourceBinding(model, extra = {}) {
@@ -263,11 +658,18 @@ function sourceBinding(model, extra = {}) {
     : sourceEntry(model);
   const identity = sourceIdentity(model);
   const artifactId = entry?.artifact_id || "";
-  const status = model?.source_identity_status?.[artifactId]?.status || (entry?.sha256 ? "verified" : "unavailable");
+  const projected = canonicalSourceRef(entry);
+  const sourceDigest = projected?.sha256
+    || entry?.sha256
+    || entry?.declared_sha256
+    || entry?.computed_sha256
+    || "";
+  const status = model?.source_identity_status?.[artifactId]?.status
+    || (sourceDigest ? "verified" : "unavailable");
   return {
-    source_ref: entry ? clone(entry) : undefined,
-    source_identity: extra.source_identity || entry?.sha256 || entry?.artifact_id || identity.sha256 || "",
-    source_revision: extra.source_revision || entry?.source_commit || context(model).source_revision || 0,
+    source_ref: projected,
+    source_identity: extra.source_identity || sourceDigest || projected?.artifact_id || entry?.artifact_id || identity.sha256 || "",
+    source_revision: extra.source_revision || projected?.source_commit || entry?.source_commit || context(model).source_revision || 0,
     provenance_status: extra.provenance_status || status,
   };
 }
@@ -318,6 +720,15 @@ function annotation(model, mode, classification, extra = {}) {
   }
   const binding = sourceBinding(model, extra);
   const selectionRevision = Number(extra.selection_revision ?? context(model).selection_revision ?? context(model).context_revision ?? 0);
+  const primarySourceProvenance = sourceProvenance(
+    extra.source_ref && typeof extra.source_ref === "object"
+      ? extra.source_ref
+      : sourceEntry(model),
+  );
+  const metadata = { ...(extra.metadata || {}) };
+  if (Object.keys(primarySourceProvenance).length) {
+    metadata.source_provenance = primarySourceProvenance;
+  }
   const row = {
     record_type: "annotation",
     annotation_id: extra.annotation_id || newId("annotation"),
@@ -336,7 +747,7 @@ function annotation(model, mode, classification, extra = {}) {
     review_scope: extra.full_episode ? "full_episode" : "interval",
     ...binding,
     metadata: {
-      ...(extra.metadata || {}),
+      ...metadata,
       actors: Array.isArray(extra.actors) ? [...extra.actors] : [],
       notes: extra.notes || "",
       execution_id: String(context(model).execution_id || ""),
@@ -353,6 +764,120 @@ function annotation(model, mode, classification, extra = {}) {
   }
   return row;
 }
+
+function normalizedActors(value) {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function fullDraftFromAnnotation(record = null) {
+  const evidence = Array.isArray(record?.measured_evidence)
+    ? clone(record.measured_evidence)
+    : (Array.isArray(record?.evidence) ? clone(record.evidence) : []);
+  const firstEvidence = evidence[0] && typeof evidence[0] === "object" ? evidence[0] : {};
+  return {
+    classification: String(record?.classification || "unclear"),
+    observed_behavior: String(record?.observed_behavior || ""),
+    hypothesis: String(record?.hypothesis ?? record?.suspected_cause ?? ""),
+    confidence: record?.confidence === null || record?.confidence === undefined ? "" : String(record.confidence),
+    evidence,
+    measured_evidence: clone(evidence),
+    evidence_text: String(firstEvidence.description || firstEvidence.observation || firstEvidence.text || ""),
+    evidence_metric_id: String(firstEvidence.metric_id || ""),
+    evidence_value: firstEvidence.value === undefined || firstEvidence.value === null ? "" : String(firstEvidence.value),
+    evidence_units: String(firstEvidence.units || firstEvidence.unit || ""),
+    notes: String(record?.notes ?? record?.metadata?.notes ?? ""),
+    actors: normalizedActors(record?.actors ?? record?.metadata?.actors ?? []),
+    full_episode: Boolean(record?.full_episode ?? record?.review_scope === "full_episode"),
+    references: Array.isArray(record?.references) ? clone(record.references) : [],
+  };
+}
+
+function referenceSourceProvenance(model, references) {
+  const entries = sourceEntries(model);
+  const result = {};
+  for (const reference of Array.isArray(references) ? references : []) {
+    const artifactId = String(reference?.source?.artifact_id || "");
+    if (!artifactId) continue;
+    const entry = entries.find((candidate) => String(candidate?.artifact_id || "") === artifactId)
+      || reference.source;
+    const extras = sourceProvenance(entry);
+    if (Object.keys(extras).length) result[String(reference.reference_id || artifactId)] = extras;
+  }
+  return result;
+}
+
+function canonicalizeReference(reference) {
+  if (!reference || typeof reference !== "object") return reference;
+  const projected = clone(reference);
+  if (reference.source !== undefined) {
+    const source = canonicalSourceRef(reference.source);
+    if (source) projected.source = source;
+    else delete projected.source;
+  }
+  return projected;
+}
+
+function fullDraftEvidence(draft = {}) {
+  const evidence = Array.isArray(draft.measured_evidence)
+    ? clone(draft.measured_evidence)
+    : (Array.isArray(draft.evidence) ? clone(draft.evidence) : []);
+  const description = String(draft.evidence_text || "").trim();
+  const metricId = String(draft.evidence_metric_id || "").trim();
+  const rawValue = String(draft.evidence_value ?? "").trim();
+  const units = String(draft.evidence_units || "").trim();
+  if (description || metricId || rawValue || units) {
+    const item = { description };
+    if (metricId) item.metric_id = metricId;
+    if (rawValue) {
+      const numeric = finite(rawValue);
+      item.value = numeric === null ? rawValue : numeric;
+    }
+    if (units) item.units = units;
+    const duplicate = evidence.some((candidate) => candidate && typeof candidate === "object"
+      && String(candidate.description || candidate.observation || candidate.text || "") === description
+      && String(candidate.metric_id || "") === metricId
+      && String(candidate.units || candidate.unit || "") === units
+      && String(candidate.value ?? "") === String(item.value ?? ""));
+    if (!duplicate) evidence.push(item);
+  }
+  return evidence;
+}
+
+export function makeFullAnnotation(model, classification = "unclear", options = {}) {
+  const normalizedClassification = TRIAGE_CLASSIFICATIONS[classification] || classification;
+  if (!CLASSIFICATIONS.includes(normalizedClassification)) {
+    throw new Error(`classification must be one of ${CLASSIFICATIONS.join(", ")}`);
+  }
+  let confidence = options.confidence;
+  if (confidence === "" || confidence === undefined) confidence = null;
+  if (confidence !== null) {
+    confidence = finite(confidence);
+    if (confidence === null || confidence < 0 || confidence > 1) {
+      throw new Error("confidence must be between 0 and 1");
+    }
+  }
+  const rawReferences = Array.isArray(options.references) ? options.references : [];
+  const references = rawReferences.map(canonicalizeReference);
+  const metadata = { ...(options.metadata || {}) };
+  const nestedSourceProvenance = referenceSourceProvenance(model, rawReferences);
+  if (Object.keys(nestedSourceProvenance).length) {
+    metadata.reference_source_provenance = nestedSourceProvenance;
+  }
+  return annotation(model, "full", normalizedClassification, {
+    ...options,
+    confidence,
+    actors: normalizedActors(options.actors),
+    evidence: fullDraftEvidence(options),
+    references,
+    metadata,
+  });
+}
+
+// Keep the Python SREV-17 API names discoverable for adapters that share the
+// model contract with the browser editor.
+export const make_full_annotation = makeFullAnnotation;
+export const snap_reference = snapReference;
 
 function sourceUnits(model, references) {
   const first = references.find((item) => item?.coordinate_frame === "world");
@@ -447,12 +972,22 @@ export class ReviewEditorController {
     this.model = clone(model || {});
     this.root = null;
     this.options = options || {};
+    const latestFull = Array.isArray(this.model.annotations)
+      ? [...this.model.annotations].reverse().find((item) => item?.mode === "full")
+      : null;
+    const declaredDraft = this.model.full_draft && typeof this.model.full_draft === "object"
+      ? this.model.full_draft
+      : latestFull;
     this.state = {
       mode: "quick",
       selectedTime: currentTime(this.model),
       selectedInterval: context(this.model).interval_id || null,
       selectionRevision: Number(context(this.model).selection_revision || context(this.model).context_revision || 0),
       annotations: Array.isArray(this.model.annotations) ? clone(this.model.annotations) : [],
+      fullDraft: fullDraftFromAnnotation(declaredDraft),
+      referenceTarget: this.model.reference_target || "actor",
+      referenceTargetId: this.model.reference_target_id || "",
+      referenceError: this.model.reference_error || "",
       storyboard: normalizeStoryboard(this.model.storyboard, this.model),
       recordRevisions: {},
       overlayState: {
@@ -465,7 +1000,9 @@ export class ReviewEditorController {
       },
       undo: [],
       redo: [],
-      autosave: { state: "saved", operation_id: "", expected_revision: null, saved_revision: null, selection_revision: 0, error: "", conflict: null },
+      autosave: this.model.autosave && typeof this.model.autosave === "object"
+        ? clone(this.model.autosave)
+        : { state: "saved", operation_id: "", expected_revision: null, saved_revision: null, selection_revision: 0, error: "", conflict: null },
       typing: false,
     };
     this.storyboardRecordId = storyboardRecordId(this.model);
@@ -508,6 +1045,10 @@ export class ReviewEditorController {
       selectedInterval: this.state.selectedInterval,
       selectionRevision: this.state.selectionRevision,
       annotations: clone(this.state.annotations),
+      fullDraft: clone(this.state.fullDraft),
+      referenceTarget: this.state.referenceTarget,
+      referenceTargetId: this.state.referenceTargetId,
+      referenceError: this.state.referenceError,
       storyboard: clone(this.state.storyboard),
       overlayState: clone(this.state.overlayState),
     };
@@ -519,6 +1060,10 @@ export class ReviewEditorController {
     this.state.selectedInterval = snapshot.selectedInterval;
     this.state.selectionRevision = snapshot.selectionRevision;
     this.state.annotations = clone(snapshot.annotations);
+    this.state.fullDraft = clone(snapshot.fullDraft || fullDraftFromAnnotation(this.state.annotations.at(-1)));
+    this.state.referenceTarget = snapshot.referenceTarget || "actor";
+    this.state.referenceTargetId = snapshot.referenceTargetId || "";
+    this.state.referenceError = snapshot.referenceError || "";
     this.state.storyboard = clone(snapshot.storyboard);
     this.state.overlayState = clone(snapshot.overlayState);
   }
@@ -545,6 +1090,46 @@ export class ReviewEditorController {
       this.state.selectionRevision += 1;
     } else if (type === "toggle-overlay") {
       if (OVERLAY_KINDS.includes(action.kind)) this.state.overlayState[action.kind] = !this.state.overlayState[action.kind];
+    } else if (type === "set-full-field") {
+      const field = String(action.field || "");
+      if (field && Object.prototype.hasOwnProperty.call(this.state.fullDraft, field)) {
+        this.state.fullDraft[field] = field === "full_episode"
+          ? Boolean(action.value)
+          : action.value;
+        this.state.referenceError = "";
+      }
+      // Do not repaint on every keystroke: replacing a textarea would move
+      // the caret and make normal note entry unusable.  The next structural
+      // action renders the current draft from state.
+      return this.snapshot();
+    } else if (type === "set-reference-target") {
+      if (REFERENCE_TARGETS.includes(String(action.target || ""))) {
+        this.state.referenceTarget = String(action.target);
+        this.state.referenceTargetId = "";
+        this.state.referenceError = "";
+      }
+    } else if (type === "set-reference-target-id") {
+      this.state.referenceTargetId = String(action.target_id || "");
+      this.state.referenceError = "";
+    } else if (type === "snap-reference" || type === "capture-reference") {
+      const target = String(action.target || this.state.referenceTarget);
+      const targetId = String(action.target_id || this.state.referenceTargetId || "");
+      const reference = snapReference(this.model, target, {
+        target_id: targetId,
+        timestamp_s: action.timestamp_s ?? this.state.selectedTime,
+      });
+      this._mutate(() => {
+        this.state.fullDraft.references = [...(this.state.fullDraft.references || []), reference];
+        this.state.referenceTarget = target;
+        this.state.referenceTargetId = targetId;
+        this.state.referenceError = "";
+      });
+    } else if (type === "remove-reference") {
+      const referenceId = String(action.reference_id || "");
+      this._mutate(() => {
+        this.state.fullDraft.references = (this.state.fullDraft.references || [])
+          .filter((item) => String(item?.reference_id || "") !== referenceId);
+      });
     } else if (type === "one-click") {
       const classification = TRIAGE_CLASSIFICATIONS[action.label] || TRIAGE_CLASSIFICATIONS[String(action.classification || "unsure").toLowerCase()] || action.classification;
       if (!CLASSIFICATIONS.includes(classification)) return this.snapshot();
@@ -563,13 +1148,19 @@ export class ReviewEditorController {
         time_s: this.state.selectedTime,
       })));
     } else if (type === "structured-note") {
-      if (!CLASSIFICATIONS.includes(action.classification)) return this.snapshot();
-      this._mutate(() => this.state.annotations.push(annotation(this.model, "full", action.classification, {
-        ...action,
-        selection_revision: this.state.selectionRevision,
-        interval: action.interval || selectedInterval(this.model, this.state.selectedInterval, this.state.storyboard),
-        time_s: this.state.selectedTime,
-      })));
+      const classification = TRIAGE_CLASSIFICATIONS[action.classification] || action.classification;
+      if (!CLASSIFICATIONS.includes(classification)) return this.snapshot();
+      const draft = { ...this.state.fullDraft, ...action, classification };
+      this._mutate(() => {
+        const record = makeFullAnnotation(this.model, classification, {
+          ...draft,
+          selection_revision: this.state.selectionRevision,
+          interval: action.interval || selectedInterval(this.model, this.state.selectedInterval, this.state.storyboard),
+          time_s: this.state.selectedTime,
+        });
+        this.state.annotations.push(record);
+        this.state.fullDraft = fullDraftFromAnnotation(record);
+      });
     } else if (type === "set-caption") {
       const known = (this.state.storyboard.intervals || []).some((item) => item.interval_id === action.interval_id);
       if (!known) throw new Error("unknown storyboard interval");
@@ -642,6 +1233,10 @@ export class ReviewEditorController {
       selected_interval: this.state.selectedInterval,
       selection_revision: this.state.selectionRevision,
       annotations: clone(this.state.annotations),
+      full_draft: clone(this.state.fullDraft),
+      reference_target: this.state.referenceTarget,
+      reference_target_id: this.state.referenceTargetId,
+      reference_error: this.state.referenceError,
       storyboard: clone(this.state.storyboard),
       record_revisions: clone(this.state.recordRevisions),
       overlay_state: clone(this.state.overlayState),
@@ -1063,6 +1658,161 @@ export class ReviewEditorController {
       }).catch(() => {});
     }));
     wrapper.appendChild(noteActions);
+
+    const fullFieldset = documentRef.createElement("fieldset");
+    fullFieldset.className = "full-annotation-editor";
+    const fullLegend = documentRef.createElement("legend");
+    fullLegend.textContent = "Full annotation";
+    fullFieldset.appendChild(fullLegend);
+    const draft = this.state.fullDraft;
+    const addField = (tag, labelText, field, value, type = "text") => {
+      const label = documentRef.createElement("label");
+      label.textContent = labelText;
+      const input = documentRef.createElement(tag);
+      input.type = type;
+      input.value = String(value ?? "");
+      input.setAttribute?.("name", field);
+      input.setAttribute?.("data-annotation-field", field);
+      const update = () => this.dispatch({ type: "set-full-field", field, value: input.value });
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+      label.appendChild(input);
+      fullFieldset.appendChild(label);
+      return input;
+    };
+    const classification = documentRef.createElement("select");
+    classification.setAttribute?.("name", "classification");
+    classification.setAttribute?.("data-annotation-field", "classification");
+    for (const value of CLASSIFICATIONS) {
+      const option = documentRef.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      classification.appendChild(option);
+    }
+    classification.value = String(draft.classification || "unclear");
+    classification.addEventListener("change", () => this.dispatch({
+      type: "set-full-field", field: "classification", value: classification.value,
+    }));
+    const classificationLabel = documentRef.createElement("label");
+    classificationLabel.textContent = "Classification";
+    classificationLabel.appendChild(classification);
+    fullFieldset.appendChild(classificationLabel);
+    addField("textarea", "Observed behaviour", "observed_behavior", draft.observed_behavior);
+    addField("textarea", "Hypothesis (optional)", "hypothesis", draft.hypothesis);
+    addField("input", "Confidence (0–1, optional)", "confidence", draft.confidence, "number");
+    addField("textarea", "Measured evidence", "evidence_text", draft.evidence_text);
+    addField("input", "Evidence metric ID (optional)", "evidence_metric_id", draft.evidence_metric_id);
+    addField("input", "Evidence value (optional)", "evidence_value", draft.evidence_value, "text");
+    addField("input", "Evidence units (optional)", "evidence_units", draft.evidence_units);
+    addField("input", "Actors (comma separated)", "actors", normalizedActors(draft.actors).join(", "));
+    addField("textarea", "Notes", "notes", draft.notes);
+    const fullEpisodeLabel = documentRef.createElement("label");
+    const fullEpisode = documentRef.createElement("input");
+    fullEpisode.type = "checkbox";
+    fullEpisode.checked = Boolean(draft.full_episode);
+    fullEpisode.setAttribute?.("data-annotation-field", "full_episode");
+    fullEpisode.addEventListener("change", () => this.dispatch({
+      type: "set-full-field", field: "full_episode", value: fullEpisode.checked,
+    }));
+    fullEpisodeLabel.appendChild(fullEpisode);
+    fullEpisodeLabel.appendChild(documentRef.createTextNode?.(" Full episode scope") || (() => {
+      const span = documentRef.createElement("span");
+      span.textContent = " Full episode scope";
+      return span;
+    })());
+    fullFieldset.appendChild(fullEpisodeLabel);
+
+    const referenceSection = documentRef.createElement("div");
+    referenceSection.className = "spatial-reference-editor";
+    const referenceHeading = documentRef.createElement("h4");
+    referenceHeading.textContent = "Spatial references (source-bound)";
+    referenceSection.appendChild(referenceHeading);
+    const targetSelect = documentRef.createElement("select");
+    targetSelect.setAttribute?.("name", "reference-target");
+    targetSelect.setAttribute?.("data-reference-target", "true");
+    for (const target of REFERENCE_TARGETS) {
+      const option = documentRef.createElement("option");
+      option.value = target;
+      option.textContent = target;
+      targetSelect.appendChild(option);
+    }
+    targetSelect.value = this.state.referenceTarget;
+    targetSelect.addEventListener("change", () => this.dispatch({
+      type: "set-reference-target", target: targetSelect.value,
+    }));
+    const targetIdSelect = documentRef.createElement("select");
+    targetIdSelect.setAttribute?.("name", "reference-target-id");
+    targetIdSelect.setAttribute?.("data-reference-target-id", "true");
+    const targetOptions = referenceTargetOptions(this.model, this.state.referenceTarget, this.state.selectedTime);
+    if (!targetOptions.length) {
+      const unavailable = documentRef.createElement("option");
+      unavailable.value = "";
+      unavailable.textContent = "unavailable at source time";
+      targetIdSelect.appendChild(unavailable);
+    } else {
+      for (const optionValue of targetOptions) {
+        const option = documentRef.createElement("option");
+        option.value = optionValue.id;
+        option.textContent = optionValue.label;
+        targetIdSelect.appendChild(option);
+      }
+    }
+    targetIdSelect.value = this.state.referenceTargetId || targetOptions[0]?.id || "";
+    targetIdSelect.addEventListener("change", () => this.dispatch({
+      type: "set-reference-target-id", target_id: targetIdSelect.value,
+    }));
+    const targetLabel = documentRef.createElement("label");
+    targetLabel.textContent = "Snap target";
+    targetLabel.appendChild(targetSelect);
+    referenceSection.appendChild(targetLabel);
+    const targetIdLabel = documentRef.createElement("label");
+    targetIdLabel.textContent = "Recorded item";
+    targetIdLabel.appendChild(targetIdSelect);
+    referenceSection.appendChild(targetIdLabel);
+    referenceSection.appendChild(createButton(documentRef, "Snap source-time reference", () => {
+      try {
+        this.dispatch({
+          type: "snap-reference", target: targetSelect.value, target_id: targetIdSelect.value,
+        });
+      } catch (error) {
+        this.state.referenceError = String(error?.message || error);
+        this._render();
+      }
+    }));
+    const referenceList = documentRef.createElement("ol");
+    referenceList.setAttribute?.("aria-label", "Numbered spatial references");
+    for (const reference of Array.isArray(draft.references) ? draft.references : []) {
+      const item = documentRef.createElement("li");
+      const target = reference.actor_id ? `actor ${reference.actor_id}`
+        : (reference.goal_id ? `goal ${reference.goal_id}`
+          : (reference.object_id ? `map ${reference.object_id}`
+            : (reference.waypoint_id ? `waypoint ${reference.waypoint_id}`
+              : (reference.metric_id ? `metric ${reference.metric_id}` : "reference"))));
+      const frame = reference.coordinate_frame || "unknown frame";
+      item.textContent = `${target} · ${frame} · t=${reference.timestamp_s ?? "?"} s`;
+      item.appendChild(createButton(documentRef, "Remove", () => this.dispatch({
+        type: "remove-reference", reference_id: reference.reference_id,
+      })));
+      referenceList.appendChild(item);
+    }
+    referenceSection.appendChild(referenceList);
+    if (this.state.referenceError) {
+      const error = documentRef.createElement("p");
+      error.className = "audit-warning";
+      error.textContent = `Reference unavailable: ${this.state.referenceError}`;
+      referenceSection.appendChild(error);
+    }
+    fullFieldset.appendChild(referenceSection);
+    fullFieldset.appendChild(createButton(documentRef, "Create full annotation", () => {
+      try {
+        this.dispatch({ type: "structured-note", classification: this.state.fullDraft.classification });
+      } catch (error) {
+        this.state.referenceError = String(error?.message || error);
+        this._render();
+      }
+    }));
+    wrapper.appendChild(fullFieldset);
+
     const overlays = documentRef.createElement("div");
     for (const kind of OVERLAY_KINDS) {
       overlays.appendChild(createButton(documentRef, `${kind}: ${this.state.overlayState[kind] ? "on" : "off"}`, () => this.dispatch({ type: "toggle-overlay", kind })));

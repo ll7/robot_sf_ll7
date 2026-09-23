@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +117,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "exact surface",
         "inputs",
         "inputs affected files",
+        "inputs affected surfaces",
         "inputs and affected files",
         "inputs and canonical owners",
         "inputs and existing owners",
@@ -132,7 +133,20 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "acceptance": (
         "acceptance",
         "acceptance and validation",
+        "acceptance and verification",
+        "acceptance and verification criteria",
+        "acceptance checklist",
         "acceptance criteria",
+        "acceptance criteria and validation",
+        "acceptance criteria and verification",
+        "acceptance criteria validation",
+        "acceptance criteria verification",
+        "acceptance criterion",
+        "acceptance definition of done",
+        "acceptance requirement",
+        "acceptance requirements",
+        "acceptance validation",
+        "acceptance verification",
         "completion",
         "definition of done",
         "required outputs",
@@ -140,14 +154,27 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "verification": (
         "acceptance and validation",
+        "acceptance and verification",
+        "acceptance and verification criteria",
+        "acceptance criteria and validation",
+        "acceptance criteria and verification",
+        "acceptance criteria validation",
+        "acceptance criteria verification",
+        "acceptance validation",
+        "acceptance verification",
         "proof",
+        "reproduction",
+        "reproduction and verification",
+        "reproduction steps",
         "testing",
         "validation",
         "validation gates",
         "validation proof",
         "validation testing",
         "verification",
+        "verification and validation",
         "verification gates",
+        "verification testing",
     ),
 }
 
@@ -167,13 +194,14 @@ def _normalize_heading(value: str) -> str:
     return SPACE_RE.sub(" ", text).strip()
 
 
-def _heading_sections(body: str) -> list[tuple[str, str]]:
-    """Return Markdown sections, including empty ones, outside fenced blocks."""
-    lines = body.splitlines(keepends=True)
-    spans: list[tuple[int, int, str]] = []
-    offset = 0
+def _iter_heading_lines(body: str) -> Iterator[tuple[int, str, str, str]]:
+    """Yield ``(line index, raw line, marks, title)`` for headings outside fenced blocks.
+
+    This is the single owner of fence-aware heading scanning; section parsing
+    builds on it so repair tooling observes identical heading identity.
+    """
     fence: str | None = None
-    for line in lines:
+    for index, line in enumerate(body.splitlines(keepends=True)):
         stripped = line.lstrip()
         if stripped.startswith("```") or stripped.startswith("~~~"):
             marker = stripped[:3]
@@ -181,14 +209,25 @@ def _heading_sections(body: str) -> list[tuple[str, str]]:
                 fence = marker
             elif fence == marker:
                 fence = None
-            offset += len(line)
             continue
         if fence is None:
             match = HEADING_RE.match(line.rstrip("\r\n"))
             if match is not None:
-                spans.append((offset, offset + len(line), _normalize_heading(match.group("title"))))
-        offset += len(line)
+                yield index, line, match.group("marks"), match.group("title")
 
+
+def _heading_sections(body: str) -> list[tuple[str, str]]:
+    """Return Markdown sections, including empty ones, outside fenced blocks."""
+    lines = body.splitlines(keepends=True)
+    offsets: list[int] = []
+    cursor = 0
+    for line in lines:
+        offsets.append(cursor)
+        cursor += len(line)
+    spans: list[tuple[int, int, str]] = []
+    for index, line, _marks, title in _iter_heading_lines(body):
+        start = offsets[index]
+        spans.append((start, start + len(line), _normalize_heading(title)))
     sections: list[tuple[str, str]] = []
     for index, (_start, content_start, heading) in enumerate(spans):
         next_start = spans[index + 1][0] if index + 1 < len(spans) else len(body)
@@ -204,59 +243,6 @@ def _heading_records(body: str) -> list[tuple[str, str]]:
 def _heading_matches(heading: str, alias: str) -> bool:
     """Return whether a normalized heading exactly identifies a contract section."""
     return heading == alias
-
-
-def inspect_contract(body: str) -> dict[str, Any]:
-    """Inspect required implementation-contract sections without inferring intent."""
-    records = _heading_records(body)
-    headings = sorted({heading for heading, _ in records})
-    fields: dict[str, dict[str, Any]] = {}
-    missing_fields: list[str] = []
-    for field, aliases in FIELD_ALIASES.items():
-        matched = sorted(
-            {
-                heading
-                for heading, _ in records
-                if any(_heading_matches(heading, alias) for alias in aliases)
-            }
-        )
-        fields[field] = {"present": bool(matched), "matched_headings": matched}
-        if not matched:
-            missing_fields.append(field)
-    return {
-        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
-        "headings": headings,
-        "fields": fields,
-        "missing_fields": missing_fields,
-        "complete": not missing_fields,
-    }
-
-
-def preflight_body_text(body: str) -> dict[str, Any]:
-    """Run the deterministic zero-write preflight for one issue body.
-
-    Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
-    (objective, scope, inputs, acceptance, verification), ``heading_suggestions``
-    mapping each unmatched body heading to its closest canonical alias (empty when
-    nothing is missing), and the body digest so a worker can repair the local draft
-    before any GitHub create request. This guard creates no labels, comments,
-    projects, claims, or issues; the live ``goal_issue_admission`` boundary remains
-    responsible for state, claims, blockers, and freshness.
-    """
-    contract = inspect_contract(body)
-    missing_fields = list(contract["missing_fields"])
-    heading_candidates = [heading for heading, _ in _heading_sections(body)]
-    return {
-        "schema": "issue_body_preflight.v1",
-        "ready": not missing_fields,
-        "missing_fields": missing_fields,
-        "heading_suggestions": _suggest_heading_aliases(
-            contract,
-            set(missing_fields),
-            heading_candidates=heading_candidates,
-        ),
-        "body_sha256": contract["body_sha256"],
-    }
 
 
 def _stem_token(token: str) -> str:
@@ -326,6 +312,247 @@ def _suggest_heading_aliases(
                 "score": round(score, 4),
             }
     return suggestions
+
+
+def inspect_contract(body: str) -> dict[str, Any]:
+    """Inspect required implementation-contract sections without inferring intent."""
+    records = _heading_records(body)
+    headings = sorted({heading for heading, _ in records})
+    fields: dict[str, dict[str, Any]] = {}
+    missing_fields: list[str] = []
+    for field, aliases in FIELD_ALIASES.items():
+        matched = sorted(
+            {
+                heading
+                for heading, _ in records
+                if any(_heading_matches(heading, alias) for alias in aliases)
+            }
+        )
+        fields[field] = {"present": bool(matched), "matched_headings": matched}
+        if not matched:
+            missing_fields.append(field)
+    result: dict[str, Any] = {
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "headings": headings,
+        "fields": fields,
+        "missing_fields": missing_fields,
+        "complete": not missing_fields,
+    }
+    if missing_fields:
+        heading_candidates = [heading for heading, _ in _heading_sections(body)]
+        result["heading_suggestions"] = _suggest_heading_aliases(
+            result,
+            set(missing_fields),
+            heading_candidates=heading_candidates,
+        )
+    return result
+
+
+def preflight_body_text(body: str) -> dict[str, Any]:
+    """Run the deterministic zero-write preflight for one issue body.
+
+    Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
+    (objective, scope, inputs, acceptance, verification), ``heading_suggestions``
+    mapping each unmatched body heading to its closest canonical alias (empty when
+    nothing is missing), and the body digest so a worker can repair the local draft
+    before any GitHub create request. This guard creates no labels, comments,
+    projects, claims, or issues; the live ``goal_issue_admission`` boundary remains
+    responsible for state, claims, blockers, and freshness.
+    """
+    contract = inspect_contract(body)
+    missing_fields = list(contract["missing_fields"])
+    return {
+        "schema": "issue_body_preflight.v1",
+        "ready": not missing_fields,
+        "missing_fields": missing_fields,
+        "heading_suggestions": contract.get("heading_suggestions", {}),
+        "body_sha256": contract["body_sha256"],
+    }
+
+
+REPAIR_SCHEMA = "issue_contract_repair.v1"
+
+
+def _all_normalized_headings(body: str) -> list[str]:
+    """Return every normalized heading line, including empty sections."""
+    return [_normalize_heading(title) for _, _, _, title in _iter_heading_lines(body)]
+
+
+def _rename_heading_line(raw_line: str, marks: str, new_title: str) -> str:
+    """Replace one heading title while preserving marks and the line ending."""
+    ending = "\r\n" if raw_line.endswith("\r\n") else ("\n" if raw_line.endswith("\n") else "")
+    return f"{marks} {new_title}{ending}"
+
+
+def _apply_renames(body: str, renames: list[dict[str, str]]) -> str:
+    """Apply exact heading renames, requiring one matching line per rename."""
+    lines = body.splitlines(keepends=True)
+    index_by_heading: dict[str, list[int]] = {}
+    marks_by_index: dict[int, str] = {}
+    for index, raw_line, marks, title in _iter_heading_lines(body):
+        normalized = _normalize_heading(title)
+        index_by_heading.setdefault(normalized, []).append(index)
+        marks_by_index[index] = marks
+    updated = list(lines)
+    for rename in renames:
+        matches = index_by_heading.get(rename["old_heading"], [])
+        if len(matches) != 1:
+            raise ValueError(
+                f"heading {rename['old_heading']!r} matches {len(matches)} lines; "
+                "repair requires exactly one"
+            )
+        target = matches[0]
+        updated[target] = _rename_heading_line(
+            lines[target], marks_by_index[target], rename["new_heading"]
+        )
+    return "".join(updated)
+
+
+def _field_vocabularies() -> dict[str, set[str]]:
+    """Return stemmed token vocabularies per contract field from alias tables."""
+    return {
+        field: {_stem_token(token) for alias in aliases for token in alias.split()}
+        for field, aliases in FIELD_ALIASES.items()
+    }
+
+
+def _rename_eligible(*, heading: str, field: str, alias: str) -> bool:
+    """Return whether renaming a heading to a canonical field is meaning-safe.
+
+    Exact alias membership always qualifies. Otherwise both must hold: every
+    stemmed heading token already occurs in the field's alias vocabulary (the
+    heading introduces no novel vocabulary such as ``appendix``), and the
+    heading covers every stemmed token of the matched alias (the rename drops
+    no qualifier the alias requires). This admits genuine synonyms such as
+    ``inputs affected surfaces`` while refusing ``inputs appendix``.
+    """
+    if heading in FIELD_ALIASES.get(field, ()):
+        return True
+    vocabularies = _field_vocabularies()
+    heading_tokens = {_stem_token(token) for token in heading.split()}
+    alias_tokens = {_stem_token(token) for token in alias.split()}
+    return heading_tokens <= vocabularies.get(field, set()) and alias_tokens <= heading_tokens
+
+
+def build_repair_packet(body: str, *, labels: list[str] | None = None) -> dict[str, Any]:
+    """Build a versioned semantics-preserving repair packet for an issue body.
+
+    A packet is emitted only when every missing contract field is covered by
+    exactly one score-1.0 heading suggestion that also passes the
+    rename-eligibility rule, the rename targets introduce no duplicate
+    headings, and the renamed body passes the full contract. Similarity score
+    alone never authorizes a rename: a leading-token or permuted match with
+    novel vocabulary refuses. Anything requiring invented content,
+    reinterpreted prose, or a maintainer decision refuses with a reason
+    instead of a packet. ``labels`` is recorded read-only as repair-context
+    evidence; the packet never authorizes label changes.
+    """
+    contract = inspect_contract(body)
+    missing = list(contract["missing_fields"])
+    digest = str(contract["body_sha256"])
+    label_snapshot = sorted({str(label).strip() for label in labels or [] if str(label).strip()})
+    refusal = {
+        "schema": REPAIR_SCHEMA,
+        "body_sha256": digest,
+        "labels": label_snapshot,
+        "missing_fields": missing,
+        "repairable": False,
+        "reason": "",
+        "renames": [],
+        "expected_body_sha256": None,
+    }
+    if not missing:
+        refusal["reason"] = "contract complete; no repair needed"
+        return refusal
+    suggestions = _suggest_heading_aliases(contract, set(missing))
+    exact = {
+        heading: detail
+        for heading, detail in suggestions.items()
+        if detail.get("score") == 1.0
+        and _rename_eligible(
+            heading=heading, field=str(detail["field"]), alias=str(detail["alias"])
+        )
+    }
+    by_field: dict[str, list[str]] = {}
+    for heading, detail in exact.items():
+        by_field.setdefault(str(detail["field"]), []).append(heading)
+    for field in missing:
+        if field not in by_field:
+            refusal["reason"] = (
+                f"field {field!r} has no exact heading equivalent; "
+                "content would have to be invented"
+            )
+            return refusal
+        if len(by_field[field]) > 1:
+            refusal["reason"] = (
+                f"field {field!r} has ambiguous equivalent headings "
+                f"{sorted(by_field[field])}; refusing to choose"
+            )
+            return refusal
+    renames = [
+        {
+            "field": field,
+            "old_heading": by_field[field][0],
+            "new_heading": field,
+        }
+        for field in sorted(missing)
+    ]
+    final_headings = _all_normalized_headings(body)
+    for rename in renames:
+        final_headings = [
+            rename["new_heading"] if heading == rename["old_heading"] else heading
+            for heading in final_headings
+        ]
+    if len(set(final_headings)) != len(final_headings):
+        refusal["reason"] = "rename targets would duplicate an existing heading; refusing"
+        return refusal
+    try:
+        expected = _apply_renames(body, renames)
+    except ValueError as exc:
+        refusal["reason"] = str(exc)
+        return refusal
+    recheck = inspect_contract(expected)
+    if not recheck["complete"]:
+        refusal["reason"] = (
+            f"renamed body still misses fields {recheck['missing_fields']}; refusing"
+        )
+        return refusal
+    return {
+        "schema": REPAIR_SCHEMA,
+        "body_sha256": digest,
+        "labels": label_snapshot,
+        "missing_fields": missing,
+        "repairable": True,
+        "reason": "",
+        "renames": renames,
+        "expected_body_sha256": hashlib.sha256(expected.encode("utf-8")).hexdigest(),
+    }
+
+
+def apply_repair_packet(body: str, packet: Mapping[str, Any]) -> str:
+    """Apply a repair packet after digest and completeness revalidation."""
+    if not isinstance(packet, Mapping) or packet.get("schema") != REPAIR_SCHEMA:
+        raise ValueError("repair packet has an unsupported schema")
+    if packet.get("repairable") is not True or not packet.get("renames"):
+        raise ValueError("repair packet carries no applicable renames")
+    if hashlib.sha256(body.encode("utf-8")).hexdigest() != packet.get("body_sha256"):
+        raise ValueError("issue body drifted since the repair packet was built")
+    renames = packet.get("renames")
+    if not isinstance(renames, list) or not all(
+        isinstance(rename, dict)
+        and isinstance(rename.get("old_heading"), str)
+        and isinstance(rename.get("new_heading"), str)
+        for rename in renames
+    ):
+        raise ValueError("repair packet renames are malformed")
+    expected = _apply_renames(
+        body, [{"old_heading": r["old_heading"], "new_heading": r["new_heading"]} for r in renames]
+    )
+    if hashlib.sha256(expected.encode("utf-8")).hexdigest() != packet.get("expected_body_sha256"):
+        raise ValueError("repaired body digest differs from the packet proof")
+    if not inspect_contract(expected)["complete"]:
+        raise ValueError("repaired body still fails the contract; refusing")
+    return expected
 
 
 def preflight_body_file(path: str | Path) -> dict[str, Any]:
@@ -679,6 +906,25 @@ def _coverage_rule(
     )
 
 
+def _needs_spec_reason(contract: dict[str, Any]) -> str:
+    """Build the contract-gap reason with closest-alias repair hints.
+
+    The hint names the nearest unmatched heading for each missing field so an
+    agent (or the contract-repair lane) can apply the exact rename instead of
+    rediscovering the alias table. Headings with no close alias produce no
+    hint rather than a misleading suggestion.
+    """
+    reason = "missing implementation-contract fields: " + ", ".join(contract["missing_fields"])
+    suggestions = _suggest_heading_aliases(contract, set(contract["missing_fields"]))
+    if not suggestions:
+        return reason
+    hints = "; ".join(
+        f"{heading!r} resembles field {detail['field']!r} (alias {detail['alias']!r})"
+        for heading, detail in sorted(suggestions.items())
+    )
+    return reason + "; closest heading suggestions: " + hints
+
+
 def _classify_issue(  # noqa: PLR0913 - explicit gate inputs keep precedence auditable.
     normalized: dict[str, Any],
     claim: dict[str, Any],
@@ -864,7 +1110,7 @@ def _classify_issue(  # noqa: PLR0913 - explicit gate inputs keep precedence aud
         (
             not contract["complete"],
             "needs_spec",
-            "missing implementation-contract fields: " + ", ".join(contract["missing_fields"]),
+            _needs_spec_reason(contract),
             "needs_spec",
         ),
     ]

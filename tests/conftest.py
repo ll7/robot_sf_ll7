@@ -418,13 +418,49 @@ _FAST_FILES = {
     # Benchmark Auditor release-bound coverage tests are deterministic
     # denominator, protocol, and receipt contracts for BA-04 (issue #9487).
     "test_audit_coverage.py",
+    "test_audit_codex.py",
+    "test_audit_codex_app_server.py",
     "test_audit_contracts.py",
     "test_audit_findings_similarity.py",
+    "test_audit_github.py",
+    # BA-05 immutable-issue publication tests are deterministic append-only
+    # reconciliation contracts; keep them in the exact-head fast lane so the
+    # changed GitHub sync implementation receives hosted coverage.
+    "test_audit_github_append_only.py",
+    # Bounded GitHub REST provider contracts are deterministic pagination,
+    # accounting, and redaction checks; keep changed coverage in fast shards.
+    "test_audit_github_rest.py",
     # Benchmark Auditor queue tests are deterministic policy, control-stream,
     # provenance, and save/resume contracts for BA-02 (issue #9486).
     "test_audit_queue.py",
+    "test_audit_mcp.py",
+    "test_audit_mcp_stdio.py",
+    "test_audit_service.py",
+    "test_audit_service_adapters.py",
+    # BA-06 fixture workbench tests exercise deterministic UI/facade contracts.
+    # They do not claim the native BA-05 service or simulator-backed evidence.
+    "test_audit_workbench.py",
+    "test_audit_workbench_server.py",
+    # BA-06 local launch and service/queue HTTP wiring are deterministic
+    # contracts; retained native-trace execution remains outside this lane.
+    "test_audit_workbench_launch.py",
+    "test_audit_workbench_live_integration.py",
+    # Durable BA-05 Next integration tests exercise the queue/authority
+    # transaction and replay boundary entirely with local fixtures.
+    "test_audit_service_next.py",
     "test_audit_store.py",
     "test_audit_store_cli.py",
+    # BA-05 source-first lazy materialization contracts stay in the exact-head
+    # fast lane (issue #9488).
+    "test_audit_materialize.py",
+    # The BA-05 native/provider seams below are deterministic offline admission,
+    # replay, and diagnostic contracts.  Keep them in the exact-head fast lane
+    # so changed coverage does not depend on live providers or benchmark runs.
+    "test_audit_codex_durable.py",
+    "test_audit_github_service.py",
+    "test_audit_materialize_native.py",
+    "test_audit_native_diagnostic.py",
+    "test_audit_native_service.py",
     # BA-01 campaign accounting and detector-family tests are deterministic
     # offline contracts; keep changed coverage in the exact-head fast lane.
     "test_audit_scan.py",
@@ -804,6 +840,9 @@ _FAST_FILES = {
     # Pedestrian-population tests are deterministic sampler contracts for the
     # spawn-capture owners; keep them in the exact-head fast lane (issue #9312).
     "test_ped_population.py",
+    # Pedestrian tracker reset-epoch tests are deterministic producer-contract
+    # coverage required by the exact-head changed-line gate (issue #9598).
+    "test_pedestrian_tracking.py",
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
@@ -986,10 +1025,6 @@ _FAST_FILES = {
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).
     "test_review_execute.py",
-    # Issue #7387 diagnostic-report tests are deterministic adapter, rule,
-    # and fixture-manifest contracts for the new benchmark leaf; keep changed
-    # coverage in fast shards.
-    "test_diagnostic_report.py",
     # SREV-24 loop tests are deterministic journal, budget, and recovery
     # contracts; keep their changed coverage in fast shards (issue #9296).
     "test_review_experiment_loop.py",

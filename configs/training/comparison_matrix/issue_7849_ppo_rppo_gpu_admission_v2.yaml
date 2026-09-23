@@ -14,7 +14,7 @@ source:
   base_ref: origin/main
   base_commit: d62a4433716910db4135d6308e01ffccfaa26a74
   inventory: configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml
-  inventory_sha256: cfb73e6a09c674e975ad2a532581201b538456c20b0c6ead3ef9ed1631d9d7ee
+  inventory_sha256: c3883afb418700561f69b81a2c2cb7eba8c6db39d55fcf7a306fb7ac5591310f
   binding_rule: Use one clean exact-head public worktree. Rehash the inventory, every
     listed source/config/scenario/map input, and the resolved environment manifest
     immediately before route admission. A changed byte invalidates this packet and
@@ -31,8 +31,8 @@ source:
     scripts/training/train_recurrent_ppo.py: d8e85301c5263cb08bebcebe3311190191c7831a8d97e2ed2ce6546ee521a1f8
     robot_sf/benchmark/research_answerability.py: bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3
     robot_sf/training/recurrent_runtime.py: 42f6a86e14612ca6b9e9cdbe47bf5000b29c03ddba5cd99d809960ad4487d5d8
-    pyproject.toml: 9dbfd7b6925330fd67c87a195ef37d282552f8f064c7993e0b3098f7aaf0816f
-    uv.lock: 61bc32dcdb5c983d8085449b89a9d58a73af396755a33f15fa8b3f3a544f964b
+    pyproject.toml: 8158dcf2d83f61bcd93a4bae18aa3b32806f14b6b44254b05a868ce8c2c3df21
+    uv.lock: 41f1046036b91bc506504a451eed02928c710c1209d601f02adbee3ecb7c3add
     maps/registry.yaml: 471d863ece35395e09d040610e77e8822f8cdf32a39a5caf88e8b56b1dbdfaad
     maps/svg_maps/classic_crossing.svg: dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911
 frozen_contract:

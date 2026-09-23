@@ -39,6 +39,13 @@ rejected as `unavailable` with `canonical_identity_unbound` or
 candidates require an explicit `canonical_*_artifact_id` config key; they are
 never silently merged.
 
+When the same campaign source enters the Benchmark Auditor scanner, its
+`campaign_id`, `study_id`, and `campaign` declarations (including nested
+`config.campaign`) must resolve to one campaign identity across the source
+and rows. Conflicting aliases are rejected before a selected episode can be
+materialized. This scanner rule does not make `config_digest` a configuration
+identity alias for the canonical owner contract above.
+
 For canonical owner rows, `config_hash` is the configuration identity bound to
 the request's `config_identity`. `config_digest` is a separate resolved-config
 provenance value: it is retained in each source-provenance record and never

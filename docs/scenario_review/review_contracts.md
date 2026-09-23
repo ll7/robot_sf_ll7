@@ -189,6 +189,16 @@ simulation-time base, and named extension slots. Behaviour boundaries:
   `robot_sf.render.threejs_viewer` instead of reimplementing playback;
 - output collisions fail closed, and only the requested output directory is written.
 
+The canonical SREV-15 HTML launch also mounts the BA-06 audit-workbench
+extension in the existing `panels` slot. This bounded integration emits the
+repository-local audit shell plus its SREV-16 synchronized panels and SREV-17
+annotation-editor dependencies next to the existing SREV-15 artifacts, so the
+generated view remains offline and needs no CDN. Until the BA-05 service is
+accepted, the extension is explicitly marked `diagnostic_fixture`,
+`evidence_status: diagnostic_only`, and `native: false`; its normal-control and
+missing-media queue cases are fixture UI coverage rather than retained/native
+episode evidence.
+
 `--descriptor` prints the component descriptor (`component-descriptor.v1`) without
 executing a request.
 

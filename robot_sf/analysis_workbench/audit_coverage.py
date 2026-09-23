@@ -1277,6 +1277,25 @@ def _review_values(
     return _sequence(mapping.get("review_records"))
 
 
+def _review_source_scan_identity_matches(value: ReviewRecord, identity: AuditIdentity) -> bool:
+    """Require both exact BA-01 identity dimensions when either is active.
+
+    Returns:
+        Whether the typed receipt carries the active source and scan tokens.
+    """
+
+    active_source_identity = identity.source_revision
+    active_scan_identity = identity.scan_revision
+    if not active_source_identity and not active_scan_identity:
+        return True
+    if not active_source_identity or not active_scan_identity:
+        return False
+    return (
+        value.source_identity == active_source_identity
+        and value.scan_identity == active_scan_identity
+    )
+
+
 def _review_identity_matches(value: Any, identity: AuditIdentity) -> bool:
     if not isinstance(value, ReviewRecord):
         return False
@@ -1293,27 +1312,24 @@ def _review_identity_matches(value: Any, identity: AuditIdentity) -> bool:
         and str(release_digest) != identity.release_digest
     ):
         return False
-    # BA-03 ReviewRecord carries the editor/selection revision as an integer.
-    # If the active audit advertises a source, scan, or review revision, an
-    # unavailable (zero) or stale receipt must not earn human coverage.  The
-    # revision token is intentionally compared as text because BA-04 identity
-    # values may be opaque hashes while BA-03's field is numeric.  If more
-    # than one active revision is declared, every token must agree; a bare
-    # BA-03 receipt cannot prove only one side of a source/scan boundary.
-    expected_revisions = {
-        str(item)
-        for item in (
-            identity.source_revision,
-            identity.scan_revision,
-            identity.review_revision,
-        )
-        if item
-    }
-    if expected_revisions:
+
+    # BA-01 source and scan revisions are independent opaque identities.  A
+    # real scan activates this boundary with both values, and a receipt must
+    # carry both exact tokens.  Reject a partially populated active identity
+    # rather than silently treating one side as optional.  Revision-less
+    # direct callers keep the historical typed-review behavior.
+    if not _review_source_scan_identity_matches(value, identity):
+        return False
+
+    # ``source_revision`` on ReviewRecord remains the editor/selection CAS
+    # revision.  If BA-04 receives an explicit review revision, preserve the
+    # existing stale-receipt gate against that revision only; do not compare
+    # the integer to source or scan identities.
+    if identity.review_revision:
         observed_revision = _field(value, "source_revision", default=0)
         if observed_revision in (None, "", 0):
             return False
-        if any(str(observed_revision) != expected for expected in expected_revisions):
+        if str(observed_revision) != identity.review_revision:
             return False
     return True
 

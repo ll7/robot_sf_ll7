@@ -113,6 +113,40 @@ def test_fixture_accounts_each_expected_episode_once() -> None:
     assert all(item.episode_id for item in report.episode_refs)
 
 
+def test_scan_marks_only_derived_config_digest_as_adapter_default() -> None:
+    derived = scan_campaign(_campaign(_episode("derived")))
+    derived_row = derived.inventory[0].row
+    assert derived_row is not None
+    assert (
+        derived_row["_audit_scan_identity_defaults"]["config_digest"]
+        == derived_row["config_digest"]
+    )
+
+    claimed_digest = "b" * 64
+    claimed = scan_campaign(_campaign(_episode("claimed", config_digest=claimed_digest)))
+    claimed_row = claimed.inventory[0].row
+    assert claimed_row is not None
+    assert claimed_row["config_digest"] == claimed_digest
+    assert "config_digest" not in claimed_row.get("_audit_scan_identity_defaults", {})
+
+
+@pytest.mark.parametrize(
+    "container", ["config", "result_provenance", "cell_context", "algorithm_metadata"]
+)
+def test_scan_does_not_mark_nested_row_campaign_claim_as_default(container: str) -> None:
+    row = _episode("nested-campaign")
+    row["provenance"].pop("campaign_id")
+    if container == "config":
+        row["config"]["campaign"] = "campaign-test"
+    else:
+        row[container] = {"campaign": "campaign-test"}
+    report = scan_campaign(_campaign(row))
+    admitted = report.inventory[0].row
+    assert admitted is not None
+    assert admitted["campaign_id"] == "campaign-test"
+    assert "campaign_id" not in admitted.get("_audit_scan_identity_defaults", {})
+
+
 def test_scan_is_logically_deterministic_and_cache_tracks_config_and_registry() -> None:
     payload = _campaign(_episode("episode"), expected_episode_ids=["episode"])
     first = scan_campaign(payload, config={"tail_steps": 2})

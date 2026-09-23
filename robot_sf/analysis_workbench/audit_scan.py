@@ -847,6 +847,21 @@ def _identity_aliases(  # noqa: C901
     return next(iter(unique)) if unique else None
 
 
+def campaign_identity_from_payload(payload: Mapping[str, Any]) -> str | None:
+    """Return the one accepted campaign identity across source and row aliases.
+
+    Returns:
+        Canonical campaign identity, or ``None`` if none was declared.
+    """
+
+    return _identity_aliases(
+        payload,
+        names=("campaign_id", "study_id", "campaign"),
+        label="campaign_id",
+        include_episode_rows=True,
+    )
+
+
 def _row_source_digest_error(row: Mapping[str, Any], source_ref: SourceRef) -> str | None:
     """Validate any row-level source digest declaration against admitted bytes.
 
@@ -1377,12 +1392,7 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
     if ref.format not in SUPPORTED_SOURCE_FORMATS or ref.schema not in SUPPORTED_SOURCE_SCHEMAS:
         source_status = "unsupported"
     declared_payload_schema = _payload_schema(payload)
-    _identity_aliases(
-        payload,
-        names=("campaign_id", "study_id", "campaign"),
-        label="campaign_id",
-        include_episode_rows=True,
-    )
+    campaign_identity_from_payload(payload)
     if declared_payload_schema and ref.schema != declared_payload_schema:
         source_status = "unsupported"
     execution_state, execution_reason = _execution_status(payload, path="campaign")
@@ -1622,6 +1632,39 @@ def _identity_digest(value: Any, *, fallback: str) -> str:
     return _sha256(canonical.encode("utf-8"))
 
 
+def _row_claims_identity(row: Mapping[str, Any], aliases: tuple[str, ...]) -> bool:
+    """Tell scanner defaults apart from identities declared by the source row.
+
+    Returns:
+        Whether the source row declares any supplied identity alias.
+    """
+
+    pending = [row]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if any(current.get(alias) not in (None, "") for alias in aliases):
+            return True
+        for name in (
+            "source",
+            "source_identity",
+            "provenance",
+            "identity",
+            "result_provenance",
+            "cell_context",
+            "config",
+            "algorithm_metadata",
+            "analysis_trace",
+        ):
+            nested = current.get(name)
+            if isinstance(nested, Mapping):
+                pending.append(nested)
+    return False
+
+
 def _row_config_digest(row: Mapping[str, Any]) -> str:
     for key in ("config_digest", "config_hash"):
         value = row.get(key)
@@ -1678,12 +1721,7 @@ def _campaign_audit(
     source_digest: str,
     config: Mapping[str, Any],
 ) -> CampaignAudit:
-    campaign_id = (
-        payload.get("campaign_id")
-        or config.get("campaign_id")
-        or payload.get("study_id")
-        or "campaign"
-    )
+    campaign_id = campaign_identity_from_payload(payload) or config.get("campaign_id") or "campaign"
     if not isinstance(campaign_id, str) or not campaign_id.strip():
         raise AuditScanError("campaign identity is missing")
     campaign_digest = _identity_digest(
@@ -2099,12 +2137,7 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         source_digest=loaded.source_digest,
         config=config_mapping,
     )
-    source_campaign_identity = _identity_aliases(
-        loaded.payload,
-        names=("campaign_id", "study_id", "campaign"),
-        label="campaign_id",
-        include_episode_rows=True,
-    )
+    source_campaign_identity = campaign_identity_from_payload(loaded.payload)
     requested_campaign_identity = _identity_aliases(
         requested_config,
         names=("campaign_id", "study_id", "campaign"),
@@ -2224,6 +2257,14 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
             )
             continue
         row_copy = dict(row)
+        row_copy.pop("_audit_scan_identity_defaults", None)
+        source_claims = {
+            "campaign_id": _row_claims_identity(row, ("campaign_id", "campaign", "study_id")),
+            "source_digest": _row_claims_identity(
+                row, ("source_digest", "recording_digest", "recording_sha256", "sha256")
+            ),
+            "execution_id": _row_claims_identity(row, ("execution_id", "run_id")),
+        }
         # Join keys are canonicalized once at admission and carried into
         # every retained row, EpisodeRef, and Signal.
         row_copy["episode_id"] = episode_id
@@ -2258,7 +2299,7 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         if not isinstance(row_provenance, Mapping):
             row_provenance = {}
         inherited_provenance = {
-            "campaign_id": loaded.payload.get("campaign_id") or loaded.payload.get("study_id"),
+            "campaign_id": expected_campaign_identity,
             "source_commit": (
                 loaded.payload.get("source_commit")
                 or loaded.payload.get("git_hash")
@@ -2283,6 +2324,13 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         row_copy.setdefault("source_artifact_id", loaded.source_ref.artifact_id)
         row_copy.setdefault("source_uri", loaded.source_ref.uri)
         row_copy.setdefault("execution_id", episode_id)
+        scan_defaults = {
+            key: row_copy[key]
+            for key, claimed in source_claims.items()
+            if not claimed and isinstance(row_copy.get(key), str) and row_copy[key]
+        }
+        if scan_defaults:
+            row_copy["_audit_scan_identity_defaults"] = scan_defaults
         for alias, identity_key in (
             ("checkpoint_hash", "checkpoint_digest"),
             ("environment_hash", "environment_digest"),
@@ -2294,6 +2342,8 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
             config_digest = _row_config_digest(row_copy)
             if config_digest:
                 row_copy["config_digest"] = config_digest
+                scan_defaults["config_digest"] = config_digest
+                row_copy["_audit_scan_identity_defaults"] = scan_defaults
         row_copy.setdefault(
             "expected_provenance",
             {
@@ -3156,6 +3206,7 @@ __all__ = [
     "EpisodeInventory",
     "audit_campaign",
     "cache_is_current",
+    "campaign_identity_from_payload",
     "capability_report",
     "descriptor",
     "main",

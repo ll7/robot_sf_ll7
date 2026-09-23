@@ -16,6 +16,8 @@ from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     _discounted_return,
     _min_obstacle_clearance,
     _physical_pedestrian_ttc,
+    _replay_branch_from_prefix,
+    _rollout_policy,
     _serialize_env_action,
     _step_trace_state,
     build_binding,
@@ -106,6 +108,20 @@ def test_physical_pedestrian_ttc_accepts_grazing_intersection() -> None:
     assert ttc["status"] == "estimated"
 
 
+def test_physical_pedestrian_ttc_estimates_finite_slow_closing_motion() -> None:
+    """The unbounded t >= 0 estimate has no undocumented minimum-speed cutoff."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[[5.0, 0.0]],
+        pedestrian_velocities=[[-1e-7, 0.0]],
+        pedestrian_radius=0.5,
+    )
+    assert ttc["estimate_s"] == pytest.approx(40_000_000.0)
+    assert ttc["status"] == "estimated"
+
+
 @pytest.mark.parametrize(
     ("pedestrian_position", "pedestrian_velocity"),
     [
@@ -185,6 +201,159 @@ def test_trace_state_preserves_executed_action_and_ttc_inputs() -> None:
     assert fields["ped_velocities_mps"] == [[-1.0, 0.0]]
     assert fields["pedestrian_ttc"]["schema_version"] == "physical-pedestrian-ttc.v1"
     assert fields["pedestrian_ttc"]["estimate_s"] == pytest.approx(2.0)
+
+
+class _FakeTraceEnv:
+    """One-step producer environment that exposes distinct post-step telemetry."""
+
+    def __init__(
+        self,
+        *,
+        robot_x: float,
+        robot_speed: float,
+        pedestrian_x: float,
+        pedestrian_speed: float,
+    ) -> None:
+        self.env_config = SimpleNamespace(robot_config=SimpleNamespace(radius=0.5))
+        self.post_step_state = (robot_x, robot_speed, pedestrian_x, pedestrian_speed)
+        self.executed_actions: list[np.ndarray] = []
+        self.closed = False
+        self.simulator = self._simulator_state(0.0, 0.0, 10.0, 0.0)
+
+    @staticmethod
+    def _simulator_state(
+        robot_x: float,
+        robot_speed: float,
+        pedestrian_x: float,
+        pedestrian_speed: float,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            robot_pos=np.asarray([[robot_x, 0.0]]),
+            robot_poses=np.asarray([[robot_x, 0.0]]),
+            robots=[
+                SimpleNamespace(
+                    pose=((robot_x, 0.0), 0.0),
+                    current_speed=(robot_speed, 0.0),
+                    config=SimpleNamespace(radius=0.5),
+                )
+            ],
+            ped_pos=np.asarray([[pedestrian_x, 0.0]]),
+            ped_vel=np.asarray([[pedestrian_speed, 0.0]]),
+            config=SimpleNamespace(ped_radius=0.5),
+            iter_obstacle_segments=lambda: [],
+        )
+
+    def reset(self, *, seed: int):
+        return {"seed": seed}, {}
+
+    def step(self, action):
+        self.executed_actions.append(action)
+        self.simulator = self._simulator_state(*self.post_step_state)
+        return (
+            {"post_step": True},
+            1.25,
+            True,
+            False,
+            {"meta": {"reward_terms": {"progress": 1.25}, "distance_to_goal": 2.0}},
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_measured_trace_row_binds_executed_action_to_post_step_telemetry(monkeypatch) -> None:
+    """Measured rows pair the exact env action with that step's resulting simulator state."""
+    from robot_sf.benchmark.map_runner_policies import map_runner_actions
+
+    env = _FakeTraceEnv(robot_x=2.0, robot_speed=0.25, pedestrian_x=4.0, pedestrian_speed=-0.25)
+    expected_action = np.asarray([0.33, -0.44])
+
+    def fake_action_converter(*, env, config, command):
+        assert config is env.env_config
+        assert command == (0.7, -0.2)
+        return expected_action.copy()
+
+    class FakePlanner:
+        def step(self, observation):
+            assert observation == {"initial": True}
+            return {"v": 0.7, "omega": -0.2}
+
+        @staticmethod
+        def foresight_diagnostics():
+            return {
+                "foresight_prediction": {
+                    "load_status": "loaded",
+                    "effective_prediction_mode": "predictive_foresight",
+                    "fallback_used": False,
+                }
+            }
+
+    monkeypatch.setattr(map_runner_actions, "policy_command_to_env_action", fake_action_converter)
+    monkeypatch.setattr(
+        "scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545._normalize_runner_obs",
+        lambda observation: observation,
+    )
+
+    rows = _rollout_policy(env, FakePlanner(), max_steps=2, obs={"initial": True})
+
+    assert len(rows) == len(env.executed_actions) == 1
+    row = rows[0]
+    assert row["step"] == 0
+    np.testing.assert_array_equal(env.executed_actions[0], expected_action)
+    assert row["env_action"] == env.executed_actions[row["step"]].tolist()
+    assert row["robot_x"] == pytest.approx(2.0)
+    assert row["robot_velocity_mps"] == pytest.approx([0.25, 0.0])
+    assert row["ped_positions"] == [[4.0, 0.0]]
+    assert row["ped_velocities_mps"] == [[-0.25, 0.0]]
+    assert row["pedestrian_ttc"]["estimate_s"] == pytest.approx(2.0)
+    assert row["pedestrian_ttc"]["status"] == "estimated"
+
+
+def test_counterfactual_trace_row_binds_executed_action_to_post_step_telemetry(monkeypatch) -> None:
+    """Counterfactual rows pair the branch action with the resulting branch state."""
+    from robot_sf.benchmark.map_runner_policies import map_runner_actions
+
+    env = _FakeTraceEnv(
+        robot_x=10.0,
+        robot_speed=0.05,
+        pedestrian_x=12.0,
+        pedestrian_speed=-0.05,
+    )
+    expected_action = np.asarray([0.08, -0.04])
+
+    def fake_action_converter(*, env, config, command):
+        assert config is env.env_config
+        assert command == (0.0, 0.0)
+        return expected_action.copy()
+
+    monkeypatch.setattr(map_runner_actions, "policy_command_to_env_action", fake_action_converter)
+    monkeypatch.setattr(
+        "scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545._build_diagnostic_env",
+        lambda seed, reward_weights=None: (env, None, env.env_config),
+    )
+
+    rows = _replay_branch_from_prefix(
+        225,
+        [],
+        0,
+        mode="hold_stop",
+        horizon=2,
+        gamma=0.99,
+    )
+
+    assert len(rows) == len(env.executed_actions) == 1
+    row = rows[0]
+    assert row["branch_step"] == 0
+    assert row["fork_step"] == 0
+    np.testing.assert_array_equal(env.executed_actions[0], expected_action)
+    assert row["env_action"] == env.executed_actions[row["branch_step"]].tolist()
+    assert row["robot_x"] == pytest.approx(10.0)
+    assert row["robot_velocity_mps"] == pytest.approx([0.05, 0.0])
+    assert row["ped_positions"] == [[12.0, 0.0]]
+    assert row["ped_velocities_mps"] == [[-0.05, 0.0]]
+    assert row["pedestrian_ttc"]["estimate_s"] == pytest.approx(10.0)
+    assert row["pedestrian_ttc"]["status"] == "estimated"
+    assert env.closed
 
 
 def test_env_action_trace_rejects_non_vector_or_non_finite_values() -> None:

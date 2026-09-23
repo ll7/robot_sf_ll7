@@ -291,20 +291,30 @@ def _trace_radius(value) -> float | None:
 
 
 def _disc_contact_time(relative_position: np.ndarray, relative_velocity: np.ndarray, radius: float):
-    """Return constant-relative-velocity first contact time and its classification."""
+    """Return first contact for constant relative velocity and its classification.
+
+    The horizon is unbounded (t >= 0), so every finite nonzero closing speed
+    remains eligible for an estimate. Normalize velocity before solving the
+    distance-to-contact quadratic to avoid a speed-squared cutoff.
+    """
     c = float(np.dot(relative_position, relative_position) - radius**2)
     if c <= 1e-12:
         return 0.0, "overlapping"
-    a = float(np.dot(relative_velocity, relative_velocity))
-    if a <= 1e-12:
+    relative_speed = math.hypot(float(relative_velocity[0]), float(relative_velocity[1]))
+    if relative_speed == 0.0:
         return None, None
-    b = 2.0 * float(np.dot(relative_position, relative_velocity))
-    discriminant = b * b - 4.0 * a * c
+    direction = relative_velocity / relative_speed
+    b = 2.0 * float(np.dot(relative_position, direction))
+    discriminant = b * b - 4.0 * c
     if discriminant < -1e-12:
         return None, None
     root = math.sqrt(max(0.0, discriminant))
-    contact_times = [(-b - root) / (2.0 * a), (-b + root) / (2.0 * a)]
-    future_times = [time_s for time_s in contact_times if time_s >= 0.0]
+    stable_root = -0.5 * (b + math.copysign(root, b))
+    if stable_root == 0.0:
+        contact_distances = [-b / 2.0]
+    else:
+        contact_distances = [stable_root, c / stable_root]
+    future_times = [distance / relative_speed for distance in contact_distances if distance >= 0.0]
     return (min(future_times), "estimated") if future_times else (None, None)
 
 

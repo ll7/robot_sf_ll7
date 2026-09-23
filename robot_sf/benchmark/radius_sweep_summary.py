@@ -14,12 +14,13 @@ import json
 import math
 import subprocess
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
 from robot_sf.benchmark.radius_rank_stability import (
     SWEEP_SUMMARY_SCHEMA,
     _gate1_canary_receipt_is_passing,
@@ -64,6 +65,15 @@ class _Episode:
     obstacle_collisions: float
     typed_collisions: float
     snqi: float
+
+
+_FamilyFeasibilityEvaluator = Callable[
+    [Path, float, Sequence[_Episode], str, str], tuple[str, Mapping[str, str]]
+]
+# No trusted evaluator is implemented in this source revision. Rule identity strings alone
+# cannot admit a family receipt; a separately reviewed change must add an evaluator that
+# recomputes its output from the exact admitted episode rows.
+_FAMILY_FEASIBILITY_EVALUATOR: _FamilyFeasibilityEvaluator | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +224,96 @@ def _validate_planner_aggregates(
                 )
 
 
+def _canonical_planner_carrier(label: str, value: object, radius: float) -> tuple[str, str]:
+    if not isinstance(value, str) or not value.strip():
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode {label} must be a non-empty planner identity"
+        )
+    return label, canonical_algorithm_name(value)
+
+
+def _episode_planner_carriers(record: Mapping[str, Any], radius: float) -> list[tuple[str, str]]:
+    carriers: list[tuple[str, str]] = []
+    if "algo" in record:
+        carriers.append(_canonical_planner_carrier("algo", record["algo"], radius))
+
+    if "algorithm_metadata" in record:
+        metadata = _mapping(record["algorithm_metadata"], "episode algorithm_metadata")
+        for field in ("algorithm", "canonical_algorithm"):
+            if field in metadata:
+                carriers.append(
+                    _canonical_planner_carrier(
+                        f"algorithm_metadata.{field}", metadata[field], radius
+                    )
+                )
+
+    if "result_provenance" in record:
+        provenance = _mapping(record["result_provenance"], "episode result_provenance")
+        if "planner_key" in provenance:
+            carriers.append(
+                _canonical_planner_carrier(
+                    "result_provenance.planner_key", provenance["planner_key"], radius
+                )
+            )
+    return carriers
+
+
+def _validate_episode_planner_identity(
+    record: Mapping[str, Any], *, planner: str, radius: float
+) -> None:
+    """Reject any declared episode planner identity that conflicts with its run directory."""
+    expected = canonical_algorithm_name(planner)
+    carriers = _episode_planner_carriers(record, radius)
+    if not carriers:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode has no embedded planner identity carrier; "
+            f"cannot validate it against directory planner {planner!r}"
+        )
+
+    distinct = {canonical for _, canonical in carriers}
+    if len(distinct) > 1:
+        details = dict(carriers)
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode planner identity carriers conflict: {details}"
+        )
+    mismatched = {label: canonical for label, canonical in carriers if canonical != expected}
+    if mismatched:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode planner identity mismatch for directory planner "
+            f"{planner!r}: {mismatched}"
+        )
+
+
+def _family_receipt_rows(raw: Mapping[str, Any], radius: float) -> tuple[str, dict[str, str]]:
+    definition = raw.get("definition")
+    if not isinstance(definition, str) or not definition.strip():
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family_feasibility requires an explicit definition"
+        )
+    families = _mapping(raw.get("families"), f"radius {radius:g} family feasibility rows")
+    normalized: dict[str, str] = {}
+    for name, status in families.items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(status, str):
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} family_feasibility has invalid family rows"
+            )
+        normalized[name] = status
+    if not normalized or "narrow_doorway" not in normalized:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family_feasibility must include narrow_doorway"
+        )
+    invalid = {
+        name: status
+        for name, status in normalized.items()
+        if status not in {"feasible", "infeasible"}
+    }
+    if invalid:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family_feasibility has invalid statuses: {invalid}"
+        )
+    return definition.strip(), normalized
+
+
 def _family_feasibility(
     root: Path,
     *,
@@ -221,6 +321,7 @@ def _family_feasibility(
     campaign_id: str,
     campaign_commit: str,
     config_sha256: str,
+    episodes: Sequence[_Episode],
 ) -> tuple[str, str, str, dict[str, str], str]:
     definition_id = EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID
     authority_sha256 = EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256
@@ -265,38 +366,80 @@ def _family_feasibility(
         raise RadiusSweepSummaryError(
             f"radius {radius:g} family_feasibility source provenance mismatch"
         )
-    definition = raw.get("definition")
-    if not isinstance(definition, str) or not definition.strip():
-        raise RadiusSweepSummaryError(
-            f"radius {radius:g} family_feasibility requires an explicit definition"
-        )
-    families = _mapping(raw.get("families"), f"radius {radius:g} family feasibility rows")
-    normalized = {str(name): str(status) for name, status in families.items()}
-    if not normalized or "narrow_doorway" not in normalized:
-        raise RadiusSweepSummaryError(
-            f"radius {radius:g} family_feasibility must include narrow_doorway"
-        )
-    invalid = {
-        name: status
-        for name, status in normalized.items()
-        if status not in {"feasible", "infeasible"}
-    }
-    if invalid:
-        raise RadiusSweepSummaryError(
-            f"radius {radius:g} family_feasibility has invalid statuses: {invalid}"
-        )
+    definition, normalized = _family_receipt_rows(raw, radius)
+    _require_family_feasibility_evaluator_match(
+        root,
+        radius=radius,
+        episodes=episodes,
+        definition_id=definition_id,
+        authority_sha256=authority_sha256,
+        definition=definition,
+        families=normalized,
+    )
     return (
         definition_id,
         authority_sha256,
-        definition.strip(),
+        definition,
         dict(sorted(normalized.items())),
         sha256(path.read_bytes()).hexdigest(),
     )
 
 
+def _require_family_feasibility_evaluator_match(
+    root: Path,
+    *,
+    radius: float,
+    episodes: Sequence[_Episode],
+    definition_id: str,
+    authority_sha256: str,
+    definition: str,
+    families: Mapping[str, str],
+) -> None:
+    evaluator = _FAMILY_FEASIBILITY_EVALUATOR
+    if not callable(evaluator):
+        raise RadiusSweepSummaryError(
+            "family_feasibility cannot be admitted without an in-tree evaluator that "
+            "independently recomputes family results from the exact source episodes"
+        )
+    try:
+        evaluated_definition, evaluated_families = evaluator(
+            root, radius, episodes, definition_id, authority_sha256
+        )
+    except Exception as exc:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family-feasibility evaluator failed: {exc}"
+        ) from exc
+    if (
+        not isinstance(evaluated_definition, str)
+        or not evaluated_definition.strip()
+        or not isinstance(evaluated_families, Mapping)
+    ):
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family-feasibility evaluator returned an invalid result"
+        )
+    expected_families: dict[str, str] = {}
+    for name, status in evaluated_families.items():
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(status, str)
+            or status not in {"feasible", "infeasible"}
+        ):
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} family-feasibility evaluator returned invalid rows"
+            )
+        expected_families[name] = status
+    if definition.strip() != evaluated_definition.strip() or dict(families) != expected_families:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family_feasibility receipt does not match independently "
+            "evaluated source-row results"
+        )
+
+
 def _episode_from_record(
     record: Mapping[str, Any], *, planner: str, radius: float, commit: str
 ) -> _Episode:
+    _validate_episode_planner_identity(record, planner=planner, radius=radius)
     scenario = str(record.get("scenario_id") or "")
     if scenario not in EXPECTED_SCENARIO_NAMES:
         raise RadiusSweepSummaryError(f"radius {radius:g} has unexpected scenario {scenario!r}")
@@ -473,6 +616,8 @@ def _load_arm(root: Path) -> _Arm:
         != EXPECTED_SEEDS
     ):
         raise RadiusSweepSummaryError(f"radius {radius:g} campaign identity mismatch")
+    episodes = _load_episodes(root, radius, commit)
+    _validate_planner_aggregates(planner_rows, episodes, radius)
     (
         family_definition_id,
         family_authority_sha256,
@@ -485,9 +630,8 @@ def _load_arm(root: Path) -> _Arm:
         campaign_id=campaign_id,
         campaign_commit=commit,
         config_sha256=config_sha,
+        episodes=episodes,
     )
-    episodes = _load_episodes(root, radius, commit)
-    _validate_planner_aggregates(planner_rows, episodes, radius)
     return _Arm(
         radius=radius,
         root=root,

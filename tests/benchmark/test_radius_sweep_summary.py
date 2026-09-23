@@ -54,6 +54,20 @@ _FIXTURE_CONFIG_PATHS = {
 }
 
 
+def _fixture_family_feasibility_evaluator(
+    _root: object,
+    radius: float,
+    _episodes: object,
+    _definition_id: str,
+    _authority_sha256: str,
+) -> tuple[str, dict[str, str]]:
+    """Synthetic unit-test plumbing; never campaign evidence or a production rule."""
+    return (
+        "fixture-authoritative family feasibility",
+        {"narrow_doorway": "feasible" if radius < 1.0 else "infeasible"},
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class _GitConfigFixture:
     root: Path
@@ -119,6 +133,10 @@ def compact_scope(monkeypatch: pytest.MonkeyPatch, git_config_fixture: _GitConfi
         "fixture-family-rule.v1",
     )
     monkeypatch.setattr(composer, "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256", "f" * 64)
+    # Explicit synthetic unit-test plumbing; production keeps this evaluator unset.
+    monkeypatch.setattr(
+        composer, "_FAMILY_FEASIBILITY_EVALUATOR", _fixture_family_feasibility_evaluator
+    )
     monkeypatch.setattr(
         composer,
         "EXPECTED_ARM_CAMPAIGN_CONFIGS",
@@ -229,6 +247,12 @@ def _write_arm(
         for seed in composer.EXPECTED_SEEDS:
             rows.append(
                 {
+                    "algo": "goal",
+                    "algorithm_metadata": {
+                        "algorithm": "goal",
+                        "canonical_algorithm": "goal",
+                    },
+                    "result_provenance": {"planner_key": "goal"},
                     "scenario_id": scenario,
                     "seed": seed,
                     "git_hash": commit,
@@ -298,6 +322,90 @@ def test_compose_summary_is_deterministic_and_preserves_per_arm_configs(
     assert first_path.read_bytes() == second_path.read_bytes()
 
 
+@pytest.mark.parametrize(
+    "carrier",
+    [
+        "algo",
+        "algorithm_metadata.algorithm",
+        "algorithm_metadata.canonical_algorithm",
+        "result_provenance.planner_key",
+    ],
+)
+def test_composer_rejects_each_mismatched_episode_planner_carrier(
+    tmp_path: Path, compact_scope: None, carrier: str
+) -> None:
+    """Every explicit planner identity must agree with the run-directory planner."""
+    roots, receipt = _write_triplet(tmp_path)
+    episode_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    lines = episode_path.read_text(encoding="utf-8").splitlines()
+    episode = json.loads(lines[0])
+    episode.pop("algo")
+    episode.pop("algorithm_metadata")
+    episode.pop("result_provenance")
+    if carrier == "algo":
+        episode["algo"] = "orca"
+    elif carrier.startswith("algorithm_metadata."):
+        field = carrier.rsplit(".", maxsplit=1)[-1]
+        episode["algorithm_metadata"] = {field: "orca"}
+    else:
+        episode["result_provenance"] = {"planner_key": "orca"}
+    lines[0] = json.dumps(episode)
+    episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match="episode planner identity mismatch"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_rejects_conflicting_episode_planner_carriers(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """A conflicting pair of payload identities cannot be hidden by the run directory."""
+    roots, receipt = _write_triplet(tmp_path)
+    episode_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    lines = episode_path.read_text(encoding="utf-8").splitlines()
+    episode = json.loads(lines[0])
+    episode["algorithm_metadata"]["canonical_algorithm"] = "orca"
+    lines[0] = json.dumps(episode)
+    episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match="planner identity carriers conflict"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_rejects_episode_without_planner_identity_carriers(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """An episode cannot inherit its planner solely from the run-directory name."""
+    roots, receipt = _write_triplet(tmp_path)
+    episode_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    lines = episode_path.read_text(encoding="utf-8").splitlines()
+    episode = json.loads(lines[0])
+    episode.pop("algo")
+    episode["algorithm_metadata"].pop("algorithm")
+    episode["algorithm_metadata"].pop("canonical_algorithm")
+    episode["result_provenance"].pop("planner_key")
+    lines[0] = json.dumps(episode)
+    episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match="no embedded planner identity carrier"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_accepts_canonical_alias_for_episode_algorithm(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """Only aliases recognized by the canonical algorithm registry normalize to the directory."""
+    roots, receipt = _write_triplet(tmp_path)
+    episode_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    lines = episode_path.read_text(encoding="utf-8").splitlines()
+    episode = json.loads(lines[0])
+    episode["algo"] = "simple_policy"
+    lines[0] = json.dumps(episode)
+    episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
 def test_composer_rejects_missing_authoritative_family_semantics(
     tmp_path: Path, compact_scope: None
 ) -> None:
@@ -336,6 +444,85 @@ def test_composer_rejects_unpinned_family_rule_identity(
     family["approved_rule"][field] = value
     family_path.write_text(json.dumps(family), encoding="utf-8")
     with pytest.raises(RadiusSweepSummaryError, match="pinned approved rule identity"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_production_family_feasibility_has_no_rule_pins_or_evaluator(tmp_path: Path) -> None:
+    """Production cannot admit a family receipt from identity strings alone."""
+    assert composer.EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID is None
+    assert composer.EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256 is None
+    assert composer._FAMILY_FEASIBILITY_EVALUATOR is None
+    with pytest.raises(RadiusSweepSummaryError, match="no owner-approved family-feasibility"):
+        composer._family_feasibility(
+            tmp_path,
+            radius=0.5,
+            campaign_id="campaign-r0p5",
+            campaign_commit="a" * 40,
+            config_sha256="b" * 64,
+            episodes=(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("family_label", "without an in-tree evaluator"),
+        ("family_status", "without an in-tree evaluator"),
+        ("definition", "without an in-tree evaluator"),
+        ("source_campaign_id", "source provenance mismatch"),
+        ("source_campaign_commit", "source provenance mismatch"),
+        ("source_config_sha256", "source provenance mismatch"),
+    ],
+)
+def test_family_receipt_mutations_stay_blocked_without_evaluator(
+    tmp_path: Path,
+    compact_scope: None,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    message: str,
+) -> None:
+    """Fixture-pinned rule strings cannot admit edited labels, definitions, or bindings."""
+    roots, receipt = _write_triplet(tmp_path)
+    monkeypatch.setattr(composer, "_FAMILY_FEASIBILITY_EVALUATOR", None)
+    family_path = roots[0] / "reports/radius_family_feasibility.json"
+    family = json.loads(family_path.read_text(encoding="utf-8"))
+    if mutation == "family_label":
+        family["families"]["invented_family"] = "feasible"
+    elif mutation == "family_status":
+        family["families"]["narrow_doorway"] = "infeasible"
+    elif mutation == "definition":
+        family["definition"] = "changed self-declared definition"
+    elif mutation == "source_campaign_id":
+        family["source_campaign_id"] = "different-campaign"
+    elif mutation == "source_campaign_commit":
+        family["source_campaign_commit"] = "b" * 40
+    else:
+        family["source_config_sha256"] = "e" * 64
+    family_path.write_text(json.dumps(family), encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match=message):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+@pytest.mark.parametrize("mutation", ["family_label", "family_status", "definition"])
+def test_family_evaluator_rejects_receipt_result_mismatch(
+    tmp_path: Path, compact_scope: None, mutation: str
+) -> None:
+    """The test-only evaluator exercises comparison plumbing, not scientific evidence."""
+    roots, receipt = _write_triplet(tmp_path)
+    family_path = roots[0] / "reports/radius_family_feasibility.json"
+    family = json.loads(family_path.read_text(encoding="utf-8"))
+    if mutation == "family_label":
+        family["families"]["invented_family"] = "feasible"
+    elif mutation == "family_status":
+        family["families"]["narrow_doorway"] = "infeasible"
+    else:
+        family["definition"] = "changed self-declared definition"
+    family_path.write_text(json.dumps(family), encoding="utf-8")
+
+    with pytest.raises(
+        RadiusSweepSummaryError, match="does not match independently evaluated source-row results"
+    ):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 

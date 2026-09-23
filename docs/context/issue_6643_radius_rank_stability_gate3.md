@@ -123,6 +123,10 @@ Each root must contain its canonical `campaign_manifest.json`,
 `runs/<planner>__differential_drive/episodes.jsonl` for every frozen planner. The composer verifies
 the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
 derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
+Each episode must carry at least one planner identity in `algo`,
+`algorithm_metadata.algorithm` / `canonical_algorithm`, or `result_provenance.planner_key`; every
+present identity must canonicalize to its run-directory planner, and missing or conflicting
+identities fail closed.
 It also reconciles each planner row's serialized success, pedestrian-collision,
 obstacle-collision, total-collision, and SNQI means against those same records at the camera-ready
 four-decimal precision; status/count metadata alone is insufficient.
@@ -166,12 +170,16 @@ family roster across arms:
 
 Statuses are limited to `feasible` and `infeasible`, and `narrow_doorway` is mandatory. The expected
 rule ID and authority digest are currently unset in source because the live #6600/#6642 contracts do
-not define or pin an approved family-level aggregation. Therefore the composer rejects all family
-receipts, including otherwise well-formed self-asserted ones. Only a separate reviewed update that
-adds the durable owner-approved rule artifact and pins its exact identity may enable this path; this
-PR does not invent the rule. The current preserved job 15504 (complete 0.5/0.8 m arms) and recovery
-job 15516 (complete 1.0 m arm) also do not contain an approved family-feasibility block. The exact
-original Gate 1 receipt bytes whose declared SHA-256 is
+not define or pin an approved family-level aggregation. The composer also has no in-tree evaluator
+that recomputes family results from the exact admitted episode rows, so production family-receipt
+acceptance is deliberately impossible in this revision. A receipt or checksum alone binds bytes; it
+does not establish that the family labels follow an approved rule. A separate reviewed change must
+supply both the durable owner-approved rule artifact and an evaluator that independently recomputes
+the family results from the exact source rows. Pinning identity strings alone cannot enable the
+path. Synthetic evaluator stubs in focused unit tests exercise summary mechanics only and are not
+campaign or benchmark evidence. The current preserved job 15504 (complete 0.5/0.8 m arms) and
+recovery job 15516 (complete 1.0 m arm) also do not contain an approved family-feasibility block.
+The exact original Gate 1 receipt bytes whose declared SHA-256 is
 `88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922` are also absent from the
 preserved campaign trees. A source replay can test the canary behavior, but a byte-different replay
 cannot replace that receipt for promoted provenance.

@@ -18,6 +18,18 @@
     "hold_start_offset_steps": 20,
     "rationale": "Fork early enough for the zero-command branch to decelerate before contact; the same measured prefix is replayed for both branches."
   },
+  "distance_conventions_by_column": {
+    "ground_truth_clearance_before_m": {
+      "definition": "Shortest robot-center to static-wall-segment distance minus the robot radius; positive values mean separation between the robot footprint and wall.",
+      "distance_convention": "surface_clearance",
+      "producer": "parent._min_obstacle_clearance"
+    },
+    "nearest_forward_obstacle_m": {
+      "definition": "Euclidean distance in the ego occupancy grid from its robot-center origin to the center of the nearest occupied static cell in the 3 m forward corridor.",
+      "distance_convention": "center_center",
+      "producer": "_nearest_forward_obstacle"
+    }
+  },
   "eval_reward_note": "Per-step rewards are recomputed live by route_completion_v3 with the final-stage weights; valid as evaluation-time replay under the bound objective, not as a recovered training-time return without training-log corroboration.",
   "fallback_or_degraded_execution": false,
   "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
@@ -41,6 +53,7 @@
   "predictive_checkpoint_local_path": "output/model_cache/predictive_proxy_selected_v2_full/predictive_proxy_selected_v2_full-predictive_model.pt",
   "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
   "predictive_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "reward_curriculum": "2 stages; stage0 until_episodes=100 (progress/collision/timeout/terminal only); final stage = full weights above. Checkpoint at ~10M steps is past stage 0; stage-at-checkpoint is inferred, not logged.",
   "reward_impl": "robot_sf/gym_env/reward.py:route_completion_v3_reward",
   "reward_impl_git_blob_sha": "73d9315ad48a0f9da55389088275c760f140b081",

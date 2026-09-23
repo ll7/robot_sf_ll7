@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -225,7 +226,45 @@ def test_cli_runs_after_rollout_foresight_load_and_writes_evidence(  # noqa: C90
     assert all(planner.closed for planner in planners)
     summary = json.loads((tmp_path / "mechanism_summary.json").read_text(encoding="utf-8"))
     assert summary["result_classification"] == "actor_value_response_mismatch_supported"
-    assert (tmp_path / "matched_state_rows.csv.review.json").exists()
+    assert summary["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    csv_path = tmp_path / "matched_state_rows.csv"
+    csv_lines = csv_path.read_text(encoding="utf-8").splitlines()
+    assert csv_lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+    assert csv_lines[1] == "# distance_convention: surface_clearance"
+    assert "ground_truth_clearance_before_m" in csv_lines[2]
+    binding = json.loads((tmp_path / "binding.json").read_text(encoding="utf-8"))
+    assert binding["distance_conventions_by_column"] == {
+        "ground_truth_clearance_before_m": {
+            "distance_convention": "surface_clearance",
+            "definition": (
+                "Shortest robot-center to static-wall-segment distance minus the robot radius; "
+                "positive values mean separation between the robot footprint and wall."
+            ),
+            "producer": "parent._min_obstacle_clearance",
+        },
+        "nearest_forward_obstacle_m": {
+            "distance_convention": "center_center",
+            "definition": (
+                "Euclidean distance in the ego occupancy grid from its robot-center origin to "
+                "the center of the nearest occupied static cell in the 3 m forward corridor."
+            ),
+            "producer": "_nearest_forward_obstacle",
+        },
+    }
+    sidecar_path = tmp_path / "matched_state_rows.csv.review.json"
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["schema_version"] == "evidence-review-marker.v1"
+    assert sidecar["artifact_sha256"] == hashlib.sha256(csv_path.read_bytes()).hexdigest()
+    assert sidecar["claim_boundary"] == diagnostic.CLAIM_BOUNDARY
+
+    first_generation = {
+        path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()
+    }
+    assert diagnostic.main() == 0
+    second_generation = {
+        path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()
+    }
+    assert first_generation == second_generation
 
 
 def test_tracked_summary_has_diagnostic_claim_boundary() -> None:

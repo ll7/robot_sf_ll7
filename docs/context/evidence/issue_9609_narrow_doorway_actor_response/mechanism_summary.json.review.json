@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9609_narrow_doorway_actor_response/mechanism_summary.json",
-  "artifact_sha256": "103e492a6dae35f3ec7ed6d67ef65540235026e267ee6e24b7c33f04ee414812",
+  "artifact_sha256": "cfeb6fe2924d04e669c4c285f853842262e0971e17da1c88fb2a56c661232024",
   "claim_boundary": "diagnostic-only evidence for the bound checkpoint/scenario/states; not benchmark, training-causal, population-level, paper, or dissertation evidence",
   "dissertation_admission_status": "not_admitted",
   "domain_approval_status": "not_granted",

@@ -32,6 +32,7 @@
   ],
   "parent_issue": 9545,
   "result_classification": "actor_value_response_mismatch_supported",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "row_count": 12,
   "schema": "issue_9609_actor_response_summary.v1",
   "seed_summaries": [

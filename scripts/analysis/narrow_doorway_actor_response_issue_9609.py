@@ -18,8 +18,6 @@ benchmark row, retraining result, or population-level mechanism claim.
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import json
 import math
 from copy import deepcopy
@@ -30,6 +28,11 @@ import numpy as np
 
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     policy_command_to_env_action,
+)
+from robot_sf.evidence.writers import (
+    write_distance_series_csv,
+    write_json,
+    write_review_sidecar,
 )
 from scripts.analysis import narrow_doorway_crash_vs_wait_issue_9545 as parent
 
@@ -49,33 +52,18 @@ REPRO_COMMAND = (
 )
 
 
-def _json_dump(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _write_review_sidecar(path: Path) -> None:
-    _json_dump(
-        path.with_name(path.name + ".review.json"),
+    sidecar_path = write_review_sidecar(path)
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar.update(
         {
-            "artifact_path": str(path.as_posix()),
-            "artifact_sha256": _sha256(path),
             "claim_boundary": CLAIM_BOUNDARY,
             "dissertation_admission_status": "not_admitted",
             "domain_approval_status": "not_granted",
-            "preserved_exact_bytes": True,
-            "review_marker": "AI-GENERATED NEEDS-REVIEW",
             "review_status": "needs_independent_review",
-            "schema_version": "evidence-review-marker.v1",
-        },
+        }
     )
+    write_json(sidecar_path, sidecar)
 
 
 def _policy_outputs(planner: Any, model_obs: dict[str, np.ndarray]) -> dict[str, Any]:
@@ -420,17 +408,37 @@ def run(output_dir: Path) -> dict[str, Any]:
     # head; neither belongs in this deterministic child packet.
     binding.pop("generated_at_utc", None)
     binding.pop("git_head", None)
+    binding["distance_conventions_by_column"] = {
+        "ground_truth_clearance_before_m": {
+            "distance_convention": "surface_clearance",
+            "definition": (
+                "Shortest robot-center to static-wall-segment distance minus the robot radius; "
+                "positive values mean separation between the robot footprint and wall."
+            ),
+            "producer": "parent._min_obstacle_clearance",
+        },
+        "nearest_forward_obstacle_m": {
+            "distance_convention": "center_center",
+            "definition": (
+                "Euclidean distance in the ego occupancy grid from its robot-center origin to "
+                "the center of the nearest occupied static cell in the 3 m forward corridor."
+            ),
+            "producer": "_nearest_forward_obstacle",
+        },
+    }
 
     binding_path = output_dir / "binding.json"
     table_path = output_dir / "matched_state_rows.csv"
     summary_path = output_dir / "mechanism_summary.json"
-    _json_dump(binding_path, binding)
-    with table_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_json(binding_path, binding)
+    write_distance_series_csv(
+        table_path,
+        rows,
+        convention="surface_clearance",
+        series_name="ground_truth_clearance_before_m",
+    )
     summary = classify(rows)
-    _json_dump(summary_path, summary)
+    write_json(summary_path, summary)
     for path in (binding_path, table_path, summary_path):
         _write_review_sidecar(path)
     return summary

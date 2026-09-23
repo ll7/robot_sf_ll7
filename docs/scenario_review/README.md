@@ -49,6 +49,12 @@ diagnostic extension is documented in
 rows only; it does not instrument a planner, run a simulator, or make a
 benchmark/scientific claim.
 
+The SREV-10 source-backed review encoder is documented in
+[review_encode.md](./review_encode.md) and runs with
+python -m robot_sf.render.review_encode. It emits diagnostic-only MP4,
+receipt, and presentation-time-map artifacts from a verified frame sequence
+or source clip; it does not produce benchmark or scientific evidence.
+
 ## Leaf fast-lane registration convention
 
 Scenario-review leaves that add a deterministic test file must also register

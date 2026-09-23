@@ -979,6 +979,8 @@ def _read_json(source: Path | Any, *, name: str | None = None) -> Any:
         return json.loads(payload.decode("utf-8"))
     except FileNotFoundError as error:
         raise _SourceLoadError(f"{source_name}: source_missing") from error
+    except RecursionError as error:
+        raise _SourceLoadError(f"{source_name}: source_json_depth") from error
     except (OSError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise _SourceLoadError(f"{source_name}: source_unreadable") from error
 
@@ -1218,6 +1220,33 @@ def _require_unchanged_file(path: Path, before: tuple[int, int, int, int]) -> No
         raise _SourceLoadError(f"source_changed_during_read: {path.name}")
 
 
+def _preflight_image_snapshot(snapshot: Any, name: str) -> int:
+    """Inspect image geometry and return the retained RGB byte bound.
+
+    Returns:
+        The exact upper bound for the normalized RGB frame, without loading
+        pixel data.
+    """
+
+    from PIL import Image  # noqa: PLC0415
+
+    try:
+        snapshot.seek(0)
+        with Image.open(snapshot) as image:
+            pixels = image.width * image.height
+            if image.width < 1 or image.height < 1:
+                raise _SourceLoadError(f"source_frame_decode_failed: {name}")
+            if pixels > MAX_OUTPUT_PIXELS:
+                raise _SourceLoadError("resource_limit: source_frame_pixels")
+            return pixels * 3
+    except _SourceLoadError:
+        raise
+    except Image.DecompressionBombError as error:
+        raise _SourceLoadError("resource_limit: source_frame_pixels") from error
+    except (OSError, TypeError, ValueError) as error:
+        raise _SourceLoadError(f"source_frame_decode_failed: {name}") from error
+
+
 def _decode_image_snapshot(snapshot: Any, name: str) -> Any:
     """Decode one bounded private image snapshot into an RGB array.
 
@@ -1228,6 +1257,7 @@ def _decode_image_snapshot(snapshot: Any, name: str) -> Any:
     from PIL import Image  # noqa: PLC0415
 
     try:
+        snapshot.seek(0)
         with Image.open(snapshot) as image:
             if image.width * image.height > MAX_OUTPUT_PIXELS:
                 raise _SourceLoadError("resource_limit: source_frame_pixels")
@@ -1235,6 +1265,8 @@ def _decode_image_snapshot(snapshot: Any, name: str) -> Any:
             return _normalise_frame_array(image)
     except _SourceLoadError:
         raise
+    except Image.DecompressionBombError as error:
+        raise _SourceLoadError("resource_limit: source_frame_pixels") from error
     except (OSError, TypeError, ValueError) as error:
         raise _SourceLoadError(f"source_frame_decode_failed: {name}") from error
 
@@ -1298,6 +1330,11 @@ def _load_manifest_frame(
                         "observed_sha256": observed,
                     },
                 ),
+            )
+        decoded_bound = _preflight_image_snapshot(snapshot, frame_path.name)
+        if decoded_bytes + decoded_bound > MAX_SOURCE_BUFFER_BYTES:
+            raise _SourceLoadError(
+                f"resource_limit: decoded_source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}"
             )
         decoded = _decode_image_snapshot(snapshot, frame_path.name)
     decoded_bytes += int(decoded.nbytes)

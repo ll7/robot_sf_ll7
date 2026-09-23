@@ -511,6 +511,35 @@ def test_manifest_decoded_memory_limit_counts_retained_frames(
     assert not (tmp_path / "out").exists()
 
 
+def test_manifest_decoded_memory_limit_is_reserved_before_decoder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An exhausted retained-frame budget prevents the decoder call."""
+
+    _request(tmp_path)
+    frame_path = tmp_path / "frames/frame-000.png"
+    decoder_called = False
+
+    def unexpected_decoder(*_args: object, **_kwargs: object) -> object:
+        nonlocal decoder_called
+        decoder_called = True
+        raise AssertionError("decoder must not run with no retained-frame budget")
+
+    monkeypatch.setattr(review_encode, "_decode_image_snapshot", unexpected_decoder)
+    with pytest.raises(
+        review_encode._SourceLoadError,
+        match="decoded_source_buffer_bytes",
+    ):
+        review_encode._load_manifest_frame(
+            frame_path,
+            0,
+            _sha256(frame_path),
+            0,
+            review_encode.MAX_SOURCE_BUFFER_BYTES,
+        )
+    assert decoder_called is False
+
+
 def test_pause_expansion_is_rejected_before_materialization(tmp_path: Path) -> None:
     """Projected pause cardinality is bounded before allocating repeated frames."""
 
@@ -580,6 +609,48 @@ def test_corrupt_manifest_fails_closed(tmp_path: Path) -> None:
     result = run(request, base=tmp_path)
     assert result.status == "failed"
     assert "source_digest_mismatch" in result.reason
+
+
+def test_decompression_bomb_fails_closed_without_artifacts(tmp_path: Path) -> None:
+    """Pillow's documented decompression-bomb exception becomes a failed result."""
+
+    request = _request(tmp_path)
+    frame_path = tmp_path / "frames/frame-000.png"
+    frame_path.write_bytes(b"P6\n1000000 1000000\n255\n\x00\x00\x00")
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["frame_digests"][0] = _sha256(frame_path)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    request = replace(
+        request,
+        sources=(replace(request.sources[0], sha256=_sha256(manifest_path)),),
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == review_encode.STATUS_FAILED
+    assert result.reason == "resource_limit: source_frame_pixels"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+def test_deep_manifest_json_fails_closed_without_artifacts(tmp_path: Path) -> None:
+    """JSON parser-depth exhaustion becomes a stable failed result."""
+
+    request = _request(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("[" * 10_000 + "]" * 10_000, encoding="utf-8")
+    request = replace(
+        request,
+        sources=(replace(request.sources[0], sha256=_sha256(manifest_path)),),
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == review_encode.STATUS_FAILED
+    assert result.reason == "manifest.json: source_json_depth"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
 
 
 def test_source_digest_change_changes_consumed_output(tmp_path: Path) -> None:

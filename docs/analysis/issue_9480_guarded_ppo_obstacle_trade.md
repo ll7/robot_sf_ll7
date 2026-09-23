@@ -2,26 +2,46 @@
 
 Claim boundary: descriptive analysis of the frozen release bundle only. No episode was
 stepped or rerun, no checkpoint retrained, no runtime changed.
-Evidence tier: diagnostic reading of retained episode records.
+Evidence tier: diagnostic-only reading of retained episode records; no causal, planner-general,
+paper, or benchmark-success claim follows.
 
 ## Input identity
 
-- Bundle: `benchmark_0_0_6_s30_h600_20260911_publication_bundle` (checksums verified)
-- Source commit: `31cdfe0361abe2c520117a17f99c1b7a0aba4359`
+- Campaign: `benchmark_0_0_6_s30_h600_20260911`; release tag: `paper-matrix-v2-h600-s30-31cdfe0361abe2c520117a17f99c1b7a0aba4359`.
+- Source commit: `31cdfe0361abe2c520117a17f99c1b7a0aba4359`.
+- Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`; publication hash `152eba3969a9`;
+  release SHA-256 `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`.
+- Seeds: `paper_eval_s30` = 111–140;
+  horizon/dt: `600` steps / `0.1` s.
+- Payload checksums: `111` files / `740933980` bytes
+  verified against `publication_manifest.json` totals. The top-level publication manifest itself is
+  not in `checksums.sha256`; its authenticity is not independently checksum-covered here.
+- Release asset declared SHA-256: `61b865fdde65455a39a68221d7c65b0eff315bfa51b4c0bfe34aed3c5d4f3e8e`; local archive verification: `verified`.
 - Arms: `guarded_ppo__differential_drive` (BR-06 v3 checkpoint behind the runtime guard) and
   `ppo__differential_drive` (different checkpoint, no guard) — descriptive comparison only,
   not a clean guard ablation because the checkpoints differ.
+- Guarded config: `configs/algos/guarded_ppo_camera_ready_cpu.yaml` SHA-256 `69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772`;
+  model `ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200` declared checkpoint SHA-256 `8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09`.
+- Base config: `configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml` SHA-256 `51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41`;
+  model `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417` declared checkpoint SHA-256 `2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d`.
+  Predictive model `predictive_proxy_selected_v2_full` declared checkpoint SHA-256
+  `a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1`.
+
+Selected arm config/checkpoint identities are bound in the machine-readable validation output:
+both configs match the release-manifest SHA, both declared checkpoint identities match the
+preflight manifest, and every retained row records a loaded, non-fallback runtime. The declared
+checkpoint SHA values are registry declarations; checkpoint bytes are not part of this bundle.
 
 ## Availability matrix (what the bundle can and cannot answer)
 
 | Issue packet item | Verdict | Reason |
 | --- | --- | --- |
-| Contact table: cell, step, map location | partial | cell + step (via `collision_time`) retained; map location NA — no per-step positions retained |
+| Retained contact table | available (see `issue_9480_guarded_ppo_obstacle_trade_rows.json`) | cell/map file/seed/time and derived step retained; one row per contact episode |
+| Contact x/y or wall-segment geometry | NA | no per-step positions retained |
 | Pedestrian within clearance in preceding N steps | NA | no step traces |
-| Guard counts per episode + contact-step decision | available | `guard_stats`, `shield_stats.last_decision` |
+| Guard labels/override fields per contact episode | available | retained guard aggregates and final decision fields |
 | Guard active in last-k-steps window | NA | per-step decision series not retained |
-| Base-PPO same views | available | episode-level |
-| Contact timing vs cap | available | `collision_time` vs 600-step (60 s) cap |
+| Base-PPO same retained-field view | available | episode-level fields only |
 | Per-map overlay figure | substituted | family-rate bars + timing histogram instead (no positions) |
 
 ## Table 7.1 verification
@@ -32,8 +52,10 @@ Evidence tier: diagnostic reading of retained episode records.
 | base ppo | 1440 | 0.0986 | 0.3243 | 796/1440 | 35 |
 
 Guarded obstacle mean (0.334) matches Table 7.1 (0.33); base PPO is nearly identical
-(0.3243). Guarded sheds pedestrian contacts (0.0174 vs 0.0986) while success collapses (329 vs 796) and timeouts rise (605 vs 35). The obstacle rate is not a trade the guard
-introduced — descriptively, both checkpoints hit walls at the same rate.
+(0.3243). The retained guarded summary has fewer pedestrian contacts
+(0.0174 vs 0.0986), fewer successes
+(329 vs 796), and more timeouts (605 vs 35).
+These are descriptive differences between two checkpoints; they do not identify a guard effect.
 
 ## Obstacle-contact rate by scenario family
 
@@ -79,8 +101,7 @@ introduced — descriptively, both checkpoints hit walls at the same rate.
 ![family rates](../figures/issue_9480_guarded_obstacle_trade/family_rates.png)
 
 Shared wall-heavy cells (merging ~0.97, narrow_doorway 1.00 both arms, doorway,
-t_intersection, bottleneck) hit both checkpoints. Divergences (cross_trap 0.767 vs 0.156,
-overtaking 0.850 vs 0.217, narrow_hallway 0.467 vs 0.867) are descriptive only: the
+t_intersection, bottleneck) hit both checkpoints. Divergences are descriptive only: the
 checkpoints differ, so no family delta isolates the guard.
 
 ## Contact timing vs the episode cap
@@ -91,9 +112,8 @@ Contacts after 50 s of the 60 s cap: guarded 18/481, base 5/467.
 
 ![contact timing](../figures/issue_9480_guarded_obstacle_trade/contact_timing_hist.png)
 
-Contacts skew early/mid-episode for both arms; guarded contacts run later (median 13.0 s
-vs 9.6 s), consistent with the guard prolonging episodes rather than with a
-"late, under time pressure" cluster.
+Contacts skew early/mid-episode for both arms; guarded contacts occur later in this retained
+comparison. Without per-step traces, this timing difference does not identify a runtime effect.
 
 ## Guard cross-tabulation (guarded arm, 481 contact episodes)
 
@@ -103,47 +123,39 @@ Final (contact-step) decisions: fallback_safe=186, ppo_clear=159, ppo_safe=3, st
 
 ![contact-step decision](../figures/issue_9480_guarded_obstacle_trade/contact_step_decision.png)
 
-In 322/481 contact episodes the guard's final decision was a substitution
-(`fallback_safe` 186, `stop_safe` 133, `ppo_safe` 3), i.e. the guard had engaged by
-contact time in two thirds of cases yet contact still occurred. In 159/481 the guard
-passed the PPO command through (`ppo_clear`). Correlation, not causation: without step
-traces we cannot tell unavoidable-from-early-commitment apart from
-fallback-steered-into-wall. The coverage reading is that the guard's obstacle clearance
-(0.30 m) and short-horizon rollout do not prevent these contacts, and the fallback DWA
-weights goal progress (4.5) far above obstacle clearance (1.2).
+In 319/481 contact episodes the final decision was a real substitution (`intervened` or `override_applied`); `ppo_safe` is a pass-through, not a substitution. The pass-through total is 162/481 (`ppo_safe` 3 plus `ppo_clear` 159).
+These fields are descriptive only: without step traces we cannot distinguish unavoidable contact
+from early commitment or fallback steering. The configured guard obstacle clearance (0.30 m),
+short-horizon rollout, and fallback DWA weights (goal progress 4.5 vs obstacle clearance 1.2)
+provide context, not an outcome attribution.
 
 ## Pedestrian proximity in contact vs clean episodes (guarded arm)
 
 Mean pedestrian near-miss events per step: contact episodes 0.03118, clean episodes 0.06829. Episodes with any near-miss: 67/481 contact vs 361/934 clean.
 
-Wall contacts concentrate in episodes with *less* pedestrian proximity — evidence against
-'dodge-pedestrian-into-wall' as the dominant mechanism and consistent with
-constrained-geometry contacts under weak obstacle coverage.
+Wall-contact episodes have a lower retained pedestrian near-miss proxy in this comparison.
+That association is descriptive; no pedestrian-to-wall mechanism can be established without
+the unavailable step traces.
 
 ## Verified implementation facts (code, not prose)
 
-- Training reward `route_completion_v3` (un-overridden): collision -10.0 covers
-  pedestrian/robot/obstacle alike; `near_miss` -1.0 is pedestrian-only
-  (`snqi_proxy`: robot-ped min distance); `ttc_risk` -0.8 falls back to `near_misses`
-  because PPO env metadata never sets `time_to_collision` — hence effectively
-  pedestrian-only in training. (Issue prose cites -1.5/-1.2; the frozen code and the
-  March-2026 training-time weights are -1.0/-0.8.)
+- Training reward `route_completion_v3` (un-overridden): collision -10.0 covers pedestrian/robot/obstacle alike;
+  `near_miss` -1.0 is pedestrian-only (`snqi_proxy`: robot-ped min distance); `ttc_risk` -0.8 falls back
+  to `near_misses` because PPO env metadata never sets `time_to_collision` — hence effectively pedestrian-only
+  in training. The issue prose's -1.5/-1.2 values do not match the frozen code.
 - Guard thresholds are NOT pedestrian-only: `guard_hard_ped_clearance` 0.58 m,
-  `guard_hard_obstacle_clearance` 0.30 m, `guard_min_ttc` 0.70 s; fallback DWA weights
-  pedestrian clearance 2.0 vs obstacle clearance 1.2 with goal progress 4.5.
+  `guard_hard_obstacle_clearance` 0.30 m, `guard_min_ttc` 0.70 s; fallback DWA weights pedestrian
+  clearance 2.0 vs obstacle clearance 1.2 with goal progress 4.5.
 
-## Dissertation paragraph (Section 7.4 candidate)
+## Diagnostic synthesis (not paper evidence)
 
-In the frozen 0.0.6 campaign guarded PPO nearly eliminates pedestrian contact (0.017 per
-episode) while obstacle contact (0.334) matches the unguarded checkpoint (0.324), so the
-configuration trades success for pedestrian safety rather than pedestrians for walls:
-success falls 796 to 329 of 1440 with timeouts rising 35 to 605. Contacts concentrate in
-constrained cells (merging, narrow doorway, doorway, t-intersection) at early-to-mid
-episode times, in episodes with below-average pedestrian proximity, and in two thirds of
-cases after the guard had already substituted a fallback or stop command — consistent
-with pedestrian-asymmetric shaping (pedestrian-only near-miss/TTC terms) plus obstacle
-coverage (0.30 m clearance, short-horizon rollout) too weak to save wall approaches the
-policy commits to. Step-trace evidence for the final causal step is not retained in the
-bundle.
+In the frozen 0.0.6 retained summaries, the guarded checkpoint has lower pedestrian contact
+(0.017 per episode) while obstacle contact (0.334) is close to the other checkpoint (0.324);
+its success count is 329/1440 versus 796/1440 and its timeout count is 605 versus 35.
+Contacts cluster in constrained cells and early-to-mid episode times, and 319/481 contact episodes
+end with a guard decision that intervened or applied an override; the 3 `ppo_safe` pass-through
+cases are not substitutions. These observations are diagnostic summaries, not causal or benchmark
+claims: the checkpoints differ and the bundle retains no step trace for the final contact mechanism.
 
+Machine-readable table: `issue_9480_guarded_ppo_obstacle_trade_rows.json`.
 Report schema: `issue_9480_guarded_obstacle_trade_report.v1`.

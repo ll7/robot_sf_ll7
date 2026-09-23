@@ -338,7 +338,12 @@ head-bound zero-work proof covering:
    histogram;
 2. zero merge-ready, merge-if-ci-green, review-eligible, and recoverable active PRs;
 3. zero safely promotable or formalizable issue contracts;
-4. a completed blocker reconciliation pass;
+4. a completed blocker reconciliation pass bound to the current head
+   (`preparation.reconciliation_base_sha`), a preparation scan bound to the
+   current head (`preparation.audit_base_sha`), and zero stale lifecycle rows
+   (`preparation.stale_state_count`); missing or drifted pass bindings, or any
+   stale row, routes `reconcile_lifecycle`, `reconcile_blockers`, or
+   `run_preparation` instead of any exhaustion verdict;
 5. an unsaturated discovery pass followed by readiness gating, or a
    head-bound saturated discovery verdict.
 

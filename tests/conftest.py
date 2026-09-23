@@ -840,6 +840,9 @@ _FAST_FILES = {
     # Pedestrian-population tests are deterministic sampler contracts for the
     # spawn-capture owners; keep them in the exact-head fast lane (issue #9312).
     "test_ped_population.py",
+    # Pedestrian tracker reset-epoch tests are deterministic producer-contract
+    # coverage required by the exact-head changed-line gate (issue #9598).
+    "test_pedestrian_tracking.py",
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
@@ -897,6 +900,10 @@ _FAST_FILES = {
     # The shared DWA diagnostic harness tests are deterministic contract tests;
     # keep their changed-module coverage in pull-request fast shards.
     "test_dwa_diagnostic_harness.py",
+    # Diagnostic-report tests are deterministic fail-closed domain-error
+    # contracts for malformed cost inputs (issue #9587); keep their
+    # changed-module coverage in pull-request fast shards.
+    "test_diagnostic_report.py",
     # Research orchestration tests are deterministic manifest/report contracts;
     # keep coverage for the benchmark orchestrator basename match in fast shards.
     "test_orchestrator.py",

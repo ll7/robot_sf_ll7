@@ -33,6 +33,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 import tomllib
 from pathlib import Path
@@ -2070,16 +2071,21 @@ def _make_incomplete_profile_worktree(
     return worktree, recovery_log, local_python, env
 
 
+@pytest.mark.parametrize("profile", ["core", "training"])
 def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
-    tmp_path: Path,
+    tmp_path: Path, profile: str
 ) -> None:
     """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
     worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
         tmp_path, recovery_heals=True
     )
 
+    command = [str(RUN_WORKTREE_SHARED_VENV)]
+    if profile != "core":
+        command.extend(["--profile", profile])
+    command.extend(["--", "python", "-V"])
     result = subprocess.run(
-        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        command,
         cwd=worktree,
         env=env,
         capture_output=True,
@@ -2090,11 +2096,11 @@ def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
 
     assert result.returncode == 7, result.stderr
     assert "Attempting one bounded completion sync" in result.stderr
-    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert f"Shared-venv dependency profile '{profile}' completed" in result.stderr
     assert "uv-reached" in result.stderr
     recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
     assert len(recovery_calls) == 1
-    assert "--profile core" in recovery_calls[0]
+    assert f"--profile {profile}" in recovery_calls[0]
     assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
 
 
@@ -4553,7 +4559,13 @@ def test_gh_comment_body_file_dev_stdin_materialized(tmp_path: Path) -> None:
     call_lines = calls.read_text(encoding="utf-8").splitlines()
     assert "api --method POST repos/ll7/robot_sf_ll7/issues/6843/comments" in call_lines[1]
     assert "-F body=@/dev/stdin" not in call_lines[1]
-    assert "-F body=@/tmp/" in call_lines[1]
+    body_match = re.search(r"-F body=@(\S+)", call_lines[1])
+    assert body_match is not None, call_lines[1]
+    body_arg = Path(body_match.group(1))
+    materialized = Path(tempfile.gettempdir())
+    assert body_arg != Path("/dev/stdin")
+    assert body_arg == materialized or materialized in body_arg.parents
+    assert body_arg.name
 
 
 def test_gh_comment_body_file_dev_stdin_empty_rejected(tmp_path: Path) -> None:

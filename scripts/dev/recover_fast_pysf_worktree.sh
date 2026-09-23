@@ -26,8 +26,9 @@ be reported as a successful recovery.
 
 This is an explicit recovery operation. It refuses the main checkout, refuses
 dirty dependency inputs, serializes recovery per repository with a kernel-backed
-lock, and fails closed when the worktree filesystem is below the
-ROBOT_SF_WORKTREE_MIN_FREE_BYTES threshold (default: 2 GiB).
+lock, and fails closed when the worktree or effective uv-cache filesystem is below the
+ROBOT_SF_WORKTREE_MIN_FREE_BYTES threshold (default: 2 GiB for core and 8 GiB for
+named/all-extras profiles).
 
 Options:
   --profile NAME         Dependency import profile the postcondition must certify
@@ -45,6 +46,15 @@ Environment:
                          (default: 0).
   ROBOT_SF_WORKTREE_MIN_FREE_BYTES
                          Minimum free bytes required for worktree recovery (default: 2 GiB).
+  ROBOT_SF_RECOVERY_MIN_FREE_BYTES
+                         Optional profile-specific capacity threshold. When set, this value
+                         overrides ROBOT_SF_WORKTREE_MIN_FREE_BYTES for the recovery gate. If
+                         neither variable is set, core uses 2 GiB and named/all-extras profiles
+                         use 8 GiB to account for larger dependency materialization.
+  UV_CACHE_DIR           Explicit uv cache override. The effective cache path is resolved with
+                         `uv cache dir` under the same config and environment as the sync;
+                         UV_NO_CACHE is therefore checked on its temporary-storage filesystem.
+  UV_CONFIG_FILE         Optional uv configuration path honored by `uv cache dir`.
   ROBOT_SF_VENV_SEED_CACHE
                          Directory holding checksum-keyed reusable recovery environments
                          (default: $XDG_CACHE_HOME/robot-sf/worktree-venv-seeds or
@@ -59,8 +69,10 @@ Environment:
 The helper is normally invoked through:
   scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>
 
-It uses a worktree-local environment and runs:
-  uv sync --all-extras --reinstall-package robot-sf --frozen
+It uses a worktree-local environment and runs a profile-aware frozen sync:
+  core:        uv sync --reinstall-package robot-sf --frozen
+  NAME:        uv sync --extra NAME --reinstall-package robot-sf --frozen
+  all-extras:  uv sync --all-extras --reinstall-package robot-sf --frozen
 
 The --frozen flag prevents this recovery path from changing dependency locks.
 EOF
@@ -190,6 +202,42 @@ if [[ ! -f "$checker" || ! -f "$profile_checker" || ! -f "$capacity_checker" ]];
   exit 2
 fi
 
+# Keep accepted profile names owned by the dependency preflight helper. The
+# recovery command must reject an unknown profile before it can materialize an
+# environment or invoke uv.
+if ! python3 - "$profile_checker" "$dependency_profile" <<'PY'
+import runpy
+import sys
+
+try:
+    namespace = runpy.run_path(sys.argv[1])
+    profiles = namespace.get("PROFILES")
+    profile = sys.argv[2]
+    if not isinstance(profiles, dict) or profile not in profiles:
+        raise ValueError(f"unsupported dependency profile: {profile}")
+except (OSError, TypeError, ValueError, KeyError) as exc:
+    print(f"recover_fast_pysf_worktree: {exc}", file=sys.stderr)
+    raise SystemExit(2) from exc
+PY
+then
+  exit 2
+fi
+
+sync_args=(sync)
+case "$dependency_profile" in
+  # ORCA's rvo2 import is provided by the core path dependency, so its
+  # optional-import profile does not correspond to a pyproject extra.
+  core|orca)
+    ;;
+  all-extras)
+    sync_args+=(--all-extras)
+    ;;
+  *)
+    sync_args+=(--extra "$dependency_profile")
+    ;;
+esac
+sync_args+=(--reinstall-package robot-sf --frozen)
+
 dependency_inputs=(
   pyproject.toml
   uv.lock
@@ -216,6 +264,200 @@ fi
 if [[ -e "$local_venv" && ! -d "$local_venv" ]]; then
   echo "recover_fast_pysf_worktree: worktree environment path is not a directory: $local_venv" >&2
   exit 2
+fi
+
+recovery_state_file="$local_venv/.robot-sf-recovery-state.json"
+recovery_state_active=0
+recovery_state_status=""
+recovery_started_at=""
+recovery_child_pid=""
+recovery_child_uses_session=0
+
+write_recovery_state() {
+  local status="$1" message="$2"
+  if ! mkdir -p "$local_venv"; then
+    echo "recover_fast_pysf_worktree: could not create partial-environment state directory: $local_venv" >&2
+    return 1
+  fi
+  if ! python3 - "$recovery_state_file" "$status" "$message" "$dependency_profile" \
+    "$repo_root" "$local_venv" "$recovery_started_at" "$$" <<'PY'
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = {
+    "schema": "robot_sf.recovery_state.v1",
+    "status": sys.argv[2],
+    "message": sys.argv[3],
+    "dependency_profile": sys.argv[4],
+    "worktree": sys.argv[5],
+    "environment": sys.argv[6],
+    "started_at": int(sys.argv[7]),
+    "updated_at": int(time.time()),
+    "pid": int(sys.argv[8]),
+}
+temporary = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+os.replace(temporary, path)
+PY
+  then
+    echo "recover_fast_pysf_worktree: could not write partial-environment state: $recovery_state_file" >&2
+    return 1
+  fi
+  recovery_state_status="$status"
+}
+
+arm_recovery_state() {
+  recovery_state_active=1
+  recovery_started_at="$(date +%s)"
+}
+
+begin_recovery_state() {
+  arm_recovery_state
+  write_recovery_state "in_progress" "profile materialization started; retry after completion or cleanup"
+}
+
+record_failed_recovery_start() {
+  arm_recovery_state
+  write_recovery_state "failed" \
+    "recovery could not create the virtual environment; inspect or remove this partial environment before retrying"
+}
+
+record_recovery_state() {
+  [[ "$recovery_state_active" -eq 1 ]] || return 0
+  write_recovery_state "$1" "$2" || true
+}
+
+clear_recovery_state() {
+  if [[ -e "$recovery_state_file" || -L "$recovery_state_file" ]]; then
+    rm -f "$recovery_state_file" || return 1
+  fi
+  recovery_state_active=0
+  recovery_state_status=""
+  return 0
+}
+
+finalize_recovery_state() {
+  local recovery_rc="$1"
+  [[ "$recovery_state_active" -eq 1 ]] || return 0
+  if [[ "$recovery_state_status" == "in_progress" && "$recovery_rc" -ne 0 ]]; then
+    record_recovery_state "failed" \
+      "recovery exited with status $recovery_rc; inspect or remove this partial environment before retrying"
+  fi
+  if [[ "$recovery_state_status" == "failed" || "$recovery_state_status" == "interrupted" ]]; then
+    echo "recover_fast_pysf_worktree: partial environment state preserved: $recovery_state_file" >&2
+    echo "recover_fast_pysf_worktree: remove that worktree .venv or rerun recovery after inspecting it" >&2
+  fi
+}
+
+run_recovery_command() {
+  recovery_child_uses_session=0
+  if command -v setsid >/dev/null 2>&1; then
+    recovery_child_uses_session=1
+    setsid -- "$@" &
+  else
+    "$@" &
+  fi
+  recovery_child_pid=$!
+
+  local command_rc=0
+  if wait "$recovery_child_pid"; then
+    command_rc=0
+  else
+    command_rc=$?
+  fi
+  recovery_child_pid=""
+  recovery_child_uses_session=0
+  return "$command_rc"
+}
+
+terminate_recovery_command() {
+  local child_pid="$recovery_child_pid"
+  [[ -n "$child_pid" ]] || return 0
+
+  recovery_process_alive() {
+    local process_pid="$1" process_state=""
+    if ! kill -0 "$process_pid" 2>/dev/null; then
+      return 1
+    fi
+    if command -v ps >/dev/null 2>&1; then
+      process_state="$(ps -o stat= -p "$process_pid" 2>/dev/null | tr -d '[:space:]')"
+      [[ "$process_state" == Z* ]] && return 1
+    fi
+    return 0
+  }
+
+  recovery_process_group_alive() {
+    local process_group_id="$1" process_state=""
+    if ! kill -0 -- "-$process_group_id" 2>/dev/null; then
+      return 1
+    fi
+    if command -v ps >/dev/null 2>&1; then
+      while read -r process_state; do
+        [[ -z "$process_state" || "$process_state" == Z* ]] || return 0
+      done < <(ps -o stat= -g "$process_group_id" 2>/dev/null)
+      return 1
+    fi
+    return 0
+  }
+
+  recovery_wait_for_exit() {
+    local process_pid="$1" attempts=0
+    while (( attempts < 100 )); do
+      if ! recovery_process_alive "$process_pid" &&
+        ! recovery_process_group_alive "$process_pid"; then
+        return 0
+      fi
+      sleep 0.05
+      attempts=$((attempts + 1))
+    done
+    return 1
+  }
+
+  if [[ "$recovery_child_uses_session" -eq 1 ]]; then
+    kill -TERM -- "-$child_pid" 2>/dev/null || true
+  else
+    kill -TERM "$child_pid" 2>/dev/null || true
+  fi
+  if ! recovery_wait_for_exit "$child_pid"; then
+    echo "recover_fast_pysf_worktree: recovery child ignored SIGTERM; sending SIGKILL" >&2
+    if [[ "$recovery_child_uses_session" -eq 1 ]]; then
+      kill -KILL -- "-$child_pid" 2>/dev/null || true
+    else
+      kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+    if ! recovery_wait_for_exit "$child_pid"; then
+      kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+  fi
+  if ! recovery_process_alive "$child_pid"; then
+    wait "$child_pid" 2>/dev/null || true
+  else
+    echo "recover_fast_pysf_worktree: recovery child cleanup remains unverified" >&2
+  fi
+  recovery_child_pid=""
+  recovery_child_uses_session=0
+}
+
+handle_recovery_signal() {
+  local signal_name="$1" signal_exit="$2"
+  terminate_recovery_command
+  if [[ "$recovery_state_active" -eq 1 ]]; then
+    record_recovery_state "interrupted" \
+      "recovery interrupted by $signal_name; inspect or remove this partial environment before retrying"
+  fi
+  exit "$signal_exit"
+}
+
+trap 'handle_recovery_signal INT 130' INT
+trap 'handle_recovery_signal TERM 143' TERM
+trap 'handle_recovery_signal HUP 129' HUP
+
+if [[ -f "$recovery_state_file" ]]; then
+  echo "recover_fast_pysf_worktree: found prior partial-environment state: $recovery_state_file" >&2
 fi
 
 check_local_venv_layout() {
@@ -544,7 +786,7 @@ restore_seed_venv() {
     return 1
   fi
   if ! env -u PYTHONPATH "$seed_dir/bin/python" "$profile_checker" \
-    --profile "$dependency_profile" >/dev/null 2>&1; then
+    --profile "$dependency_profile" --check-entry-points >/dev/null 2>&1; then
     echo "recover_fast_pysf_worktree: seed environment lacks dependency profile '$dependency_profile'; using full sync" >&2
     return 1
   fi
@@ -638,6 +880,8 @@ if [[ "$locked_recovery" -eq 1 ]]; then
   # shared lock file; record lock owner metadata and clear on exit.
   printf 'pid=%s\nstarted=%s\nworktree=%s\n' "$$" "$(date +%s)" "$repo_root" > "$lock_path" 2>/dev/null || true
   release_locked_recovery() {
+    local recovery_rc="$?"
+    finalize_recovery_state "$recovery_rc"
     : > "$lock_path" 2>/dev/null || true
   }
   trap release_locked_recovery EXIT
@@ -673,6 +917,8 @@ elif command -v flock >/dev/null 2>&1; then
   printf 'pid=%s\nstarted=%s\nworktree=%s\n' "$$" "$(date +%s)" "$repo_root" > "$lock_path" 2>/dev/null || true
 
   release_lock() {
+    local recovery_rc="$?"
+    finalize_recovery_state "$recovery_rc"
     : > "$lock_path" 2>/dev/null || true
     flock -u "$lock_fd" 2>/dev/null || true
     exec {lock_fd}>&-
@@ -705,17 +951,49 @@ else
 fi
 
 capacity_report=""
-if ! capacity_report="$(python3 "$capacity_checker" --path "$local_venv" 2>&1)"; then
-  printf '%s\n' "$capacity_report" >&2
-  echo "recover_fast_pysf_worktree: capacity gate blocked recovery before uv started" >&2
-  exit 2
+recovery_minimum_free_bytes="${ROBOT_SF_RECOVERY_MIN_FREE_BYTES:-}"
+if [[ -z "$recovery_minimum_free_bytes" && -z "${ROBOT_SF_WORKTREE_MIN_FREE_BYTES:-}" ]]; then
+  case "$dependency_profile" in
+    core)
+      recovery_minimum_free_bytes=$((2 * 1024 * 1024 * 1024))
+      ;;
+    *)
+      recovery_minimum_free_bytes=$((8 * 1024 * 1024 * 1024))
+      ;;
+  esac
 fi
-printf '%s\n' "$capacity_report" >&2
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "recover_fast_pysf_worktree: uv is required for explicit environment recovery" >&2
   exit 2
 fi
+
+uv_cache_dir=""
+if ! uv_cache_dir="$(
+  env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
+    UV_PROJECT_ENVIRONMENT="$local_venv" uv cache dir --directory "$repo_root" 2>/dev/null
+)" || [[ -z "$uv_cache_dir" ]]; then
+  echo "recover_fast_pysf_worktree: could not determine the effective uv cache directory" >&2
+  echo "uv cache dir failed; inspect UV_CONFIG_FILE, UV_CACHE_DIR, or UV_NO_CACHE, then retry." >&2
+  exit 2
+fi
+if [[ "$uv_cache_dir" != /* ]]; then
+  uv_cache_dir="$repo_root/$uv_cache_dir"
+fi
+
+for capacity_path in "$local_venv" "$uv_cache_dir"; do
+  capacity_args=(--path "$capacity_path")
+  if [[ -n "$recovery_minimum_free_bytes" ]]; then
+    capacity_args+=(--minimum-free-bytes "$recovery_minimum_free_bytes")
+  fi
+  echo "recover_fast_pysf_worktree: capacity preflight for dependency profile '$dependency_profile' at $capacity_path" >&2
+  if ! capacity_report="$(python3 "$capacity_checker" "${capacity_args[@]}" 2>&1)"; then
+    printf '%s\n' "$capacity_report" >&2
+    echo "recover_fast_pysf_worktree: capacity gate blocked recovery before materialization at $capacity_path" >&2
+    exit 2
+  fi
+  printf '%s\n' "$capacity_report" >&2
+done
 
 sync_needed=1
 if [[ -x "$local_venv/bin/python" ]]; then
@@ -730,7 +1008,7 @@ if [[ -x "$local_venv/bin/python" ]]; then
   profile_report=""
   dependency_profile_complete=0
   if profile_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
-    --profile "$dependency_profile" 2>&1)"; then
+    --profile "$dependency_profile" --check-entry-points 2>&1)"; then
     dependency_profile_complete=1
   fi
 
@@ -757,18 +1035,35 @@ if [[ "$sync_needed" -eq 1 ]]; then
     echo "recover_fast_pysf_worktree: seed restore will be rebound and verified by the standard sync below" >&2
   fi
   if [[ ! -x "$local_venv/bin/python" ]]; then
+    # A previous interrupted attempt may have left only the state marker.  Do
+    # not leave that marker in place while uv creates the virtual environment:
+    # uv rejects a non-empty directory that is not already a virtualenv.
+    if [[ -e "$recovery_state_file" || -L "$recovery_state_file" ]]; then
+      rm -f "$recovery_state_file" || {
+        echo "recover_fast_pysf_worktree: could not clear the prior partial-environment state" >&2
+        exit 2
+      }
+    fi
+    arm_recovery_state
     echo "recover_fast_pysf_worktree: creating worktree-local environment: $local_venv" >&2
-    if ! env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
+    if ! run_recovery_command env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
       UV_PROJECT_ENVIRONMENT="$local_venv" uv venv "$local_venv"; then
+      if ! record_failed_recovery_start; then
+        echo "recover_fast_pysf_worktree: refusing to certify recovery without partial-environment state" >&2
+      fi
       echo "recover_fast_pysf_worktree: uv venv failed; wrapped command was not started" >&2
       exit 2
     fi
   fi
+  if ! begin_recovery_state; then
+    echo "recover_fast_pysf_worktree: refusing to certify recovery without partial-environment state" >&2
+    exit 2
+  fi
 
   echo "recover_fast_pysf_worktree: refreshing only $local_venv" >&2
-  echo "recover_fast_pysf_worktree: uv sync --all-extras --reinstall-package robot-sf --frozen" >&2
-  if ! env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
-    UV_PROJECT_ENVIRONMENT="$local_venv" uv sync --all-extras --reinstall-package robot-sf --frozen; then
+  echo "recover_fast_pysf_worktree: uv ${sync_args[*]}" >&2
+  if ! run_recovery_command env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
+    UV_PROJECT_ENVIRONMENT="$local_venv" uv "${sync_args[@]}"; then
     echo "recover_fast_pysf_worktree: uv sync failed; wrapped command was not started" >&2
     exit 2
   fi
@@ -791,9 +1086,10 @@ printf '%s\n' "$final_report" >&2
 # Issue #8811: certify the requested dependency profile as part of the recovery
 # postcondition, so callers can rely on a successful recovery satisfying the
 # shared wrapper's own profile preflight.
+# Issue #9591: certify declared entry points match installed package metadata.
 profile_final_report=""
 if ! profile_final_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
-  --profile "$dependency_profile" 2>&1)"; then
+  --profile "$dependency_profile" --check-entry-points 2>&1)"; then
   echo "recover_fast_pysf_worktree: post-sync dependency profile '$dependency_profile' is incomplete in $local_venv" >&2
   printf '%s\n' "$profile_final_report" >&2
   echo "No wrapped command was started because the requested dependency profile is incomplete." >&2
@@ -810,6 +1106,11 @@ if [[ -n "$remaining_dirty_inputs" ]]; then
   echo "recover_fast_pysf_worktree: recovery changed tracked dependency inputs; refusing to continue" >&2
   printf '%s\n' "$remaining_dirty_inputs" >&2
   echo "Inspect and preserve the changes before retrying; no wrapped command was started." >&2
+  exit 2
+fi
+
+if ! clear_recovery_state; then
+  echo "recover_fast_pysf_worktree: could not clear partial-environment state; refusing to certify recovery" >&2
   exit 2
 fi
 

@@ -31,6 +31,9 @@ GATE1_CANARY_ISSUE = 6641
 # Frozen by the tracked Gate 2 manifest and all three arm configs. A campaign
 # declaration cannot substitute a different passing receipt for this admitted artifact.
 EXPECTED_GATE1_RECEIPT_SHA256 = "88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922"
+# The accepted #6642 populations were produced at this one immutable source
+# commit. Gate 3 must bind campaign metadata and config blobs to that object.
+EXPECTED_CAMPAIGN_GIT_COMMIT = "aabad2e2a82cd8dcca93cc78a01493ec6ead5212"
 
 # The release roster is frozen to the 0.0.3.post1 baseline; the checker rejects a
 # sweep whose arm config does not reproduce this exact 14-key roster in order.
@@ -556,6 +559,10 @@ def _runtime_binding_violations(metadata: Mapping[str, Any], *, label: str) -> l
     if not isinstance(receipt, str) or _SHA256_PATTERN.fullmatch(receipt) is None:
         violations.append(
             f"{label}.gate1_receipt_sha256 must be a lowercase 64-character SHA-256 digest"
+        )
+    elif receipt != EXPECTED_GATE1_RECEIPT_SHA256:
+        violations.append(
+            f"{label}.gate1_receipt_sha256 must match the frozen Gate 1 receipt digest"
         )
     source_commit = metadata.get("gate1_source_commit")
     if not isinstance(source_commit, str) or _GIT_SHA_PATTERN.fullmatch(source_commit) is None:
@@ -1286,6 +1293,7 @@ __all__ = [
     "EXPECTED_ARM_RELEASE_TAGS",
     "EXPECTED_ARM_RELEASE_TAG_0P5M",
     "EXPECTED_ARM_RELEASE_TAG_0P8M",
+    "EXPECTED_CAMPAIGN_GIT_COMMIT",
     "EXPECTED_DT",
     "EXPECTED_GATE1_RECEIPT_SHA256",
     "EXPECTED_HORIZON",

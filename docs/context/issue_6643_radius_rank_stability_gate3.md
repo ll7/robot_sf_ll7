@@ -131,19 +131,20 @@ requires that sum to equal `total_collision_count` on every episode rather than 
 untyped CSV collision column.
 
 The three arm configs are intentionally different tracked treatment configs, so their SHA-256
-digests must remain recorded per arm. Gate 3 requires one shared campaign commit and one shared Gate
-1 receipt digest, but it no longer incorrectly requires the three arm config digests to be equal.
-The bundle's `--config` path remains the 1.0 m baseline config and must match that arm's digest.
-Each per-arm digest is independently pinned to the exact tracked config bytes at the immutable
-campaign commit; a coordinated replacement in preflight and family-feasibility metadata is rejected.
-The receipt must also match the frozen digest in the tracked Gate 2 manifest/config contract;
-coordinated edits to campaign metadata cannot admit a different passing receipt. Composed summaries
-record stable campaign IDs and repository-relative config paths, not host-specific campaign roots.
+digests must remain recorded per arm. Gate 3 requires the exact frozen #6642 campaign commit
+(`aabad2e2a82cd8dcca93cc78a01493ec6ead5212`) and one shared Gate 1 receipt digest; it does not
+require the three arm config digests to be equal. The bundle's `--config` path remains the 1.0 m
+baseline config. For each arm, the composer reads the config blob from the frozen commit, verifies
+its bytes against the pinned digest, and then compares the preflight's digest with those bytes. A
+missing Git object or mismatch fails closed. The receipt must also match the exact frozen digest in
+the tracked Gate 2 manifest/config contract; coordinated edits to gate and arm metadata cannot admit
+a different passing receipt. Composed summaries record stable campaign IDs and repository-relative
+config paths, not host-specific campaign roots.
 
 Family feasibility is not inferred from success rates, route-clearance warnings, or the separate
 #6644/#6645 narrow-doorway diagnostics. Every campaign root must instead carry a checksum-bound
-`reports/radius_family_feasibility.json` receipt with the same explicit definition and family
-roster across arms:
+`reports/radius_family_feasibility.json` receipt with the same explicitly pinned rule identity and
+family roster across arms:
 
 ```json
 {
@@ -152,6 +153,10 @@ roster across arms:
   "source_campaign_id": "<exact campaign id>",
   "source_campaign_commit": "<exact 40-character campaign commit>",
   "source_config_sha256": "<exact radius-arm config SHA-256>",
+  "approved_rule": {
+    "definition_id": "<reviewed owner-approved rule id>",
+    "authority_sha256": "<digest of the durable approved rule artifact>"
+  },
   "definition": "<approved preregistered aggregation rule>",
   "families": {
     "narrow_doorway": "feasible"
@@ -159,9 +164,13 @@ roster across arms:
 }
 ```
 
-Statuses are limited to `feasible` and `infeasible`, and `narrow_doorway` is mandatory. The current
-preserved job 15504 (complete 0.5/0.8 m arms) and recovery job 15516 (complete 1.0 m arm) do not
-contain this authoritative block, so the composer fails closed before writing a summary. The exact
+Statuses are limited to `feasible` and `infeasible`, and `narrow_doorway` is mandatory. The expected
+rule ID and authority digest are currently unset in source because the live #6600/#6642 contracts do
+not define or pin an approved family-level aggregation. Therefore the composer rejects all family
+receipts, including otherwise well-formed self-asserted ones. Only a separate reviewed update that
+adds the durable owner-approved rule artifact and pins its exact identity may enable this path; this
+PR does not invent the rule. The current preserved job 15504 (complete 0.5/0.8 m arms) and recovery
+job 15516 (complete 1.0 m arm) also do not contain an approved family-feasibility block. The exact
 original Gate 1 receipt bytes whose declared SHA-256 is
 `88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922` are also absent from the
 preserved campaign trees. A source replay can test the canary behavior, but a byte-different replay

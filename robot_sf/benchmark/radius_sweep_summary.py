@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -26,6 +27,7 @@ from robot_sf.benchmark.radius_rank_stability import (
 from robot_sf.benchmark.radius_sweep_manifest import (
     EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
     EXPECTED_ARM_CAMPAIGN_CONFIGS,
+    EXPECTED_CAMPAIGN_GIT_COMMIT,
     EXPECTED_GATE1_RECEIPT_SHA256,
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_MATRIX,
@@ -38,6 +40,11 @@ from robot_sf.benchmark.radius_sweep_manifest import (
 CAMPAIGN_SCHEMA = "benchmark-camera-ready-campaign.v1"
 FAMILY_FEASIBILITY_SCHEMA = "issue_6642_family_feasibility.v1"
 EXPECTED_KINEMATICS = "differential_drive"
+# These remain unset until a separately reviewed owner decision pins the exact
+# family rule. A self-declared receipt cannot authorize its own interpretation.
+EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID: str | None = None
+EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256: str | None = None
+SOURCE_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RADIUS_TO_ARM_KEY = dict(zip(PRODUCTION_RADII, ("r0p5", "r0p8", "r1p0"), strict=True))
 
 
@@ -70,6 +77,8 @@ class _Arm:
     config_path: str
     config_sha256: str
     gate1_receipt_sha256: str
+    family_feasibility_definition_id: str
+    family_feasibility_authority_sha256: str
     family_feasibility_definition: str
     family_feasibility: dict[str, str]
     family_feasibility_sha256: str
@@ -212,7 +221,19 @@ def _family_feasibility(
     campaign_id: str,
     campaign_commit: str,
     config_sha256: str,
-) -> tuple[str, dict[str, str], str]:
+) -> tuple[str, str, str, dict[str, str], str]:
+    definition_id = EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID
+    authority_sha256 = EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256
+    if (
+        not isinstance(definition_id, str)
+        or not definition_id.strip()
+        or not isinstance(authority_sha256, str)
+        or len(authority_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in authority_sha256)
+    ):
+        raise RadiusSweepSummaryError(
+            "no owner-approved family-feasibility rule identity is pinned in this source revision"
+        )
     path = root / "reports/radius_family_feasibility.json"
     if not path.is_file():
         raise RadiusSweepSummaryError(
@@ -223,6 +244,16 @@ def _family_feasibility(
     if raw.get("schema_version") != FAMILY_FEASIBILITY_SCHEMA:
         raise RadiusSweepSummaryError(
             f"radius {radius:g} family_feasibility schema must be {FAMILY_FEASIBILITY_SCHEMA}"
+        )
+    approved_rule = _mapping(
+        raw.get("approved_rule"), f"radius {radius:g} approved family-feasibility rule"
+    )
+    if (
+        approved_rule.get("definition_id") != definition_id
+        or approved_rule.get("authority_sha256") != authority_sha256
+    ):
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} family_feasibility does not match the pinned approved rule identity"
         )
     if _finite(raw.get("radius_m"), "family_feasibility radius_m") != radius:
         raise RadiusSweepSummaryError(f"radius {radius:g} family_feasibility radius mismatch")
@@ -255,6 +286,8 @@ def _family_feasibility(
             f"radius {radius:g} family_feasibility has invalid statuses: {invalid}"
         )
     return (
+        definition_id,
+        authority_sha256,
         definition.strip(),
         dict(sorted(normalized.items())),
         sha256(path.read_bytes()).hexdigest(),
@@ -368,6 +401,26 @@ def _load_episodes(root: Path, radius: float, commit: str) -> tuple[_Episode, ..
     return tuple(episodes)
 
 
+def _committed_config_sha256(commit: str, config_path: str) -> str:
+    """Hash config bytes from the source commit, never from a mutable worktree file.
+
+    Returns:
+        The SHA-256 digest of the committed config bytes.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(SOURCE_REPOSITORY_ROOT), "show", f"{commit}:{config_path}"],
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RadiusSweepSummaryError(
+            f"frozen campaign config blob is unavailable: {commit}:{config_path}"
+        ) from exc
+    return sha256(result.stdout).hexdigest()
+
+
 def _load_arm(root: Path) -> _Arm:
     root = root.expanduser().resolve()
     if not root.is_dir():
@@ -391,11 +444,20 @@ def _load_arm(root: Path) -> _Arm:
     if preflight_binding != binding:
         raise RadiusSweepSummaryError(f"radius {radius:g} manifest/preflight binding mismatch")
     commit = _hex(_mapping(manifest.get("git"), "manifest git").get("commit"), 40, "commit")
+    if commit != EXPECTED_CAMPAIGN_GIT_COMMIT:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} campaign commit does not match the frozen #6642 source commit"
+        )
     config_sha = _hex(preflight.get("config_sha256"), 64, "config_sha256")
     expected_config_sha = EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[RADIUS_TO_ARM_KEY[radius]]
-    if config_sha != expected_config_sha:
+    committed_config_sha = _committed_config_sha256(commit, config_path)
+    if committed_config_sha != expected_config_sha:
         raise RadiusSweepSummaryError(
-            f"radius {radius:g} config digest does not match the frozen campaign config bytes"
+            f"radius {radius:g} frozen config digest does not match the Git blob at the campaign commit"
+        )
+    if config_sha != committed_config_sha:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} preflight config digest does not match config bytes at the campaign commit"
         )
     receipt_sha = _hex(binding.get("gate1_receipt_sha256"), 64, "Gate 1 receipt digest")
     _validate_campaign_status(summary, radius)
@@ -411,7 +473,13 @@ def _load_arm(root: Path) -> _Arm:
         != EXPECTED_SEEDS
     ):
         raise RadiusSweepSummaryError(f"radius {radius:g} campaign identity mismatch")
-    family_definition, family_feasibility, family_sha256 = _family_feasibility(
+    (
+        family_definition_id,
+        family_authority_sha256,
+        family_definition,
+        family_feasibility,
+        family_sha256,
+    ) = _family_feasibility(
         root,
         radius=radius,
         campaign_id=campaign_id,
@@ -428,6 +496,8 @@ def _load_arm(root: Path) -> _Arm:
         config_path=config_path,
         config_sha256=config_sha,
         gate1_receipt_sha256=receipt_sha,
+        family_feasibility_definition_id=family_definition_id,
+        family_feasibility_authority_sha256=family_authority_sha256,
         family_feasibility_definition=family_definition,
         family_feasibility=family_feasibility,
         family_feasibility_sha256=family_sha256,
@@ -492,6 +562,12 @@ def _validate_arm_set(arms: Sequence[_Arm], receipt_sha256: str) -> None:
         )
     if len({arm.family_feasibility_definition for arm in arms}) != 1:
         raise RadiusSweepSummaryError("campaign roots use mixed family-feasibility definitions")
+    if len({arm.family_feasibility_definition_id for arm in arms}) != 1:
+        raise RadiusSweepSummaryError("campaign roots use mixed family-feasibility rule identities")
+    if len({arm.family_feasibility_authority_sha256 for arm in arms}) != 1:
+        raise RadiusSweepSummaryError(
+            "campaign roots use mixed family-feasibility authority digests"
+        )
     family_sets = {tuple(arm.family_feasibility) for arm in arms}
     if len(family_sets) != 1:
         raise RadiusSweepSummaryError("campaign roots have mismatched family-feasibility rosters")
@@ -528,6 +604,8 @@ def compose_radius_sweep_summary(
         families[radius_key] = arm.family_feasibility
         family_provenance[radius_key] = {
             "definition": arm.family_feasibility_definition,
+            "definition_id": arm.family_feasibility_definition_id,
+            "authority_sha256": arm.family_feasibility_authority_sha256,
             "receipt_sha256": arm.family_feasibility_sha256,
         }
         provenance[radius_key] = {

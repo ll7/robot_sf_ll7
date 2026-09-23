@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
@@ -45,29 +47,87 @@ _GATE1_RECEIPT_PAYLOAD = {
 }
 _GATE1_RECEIPT_BYTES = json.dumps(_GATE1_RECEIPT_PAYLOAD).encode()
 _GATE1_RECEIPT_SHA256 = sha256(_GATE1_RECEIPT_BYTES).hexdigest()
+_FIXTURE_CONFIG_PATHS = {
+    "r0p5": "configs/benchmarks/fixture_arm_0p5.yaml",
+    "r0p8": "configs/benchmarks/fixture_arm_0p8.yaml",
+    "r1p0": "configs/benchmarks/fixture_arm_1p0.yaml",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _GitConfigFixture:
+    root: Path
+    commit: str
+    config_paths: dict[str, str]
+    config_sha256: dict[str, str]
+
+
+@pytest.fixture(scope="module")
+def git_config_fixture(tmp_path_factory: pytest.TempPathFactory) -> _GitConfigFixture:
+    """Create exact committed config bytes for Git-blob provenance tests."""
+    root = tmp_path_factory.mktemp("radius-sweep-source")
+    for arm_key, relative in _FIXTURE_CONFIG_PATHS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"fixture_arm: {arm_key}\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "init", "--quiet"], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "add", "--", *_FIXTURE_CONFIG_PATHS.values()], check=True
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "-c",
+            "user.name=Robot SF test fixture",
+            "-c",
+            "user.email=robot-sf-test-fixture@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture campaign source",
+        ],
+        check=True,
+    )
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    config_sha256 = {
+        arm_key: sha256((root / relative).read_bytes()).hexdigest()
+        for arm_key, relative in _FIXTURE_CONFIG_PATHS.items()
+    }
+    return _GitConfigFixture(root, commit, _FIXTURE_CONFIG_PATHS.copy(), config_sha256)
 
 
 @pytest.fixture
-def compact_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def compact_scope(monkeypatch: pytest.MonkeyPatch, git_config_fixture: _GitConfigFixture) -> None:
     """Shrink the frozen matrix while preserving all structural checks."""
     monkeypatch.setattr(composer, "RELEASE_PLANNER_KEYS", ("goal",))
     monkeypatch.setattr(composer, "EXPECTED_SCENARIO_NAMES", ("case_a", "case_b"))
     monkeypatch.setattr(composer, "EXPECTED_SEEDS", (111, 112))
     monkeypatch.setattr(composer, "EXPECTED_ROWS_PER_ARM", 4)
     monkeypatch.setattr(composer, "EXPECTED_GATE1_RECEIPT_SHA256", _GATE1_RECEIPT_SHA256)
+    monkeypatch.setattr(composer, "SOURCE_REPOSITORY_ROOT", git_config_fixture.root)
+    monkeypatch.setattr(composer, "EXPECTED_CAMPAIGN_GIT_COMMIT", git_config_fixture.commit)
+    monkeypatch.setattr(
+        composer,
+        "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID",
+        "fixture-family-rule.v1",
+    )
+    monkeypatch.setattr(composer, "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256", "f" * 64)
     monkeypatch.setattr(
         composer,
         "EXPECTED_ARM_CAMPAIGN_CONFIGS",
-        {
-            "r0p5": "configs/arm_0p5.yaml",
-            "r0p8": "configs/arm_0p8.yaml",
-            "r1p0": "configs/arm_1p0.yaml",
-        },
+        git_config_fixture.config_paths,
     )
     monkeypatch.setattr(
         composer,
         "EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256",
-        {"r0p5": "1" * 64, "r0p8": "2" * 64, "r1p0": "3" * 64},
+        git_config_fixture.config_sha256,
     )
 
 
@@ -75,11 +135,13 @@ def _write_arm(
     parent: Path,
     radius: float,
     *,
-    commit: str = "a" * 40,
+    commit: str | None = None,
     gate1_receipt_sha256: str,
     include_family: bool = True,
     degraded: bool = False,
 ) -> Path:
+    if commit is None:
+        commit = composer.EXPECTED_CAMPAIGN_GIT_COMMIT
     arm_key = composer.RADIUS_TO_ARM_KEY[radius]
     root = parent / arm_key
     (root / "preflight").mkdir(parents=True)
@@ -99,7 +161,7 @@ def _write_arm(
     }
     preflight = {
         "config_path": composer.EXPECTED_ARM_CAMPAIGN_CONFIGS[arm_key],
-        "config_sha256": ({"r0p5": "1", "r0p8": "2", "r1p0": "3"}[arm_key] * 64),
+        "config_sha256": composer.EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[arm_key],
         "radius_binding": binding,
     }
     campaign_summary = {
@@ -142,6 +204,10 @@ def _write_arm(
             "source_campaign_id": manifest["campaign_id"],
             "source_campaign_commit": commit,
             "source_config_sha256": preflight["config_sha256"],
+            "approved_rule": {
+                "definition_id": composer.EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID,
+                "authority_sha256": composer.EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256,
+            },
             "definition": "fixture-authoritative family feasibility",
             "families": {"narrow_doorway": "feasible" if radius < 1.0 else "infeasible"},
         }
@@ -242,8 +308,41 @@ def test_composer_rejects_missing_authoritative_family_semantics(
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
-def test_composer_rejects_mixed_commits(tmp_path: Path, compact_scope: None) -> None:
-    """Recovered arms remain admissible only at the same immutable source commit."""
+def test_composer_rejects_family_receipts_without_a_pinned_owner_approved_rule(
+    tmp_path: Path, compact_scope: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A receipt cannot establish its own family-feasibility authority."""
+    roots, receipt = _write_triplet(tmp_path)
+    monkeypatch.setattr(composer, "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID", None)
+    monkeypatch.setattr(composer, "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256", None)
+    with pytest.raises(RadiusSweepSummaryError, match="no owner-approved family-feasibility"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("definition_id", "self-approved.v1"),
+        ("authority_sha256", "e" * 64),
+    ],
+)
+def test_composer_rejects_unpinned_family_rule_identity(
+    tmp_path: Path, compact_scope: None, field: str, value: str
+) -> None:
+    """Family feasibility must carry the exact rule identity pinned by source code."""
+    roots, receipt = _write_triplet(tmp_path)
+    family_path = roots[0] / "reports/radius_family_feasibility.json"
+    family = json.loads(family_path.read_text(encoding="utf-8"))
+    family["approved_rule"][field] = value
+    family_path.write_text(json.dumps(family), encoding="utf-8")
+    with pytest.raises(RadiusSweepSummaryError, match="pinned approved rule identity"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_rejects_campaign_commit_outside_frozen_source(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """A self-consistent but unpinned commit cannot stand in for the frozen campaign source."""
     roots, receipt = _write_triplet(tmp_path)
     root = roots[-1]
     manifest_path = root / "campaign_manifest.json"
@@ -265,8 +364,28 @@ def test_composer_rejects_mixed_commits(tmp_path: Path, compact_scope: None) -> 
     episodes_path.write_text(
         "".join(json.dumps(episode) + "\n" for episode in episodes), encoding="utf-8"
     )
-    with pytest.raises(RadiusSweepSummaryError, match="mixed commits"):
+    with pytest.raises(RadiusSweepSummaryError, match="frozen #6642 source commit"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_hashes_config_blob_at_campaign_commit_not_worktree_bytes(
+    tmp_path: Path,
+    compact_scope: None,
+    git_config_fixture: _GitConfigFixture,
+) -> None:
+    """Config identity comes from the frozen Git object, not the mutable current file."""
+    roots, receipt = _write_triplet(tmp_path)
+    config_path = git_config_fixture.root / git_config_fixture.config_paths["r0p5"]
+    original_bytes = config_path.read_bytes()
+    config_path.write_bytes(b"changed working-tree bytes\n")
+    try:
+        summary = compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+    finally:
+        config_path.write_bytes(original_bytes)
+    assert (
+        summary["campaign_provenance"]["0.5"]["config_sha256"]
+        == (git_config_fixture.config_sha256["r0p5"])
+    )
 
 
 def test_composer_rejects_fallback_or_degraded_rows(tmp_path: Path, compact_scope: None) -> None:
@@ -330,7 +449,9 @@ def test_composer_rejects_coordinated_config_digest_tampering(
         family = json.loads(family_path.read_text(encoding="utf-8"))
         family["source_config_sha256"] = replacement_digest
         family_path.write_text(json.dumps(family), encoding="utf-8")
-    with pytest.raises(RadiusSweepSummaryError, match="frozen campaign config bytes"):
+    with pytest.raises(
+        RadiusSweepSummaryError, match="does not match config bytes at the campaign commit"
+    ):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 

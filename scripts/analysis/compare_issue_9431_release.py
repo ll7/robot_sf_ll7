@@ -41,9 +41,7 @@ def _row_outcome(row: Mapping[str, Any]) -> dict[str, bool]:
         raise ValueError("row outcome must be an object")
     invalid = [key for key in OUTCOME_KEYS if type(outcome.get(key)) is not bool]
     if invalid:
-        raise ValueError(
-            "row outcome requires explicit boolean values for " + ", ".join(invalid)
-        )
+        raise ValueError("row outcome requires explicit boolean values for " + ", ".join(invalid))
     return {key: outcome[key] for key in OUTCOME_KEYS}
 
 
@@ -271,8 +269,7 @@ def _bundle_episode_digests(bundle: Path) -> dict[str, str]:
             parts = Path(relative).parts
             if len(parts) != 2 or parts[1] != "episodes.jsonl":
                 raise ValueError(
-                    "successor bundle episode member must be one run directory deep: "
-                    f"{member.name}"
+                    f"successor bundle episode member must be one run directory deep: {member.name}"
                 )
             arm = _arm_from_name(parts[0])
             if arm in result:
@@ -300,9 +297,7 @@ def _validate_successor_bundle_root(bundle: Path, root: Path) -> None:
             f"bundle_only={sorted(set(bundle_digests) - set(root_digests))}, "
             f"root_only={sorted(set(root_digests) - set(bundle_digests))}"
         )
-    mismatched = [
-        arm for arm in sorted(bundle_digests) if bundle_digests[arm] != root_digests[arm]
-    ]
+    mismatched = [arm for arm in sorted(bundle_digests) if bundle_digests[arm] != root_digests[arm]]
     if mismatched:
         raise ValueError(
             "successor root episode bytes do not match the pinned bundle for arms: "
@@ -338,9 +333,7 @@ def _validate_matrix(
                 f"successor_only={sorted(new_keys - old_keys)}"
             )
         if len(old_keys) != expected_rows_per_arm:
-            raise ValueError(
-                f"{arm} expected {expected_rows_per_arm} rows, got {len(old_keys)}"
-            )
+            raise ValueError(f"{arm} expected {expected_rows_per_arm} rows, got {len(old_keys)}")
     old_total = sum(len(rows) for rows in old.values())
     new_total = sum(len(rows) for rows in new.values())
     if old_total != expected_total_rows or new_total != expected_total_rows:
@@ -421,9 +414,6 @@ def compare(
     predecessor_source_sha: str,
     successor_source_sha: str,
     successor_bundle_sha256: str,
-    expected_arm_count: int = EXPECTED_ARM_COUNT,
-    expected_rows_per_arm: int = EXPECTED_ROWS_PER_ARM,
-    expected_total_rows: int = EXPECTED_TOTAL_ROWS,
 ) -> dict[str, Any]:
     """Pair predecessor and successor rows and derive the governed release diff."""
     verified_predecessor_sha256 = _verify_sha256(
@@ -444,9 +434,9 @@ def compare(
     _validate_matrix(
         old,
         new,
-        expected_arm_count=expected_arm_count,
-        expected_rows_per_arm=expected_rows_per_arm,
-        expected_total_rows=expected_total_rows,
+        expected_arm_count=EXPECTED_ARM_COUNT,
+        expected_rows_per_arm=EXPECTED_ROWS_PER_ARM,
+        expected_total_rows=EXPECTED_TOTAL_ROWS,
     )
     _validate_successor_rows(new, successor_source_sha=successor_source_sha)
     arms = sorted(old)

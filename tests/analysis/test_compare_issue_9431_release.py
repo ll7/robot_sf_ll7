@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from io import BytesIO
 import tarfile
+from io import BytesIO
 
 import pytest
 
@@ -95,9 +95,7 @@ def test_successor_root_must_match_pinned_bundle_episode_bytes(tmp_path) -> None
     payload = b'{"scenario_id":"s1","seed":1}\n'
     bundle = tmp_path / "bundle.tar.gz"
     with tarfile.open(bundle, "w:gz") as archive:
-        info = tarfile.TarInfo(
-            "release/payload/runs/goal__differential_drive/episodes.jsonl"
-        )
+        info = tarfile.TarInfo("release/payload/runs/goal__differential_drive/episodes.jsonl")
         info.size = len(payload)
         archive.addfile(info, BytesIO(payload))
 

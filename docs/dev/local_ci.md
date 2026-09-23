@@ -26,32 +26,45 @@ If the shared wrapper reports a stale installed `fast-pysf` package, recover fro
 worktree by rerunning the same command with the explicit recovery option:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- \
+scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf --profile core -- \
   uv run pytest tests/test_ci_script_contract.py -q
 ```
 
 This route creates or refreshes only the current linked worktree's ignored `.venv`. It refuses the
-main checkout and dirty dependency inputs, checks `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` (2 GiB by
-default) with `check_worktree_capacity.py`, serializes recovery per repository with a kernel-backed
-lock, and verifies `fast-pysf` plus the requested dependency import profile (default `core`,
-selectable with `--profile`) before starting the command. It runs the frozen, auditable operation
-`uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing local environment that is
-both fast-pysf coherent and profile-complete skips the sync. A selected worktree-local `.venv` that
-fails the wrapper's profile preflight gets exactly one automatic completion sync through this same
-recovery helper before the wrapper fails closed with the bootstrap remedy. Environment ownership
-checks reject nested links that would redirect package writes outside the worktree, while allowing
-valid standard `bin/python*` links to the host interpreter and rejecting broken aliases or links
-into the owning checkout. The recursive scan also fails closed if any environment subtree cannot be
-inspected. Concurrent worktree recoveries wait boundedly for the repository-scoped recovery
-lock (120s budget by default via `ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS` or `--recovery-timeout` /
-`--wait-timeout`) with structured diagnostics (owner PID, started timestamp, worktree location,
-and alive/stale status) before failing closed with exit code 75. Capacity exhaustion also fails
-closed without starting the wrapped command.
+main checkout and dirty dependency inputs, serializes recovery per repository with a kernel-backed
+lock, and verifies `fast-pysf` plus the requested dependency profile before starting the command.
+Recovery uses a frozen sync for the selected profile, and each sync includes
+`--reinstall-package robot-sf --frozen`. Core runs `uv sync --reinstall-package robot-sf --frozen`;
+a named extra adds `--extra NAME`; and `all-extras` adds `--all-extras`. The `orca` profile uses the
+core sync because its dependency is part of the core path. The wrapper's `--profile` defaults to
+`core`. An existing local environment that is both fast-pysf coherent and profile-complete skips
+the sync.
+
+Before materializing the environment, the capacity gate checks free space for both the
+worktree-local `.venv` and the filesystem containing the effective uv cache directory. The default
+conservative free-space reserve is 2 GiB for `core` and 8 GiB for non-core profiles, including
+named extras and `all-extras`.
+`ROBOT_SF_RECOVERY_MIN_FREE_BYTES` overrides the profile default; when it is unset,
+`ROBOT_SF_WORKTREE_MIN_FREE_BYTES` can override that default. Recovery fails closed before
+materialization if either filesystem is below the selected reserve, and the wrapped command is not
+started. This is a conservative reserve, not an exact projection of future `uv sync` size or a hard
+cap on cache growth.
+
+A selected worktree-local `.venv` that fails the wrapper's profile preflight gets exactly one
+automatic completion sync through this same recovery helper before the wrapper fails closed with
+the bootstrap remedy. Environment ownership checks reject nested links that would redirect package
+writes outside the worktree, while allowing valid standard `bin/python*` links to the host
+interpreter and rejecting broken aliases or links into the owning checkout. The recursive scan also
+fails closed if any environment subtree cannot be inspected. Concurrent worktree recoveries wait
+boundedly for the repository-scoped recovery lock (120s budget by default via
+`ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS` or `--recovery-timeout` / `--wait-timeout`) with
+structured diagnostics (owner PID, started timestamp, worktree location, and alive/stale status)
+before failing closed with exit code 75.
 
 Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
-owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that
-checkout only when that ownership is intentional. The standalone helper and its ownership boundary
-are documented in `scripts/dev/recover_fast_pysf_worktree.sh`.
+owned environment manually with the sync matching the needed dependency profile, in that checkout
+only when that ownership is intentional. The standalone helper and its ownership boundary are
+documented in `scripts/dev/recover_fast_pysf_worktree.sh`.
 
 ## Validate with an isolated Ruff version
 

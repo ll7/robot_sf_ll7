@@ -15,6 +15,9 @@ from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     FINAL_STAGE_WEIGHTS,
     _discounted_return,
     _min_obstacle_clearance,
+    _physical_pedestrian_ttc,
+    _serialize_env_action,
+    _step_trace_state,
     build_binding,
 )
 
@@ -69,6 +72,127 @@ def test_obstacle_clearance_parses_legacy_flat_endpoints() -> None:
         env_config=SimpleNamespace(robot_config=SimpleNamespace(radius=1.0)),
     )
     assert _min_obstacle_clearance(env) == pytest.approx(0.2)
+
+
+def test_physical_pedestrian_ttc_estimates_head_on_contact() -> None:
+    """TTC is geometric relative-motion contact time, not a reward component."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[1.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[[5.0, 0.0]],
+        pedestrian_velocities=[[-1.0, 0.0]],
+        pedestrian_radius=0.5,
+    )
+    assert ttc["schema_version"] == "physical-pedestrian-ttc.v1"
+    assert "constant observed velocities" in ttc["definition"]
+    assert ttc["estimate_s"] == pytest.approx(2.0)
+    assert ttc["status"] == "estimated"
+    assert ttc["pedestrian_index"] == 0
+    assert ttc["combined_radius_m"] == pytest.approx(1.0)
+
+
+def test_physical_pedestrian_ttc_accepts_grazing_intersection() -> None:
+    """A tangent relative path counts as contact with the combined-radius disc."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[[5.0, 1.0]],
+        pedestrian_velocities=[[-1.0, 0.0]],
+        pedestrian_radius=0.5,
+    )
+    assert ttc["estimate_s"] == pytest.approx(5.0)
+    assert ttc["status"] == "estimated"
+
+
+@pytest.mark.parametrize(
+    ("pedestrian_position", "pedestrian_velocity"),
+    [
+        ([5.0, 0.0], [1.0, 0.0]),  # receding on the same line
+        ([5.0, 2.0], [-1.0, 0.0]),  # approaching but misses the combined-radius disc
+    ],
+)
+def test_physical_pedestrian_ttc_reports_no_intercept(
+    pedestrian_position: list[float], pedestrian_velocity: list[float]
+) -> None:
+    """Receding and miss trajectories are null/no-intercept, never infinity."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[pedestrian_position],
+        pedestrian_velocities=[pedestrian_velocity],
+        pedestrian_radius=0.5,
+    )
+    assert ttc["estimate_s"] is None
+    assert ttc["status"] == "no_intercept"
+    assert "constant-velocity" in ttc["reason"]
+
+
+def test_physical_pedestrian_ttc_distinguishes_no_pedestrians() -> None:
+    """A valid empty actor set has its own status, not an unavailable estimate."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=np.empty((0, 2)),
+        pedestrian_velocities=np.empty((0, 2)),
+        pedestrian_radius=0.5,
+    )
+    assert ttc["estimate_s"] is None
+    assert ttc["status"] == "no_pedestrians"
+    assert ttc["reason"]
+
+
+def test_physical_pedestrian_ttc_fails_closed_on_unavailable_inputs() -> None:
+    """Missing actor kinematics produce null/unavailable rather than a proxy value."""
+    ttc = _physical_pedestrian_ttc(
+        robot_position=[0.0, 0.0],
+        robot_velocity=[0.0, 0.0],
+        robot_radius=0.5,
+        pedestrian_positions=[[5.0, 0.0]],
+        pedestrian_velocities=None,
+        pedestrian_radius=0.5,
+    )
+    assert ttc["estimate_s"] is None
+    assert ttc["status"] == "unavailable"
+    assert "velocities" in ttc["reason"]
+
+
+def test_trace_state_preserves_executed_action_and_ttc_inputs() -> None:
+    """Measured/counterfactual row helpers retain action identity and TTC schema."""
+    action = np.asarray([0.125, -0.75], dtype=np.float64)
+    serialized_action = _serialize_env_action(action)
+    simulator = SimpleNamespace(
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=(1.0, 0.0),
+                config=SimpleNamespace(radius=0.5),
+            )
+        ],
+        config=SimpleNamespace(ped_radius=0.5),
+        ped_pos=np.asarray([[5.0, 0.0]], dtype=float),
+        ped_vel=np.asarray([[-1.0, 0.0]], dtype=float),
+    )
+
+    fields = _step_trace_state(simulator)
+
+    assert serialized_action == [0.125, -0.75]
+    assert fields["robot_velocity_mps"] == [1.0, 0.0]
+    assert fields["ped_positions"] == [[5.0, 0.0]]
+    assert fields["ped_velocities_mps"] == [[-1.0, 0.0]]
+    assert fields["pedestrian_ttc"]["schema_version"] == "physical-pedestrian-ttc.v1"
+    assert fields["pedestrian_ttc"]["estimate_s"] == pytest.approx(2.0)
+
+
+def test_env_action_trace_rejects_non_vector_or_non_finite_values() -> None:
+    """The recorded action cannot silently flatten or sanitize malformed inputs."""
+    with pytest.raises(ValueError, match="one-dimensional"):
+        _serialize_env_action(np.asarray([[1.0, 2.0]]))
+    with pytest.raises(ValueError, match="finite"):
+        _serialize_env_action(np.asarray([np.nan, 0.0]))
 
 
 def test_binding_records_gamma_provenance_gap(tmp_path: Path) -> None:

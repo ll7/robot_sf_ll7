@@ -95,6 +95,12 @@ BASE_ALGO_CONFIG = {
 }
 
 REWARD_GIT_PATH = "robot_sf/gym_env/reward.py"
+PEDESTRIAN_TTC_SCHEMA = "physical-pedestrian-ttc.v1"
+PEDESTRIAN_TTC_DEFINITION = (
+    "First t >= 0 satisfying ||(pedestrian_position - robot_position) + "
+    "(pedestrian_velocity - robot_velocity) * t|| <= robot_radius + pedestrian_radius, "
+    "under constant observed velocities; no acceleration model or reward proxy is used."
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -234,6 +240,203 @@ def _min_ped_distance(env) -> float:
     return float(np.min(np.linalg.norm(peds - np.array([rx, ry]), axis=1)))
 
 
+def _serialize_env_action(action) -> list[float]:
+    """Serialize the exact one-dimensional action vector passed to ``env.step``."""
+    try:
+        values = np.asarray(action, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("env action must be a numeric vector for trace serialization") from exc
+    if values.ndim != 1 or not np.all(np.isfinite(values)):
+        raise ValueError("env action must be a finite one-dimensional vector")
+    return values.tolist()
+
+
+def _trace_xy_rows(value) -> np.ndarray | None:
+    """Coerce an observed actor position/velocity collection without inventing rows."""
+    if value is None:
+        return None
+    try:
+        rows = np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if rows.size == 0:
+        return np.empty((0, 2), dtype=float)
+    if rows.ndim == 1 and rows.shape == (2,):
+        rows = rows.reshape(1, 2)
+    if rows.ndim != 2 or rows.shape[1] != 2 or not np.all(np.isfinite(rows)):
+        return None
+    return rows
+
+
+def _trace_xy_vector(value) -> np.ndarray | None:
+    """Coerce one observed two-dimensional position or velocity."""
+    if value is None:
+        return None
+    try:
+        vector = np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if vector.shape != (2,) or not np.all(np.isfinite(vector)):
+        return None
+    return vector
+
+
+def _trace_radius(value) -> float | None:
+    """Return a finite positive radius, or ``None`` when unavailable."""
+    try:
+        radius = float(value)
+    except (TypeError, ValueError):
+        return None
+    return radius if math.isfinite(radius) and radius > 0.0 else None
+
+
+def _disc_contact_time(relative_position: np.ndarray, relative_velocity: np.ndarray, radius: float):
+    """Return constant-relative-velocity first contact time and its classification."""
+    c = float(np.dot(relative_position, relative_position) - radius**2)
+    if c <= 1e-12:
+        return 0.0, "overlapping"
+    a = float(np.dot(relative_velocity, relative_velocity))
+    if a <= 1e-12:
+        return None, None
+    b = 2.0 * float(np.dot(relative_position, relative_velocity))
+    discriminant = b * b - 4.0 * a * c
+    if discriminant < -1e-12:
+        return None, None
+    root = math.sqrt(max(0.0, discriminant))
+    contact_times = [(-b - root) / (2.0 * a), (-b + root) / (2.0 * a)]
+    future_times = [time_s for time_s in contact_times if time_s >= 0.0]
+    return (min(future_times), "estimated") if future_times else (None, None)
+
+
+def _physical_pedestrian_ttc(
+    *,
+    robot_position,
+    robot_velocity,
+    robot_radius,
+    pedestrian_positions,
+    pedestrian_velocities,
+    pedestrian_radius,
+) -> dict:
+    """Estimate first disc contact under constant observed robot/pedestrian velocities.
+
+    This geometric estimate is deliberately independent of ``ttc_risk`` reward
+    decomposition. Missing or malformed simulator inputs produce a null estimate with
+    an explicit status; non-intersecting trajectories are not encoded as infinity.
+    """
+    result = {
+        "schema_version": PEDESTRIAN_TTC_SCHEMA,
+        "definition": PEDESTRIAN_TTC_DEFINITION,
+        "estimate_s": None,
+        "status": "unavailable",
+        "reason": None,
+        "pedestrian_index": None,
+        "robot_radius_m": None,
+        "pedestrian_radius_m": None,
+        "combined_radius_m": None,
+    }
+    ped_positions = _trace_xy_rows(pedestrian_positions)
+    if ped_positions is None:
+        result["reason"] = "pedestrian positions are unavailable or malformed"
+        return result
+    if ped_positions.shape[0] == 0:
+        result.update(status="no_pedestrians", reason="simulator reports no pedestrians")
+        return result
+
+    ped_velocities = _trace_xy_rows(pedestrian_velocities)
+    robot_pos = _trace_xy_vector(robot_position)
+    robot_vel = _trace_xy_vector(robot_velocity)
+    robot_radius_value = _trace_radius(robot_radius)
+    ped_radius_value = _trace_radius(pedestrian_radius)
+    if ped_velocities is None or ped_velocities.shape != ped_positions.shape:
+        result["reason"] = "pedestrian velocities are unavailable or do not match positions"
+        return result
+    if robot_pos is None:
+        result["reason"] = "robot position is unavailable or malformed"
+        return result
+    if robot_vel is None:
+        result["reason"] = "robot velocity is unavailable or malformed"
+        return result
+    if robot_radius_value is None or ped_radius_value is None:
+        result["reason"] = "robot or pedestrian collision radius is unavailable or invalid"
+        return result
+
+    combined_radius = robot_radius_value + ped_radius_value
+    result.update(
+        robot_radius_m=robot_radius_value,
+        pedestrian_radius_m=ped_radius_value,
+        combined_radius_m=combined_radius,
+    )
+    candidates: list[tuple[float, int, str]] = []
+    for index, (ped_pos, ped_vel) in enumerate(zip(ped_positions, ped_velocities, strict=True)):
+        relative_position = ped_pos - robot_pos
+        relative_velocity = ped_vel - robot_vel
+        estimate, status = _disc_contact_time(relative_position, relative_velocity, combined_radius)
+        if estimate is not None and status is not None:
+            candidates.append((estimate, index, status))
+
+    if not candidates:
+        result.update(
+            status="no_intercept",
+            reason=(
+                "no pedestrian's constant-velocity relative trajectory intersects the "
+                "combined-radius disc for t >= 0"
+            ),
+        )
+        return result
+    estimate_s, pedestrian_index, status = min(candidates)
+    result.update(
+        estimate_s=float(estimate_s),
+        status=status,
+        pedestrian_index=pedestrian_index,
+    )
+    return result
+
+
+def _step_trace_state(simulator) -> dict:
+    """Capture the observed kinematics and physical pedestrian TTC for a trace row."""
+    ped_positions = _trace_xy_rows(getattr(simulator, "ped_pos", None))
+    ped_velocities = _trace_xy_rows(getattr(simulator, "ped_vel", None))
+    robot_position = None
+    robot_velocity = None
+    robot_radius = None
+    try:
+        robot = simulator.robots[0]
+        pose = robot.pose
+        robot_position = _trace_xy_vector(pose[0])
+        heading = float(pose[1])
+        current_speed = np.asarray(robot.current_speed, dtype=float).reshape(-1)
+        if (
+            current_speed.size >= 1
+            and math.isfinite(heading)
+            and np.all(np.isfinite(current_speed))
+        ):
+            linear_speed = float(current_speed[0])
+            robot_velocity = np.asarray(
+                [linear_speed * math.cos(heading), linear_speed * math.sin(heading)],
+                dtype=float,
+            )
+        robot_radius = _trace_radius(getattr(getattr(robot, "config", None), "radius", None))
+    except (AttributeError, IndexError, TypeError, ValueError):
+        pass
+    pedestrian_radius = _trace_radius(
+        getattr(getattr(simulator, "config", None), "ped_radius", None)
+    )
+    ttc = _physical_pedestrian_ttc(
+        robot_position=robot_position,
+        robot_velocity=robot_velocity,
+        robot_radius=robot_radius,
+        pedestrian_positions=ped_positions,
+        pedestrian_velocities=ped_velocities,
+        pedestrian_radius=pedestrian_radius,
+    )
+    return {
+        "ped_positions": None if ped_positions is None else ped_positions.tolist(),
+        "ped_velocities_mps": None if ped_velocities is None else ped_velocities.tolist(),
+        "robot_velocity_mps": None if robot_velocity is None else robot_velocity.tolist(),
+        "pedestrian_ttc": ttc,
+    }
+
+
 def _normalize_runner_obs(step_obs):
     """Normalize a runner observation through the canonical map-runner path."""
     from robot_sf.benchmark.map_runner.map_runner_observations import normalize_map_observation
@@ -266,14 +469,11 @@ def _rollout_policy(env, planner, max_steps: int, obs):
         v = float(action_dict.get("v", action_dict.get("linear_velocity", 0.0)))
         w = float(action_dict.get("omega", action_dict.get("angular_velocity", 0.0)))
         env_action = np.asarray(_to_env_action(env=env, config=config, command=(v, w)))
+        action_trace = _serialize_env_action(env_action)
         obs, reward, terminated, truncated, info = env.step(env_action)
         meta = dict(info.get("meta", {}))
         terms = {k: float(vv) for k, vv in dict(meta.get("reward_terms", {})).items()}
         rx, ry = float(env.simulator.robot_pos[0][0]), float(env.simulator.robot_pos[0][1])
-        try:
-            peds = np.asarray(env.simulator.ped_pos, dtype=float).reshape(-1, 2).tolist()
-        except (AttributeError, TypeError, ValueError):
-            peds = []
         rows.append(
             {
                 "step": step_idx,
@@ -282,6 +482,8 @@ def _rollout_policy(env, planner, max_steps: int, obs):
                 "heading": float(env.simulator.robot_poses[0][1]),
                 "cmd_v": v,
                 "cmd_w": w,
+                "env_action": action_trace,
+                **_step_trace_state(env.simulator),
                 "reward": float(reward),
                 "reward_terms": terms,
                 "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
@@ -291,7 +493,6 @@ def _rollout_policy(env, planner, max_steps: int, obs):
                 "distance_to_goal": float(meta.get("distance_to_goal", float("nan"))),
                 "min_obstacle_clearance_m": _min_obstacle_clearance(env),
                 "min_ped_distance_m": _min_ped_distance(env),
-                "ped_positions": peds,
                 "terminated": bool(terminated),
                 "truncated": bool(truncated),
             }
@@ -521,6 +722,7 @@ def _replay_branch_from_prefix(
                 cmd_v = float(act.get("v", act.get("linear_velocity", 0.0)))
                 cmd_w = float(act.get("omega", act.get("angular_velocity", 0.0)))
                 action = np.asarray(_to_env_action(env=env, config=config, command=(cmd_v, cmd_w)))
+            action_trace = _serialize_env_action(action)
             obs, reward, terminated, truncated, info = env.step(action)
             meta = dict(info.get("meta", {}))
             terms = {kk: float(vv) for kk, vv in dict(meta.get("reward_terms", {})).items()}
@@ -534,6 +736,8 @@ def _replay_branch_from_prefix(
                     "robot_y": ry,
                     "cmd_v": cmd_v,
                     "cmd_w": cmd_w,
+                    "env_action": action_trace,
+                    **_step_trace_state(env.simulator),
                     "reward": float(reward),
                     "reward_terms": terms,
                     "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),

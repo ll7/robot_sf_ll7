@@ -350,7 +350,7 @@ def write_bundle(
         ),
         "generated_at_utc": pin_generated_at or datetime.now(UTC).isoformat(),
         "git_commit": _git_commit(),
-        "source_commit": campaign.source_commit or _git_commit(),
+        "source_commit": campaign.source_commit,
         "campaign_id": campaign.campaign_id,
         "campaign_job": campaign.campaign_job,
         "release_tag": campaign.release_tag,
@@ -423,7 +423,7 @@ statistical benchmark or dissertation claim.
 - Selection mode: `{metadata["selection_mode"]}`
 - Selection metric: `{metadata["selection_metric"]} = {metadata["selection_metric_value"]}`
 - Git commit at generation: `{metadata["git_commit"]}`
-- Source commit: `{metadata["source_commit"]}`
+- Source commit: `{metadata["source_commit"] or "not specified"}`
 - Release tag: `{metadata["release_tag"] or "not specified"}`
 - Config SHA-256: `{metadata["config_sha256"] or "not specified"}`
 

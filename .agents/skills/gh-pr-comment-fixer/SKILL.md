@@ -28,6 +28,8 @@ asks to fix known review comments.
 ## Scope
 
 - Fetch PR context for current branch.
+- Read `docs/context/issue_relationships.md` and the linked issue's canonical relationship block;
+  preserve the PR's `## Issue Relationship Mirror` while fixing comments.
 - Collect review threads and top-level PR comments.
 - Apply only fixable-now items that stay inside PR scope.
 - Run proof at the tightest practical level, then push and resolve threads.
@@ -35,7 +37,8 @@ asks to fix known review comments.
 ## Workflow
 
 1. Confirm PR for current branch and branch match.
-2. Pull requested comments and review threads; keep thread IDs for actionable items.
+2. Pull requested comments and review threads; keep thread IDs for actionable items. Re-read the
+   linked issue's native Parent/Blocked by/Blocking state before any relationship-related edit.
 3. Classify requests:
    - fixable now,
    - needs clarification (ask before editing),
@@ -46,6 +49,8 @@ asks to fix known review comments.
 7. Rebuild the final PR title/body from the post-fix diff and validation, then run the REST
    reconciliation helper with the final title and body. A no-op is valid; any metadata change
    invalidates prior final-state review evidence and requires a fresh exact-head review trailer.
+   Preserve the explicit `## Issue Relationship Mirror`; do not infer or silently change graph edges
+   while applying review fixes.
 8. Re-query unresolved review threads after the push and metadata reconciliation before resolving anything. Bots may add fresh
    findings once a draft PR becomes ready or after the first fix commit.
 9. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
@@ -62,6 +67,8 @@ asks to fix known review comments.
 - Inspect `output/`-class artifacts before commit and document disposal/durability.
 - Verify PR head before applying fixes; avoid resolving threads not yet satisfied by code or commit.
 - Do not force-push or mutate thread state for unresolved/ambiguous feedback.
+- Do not create native issue links from review prose. Relationship changes require an explicit issue
+  declaration, a fresh read, and native-link readback from the writable worktree.
 
 ## Required Output
 

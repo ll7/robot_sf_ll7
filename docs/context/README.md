@@ -7,6 +7,9 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The repository-wide explicit issue-relationship contract and bounded migration audit are documented
+in [issue_relationships.md](issue_relationships.md).
+
 ## Per-tool contract notes
 
 Each tool-specific contract lives in its own `docs/context/<tool>.md` note (for example

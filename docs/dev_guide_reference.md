@@ -707,6 +707,17 @@ workflow evidence only and does not authorize a policy change, merge, campaign, 
 
 ### Merge queue gate (issue #6274)
 
+An accepted review can be recorded before hosted checks finish with
+`merge-if-ci-green`. This conditional label is a handoff, not merge admission:
+`goal-pr-review` publishes its trusted exact-head review evidence and applies
+the label, and `gh-pr-merger` runs
+`uv run python -m scripts.dev.promote_merge_if_ci_green <pr> --expected-head-sha <head> --expected-base-sha <base>`
+after required CI is green on that head. Promotion adds `merge-ready` through
+the existing carrier guard and clears the conditional label. A pending, failed,
+unknown, or stale CI result leaves the PR unmerged. The native merge queue and
+direct guarded merge still require `merge-ready`; CI finishing does not require
+another review or a routine waiting comment.
+
 **Problem.** An external or parallel auto-merge path merged several PRs without the `merge-ready`
 label and without a current exact-head `gate-verdict: accepted` trailer (issue #6274). The in-repo
 `gh-pr-merger` contract is fail-closed, but it only governs merges it performs itself; any
@@ -3167,7 +3178,13 @@ the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown t
 the metadata block near the top of the issue body; YAML issue forms expose both fields as required
 dropdowns. Use exactly one value from each enum and add repository-relative paths under
 `linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
-without rewriting existing issue bodies or changing labels and project fields.
+without rewriting existing issue bodies or changing labels and project fields. Every template also
+collects the explicit relationship block described in
+[Explicit Issue Relationships](context/issue_relationships.md); set native Parent, Blocked by, and
+Blocking links after creation and use the bounded audit before any existing-issue migration.
+
+The read-only migration audit is:
+`uv run python scripts/dev/audit_issue_relationships.py --issue 123 --format json`.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - YAML issue forms for common backlog lanes:

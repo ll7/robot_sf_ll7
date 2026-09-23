@@ -850,6 +850,99 @@ def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:
     }
 
 
+def test_snapshot_claimable_issues_emits_per_row_claimable_signal() -> None:
+    """Every row carries a machine-readable claimable flag plus a stable reason."""
+    issue_list = [
+        {
+            "number": 2691,
+            "title": "closed issue",
+            "state": "CLOSED",
+            "url": "https://github.test/issues/2691",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2692,
+            "title": "claimed issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2692",
+            "labels": [{"name": "state:ready"}],
+            "assignees": [],
+        },
+        {
+            "number": 2693,
+            "title": "blocked issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2693",
+            "labels": [{"name": "state:ready"}, {"name": "blocked"}],
+            "assignees": [],
+        },
+        {
+            "number": 2694,
+            "title": "ready issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2694",
+            "labels": [{"name": "state:ready"}],
+            "assignees": [],
+        },
+    ]
+    ready_preflight = {
+        "classification": "ready",
+        "admission_reason": "claimable",
+        "reasons": ["open, unassigned, and unclaimed"],
+        "ready": True,
+        "write_allowed": True,
+        "claim": _claim_status(2694),
+    }
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {
+                2691: _claim_status(2691),
+                2692: _claim_status(2692, claimed=True, sha="abc123"),
+                2693: _claim_status(2693),
+                2694: _claim_status(2694),
+            }
+            with patch(
+                "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue"
+            ) as admit:
+                admit.return_value = {
+                    "schema": "goal_issue_admission.v1",
+                    "ok": True,
+                    "outcome": "ready_check_only",
+                    "write_attempted": False,
+                    "source_ref": "origin/main",
+                    "preflight": ready_preflight,
+                    "claim": _claim_status(2694),
+                }
+                payload = snapshot_claimable_issues(
+                    repo="ll7/robot_sf_ll7",
+                    remote="origin",
+                    body_limit=150,
+                    limit=4,
+                )
+
+    assert [issue["claimable"] for issue in payload["issues"]] == [False, False, False, True]
+    assert [issue["claimable_reason"] for issue in payload["issues"]] == [
+        "closed",
+        "already_claimed",
+        "blocked",
+        "claimable",
+    ]
+    assert all(isinstance(issue["claimable"], bool) for issue in payload["issues"])
+    assert all(isinstance(issue["claimable_reason"], str) for issue in payload["issues"])
+    assert [issue["number"] for issue in payload["claimable_issues"]] == [2694]
+    assert payload["claimable_count"] == 1
+    admit.assert_called_once_with(
+        2694,
+        repo="ll7/robot_sf_ll7",
+        remote="origin",
+        source_ref="origin/main",
+        check_only=True,
+    )
+
+
 def test_snapshot_claimable_issues_uses_bounded_rest_when_graphql_is_near_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

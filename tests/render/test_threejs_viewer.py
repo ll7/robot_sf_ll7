@@ -111,3 +111,96 @@ def test_export_threejs_viewer_writes_static_assets(tmp_path) -> None:
     assert scene["episode_id"] == 3
     assert len(scene["frames"]) == 1
     assert "three.module.js" in (result.output_dir / "viewer.js").read_text(encoding="utf-8")
+
+
+def _rich_state(timestep: int, **overrides: object) -> VisualizableSimState:
+    """Build a visualizer state with optional recorded fidelity attributes."""
+    state = _state(timestep)
+    for key, value in overrides.items():
+        setattr(state, key, value)
+    return state
+
+
+def test_fidelity_block_reports_monotonic_slot_symbolic_defaults() -> None:
+    """Default states yield timestep timing, slot identity, symbolic geometry."""
+    episode = PlaybackEpisode(episode_id=11, states=[_state(0), _state(1)])
+
+    scene = build_threejs_scene(episode, _map(), source="synthetic.jsonl")
+
+    assert scene["frames"][0]["timing_source"] == "timestep_times_dt"
+    assert scene["frames"][0]["time_s"] == 0.0
+    assert scene["frames"][1]["time_s"] == 0.1
+    assert scene["fidelity"]["timing"] == {
+        "mode": "monotonic",
+        "explicit_time_s": False,
+        "bad_time_frames": [],
+        "nonmonotonic_frames": [],
+    }
+    assert scene["fidelity"]["identity"] == {"mode": "slot_index"}
+    assert scene["fidelity"]["geometry"]["mode"] == "symbolic"
+    ped = scene["frames"][0]["pedestrians"][0]
+    assert ped["id"] == 0
+    assert ped["heading"] is None
+    assert ped["heading_source"] == "unknown"
+    assert ped["radius_m"] is None
+    assert ped["radius_source"] == "unknown"
+
+
+def test_explicit_time_and_recorded_actor_fields_are_preserved() -> None:
+    """Recorded time, ids, headings, and radii travel verbatim with sources."""
+    states = [
+        _rich_state(
+            0,
+            time_s=1.5,
+            pedestrian_ids=["ped-a"],
+            pedestrian_headings=np.array([0.75]),
+            pedestrian_radii=np.array([0.31]),
+        ),
+        _rich_state(
+            5,
+            time_s=1.2,
+            pedestrian_ids=["ped-a"],
+            pedestrian_headings=np.array([0.75]),
+            pedestrian_radii=np.array([0.31]),
+        ),
+    ]
+    episode = PlaybackEpisode(episode_id=12, states=states)
+
+    scene = build_threejs_scene(episode, _map(), source="synthetic.jsonl")
+
+    assert [frame["time_s"] for frame in scene["frames"]] == [1.5, 1.2]
+    assert scene["frames"][0]["timing_source"] == "explicit_time_s"
+    assert scene["fidelity"]["timing"]["mode"] == "nonmonotonic_time_s"
+    assert scene["fidelity"]["timing"]["nonmonotonic_frames"] == [1]
+    assert scene["fidelity"]["timing"]["explicit_time_s"] is True
+    assert scene["fidelity"]["identity"] == {"mode": "stable"}
+    assert scene["fidelity"]["geometry"]["mode"] == "recorded"
+    ped = scene["frames"][0]["pedestrians"][0]
+    assert ped["id"] == "ped-a"
+    assert ped["heading"] == 0.75
+    assert ped["heading_source"] == "recorded"
+    assert ped["radius_m"] == 0.31
+    assert ped["radius_source"] == "recorded"
+    json.dumps(scene)
+
+
+def test_numpy_stable_ids_serialize_without_guessing() -> None:
+    """Numpy-backed identities serialize; unrepresentable ids fall back to slots."""
+    states = [
+        _rich_state(0, pedestrian_ids=np.array([np.int64(7)])),
+    ]
+    episode = PlaybackEpisode(episode_id=13, states=states)
+
+    scene = build_threejs_scene(episode, _map(), source="synthetic.jsonl")
+
+    assert scene["frames"][0]["pedestrians"][0]["id"] == 7
+    assert scene["fidelity"]["identity"] == {"mode": "stable"}
+
+
+def test_map_origin_defaults_explicitly_for_alignment() -> None:
+    """Map payloads always carry an origin so asymmetric maps cannot drift."""
+    scene = build_threejs_scene(
+        PlaybackEpisode(episode_id=14, states=[_state(0)]), _map(), source="s.json"
+    )
+
+    assert scene["map"]["origin"] == [0.0, 0.0]

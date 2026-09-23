@@ -225,7 +225,7 @@ uv run python scripts/validation/verify_maps.py --scope ci --mode ci --output ou
 | R005 | INFO | Layer stats (labeled vs total) | Ensure critical semantics have labels |
 
 ### Manifest Structure (excerpt)
-```jsonc
+```json
 {
   "run_id": "map_verification_20251120_220354_bb7cc5f6",
   "mode": "ci",
@@ -353,11 +353,11 @@ The runner supports two execution modes configured in the algorithm configuratio
   - `{horizon}`: Maximum timesteps for the episode.
   - `{dt}`: Simulation timestep duration in seconds.
 - **I/O Protocol**: At each step, the runner writes a single-line JSON payload to stdin, terminated by a newline:
-  ```json
+  ```text
   {"robot": {"position": [x, y], "heading": [h]}, "goal": {"current": [gx, gy]}, "pedestrians": [...] }
   ```
   The process must respond on stdout with a single-line JSON payload, terminated by a newline:
-  ```json
+  ```text
   {"linear_velocity": v, "angular_velocity": w}
   ```
   The unicycle aliases `v`/`omega`, holonomic aliases `vx`/`vy`, and the

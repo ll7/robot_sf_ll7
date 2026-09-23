@@ -110,6 +110,9 @@ During long delegated runs, record the REST publication path that actually worke
 head-SHA check-run polling, labels, merge, closeout comment, and cleanup. A successful REST
 operation is publication evidence only; still verify branch head, CI state, and local validation
 before applying merge-ready or calling an issue closed.
+When review proof is accepted while hosted CI is pending, record that with
+`merge-if-ci-green`. The merge cycle promotes it after green checks on the
+same head; CI completion does not require another review or waiting comment.
 
 The priority workflow uses [docs/project_prioritization.md](../project_prioritization.md) as an
 advisory rubric, not as hard authority over current maintainer direction or fresh evidence.
@@ -232,6 +235,12 @@ path, the PR must clearly list the skipped gate.
 
 The PR body should come from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` and keep the template sections intact.
 
+When the PR is opened from a worktree, fill `## Issue Relationship Mirror` from the linked issue's
+fresh native Parent/Blocked by/Blocking state. Keep `Closes`/`Refs` in `## Linked Issues` for
+coverage semantics, use `none` for unestablished graph edges, and never infer relationships from
+mentions. Review-only worktrees may verify the mirror but must not create native links; see
+[`docs/context/issue_relationships.md`](../context/issue_relationships.md).
+
 PR creation should only happen after the branch diff shows the issue scope is actually implemented.
 
 ### 8. Review and fix comments
@@ -324,7 +333,8 @@ benchmark notes, issue notes, and PR text should reinforce the same traceability
 
 ## Mermaid Overview
 
-```mermaid
+<!-- Renders as a Mermaid diagram on GitHub; fenced as text so the strict Sphinx build stays warning-clean. -->
+```text
 flowchart TD
   A[Prompt or idea] --> B{Need routing help?}
   B -->|yes| C[skill-picker or what-context-needed]

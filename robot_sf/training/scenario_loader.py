@@ -2543,7 +2543,19 @@ def _set_simulation_override_attr(
             enable_attr,
             replace(getattr(config.sim_config, enable_attr), enabled=True),
         )
-    elif attr in {"pedestrian_uncertainty_envelope_enabled", "oracle_force_trace_enabled"}:
+    elif attr == "goal_completion_policy":
+        from robot_sf.nav.map_config import normalize_goal_completion_policy  # noqa: PLC0415
+
+        setattr(
+            config.sim_config,
+            attr,
+            normalize_goal_completion_policy(overrides[attr]),
+        )
+    elif attr in {
+        "pedestrian_uncertainty_envelope_enabled",
+        "oracle_force_trace_enabled",
+        "sampler_capture_enabled",
+    }:
         setattr(
             config.sim_config,
             attr,
@@ -2662,10 +2674,12 @@ def _apply_simulation_overrides(
         "action_latency_ms",
         "pedestrian_integration_scheme",
         "oracle_force_trace_enabled",
+        "sampler_capture_enabled",
         "ped_radius",
         "pedestrian_uncertainty_envelope_enabled",
         "pedestrian_uncertainty_alpha_mps",
         "goal_radius",
+        "goal_completion_policy",
         "pedestrian_model",
         "ttc_predictive_force",
         "zanlungo_collision_prediction",

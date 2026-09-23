@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.errors import RobotSfError
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -58,16 +59,6 @@ class _Planner:
     key: str
     algo: str
     enabled: bool
-
-
-def _repo_root() -> Path:
-    """Return the repository root for repo-relative path normalization.
-
-    Returns:
-        Absolute repository root path.
-    """
-
-    return Path(__file__).resolve().parents[2]
 
 
 def _read_yaml_mapping(path: Path, *, label: str) -> dict[str, Any]:
@@ -590,7 +581,7 @@ def build_scenario_denominator_manifest(
 
     if not config_paths:
         raise DenominatorManifestError("At least one benchmark config path is required")
-    root = (repo_root or _repo_root()).resolve()
+    root = (repo_root or get_repository_root()).resolve()
     configs = [_build_config_manifest(Path(path), repo_root=root) for path in config_paths]
     total_planner_denominator = sum(
         int(config["summary"]["planner_episode_denominator"]) for config in configs

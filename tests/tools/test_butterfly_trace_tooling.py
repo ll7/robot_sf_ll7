@@ -540,3 +540,59 @@ def test_minimap_panel_labels_name_centre_to_centre_distance() -> None:
         assert "clearance" not in ax_speed.get_title().lower()
     finally:
         plt.close(fig)
+
+
+def _contrast_gutter_fixture() -> dict[str, object]:
+    """Return a minimal gutter dict for the contrast label tests."""
+    return {
+        "min_clearance_focal_m": {"episode_a": 1.73, "episode_b": 1.44},
+        "near_miss_steps": {"episode_a": 13, "episode_b": 78},
+        "steps_to_termination": {"episode_a": 88, "episode_b": 235},
+        "first_braking_time_s": {"episode_a": 3.5, "episode_b": 2.4},
+    }
+
+
+def test_contrast_gutter_lines_label_centre_distance() -> None:
+    """The vertical contrast gutter names the distance, not clearance (#9235)."""
+    text = "\n".join(hinge._format_contrast_gutter_lines(_contrast_gutter_fixture()))
+
+    assert "centre-to-centre" in text
+    assert "clearance" not in text.lower()
+    assert "A 1.73 m" in text and "B 1.44 m" in text
+
+
+def test_delta_gutter_lines_label_centre_distance() -> None:
+    """The delta gutter horizon line names the distance, not clearance (#9235)."""
+    gutter = {
+        "dt_brake_s": 0.5,
+        "dv_cmd_at_pivot_mps": 0.1,
+        "domega_cmd_at_pivot_rad_s": 0.2,
+        "horizon_s": 2.0,
+        "min_clearance_horizon_m": {
+            "episode_a": {"distance_m": 1.6},
+            "episode_b": {"distance_m": 1.4},
+        },
+    }
+
+    text = "\n".join(hinge._format_gutter_lines(gutter))
+
+    assert "centre-to-centre" in text
+    assert "clearance" not in text.lower()
+    assert "A 1.60m / B 1.40m" in text
+
+
+def test_contrast_strip_header_labels_centre_distance() -> None:
+    """The compact strip header names the distance, not clearance (#9235)."""
+    fig, ax = plt.subplots()
+    try:
+        hinge._draw_contrast_strip(
+            ax,
+            _contrast_gutter_fixture(),
+            fontsize=8.0,  # type: ignore[arg-type]
+        )
+        headers = [artist.get_text() for artist in ax.texts]
+    finally:
+        plt.close(fig)
+
+    assert any("centre-to-centre" in header for header in headers)
+    assert not any("clearance" in header.lower() for header in headers)

@@ -17,13 +17,13 @@ permissions:
   contents: read
 
 concurrency:
-  # Latest-main-wins (issue #6399): cancelling in-progress runs in the
-  # per-ref group lets the final aggregate SHA of a merge burst be validated
-  # without queueing behind superseded intermediate runs. Because the group is
-  # per-ref, a new main push only cancels superseded main runs, and a new pull
-  # request push still only cancels its own superseded run.
+  # Pushes and pull-request updates retain latest-main-wins supersession. A
+  # workflow_dispatch is the monitor/recovery path: repeated same-head
+  # dispatches must not cancel the one decisive run already in progress
+  # (issue #9340). The watcher decides whether to dispatch; this expression
+  # prevents a duplicate dispatch from destroying its evidence.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -320,9 +320,17 @@ jobs:
         uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ matrix.python }}
-          sync-args: "--all-extras --frozen"
+          # Slim profile (issue #9355): base + viz + maps extras cover the full
+          # compat test closure (proven by check_compat_import_profile.py plus a
+          # slim-venv collection/runtime probe). Full --all-extras downloads
+          # (CUDA torch, Ray, browsers) blew the 1,200s setup budget on cold
+          # caches before any test ran.
+          sync-args: "--extra viz --extra maps --frozen"
 
-      - name: Run compatibility tests with full extras
+      - name: Verify compat import profile before tests
+        run: uv run python scripts/dev/check_compat_import_profile.py
+
+      - name: Run compatibility tests with profile extras
         run: >-
           uv run pytest tests/common tests/contract tests/factories tests/gym_env tests/maps
           tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit

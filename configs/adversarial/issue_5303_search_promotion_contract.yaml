@@ -107,10 +107,14 @@ input_provenance:
       sha256: 19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 01e2477c5741a5404d793b1e8341cb1f2ec714051453790b946e5a8a0a4cc828
+      # Refreshed after the additive synthetic temporal-robustness fixture
+      # fields; the frozen #5303 objective and promotion boundary are unchanged.
+      sha256: e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
-      sha256: 0a926d30f304bf7fa2e8065ba6e2f7bfdab31c7c46c1dfe85bb9ac8ec34a0160
+      # Refreshed after the additive issue #9304 evidence-trace bridge; the
+      # frozen #5303 objective and promotion boundary are unchanged.
+      sha256: c4636e29f4769a7f69649b2c7301d4a24e70cb203eef6c13af179501ff13c89c
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: a8fe9e70249a924e2f4b6dd0334ad2ef34cfc10a11bc6d1e21e7d077d6146812

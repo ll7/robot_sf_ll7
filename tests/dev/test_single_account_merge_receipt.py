@@ -819,6 +819,9 @@ def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailab
 ) -> None:
     """Quota recovery emits an auditable blocked receipt instead of an opaque error."""
     snapshot = _snapshot_with_provenance()
+    # Keep this quota-path unit test on the current base. A stale base exercises
+    # the separate ordinary-CAS path, which otherwise queries live PR files.
+    snapshot["base_sha"] = CURRENT_BASE_SHA
     monkeypatch.setattr(
         "scripts.dev.merge_queue_gate.fetch_pr_snapshot",
         lambda *args, **kwargs: (snapshot, None),
@@ -847,6 +850,7 @@ def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailab
         "diagnostic": "GitHub GraphQL quota exhausted",
     }
     assert evidence["thread_resolution"]["status"] == "unavailable"
+    assert evidence["ordinary_cas"]["status"] == "not_required"
     assert evidence["gate_audit"]["closing_discipline_status"] == "blocked"
     assert "closing_discipline_blocked" in evidence["gate_audit"]["reasons"]
     assert evidence["gate_audit"]["thread_resolution"] == "not_evaluated"
@@ -930,6 +934,109 @@ def test_review_carrier_precedence_and_fail_closed_states() -> None:
     )
     assert self_review["status"] == "conflicting"
     assert "owner_self_review_not_independent" in self_review["reason_codes"]
+
+
+@pytest.mark.parametrize(
+    ("status", "reason_codes"),
+    [
+        ("malformed", ["machine_review_marker_malformed"]),
+        ("stale", ["machine_review_marker_stale_head"]),
+    ],
+)
+def test_classified_review_source_preserves_primary_failure(
+    status: str, reason_codes: list[str]
+) -> None:
+    """A classified carrier with no carrier must not be reclassified as a direct source."""
+    classified = {
+        "status": status,
+        "carrier": None,
+        "reason_codes": reason_codes,
+        "precedence": None,
+    }
+
+    normalized = receipt_module._normalize_review_source(
+        classified,
+        head_sha=HEAD_SHA,
+        metadata_digest=METADATA_DIGEST,
+    )
+
+    assert normalized["status"] == status
+    assert normalized["carrier"] is None
+    assert normalized["reason_codes"] == reason_codes
+    assert "review_carrier_kind_invalid" not in normalized["reason_codes"]
+
+
+def test_normalize_kind_bearing_source_still_classifies_direct() -> None:
+    """A raw kind-bearing source must use direct validation, not classified preservation."""
+    normalized = receipt_module._normalize_review_source(
+        {
+            "status": "accepted",
+            "kind": "static_report",
+            "carrier": None,
+            "reason_codes": [],
+            "identity": "independent-reviewer",
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "evidence_digest": REVIEW_DIGEST,
+        },
+        head_sha=HEAD_SHA,
+        metadata_digest=METADATA_DIGEST,
+    )
+
+    assert normalized["status"] == "accepted"
+    assert normalized["carrier"] == {
+        "identity": "independent-reviewer",
+        "kind": "static_report",
+        "head_sha": HEAD_SHA,
+        "metadata_digest": METADATA_DIGEST,
+        "evidence_digest": REVIEW_DIGEST,
+        "verdict": "accepted",
+    }
+    assert normalized["reason_codes"] == []
+    assert normalized["precedence"] == 2
+
+
+@pytest.mark.parametrize(
+    ("status", "reason_codes"),
+    [
+        ("malformed", ["machine_review_marker_malformed"]),
+        ("stale", ["review_carrier_stale_head"]),
+    ],
+)
+def test_classify_refed_classified_source_preserves_primary_failure(
+    status: str, reason_codes: list[str]
+) -> None:
+    """A re-fed classified mapping must keep its status, not gain kind_invalid."""
+    classified = classify_implementation_review(
+        {
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "review_source": {
+                "status": status,
+                "carrier": None,
+                "reason_codes": reason_codes,
+            },
+        }
+    )
+
+    assert classified["status"] == status
+    assert classified["carrier"] is None
+    assert classified["reason_codes"] == reason_codes
+    assert "review_carrier_kind_invalid" not in classified["reason_codes"]
+
+
+def test_classify_kind_bearing_source_still_classifies_direct() -> None:
+    """A mapping with a direct-source kind is classified, never preserved blindly."""
+    classified = classify_implementation_review(
+        {
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "review_source": {"kind": "not_a_kind"},
+        }
+    )
+
+    assert classified["status"] == "malformed"
+    assert classified["reason_codes"] == ["review_carrier_kind_invalid"]
 
 
 @pytest.mark.parametrize(

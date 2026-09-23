@@ -16,6 +16,7 @@ import sys
 
 import pytest
 
+from robot_sf.adversarial import samplers as samplers_module
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
@@ -385,3 +386,58 @@ def test_cmaes_sampler_flushes_generation_after_full_population_observed() -> No
     sampler.observe(_evaluation(population[-1], objective_value=0.9))
     assert sampler._observed == []
     assert sampler._in_flight == []
+
+
+class _RecordingCmaEs:
+    """Small CMA-ES stand-in that records the costs passed to ``tell``."""
+
+    def __init__(self, x0, _sigma, _options):
+        self.mean = list(x0)
+        self.popsize = 3
+        self._population = [
+            [0.25, 3.0, 6.0, 3.0, 0.25],
+            [0.75, 3.0, 6.0, 3.0, 0.25],
+            [1.25, 3.0, 6.0, 3.0, 0.25],
+        ]
+        self.told_costs: list[float] | None = None
+
+    def ask(self, _popsize: int) -> list[list[float]]:
+        return self._population
+
+    def stop(self) -> dict:
+        return {}
+
+    def tell(self, _vectors, costs) -> None:
+        self.told_costs = list(costs)
+
+
+def test_cmaes_sampler_tell_orders_maximization_and_invalid_as_worst(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CMA-ES receives negated finite scores and an infinite invalid cost."""
+
+    class _FakeCma:
+        CMAEvolutionStrategy = _RecordingCmaEs
+
+    monkeypatch.setattr(samplers_module, "_import_cma", lambda: _FakeCma)
+    sampler = CmaEsCandidateSampler(_space(), seed=7, popsize=3)
+    candidates = [sampler.sample() for _ in range(3)]
+    for candidate, score in zip(candidates, [1.0, 9.0, None], strict=True):
+        sampler.observe(_evaluation(candidate, objective_value=score))
+    assert sampler._es.told_costs == [-1.0, -9.0, float("inf")]
+
+
+def test_cmaes_sampler_analytic_maximization_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quadratic maximizing objective is represented as a minimizing CMA cost."""
+
+    class _FakeCma:
+        CMAEvolutionStrategy = _RecordingCmaEs
+
+    monkeypatch.setattr(samplers_module, "_import_cma", lambda: _FakeCma)
+    sampler = CmaEsCandidateSampler(_space(), seed=7, popsize=3)
+    candidates = [sampler.sample() for _ in range(3)]
+    scores = [-((candidate.start.x - 0.75) ** 2) for candidate in candidates]
+    for candidate, score in zip(candidates, scores, strict=True):
+        sampler.observe(_evaluation(candidate, objective_value=score))
+    assert sampler._es.told_costs == pytest.approx([-score for score in scores])
+    assert sampler._es.told_costs[1] < sampler._es.told_costs[0]

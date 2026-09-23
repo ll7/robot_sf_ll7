@@ -89,6 +89,11 @@ PLACEHOLDER_DOCSTRING_PATTERNS = [
 def is_negated(text: str, match_start: int) -> bool:
     """Check if the matched word is negated in the preceding context."""
     prefix = text[max(0, match_start - 30) : match_start].lower()
+    # Negation applies only within the same prose clause. Without this boundary,
+    # an unrelated sentence such as ``does not affect runtime. Closes #123``
+    # suppresses the intentional closing declaration merely because ``not`` is
+    # inside the historical 30-character lookback window.
+    prefix = re.split(r"[,.;:!?()\n]|\s[-–—]\s", prefix)[-1]
     negations = [
         r"\bnot\b",
         r"\bno\b",
@@ -117,6 +122,94 @@ def _find_closed_references(text: str) -> list[tuple[str | None, str]]:
         if issue:
             references.append((target_repo, issue))
     return references
+
+
+GITHUB_CLOSING_PARITY_TAG = "[github-closing-parity]"
+
+
+def find_github_parity_closing_mentions(text: str) -> list[tuple[str | None, str, str]]:
+    """Extract raw closing-keyword mentions as GitHub parses them.
+
+    GitHub matches closing keywords (close/fix/resolve + issue reference)
+    without negation awareness, so prose such as ``does not close #123``
+    still registers ``#123`` in ``closingIssuesReferences`` and auto-closes
+    it on merge (observed in issue #9566 via PR #9565). This helper returns
+    ``(target_repo, issue_number, matched_text)`` triples for every raw
+    pattern match, before negation filtering, so callers can flag mentions
+    the repository parser excuses but GitHub honors.
+    """
+    mentions: list[tuple[str | None, str, str]] = []
+    for match in CLOSING_PATTERN.finditer(text):
+        target_repo = match.group("qualified_repo") or match.group("url_repo")
+        issue = match.group("qualified_issue") or match.group("issue") or match.group("url_issue")
+        if issue:
+            mentions.append((target_repo, issue, match.group(0)))
+    return mentions
+
+
+def _canonical_parity_target(target_repo: str | None, local_repo: str) -> str:
+    """Normalize an issue reference target for parity comparison.
+
+    GitHub treats an unqualified reference and a qualified reference for this
+    repository as the same closing target. Foreign qualified and URL targets
+    remain distinct so each potentially closable repository is checked.
+    """
+    if target_repo is None:
+        return local_repo
+    return target_repo.strip().casefold()
+
+
+def check_github_closing_parity(
+    body: str,
+    repo: str,
+    *,
+    commit_messages: str | None = None,
+    commit_messages_checked: bool = False,
+) -> list[str]:
+    """Rule 1b: fail closed when prose closing mentions diverge from repo parsing.
+
+    Any closing-keyword + issue reference that GitHub honors but the
+    negation-aware repository parser excuses (e.g. ``does not close #123``)
+    auto-closes the issue on merge. Intentional ``Closes #123`` references
+    appear in both parses and remain governed by closes-discipline; only the
+    divergent (negated/prose) mentions are flagged here. The author must
+    rephrase without a closing keyword (e.g. ``leaves #123 open``).
+    """
+    blockers: list[str] = []
+    sources = [("PR body", body)]
+    if commit_messages_checked:
+        if not isinstance(commit_messages, str) or not commit_messages.strip():
+            blockers.append(
+                f"BLOCKER: {GITHUB_CLOSING_PARITY_TAG} Could not verify PR commit messages before "
+                "evaluating GitHub closing-keyword parity. The check fails closed; retry when "
+                "GitHub commit metadata is available."
+            )
+        else:
+            sources.append(("PR commit message", commit_messages))
+
+    local_repo = repo.strip().casefold()
+    seen_references: set[tuple[str, str]] = set()
+    for source_name, source_text in sources:
+        excused = {
+            (_canonical_parity_target(target_repo, local_repo), issue)
+            for target_repo, issue in _find_closed_references(source_text)
+        }
+        for target_repo, issue, snippet in find_github_parity_closing_mentions(source_text):
+            reference = (_canonical_parity_target(target_repo, local_repo), issue)
+            if reference in excused:
+                continue
+            if reference in seen_references:
+                continue
+            seen_references.add(reference)
+            target_label = f"{target_repo}#{issue}" if target_repo else f"#{issue}"
+            blockers.append(
+                f"BLOCKER: {GITHUB_CLOSING_PARITY_TAG} {source_name} contains prose closing mention "
+                f"'{snippet.strip()}' targeting {target_label}, which GitHub parses as a closing reference "
+                f"even when negated (see issue #9566: 'does not close #9489' auto-closed the parent). "
+                f"Rephrase without a closing keyword (e.g. 'leaves {target_label} open') so only explicit "
+                f"'Closes {target_label}' declarations close issues."
+            )
+    return blockers
 
 
 def find_closed_issues(body: str, repo: str | None = None) -> list[str]:
@@ -1032,7 +1125,7 @@ def _diff_numstat(base_ref: str) -> str | None:
 
 
 def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, int]:
-    """Parse complete, unambiguous Git numstat rows for budget evidence."""
+    """Parse complete Git numstat rows, including canonical binary-file rows."""
     if not isinstance(numstat_text, str) or not numstat_text.strip():
         raise ValueError("historical numstat is empty or is not text")
 
@@ -1047,9 +1140,10 @@ def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, i
         if len(fields) != 3:
             raise ValueError(f"historical numstat row {line_number} is ambiguous")
         added_text, deleted_text, filename = fields
-        if re.fullmatch(r"[0-9]+", added_text) is None:
+        is_binary = added_text == "-" and deleted_text == "-"
+        if not is_binary and re.fullmatch(r"[0-9]+", added_text) is None:
             raise ValueError(f"historical numstat row {line_number} has invalid additions")
-        if re.fullmatch(r"[0-9]+", deleted_text) is None:
+        if not is_binary and re.fullmatch(r"[0-9]+", deleted_text) is None:
             raise ValueError(f"historical numstat row {line_number} has invalid deletions")
         if not filename.strip() or any(
             unicodedata.category(character) == "Cc" for character in filename
@@ -1058,8 +1152,9 @@ def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, i
         if filename in filenames:
             raise ValueError(f"historical numstat repeats filename {filename!r}")
         filenames.append(filename)
-        added += int(added_text)
-        deleted += int(deleted_text)
+        if not is_binary:
+            added += int(added_text)
+            deleted += int(deleted_text)
     return tuple(filenames), added, deleted
 
 
@@ -1245,7 +1340,7 @@ def run_all_checks(
     added_files: set[str] | None = None,
     historical_numstat: object = _UNSET_NUMSTAT,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 9 contract checks."""
+    """Run all 10 contract checks."""
     blockers = []
     warnings = []
     infos = []
@@ -1263,6 +1358,17 @@ def run_all_checks(
         commit_messages_checked=commit_messages_checked,
     )
     blockers.extend(closes_blockers)
+
+    # 1b. GitHub closing-keyword parity (issue #9566): negated prose closing
+    # mentions auto-close on merge even though the repo parser excuses them.
+    blockers.extend(
+        check_github_closing_parity(
+            body,
+            repo,
+            commit_messages=commit_messages,
+            commit_messages_checked=commit_messages_checked,
+        )
+    )
 
     # 2. Closure declaration
     closure_warnings = check_closure_declaration(title, body)
@@ -1314,32 +1420,35 @@ def build_comment_body(
         f"| 1. Closes-discipline | {get_status_str(any(CLOSES_DISCIPLINE_TAG in b.lower() for b in blockers))} | Demand Refs #N for epic issues and main-CI incidents |"
     )
     rows.append(
-        f"| 2. Closure declaration | {get_status_str(bool(warnings), is_blocker=False)} | Require Closes/Refs for title issues |"
+        f"| 2. GitHub closing-keyword parity | {get_status_str(any(GITHUB_CLOSING_PARITY_TAG in b.lower() for b in blockers))} | Fail closed when GitHub closing references diverge from repository parsing |"
     )
     rows.append(
-        f"| 3. State-refresh-only | {get_status_str(any('state-refresh-only' in b.lower() for b in blockers))} | Reject docs/context state updates |"
+        f"| 3. Closure declaration | {get_status_str(bool(warnings), is_blocker=False)} | Require Closes/Refs for title issues |"
     )
     rows.append(
-        f"| 4. Evidence hygiene | {get_status_str(any('evidence' in b.lower() for b in blockers))} | Checks markers and provenance fields |"
+        f"| 4. State-refresh-only | {get_status_str(any('state-refresh-only' in b.lower() for b in blockers))} | Reject docs/context state updates |"
     )
     rows.append(
-        f"| 5. Evidence writer usage | {get_status_str(any('evidence-writer' in b.lower() for b in blockers))} | Require the shared marked writer path |"
+        f"| 5. Evidence hygiene | {get_status_str(any('evidence' in b.lower() for b in blockers))} | Checks markers and provenance fields |"
     )
     rows.append(
-        f"| 6. Successor discipline | {get_status_str(any('successor' in w.lower() for w in warnings), is_blocker=False)} | Require successor statement on multi-PR issues |"
+        f"| 6. Evidence writer usage | {get_status_str(any('evidence-writer' in b.lower() for b in blockers))} | Require the shared marked writer path |"
+    )
+    rows.append(
+        f"| 7. Successor discipline | {get_status_str(any('successor' in w.lower() for w in warnings), is_blocker=False)} | Require successor statement on multi-PR issues |"
     )
 
     lane_detected = "Added 'cheap-lane' label" in "".join(infos)
     rows.append(
-        f"| 7. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
+        f"| 8. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
     )
     rows.append(
-        f"| 8. Placeholder docstring ratchet | "
+        f"| 9. Placeholder docstring ratchet | "
         f"{get_status_str(any('placeholder docstring' in b.lower() for b in blockers))} | "
         f"Reject NEW TODO/empty docstrings in added diff lines |"
     )
     rows.append(
-        f"| 9. Issue line/file budget | "
+        f"| 10. Issue line/file budget | "
         f"{get_status_str(any('exceeds the budget declared' in b.lower() for b in blockers))} | "
         f"Enforce declared caps unless 'budget-override: <reason>' is present |"
     )

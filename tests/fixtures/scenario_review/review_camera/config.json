@@ -1,0 +1,12 @@
+{
+  "camera_mode": "full_scene",
+  "margin_m": 1.0,
+  "context_retention_m": 5.0,
+  "interpolation_method": "linear",
+  "presentation": {
+    "width": 320,
+    "height": 180,
+    "fps": 10.0,
+    "speed": 1.0
+  }
+}

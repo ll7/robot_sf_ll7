@@ -1,0 +1,149 @@
+schema_version: training_gpu_admission.v2
+packet_id: issue_7849_ppo_rppo_gpu_admission_v2
+issue: 7849
+evidence_tier: preparation-only
+claim_boundary: Preparation-only candidate for the registered matched PPO versus RecurrentPPO
+  comparison. No training, benchmark, performance, safety, paper, or release claim
+  is admitted by this packet.
+execution_authorized: false
+claim_eligible: false
+validation_command: uv run pytest tests/training/test_issue_7849_gpu_admission_packet.py
+  tests/training/test_train_recurrent_ppo_runtime.py -q
+source:
+  repository: ll7/robot_sf_ll7
+  base_ref: origin/main
+  base_commit: d62a4433716910db4135d6308e01ffccfaa26a74
+  inventory: configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml
+  inventory_sha256: af4064ac1365584c23522d2beeb8493ea1c180eca288ddfc42c993a420630c7a
+  binding_rule: Use one clean exact-head public worktree. Rehash the inventory, every
+    listed source/config/scenario/map input, and the resolved environment manifest
+    immediately before route admission. A changed byte invalidates this packet and
+    requires a new review.
+  checksums:
+    configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml: a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa
+    configs/training/ppo/issue_7849_ppo_full_v2.yaml: f83d66ded3a22b2f5e7c2fa8fe894b663769e49586ca42d47cd8f41abfb74103
+    configs/training/ppo/issue_7849_ppo_gate1_canary_v2.yaml: a151561ed17afa59ec870e687a6015aad8718a8847aba33f99aacbd0bd659f24
+    configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml: 7d1de6452d47a88b2b40fec39ced8017cee37fb23bb17138c87b2cef9d4ca865
+    configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v2.yaml: 0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d
+    configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml: 3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482
+    robot_sf/training/imitation_config.py: 54a8b560271f477efc71ec7f2a09dff8a109d5122391af017f3d6a88f74fcc06
+    scripts/training/train_ppo.py: 5e3821b7e8fb5491ce7047ea74c8fbdbcfa12fc4945e76ada0cf32943b1462f3
+    scripts/training/train_recurrent_ppo.py: d8e85301c5263cb08bebcebe3311190191c7831a8d97e2ed2ce6546ee521a1f8
+    robot_sf/benchmark/research_answerability.py: bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3
+    robot_sf/training/recurrent_runtime.py: 42f6a86e14612ca6b9e9cdbe47bf5000b29c03ddba5cd99d809960ad4487d5d8
+    pyproject.toml: 8158dcf2d83f61bcd93a4bae18aa3b32806f14b6b44254b05a868ce8c2c3df21
+    uv.lock: 20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8
+    maps/registry.yaml: 471d863ece35395e09d040610e77e8822f8cdf32a39a5caf88e8b56b1dbdfaad
+    maps/svg_maps/classic_crossing.svg: dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911
+frozen_contract:
+  contract_path: configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml
+  contract_sha256: a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa
+  observation:
+    mode: default_gym
+    keys:
+    - drive_state
+    - rays
+    normalized_identically: true
+  action:
+    policy_command: desired_unicycle_velocity
+    components:
+    - v
+    - omega
+    environment_command: commanded_linear_and_angular_acceleration
+    conversion: canonical_policy_command_to_env_action
+    dt_correct: true
+  reward: route_completion_v2
+  scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  training_seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+  total_timesteps_per_arm_seed: 15000000
+  independent_training_runs: 10
+  total_planned_environment_steps: 150000000
+  held_out_scenario_family_split_feasible: false
+  claim_scope_if_admitted: disjoint-seed in-distribution matching on the frozen scenario
+    matrix
+evaluation_seed_manifest:
+  path: configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml
+  sha256: 3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482
+  evaluation_seeds:
+  - 111
+  - 112
+  - 113
+  disjoint_from_training_seeds: true
+  consumed_by:
+  - scripts/training/train_ppo.py
+  - scripts/training/train_recurrent_ppo.py
+  schedule: cycle_one_seed_block_per_scenario_surface
+arms:
+  ppo:
+    training_config: configs/training/ppo/issue_7849_ppo_full_v2.yaml
+    training_config_sha256: f83d66ded3a22b2f5e7c2fa8fe894b663769e49586ca42d47cd8f41abfb74103
+    runner_script: scripts/training/train_ppo.py
+    runner_script_sha256: 5e3821b7e8fb5491ce7047ea74c8fbdbcfa12fc4945e76ada0cf32943b1462f3
+  recurrent_ppo:
+    training_config: configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml
+    training_config_sha256: 7d1de6452d47a88b2b40fec39ced8017cee37fb23bb17138c87b2cef9d4ca865
+    runner_script: scripts/training/train_recurrent_ppo.py
+    runner_script_sha256: d8e85301c5263cb08bebcebe3311190191c7831a8d97e2ed2ce6546ee521a1f8
+    recurrent_policy: MultiInputLstmPolicy
+exact_source_gate:
+  status: candidate_head_requires_post_merge_rehash
+  source_head: d62a4433716910db4135d6308e01ffccfaa26a74
+  focused_tests:
+  - tests/training/test_issue_7849_gpu_admission_packet.py
+  - tests/training/test_train_recurrent_ppo_runtime.py
+  native_smoke_required: true
+gate_1_canary:
+  status: not_run
+  evidence_tier: diagnostic-only
+  outcome_use: forbidden
+  training_seed: 4014
+  ppo_config: configs/training/ppo/issue_7849_ppo_gate1_canary_v2.yaml
+  ppo_config_sha256: a151561ed17afa59ec870e687a6015aad8718a8847aba33f99aacbd0bd659f24
+  recurrent_config: configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v2.yaml
+  recurrent_config_sha256: 0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d
+  route_boundary: in-allocation command only after private route and CUDA preflight
+  gpu_probe_command: .venv/bin/python -c "import torch; assert torch.cuda.is_available();
+    assert torch.cuda.device_count() >= 1; print(torch.cuda.get_device_name(0))"
+  canary_failure_policy: preserve diagnostic receipt; classify failure; never tune
+    or retry for a favourable outcome
+domain_aware_approval:
+  status: pending_private_authorization_record
+  approved: false
+  exact_campaign_name: issue_7849_ppo_rppo_gpu_admission_v2
+  decision_owner: maintainer with domain authority
+  required_decisions:
+  - recurrence-only question remains answerable under default_gym drive_state and
+    rays
+  - disjoint-seed in-distribution claim boundary is accepted
+  - success_rate selection and collision guardrail remain frozen
+  - five training seeds and no outcome-dependent replacement are accepted
+  - answerability, custody, and failure classifications are accepted
+compute_authorization:
+  status: blocked_live_preflight
+  authorized: false
+  blocking_reasons:
+  - exact post-merge source rehash and dependency smokes are not yet recorded
+  - compute-node CUDA allocation is not yet observed
+  - A100 route/QoS, quota, checkpoint staging, storage, and deadline feasibility are
+    not bound
+  - ten-run completion estimate is not yet pessimistic enough to admit
+execution_boundary:
+  submit_slurm_from_this_issue: false
+  gate1_submission_in_this_pr: false
+  full_training_in_this_pr: false
+  inspect_outcomes_for_tuning: false
+  preserve_failed_or_incomplete_attempts: true
+  scientific_claim: false
+preservation:
+  durable_destination: wandb+external_data_hub
+  require_scheduler_receipts: true
+  require_sha256sums: true
+  require_independent_copy: true
+  require_cold_restore_without_university_auth: true
+  failed_artifacts_remain_diagnostic: true

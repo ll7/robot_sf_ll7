@@ -33,6 +33,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 import tomllib
 from pathlib import Path
@@ -2070,16 +2071,21 @@ def _make_incomplete_profile_worktree(
     return worktree, recovery_log, local_python, env
 
 
+@pytest.mark.parametrize("profile", ["core", "training"])
 def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
-    tmp_path: Path,
+    tmp_path: Path, profile: str
 ) -> None:
     """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
     worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
         tmp_path, recovery_heals=True
     )
 
+    command = [str(RUN_WORKTREE_SHARED_VENV)]
+    if profile != "core":
+        command.extend(["--profile", profile])
+    command.extend(["--", "python", "-V"])
     result = subprocess.run(
-        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        command,
         cwd=worktree,
         env=env,
         capture_output=True,
@@ -2090,11 +2096,11 @@ def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
 
     assert result.returncode == 7, result.stderr
     assert "Attempting one bounded completion sync" in result.stderr
-    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert f"Shared-venv dependency profile '{profile}' completed" in result.stderr
     assert "uv-reached" in result.stderr
     recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
     assert len(recovery_calls) == 1
-    assert "--profile core" in recovery_calls[0]
+    assert f"--profile {profile}" in recovery_calls[0]
     assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
 
 
@@ -4505,6 +4511,136 @@ def test_gh_comment_issue_uses_rest_api(tmp_path: Path) -> None:
     # through GraphQL under quota exhaustion) nor issue any GraphQL call.
     assert all("issue comment" not in call for call in call_lines)
     assert all("graphql" not in call.lower() for call in call_lines)
+
+
+def test_gh_comment_body_file_dev_stdin_materialized(tmp_path: Path) -> None:
+    """Issue #9456: an explicit /dev/stdin body must be accepted and materialized.
+
+    The stream is copied to a temporary file first so the downstream gates and
+    the file upload keep working; the POST must reference the materialized
+    file, never the stdio path itself.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        "printf '%s\\n' '{\"id\": 1, \"number\": 6843}'\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            "/dev/stdin",
+        ],
+        cwd=ROOT,
+        env=env,
+        input="stdio comment body\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert "api --method POST repos/ll7/robot_sf_ll7/issues/6843/comments" in call_lines[1]
+    assert "-F body=@/dev/stdin" not in call_lines[1]
+    body_match = re.search(r"-F body=@(\S+)", call_lines[1])
+    assert body_match is not None, call_lines[1]
+    body_arg = Path(body_match.group(1))
+    materialized = Path(tempfile.gettempdir())
+    assert body_arg != Path("/dev/stdin")
+    assert body_arg == materialized or materialized in body_arg.parents
+    assert body_arg.name
+
+
+def test_gh_comment_body_file_dev_stdin_empty_rejected(tmp_path: Path) -> None:
+    """An empty stdio stream must fail the emptiness gate without any API call."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        '#!/usr/bin/env bash\nset -eu\nprintf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n',
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            "/dev/stdin",
+        ],
+        cwd=ROOT,
+        env=env,
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "comment body is empty" in result.stderr
+    assert not calls.exists()
+
+
+def test_gh_comment_body_file_closed_fd_rejected(tmp_path: Path) -> None:
+    """An unreadable /dev/fd/N path must fail with a read error, not a traceback.
+
+    A closed-fd fake ``gh`` guards the test itself: any code path that reaches
+    the network fails loudly instead of publishing to a real issue.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text("#!/usr/bin/env bash\nset -eu\nexit 1\n", encoding="utf-8")
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            "/dev/fd/3",
+        ],
+        cwd=ROOT,
+        env=env,
+        input="unreadable",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "could not read comment body" in result.stderr
 
 
 def test_gh_comment_issue_fail_closed_on_missing(tmp_path: Path) -> None:

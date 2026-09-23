@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from robot_sf.evidence.writers import write_json
+from scripts.dev.git_common import resolve_repo_root
 
 SCHEMA_VERSION = "issue-5273-s20-launch-packet.v1"
 ISSUE = 5273
@@ -75,7 +76,7 @@ PreflightRunner = Callable[[Path, Path, str], dict[str, Any]]
 
 def _repo_root() -> Path:
     """Return the repository root for this script."""
-    return Path(__file__).resolve().parents[2]
+    return resolve_repo_root()
 
 
 def _sha256(path: Path) -> str:

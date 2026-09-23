@@ -13,6 +13,8 @@ _EXPECTED_EXIT_CODES = {
     "ready": 0,
     "check_failed": 1,
     "missing_optional": 2,
+    "missing_entry_points": 2,
+    "mismatched_entry_points": 2,
 }
 
 
@@ -30,7 +32,10 @@ def validate_report(  # noqa: C901, PLR0912 - explicit fail-closed contract bran
     status = report.get("status")
     status_is_known = isinstance(status, str) and status in _EXPECTED_EXIT_CODES
     if not status_is_known:
-        errors.append("status must be ready, check_failed, or missing_optional")
+        errors.append(
+            "status must be ready, check_failed, missing_optional, "
+            "missing_entry_points, or mismatched_entry_points"
+        )
     reported_exit_code = report.get("exit_code")
     if isinstance(reported_exit_code, bool) or not isinstance(reported_exit_code, int):
         errors.append("exit_code must be an integer")
@@ -64,8 +69,18 @@ def validate_report(  # noqa: C901, PLR0912 - explicit fail-closed contract bran
         errors.append("ready reports cannot contain missing_optional or check_failures")
     elif status == "missing_optional" and (not missing_optional or check_failures):
         errors.append("missing_optional reports require missing modules and no probe failures")
+    elif status in ("missing_entry_points", "mismatched_entry_points"):
+        ep_info = report.get("entry_points")
+        if not isinstance(ep_info, dict):
+            errors.append(f"{status} reports require an entry_points object")
     elif status == "check_failed" and not check_failures:
-        errors.append("check_failed reports require at least one probe failure")
+        ep_status = (
+            report.get("entry_points", {}).get("status")
+            if isinstance(report.get("entry_points"), dict)
+            else None
+        )
+        if ep_status != "check_failed":
+            errors.append("check_failed reports require at least one probe failure")
 
     if errors:
         return 1, errors

@@ -1,0 +1,41 @@
+{
+  "schema_version": "review-bundle.v1",
+  "bundle_id": "srev14-fixture-bundle",
+  "episodes": [
+    {
+      "episode_id": "ep_srev14_001",
+      "references": [
+        {
+          "artifact_id": "trace",
+          "uri": "tests/fixtures/scenario_review/review_report/trace.json",
+          "format": "simulation_trace_export.v1",
+          "schema": "simulation_trace_export.v1",
+          "sha256": "ab2f293e2afb708595e3be55c217dd913a9b476c7ed2bbe778528be313d320c0",
+          "source_commit": "433a8ed65ecc34b52583132f222f98f19d2fce7f",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "world"
+        },
+        {
+          "artifact_id": "annotations",
+          "uri": "tests/fixtures/scenario_review/review_report/annotations.json",
+          "format": "trace_annotation_set.v1",
+          "schema": "trace_annotation_set.v1",
+          "sha256": "f16e436423c89f173cf0d0b7922f77211fbff1110819ede3a839a450486c3609",
+          "source_commit": "433a8ed65ecc34b52583132f222f98f19d2fce7f",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "world"
+        },
+        {
+          "artifact_id": "diagnosis",
+          "uri": "tests/fixtures/scenario_review/review_report/diagnosis.json",
+          "format": "failure_diagnosis.v1",
+          "schema": "failure_diagnosis.v1",
+          "sha256": "473b2adfed71798b17ab6f5f4b6d3f146f30fb6d081b29e13e84dcd55dace93c",
+          "source_commit": "433a8ed65ecc34b52583132f222f98f19d2fce7f",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "world"
+        }
+      ]
+    }
+  ]
+}

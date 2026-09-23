@@ -1,0 +1,10 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev01-smoke",
+  "component_id": "srev01-inspect",
+  "sources": [
+    {"artifact_id": "trace-0000", "uri": "trace-0000.json", "format": "simulation_trace_export.v1"}
+  ],
+  "config": {"preset": "test"},
+  "output_directory": "srev-01-smoke"
+}

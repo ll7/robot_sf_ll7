@@ -21,6 +21,10 @@ from typing import Any
 
 from shapely.geometry import LineString, Polygon
 
+from robot_sf.common.math_utils import (
+    angle_between_unit,
+    point_distance,
+)
 from robot_sf.prediction._contract_utils import (
     require_finite,
     require_non_negative,
@@ -208,19 +212,6 @@ def _point_json(point: Point | None) -> list[float] | None:
     """Serialize an optional point without introducing tuples into JSON receipts."""
 
     return None if point is None else [point[0], point[1]]
-
-
-def _distance(left: Point, right: Point) -> float:
-    """Return Euclidean point distance."""
-
-    return math.hypot(left[0] - right[0], left[1] - right[1])
-
-
-def _angle_between(left: Point, right: Point) -> float:
-    """Return the unsigned angle between two unit directions."""
-
-    dot = max(-1.0, min(1.0, left[0] * right[0] + left[1] * right[1]))
-    return math.acos(dot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -678,10 +669,10 @@ def _can_merge(left: _PreparedCandidate, right: _PreparedCandidate, tolerance: f
     if left.position is None or right.position is None:
         if left.position is not right.position:
             return False
-    elif _distance(left.position, right.position) > tolerance:
+    elif point_distance(left.position, right.position) > tolerance:
         return False
     if left.direction is not None and right.direction is not None:
-        if _angle_between(left.direction, right.direction) > 1e-6:
+        if angle_between_unit(left.direction, right.direction) > 1e-6:
             return False
     return True
 
@@ -770,7 +761,7 @@ def _merge_pair(left: _PreparedCandidate, right: _PreparedCandidate) -> _Prepare
 def _path_length(path: Sequence[Point]) -> float:
     """Return polyline length."""
 
-    return sum(_distance(left, right) for left, right in pairwise(path))
+    return sum(point_distance(left, right) for left, right in pairwise(path))
 
 
 def _path_tangent(path: Sequence[Point], lookahead_m: float) -> Point | None:
@@ -893,7 +884,7 @@ def _prepared_from_record(
     elif (
         path
         and position is not None
-        and _distance(path[-1], position) > config.deduplication_tolerance_m
+        and point_distance(path[-1], position) > config.deduplication_tolerance_m
     ):
         path = (*path, position)
     if path and _path_intersects_obstacle(path, obstacles, config.path_clearance_m):

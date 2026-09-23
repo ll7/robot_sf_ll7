@@ -1234,6 +1234,92 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "exit 0" in workflow
 
 
+def test_workflow_evaluates_rapid_label_promotion_events() -> None:
+    """Rapid label promotion (adding merge-ready then removing merge-if-ci-green) must not skip.
+
+    Issue #9511: When promote_merge_if_ci_green adds merge-ready and quickly removes
+    merge-if-ci-green, the subsequent 'unlabeled' event cancels in-flight runs in the
+    same concurrency group. The job 'if' must evaluate to true on that unlabeled event
+    because merge-ready remains present on the PR, preventing the gate check from being
+    skipped.
+    """
+    workflow_path = Path(".github/workflows/merge-queue-gate.yml")
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    assert "github.event.label.name == 'merge-ready' ||" in workflow
+    assert "contains(github.event.pull_request.labels.*.name, 'merge-ready')" in workflow
+
+    def evaluate_job_if(
+        event_name: str,
+        action: str | None = None,
+        event_label_name: str | None = None,
+        pr_label_names: list[str] | None = None,
+    ) -> bool:
+        if event_name in {"merge_group", "workflow_dispatch"}:
+            return True
+        if event_name == "pull_request":
+            pr_labels = pr_label_names or []
+            return (event_label_name == "merge-ready") or ("merge-ready" in pr_labels)
+        return False
+
+    # 1. Rapid promotion sequence:
+    # First event: labeled merge-ready
+    assert (
+        evaluate_job_if(
+            "pull_request",
+            action="labeled",
+            event_label_name="merge-ready",
+            pr_label_names=["merge-ready", "merge-if-ci-green"],
+        )
+        is True
+    )
+    # Second event: unlabeled merge-if-ci-green (merge-ready remains on PR)
+    # This was previously skipped, causing issue #9511. Now it runs.
+    assert (
+        evaluate_job_if(
+            "pull_request",
+            action="unlabeled",
+            event_label_name="merge-if-ci-green",
+            pr_label_names=["merge-ready"],
+        )
+        is True
+    )
+
+    # 2. Demotion: unlabeled merge-ready (merge-ready removed from PR)
+    # Must still run advisory audit to record loss of readiness
+    assert (
+        evaluate_job_if(
+            "pull_request", action="unlabeled", event_label_name="merge-ready", pr_label_names=[]
+        )
+        is True
+    )
+
+    # 3. Synchronize on merge-ready PR
+    assert (
+        evaluate_job_if("pull_request", action="synchronize", pr_label_names=["merge-ready"])
+        is True
+    )
+
+    # 4. Synchronize on non-merge-ready PR: skipped
+    assert (
+        evaluate_job_if("pull_request", action="synchronize", pr_label_names=["feature"]) is False
+    )
+
+    # 5. Unrelated label churn on non-merge-ready PR: skipped
+    assert (
+        evaluate_job_if(
+            "pull_request", action="labeled", event_label_name="bug", pr_label_names=["bug"]
+        )
+        is False
+    )
+    assert (
+        evaluate_job_if(
+            "pull_request", action="unlabeled", event_label_name="bug", pr_label_names=[]
+        )
+        is False
+    )
+
+
 def test_docs_only_bypass_matches_ci_workflow_path_filters() -> None:
     """The gate's exemption cannot drift from the workflow that skips CI."""
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")

@@ -1,0 +1,22 @@
+[
+  {
+    "row_id": "sat-ambiguous",
+    "planner_id": "orca_residual",
+    "sim_step": 11,
+    "sim_time_s": 1.1,
+    "observation_source_time_s": 1.1,
+    "planner_available_time_s": 1.15,
+    "logging_time_s": 1.2,
+    "observation_version": 4,
+    "consumed_observation_version": 4,
+    "candidates": null,
+    "cost_scale": null,
+    "cost_units": null,
+    "commanded_control": [2.0, 0.0],
+    "executed_control": [1.2, 0.0],
+    "saturation_flag": null,
+    "collision_event": false,
+    "unsupported_narrative": "the planner chose the wrong maneuver",
+    "provenance": {"artifact_digest": "digest-sat-ambiguous", "source_row": "controller_saturation/ambiguous.json#0"}
+  }
+]

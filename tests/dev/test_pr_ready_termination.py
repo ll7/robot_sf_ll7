@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from typing import TYPE_CHECKING
@@ -67,6 +68,7 @@ def test_write_receipt_is_private_and_does_not_overwrite(tmp_path: Path) -> None
 
     assert write_receipt(receipt, output) == output
     assert output.stat().st_mode & 0o777 == 0o600
+    assert json.loads(output.read_bytes()) == receipt
     with pytest.raises(ValueError, match="refusing to overwrite"):
         write_receipt(receipt, output)
 

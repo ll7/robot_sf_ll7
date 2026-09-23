@@ -403,6 +403,344 @@ def test_publication_failure_is_reported_without_success(tmp_path: Path) -> None
     mock_post.assert_called_once()
 
 
+def test_publication_failure_reports_structured_endpoint_evidence(tmp_path: Path) -> None:
+    """A rejected review POST names the endpoint, status, and explicit fallback handoff."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(
+                returncode=1,
+                stderr="gh: Validation Failed (HTTP 422)",
+                stdout='{"message":"Validation Failed","errors":[]}',
+            ),
+        ) as mock_post,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert result["error_class"] == "review_publication_failed"
+    assert result["endpoint"] == "repos/ll7/robot_sf_ll7/pulls/7571/reviews"
+    assert result["http_status"] == 422
+    assert result["expected_head_sha"] == HEAD_SHA
+    assert "Validation Failed" in result["response_body_excerpt"]
+    assert "HTTP 422" in result["stderr_excerpt"]
+    assert result["fallback_recommended"] is True
+    assert result["fallback"] == {
+        "kind": "top_level_comment",
+        "endpoint": "repos/ll7/robot_sf_ll7/issues/7571/comments",
+        "event": "COMMENT",
+        "automatic": False,
+        "authoritative_for_review": False,
+        "idempotency_marker": "<!-- exact-head-review-fallback:v1 -->",
+        "expected_head_sha": HEAD_SHA,
+        "cli_flag": "--fallback-comment",
+    }
+    mock_post.assert_called_once()
+
+
+def test_empty_review_response_is_classified_unavailable(tmp_path: Path) -> None:
+    """An empty 200 response still names the endpoint and recommends the fallback."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(stdout=""),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert result["http_status"] is None
+    assert result["fallback_recommended"] is True
+
+
+def test_permission_failure_does_not_recommend_fallback(tmp_path: Path) -> None:
+    """A 403 is an authorization failure, not an endpoint-availability fallback case."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(returncode=1, stderr="gh: Forbidden (HTTP 403)"),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert result["http_status"] == 403
+    assert result["fallback_recommended"] is False
+
+
+def test_validation_failure_does_not_recommend_fallback(tmp_path: Path) -> None:
+    """A 422 with actionable validation errors is not endpoint unavailability."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(
+                returncode=1,
+                stderr="gh: Validation Failed (HTTP 422)",
+                stdout=json.dumps(
+                    {"message": "Validation Failed", "errors": [{"code": "missing"}]}
+                ),
+            ),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert result["error_class"] == "review_validation_failed"
+    assert result["fallback_recommended"] is False
+
+
+def test_fallback_comment_is_explicit_and_marked(tmp_path: Path) -> None:
+    """Only --fallback-comment records the fallback, and it carries the head marker."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            side_effect=[
+                _proc(returncode=1, stderr="gh: Server Error (HTTP 502)"),
+                _proc(stdout=json.dumps({"id": 4242, "html_url": "https://example.test/c/4242"})),
+            ],
+        ) as mock_post,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            return_value=_proc(stdout="[]"),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["status"] == "error"
+    assert result["fallback_result"]["status"] == "review_fallback_comment_recorded"
+    assert result["fallback_result"]["authoritative_for_review"] is False
+    assert result["fallback_result"]["duplicate_prevented"] is False
+    assert result["fallback_result"]["comment_id"] == 4242
+    assert mock_post.call_count == 2
+    endpoint, payload = mock_post.call_args.args
+    assert endpoint == "repos/ll7/robot_sf_ll7/issues/7571/comments"
+    assert payload["body"].startswith(f"<!-- exact-head-review-fallback:v1 --> head: {HEAD_SHA}")
+    assert "Exact-head review evidence" in payload["body"]
+    assert "event" not in payload
+
+
+def test_fallback_comment_is_idempotent_per_head(tmp_path: Path) -> None:
+    """An existing marked fallback for the same head is reused without a new comment."""
+    body_file = _write_body(tmp_path)
+    existing = json.dumps(
+        [
+            {
+                "id": 99,
+                "html_url": "https://example.test/c/99",
+                "body": f"<!-- exact-head-review-fallback:v1 --> head: {HEAD_SHA}\n\nold",
+            }
+        ]
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(returncode=1, stderr="gh: Validation Failed (HTTP 422)"),
+        ) as mock_post,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            return_value=_proc(stdout=existing),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["fallback_result"]["status"] == "review_fallback_comment_recorded"
+    assert result["fallback_result"]["duplicate_prevented"] is True
+    assert result["fallback_result"]["comment_id"] == 99
+    mock_post.assert_called_once()
+
+
+def test_fallback_comment_searches_all_comment_pages(tmp_path: Path) -> None:
+    """A marker on a later page prevents a duplicate fallback comment."""
+    body_file = _write_body(tmp_path)
+    first_page = [{"id": index, "body": "ordinary comment"} for index in range(100)]
+    second_page = json.dumps(
+        [
+            {
+                "id": 999,
+                "html_url": "https://example.test/c/999",
+                "body": f"<!-- exact-head-review-fallback:v1 --> head: {HEAD_SHA}\n\nold",
+            }
+        ]
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(returncode=1, stderr="gh: Server Error (HTTP 502)"),
+        ) as mock_post,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            side_effect=[_proc(stdout=json.dumps(first_page)), _proc(stdout=second_page)],
+        ) as mock_comments,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["fallback_result"]["duplicate_prevented"] is True
+    assert result["fallback_result"]["comment_id"] == 999
+    assert [call.args[0] for call in mock_comments.call_args_list] == [
+        "repos/ll7/robot_sf_ll7/issues/7571/comments?per_page=100&page=1",
+        "repos/ll7/robot_sf_ll7/issues/7571/comments?per_page=100&page=2",
+    ]
+    mock_post.assert_called_once()
+
+
+def test_unknown_fallback_response_fails_closed(tmp_path: Path) -> None:
+    """A comment POST without a numeric identity is not treated as recorded."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            side_effect=[
+                _proc(returncode=1, stderr="gh: Server Error (HTTP 503)"),
+                _proc(stdout=json.dumps({"message": "created"})),
+            ],
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            return_value=_proc(stdout="[]"),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["fallback_result"] == {
+        "status": "error",
+        "error": "fallback comment response had no numeric id",
+        "error_class": "fallback_response_unrecognized",
+    }
+
+
+def test_fallback_comment_read_failure_fails_closed(tmp_path: Path) -> None:
+    """An unreadable comment list blocks the fallback instead of risking a duplicate."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(returncode=1, stderr="gh: Validation Failed (HTTP 422)"),
+        ) as mock_post,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            return_value=_proc(returncode=1, stderr="gh: Server Error (HTTP 502)"),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["fallback_result"]["error_class"] == "fallback_read_failed"
+    mock_post.assert_called_once()
+
+
+def test_cli_fallback_flag_maps_to_exit_two(tmp_path: Path, capsys) -> None:
+    """The CLI records the fallback and exits 2, never reporting a published review."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            side_effect=[
+                _proc(returncode=1, stderr="gh: Server Error (HTTP 503)"),
+                _proc(stdout=json.dumps({"id": 7, "html_url": "https://example.test/c/7"})),
+            ],
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            return_value=_proc(stdout="[]"),
+        ),
+    ):
+        exit_code = main(
+            [
+                "7571",
+                "--repo",
+                "ll7/robot_sf_ll7",
+                "--body-file",
+                str(body_file),
+                "--expected-head-sha",
+                HEAD_SHA,
+                "--fallback-comment",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    payload = json.loads(captured.err)
+    assert payload["status"] == "error"
+    assert payload["fallback_result"]["status"] == "review_fallback_comment_recorded"
+
+
+def test_cli_reports_structured_failure_without_fallback(tmp_path: Path, capsys) -> None:
+    """Without the flag the CLI still exits 1 and never posts a comment."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(returncode=1, stderr="gh: Validation Failed (HTTP 422)"),
+        ) as mock_post,
+    ):
+        exit_code = main(
+            [
+                "7571",
+                "--repo",
+                "ll7/robot_sf_ll7",
+                "--body-file",
+                str(body_file),
+                "--expected-head-sha",
+                HEAD_SHA,
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert payload["http_status"] == 422
+    assert payload["fallback_recommended"] is True
+    mock_post.assert_called_once()
+
+
 def test_actor_read_failure_skips_guard_and_review_post(tmp_path: Path) -> None:
     """An uncertain authenticated actor cannot authorize a requested-changes write."""
     body_file = _write_body(tmp_path)

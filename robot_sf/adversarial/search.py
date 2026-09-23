@@ -7,12 +7,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.adversarial.attribution import (
     FailureAttribution,
     attribution_from_episode_record,
     attribution_from_error,
 )
 from robot_sf.adversarial.bundle import (
+    compute_effective_scenario_hash,
     write_candidate_inputs,
     write_json,
     write_search_manifest,
@@ -214,6 +217,24 @@ def _default_certifier(
     )
 
 
+def _effective_hash_for_bundle(scenario_yaml_path: Path, candidate_dir: Path) -> str | None:
+    """Bind a candidate bundle to its runtime-effective scenario hash, if readable.
+
+    Returns ``None`` when the written inputs cannot be loaded (fail closed: the
+    eligibility receipt records ``effective_hash_unbound`` instead of guessing).
+    """
+    try:
+        scenario_payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
+        route_path = candidate_dir / "route_overrides.yaml"
+        route_payload = (
+            yaml.safe_load(route_path.read_text(encoding="utf-8")) if route_path.is_file() else {}
+        )
+        scenario = (scenario_payload or {}).get("scenarios", [{}])[0]
+        return compute_effective_scenario_hash(scenario, route_payload or {})
+    except Exception:  # noqa: BLE001 - unreadable inputs mean unbound hash, never a crash
+        return None
+
+
 def _invalid_evaluation(
     *,
     candidate: CandidateSpec,
@@ -333,7 +354,13 @@ def run_adversarial_search(
 
         try:
             evaluation = active_evaluator(config, candidate, scenario_yaml_path, candidate_dir)
-            evaluation = replace(evaluation, certification_status=certification_status)
+            evaluation = replace(
+                evaluation,
+                certification_status=certification_status,
+                effective_scenario_hash=_effective_hash_for_bundle(
+                    scenario_yaml_path, candidate_dir
+                ),
+            )
             score = objective(evaluation)
             evaluation = evaluation.with_objective(score)
         except Exception as exc:  # noqa: BLE001 - evaluator failure records candidate attribution
@@ -462,7 +489,13 @@ def production_candidate_evaluator(
         objective = get_objective(config.objective)
         try:
             evaluation = active_evaluator(config, candidate, scenario_yaml_path, candidate_dir)
-            evaluation = replace(evaluation, certification_status=certification_status)
+            evaluation = replace(
+                evaluation,
+                certification_status=certification_status,
+                effective_scenario_hash=_effective_hash_for_bundle(
+                    scenario_yaml_path, candidate_dir
+                ),
+            )
             score = objective(evaluation)
             return evaluation.with_objective(score)
         except Exception as exc:  # noqa: BLE001 - evaluator failure records candidate attribution

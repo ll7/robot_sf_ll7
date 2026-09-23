@@ -346,6 +346,17 @@ def _claim(*, claimed: bool = False, ok: bool = True) -> dict[str, object]:
     }
 
 
+def _coverage(*, covering: list[int] | None = None, ok: bool = True) -> dict[str, object]:
+    """Return one canonical open-PR coverage snapshot fixture."""
+    return {
+        "ok": ok,
+        "covering_prs": covering or [],
+        "truncated": False,
+        "source": "graphql",
+        "error": None if ok else "open PR snapshot failed",
+    }
+
+
 def test_complete_ready_issue_is_admitted() -> None:
     report = evaluate_issue(_issue(), _claim())
 
@@ -689,6 +700,10 @@ def test_live_issue_report_applies_explicit_dependency_packet_gate(tmp_path: Pat
         patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
         patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
         patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(),
+        ),
+        patch(
             "scripts.dev.issue_implementability.issue_dependency_packet.resolve_packet",
             return_value=dependency_evaluation,
         ) as resolve_packet,
@@ -714,6 +729,10 @@ def test_live_issue_report_can_evaluate_prospective_ready_without_mutating_issue
     with (
         patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
         patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(),
+        ),
     ):
         report = live_issue_report(
             7611,
@@ -734,6 +753,10 @@ def test_live_issue_report_does_not_override_existing_state_with_prospective_rea
     with (
         patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
         patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(),
+        ),
     ):
         report = live_issue_report(
             7611,
@@ -745,6 +768,62 @@ def test_live_issue_report_does_not_override_existing_state_with_prospective_rea
     assert report["classification"] == "state_conflict"
     assert report["admission_reason"] == "state_label_conflict"
     assert issue["labels"] == ["state:blocked"]
+
+
+def test_live_issue_report_blocks_reference_only_open_pr_coverage() -> None:
+    """An open PR that only references the issue refuses a duplicate claim (#9208)."""
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=_issue()),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(covering=[8450]),
+        ),
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin")
+
+    assert report["classification"] == "covering_pr_open"
+    assert report["admission_reason"] == "covering_pr_open"
+    assert report["ready"] is False
+    assert report["write_allowed"] is False
+    assert "#8450" in " ".join(report["reasons"])
+    assert report["open_pr_coverage"]["covering_prs"] == [8450]
+
+
+def test_live_issue_report_ignores_closed_covering_pr() -> None:
+    """Closed coverage is not an open covering PR and keeps the issue admissible."""
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=_issue()),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(covering=[]),
+        ),
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin")
+
+    assert report["classification"] == "ready"
+    assert report["ready"] is True
+    assert report["write_allowed"] is True
+    assert report["open_pr_coverage"]["covering_prs"] == []
+
+
+def test_live_issue_report_fails_closed_when_coverage_snapshot_is_unavailable() -> None:
+    """An unreadable open-PR snapshot must not silently admit a possibly covered issue."""
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=_issue()),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(ok=False),
+        ),
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin")
+
+    assert report["classification"] == "error"
+    assert report["admission_reason"] == "coverage_unavailable"
+    assert report["ready"] is False
+    assert report["write_allowed"] is False
 
 
 def test_decision_heading_is_ignored_after_ruling() -> None:
@@ -849,11 +928,14 @@ def test_unknown_verification_variant_still_rejected() -> None:
     "heading",
     [
         "Inputs / Affected Files",
+        "Inputs / Affected Surfaces",
         "Inputs and Affected Files",
         "Inputs / Context",
         "Inputs / Predecessor",
         "Inputs / Predecessors",
         "Inputs / Prerequisites",
+        "Inputs and Canonical Owners",
+        "Inputs and Existing Owners",
     ],
 )
 def test_compound_inputs_heading_aliases_satisfy_inputs(heading: str) -> None:
@@ -866,11 +948,22 @@ def test_compound_inputs_heading_aliases_satisfy_inputs(heading: str) -> None:
     assert "inputs" not in report["contract"]["missing_fields"]
 
 
+def test_bare_acceptance_heading_satisfies_acceptance() -> None:
+    """Issue #9462: a bare 'Acceptance' heading satisfies the acceptance field."""
+    body = COMPLETE_BODY.replace("## Acceptance Criteria", "## Acceptance")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["contract"]["fields"]["acceptance"]["present"] is True
+    assert "acceptance" not in report["contract"]["missing_fields"]
+
+
 @pytest.mark.parametrize(
     "heading",
     [
         "Scope and Non-goals",
         "Scope / Non-goals",
+        "Scope and Implementation Plan",
     ],
 )
 def test_compound_scope_heading_aliases_satisfy_scope(heading: str) -> None:
@@ -1128,3 +1221,327 @@ def test_main_preflight_body_mode_is_zero_write(tmp_path: Path, capsys) -> None:
         "acceptance",
         "verification",
     ]
+
+
+NATURAL_ACCEPTANCE_BODY = """## Goal / Problem
+
+Fix the stale running label.
+
+## Context
+
+Run the gate without arguments.
+
+## Scope
+
+- In scope: the hint text.
+
+## Acceptance
+
+- A documented roundtrip exists in `--help`.
+- Focused helper tests pass.
+
+## Affected Files
+
+- `scripts/dev/check_prepublication_state.py`.
+"""
+
+
+def _verifiable_body(body: str) -> str:
+    """Replace the context section with a verification section."""
+    return body.replace(
+        "## Context\n\nRun the gate without arguments.",
+        "## Verification\n\nRun the gate without arguments; expect the hint.",
+    )
+
+
+def test_natural_acceptance_heading_matches_contract() -> None:
+    """Issue #9501: a natural `## Acceptance` heading satisfies acceptance."""
+    contract = issue_implementability.inspect_contract(NATURAL_ACCEPTANCE_BODY)
+
+    assert contract["fields"]["acceptance"]["matched_headings"] == ["acceptance"]
+    assert contract["missing_fields"] == ["verification"]
+
+
+def test_needs_spec_reason_surfaces_closest_alias() -> None:
+    """Issue #9501: admission failures name the closest heading suggestion."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Input contract"
+    )
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert report["reasons"] == [
+        "missing implementation-contract fields: inputs; closest heading suggestions: "
+        "'input contract' resembles field 'inputs' (alias 'inputs')"
+    ]
+
+
+def test_needs_spec_reason_without_suggestion_has_no_suffix() -> None:
+    """Headings with no close alias keep the historical reason text."""
+    report = evaluate_issue(_issue(body=NATURAL_ACCEPTANCE_BODY), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert report["reasons"] == ["missing implementation-contract fields: verification"]
+
+
+def test_build_repair_packet_renames_unambiguous_heading() -> None:
+    """The #9535 heading shape repairs to a complete contract."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is True
+    assert packet["missing_fields"] == ["inputs"]
+    assert packet["renames"] == [
+        {"field": "inputs", "old_heading": "inputs and files", "new_heading": "inputs"}
+    ]
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+    assert issue_implementability.inspect_contract(repaired)["complete"] is True
+    assert (
+        packet["expected_body_sha256"]
+        == issue_implementability.inspect_contract(repaired)["body_sha256"]
+    )
+
+
+def test_repaired_body_admits_with_ready_label() -> None:
+    """A repaired deterministic case passes the contract gate for readiness."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+    report = evaluate_issue(_issue(body=repaired), _claim())
+
+    assert report["classification"] == "ready"
+
+
+def test_build_repair_packet_refuses_complete_body() -> None:
+    """Complete bodies produce no packet instead of a no-op rename."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace("## Affected Files", "## Inputs")
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is False
+    assert packet["reason"] == "contract complete; no repair needed"
+
+
+def test_build_repair_packet_refuses_prefix_only_heading() -> None:
+    """A leading-token match that is not a known synonym refuses repair."""
+    body = (
+        "## Goal / Problem\n\nFix x.\n\n"
+        "## Inputs appendix\n\n- one file\n\n"
+        "## Scope\n\n- bounded\n\n"
+        "## Acceptance\n\n- done\n\n"
+        "## Verification\n\n- checked\n"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is False
+    assert "no exact heading equivalent" in packet["reason"]
+
+
+def test_build_repair_packet_refuses_ambiguous_tie() -> None:
+    """Two eligible equivalent headings for one field refuse instead of choosing."""
+    body = (
+        "## Goal / Problem\n\nFix x.\n\n"
+        "## Inputs and files\n\n- one file\n\n"
+        "## Inputs and paths\n\n- another file\n\n"
+        "## Scope\n\n- bounded\n\n"
+        "## Acceptance\n\n- done\n\n"
+        "## Verification\n\n- checked\n"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    assert packet["repairable"] is False
+    assert "ambiguous" in packet["reason"]
+
+
+def test_repaired_body_preserves_non_contract_prose() -> None:
+    """Only renamed heading lines change; all other bytes are preserved."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+
+    old_lines = body.splitlines()
+    new_lines = repaired.splitlines()
+    assert len(old_lines) == len(new_lines)
+    changed = [(old, new) for old, new in zip(old_lines, new_lines, strict=True) if old != new]
+    assert len(changed) == 1
+    assert changed[0][0] == "## Inputs and files"
+    assert changed[0][1] == "## inputs"
+
+
+def test_repair_packet_is_idempotent_on_repaired_body() -> None:
+    """Planning on an already-repaired body reports completeness, not a packet."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+    repaired = issue_implementability.apply_repair_packet(body, packet)
+
+    second = issue_implementability.build_repair_packet(repaired)
+
+    assert second["repairable"] is False
+    assert second["reason"] == "contract complete; no repair needed"
+
+
+def test_repair_packet_records_read_only_label_snapshot() -> None:
+    """The packet carries labels as evidence without authorizing changes."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(
+        body, labels=["state:ready", "type:workflow"]
+    )
+
+    assert packet["labels"] == ["state:ready", "type:workflow"]
+    assert packet["repairable"] is True
+
+
+def test_build_repair_packet_refuses_invented_content() -> None:
+    """Missing verification with only a low-score Reproduction refuses."""
+    packet = issue_implementability.build_repair_packet(NATURAL_ACCEPTANCE_BODY)
+
+    assert packet["repairable"] is False
+    assert "invented" in packet["reason"]
+
+
+def test_apply_repair_packet_rejects_body_drift() -> None:
+    """A body changed since planning cannot consume the packet."""
+    body = _verifiable_body(NATURAL_ACCEPTANCE_BODY).replace(
+        "## Affected Files", "## Inputs and files"
+    )
+    packet = issue_implementability.build_repair_packet(body)
+
+    with pytest.raises(ValueError, match="drifted"):
+        issue_implementability.apply_repair_packet(body + "\nExtra line.\n", packet)
+
+
+def test_apply_repair_packet_rejects_duplicate_heading_line() -> None:
+    """A twice-present heading refuses instead of renaming both occurrences."""
+    body = (
+        "## Goal / Problem\n\nFix x.\n\n"
+        "## Inputs and files\n\n- one file\n\n"
+        "## Inputs and files\n\n- another file\n\n"
+        "## Scope\n\n- bounded\n\n"
+        "## Acceptance\n\n- done\n\n"
+        "## Verification\n\n- checked\n"
+    )
+    packet = {
+        "schema": issue_implementability.REPAIR_SCHEMA,
+        "body_sha256": issue_implementability.inspect_contract(body)["body_sha256"],
+        "missing_fields": ["inputs"],
+        "repairable": True,
+        "reason": "",
+        "renames": [
+            {
+                "field": "inputs",
+                "old_heading": "inputs and files",
+                "new_heading": "inputs",
+            }
+        ],
+        "expected_body_sha256": "0" * 64,
+    }
+
+    with pytest.raises(ValueError, match="exactly one"):
+        issue_implementability.apply_repair_packet(body, packet)
+
+
+def test_natural_acceptance_and_reproduction_heading_aliases_satisfy_contract() -> None:
+    """Issue #9501: natural Acceptance and Reproduction headings satisfy contract fields."""
+    body = (
+        "## Goal / Problem\n\nFriction in the contract matcher.\n\n"
+        "## Scope\n\n- in scope: alias additions\n- out of scope: contract changes\n\n"
+        "## Affected Files\n\n- scripts/dev/issue_implementability.py\n\n"
+        "## Acceptance\n\n- bullet 1\n- bullet 2\n\n"
+        "## Reproduction\n\nRun the admission probe on the fixture.\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is True
+    assert inspection["missing_fields"] == []
+    assert inspection["fields"]["acceptance"]["matched_headings"] == ["acceptance"]
+    assert inspection["fields"]["verification"]["matched_headings"] == ["reproduction"]
+
+    issue = {
+        "number": 9501,
+        "title": "friction fix",
+        "body": body,
+        "state": "OPEN",
+        "labels": ["state:ready"],
+        "assignees": [],
+    }
+    report = evaluate_issue(issue, {"ok": True, "claimed": False})
+    assert report["classification"] == "ready"
+    assert report["ready"] is True
+    assert report["contract"]["complete"] is True
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Acceptance and Verification",
+        "## Acceptance & Verification",
+        "## Acceptance / Verification",
+        "## Acceptance Criteria and Verification",
+        "## Acceptance Criteria / Validation",
+    ],
+)
+def test_compound_acceptance_and_verification_headings(heading: str) -> None:
+    """Compound acceptance and verification headings satisfy both contract fields."""
+    body = (
+        "## Goal / Problem\n\nFix friction.\n\n"
+        "## Scope\n\nOnly this module.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        f"{heading}\n\n- tests pass and criteria met\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is True
+    assert inspection["missing_fields"] == []
+    assert inspection["fields"]["acceptance"]["present"] is True
+    assert inspection["fields"]["verification"]["present"] is True
+
+
+def test_vague_body_without_acceptance_is_still_rejected() -> None:
+    """A body without an acceptance section is still rejected fail-closed."""
+    body = (
+        "## Goal / Problem\n\nFix friction.\n\n"
+        "## Scope\n\nOnly this module.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        "## Verification\n\n- run tests\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is False
+    assert inspection["missing_fields"] == ["acceptance"]
+    assert inspection["fields"]["acceptance"]["present"] is False
+
+    issue = {
+        "number": 1234,
+        "title": "vague issue",
+        "body": body,
+        "state": "OPEN",
+        "labels": ["state:ready"],
+        "assignees": [],
+    }
+    report = evaluate_issue(issue, {"ok": True, "claimed": False})
+    assert report["classification"] == "needs_spec"
+    assert report["ready"] is False
+    assert "acceptance" in report["contract"]["missing_fields"]
+
+
+def test_inspect_contract_surfaces_heading_suggestions_on_missing_fields() -> None:
+    """inspect_contract includes heading_suggestions when fields are missing."""
+    body = (
+        "## Goal / Problem\n\nFix friction.\n\n"
+        "## Scope\n\nOnly this module.\n\n"
+        "## Input contract\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- tests pass\n\n"
+        "## Verification\n\n- run tests\n"
+    )
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is False
+    assert inspection["missing_fields"] == ["inputs"]
+    assert "heading_suggestions" in inspection
+    assert "input contract" in inspection["heading_suggestions"]
+    assert inspection["heading_suggestions"]["input contract"]["field"] == "inputs"

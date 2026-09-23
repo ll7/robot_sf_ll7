@@ -6,12 +6,22 @@ When a caller has already computed the exact title/body metadata digest, pass
 before the review POST. A mismatched ``pr-metadata`` carrier is an error
 (CLI exit 1), while a mismatch against the live PR title/body metadata is a
 safe stale-state skip (CLI exit 2).
+
+A rejected review POST returns structured evidence instead of an opaque error:
+the endpoint, HTTP status, bounded stderr/response excerpts, and an explicit
+``fallback`` handoff describing the idempotent top-level comment route. That
+route runs only with ``--fallback-comment`` (never automatically), marks the
+comment with ``REVIEW_FALLBACK_MARKER`` plus the expected head so a repeat run
+cannot duplicate it, and reports ``authoritative_for_review: false`` because a
+comment is not a formal review event. An unavailable endpoint exits 2 once the
+fallback is recorded; a real review publication exits 0.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,6 +31,7 @@ if __package__ in {None, ""}:
     # ahead of any competing checkout or editable installation on sys.path.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.dev._gh_rest import gh_api_comments_get as _gh_api_comments_get
 from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
@@ -32,7 +43,14 @@ from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lo
 REVIEW_EVENTS = ("COMMENT", "APPROVE", "REQUEST_CHANGES")
 SELF_AUTHORED_REVIEW_STATUS = "review_skipped_self_authored"
 METADATA_DIGEST_STATUS = "review_skipped_stale_state"
+REVIEW_FALLBACK_STATUS = "review_fallback_comment_recorded"
 FULL_METADATA_DIGEST_LENGTH = 64
+REVIEW_FALLBACK_MARKER = "<!-- exact-head-review-fallback:v1 -->"
+REVIEW_ENDPOINT_FAILURE_STATUSES = frozenset({422, 500, 502, 503, 504})
+REVIEW_AUTHORIZATION_STATUSES = frozenset({401, 403})
+_EXCERPT_LIMIT = 400
+_COMMENTS_PAGE_SIZE = 100
+_HTTP_STATUS_PATTERN = re.compile(r"\(HTTP (\d{3})\)|\bHTTP (\d{3})\b")
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_review_rest.py")
 
 
@@ -262,6 +280,168 @@ def _metadata_digest_preflight(
     }
 
 
+def _bounded_excerpt(value: str, limit: int = _EXCERPT_LIMIT) -> str:
+    """Return a single-line, length-bounded excerpt for structured evidence."""
+    text = " ".join(str(value or "").split())
+    return text[:limit]
+
+
+def _http_status(texts: tuple[str, ...]) -> int | None:
+    """Return the first HTTP status found in the given texts, if any."""
+    for text in texts:
+        match = _HTTP_STATUS_PATTERN.search(text or "")
+        if match:
+            return int(match.group(1) or match.group(2))
+    return None
+
+
+def _fallback_handoff(number: int, *, repo: str, expected_head_sha: str) -> dict[str, Any]:
+    """Describe the explicit, idempotent top-level-comment fallback route."""
+    return {
+        "kind": "top_level_comment",
+        "endpoint": f"repos/{repo}/issues/{number}/comments",
+        "event": "COMMENT",
+        "automatic": False,
+        "authoritative_for_review": False,
+        "idempotency_marker": REVIEW_FALLBACK_MARKER,
+        "expected_head_sha": expected_head_sha,
+        "cli_flag": "--fallback-comment",
+    }
+
+
+def _review_publication_failure(
+    result: Any,
+    *,
+    repo: str,
+    number: int,
+    expected_head_sha: str,
+    event: str,
+) -> dict[str, Any]:
+    """Return structured, actionable evidence for a failed review POST."""
+    stderr = str(getattr(result, "stderr", "") or "")
+    stdout = str(getattr(result, "stdout", "") or "")
+    status = _http_status((stderr, stdout))
+    validation_error = False
+    if status == 422:
+        try:
+            response = json.loads(stdout)
+        except json.JSONDecodeError:
+            response = None
+        validation_error = isinstance(response, dict) and bool(response.get("errors"))
+    authorization_error = status in REVIEW_AUTHORIZATION_STATUSES
+    unavailable = (
+        not authorization_error
+        and not validation_error
+        and (status is None or status in REVIEW_ENDPOINT_FAILURE_STATUSES)
+    )
+    if authorization_error:
+        error_class = "review_authorization_failed"
+    elif validation_error:
+        error_class = "review_validation_failed"
+    else:
+        error_class = "review_publication_failed"
+    return {
+        "status": "error",
+        "error": f"PR {number} review publication failed: {_bounded_excerpt(stderr or stdout)}",
+        "error_class": error_class,
+        "endpoint": f"repos/{repo}/pulls/{number}/reviews",
+        "http_status": status,
+        "returncode": getattr(result, "returncode", None),
+        "stderr_excerpt": _bounded_excerpt(stderr),
+        "response_body_excerpt": _bounded_excerpt(stdout),
+        "expected_head_sha": expected_head_sha,
+        "event": event,
+        "fallback_recommended": unavailable,
+        "fallback": _fallback_handoff(number, repo=repo, expected_head_sha=expected_head_sha),
+    }
+
+
+def _fallback_marker(head_sha: str) -> str:
+    """Return the idempotency marker binding one fallback comment to one head."""
+    return f"{REVIEW_FALLBACK_MARKER} head: {head_sha.lower()}"
+
+
+def _existing_fallback_comment(
+    number: int, *, repo: str, expected_head_sha: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return an existing fallback comment for this head, or a read error."""
+    marker = _fallback_marker(expected_head_sha)
+    page = 1
+    while True:
+        result = _gh_api_comments_get(
+            f"repos/{repo}/issues/{number}/comments?per_page={_COMMENTS_PAGE_SIZE}&page={page}"
+        )
+        payload, error = _parse_json(result, what=f"PR {number} fallback comment read")
+        if error:
+            return None, error
+        if not isinstance(payload, list):
+            return None, f"PR {number} fallback comment read was not a list"
+        for comment in payload:
+            body = str((comment or {}).get("body") or "") if isinstance(comment, dict) else ""
+            if marker in body:
+                return {
+                    "comment_id": comment.get("id"),
+                    "url": str((comment or {}).get("html_url", "")),
+                }, None
+        if len(payload) < _COMMENTS_PAGE_SIZE:
+            break
+        page += 1
+    return None, None
+
+
+def _record_fallback_comment(
+    number: int,
+    body: str,
+    *,
+    repo: str,
+    expected_head_sha: str,
+) -> dict[str, Any]:
+    """Post (or find) the idempotent top-level comment fallback for one head."""
+    existing, read_error = _existing_fallback_comment(
+        number, repo=repo, expected_head_sha=expected_head_sha
+    )
+    if read_error is not None:
+        return {"status": "error", "error": read_error, "error_class": "fallback_read_failed"}
+    if existing is not None:
+        return {
+            "status": REVIEW_FALLBACK_STATUS,
+            "number": number,
+            "repo": repo,
+            "expected_head_sha": expected_head_sha,
+            "authoritative_for_review": False,
+            "duplicate_prevented": True,
+            **existing,
+        }
+    marked_body = f"{_fallback_marker(expected_head_sha)}\n\n{body}"
+    result = _gh_api_post(f"repos/{repo}/issues/{number}/comments", {"body": marked_body})
+    payload, error = _parse_json(result, what=f"PR {number} fallback comment publication")
+    if error:
+        return {"status": "error", "error": error, "error_class": "fallback_publication_failed"}
+    if not isinstance(payload, dict):
+        return {
+            "status": "error",
+            "error": "fallback comment response was not an object",
+            "error_class": "fallback_publication_failed",
+        }
+    comment_id = payload.get("id")
+    if isinstance(comment_id, bool) or not isinstance(comment_id, int) or comment_id < 1:
+        return {
+            "status": "error",
+            "error": "fallback comment response had no numeric id",
+            "error_class": "fallback_response_unrecognized",
+        }
+    return {
+        "status": REVIEW_FALLBACK_STATUS,
+        "number": number,
+        "repo": repo,
+        "expected_head_sha": expected_head_sha,
+        "authoritative_for_review": False,
+        "duplicate_prevented": False,
+        "comment_id": comment_id,
+        "url": str(payload.get("html_url", "")),
+    }
+
+
 def _publish_review(
     number: int,
     body: str,
@@ -277,7 +457,13 @@ def _publish_review(
     )
     payload, error = _parse_json(result, what=f"PR {number} review publication")
     if error:
-        return {"status": "error", "error": error}
+        return _review_publication_failure(
+            result,
+            repo=repo,
+            number=number,
+            expected_head_sha=expected_head_sha,
+            event=event,
+        )
     if not isinstance(payload, dict):
         return {"status": "error", "error": "review response was not an object"}
     response_commit = payload.get("commit_id")
@@ -310,8 +496,14 @@ def post_review(
     event: str = "COMMENT",
     repo: str = DEFAULT_REPO,
     expected_metadata_digest: str | None = None,
+    fallback_comment: bool = False,
 ) -> dict[str, Any]:
-    """Post one review only when the PR state and optional metadata digest are current."""
+    """Post one review only when the PR state and optional metadata digest are current.
+
+    With ``fallback_comment``, an unavailable review endpoint records the review
+    body as an idempotent top-level comment instead; the result then reports
+    ``authoritative_for_review: false`` and never substitutes for a review.
+    """
     body, body_error = _read_body_file(body_file)
     if body_error:
         return {"status": "error", "error": body_error}
@@ -348,13 +540,23 @@ def post_review(
             if metadata_preflight is not None:
                 return metadata_preflight
 
-            return _publish_review(
+            published = _publish_review(
                 number,
                 body,
                 repo=repo,
                 expected_head_sha=expected_head_sha,
                 event=event,
             )
+            if (
+                fallback_comment
+                and published.get("status") == "error"
+                and published.get("fallback_recommended")
+            ):
+                fallback = _record_fallback_comment(
+                    number, body, repo=repo, expected_head_sha=expected_head_sha
+                )
+                return {**published, "fallback_result": fallback}
+            return published
     except RuntimeError as exc:
         return {"status": "error", "error": str(exc)}
 
@@ -378,7 +580,28 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--event", choices=REVIEW_EVENTS, default="COMMENT")
+    parser.add_argument(
+        "--fallback-comment",
+        action="store_true",
+        help=(
+            "When the review endpoint is unavailable, record the review body as an "
+            "idempotent top-level PR comment (never a review substitute; exit 2)."
+        ),
+    )
     return parser
+
+
+def _exit_code(result: dict[str, Any]) -> int:
+    """Map a result payload to the CLI exit code."""
+    status = result.get("status")
+    if status == "ok":
+        return 0
+    if status in {"review_skipped_stale_state", SELF_AUTHORED_REVIEW_STATUS}:
+        return 2
+    fallback = result.get("fallback_result")
+    if isinstance(fallback, dict) and fallback.get("status") == REVIEW_FALLBACK_STATUS:
+        return 2
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -391,14 +614,13 @@ def main(argv: list[str] | None = None) -> int:
         event=args.event,
         repo=args.repo,
         expected_metadata_digest=args.expected_metadata_digest,
+        fallback_comment=args.fallback_comment,
     )
-    status = result.get("status")
-    print(json.dumps(result, sort_keys=True), file=sys.stdout if status == "ok" else sys.stderr)
-    if status == "ok":
-        return 0
-    if status in {"review_skipped_stale_state", SELF_AUTHORED_REVIEW_STATUS}:
-        return 2
-    return 1
+    print(
+        json.dumps(result, sort_keys=True),
+        file=sys.stdout if result.get("status") == "ok" else sys.stderr,
+    )
+    return _exit_code(result)
 
 
 if __name__ == "__main__":

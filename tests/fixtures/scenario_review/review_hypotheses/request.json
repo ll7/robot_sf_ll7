@@ -1,0 +1,24 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev21-smoke",
+  "component_id": "srev21-review-hypotheses",
+  "sources": [
+    {
+      "artifact_id": "finding-0000",
+      "uri": "finding-0000.json",
+      "format": "trace_failure_predicates.v1"
+    }
+  ],
+  "config": {
+    "preset": "test",
+    "hypothesis": {
+      "template": "single-pedestrian-speed",
+      "pedestrian_id": "ped-0000",
+      "factor_value": 1.2,
+      "expected_direction": "increase",
+      "priority": 0,
+      "terminal_condition": "episode_end_or_timeout"
+    }
+  },
+  "output_directory": "srev-21-smoke"
+}

@@ -376,6 +376,31 @@ def test_dependency_evaluation_is_delegated_to_canonical_gate() -> None:
     assert item["dependency_gate"]["mandatory_failures"][0]["id"] == "required-pr"
 
 
+def test_covering_pr_open_classification_blocks_dispatch() -> None:
+    """A live reference-only covering PR must block dispatch through the audit vocabulary."""
+    fixture = _validate_fixture(_fixture([_raw_issue(1)]))
+    report = _fixture_evaluator(fixture)(1)
+    report["classification"] = "covering_pr_open"
+    report["admission_reason"] = "covering_pr_open"
+    report["ready"] = False
+    report["write_allowed"] = False
+
+    audit = _build_report(
+        repo="ll7/robot_sf_ll7",
+        source="fixture",
+        pages=fixture["pages"],
+        pagination={"complete": True, "errors": [], "page_size": 100, "max_pages": 20},
+        evaluator=lambda _number: report,
+        input_sha256="f" * 64,
+    )
+
+    item = audit["items"][0]
+    assert item["classification"] == "covering_pr_open"
+    assert item["dispatch_eligible"] is False
+    assert item["next_action"] == NEXT_ACTIONS["covering_pr_open"]
+    assert item["next_action"] == "do_not_duplicate_active_work"
+
+
 def test_unknown_classifier_output_fails_closed() -> None:
     """A future unknown classification must not become implied dispatch authority."""
     fixture = _validate_fixture(_fixture([_raw_issue(1)]))

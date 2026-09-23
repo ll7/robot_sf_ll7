@@ -27,6 +27,12 @@ ROOT = Path(__file__).resolve().parents[2]
 # incident in #8414 before the two-green reconciler criterion was established.
 KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
 
+# PRs #9565/#9569 are the known pre-guard regressions for issue #9566: their
+# bodies contain negated prose ("does not close #9489") that GitHub parsed as
+# a closing reference and auto-closed parent #9489 on merge. The parity guard
+# must keep flagging these historical bodies while future PRs stay clean.
+KNOWN_HISTORICAL_GITHUB_PARITY_HITS = {9565: {"9489"}, 9569: {"9489"}}
+
 
 # Keep this mapping deliberately narrow: entries must identify one merged PR,
 # one linked issue, and the immutable GitHub file-stat totals that prove the
@@ -702,8 +708,123 @@ def test_check_closes_discipline_allows_non_closing_reference() -> None:
     assert not pr_contract_check.check_closes_discipline("Refs #8414", "ll7/robot_sf_ll7")
 
 
+def test_github_closing_parity_flags_negated_prose_mention() -> None:
+    """Regression for issue #9566: negated prose still auto-closes on GitHub."""
+    body = (
+        "The result is diagnostic integration evidence only; it does not close #9489 or epic #9483."
+    )
+    # The negation-aware repo parser excuses the mention ...
+    assert pr_contract_check._find_closed_references(body) == []
+    assert not pr_contract_check.check_closes_discipline(body, "ll7/robot_sf_ll7")
+    # ... but GitHub honors it, so the parity guard must fail closed.
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "#9489" in blockers[0]
+    assert "leaves #9489 open" in blockers[0]
+
+
+def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
+    """``Refs`` never closes; intentional ``Closes`` stays with closes-discipline."""
+    assert pr_contract_check.check_github_closing_parity("Refs #9489", "ll7/robot_sf_ll7") == []
+    assert pr_contract_check.check_github_closing_parity("Closes #9489", "ll7/robot_sf_ll7") == []
+    assert (
+        pr_contract_check.check_github_closing_parity("leaves #9489 open", "ll7/robot_sf_ll7") == []
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "This does not affect runtime. Closes #9566",
+        "This does not affect runtime, closes #9566",
+        "This does not affect runtime; resolves #9566",
+        "No changes - Closes #9566",
+        "No changes — Closes #9566",
+    ),
+)
+def test_github_closing_parity_allows_explicit_close_after_unrelated_negation(
+    body: str,
+) -> None:
+    """An earlier prose clause cannot negate an intentional closing declaration."""
+    assert pr_contract_check._find_closed_references(body) == [(None, "9566")]
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "It does-not-close #9489",
+        "It don't-close #9489",
+        "It never-close #9489",
+    ),
+)
+def test_github_closing_parity_preserves_hyphenated_negation(body: str) -> None:
+    """A hyphen inside a negated phrase is not a clause boundary."""
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+
+    assert len(blockers) == 1
+    assert "#9489" in blockers[0]
+
+
+@pytest.mark.parametrize(
+    ("body", "target"),
+    (
+        ("it does not close other-org/other-repo#9489", "other-org/other-repo#9489"),
+        ("it does not close ll7/robot_sf_ll7#9489", "ll7/robot_sf_ll7#9489"),
+        (
+            "it does not close https://github.com/other-org/other-repo/issues/9489",
+            "other-org/other-repo#9489",
+        ),
+        (
+            "it does not close https://github.com/ll7/robot_sf_ll7/issues/9489",
+            "ll7/robot_sf_ll7#9489",
+        ),
+    ),
+)
+def test_github_closing_parity_flags_qualified_and_url_mentions(body: str, target: str) -> None:
+    """Negated qualified and URL forms remain GitHub-closing parity blockers."""
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+
+    assert len(blockers) == 1
+    assert target in blockers[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "Closes other-org/other-repo#9489",
+        "Closes ll7/robot_sf_ll7#9489",
+        "Closes https://github.com/other-org/other-repo/issues/9489",
+        "Closes https://github.com/ll7/robot_sf_ll7/issues/9489",
+    ),
+)
+def test_github_closing_parity_allows_explicit_qualified_and_url_closes(body: str) -> None:
+    """Explicit local and cross-repository closes remain intentional references."""
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
+def test_github_closing_parity_normalizes_local_qualified_target() -> None:
+    """An explicit local close excuses an equivalent qualified prose mention."""
+    body = "Closes #9489\nThe note does not close ll7/robot_sf_ll7#9489."
+
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
+def test_github_closing_parity_scans_commit_messages() -> None:
+    """Squash-merge commit prose receives the same parity protection as the body."""
+    blockers = pr_contract_check.check_github_closing_parity(
+        "Adds a repair without a body closing keyword.",
+        "ll7/robot_sf_ll7",
+        commit_messages="Implement repair\n\nit does not close #9489\n",
+        commit_messages_checked=True,
+    )
+    assert len(blockers) == 1
+    assert "PR commit message" in blockers[0]
+
+
 _OVERRIDE_NUMSTAT = "\n".join(f"300\t0\tscripts/dev/file_{index}.py" for index in range(5)) + "\n"
 _CAPPED_ISSUE_BODY = "Reviewability budget: Maximum 10 files and 800 net new lines.\n"
+_BINARY_NUMSTAT = "10\t2\tscripts/dev/a.py\n-\t-\texamples/fixtures/synthetic.zip\n"
 
 
 @patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
@@ -801,6 +922,32 @@ def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
     mock_numstat.assert_called_once_with("missing-base")
 
 
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_accepts_canonical_binary_numstat_row(
+    mock_metadata: MagicMock,
+) -> None:
+    """A Git binary row counts as a file without inventing text-line totals."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text=_BINARY_NUMSTAT,
+    )
+
+    assert blockers == []
+    evidence = pr_contract_check.HistoricalNumstatEvidence.from_numstat(_BINARY_NUMSTAT)
+    assert evidence.changed_files == (
+        "scripts/dev/a.py",
+        "examples/fixtures/synthetic.zip",
+    )
+    assert evidence.files == 2
+    assert evidence.added == 10
+    assert evidence.deleted == 2
+    assert evidence.net == 8
+
+
 @patch("scripts.ci.pr_contract_check._diff_numstat")
 @patch("scripts.ci.pr_contract_check.get_issue_metadata")
 def test_check_line_budget_discipline_uses_supplied_historical_numstat(
@@ -868,6 +1015,8 @@ def test_supplied_unavailable_historical_numstat_fails_closed(
         "4\tbad\ta.py\n",
         "4\t0\ta.py\textra\n",
         "4\t0\ta.py\n5\t0\ta.py\n",
+        "-\t0\tbinary.zip\n",
+        "0\t-\tbinary.zip\n",
     ],
 )
 @patch("scripts.ci.pr_contract_check.get_issue_metadata")
@@ -1411,6 +1560,30 @@ def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
     )
     comment = pr_contract_check.build_comment_body([blocker], [], [], "🔴 FAILED")
     assert "| 1. Closes-discipline | ❌ FAILED |" in comment
+
+
+@pytest.mark.parametrize(
+    ("blockers", "expected_status"),
+    (
+        ([], "✅ PASSED"),
+        (
+            [
+                f"BLOCKER: {pr_contract_check.GITHUB_CLOSING_PARITY_TAG} "
+                "PR body contains a prose closing mention."
+            ],
+            "❌ FAILED",
+        ),
+    ),
+)
+def test_build_comment_body_renders_github_closing_parity_row(
+    blockers: list[str], expected_status: str
+) -> None:
+    """The summary exposes parity status independently and keeps ten rows numbered."""
+    comment = pr_contract_check.build_comment_body(blockers, [], [], "🔴 FAILED")
+
+    assert f"| 2. GitHub closing-keyword parity | {expected_status} |" in comment
+    assert "| 3. Closure declaration | ✅ PASSED |" in comment
+    assert "| 10. Issue line/file budget | ✅ PASSED |" in comment
 
 
 def test_check_closure_declaration() -> None:
@@ -2149,10 +2322,20 @@ def test_regression_last_20_merged_prs() -> None:
             assert any(f"incident issue #{issue}" in blocker for blocker in blockers), (
                 f"PR #{number} no longer exposes its known historical guard hit"
             )
+        expected_parity_issues = KNOWN_HISTORICAL_GITHUB_PARITY_HITS.get(number, set())
+        for issue in expected_parity_issues:
+            assert any(
+                "github-closing-parity" in blocker and f"#{issue}" in blocker
+                for blocker in blockers
+            ), f"PR #{number} no longer exposes its known historical parity hit"
         unexpected_blockers = [
             blocker
             for blocker in blockers
             if not any(f"incident issue #{issue}" in blocker for issue in expected_incident_issues)
+            and not any(
+                "github-closing-parity" in blocker and f"#{issue}" in blocker
+                for issue in expected_parity_issues
+            )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
         ]
         assert not unexpected_blockers, (

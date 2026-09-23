@@ -16,6 +16,7 @@ import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.evidence.writers import write_json, write_text
+from scripts.dev.git_common import resolve_repo_root
 
 DEFAULT_DECLARATIONS = Path("configs/validation/issue_4366_manuscript_asserted_numbers.yaml")
 DEFAULT_REPORT = Path("docs/context/evidence/issue_4366_manuscript_asserted_numbers_report.md")
@@ -50,7 +51,8 @@ class VerificationResult:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the current Git repository root."""
+    return resolve_repo_root()
 
 
 def _load_structured_file(path: Path) -> Any:

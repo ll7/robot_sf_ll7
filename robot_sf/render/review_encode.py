@@ -886,6 +886,23 @@ def _encoder_probe() -> tuple[dict[str, Any] | None, str | None]:
     )
 
 
+def _require_imageio() -> Any:
+    """Import imageio for MP4 operations and fail closed when unavailable.
+
+    Returns:
+        The imageio v2 module.
+
+    Raises:
+        ImportError: If the configured encoder dependency is unavailable.
+    """
+
+    try:
+        import imageio.v2 as imageio  # noqa: PLC0415
+    except ImportError as error:
+        raise ImportError("review encode requires imageio") from error
+    return imageio
+
+
 @contextmanager
 def _operation_deadline(seconds: float) -> Iterator[None]:
     """Bound an ffmpeg-backed operation or fail closed on worker threads."""
@@ -2290,10 +2307,9 @@ def _encode_mp4(
         Failure reason and encoder receipt record.
     """
 
-    import imageio.v2 as imageio  # noqa: PLC0415
-
     record = dict(env)
     try:
+        imageio = _require_imageio()
         with _operation_deadline(MAX_ENCODER_SECONDS):
             imageio.mimsave(
                 str(path),
@@ -2330,8 +2346,7 @@ def _decode_frame_count(path: Path) -> tuple[int | None, str | None]:
     """
 
     try:
-        import imageio.v2 as imageio  # noqa: PLC0415
-
+        imageio = _require_imageio()
         count = 0
         with _operation_deadline(MAX_DECODER_SECONDS):
             with imageio.get_reader(str(path)) as reader:

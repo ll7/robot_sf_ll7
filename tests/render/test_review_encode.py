@@ -158,10 +158,10 @@ def test_interval_endpoints_and_first_terminal_frames(tmp_path: Path) -> None:
 def test_encoded_video_uses_actual_source_pixels(tmp_path: Path) -> None:
     """The encoder must consume decoded fixture pixels instead of synthetic frames."""
 
-    import imageio.v2 as imageio
     import numpy as np
     from PIL import Image
 
+    imageio = review_encode._require_imageio()
     config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
     result = run(_request(tmp_path, config_extra=config), base=tmp_path)
     assert result.status == "complete"
@@ -634,9 +634,9 @@ def test_encoder_failure_has_no_complete_artifact(
 def test_source_clip_is_decoded_and_bound(tmp_path: Path) -> None:
     """A clip-only request decodes its frames and does not synthesize a manifest."""
 
-    import imageio.v2 as imageio
     import numpy as np
 
+    imageio = review_encode._require_imageio()
     clip = tmp_path / "source.mp4"
     frames = [
         np.full((12, 16, 3), (index * 40, 10, 200 - index * 20), dtype=np.uint8)
@@ -1331,9 +1331,9 @@ def test_clip_decode_rejects_buffer_overrun(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A tiny buffer ceiling fires before unbounded accumulation."""
-    import imageio.v2 as imageio
     import numpy as _numpy
 
+    imageio = review_encode._require_imageio()
     clip = tmp_path / "clip.mp4"
     with imageio.get_writer(str(clip), fps=10, macro_block_size=None) as writer:
         writer.append_data(_numpy.zeros((16, 16, 3), dtype=_numpy.uint8))

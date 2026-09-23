@@ -97,8 +97,9 @@ does not identify any mechanism. Nothing in this note reuses it as mechanism evi
 Fork state: 20 steps before measured contact (t=42/39/37), prefix replayed open-loop
 through the canonical command path. Hold branch commands (v=0, w=0) velocity, which
 decelerates the robot to rest in ~10 steps and holds it collision-free for the full
-60-step horizon. Policy-continuation branch re-runs the bound policy live and contacts
-the wall within 11 steps on all seeds.
+60-step measured horizon. Policy-continuation branches re-run the bound policy live; each
+contains 21 rows indexed `branch_step=0..20`, with the wall collision recorded at
+`branch_step=20` (for forks t=42/39/37, respectively).
 
 | seed | fork | crash disc. (γ=0.99) | wait disc. (γ=0.99) | crash undisc. | wait undisc. | wait contacts? |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -106,8 +107,9 @@ the wall within 11 steps on all seeds.
 | 226 | t39 | −9.46 | −0.31 | −11.92 | −0.87 | no |
 | 227 | t37 | −9.32 | −0.32 | −11.75 | −0.88 | no |
 
-Waiting strictly dominates crashing under the bound evaluation objective, by ~9
-discounted points on every seed. The counterfactual is controlled but not bit-identical:
+Over the measured 60-step hold window, waiting strictly dominates the policy continuation
+under the bound evaluation objective by ~9 discounted points on every seed. The
+counterfactual is controlled but not bit-identical:
 pedestrian reactions after the fork may differ (documented per row); here the pedestrian
 is >8 m away and its motion is unaffected in practice.
 
@@ -122,13 +124,14 @@ population-level claim.
 
 The tested explanation — that the training objective makes wall contact preferable to
 waiting — predicts crash return ≥ wait return under the bound objective. The matched
-replay shows the opposite at the bound objective, robustly across these three seeds:
-waiting avoids the −15 collision, keeps the small
-per-step progress/living terms, and never triggers the −6.5 timeout term inside the
-60-step window (and the full-episode arithmetic shows even 300 further wait steps at
-−0.015 living plus zero progress cannot approach −15). The policy nevertheless drives
-forward into the wall on all three seeds without any pedestrian, time, or deadlock
-trigger. The reward did not incentivize this contact at the bound evaluation objective;
+replay shows the opposite at the bound objective, robustly across these three seeds
+within the measured 60-step counterfactual window: waiting avoids the −15 collision,
+retains the observed per-step reward terms, and does not trigger the −6.5 timeout term
+within that window. No full-horizon wait-return extrapolation is made: later smoothness
+and terminal/timeout rewards are not evaluated by these 60-step traces. The policy
+nevertheless drives forward into the wall on all three seeds without any pedestrian,
+time, or deadlock trigger. The reward did not incentivize this contact at the bound
+evaluation objective over the measured window;
 the mechanism is a systematic geometry/obstacle-handling failure (persistent forward
 drive and steering into doorway geometry), with the reward gradient, if followed,
 pointing toward waiting instead.

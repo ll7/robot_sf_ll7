@@ -1966,7 +1966,7 @@ def test_recovery_seed_cache_off_disables_publish_and_restore(tmp_path: Path) ->
 def test_recovery_refuses_seed_restore_when_seed_entry_points_stale(
     tmp_path: Path,
 ) -> None:
-    """Issue #9591: a seed with stale entry points is rejected, falling back to full sync."""
+    """Issue #9591: a seed with stale entry points is rejected before profile sync."""
     repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
     try:
         first = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a.txt", "--profile", "core")
@@ -1997,7 +1997,7 @@ def test_recovery_refuses_seed_restore_when_seed_entry_points_stale(
         assert "seed environment lacks dependency profile 'core'; using full sync" in result.stderr
         calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
         assert any(call.startswith("venv ") for call in calls)
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
     finally:
         _teardown_seed_fixture(repo, worktree_a, worktree_b)
 
@@ -2031,6 +2031,10 @@ def test_recovery_refuses_early_seed_publish_when_entry_points_stale(
         fake_uv.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
+            'if [[ "${1:-}" == "cache" && "${2:-}" == "dir" ]]; then\n'
+            '  printf "%s\\n" "${UV_CACHE_DIR_OUTPUT:-${UV_CACHE_DIR:-$PWD/.uv-cache}}"\n'
+            "  exit 0\n"
+            "fi\n"
             'printf \'%s\\n\' "$*" >> "$UV_CAPTURE"\n'
             'case "${1:-}" in\n'
             "  venv)\n"
@@ -2073,7 +2077,7 @@ def test_recovery_refuses_early_seed_publish_when_entry_points_stale(
             in result.stderr
         )
         calls = (tmp_path / "uv-a.txt").read_text(encoding="utf-8").splitlines()
-        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "sync --reinstall-package robot-sf --frozen" in calls
         # And after successful recovery, seed was published
         assert any(
             entry.is_dir() and (entry / "seed-receipt.json").is_file()

@@ -18,6 +18,8 @@ post-run filesystem promotion error; it is retained below rather than hidden.
   `095331329b06673dc165109c8523579549f769c98542b207a712f6e2bf9ed6ad`
 - scenario-matrix SHA-256:
   `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`
+- versioned scenario-source manifest SHA-256:
+  `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`
 - resolved release-identity SHA-256:
   `9256f2a92578319238b06b0873aa1232482347a47b781a93c05390e93b480a63`
 - release-metadata SHA-256:
@@ -84,10 +86,16 @@ The committed diff files can be regenerated from the preserved predecessor
 archive and successor publication bundle using
 [`compare_issue_9431_release.py`](../../scripts/analysis/compare_issue_9431_release.py).
 The comparator verifies both archive checksums, the predecessor source identity
-inside its resolved manifest, exact successor row-byte equality with the pinned
-bundle, the 14-arm/20,160-row matrix, and each successor row's source and
-execution metadata before writing the reports. After retrieving the exact
-archives and extracting the successor bundle's `payload/` directory, rerun:
+inside its resolved manifest, and exact successor row-byte equality with the
+pinned bundle. It requires the exact canonical 14-arm × 48-scenario × 30-seed
+Cartesian identity (20,160 rows), checks the scenario IDs against the versioned
+source manifest and planner arms/seeds against the release manifest, and checks
+each successor row's source and execution metadata. Runtime fallback/degraded
+markers use the release-acceptance filter, so declarative config fields are not
+misclassified as runtime execution. The generated report binds its campaign ID
+to the pinned bundle's campaign manifest and records both matrix digests. After
+retrieving the exact archives and extracting the successor bundle's `payload/`
+directory, rerun:
 
 ```bash
 uv run python scripts/analysis/compare_issue_9431_release.py \

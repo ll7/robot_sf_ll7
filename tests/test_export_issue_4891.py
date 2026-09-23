@@ -358,6 +358,34 @@ class TestPinGeneratedAt:
         meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
         assert meta["generated_at_utc"] == pin
 
+    def test_missing_source_commit_is_not_inferred_from_export_checkout(
+        self, tmp_path: Path
+    ) -> None:
+        record = self._make_minimal_record()
+        selection = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+
+        metadata = _export_module.write_bundle(
+            episode_record=record,
+            selection=selection,
+            output_dir=bundle_dir,
+            pin_generated_at="2026-01-01T00:00:00+00:00",
+        )
+
+        assert metadata["source_commit"] is None
+        assert "Source commit: `not specified`" in (bundle_dir / "README.md").read_text(
+            encoding="utf-8"
+        )
+
     def test_custom_campaign_provenance_is_retained(self, tmp_path: Path) -> None:
         record = self._make_minimal_record()
         selection = _export_module.SelectedEpisode(

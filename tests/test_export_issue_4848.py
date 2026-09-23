@@ -227,7 +227,7 @@ class TestWriteBundleFixture:
         )
         bundle_dir = tmp_path / "bundle"
         bundle_dir.mkdir()
-        _export_module.write_bundle(
+        metadata = _export_module.write_bundle(
             episode_record=record,
             selection=sel,
             output_dir=bundle_dir,
@@ -242,6 +242,10 @@ class TestWriteBundleFixture:
         }
         actual = {f.name for f in bundle_dir.iterdir()}
         assert expected_files.issubset(actual)
+        assert metadata["source_commit"] is None
+        assert "Source commit: `not specified`" in (bundle_dir / "README.md").read_text(
+            encoding="utf-8"
+        )
 
     def test_custom_campaign_provenance_is_retained(self, tmp_path: Path) -> None:
         record = self._make_minimal_record()

@@ -362,8 +362,8 @@ def _check_cost_scale(row: dict[str, Any]) -> tuple[list, list, list, list]:
     gated = _missing_cost_inputs(row, candidates, scale)
     if gated is not None:
         return gated
-    if not isinstance(candidates, list) or not isinstance(scale, Mapping):
-        raise DiagnosticReportError(f"row {row['row_id']!r}: malformed cost_scale")
+    # _missing_cost_inputs returns None only when candidates is a usable list
+    # and scale is a Mapping, so no further narrowing is needed here.
     recorded, rescaled = _score_candidates(row, candidates, scale)
     recorded_best = min(recorded, key=lambda key: (recorded[key], key))
     rescaled_best = min(rescaled, key=lambda key: (rescaled[key], key))

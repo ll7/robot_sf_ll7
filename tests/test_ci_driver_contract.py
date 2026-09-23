@@ -123,7 +123,7 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
     every earlier commit, so retaining them only adds queue latency without
     adding coverage. Pushes and pull-request updates retain this policy, while
     ``workflow_dispatch`` gets a unique pending identity, then the ownership
-    gate admits only one expensive exact-head matrix.
+    gate admits only one expensive exact-head matrix for the selected branch.
 
     The non-dispatch branch of the group keeps each ref isolated, so a new
     pull-request push still cancels only its own superseded run.
@@ -146,6 +146,8 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
         "cancel-in-progress": False,
     }
     assert gate["outputs"]["run_full_ci"] == "${{ steps.decision.outputs.run_full_ci }}"
+    dispatch_command = "\n".join(step.get("run", "") for step in gate["steps"])
+    assert '--target-branch "${GITHUB_REF_NAME}"' in dispatch_command
     for job_name in (
         "fast-feedback",
         "compat-matrix",

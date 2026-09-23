@@ -2717,10 +2717,14 @@ Manual CI recovery dispatches use a separate ownership gate before any full
 matrix job starts. GitHub can replace a pending run in a shared concurrency
 group even when `cancel-in-progress` is false, so each `workflow_dispatch` run
 has a unique workflow concurrency identity and the serialized
-`dispatch-ownership` job elects the oldest active run for the exact main SHA.
-Followers wait for that owner: they mirror only a completed exact-head
-success/failure, or take ownership if the prior run becomes stale or
-cancelled. Set the `retry_failed` workflow input only for one justified retry;
+`dispatch-ownership` job elects the oldest active run for the exact SHA on the
+branch selected for that manual dispatch. Its Actions API lookup is scoped to
+that branch, so dispatches on feature or release branches participate in the
+same election as dispatches on `main`; a missing or malformed branch fails
+closed. The gate does not coordinate runs on different branch names, even when
+those refs point to the same SHA. Followers wait for that owner: they mirror
+only a completed exact-head success/failure, or take ownership if the prior run
+becomes stale or cancelled. Set the `retry_failed` workflow input only for one justified retry;
 the run title is its idempotent receipt. Repeated ordinary watcher dispatches
 therefore cannot cancel the owner or start duplicate full matrices.
 

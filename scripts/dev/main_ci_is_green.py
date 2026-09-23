@@ -236,9 +236,20 @@ def fetch_dispatch_run_window(
     repo: str = DEFAULT_REPO,
     workflow: str = DEFAULT_WORKFLOW,
     *,
+    target_branch: str = "main",
     runner: Callable[..., Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Read one complete recent run page for the workflow-dispatch ownership gate."""
+    """Read recent workflow runs for the selected branch's dispatch ownership gate."""
+    branch = target_branch.strip() if isinstance(target_branch, str) else ""
+    if (
+        not branch
+        or branch != target_branch
+        or branch.startswith("refs/")
+        or any(character.isspace() for character in branch)
+    ):
+        raise MainCiRunFetchError(
+            "dispatch ownership target_branch must be a non-empty branch name, not a full ref"
+        )
     rest_runner = runner or _default_rest_runner
     selector = resolve_workflow_selector(
         repo=repo,
@@ -248,18 +259,18 @@ def fetch_dispatch_run_window(
     )
     endpoint = (
         f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
-        f"?{urlencode({'branch': 'main', 'per_page': REST_PAGE_SIZE, 'page': 1})}"
+        f"?{urlencode({'branch': branch, 'per_page': REST_PAGE_SIZE, 'page': 1})}"
     )
     payload = _rest_json(
         endpoint,
         runner=rest_runner,
-        operation="recent main-CI dispatch ownership window",
+        operation=f"recent CI dispatch ownership window for branch {branch!r}",
     )
     if not isinstance(payload, Mapping):
-        raise MainCiRunFetchError("main-CI dispatch ownership window returned a non-object payload")
+        raise MainCiRunFetchError("CI dispatch ownership window returned a non-object payload")
     rows = payload.get("workflow_runs")
     if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
-        raise MainCiRunFetchError("main-CI dispatch ownership window returned malformed rows")
+        raise MainCiRunFetchError("CI dispatch ownership window returned malformed rows")
     return [
         normalize_actions_run(row, index=index)
         for index, row in enumerate(rows)
@@ -535,18 +546,21 @@ def wait_for_dispatch_gate(  # noqa: PLR0913 - explicit polling/test seams are i
     *,
     repo: str = DEFAULT_REPO,
     workflow: str = DEFAULT_WORKFLOW,
+    target_branch: str = "main",
     retry_failed: bool = False,
     poll_seconds: float = 30.0,
     max_wait_seconds: float = 3000.0,
     fetcher: Callable[[], list[dict[str, Any]]] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
-    """Wait until this dispatch owns the matrix or an exact-head verdict exists."""
+    """Wait for ownership or an exact-head verdict within the selected branch."""
     if poll_seconds <= 0:
         raise ValueError("poll_seconds must be positive")
     if max_wait_seconds < 0:
         raise ValueError("max_wait_seconds must not be negative")
-    read_runs = fetcher or (lambda: fetch_dispatch_run_window(repo, workflow))
+    read_runs = fetcher or (
+        lambda: fetch_dispatch_run_window(repo, workflow, target_branch=target_branch)
+    )
     deadline = time.monotonic() + max_wait_seconds
     while True:
         decision = dispatch_gate_decision(
@@ -667,6 +681,7 @@ def main(argv: list[str] | None = None) -> int:
         help="elect or observe the one exact-head manual run allowed to launch full CI",
     )
     ap.add_argument("--target-sha", default=os.environ.get("GITHUB_SHA"))
+    ap.add_argument("--target-branch", default=os.environ.get("GITHUB_REF_NAME"))
     ap.add_argument("--current-run-id", type=int, default=os.environ.get("GITHUB_RUN_ID"))
     ap.add_argument("--retry-failed", action="store_true")
     ap.add_argument("--poll-seconds", type=float, default=30.0)
@@ -681,14 +696,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     if args.dispatch_gate:
-        if not args.target_sha or args.current_run_id is None:
-            ap.error("--dispatch-gate requires --target-sha and --current-run-id")
+        if not args.target_sha or args.current_run_id is None or not args.target_branch:
+            ap.error("--dispatch-gate requires --target-sha, --target-branch, and --current-run-id")
         try:
             decision = wait_for_dispatch_gate(
                 args.target_sha,
                 args.current_run_id,
                 repo=args.repo,
                 workflow=args.workflow,
+                target_branch=args.target_branch,
                 retry_failed=args.retry_failed,
                 poll_seconds=args.poll_seconds,
                 max_wait_seconds=args.max_wait_seconds,

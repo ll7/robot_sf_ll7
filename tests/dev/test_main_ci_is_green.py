@@ -376,6 +376,46 @@ def test_fetch_dispatch_window_preserves_event_and_retry_receipt_title() -> None
     assert runs[0]["displayTitle"].endswith("retry_failed=true")
 
 
+def test_off_main_dispatch_window_observes_active_same_head_run() -> None:
+    """An active run on the selected feature branch participates in ownership election."""
+    sha = "f" * 40
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            body = {"workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]}
+        else:
+            assert path.endswith(
+                "actions/workflows/77/runs?branch=release%2F9340-test&per_page=100&page=1"
+            )
+            body = {
+                "workflow_runs": [
+                    {
+                        "id": 11,
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "head_sha": sha,
+                        "created_at": "2026-09-23T12:00:00Z",
+                        "event": "workflow_dispatch",
+                    }
+                ]
+            }
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps(body), "")
+
+    runs = fetch_dispatch_run_window(target_branch="release/9340-test", runner=fake_runner)
+    decision = dispatch_gate_decision(sha, 20, runs)
+
+    assert decision["action"] == "wait"
+    assert decision["owner_run_id"] == 11
+
+
+@pytest.mark.parametrize("target_branch", ["", " refs/heads/main", "main ", None])
+def test_dispatch_window_rejects_missing_or_non_branch_ref(target_branch: str | None) -> None:
+    """Missing or full-ref branch input fails closed before querying the API."""
+    with pytest.raises(MainCiRunFetchError, match="target_branch"):
+        fetch_dispatch_run_window(target_branch=target_branch)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
     ("action", "expected_rc", "expected_output"),
     [
@@ -410,6 +450,8 @@ def test_dispatch_gate_cli_writes_boolean_job_output(
             "--dispatch-gate",
             "--target-sha",
             "a" * 40,
+            "--target-branch",
+            "feature/9340-test",
             "--current-run-id",
             "20",
             "--github-output",
@@ -438,6 +480,8 @@ def test_dispatch_gate_cli_fails_closed_on_unreadable_run_window(
             "--dispatch-gate",
             "--target-sha",
             "a" * 40,
+            "--target-branch",
+            "feature/9340-test",
             "--current-run-id",
             "20",
             "--github-output",

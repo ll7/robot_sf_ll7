@@ -80,6 +80,7 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --workflow ci.yml \
             --target-sha "${GITHUB_SHA}" \
+            --target-branch "${GITHUB_REF_NAME}" \
             --current-run-id "${GITHUB_RUN_ID}" \
             --github-output "${GITHUB_OUTPUT}" \
             "${retry_args[@]}"

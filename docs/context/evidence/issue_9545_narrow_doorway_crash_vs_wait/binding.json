@@ -1,5 +1,7 @@
 {
   "base_config_reward_block_sha256": "332810bc1a9e3e22915967c57eeae155b3f7b72cc89fb0032d4e96b0d17733d0",
+  "baseline_preflight_config": "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml",
+  "baseline_preflight_config_sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
   "checkpoint_gamma_embedded": 0.99,
   "checkpoint_gamma_source": "SB3 data blob: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
   "checkpoint_local_path": "output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
@@ -14,8 +16,8 @@
   "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
   "gamma_training_config_declared": null,
   "gamma_used_for_discounted_replay": 0.99,
-  "generated_at_utc": "2026-09-22T08:57:23.157386+00:00",
-  "git_head": "bc6b807e7ecbec0ea57164d83655f730c3113162",
+  "generated_at_utc": "2026-09-23T12:39:16.904516+00:00",
+  "git_head": "8e28e31cf75a8b04d6daf817128e45525d2dce12",
   "observation_contract": {
     "fallback_or_degraded_execution": false,
     "occupancy_grid_preserved": true,
@@ -26,6 +28,8 @@
   "predictive_checkpoint_local_path": "output/model_cache/predictive_proxy_selected_v2_full/predictive_proxy_selected_v2_full-predictive_model.pt",
   "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
   "predictive_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+  "producer_script": "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py",
+  "producer_script_sha256": "5014465b6f194bee2d82df26e82968fe23aa318db80d263c6dae25abb0f47797",
   "reward_curriculum": "2 stages; stage0 until_episodes=100 (progress/collision/timeout/terminal only); final stage = full weights above. Checkpoint at ~10M steps is past stage 0; stage-at-checkpoint is inferred, not logged.",
   "reward_impl": "robot_sf/gym_env/reward.py:route_completion_v3_reward",
   "reward_impl_git_blob_sha": "73d9315ad48a0f9da55389088275c760f140b081",
@@ -45,6 +49,7 @@
   "scenario": "francis2023_narrow_doorway",
   "scenario_cap_steps": 400,
   "scenario_file": "configs/scenarios/single/francis2023_narrow_doorway.yaml",
+  "scenario_file_sha256": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
   "scenario_seeds": [
     225,
     226,
@@ -53,7 +58,9 @@
   "schema": "issue_9545_binding.v1",
   "termination_semantics": "terminated = route_complete OR timeout(timestep>=max_sim_steps) OR ped/robot/obstacle collision; RobotEnv returns truncated=False always; reward timeout term fires only on non-collision, non-success timeout",
   "training_base_config": "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml",
+  "training_base_config_sha256": "76a6f8251e7ea6c61f326db88443d08e71751206f94393894b68c6655f2b799c",
   "training_config": "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml",
+  "training_config_sha256": "e4851c198911645d54d703628adf887f340c6eda945f470cb07e295a59d42b1f",
   "wrappers": {
     "benchmark_adapter": "ppo_action_to_unicycle (mixed), feasibility projection",
     "cbf_safety_filter": "disabled",

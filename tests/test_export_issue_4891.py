@@ -382,6 +382,7 @@ class TestPinGeneratedAt:
                 source_commit="07f7e8d4",
                 release_tag="paper-matrix-v2",
                 config_sha256="config-digest",
+                issue_url="https://github.com/ll7/robot_sf_ll7/issues/9431",
             ),
         )
 
@@ -390,6 +391,7 @@ class TestPinGeneratedAt:
         assert metadata["source_commit"] == "07f7e8d4"
         assert metadata["release_tag"] == "paper-matrix-v2"
         assert metadata["config_sha256"] == "config-digest"
+        assert metadata["issue"] == "https://github.com/ll7/robot_sf_ll7/issues/9431"
 
     def test_pin_generated_at_byte_identical(self, tmp_path: Path) -> None:
         """pin_generated_at makes metadata.json and trace_series.json byte-identical."""

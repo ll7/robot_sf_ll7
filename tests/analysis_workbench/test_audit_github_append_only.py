@@ -9,6 +9,7 @@ import pytest
 
 from robot_sf.analysis_workbench.audit_contracts import Finding
 from robot_sf.analysis_workbench.audit_findings import (
+    FindingStore,
     add_candidate,
     confirm_member,
     new_finding,
@@ -24,6 +25,7 @@ from robot_sf.analysis_workbench.audit_github import (
     render_finding_issue,
 )
 from robot_sf.analysis_workbench.audit_github_rest import auditor_request_marker
+from robot_sf.analysis_workbench.audit_store import AuditStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -421,7 +423,7 @@ def test_append_only_canonical_link_conflict_with_marker_search_is_explicit(
     assert result.outbox is not None and result.outbox.state == "conflict"
 
 
-def test_append_only_same_revision_outbox_loss_reconciles_existing_comment(
+def test_append_only_same_revision_outbox_loss_without_link_reconciles_existing_comment(
     tmp_path: Path,
 ) -> None:
     finding = _finding("append-outbox-loss")
@@ -444,12 +446,10 @@ def test_append_only_same_revision_outbox_loss_reconciles_existing_comment(
     assert published.outbox is not None and published.outbox.publication_revision == 0
     assert published.finding.github_issue["publication_kind"] == "revision_comment"
     assert len(provider.comment_calls) == 1
-    provider.hide_issues_from_search = True
-
     with GitHubOutbox(tmp_path / "recovered") as outbox:
         replay = GitHubSync(provider, outbox).sync(
             REPOSITORY,
-            published.finding,
+            replace(published.finding, github_issue=None),
             operation_id="outbox-loss-replay",
         )
 
@@ -470,6 +470,74 @@ def test_append_only_same_revision_outbox_loss_reconciles_existing_comment(
     assert second_replay.replayed
     assert len(provider.create_calls) == 1
     assert len(provider.comment_calls) == 1
+
+
+def test_append_only_finding_store_requires_create_reservation_before_mutation(
+    tmp_path: Path,
+) -> None:
+    finding = _finding("append-reservation-required")
+    provider = AppendOnlyProvider()
+    with AuditStore(tmp_path / "audit") as store:
+        finding_store = FindingStore(store)
+        finding_store.create(finding, operation_id="create-canonical-finding")
+        with GitHubOutbox(store) as outbox:
+            result = GitHubSync(provider, outbox, finding_store=finding_store).sync(
+                REPOSITORY,
+                finding,
+                operation_id="append-create-needs-reservation",
+            )
+
+    assert result.status == "conflict"
+    assert "reservation" in result.reason
+    assert provider.create_calls == []
+    assert provider.comment_calls == []
+
+
+def test_append_only_changed_finding_does_not_reuse_ambiguous_initial_payload(
+    tmp_path: Path,
+) -> None:
+    class LostCreateProvider(AppendOnlyProvider):
+        def create_issue(
+            self,
+            repository: str,
+            *,
+            title: str,
+            body: str,
+            labels: tuple[str, ...],
+        ) -> GitHubIssue:
+            self.create_calls.append({"title": title, "body": body})
+            raise TimeoutError("create response was lost before apply")
+
+    finding = _finding("append-changed-after-ambiguous-create")
+    provider = LostCreateProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        sync = GitHubSync(provider, outbox)
+        first = sync.sync(
+            REPOSITORY,
+            finding,
+            operation_id="ambiguous-initial-create",
+        )
+        changed = replace(finding, observations=("changed while create was ambiguous",))
+        retry = sync.sync(
+            REPOSITORY,
+            changed,
+            operation_id="changed-finding-retry",
+            retry_ambiguous=True,
+        )
+        receipt = outbox.find_publication_kind(
+            REPOSITORY,
+            finding.finding_id,
+            "initial_issue",
+        )
+
+    assert first.status == "ambiguous"
+    assert retry.status == "ambiguous"
+    assert "different immutable finding snapshot" in retry.reason
+    assert len(provider.create_calls) == 1
+    assert provider.issues == []
+    assert receipt is not None
+    assert receipt.body != render_finding_issue(changed, repository=REPOSITORY).body
+    assert retry.finding is not None and retry.finding.github_issue is None
 
 
 def test_append_only_current_comment_link_id_mismatch_is_conflict(tmp_path: Path) -> None:

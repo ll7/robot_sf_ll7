@@ -56,9 +56,12 @@ cannot nominate a client or credentials.
 When the injected provider exposes `append_auditor_comment`, the route keeps the initial issue
 immutable and publishes later finding revisions as comments. The initial issue is identified by the
 finding-wide `(repository, finding_id, initial_issue)` identity. A current-schema marker discovered
-without a local receipt is adopted as that immutable initial publication: recovery reports
-`unchanged` and does not append a synthetic same-revision comment. Legacy or forged publication
-markers remain conflicts until their provenance is independently established.
+without a local receipt is adopted only after its stable finding marker, initial-publication marker,
+and immutable auditor block validate. If it matches the current initial snapshot, recovery reports
+`unchanged` without a synthetic comment; if it is an earlier snapshot, recovery reads the complete
+comment collection and reconciles or appends the current revision without rewriting the issue.
+Legacy or forged publication markers remain conflicts until their provenance is independently
+established.
 
 Each revision comment has a semantic `(repository, finding_id, revision, publication_digest)` key,
 an exact request marker, and an exact publication marker. Recovery reads the complete comment
@@ -141,10 +144,12 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run pytest \
   tests/analysis_workbench/test_audit_github_service.py -q
 ```
 
-The append-only fake-provider tests cover immutable-issue adoption without a synthetic comment,
-canonical-link readback and link/search conflicts, same-revision outbox-loss deduplication, exact
-publication provenance and comment-body validation, explicit ambiguous-comment retry, and remote
-issue/comment deletion with the local receipt retained as conflict. The general fake-provider tests
+The append-only fake-provider tests cover same-snapshot and older-snapshot immutable-issue adoption,
+canonical-link readback and link/search conflicts, same-revision outbox-loss deduplication without a
+canonical link, create-reservation enforcement when a canonical `FindingStore` is present, refusal to
+reuse a nonterminal old initial payload for a changed finding, exact publication provenance and
+comment-body validation, explicit ambiguous-comment retry, and remote issue/comment deletion with
+the local receipt retained as conflict. The general fake-provider tests
 cover success-then-timeout reconciliation, block-only updates with human text and labels preserved,
 human-edit conflicts after search, concurrent-marker conflict, finding-wide claim recovery,
 stale-operation rollback protection, private-path/secret/media filtering, malformed responses, and
@@ -165,14 +170,18 @@ materialization remains outside this module.
 ## Recovery and integration boundary
 
 The outbox is the local recovery point. On process interruption, reopen the same `AuditStore` path
-and reuse the same operation ID. A current-schema marker-discovered initial issue is adopted as
-`unchanged` without a synthetic comment, and a crash-left canonical claim is repaired locally. A
-same-revision comment found after outbox loss is reconciled from its exact markers and body without
+and reuse the same operation ID. A current-schema marker-discovered initial issue is validated and
+adopted without a synthetic comment when it matches the current initial snapshot; an older immutable
+snapshot proceeds through exact comment readback. A crash-left canonical claim is repaired locally.
+A same-revision comment found after outbox loss is reconciled from its exact markers and body without
 a duplicate POST. An `ambiguous` comment requires a complete reread and explicit
 `retry_ambiguous=True` before another POST. If a previously successful issue or comment is deleted
 or cannot be reread, the durable receipt is retained and reported as `conflict`; the protocol does
 not erase local accounting intent or silently replace the remote publication. An older ambiguous
-request cannot take over a different newer succeeded request for the same finding.
+request cannot take over a different newer succeeded request for the same finding. If a nonterminal
+initial-create receipt belongs to a different immutable finding snapshot and a complete marker search
+finds no issue, the service remains `ambiguous` and refuses to send a new body under the old receipt;
+reconciliation must establish whether that original create applied first.
 The optional `FindingStore` adapter binds the issue URL/number, marker, source revision, and
 auditor-block digest to the current finding revision.
 

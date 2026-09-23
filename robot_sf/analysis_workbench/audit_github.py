@@ -2383,6 +2383,60 @@ class GitHubSync:
                         initial_block_digest = entry.auditor_block_digest
                         initial_body = entry.body
                         current_initial_entry = False
+                elif current_initial_entry:
+                    # A complete marker search can recover the immutable initial
+                    # snapshot even when both the outbox and optional finding link
+                    # were lost.  Its revision/block are read from the immutable
+                    # issue, not inferred from the current finding revision.
+                    try:
+                        initial_publication = _parse_publication_marker(remote.body)
+                    except GitHubSyncError as exc:
+                        raise GitHubConflictError(
+                            f"marker-discovered issue has malformed publication provenance: {exc}"
+                        ) from exc
+                    if (
+                        initial_publication is None
+                        or initial_publication[0] != finding.finding_id
+                        or initial_publication[2] is not None
+                        or initial_publication[1] > revision
+                    ):
+                        raise GitHubConflictError(
+                            "marker-discovered issue does not identify a compatible initial snapshot"
+                        )
+                    _validate_initial_publication_issue(
+                        remote,
+                        rendered,
+                        finding_revision=initial_publication[1],
+                        initial_body=remote.body,
+                    )
+                    observed_block_digest = _sha256_text(_extract_auditor_block(remote.body))
+                    if (
+                        initial_publication[1] != revision
+                        or observed_block_digest != initial_block_digest
+                    ):
+                        entry = self._mark_publication_stale(
+                            entry,
+                            "initial create intent differs from the marker-discovered immutable issue snapshot",
+                        )
+                        entry = self.outbox.enqueue(
+                            _adopt_initial_publication_snapshot(
+                                entry,
+                                remote,
+                                adoption_mode="marker_search",
+                            )
+                        )
+                        initial_revision = entry.publication_revision
+                        initial_block_digest = entry.auditor_block_digest
+                        initial_body = entry.body
+                        current_initial_entry = False
+                    else:
+                        _validate_initial_publication_issue(
+                            remote,
+                            rendered,
+                            finding_revision=initial_revision,
+                            initial_body=initial_body,
+                            expected_block_digest=initial_block_digest,
+                        )
                 else:
                     _validate_initial_publication_issue(
                         remote,
@@ -2402,6 +2456,17 @@ class GitHubSync:
             if entry.state in {"in_flight", "ambiguous"} and not retry_ambiguous:
                 return _ambiguous(
                     "create remains ambiguous; exact marker is absent and retry was not authorized"
+                )
+            if not current_initial_entry:
+                return _ambiguous(
+                    "a nonterminal initial-create receipt belongs to a different immutable "
+                    "finding snapshot; marker reconciliation is required before any new create"
+                )
+            if self.finding_store is not None and not callable(
+                getattr(self.provider, "create_issue_with_finding_revision", None)
+            ):
+                return _stale(
+                    "provider lacks canonical finding-revision reservation; refusing issue create"
                 )
             claim, claim_owned = self._acquire_finding_claim(
                 rendered,
@@ -2438,11 +2503,10 @@ class GitHubSync:
                 status = "created"
                 try:
                     remote = _coerce_issue(
-                        self.provider.create_issue(
-                            repository,
-                            title=rendered.title,
-                            body=initial_body_for_request,
-                            labels=rendered.labels,
+                        self._create_issue(
+                            rendered,
+                            finding_revision=revision,
+                            body=initial_body,
                         )
                     )
                     _validate_issue_for_finding(
@@ -2451,9 +2515,9 @@ class GitHubSync:
                     _validate_initial_publication_issue(
                         remote,
                         rendered,
-                        finding_revision=revision,
-                        initial_body=initial_body_for_request,
-                        expected_block_digest=rendered.auditor_block_digest,
+                        finding_revision=initial_revision,
+                        initial_body=initial_body,
+                        expected_block_digest=initial_block_digest,
                         exact_payload=True,
                     )
                     remote_write = "applied"
@@ -2495,9 +2559,9 @@ class GitHubSync:
                         _validate_initial_publication_issue(
                             remote,
                             rendered,
-                            finding_revision=revision,
-                            initial_body=initial_body_for_request,
-                            expected_block_digest=rendered.auditor_block_digest,
+                            finding_revision=initial_revision,
+                            initial_body=initial_body,
+                            expected_block_digest=initial_block_digest,
                             exact_payload=True,
                         )
                     except GitHubIssueMissing as missing:
@@ -2536,9 +2600,9 @@ class GitHubSync:
                     _validate_initial_publication_issue(
                         reread,
                         rendered,
-                        finding_revision=revision,
-                        initial_body=initial_body_for_request,
-                        expected_block_digest=rendered.auditor_block_digest,
+                        finding_revision=initial_revision,
+                        initial_body=initial_body,
+                        expected_block_digest=initial_block_digest,
                         exact_payload=True,
                     )
                     remote = reread
@@ -3489,6 +3553,7 @@ class GitHubSync:
         rendered: RenderedFinding,
         *,
         finding_revision: int | None,
+        body: str | None = None,
     ) -> GitHubIssue:
         """Create through the guarded canonical-revision seam when required."""
 
@@ -3507,14 +3572,14 @@ class GitHubSync:
                 finding_id=rendered.finding_id,
                 expected_finding_revision=finding_revision,
                 title=rendered.title,
-                body=rendered.body,
+                body=rendered.body if body is None else body,
                 labels=rendered.labels,
             )
         else:
             response = self.provider.create_issue(
                 rendered.repository,
                 title=rendered.title,
-                body=rendered.body,
+                body=rendered.body if body is None else body,
                 labels=rendered.labels,
             )
         return _coerce_issue(response)
@@ -4350,7 +4415,7 @@ def _validate_initial_entry_identity(
             expected["adoption_mode"] = adoption_mode
         if provenance != expected:
             mismatches.append("publication_provenance")
-    if adoption_mode == "canonical_link_comment":
+    if adoption_mode in {"canonical_link_comment", "marker_search"}:
         expected_digest = _adopted_initial_publication_digest(
             repository=entry.repository,
             finding_id=entry.finding_id,
@@ -4392,8 +4457,13 @@ def _validate_initial_entry_identity(
 def _adopt_initial_publication_snapshot(
     entry: GitHubOutboxEntry,
     issue: GitHubIssue,
+    *,
+    adoption_mode: str = "canonical_link_comment",
 ) -> GitHubOutboxEntry:
-    """Record an exact initial issue snapshot after its linked comment is verified."""
+    """Record an immutable initial snapshot after independent remote validation."""
+
+    if adoption_mode not in {"canonical_link_comment", "marker_search"}:
+        raise GitHubConflictError("initial snapshot adoption mode is unsupported")
 
     try:
         publication = _parse_publication_marker(issue.body)
@@ -4454,7 +4524,7 @@ def _adopt_initial_publication_snapshot(
             "publication_key": publication_key,
             "marker": entry.marker,
             "auditor_block_digest": block_digest,
-            "adoption_mode": "canonical_link_comment",
+            "adoption_mode": adoption_mode,
         },
         updated_at=utc_now(),
     )

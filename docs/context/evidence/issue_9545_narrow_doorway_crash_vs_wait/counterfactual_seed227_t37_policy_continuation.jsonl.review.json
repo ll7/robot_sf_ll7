@@ -1,0 +1,11 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait/counterfactual_seed227_t37_policy_continuation.jsonl",
+  "artifact_sha256": "21758f4a144426af47b8c5f7ffbdf40754b311e598475a24eb65531e6f70aef8",
+  "claim_boundary": "diagnostic-only evidence for issue #9545; not benchmark evidence and not admitted to the dissertation",
+  "dissertation_admission_status": "not_admitted",
+  "domain_approval_status": "not_granted",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs_independent_review",
+  "schema_version": "evidence-review-marker.v1"
+}

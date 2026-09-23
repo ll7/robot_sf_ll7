@@ -1,0 +1,65 @@
+{
+  "base_config_reward_block_sha256": "332810bc1a9e3e22915967c57eeae155b3f7b72cc89fb0032d4e96b0d17733d0",
+  "checkpoint_gamma_embedded": 0.99,
+  "checkpoint_gamma_source": "SB3 data blob: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+  "checkpoint_local_path": "output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+  "checkpoint_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+  "checkpoint_sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+  "counterfactual_fork": {
+    "hold_horizon_steps": 60,
+    "hold_start_offset_steps": 20,
+    "rationale": "Fork early enough for the zero-command branch to decelerate before contact; the same measured prefix is replayed for both branches."
+  },
+  "eval_reward_note": "Per-step rewards are recomputed live by route_completion_v3 with the final-stage weights; valid as evaluation-time replay under the bound objective, not as a recovered training-time return without training-log corroboration.",
+  "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
+  "gamma_training_config_declared": null,
+  "gamma_used_for_discounted_replay": 0.99,
+  "generated_at_utc": "2026-09-22T08:57:23.157386+00:00",
+  "git_head": "bc6b807e7ecbec0ea57164d83655f730c3113162",
+  "observation_contract": {
+    "fallback_or_degraded_execution": false,
+    "occupancy_grid_preserved": true,
+    "predictive_foresight_preserved": true,
+    "source": "RobotEnv raw dict -> normalize_map_observation -> PPOPlanner native dict alignment",
+    "status": "canonical_raw_grid_socnav_with_predictive_foresight"
+  },
+  "predictive_checkpoint_local_path": "output/model_cache/predictive_proxy_selected_v2_full/predictive_proxy_selected_v2_full-predictive_model.pt",
+  "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
+  "predictive_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+  "reward_curriculum": "2 stages; stage0 until_episodes=100 (progress/collision/timeout/terminal only); final stage = full weights above. Checkpoint at ~10M steps is past stage 0; stage-at-checkpoint is inferred, not logged.",
+  "reward_impl": "robot_sf/gym_env/reward.py:route_completion_v3_reward",
+  "reward_impl_git_blob_sha": "73d9315ad48a0f9da55389088275c760f140b081",
+  "reward_name": "route_completion_v3",
+  "reward_weights_final_stage": {
+    "collision": -15.0,
+    "comfort": -0.5,
+    "living": -0.015,
+    "near_miss": -1.5,
+    "progress": 1.1,
+    "smoothness": -0.18,
+    "stagnation": -0.8,
+    "terminal_bonus": 20.0,
+    "timeout": -6.5,
+    "ttc_risk": -1.2
+  },
+  "scenario": "francis2023_narrow_doorway",
+  "scenario_cap_steps": 400,
+  "scenario_file": "configs/scenarios/single/francis2023_narrow_doorway.yaml",
+  "scenario_seeds": [
+    225,
+    226,
+    227
+  ],
+  "schema": "issue_9545_binding.v1",
+  "termination_semantics": "terminated = route_complete OR timeout(timestep>=max_sim_steps) OR ped/robot/obstacle collision; RobotEnv returns truncated=False always; reward timeout term fires only on non-collision, non-success timeout",
+  "training_base_config": "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml",
+  "training_config": "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml",
+  "wrappers": {
+    "benchmark_adapter": "ppo_action_to_unicycle (mixed), feasibility projection",
+    "cbf_safety_filter": "disabled",
+    "fallback_to_goal": false,
+    "predictive_foresight": "enabled from the registry-pinned predictive checkpoint on CPU; replay fails closed if model loading degrades",
+    "predictive_foresight_device": "cpu",
+    "safety_wrapper": "disabled"
+  }
+}

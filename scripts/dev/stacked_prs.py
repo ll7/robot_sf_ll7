@@ -92,6 +92,7 @@ SUCCESS_CONCLUSIONS = frozenset({"neutral", "skipped", "success"})
 MERGE_QUEUE_GATE_CHECK_NAME = "merge-queue-gate"
 REST_PAGE_SIZE = 100
 REST_PAGE_BUDGET = 100
+_MAX_CHECK_RUN_ID = (1 << 63) - 1
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 _ACTIONS_RUN_JOB_PATH_RE = re.compile(
     r"^/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)/?$"
@@ -331,14 +332,21 @@ def _check_run_identifier(item: dict[str, Any]) -> int | None:
         return None
     if isinstance(raw_identifier, int):
         identifier = raw_identifier
-    elif isinstance(raw_identifier, str) and raw_identifier.strip().isdigit():
+    elif isinstance(raw_identifier, str):
+        normalized_identifier = raw_identifier.strip()
+        if (
+            not normalized_identifier.isascii()
+            or not normalized_identifier.isdigit()
+            or len(normalized_identifier) > 19
+        ):
+            return None
         try:
-            identifier = int(raw_identifier.strip())
+            identifier = int(normalized_identifier)
         except (OverflowError, ValueError):
             return None
     else:
         return None
-    return identifier if identifier > 0 else None
+    return identifier if 0 < identifier <= _MAX_CHECK_RUN_ID else None
 
 
 def _check_run_sort_key(item: dict[str, Any]) -> tuple[int, int, str]:

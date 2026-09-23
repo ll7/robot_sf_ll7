@@ -230,6 +230,23 @@ def test_check_run_identifier_rejects_oversized_decimal_string() -> None:
     assert _check_run_identifier({"id": "9" * 5000}) is None
 
 
+@pytest.mark.parametrize(
+    ("raw_identifier", "expected"),
+    [
+        (9223372036854775807, 9223372036854775807),
+        ("9223372036854775807", 9223372036854775807),
+        (9223372036854775808, None),
+        ("9223372036854775808", None),
+        ("9" * 4000, None),
+    ],
+)
+def test_check_run_identifier_enforces_int64_range(
+    raw_identifier: int | str, expected: int | None
+) -> None:
+    """Only positive signed-int64 Check Run identifiers can bind gate evidence."""
+    assert _check_run_identifier({"id": raw_identifier}) == expected
+
+
 def test_run_gh_api_rejects_oversized_numeric_json_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """An oversized numeric ID in a mocked gh response stays on the structured error path."""
     payload = '{"check_runs":[{"id":' + "9" * 5000 + "}]}"
@@ -364,6 +381,27 @@ def test_merge_queue_gate_rejects_malformed_newest_run_instead_of_using_old_succ
     }
 
     summary = summarize_merge_queue_gate([older, malformed_newer], head_sha=head_sha)
+
+    assert summary["status"] == "malformed"
+
+
+def test_merge_queue_gate_rejects_out_of_range_check_run_id() -> None:
+    """An out-of-range identifier cannot make exact-head gate evidence green."""
+    head_sha = "a" * 40
+    summary = summarize_merge_queue_gate(
+        [
+            {
+                "id": 9223372036854775808,
+                "name": "merge-queue-gate",
+                "workflow_name": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T11:00:00Z",
+                "head_sha": head_sha,
+            }
+        ],
+        head_sha=head_sha,
+    )
 
     assert summary["status"] == "malformed"
 

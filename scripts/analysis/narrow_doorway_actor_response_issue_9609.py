@@ -20,6 +20,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import shutil
+import tempfile
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -52,9 +55,15 @@ REPRO_COMMAND = (
 )
 
 
-def _write_review_sidecar(path: Path) -> None:
+def _write_review_sidecar(path: Path, *, artifact_path: Path | None = None) -> Path:
     sidecar_path = write_review_sidecar(path)
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    if artifact_path is not None:
+        repo_root = Path(__file__).resolve().parents[2]
+        try:
+            sidecar["artifact_path"] = artifact_path.resolve().relative_to(repo_root).as_posix()
+        except ValueError:
+            sidecar["artifact_path"] = artifact_path.name
     sidecar.update(
         {
             "claim_boundary": CLAIM_BOUNDARY,
@@ -64,6 +73,86 @@ def _write_review_sidecar(path: Path) -> None:
         }
     )
     write_json(sidecar_path, sidecar)
+    return sidecar_path
+
+
+def _publish_artifact_sidecar_pair(
+    staged_artifact: Path,
+    staged_sidecar: Path,
+    artifact_path: Path,
+    staging_dir: Path,
+) -> None:
+    """Replace an artifact and its hash sidecar as a rollback-capable pair.
+
+    The two public filenames cannot be renamed in one filesystem operation. Both
+    replacements are therefore prepared first, previous bytes are backed up,
+    and an ordinary publication error restores the old pair. A forced process
+    termination between renames can leave a missing or mismatched sidecar, which
+    downstream evidence checks reject by the recorded SHA-256.
+    """
+    sidecar_path = artifact_path.with_name(artifact_path.name + ".review.json")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_dir = staging_dir / "previous"
+    backup_dir.mkdir()
+    backups: dict[Path, Path | None] = {}
+    for target in (artifact_path, sidecar_path):
+        if target.exists():
+            backup = backup_dir / target.name
+            shutil.copy2(target, backup)
+            backups[target] = backup
+        else:
+            backups[target] = None
+
+    try:
+        os.replace(staged_artifact, artifact_path)
+        os.replace(staged_sidecar, sidecar_path)
+    except BaseException as publication_error:
+        rollback_errors: list[OSError] = []
+        for target in (sidecar_path, artifact_path):
+            backup = backups[target]
+            try:
+                if backup is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    os.replace(backup, target)
+            except OSError as rollback_error:
+                rollback_errors.append(rollback_error)
+        if rollback_errors:
+            raise RuntimeError(
+                "artifact/sidecar publication failed and rollback was incomplete; "
+                f"inspect {artifact_path} and {sidecar_path}"
+            ) from publication_error
+        raise
+
+
+def _publication_staging_root(path: Path) -> Path:
+    """Choose a same-filesystem staging parent outside the evidence tree."""
+    repo_root = Path(__file__).resolve().parents[2]
+    evidence_root = (repo_root / "docs" / "context" / "evidence").resolve()
+    try:
+        path.resolve().relative_to(evidence_root)
+    except ValueError:
+        return path.parent
+    return repo_root / "docs" / "context"
+
+
+def _write_json_with_review_sidecar(path: Path, payload: dict[str, Any]) -> None:
+    """Stage a marked JSON artifact and sidecar before publishing either file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = _publication_staging_root(path)
+    with tempfile.TemporaryDirectory(
+        prefix=".issue9609-actor-response-", dir=staging_root
+    ) as temporary_directory:
+        staging_dir = Path(temporary_directory)
+        staged_artifact = staging_dir / path.name
+        write_json(staged_artifact, payload)
+        staged_sidecar = _write_review_sidecar(staged_artifact, artifact_path=path)
+        _publish_artifact_sidecar_pair(
+            staged_artifact,
+            staged_sidecar,
+            path,
+            staging_dir,
+        )
 
 
 def _policy_outputs(planner: Any, model_obs: dict[str, np.ndarray]) -> dict[str, Any]:
@@ -387,7 +476,14 @@ def run(output_dir: Path) -> dict[str, Any]:
     if len(rows) != len(SEEDS) * len(OFFSETS):
         raise RuntimeError(f"expected 12 matched rows, observed {len(rows)}")
 
-    binding = parent.build_binding(output_dir, 0.99)
+    # The inherited builder writes binding.json as a side effect. Keep that
+    # intermediate file outside the durable evidence directory so a failure
+    # cannot replace the published binding before its final sidecar is ready.
+    repo_root = Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory(
+        prefix=".issue9609-parent-binding-", dir=repo_root / "docs" / "context"
+    ) as binding_staging_directory:
+        binding = parent.build_binding(Path(binding_staging_directory), 0.99)
     binding.update(
         {
             "schema": "issue_9609_actor_response_binding.v1",
@@ -430,7 +526,7 @@ def run(output_dir: Path) -> dict[str, Any]:
     binding_path = output_dir / "binding.json"
     table_path = output_dir / "matched_state_rows.csv"
     summary_path = output_dir / "mechanism_summary.json"
-    write_json(binding_path, binding)
+    _write_json_with_review_sidecar(binding_path, binding)
     write_distance_series_csv(
         table_path,
         rows,
@@ -439,7 +535,7 @@ def run(output_dir: Path) -> dict[str, Any]:
     )
     summary = classify(rows)
     write_json(summary_path, summary)
-    for path in (binding_path, table_path, summary_path):
+    for path in (table_path, summary_path):
         _write_review_sidecar(path)
     return summary
 

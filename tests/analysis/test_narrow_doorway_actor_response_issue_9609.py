@@ -1,5 +1,8 @@
 """Contract tests for the issue #9609 actor/observation diagnostic."""
 
+# evidence-writer-exempt: writer-failure tests create synthetic prior artifact/sidecar bytes only
+# under pytest tmp_path so rollback behavior can be asserted; they never write repository evidence.
+
 from __future__ import annotations
 
 import hashlib
@@ -113,6 +116,76 @@ def test_classify_fails_closed_on_missing_nonfinite_or_wrong_direction_ablation(
     summary = classify(rows)
 
     assert summary["result_classification"] == "not_identifiable"
+
+
+def test_parent_binding_write_failure_preserves_published_pair(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The inherited builder's side-effect write must stay in private staging."""
+    output_dir = tmp_path / "evidence"
+    output_dir.mkdir()
+    binding_path = output_dir / "binding.json"
+    sidecar_path = output_dir / "binding.json.review.json"
+    previous_binding = b'{"review_marker":"previous binding"}\n'
+    previous_sidecar = b'{"artifact_sha256":"previous digest"}\n'
+    binding_path.write_bytes(previous_binding)
+    sidecar_path.write_bytes(previous_sidecar)
+
+    monkeypatch.setattr(diagnostic, "SEEDS", (225,))
+    monkeypatch.setattr(
+        diagnostic,
+        "_trace_seed",
+        lambda _seed: ([{} for _ in diagnostic.OFFSETS], 21),
+    )
+    builder_paths: list[Path] = []
+
+    def fail_after_inherited_write(output_path: Path, _gamma: float) -> dict[str, object]:
+        output_path = Path(output_path)
+        builder_paths.append(output_path)
+        output_path.mkdir(parents=True, exist_ok=True)
+        diagnostic.write_json(output_path / "binding.json", {"intermediate": True})
+        raise RuntimeError("injected failure after inherited binding write")
+
+    monkeypatch.setattr(diagnostic.parent, "build_binding", fail_after_inherited_write)
+
+    with pytest.raises(RuntimeError, match="injected failure"):
+        diagnostic.run(output_dir)
+
+    assert builder_paths
+    assert builder_paths[0].resolve() != output_dir.resolve()
+    assert binding_path.read_bytes() == previous_binding
+    assert sidecar_path.read_bytes() == previous_sidecar
+
+
+def test_json_sidecar_publish_failure_rolls_back_previous_pair(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_dir = tmp_path / "evidence"
+    output_dir.mkdir()
+    binding_path = output_dir / "binding.json"
+    sidecar_path = output_dir / "binding.json.review.json"
+    previous_binding = b'{"review_marker":"previous binding"}\n'
+    previous_sidecar = b'{"artifact_sha256":"previous digest"}\n'
+    binding_path.write_bytes(previous_binding)
+    sidecar_path.write_bytes(previous_sidecar)
+    original_replace = diagnostic.os.replace
+    sidecar_replace_failed = False
+
+    def fail_sidecar_replace_once(source: Path, target: Path) -> None:
+        nonlocal sidecar_replace_failed
+        if Path(target) == sidecar_path and not sidecar_replace_failed:
+            sidecar_replace_failed = True
+            raise OSError("injected sidecar publication failure")
+        original_replace(source, target)
+
+    monkeypatch.setattr(diagnostic.os, "replace", fail_sidecar_replace_once)
+
+    with pytest.raises(OSError, match="injected sidecar publication failure"):
+        diagnostic._write_json_with_review_sidecar(binding_path, {"new": "binding"})
+
+    assert sidecar_replace_failed
+    assert binding_path.read_bytes() == previous_binding
+    assert sidecar_path.read_bytes() == previous_sidecar
 
 
 def test_cli_runs_after_rollout_foresight_load_and_writes_evidence(  # noqa: C901
@@ -251,6 +324,16 @@ def test_cli_runs_after_rollout_foresight_load_and_writes_evidence(  # noqa: C90
             "producer": "_nearest_forward_obstacle",
         },
     }
+    binding_path = tmp_path / "binding.json"
+    binding_sidecar = json.loads(
+        (tmp_path / "binding.json.review.json").read_text(encoding="utf-8")
+    )
+    assert binding_sidecar["artifact_path"] == binding_path.name
+    assert (
+        binding_sidecar["artifact_sha256"] == hashlib.sha256(binding_path.read_bytes()).hexdigest()
+    )
+    assert binding_sidecar["domain_approval_status"] == "not_granted"
+    assert binding_sidecar["dissertation_admission_status"] == "not_admitted"
     sidecar_path = tmp_path / "matched_state_rows.csv.review.json"
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["schema_version"] == "evidence-review-marker.v1"

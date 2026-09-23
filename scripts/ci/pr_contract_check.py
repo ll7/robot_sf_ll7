@@ -93,7 +93,11 @@ def is_negated(text: str, match_start: int) -> bool:
     # an unrelated sentence such as ``does not affect runtime. Closes #123``
     # suppresses the intentional closing declaration merely because ``not`` is
     # inside the historical 30-character lookback window.
-    prefix = re.split(r"[,.;:!?()\n]|\s[-–—]\s", prefix)[-1]
+    # Treat attached en/em dashes as prose-clause boundaries, while keeping
+    # ordinary hyphens inside compound negations (for example,
+    # ``does-not-close``).  A spaced ASCII hyphen remains a boundary for
+    # compatibility with the common ``No changes - Closes`` form.
+    prefix = re.split(r"[,.;:!?()\n]|[–—]|\s-\s", prefix)[-1]
     negations = [
         r"\bnot\b",
         r"\bno\b",
@@ -104,6 +108,11 @@ def is_negated(text: str, match_start: int) -> bool:
         r"\bdoesn't\b",
         r"\bdont\b",
         r"\bdon't\b",
+        r"\bcannot\b",
+        r"\b(?:can|won|isn)['’]t\b",
+        r"\bwithout\b",
+        r"\bfail(?:s|ed|ing)?\s+to\b",
+        r"\brefus(?:e|es|ed|ing)\s+to\b",
     ]
     for neg in negations:
         if re.search(neg, prefix):

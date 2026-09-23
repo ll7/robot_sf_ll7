@@ -723,6 +723,48 @@ def test_github_closing_parity_flags_negated_prose_mention() -> None:
     assert "leaves #9489 open" in blockers[0]
 
 
+@pytest.mark.parametrize(
+    "body",
+    (
+        "cannot close #1",
+        "can't close #1",
+        "won't close #1",
+        "isn't close #1",
+        "without close #1",
+        "fails to close #1",
+        "refuses to close #1",
+    ),
+)
+def test_github_closing_parity_flags_common_negated_closing_forms(body: str) -> None:
+    """Common negative constructions are not actionable, but remain parity blockers."""
+    assert pr_contract_check._find_closed_references(body) == []
+    assert pr_contract_check.find_closed_issues(body) == []
+    assert not pr_contract_check.check_closes_discipline(body, "ll7/robot_sf_ll7")
+
+    # GitHub still honors the raw closing keyword, so parity must fail closed.
+    blockers = pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "#1" in blockers[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "cannot reproduce. Closes #9566",
+        "can't reproduce, Closes #9566",
+        "won't reproduce; Closes #9566",
+        "isn't reproducible: Closes #9566",
+        "without changes! Closes #9566",
+        "fails to reproduce? Closes #9566",
+        "refuses to reproduce—Closes #9566",
+    ),
+)
+def test_github_closing_parity_preserves_explicit_close_after_negation(body: str) -> None:
+    """A clause-delimited explicit close remains intentional after negative prose."""
+    assert pr_contract_check._find_closed_references(body) == [(None, "9566")]
+    assert pr_contract_check.check_github_closing_parity(body, "ll7/robot_sf_ll7") == []
+
+
 def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
     """``Refs`` never closes; intentional ``Closes`` stays with closes-discipline."""
     assert pr_contract_check.check_github_closing_parity("Refs #9489", "ll7/robot_sf_ll7") == []
@@ -740,6 +782,7 @@ def test_github_closing_parity_allows_refs_and_explicit_closes() -> None:
         "This does not affect runtime; resolves #9566",
         "No changes - Closes #9566",
         "No changes — Closes #9566",
+        "No changes—Closes #9566",
     ),
 )
 def test_github_closing_parity_allows_explicit_close_after_unrelated_negation(

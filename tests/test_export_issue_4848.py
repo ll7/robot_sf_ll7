@@ -267,6 +267,7 @@ class TestWriteBundleFixture:
                 source_commit="07f7e8d4",
                 release_tag="paper-matrix-v2",
                 config_sha256="config-digest",
+                issue_url="https://github.com/ll7/robot_sf_ll7/issues/9431",
             ),
         )
 
@@ -275,6 +276,7 @@ class TestWriteBundleFixture:
         assert metadata["source_commit"] == "07f7e8d4"
         assert metadata["release_tag"] == "paper-matrix-v2"
         assert metadata["config_sha256"] == "config-digest"
+        assert metadata["issue"] == "https://github.com/ll7/robot_sf_ll7/issues/9431"
 
     def test_json_has_review_marker(self, tmp_path: Path) -> None:
         record = self._make_minimal_record()

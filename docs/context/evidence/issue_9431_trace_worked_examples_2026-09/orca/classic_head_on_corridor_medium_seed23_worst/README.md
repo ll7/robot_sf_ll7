@@ -1,8 +1,8 @@
-<!-- AI-GENERATED (robot_sf#4891, 2026-09-22) - NEEDS-REVIEW -->
-# Issue #4891 Exemplar Trace: classic_head_on_corridor_medium (orca)
+<!-- AI-GENERATED (robot_sf#9431, 2026-09-23) - NEEDS-REVIEW -->
+# Issue #9431 Exemplar Trace: classic_head_on_corridor_medium (orca)
 
 Plain-language summary: this directory contains one exemplar trace episode from the
-retained `issue9431_worked_traces_0_0_7_20260922` campaign (job 15716).
+retained `issue9431_trace_18ep_0_0_7_2e87f9de0523_20260922` campaign (job 15724).
 It is an illustrative head-on corridor interaction episode and does not establish a
 statistical benchmark or dissertation claim.
 
@@ -19,17 +19,17 @@ statistical benchmark or dissertation claim.
 
 ## Provenance
 
-- Campaign: `issue9431_worked_traces_0_0_7_20260922`
-- Job: `15716`
+- Campaign: `issue9431_trace_18ep_0_0_7_2e87f9de0523_20260922`
+- Job: `15724`
 - Planner: `orca`
 - Scenario: `classic_head_on_corridor_medium`
 - Seed: `23`
 - Selection mode: `worst`
 - Selection metric: `path_efficiency = 0.8604356938052677`
-- Git commit at generation: `07f7e8d43084de748915e1b1eb8b2a1603357c6e`
-- Source commit: `07f7e8d43084de748915e1b1eb8b2a1603357c6e`
+- Git commit at generation: `f39bbcc7d49026c490d5cbda8bb1bdcfb18f8233`
+- Source commit: `2e87f9de0523ef977bce19b40189ea0a74c61e13`
 - Release tag: `paper-matrix-v2-h600-s30-2026-09-07f7e8d43084de748915e1b1eb8b2a1603357c6e`
-- Config SHA-256: `dcaf87a46182e1cb64283a7b2442b02ce5fec86d33e9d72df2bcc6a04ee19806`
+- Config SHA-256: `9d0ddf20842e1d959a1f7428a4efb998ccab48e33d992b51bceeabb5781d90b5`
 
 ## Claim Boundary
 

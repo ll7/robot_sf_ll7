@@ -12,7 +12,9 @@ silently treated as ``false``.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import sys
 import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
@@ -26,6 +28,9 @@ OUTCOME_KEYS = ("route_complete", "collision_event", "timeout_event")
 # native and adapter components (for example a guarded PPO wrapper).  All
 # three are contract-valid; fallback/degraded flags remain disqualifying.
 EXECUTION_MODES = {"native", "adapter", "mixed"}
+EXPECTED_ARM_COUNT = 14
+EXPECTED_ROWS_PER_ARM = 1440
+EXPECTED_TOTAL_ROWS = 20160
 BOOTSTRAP_SAMPLES = 3000
 BOOTSTRAP_SEED = 123
 
@@ -33,8 +38,13 @@ BOOTSTRAP_SEED = 123
 def _row_outcome(row: Mapping[str, Any]) -> dict[str, bool]:
     outcome = row.get("outcome")
     if not isinstance(outcome, Mapping):
-        outcome = {}
-    return {key: bool(outcome.get(key, False)) for key in OUTCOME_KEYS}
+        raise ValueError("row outcome must be an object")
+    invalid = [key for key in OUTCOME_KEYS if type(outcome.get(key)) is not bool]
+    if invalid:
+        raise ValueError(
+            "row outcome requires explicit boolean values for " + ", ".join(invalid)
+        )
+    return {key: outcome[key] for key in OUTCOME_KEYS}
 
 
 def _nested_values(value: Any) -> Iterable[Any]:
@@ -68,12 +78,16 @@ def _goal_adjacent_status(row: Mapping[str, Any]) -> str:
 def _execution_audit(row: Mapping[str, Any]) -> list[str]:
     issues: list[str] = []
     metadata = row.get("algorithm_metadata")
-    if isinstance(metadata, Mapping):
+    if not isinstance(metadata, Mapping):
+        issues.append("algorithm_metadata=missing")
+    else:
         kinematics = metadata.get("planner_kinematics")
-        if isinstance(kinematics, Mapping):
-            mode = str(kinematics.get("execution_mode", ""))
-            if mode and mode not in EXECUTION_MODES:
-                issues.append(f"execution_mode={mode}")
+        if not isinstance(kinematics, Mapping):
+            issues.append("planner_kinematics=missing")
+        else:
+            mode = kinematics.get("execution_mode")
+            if not isinstance(mode, str) or mode not in EXECUTION_MODES:
+                issues.append(f"execution_mode={mode if mode is not None else 'missing'}")
         for key in ("fallback_used", "degraded", "unavailable"):
             if metadata.get(key) is True:
                 issues.append(f"{key}=true")
@@ -102,6 +116,52 @@ def _execution_audit(row: Mapping[str, Any]) -> list[str]:
 
 def _arm_from_name(name: str) -> str:
     return name.removesuffix("__differential_drive")
+
+
+def _normalize_sha256(value: str, *, label: str) -> str:
+    digest = value.removeprefix("sha256:").lower()
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise ValueError(f"{label} must be a 64-character SHA-256 digest")
+    return digest
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_sha256(path: Path, expected: str, *, label: str) -> str:
+    normalized = _normalize_sha256(expected, label=label)
+    actual = _sha256(path)
+    if actual != normalized:
+        raise ValueError(f"{label} mismatch: expected {normalized}, got {actual}")
+    return normalized
+
+
+def _row_source_commit(row: Mapping[str, Any]) -> str:
+    provenance = row.get("result_provenance")
+    provenance_commit: Any = None
+    if provenance is not None:
+        if not isinstance(provenance, Mapping):
+            raise ValueError("result_provenance must be an object when present")
+        provenance_commit = provenance.get("repo_commit")
+        if provenance_commit is not None and not isinstance(provenance_commit, str):
+            raise ValueError("result_provenance.repo_commit must be a string")
+    git_hash = row.get("git_hash")
+    if git_hash is not None and not isinstance(git_hash, str):
+        raise ValueError("git_hash must be a string")
+    if provenance_commit and git_hash and provenance_commit != git_hash:
+        raise ValueError(
+            "row source commits disagree: "
+            f"result_provenance.repo_commit={provenance_commit}, git_hash={git_hash}"
+        )
+    commit = provenance_commit or git_hash
+    if not commit:
+        raise ValueError("row is missing result_provenance.repo_commit and git_hash")
+    return commit
 
 
 def _read_jsonl(path: Path, *, arm: str) -> dict[tuple[str, int], dict[str, Any]]:
@@ -136,6 +196,8 @@ def _read_predecessor(archive: Path) -> dict[str, dict[tuple[str, int], dict[str
         for member in members:
             stem = Path(member.name).parent.name
             arm = _arm_from_name(stem)
+            if arm in result:
+                raise ValueError(f"duplicate predecessor arm {arm} in {archive}")
             extracted = handle.extractfile(member)
             if extracted is None:
                 raise ValueError(f"cannot read archive member {member.name}")
@@ -152,6 +214,30 @@ def _read_predecessor(archive: Path) -> dict[str, dict[tuple[str, int], dict[str
     return result
 
 
+def _archive_source_commit(archive: Path) -> str:
+    """Read the source identity from the publication archive's resolved manifest."""
+    manifest_suffix = "/payload/release/release_manifest.resolved.json"
+    with tarfile.open(archive, "r:gz") as handle:
+        matches = [
+            member
+            for member in handle.getmembers()
+            if member.isfile() and member.name.endswith(manifest_suffix)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                "publication archive must contain exactly one resolved release manifest; "
+                f"found {len(matches)}"
+            )
+        extracted = handle.extractfile(matches[0])
+        if extracted is None:
+            raise ValueError(f"cannot read resolved release manifest {matches[0].name}")
+        manifest = json.load(extracted)
+    source_commit = manifest.get("source_sha") or manifest.get("source_commit")
+    if not isinstance(source_commit, str) or not source_commit:
+        raise ValueError("resolved release manifest is missing a source commit")
+    return source_commit
+
+
 def _read_successor(root: Path) -> dict[str, dict[tuple[str, int], dict[str, Any]]]:
     result: dict[str, dict[tuple[str, int], dict[str, Any]]] = {}
     for path in sorted(root.glob("runs/*/episodes.jsonl")):
@@ -161,6 +247,134 @@ def _read_successor(root: Path) -> dict[str, dict[tuple[str, int], dict[str, Any
     if not result:
         raise ValueError(f"successor root has no run rows: {root}")
     return result
+
+
+def _bundle_episode_digests(bundle: Path) -> dict[str, str]:
+    """Return arm-to-digest bindings for episode rows inside a release bundle."""
+    suffix = "/payload/runs/"
+    result: dict[str, str] = {}
+    with tarfile.open(bundle, "r:gz") as handle:
+        members = sorted(
+            (
+                member
+                for member in handle.getmembers()
+                if member.isfile()
+                and suffix in member.name
+                and member.name.endswith("/episodes.jsonl")
+            ),
+            key=lambda member: member.name,
+        )
+        if not members:
+            raise ValueError(f"successor bundle has no payload run rows: {bundle}")
+        for member in members:
+            relative = member.name.rsplit(suffix, 1)[1]
+            parts = Path(relative).parts
+            if len(parts) != 2 or parts[1] != "episodes.jsonl":
+                raise ValueError(
+                    "successor bundle episode member must be one run directory deep: "
+                    f"{member.name}"
+                )
+            arm = _arm_from_name(parts[0])
+            if arm in result:
+                raise ValueError(f"duplicate successor bundle arm {arm} in {bundle}")
+            extracted = handle.extractfile(member)
+            if extracted is None:
+                raise ValueError(f"cannot read successor bundle member {member.name}")
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: extracted.read(1024 * 1024), b""):
+                digest.update(chunk)
+            result[arm] = digest.hexdigest()
+    return result
+
+
+def _validate_successor_bundle_root(bundle: Path, root: Path) -> None:
+    """Require the compared root's episode bytes to come from the pinned bundle."""
+    bundle_digests = _bundle_episode_digests(bundle)
+    root_digests = {
+        _arm_from_name(path.parent.name): _sha256(path)
+        for path in sorted(root.glob("runs/*/episodes.jsonl"))
+    }
+    if set(bundle_digests) != set(root_digests):
+        raise ValueError(
+            "successor bundle/root arm sets differ: "
+            f"bundle_only={sorted(set(bundle_digests) - set(root_digests))}, "
+            f"root_only={sorted(set(root_digests) - set(bundle_digests))}"
+        )
+    mismatched = [
+        arm for arm in sorted(bundle_digests) if bundle_digests[arm] != root_digests[arm]
+    ]
+    if mismatched:
+        raise ValueError(
+            "successor root episode bytes do not match the pinned bundle for arms: "
+            + ", ".join(mismatched)
+        )
+
+
+def _validate_matrix(
+    old: Mapping[str, Mapping[tuple[str, int], Mapping[str, Any]]],
+    new: Mapping[str, Mapping[tuple[str, int], Mapping[str, Any]]],
+    *,
+    expected_arm_count: int,
+    expected_rows_per_arm: int,
+    expected_total_rows: int,
+) -> None:
+    old_arms = set(old)
+    new_arms = set(new)
+    if old_arms != new_arms:
+        raise ValueError(
+            "predecessor/successor arm sets differ: "
+            f"predecessor_only={sorted(old_arms - new_arms)}, "
+            f"successor_only={sorted(new_arms - old_arms)}"
+        )
+    if len(old_arms) != expected_arm_count:
+        raise ValueError(f"expected {expected_arm_count} arms, got {len(old_arms)}")
+    for arm in sorted(old_arms):
+        old_keys = set(old[arm])
+        new_keys = set(new[arm])
+        if old_keys != new_keys:
+            raise ValueError(
+                f"{arm} scenario/seed keys differ: "
+                f"predecessor_only={sorted(old_keys - new_keys)}, "
+                f"successor_only={sorted(new_keys - old_keys)}"
+            )
+        if len(old_keys) != expected_rows_per_arm:
+            raise ValueError(
+                f"{arm} expected {expected_rows_per_arm} rows, got {len(old_keys)}"
+            )
+    old_total = sum(len(rows) for rows in old.values())
+    new_total = sum(len(rows) for rows in new.values())
+    if old_total != expected_total_rows or new_total != expected_total_rows:
+        raise ValueError(
+            f"expected {expected_total_rows} rows in each release, "
+            f"got predecessor={old_total}, successor={new_total}"
+        )
+
+
+def _validate_successor_rows(
+    rows_by_arm: Mapping[str, Mapping[tuple[str, int], Mapping[str, Any]]],
+    *,
+    successor_source_sha: str,
+) -> None:
+    issues: list[str] = []
+    for arm, rows in sorted(rows_by_arm.items()):
+        for key, row in sorted(rows.items()):
+            context = f"{arm}/{key[0]}/{key[1]}"
+            try:
+                _row_outcome(row)
+                commit = _row_source_commit(row)
+            except ValueError as exc:
+                issues.append(f"{context}: {exc}")
+                continue
+            if commit != successor_source_sha:
+                issues.append(
+                    f"{context}: source commit {commit} does not match {successor_source_sha}"
+                )
+            for issue in _execution_audit(row):
+                issues.append(f"{context}: {issue}")
+    if issues:
+        preview = "; ".join(issues[:20])
+        suffix = f"; ... {len(issues) - 20} more" if len(issues) > 20 else ""
+        raise ValueError(f"successor row validation failed: {preview}{suffix}")
 
 
 def _metric(row: Mapping[str, Any], metric: str) -> float:
@@ -201,16 +415,41 @@ def _bootstrap_seed_delta(
 def compare(
     predecessor_archive: Path,
     successor_root: Path,
+    successor_bundle: Path,
     *,
     predecessor_sha256: str,
     predecessor_source_sha: str,
     successor_source_sha: str,
     successor_bundle_sha256: str,
+    expected_arm_count: int = EXPECTED_ARM_COUNT,
+    expected_rows_per_arm: int = EXPECTED_ROWS_PER_ARM,
+    expected_total_rows: int = EXPECTED_TOTAL_ROWS,
 ) -> dict[str, Any]:
     """Pair predecessor and successor rows and derive the governed release diff."""
+    verified_predecessor_sha256 = _verify_sha256(
+        predecessor_archive, predecessor_sha256, label="predecessor archive SHA-256"
+    )
+    verified_successor_bundle_sha256 = _verify_sha256(
+        successor_bundle, successor_bundle_sha256, label="successor bundle SHA-256"
+    )
+    _validate_successor_bundle_root(successor_bundle, successor_root)
+    archive_source_commit = _archive_source_commit(predecessor_archive)
+    if archive_source_commit != predecessor_source_sha:
+        raise ValueError(
+            "predecessor source commit mismatch: "
+            f"expected {predecessor_source_sha}, archive declares {archive_source_commit}"
+        )
     old = _read_predecessor(predecessor_archive)
     new = _read_successor(successor_root)
-    arms = sorted(set(old) | set(new))
+    _validate_matrix(
+        old,
+        new,
+        expected_arm_count=expected_arm_count,
+        expected_rows_per_arm=expected_rows_per_arm,
+        expected_total_rows=expected_total_rows,
+    )
+    _validate_successor_rows(new, successor_source_sha=successor_source_sha)
+    arms = sorted(old)
     execution_issues: dict[str, list[str]] = defaultdict(list)
     arm_reports: dict[str, Any] = {}
     changed: list[dict[str, Any]] = []
@@ -236,9 +475,6 @@ def compare(
             new_counts["collision"] += int(outcome["collision_event"])
             new_counts["timeout"] += int(outcome["timeout_event"])
             new_goal[_goal_adjacent_status(row)] += 1
-            issues = _execution_audit(row)
-            if issues:
-                execution_issues[arm].extend(issues)
         for key in paired_keys:
             old_outcome = _row_outcome(old_rows[key])
             new_outcome = _row_outcome(new_rows[key])
@@ -270,14 +506,15 @@ def compare(
         "schema_version": "issue-9431-release-diff.v1",
         "predecessor": {
             "release": "0.0.6",
-            "archive_sha256": predecessor_sha256,
+            "archive_sha256": verified_predecessor_sha256,
             "archive": predecessor_archive.name,
-            "source_commit": predecessor_source_sha,
+            "source_commit": archive_source_commit,
         },
         "successor": {
             "release": "0.0.7",
             "source_commit": successor_source_sha,
-            "bundle_sha256": successor_bundle_sha256,
+            "bundle_sha256": verified_successor_bundle_sha256,
+            "bundle": successor_bundle.name,
             "campaign_root": successor_root.name,
         },
         "arms": arm_reports,
@@ -323,8 +560,10 @@ def _markdown(report: Mapping[str, Any]) -> str:
         new = values["successor_outcomes"]
         old_goal = values["predecessor_goal_adjacent_timeout"]
         new_goal = values["successor_goal_adjacent_timeout"]
+        old_goal_text = ", ".join(f"{key}={value}" for key, value in sorted(old_goal.items()))
+        new_goal_text = ", ".join(f"{key}={value}" for key, value in sorted(new_goal.items()))
         lines.append(
-            f"| `{arm}` | {values['paired_rows']} | {old.get('success', 0)} | {new.get('success', 0)} | {old.get('collision', 0)} | {new.get('collision', 0)} | {old.get('timeout', 0)} | {new.get('timeout', 0)} | old `{dict(old_goal)}`; new `{dict(new_goal)}` |"
+            f"| `{arm}` | {values['paired_rows']} | {old.get('success', 0)} | {new.get('success', 0)} | {old.get('collision', 0)} | {new.get('collision', 0)} | {old.get('timeout', 0)} | {new.get('timeout', 0)} | old `{old_goal_text}`; new `{new_goal_text}` |"
         )
     lines += [
         "",
@@ -354,6 +593,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--predecessor-archive", type=Path, required=True)
     parser.add_argument("--successor-root", type=Path, required=True)
+    parser.add_argument("--successor-bundle", type=Path, required=True)
     parser.add_argument("--predecessor-sha256", required=True)
     parser.add_argument("--predecessor-source-sha", required=True)
     parser.add_argument("--successor-source-sha", required=True)
@@ -361,14 +601,19 @@ def main() -> int:
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-markdown", type=Path, required=True)
     args = parser.parse_args()
-    report = compare(
-        args.predecessor_archive,
-        args.successor_root,
-        predecessor_sha256=args.predecessor_sha256,
-        predecessor_source_sha=args.predecessor_source_sha,
-        successor_source_sha=args.successor_source_sha,
-        successor_bundle_sha256=args.successor_bundle_sha256,
-    )
+    try:
+        report = compare(
+            args.predecessor_archive,
+            args.successor_root,
+            args.successor_bundle,
+            predecessor_sha256=args.predecessor_sha256,
+            predecessor_source_sha=args.predecessor_source_sha,
+            successor_source_sha=args.successor_source_sha,
+            successor_bundle_sha256=args.successor_bundle_sha256,
+        )
+    except (OSError, ValueError, json.JSONDecodeError, tarfile.TarError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"

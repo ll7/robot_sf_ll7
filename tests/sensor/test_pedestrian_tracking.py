@@ -11,6 +11,7 @@ from robot_sf.sensor.pedestrian_tracking import (
     PedestrianObservationSnapshot,
     PedestrianTracker,
     PedestrianTrackingConfig,
+    PedestrianTrackingResult,
     TrackStatus,
 )
 
@@ -351,6 +352,164 @@ def test_reset_clears_history_and_restarts_episode_ids() -> None:
     assert [track.track_id for track in result.tracks] == [1]
     np.testing.assert_allclose(result.track(1).position_global_xy, [9.0, 0.0])
     assert result.track(1).history_valid_mask.tolist() == [False, False, False, True]
+
+
+def test_reset_advances_epoch_while_restarting_numeric_ids() -> None:
+    """The same numeric ID after reset is separated by a distinct epoch."""
+    tracker = _tracker()
+    before = tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert before.reset_epoch == 0
+    assert tracker.reset_epoch == 0
+    assert [track.track_id for track in before.tracks] == [1]
+    tracker.reset()
+    after = tracker.update(_snapshot(0.0, 0, [[9.0, 0.0]], [[0.0, 0.0]]))
+    assert after.reset_epoch == 1
+    assert tracker.reset_epoch == 1
+    assert [track.track_id for track in after.tracks] == [1]
+    assert (before.reset_epoch, 1) != (after.reset_epoch, 1)
+    assert before.reset_epoch == 0
+    tracker.reset()
+    assert tracker.reset_epoch == 2
+
+
+def test_disabled_result_carries_current_epoch() -> None:
+    """Disabled updates still report the producer-owned epoch without mutating it."""
+    tracker = PedestrianTracker()
+    first = tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert first.reset_epoch == 0
+    tracker.reset()
+    second = tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert second.reset_epoch == 1
+    assert second.diagnostics.blockers == ("tracking_disabled",)
+
+
+def test_lost_reacquired_track_keeps_composite_identity_within_epoch() -> None:
+    """Lost and reacquired tracks keep one (epoch, track_id) identity."""
+    tracker = _tracker(max_missed_steps=2)
+    born = tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[1.0, 0.0]]))
+    lost = tracker.update(
+        _snapshot(1.0, 1, [[np.nan, np.nan]], [[np.nan, np.nan]], visible=[False])
+    )
+    reacquired = tracker.update(_snapshot(2.0, 2, [[3.0, 0.0]], [[1.0, 0.0]]))
+    for result in (born, lost, reacquired):
+        assert result.reset_epoch == 0
+        assert result.track(1) is not None
+    assert lost.track(1).status is TrackStatus.LOST
+    assert reacquired.track(1).status is TrackStatus.CONFIRMED
+    assert reacquired.associations[0].track_id == 1
+    assert (reacquired.reset_epoch, 1) == (born.reset_epoch, 1)
+
+
+def test_retirement_then_birth_separates_composite_identities() -> None:
+    """Retirement stays explicit and later births differ from retired identities."""
+    tracker = _tracker(max_missed_steps=1)
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    tracker.update(_snapshot(1.0, 1, [[np.nan, np.nan]], [[np.nan, np.nan]], visible=[False]))
+    retired = tracker.update(
+        _snapshot(2.0, 2, [[np.nan, np.nan]], [[np.nan, np.nan]], visible=[False])
+    )
+    born = tracker.update(_snapshot(3.0, 3, [[5.0, 0.0]], [[0.0, 0.0]]))
+    assert retired.track(1).status is TrackStatus.RETIRED
+    assert retired.diagnostics.retired_track_count == 1
+    assert born.track(1) is None
+    assert born.track(2) is not None
+    assert born.reset_epoch == retired.reset_epoch == 0
+    assert (born.reset_epoch, 2) != (retired.reset_epoch, 1)
+
+
+def test_identical_update_reset_sequences_replay_composite_identities() -> None:
+    """Identical valid sequences reproduce (epoch, track_id, status) tuples."""
+
+    def run_sequence() -> list[tuple[int, int, str]]:
+        tracker = _tracker(max_missed_steps=1)
+        results = [
+            tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]])),
+            tracker.update(
+                _snapshot(1.0, 1, [[np.nan, np.nan]], [[np.nan, np.nan]], visible=[False])
+            ),
+            tracker.update(
+                _snapshot(2.0, 2, [[np.nan, np.nan]], [[np.nan, np.nan]], visible=[False])
+            ),
+            tracker.update(_snapshot(3.0, 3, [[5.0, 0.0]], [[0.0, 0.0]])),
+        ]
+        tracker.reset()
+        results.append(tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]])))
+        return [
+            (result.reset_epoch, track.track_id, track.status.value)
+            for result in results
+            for track in result.tracks
+        ]
+
+    identities = run_sequence()
+    assert identities == run_sequence()
+    assert (0, 1, "retired") in identities
+    assert (0, 2, "tentative") in identities
+    assert (1, 1, "tentative") in identities
+
+
+def test_failed_update_does_not_advance_epoch_or_consume_ids(monkeypatch) -> None:
+    """A failure after partial ID consumption rolls back epoch and next-ID state."""
+    tracker = _tracker()
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert tracker.reset_epoch == 0
+
+    def fail_diagnostics(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise RuntimeError("synthetic diagnostics failure")
+
+    monkeypatch.setattr(tracker, "_diagnostics", fail_diagnostics)
+    with pytest.raises(RuntimeError, match="diagnostics"):
+        tracker.update(_snapshot(1.0, 1, [[1.0, 0.0], [5.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]))
+    monkeypatch.undo()
+
+    assert tracker.reset_epoch == 0
+    retried = tracker.update(_snapshot(1.0, 1, [[1.0, 0.0], [5.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]))
+    assert retried.reset_epoch == 0
+    assert [track.track_id for track in retried.tracks] == [1, 2]
+
+
+def test_malformed_update_neither_advances_epoch_nor_consumes_ids() -> None:
+    """Rejected snapshots leave epoch and next-ID allocation untouched."""
+    tracker = _tracker()
+    first = tracker.update(_snapshot(1.0, 1, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert first.reset_epoch == 0
+    with pytest.raises(ValueError, match="timestamp"):
+        tracker.update(_snapshot(0.5, 2, [[9.0, 0.0]], [[0.0, 0.0]]))
+    with pytest.raises(ValueError, match="step_index"):
+        tracker.update(_snapshot(2.0, 1, [[9.0, 0.0]], [[0.0, 0.0]]))
+    assert tracker.reset_epoch == 0
+    result = tracker.update(_snapshot(2.0, 2, [[9.0, 0.0]], [[0.0, 0.0]]))
+    assert result.reset_epoch == 0
+    assert [track.track_id for track in result.tracks] == [1, 2]
+
+
+def test_manual_result_omits_epoch_while_tracker_result_supplies_integer() -> None:
+    """Legacy construction reports provenance unavailable instead of manufacturing it."""
+    produced = _tracker(confirmation_steps=1).update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert type(produced.reset_epoch) is int
+    assert produced.reset_epoch == 0
+    manual = PedestrianTrackingResult(
+        timestamp_s=produced.timestamp_s,
+        step_index=produced.step_index,
+        tracks=produced.tracks,
+        associations=produced.associations,
+        diagnostics=produced.diagnostics,
+        history_order=produced.history_order,
+    )
+    assert manual.reset_epoch is None
+    assert replace(manual, reset_epoch=None).reset_epoch is None
+
+
+def test_result_rejects_malformed_reset_epoch() -> None:
+    """The public epoch field cannot bypass its typed immutable contract."""
+    result = _tracker(confirmation_steps=1).update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert result.reset_epoch == 0
+    with pytest.raises(ValueError, match="reset_epoch"):
+        replace(result, reset_epoch=-1)
+    with pytest.raises(ValueError, match="reset_epoch"):
+        replace(result, reset_epoch=1.5)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="reset_epoch"):
+        replace(result, reset_epoch=True)
 
 
 def test_maximum_track_count_is_bounded_and_reported() -> None:

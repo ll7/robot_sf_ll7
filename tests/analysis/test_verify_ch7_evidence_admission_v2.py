@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 from jsonschema import Draft202012Validator
 
 from scripts.analysis import build_ch7_evidence_package_v2 as builder
@@ -19,6 +20,10 @@ SOURCE_PACKAGE = (
 )
 DURABLE_V2_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
+)
+FROZEN_CONFIG_PATH = Path(__file__).parents[2] / "configs/analysis/ch7_evidence_package.v2.1.yaml"
+DURABLE_REFRESH_PACKAGE = (
+    Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2_1"
 )
 
 
@@ -144,6 +149,53 @@ def test_check_only_rejects_csv_cell_identity_drift_with_updated_checksum(
         verifier.diagnose_v2_package(package)
 
 
+@pytest.mark.parametrize("field", ["claim_boundary", "exclusion_reason"])
+def test_post_ruling_check_only_rejects_forged_claim_or_exclusion(
+    tmp_path: Path, field: str
+) -> None:
+    package = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE, output=package, config_path=FROZEN_CONFIG_PATH
+    )
+    manifest_path = package / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if field == "claim_boundary":
+        manifest["claim_boundary"] = "forged boundary"
+    else:
+        manifest["metrics"]["excluded"][0]["reason"] = "forged exclusion"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n")
+    builder._write_checksums(package)
+    with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="expected|excluded"):
+        verifier.diagnose_v2_package(package)
+
+
+def test_post_ruling_check_only_rejects_coordinated_forged_exclusion_reason(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE, output=package, config_path=FROZEN_CONFIG_PATH
+    )
+    forged_reason = "forged but frozen #7042 ruling"
+    for relative_path, key in (
+        ("manifest.json", "metrics"),
+        ("publication/reduced_atlas.json", "excluded_metrics"),
+        ("source/projection_binding.json", "excluded_metrics"),
+    ):
+        path = package / relative_path
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        entries = payload[key]["excluded"] if key == "metrics" else payload[key]
+        entries[0]["reason"] = forged_reason
+        path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+    builder._write_checksums(package)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="approved ruling",
+    ):
+        verifier.diagnose_v2_package(package)
+
+
 def test_blocked_builder_output_cannot_cross_the_v2_admission_boundary(tmp_path: Path) -> None:
     output = tmp_path / "package"
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
@@ -193,6 +245,74 @@ def test_check_only_accepts_complete_review_sidecars_on_durable_package() -> Non
     assert diagnostic["receipt_template"]["template_status"] == "not_a_receipt"
 
 
+def test_v21_custody_uses_canonical_source_gate_registry() -> None:
+    config = yaml.safe_load(FROZEN_CONFIG_PATH.read_text(encoding="utf-8"))
+    expected = {
+        "package_key": builder.V21_PACKAGE_KEY,
+        "source_registry_key": builder.V21_SOURCE_REGISTRY_KEY,
+        "source_registry_path": "configs/analysis/source_gate_registry.v1.json",
+        "source_registry_sha256": "ebff0f47aeefd5e423c968f9c63f44961a7338765898874bb53b3a623e05944a",
+    }
+    assert config["custody"] == expected
+    manifest = json.loads((DURABLE_REFRESH_PACKAGE / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["custody"] == expected
+
+
+def test_admitted_v21_receipt_must_bind_the_custody_registry(tmp_path: Path, monkeypatch) -> None:
+    package = tmp_path / "package"
+    receipt_path = tmp_path / "receipt.json"
+    package.mkdir()
+    manifest = {
+        "package_revision": "v2.1",
+        "custody": {"source_registry_sha256": "b" * 64},
+        "status": "admitted",
+        "admission_status": "admitted",
+        "source_integrity_gate": "passed",
+        "admission": {"status": "admitted"},
+        "source": {
+            "v1_package_sha256sums": "a" * 64,
+            "v1_manifest_sha256": "a" * 64,
+            "v1_audit_member_sha256": "a" * 64,
+            "v1_reduced_atlas_member_sha256": "a" * 64,
+        },
+        "inputs": {"portfolio_config": {"sha256": "a" * 64}},
+        "claim_boundary": "bound",
+        "roles": {
+            "cross_topology_inversion": {"grain": "release_cell"},
+            "cross_mechanism_inversion": {"grain": "release_cell"},
+            "feasibility_criticism": {"grain": "release_cell_geometry"},
+        },
+    }
+    receipt = _valid_receipt()
+    receipt["package"] = {"sha256sums_sha256": "a" * 64, "manifest_sha256": "a" * 64}
+    receipt["source"]["source_registry_sha256"] = "c" * 64
+    receipt["scope"]["claim_boundary"] = "bound"
+    manifest_path = package / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    monkeypatch.setattr(
+        verifier.admission, "_verify_members", lambda *args, **kwargs: ("a" * 64, [])
+    )
+    monkeypatch.setattr(verifier, "_validate", lambda *args, **kwargs: None)
+    monkeypatch.setattr(verifier, "_verify_projection_contract", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        verifier,
+        "_read_object",
+        lambda path, label: manifest if path == manifest_path else receipt,
+    )
+    monkeypatch.setattr(verifier, "_sha256_file", lambda path: "a" * 64)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="source registry binding differs",
+    ):
+        verifier.verify_v2_admission(package, receipt_path)
+
+    receipt["source"]["source_registry_sha256"] = "b" * 64
+    assert verifier.verify_v2_admission(package, receipt_path)["status"] == "admitted"
+
+
 def test_check_only_template_is_rejected_as_an_admission_receipt(tmp_path: Path) -> None:
     output = tmp_path / "package"
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
@@ -212,3 +332,39 @@ def test_check_only_cli_emits_a_machine_readable_diagnostic(
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "ch7-evidence-admission-diagnostic.v1"
     assert payload["diagnostics"]["admission_authorized"] is False
+
+
+def test_post_ruling_check_only_removes_superseded_metric_blocker(tmp_path: Path) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE,
+        output=output,
+        config_path=FROZEN_CONFIG_PATH,
+    )
+
+    diagnostic = verifier.diagnose_v2_package(output)
+
+    assert diagnostic["status"] == "blocked_pending_domain_approval"
+    assert diagnostic["admission_status"] == "not_admitted"
+    assert diagnostic["diagnostics"]["receipt_created"] is False
+    assert {blocker["code"] for blocker in diagnostic["diagnostics"]["blockers"]} == {
+        "domain_approval_pending",
+        "external_admission_receipt_required",
+    }
+
+
+def test_check_only_verifies_durable_refresh_review_sidecars() -> None:
+    diagnostic = verifier.diagnose_v2_package(DURABLE_REFRESH_PACKAGE)
+
+    assert diagnostic["diagnostics"]["package_checksums_verified"] is True
+    assert diagnostic["diagnostics"]["receipt_created"] is False
+    assert diagnostic["diagnostics"]["blockers"] == [
+        {
+            "code": "domain_approval_pending",
+            "reason": "v2 domain approval is outside the package builder and verifier",
+        },
+        {
+            "code": "external_admission_receipt_required",
+            "reason": "a maintainer-owned ch7-evidence-admission.v2 receipt is required",
+        },
+    ]

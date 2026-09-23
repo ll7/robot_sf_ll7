@@ -42,10 +42,13 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
   The historical 600-step horizon assumption is not used anywhere.
 - Wrappers/adapters: benchmark `ppo_action_to_unicycle` (mixed) + feasibility projection;
   `safety_wrapper`/`cbf_safety_filter` disabled; `fallback_to_goal: false` (fail-closed);
-  predictive foresight is enabled from the registry-pinned checkpoint and the replay
-  fails closed on predictive-model degradation. The raw RobotEnv dict (including the
-  occupancy grid and metadata) is passed through `normalize_map_observation` to the
-  native PPO dict adapter; no predictive keys are backfilled.
+  predictive foresight is enabled from the registry-pinned checkpoint. The raw RobotEnv
+  dict (including the occupancy grid and metadata) is passed through
+  `normalize_map_observation` to the native PPO dict adapter, which computes six
+  predictive features from that checkpoint. The replay fails closed unless every policy
+  step reports `load_status: loaded`, `effective_prediction_mode: predictive_foresight`,
+  and boolean `fallback_used: false`; missing or degraded inference is not replaced with
+  default-zero predictive features.
 - Counterfactual fork: 20 steps before measured contact, then 60 steps. This is early
   enough for the zero-command branch to decelerate; both branches replay the same
   measured prefix.

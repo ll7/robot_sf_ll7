@@ -18,6 +18,7 @@ from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     SCENARIO_YAML,
     TRAINING_BASE_CONFIG,
     TRAINING_CONFIG,
+    _assert_predictive_foresight_loaded,
     _assert_producer_source_commit_matches_current_source,
     _discounted_return,
     _min_obstacle_clearance,
@@ -69,6 +70,50 @@ def test_discounted_return_orders_crash_below_wait() -> None:
     wait = [-0.015] * 11
     crash = [0.05] * 10 + [-15.0]
     assert _discounted_return(crash, 0.99) < _discounted_return(wait, 0.99)
+
+
+@pytest.mark.parametrize(
+    "foresight_prediction",
+    [
+        {
+            "load_status": "loaded",
+            "effective_prediction_mode": "predictive_foresight",
+        },
+        {
+            "load_status": "loaded",
+            "effective_prediction_mode": "predictive_foresight",
+            "fallback_used": None,
+        },
+        {
+            "load_status": "loaded",
+            "effective_prediction_mode": "predictive_foresight",
+            "fallback_used": True,
+        },
+        {
+            "load_status": "loaded",
+            "effective_prediction_mode": "predictive_foresight",
+            "fallback_used": "false",
+        },
+        {
+            "load_status": "loaded",
+            "effective_prediction_mode": "predictive_foresight",
+            "fallback_used": 0,
+        },
+    ],
+    ids=("missing", "null", "fallback", "string-false", "integer-zero"),
+)
+def test_predictive_foresight_provenance_requires_explicit_no_fallback(
+    foresight_prediction: dict,
+) -> None:
+    """Unknown or non-boolean fallback provenance cannot pass the replay gate."""
+
+    class FakePlanner:
+        @staticmethod
+        def foresight_diagnostics() -> dict:
+            return {"foresight_prediction": foresight_prediction}
+
+    with pytest.raises(RuntimeError, match="verified predictive checkpoint"):
+        _assert_predictive_foresight_loaded(FakePlanner())
 
 
 def test_obstacle_clearance_parses_legacy_flat_endpoints() -> None:

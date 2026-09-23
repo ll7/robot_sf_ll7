@@ -534,9 +534,10 @@ def _rollout_policy(env, planner, max_steps: int, obs):
     done = False
     step_idx = 0
     while not done and step_idx < max_steps:
-        # Preserve the complete canonical environment dict.  The PPO adapter
-        # aligns its native MultiInput observation and predictive features from
-        # this payload; lossy reconstruction silently backfills model inputs.
+        # Preserve the canonical environment dict for the PPO MultiInput
+        # adapter, which computes six predictive features from the configured
+        # checkpoint. Missing or degraded model outputs must not become
+        # default-zero inputs; the provenance check below fails closed.
         step_obs = _normalize_runner_obs(obs)
         action_dict = planner.step(step_obs)
         _assert_predictive_foresight_loaded(planner)
@@ -594,7 +595,7 @@ def _assert_predictive_foresight_loaded(planner) -> None:
     if (
         provenance.get("load_status") != "loaded"
         or provenance.get("effective_prediction_mode") != "predictive_foresight"
-        or provenance.get("fallback_used") is True
+        or provenance.get("fallback_used") is not False
     ):
         raise RuntimeError(
             "Diagnostic replay requires the verified predictive checkpoint; "

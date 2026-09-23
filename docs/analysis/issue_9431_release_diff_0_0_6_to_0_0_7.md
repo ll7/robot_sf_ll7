@@ -2,10 +2,10 @@
 
 This report pairs rows by planner, scenario, and seed. Successor execution is admitted only when every row is native, adapter, or mixed mode with no fallback/degraded row. Trace-dependent goal-adjacent timeout labels remain `unavailable` when step traces were not recorded.
 
-This is a **descriptive multi-change release comparison**, not a single-change causal ablation. The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections.
+This is a **descriptive multi-change release comparison**, not a single-change causal ablation. Rows match by planner, scenario ID, and seed, but the scenario definitions differ between releases. The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections.
 
 - validated matrix: **14 arms × 48 scenarios × 30 seeds** = 20160 rows
-- scenario-matrix SHA-256: `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`; source manifest `configs/scenarios/classic_interactions_francis2023.yaml` SHA-256: `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`
+- scenario sources: 0.0.6 `configs/scenarios/classic_interactions_francis2023.yaml` (SHA-256 `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`) → 0.0.7 `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml` (SHA-256 `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`); definitions identical: **no**
 
 - predecessor archive SHA-256: `61b865fdde65455a39a68221d7c65b0eff315bfa51b4c0bfe34aed3c5d4f3e8e`
 - exact source range: `31cdfe0361abe2c520117a17f99c1b7a0aba4359..07f7e8d43084de748915e1b1eb8b2a1603357c6e`

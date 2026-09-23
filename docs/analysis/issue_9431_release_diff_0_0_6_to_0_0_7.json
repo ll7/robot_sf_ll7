@@ -9660,7 +9660,8 @@
   "comparison_design": {
     "causal_ablation": false,
     "classification": "descriptive multi-change release comparison",
-    "note": "The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections; it does not isolate one causal change."
+    "note": "Rows are matched by planner, scenario ID, and seed, but the predecessor and successor scenario definitions differ. The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections; it does not isolate one causal change.",
+    "scenario_definitions_identical": false
   },
   "execution_audit": {
     "admitted": true,
@@ -9689,6 +9690,7 @@
       "social_force",
       "socnav_sampling"
     ],
+    "scenario_definitions_identical": false,
     "scenario_ids": [
       "classic_bottleneck_high",
       "classic_bottleneck_low",
@@ -9739,9 +9741,16 @@
       "francis2023_robot_crowding",
       "francis2023_robot_overtaking"
     ],
-    "scenario_manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
-    "scenario_manifest_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
-    "scenario_matrix_sha256": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    "scenario_manifests": {
+      "predecessor": {
+        "manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+      },
+      "successor": {
+        "manifest": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+        "sha256": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+      }
+    },
     "seeds": [
       111,
       112,

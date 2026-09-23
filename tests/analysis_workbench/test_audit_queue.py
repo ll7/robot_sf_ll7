@@ -172,10 +172,11 @@ def _canonical_alignment(primary, peer):
     }
 
 
-def _select_from_worker(state_path: str, start_event, result_queue) -> None:
+def _select_from_worker(state_path: str, start_event, ready_queue, result_queue) -> None:
     """Attempt one synchronized state write in a separate process."""
 
     queue = AuditQueue((_candidate("cross-process"),), state_path=state_path)
+    ready_queue.put("ready")
     start_event.wait(timeout=10)
     try:
         queue.select_next()
@@ -1017,13 +1018,19 @@ def test_state_cas_serializes_synchronized_cross_process_writers(tmp_path: Path)
     context = multiprocessing.get_context("fork")
     state_path = str(tmp_path / "state.json")
     start_event = context.Event()
+    ready_queue = context.Queue()
     result_queue = context.Queue()
     workers = [
-        context.Process(target=_select_from_worker, args=(state_path, start_event, result_queue))
+        context.Process(
+            target=_select_from_worker,
+            args=(state_path, start_event, ready_queue, result_queue),
+        )
         for _ in range(2)
     ]
     for worker in workers:
         worker.start()
+    for _ in workers:
+        assert ready_queue.get(timeout=10) == "ready"
     start_event.set()
     results = [result_queue.get(timeout=10) for _ in workers]
     for worker in workers:

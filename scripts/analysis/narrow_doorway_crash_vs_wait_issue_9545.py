@@ -22,6 +22,14 @@ benchmark evidence. Counterfactual continuations diverge from the measured
 episode where pedestrian reactions differ; divergence is documented per row.
 No retraining is performed; sensitivity varies eval-time replay weights only.
 
+Trace timing: each measured ``step`` and counterfactual ``branch_step`` identifies
+the action computed from the pre-step observation and passed to ``env.step`` at that
+iteration; robot/pedestrian positions, velocities, TTC, and reward fields are sampled
+from the resulting post-step state.
+The binding records the resolved CLI seeds and fork parameters. Its
+``producer_source_commit`` identifies the frozen source commit used to generate
+the bundle; the generated evidence is committed later and is not self-referential.
+
 Claim scope: bound checkpoint
   ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
 in francis2023_narrow_doorway only.
@@ -151,6 +159,42 @@ def _git_head() -> str:
         return out.stdout.strip()
     except (OSError, ValueError, RuntimeError):
         return "unavailable"
+
+
+def _git_producer_blob_sha256(commit: str, producer_path: Path) -> str:
+    """Hash the producer bytes stored in ``commit`` without using the worktree file."""
+    import subprocess
+
+    try:
+        relative_path = producer_path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+        out = subprocess.run(
+            ["git", "show", f"{commit}:{relative_path}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+        )
+        return hashlib.sha256(out.stdout).hexdigest()
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError):
+        return "unavailable"
+
+
+def _assert_producer_source_commit_matches_current_source(
+    producer_path: Path,
+) -> tuple[str, str]:
+    """Require the source commit used for evidence generation to contain this producer bytes."""
+    source_commit = _git_head()
+    committed_blob_sha256 = _git_producer_blob_sha256(source_commit, producer_path)
+    current_source_sha256 = _sha256_file(producer_path)
+    if (
+        source_commit == "unavailable"
+        or committed_blob_sha256 == "unavailable"
+        or committed_blob_sha256 != current_source_sha256
+    ):
+        raise RuntimeError(
+            "Evidence generation requires a frozen producer source commit whose tracked "
+            "producer blob matches the current source; commit the producer repair before replay."
+        )
+    return source_commit, committed_blob_sha256
 
 
 def _reward_git_sha() -> str:
@@ -579,8 +623,20 @@ def run_diagnostic(
 ) -> dict:
     """Run measured replays, matched counterfactuals, and sensitivity sweep."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    producer_path = Path(__file__).resolve()
+    producer_source_commit, producer_source_blob_sha256 = (
+        _assert_producer_source_commit_matches_current_source(producer_path)
+    )
     planner = _make_planner()
-    binding = build_binding(out_dir, gamma)
+    binding = build_binding(
+        out_dir,
+        gamma,
+        resolved_seeds=seeds,
+        hold_start_offset=hold_start_offset,
+        hold_steps=hold_steps,
+        producer_source_commit=producer_source_commit,
+        producer_source_blob_sha256=producer_source_blob_sha256,
+    )
     max_steps = binding["scenario_cap_steps"]
     summary_rows: list[dict] = []
     all_traces: dict[int, list[dict]] = {}
@@ -787,7 +843,16 @@ def _replay_branch_from_prefix(
         env.close()
 
 
-def build_binding(out_dir: Path, gamma: float) -> dict:
+def build_binding(
+    out_dir: Path,
+    gamma: float,
+    *,
+    resolved_seeds: tuple[int, ...] | None = None,
+    hold_start_offset: int = DEFAULT_HOLD_START_OFFSET,
+    hold_steps: int = DEFAULT_HOLD_STEPS,
+    producer_source_commit: str | None = None,
+    producer_source_blob_sha256: str | None = None,
+) -> dict:
     """Record the immutable checkpoint/objective/configuration binding."""
     scenario_path = REPO_ROOT / SCENARIO_YAML
     training_path = REPO_ROOT / TRAINING_CONFIG
@@ -800,15 +865,35 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
     predictive_model_path = resolve_model_path(PREDICTIVE_MODEL_ID)
     base_cfg = yaml.safe_load(training_base_path.read_text(encoding="utf-8"))
     gamma_embedded, gamma_source = _checkpoint_gamma()
+    run_seeds = (
+        tuple(scenario.get("seeds", [])) if resolved_seeds is None else tuple(resolved_seeds)
+    )
+    producer_source_commit = producer_source_commit or _git_head()
+    producer_source_blob_sha256 = producer_source_blob_sha256 or _git_producer_blob_sha256(
+        producer_source_commit, producer_path
+    )
+    env_factory_kwargs = base_cfg.get("env_factory_kwargs", {})
+    final_stage_reward_kwargs = env_factory_kwargs.get("reward_curriculum", {}).get("stages", [])[
+        -1
+    ]["reward_kwargs"]
     binding = {
-        "schema": "issue_9545_binding.v1",
+        "schema": "issue_9545_binding.v2",
         "generated_at_utc": datetime.now(UTC).isoformat(),
-        "git_head": _git_head(),
+        "producer_source_commit": producer_source_commit,
+        "producer_source_blob_sha256": producer_source_blob_sha256,
+        "producer_source_commit_note": "This is the source/code commit used to generate the "
+        "evidence. Generated evidence is committed later in a separate artifact commit; this "
+        "binding intentionally does not self-reference that later artifact commit.",
         "scenario": "francis2023_narrow_doorway",
         "scenario_file": SCENARIO_YAML,
         "scenario_file_sha256": _sha256_file(scenario_path),
         "scenario_cap_steps": cap,
         "scenario_seeds": list(scenario.get("seeds", [])),
+        "resolved_cli": {
+            "seeds": list(run_seeds),
+            "hold_start_offset": int(hold_start_offset),
+            "hold_steps": int(hold_steps),
+        },
         "checkpoint_model_id": MODEL_ID,
         "checkpoint_local_path": _portable_path(Path(model_path)),
         "checkpoint_sha256": _sha256_file(Path(model_path))
@@ -841,8 +926,11 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
         "baseline_preflight_config_sha256": _sha256_file(REPO_ROOT / BASELINE_PREFLIGHT_CONFIG),
         "producer_script": _portable_path(producer_path),
         "producer_script_sha256": _sha256_file(producer_path),
-        "base_config_reward_block_sha256": hashlib.sha256(
-            json.dumps(base_cfg.get("env_factory_kwargs", {}), sort_keys=True).encode()
+        "base_config_env_factory_kwargs_sha256": hashlib.sha256(
+            json.dumps(env_factory_kwargs, sort_keys=True).encode()
+        ).hexdigest(),
+        "base_config_final_stage_reward_kwargs_sha256": hashlib.sha256(
+            json.dumps(final_stage_reward_kwargs, sort_keys=True).encode()
         ).hexdigest(),
         "wrappers": {
             "benchmark_adapter": "ppo_action_to_unicycle (mixed), feasibility projection",
@@ -861,8 +949,8 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
             "fallback_or_degraded_execution": False,
         },
         "counterfactual_fork": {
-            "hold_start_offset_steps": DEFAULT_HOLD_START_OFFSET,
-            "hold_horizon_steps": DEFAULT_HOLD_STEPS,
+            "hold_start_offset_steps": int(hold_start_offset),
+            "hold_horizon_steps": int(hold_steps),
             "rationale": "Fork early enough for the zero-command branch to decelerate before contact; "
             "the same measured prefix is replayed for both branches.",
         },

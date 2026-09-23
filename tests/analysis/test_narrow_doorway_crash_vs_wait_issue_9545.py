@@ -11,12 +11,14 @@ import numpy as np
 import pytest
 import yaml
 
+import scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 as producer
 from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     BASELINE_PREFLIGHT_CONFIG,
     FINAL_STAGE_WEIGHTS,
     SCENARIO_YAML,
     TRAINING_BASE_CONFIG,
     TRAINING_CONFIG,
+    _assert_producer_source_commit_matches_current_source,
     _discounted_return,
     _min_obstacle_clearance,
     _physical_pedestrian_ttc,
@@ -410,6 +412,39 @@ def test_binding_records_gamma_provenance_gap(tmp_path: Path) -> None:
     assert binding["checkpoint_gamma_embedded"] == 0.99
     assert binding["gamma_training_config_declared"] is None
     assert "not proof of the training-time objective" in binding["gamma_provenance_note"]
+
+
+def test_binding_records_resolved_cli_overrides_and_hash_scopes(tmp_path: Path) -> None:
+    """Binding identity follows a subset/fork override and names each hash scope."""
+    binding = build_binding(
+        tmp_path,
+        0.99,
+        resolved_seeds=(225,),
+        hold_start_offset=7,
+        hold_steps=11,
+    )
+    assert binding["resolved_cli"] == {
+        "seeds": [225],
+        "hold_start_offset": 7,
+        "hold_steps": 11,
+    }
+    assert binding["counterfactual_fork"]["hold_start_offset_steps"] == 7
+    assert binding["counterfactual_fork"]["hold_horizon_steps"] == 11
+    assert "base_config_env_factory_kwargs_sha256" in binding
+    assert "base_config_final_stage_reward_kwargs_sha256" in binding
+    assert "base_config_reward_block_sha256" not in binding
+
+
+def test_producer_source_commit_guard_rejects_unfrozen_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replay must fail when the source commit does not contain current producer bytes."""
+    monkeypatch.setattr(producer, "_git_head", lambda: "deadbeef" * 5)
+    monkeypatch.setattr(producer, "_git_producer_blob_sha256", lambda *_args: "0" * 64)
+    with pytest.raises(RuntimeError, match="frozen producer source commit"):
+        _assert_producer_source_commit_matches_current_source(
+            REPO_ROOT / "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py"
+        )
 
 
 def _assert_full_source_provenance(binding: dict) -> None:

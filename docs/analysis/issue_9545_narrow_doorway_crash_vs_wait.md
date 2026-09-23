@@ -27,6 +27,16 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
   only — not as proof of the training-time objective.
 - Reward implementation: `robot_sf/gym_env/reward.py:route_completion_v3_reward`
   (git blob `73d9315ad48a0f9da55389088275c760f140b081` at diagnostic head).
+- Binding provenance: `binding.json` records `producer_source_commit` and the SHA-256 of the
+  producer bytes stored at that commit. Generation fails closed unless that tracked blob matches
+  the current producer source. The generated evidence is committed later in a separate artifact
+  commit; the binding intentionally does not self-reference that later commit.
+- Resolved run parameters: `binding.json.resolved_cli` records the actual seed tuple and the
+  `hold_start_offset`/`hold_steps` values passed to the producer. `scenario_seeds` remains the
+  scenario-file declaration and is not a substitute for the resolved run subset.
+- Base-config hash scope: `base_config_env_factory_kwargs_sha256` covers the complete
+  `env_factory_kwargs` mapping; `base_config_final_stage_reward_kwargs_sha256` covers only the
+  final-stage `reward_kwargs` mapping. The full base-config SHA-256 is recorded separately.
 - Scenario cap: `configs/scenarios/single/francis2023_narrow_doorway.yaml` declares
   `max_episode_steps: 400`; diagnostic env resolves `sim_time 40.0 s / dt 0.1 s = 400 steps`.
   The historical 600-step horizon assumption is not used anywhere.
@@ -39,6 +49,10 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
 - Counterfactual fork: 20 steps before measured contact, then 60 steps. This is early
   enough for the zero-command branch to decelerate; both branches replay the same
   measured prefix.
+- Checkpoint path alias: `model/registry.yaml` keeps the logical local path ending in
+  `model.zip`, while the release-backed cache uses the pinned release asset ending in
+  `-model.zip`. The resolver verifies the release asset SHA-256 before reuse; this alias is
+  exercised by the offline preflight command below and is not a second checkpoint.
 - Termination: `terminated = route_complete OR timeout(timestep >= max_sim_steps) OR
   ped/robot/obstacle collision`; `RobotEnv` returns `truncated=False` always. The v3
   `timeout` reward term fires only on non-collision, non-success timeout.
@@ -51,6 +65,9 @@ Reproducible command (CPU, deterministic policy):
 ```bash
 uv run python scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py \
   --output-dir <dir> --seeds 225,226,227 --hold-start-offset 20 --hold-steps 60
+
+ROBOT_SF_DISABLE_MODEL_DOWNLOADS=1 uv run python scripts/models/preflight_models.py \
+  --config configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
 ```
 
 Episode summary (`episode_summary.csv`):
@@ -82,8 +99,12 @@ y ≈ 4.23–5.37 and contacts at y ≈ 4.60–5.12; the pedestrian remains far 
 400) and no pedestrian interaction. The pedestrian state is `behavior: none` per the
 scenario file and cannot explain contact.
 
-Per-step traces: `trace_seed{225,226,227}.jsonl` (slimmed to measured fields;
-`ped_positions` dropped from counterfactual files to keep them compact).
+Per-step traces: `trace_seed{225,226,227}.jsonl` and the six counterfactual JSONL files share
+the retained state schema, including `ped_positions`, `ped_velocities_mps`,
+`robot_velocity_mps`, and structured `pedestrian_ttc` fields. Each `step`/`branch_step` records
+the action computed from the pre-step observation and passed to `env.step` at that iteration;
+positions, velocities, TTC, reward, and contact flags are sampled from the resulting post-step
+state.
 Figures: `figure_trajectory.png` (paths vs doorway walls),
 `figure_reward_timeline.png` (reward + wall clearance to contact),
 `figure_mechanism_timeline.png` (progress term, cmd_v, ped distance).

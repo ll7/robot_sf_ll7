@@ -7,7 +7,11 @@ Describe what changed and the user or maintainer value in one or two sentences.
 <!-- Keep issue references plain so GitHub recognizes closing keywords after merge. Use a
 closing keyword only when this PR is authorized to complete the issue. Canonical main
 continuous-integration (CI) incidents marked `ll7-main-red-incident:v1` must use `Refs #<id>`;
-the scheduled reconciler closes them only after two newer, consecutive decisive green runs. -->
+the scheduled reconciler closes them only after two newer, consecutive decisive green runs.
+Never write close/fix/resolve #<id> (including owner/repo#<id> or a GitHub issue URL) in prose,
+even negated (e.g. "does not close #<id>"):
+GitHub parses the keyword without negation awareness and auto-closes the issue on merge
+(issue #9566). Rephrase as "leaves #<id> open". -->
 - Closes #<id>
 - Refs #<id>
 - Relates to #<id>

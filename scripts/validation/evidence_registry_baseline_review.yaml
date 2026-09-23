@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 8566
-latest_reviewed_date: 2026-09-10
+latest_reconciliation_issue: 9431
+latest_reviewed_date: 2026-09-23
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 436
-refreshed_baseline_files_with_findings: 97
+refreshed_baseline_total_findings: 438
+refreshed_baseline_files_with_findings: 98
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -142,6 +142,19 @@ decision_summary: >-
   The packet's validator and SHA256SUMS receipt verify those bytes and retain the explicit
   no-campaign/no-claim boundary, so the five `hash_without_artifact_path` findings are baselined
   as reviewed provenance bookkeeping rather than rewritten into a weaker schema.
+  Worked-example trace addendum (issue #9431; 2026-09-23): the diagnostic-only 18-episode trace
+  bundle preserves its exact 0.0.7 release-tag identity and the exporter revision used to produce
+  the compact examples. The generic linter extracts their embedded/full SHA-1 values from the
+  campaign provenance document and requires ancestry from frozen main `5426a585...`; the release
+  candidate commit `07f7e8d43084de748915e1b1eb8b2a1603357c6e` and pre-squash exporter commit
+  `f39bbcc7d49026c490d5cbda8bb1bdcfb18f8233` are outside that ancestry. Both objects and their
+  roles are verified, while runtime `source_commit` `2e87f9de0523ef977bce19b40189ea0a74c61e13`
+  is reachable from frozen main. Replacing these exact provenance coordinates with a later
+  integration SHA or shortening the release-tag identity would misstate the producer record.
+  Preserve the diagnostic-only claim boundary and the separately disclosed startup/admission
+  receipt exception; no benchmark, statistical, or causal claim is promoted. This targeted
+  provenance disposition refreshes the machine baseline from 436 findings across 97 files to 438
+  across 98 files, and records the 38-file evidence-tree addition.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -371,6 +384,23 @@ reviewed_files:
       Rewriting either identity would falsify provenance. The receipt explicitly disclaims benchmark
       evidence and campaign authorization, so these two historical provenance findings are reviewed
       legacy debt pending an external or historical-source backfill.
+  - path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The diagnostic-only #9431 worked-example trace provenance preserves two exact, verified
+      identities: the 0.0.7 release-tag string embeds campaign source commit
+      07f7e8d43084de748915e1b1eb8b2a1603357c6e, and exporter_commit is
+      f39bbcc7d49026c490d5cbda8bb1bdcfb18f8233. Neither commit is an ancestor of the frozen
+      5426a585... base (and the exporter commit will not survive a squash merge), so the frozen-base
+      projection correctly classifies both as dangling_commit even though the objects exist.
+      Runtime source_commit 2e87f9de0523ef977bce19b40189ea0a74c61e13 is main-reachable and binds
+      the recorded trace config. Do not rewrite the release tag, replace the exporter revision with
+      an integration commit, or suppress the linter; those changes would falsify exact provenance.
+      Keep this pair of campaign coordinates explicitly baselined as diagnostic provenance debt;
+      the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
+      admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
+      unavailable, no waiver is claimed, and the issue stays open.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

@@ -209,3 +209,78 @@ def test_temporary_staging_failure_does_not_fall_back_to_cwd(tmp_path: Path, mon
     assert receipt["terminal_refused"] is True
     assert receipt["lane_errors"] == ["preparation_audit_staging_failed: scratch unavailable"]
     assert not (tmp_path / "recovery_cycle_audit.json").exists()
+
+
+def test_exit_nonzero_with_payload_is_evidence_not_failure(monkeypatch) -> None:
+    """A findings exit code with valid JSON stdout keeps the lane usable.
+
+    Live case: the hygiene guard exits 1 while reporting 36 candidates.
+    """
+
+    class Completed:
+        returncode = 1
+        stdout = json.dumps({"ok": False, "candidate_count": 36, "issues": []})
+        stderr = ""
+
+    monkeypatch.setattr(cycle.subprocess, "run", lambda *a, **k: Completed())
+    result = cycle._subprocess_runner(["scripts/dev/open_state_label_hygiene.py"])
+
+    assert result.ok is True
+    assert result.payload["candidate_count"] == 36
+
+
+def test_unreadable_stdout_still_fails_lane(monkeypatch) -> None:
+    """Garbage stdout on nonzero exit remains a lane failure."""
+
+    class Completed:
+        returncode = 2
+        stdout = "not json"
+        stderr = "usage error"
+
+    monkeypatch.setattr(cycle.subprocess, "run", lambda *a, **k: Completed())
+    result = cycle._subprocess_runner(["scripts/dev/whatever.py"])
+
+    assert result.ok is False
+    assert "exit_2" in result.error
+
+
+def test_hygiene_candidates_surface_as_notes_not_errors() -> None:
+    """Hygiene findings feed notes/candidate counts, never lane errors."""
+
+    def run(command):
+        text = " ".join(command)
+        if "open_state_label_hygiene" in text:
+            return cycle.LaneResult(
+                ok=True,
+                payload={"ok": False, "candidate_count": 36, "complete_for_open_issues": True},
+            )
+        return _runner_for(_queue(), _prep())(command)
+
+    receipt = cycle.run_cycle(repo="o/r", origin_main_sha=ORIGIN, runner=run)
+
+    assert receipt["lifecycle_candidates"] == 36
+    assert receipt["notes"] == ["lifecycle_hygiene_reports_candidates: 36"]
+    assert receipt["lane_errors"] == []
+    assert "lifecycle" in receipt["lanes_evaluated"]
+
+
+def test_audit_max_pages_reaches_canonical_owner() -> None:
+    """The page-budget passthrough lands on the audit command line."""
+    seen: list[str] = []
+    base = _runner_for(_queue(), _prep())
+
+    def run(command):
+        seen.append(" ".join(command))
+        return base(command)
+
+    cycle.run_cycle(
+        repo="o/r",
+        origin_main_sha=ORIGIN,
+        runner=run,
+        audit_max_pages=7,
+        audit_page_size=50,
+    )
+
+    audit_commands = [text for text in seen if "audit_open_issue_contracts" in text]
+    assert audit_commands and "--max-pages 7" in audit_commands[0]
+    assert "--page-size 50" in audit_commands[0]

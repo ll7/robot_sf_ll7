@@ -33,6 +33,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 import tomllib
 from pathlib import Path
@@ -4553,7 +4554,13 @@ def test_gh_comment_body_file_dev_stdin_materialized(tmp_path: Path) -> None:
     call_lines = calls.read_text(encoding="utf-8").splitlines()
     assert "api --method POST repos/ll7/robot_sf_ll7/issues/6843/comments" in call_lines[1]
     assert "-F body=@/dev/stdin" not in call_lines[1]
-    assert "-F body=@/tmp/" in call_lines[1]
+    body_match = re.search(r"-F body=@(\S+)", call_lines[1])
+    assert body_match is not None, call_lines[1]
+    body_arg = Path(body_match.group(1))
+    materialized = Path(tempfile.gettempdir())
+    assert body_arg != Path("/dev/stdin")
+    assert body_arg == materialized or materialized in body_arg.parents
+    assert body_arg.name
 
 
 def test_gh_comment_body_file_dev_stdin_empty_rejected(tmp_path: Path) -> None:

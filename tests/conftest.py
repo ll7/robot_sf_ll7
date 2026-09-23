@@ -840,6 +840,9 @@ _FAST_FILES = {
     # Pedestrian-population tests are deterministic sampler contracts for the
     # spawn-capture owners; keep them in the exact-head fast lane (issue #9312).
     "test_ped_population.py",
+    # Pedestrian tracker reset-epoch tests are deterministic producer-contract
+    # coverage required by the exact-head changed-line gate (issue #9598).
+    "test_pedestrian_tracking.py",
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",

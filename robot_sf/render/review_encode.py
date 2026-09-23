@@ -693,12 +693,33 @@ def _check_version_compatible(config: dict[str, Any]) -> str | None:
     if "min_component_version" not in config:
         return None
     minimum = config["min_component_version"]
-    if not isinstance(minimum, str) or re.fullmatch(r"[vV]?\d+(?:\.\d+){0,2}", minimum) is None:
+    if (
+        not isinstance(minimum, str)
+        or re.fullmatch(r"[vV]?[0-9]+(?:\.[0-9]+){0,2}", minimum) is None
+    ):
         return "config_invalid: min_component_version must be a dotted version string"
-    wanted = int(minimum.lstrip("vV").split(".", maxsplit=1)[0])
-    ours = int(COMPONENT_VERSION.split(".", maxsplit=1)[0])
+    def _version_key(value: str) -> tuple[tuple[int, str], ...]:
+        """Normalize decimal components without converting untrusted strings to ints.
+
+        Returns:
+            Length-first pairs that compare arbitrary-size decimal components.
+        """
+
+        parts = tuple(part.lstrip("0") or "0" for part in value.lstrip("vV").split("."))
+        parts += ("0",) * (3 - len(parts))
+        # Length-first pairs compare arbitrary-size decimal strings numerically.
+        return tuple((len(part), part) for part in parts)
+
+    wanted = _version_key(minimum)
+    ours = _version_key(COMPONENT_VERSION)
     if wanted > ours:
-        return f"incompatible_component_version: request needs v{wanted}, component is v{ours}"
+        if len(minimum) > 64:
+            return "incompatible_component_version: requested minimum is newer than component"
+        return (
+            "incompatible_component_version: "
+            f"request needs v{minimum.lstrip('vV')}, "
+            f"component is v{COMPONENT_VERSION.lstrip('vV')}"
+        )
     return None
 
 

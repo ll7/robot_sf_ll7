@@ -809,6 +809,54 @@ def test_incompatible_version_fails(tmp_path: Path) -> None:
     assert "incompatible_component_version" in result.reason
 
 
+def test_huge_minimum_version_fails_as_schema_valid_result(tmp_path: Path) -> None:
+    """A huge numeric minimum cannot leak an integer-conversion exception."""
+
+    result = run(
+        _request(tmp_path, config_extra={"min_component_version": "9" * 4301}),
+        base=tmp_path,
+    )
+
+    assert result.status == "failed"
+    assert (
+        result.reason == "incompatible_component_version: requested minimum is newer than component"
+    )
+    assert result.artifacts == ()
+    component_result_from_dict(result_payload(result))
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("minimum", ["1.1", "1.1.0"])
+def test_higher_minor_component_version_fails(minimum: str) -> None:
+    """A higher minor requirement is incompatible with the current component."""
+
+    reason = review_encode._check_version_compatible({"min_component_version": minimum})
+    assert reason is not None
+    assert "incompatible_component_version" in reason
+
+
+def test_higher_patch_component_version_fails() -> None:
+    """A higher patch requirement is incompatible with the current component."""
+
+    reason = review_encode._check_version_compatible({"min_component_version": "1.0.1"})
+    assert reason is not None
+    assert "incompatible_component_version" in reason
+
+
+def test_non_ascii_version_digits_are_rejected() -> None:
+    """Version components use ASCII decimal digits for deterministic ordering."""
+
+    reason = review_encode._check_version_compatible({"min_component_version": "١.٠.٠"})
+    assert reason == "config_invalid: min_component_version must be a dotted version string"
+
+
+@pytest.mark.parametrize("minimum", ["0.9.9", "1", "1.0", "1.0.0", "v1.0.0"])
+def test_same_or_older_component_version_is_compatible(minimum: str) -> None:
+    """Equivalent and older minimum versions remain admitted."""
+
+    assert review_encode._check_version_compatible({"min_component_version": minimum}) is None
+
+
 def test_component_identity_is_admitted(tmp_path: Path) -> None:
     """A request for another component cannot be completed by this leaf."""
 

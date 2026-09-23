@@ -66,8 +66,18 @@ uv run python -m robot_sf.render.review_encode \
 
 ## Unavailable reasons and limits
 
-- Missing encoder backend, missing frame-sequence family, or unsupported
-  required capabilities make the result `unavailable`, never silently complete.
+- Missing encoder backend, a missing required source family (frame-sequence or
+  source-clip), or unsupported required capabilities make the result
+  `unavailable`, never silently complete.
+- `config.min_component_version`, when present, accepts one to three ASCII
+  decimal components with an optional `v`/`V` prefix: `1`, `1.0`, `1.0.0`, `v1.0`, and
+  `V1.0.0` are examples. Components are compared numerically after zero-padding
+  to major/minor/patch, including arbitrarily long numeric components without
+  converting untrusted text to a native integer. A malformed value fails with
+  the stable reason prefix `config_invalid` and detail
+  `min_component_version must be a dotted version string`; a valid minimum
+  newer than this component's `1.0.0` fails with the stable reason prefix
+  `incompatible_component_version`.
 - MP4 byte identity is promised only within the declared encoder environment
   recorded in the receipt. No generated media is stored in git.
 - Output paths must remain below the supplied base, contain no symlink or

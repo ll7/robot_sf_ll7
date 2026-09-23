@@ -52,10 +52,16 @@ from robot_sf.benchmark.fidelity_rank_stability import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.radius_sweep_manifest import (
+    EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
+    EXPECTED_ARM_CAMPAIGN_CONFIGS,
+    EXPECTED_CAMPAIGN_GIT_COMMIT,
+    EXPECTED_GATE1_RECEIPT_SHA256,
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_MATRIX,
     EXPECTED_SCENARIO_NAMES,
     EXPECTED_TOTAL_ROWS,
+    PRODUCTION_RADII,
+    PRODUCTION_RADIUS_KEYS,
 )
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -94,6 +100,7 @@ DEFAULT_RANK_METRICS: tuple[str, ...] = (
     RANK_METRIC_SNQI,
 )
 EXPECTED_RADIUS_ARMS: tuple[float, ...] = (0.5, 0.8, 1.0)
+_RADIUS_TO_CAMPAIGN_ARM_KEY = dict(zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True))
 EXPECTED_SCENARIO_CELL_COUNT = 48
 EXPECTED_SEED_ROSTER: tuple[int, ...] = tuple(range(111, 141))
 EXPECTED_PLANNER_ROSTER: tuple[str, ...] = (
@@ -680,16 +687,37 @@ def _paired_observation_blockers(
     return blockers
 
 
+def _frozen_arm_config_blockers(
+    radius: float, config_path: object, config_sha256: object
+) -> list[str]:
+    """Validate a summary arm's config path and digest against its frozen arm.
+
+    Returns:
+        Any blockers for this arm's frozen config identity.
+    """
+    arm_key = _RADIUS_TO_CAMPAIGN_ARM_KEY.get(radius)
+    if arm_key is None:
+        return [f"radius_{_radius_key(radius)}_unknown_frozen_arm"]
+    blockers = []
+    if config_path != EXPECTED_ARM_CAMPAIGN_CONFIGS.get(arm_key):
+        blockers.append(f"radius_{_radius_key(radius)}_unfrozen_config_path")
+    if _is_hex_digest(
+        config_sha256, length=64
+    ) and config_sha256 != EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256.get(arm_key):
+        blockers.append(f"radius_{_radius_key(radius)}_unfrozen_config_sha256")
+    return blockers
+
+
 def _campaign_provenance_blockers(  # noqa: C901
     sweep_summary: Mapping[str, object], radii: Sequence[float]
 ) -> tuple[list[str], tuple[str, dict[float, str], str] | None]:
-    """Validate per-arm config digests under one commit and Gate 1 receipt binding.
+    """Validate frozen per-arm configs, campaign commit, and Gate 1 receipt binding.
 
     The Gate 2 treatment intentionally uses one tracked config per radius arm, so their
-    config digests are expected to differ.  What must remain common is the immutable
-    campaign commit and Gate 1 receipt.  The returned binding retains every per-arm
-    config digest so the bundle writer can bind its supplied baseline config to the
-    1.0 m arm without weakening the other arms' provenance.
+    config digests are expected to differ. Each digest and path must match the frozen
+    manifest value for that radius. All arms must also match the exact frozen campaign
+    commit and Gate 1 receipt digest. The returned binding retains every per-arm config
+    digest so the bundle writer can bind its supplied baseline config to the 1.0 m arm.
 
     Returns:
         Fail-closed blockers and the shared immutable binding when all arms match.
@@ -706,14 +734,20 @@ def _campaign_provenance_blockers(  # noqa: C901
             blockers.append(f"radius_{_radius_key(radius)}_missing_campaign_provenance")
             continue
         campaign_commit = arm_provenance.get("campaign_commit")
+        config_path = arm_provenance.get("config_path")
         config_sha256 = arm_provenance.get("config_sha256")
         canary_receipt_sha256 = arm_provenance.get("gate1_canary_receipt_sha256")
         if not _is_hex_digest(campaign_commit, length=40):
             blockers.append(f"radius_{_radius_key(radius)}_invalid_campaign_commit")
+        elif campaign_commit != EXPECTED_CAMPAIGN_GIT_COMMIT:
+            blockers.append(f"radius_{_radius_key(radius)}_unfrozen_campaign_commit")
         if not _is_hex_digest(config_sha256, length=64):
             blockers.append(f"radius_{_radius_key(radius)}_invalid_config_sha256")
+        blockers.extend(_frozen_arm_config_blockers(radius, config_path, config_sha256))
         if not _is_hex_digest(canary_receipt_sha256, length=64):
             blockers.append(f"radius_{_radius_key(radius)}_invalid_gate1_canary_receipt")
+        elif canary_receipt_sha256 != EXPECTED_GATE1_RECEIPT_SHA256:
+            blockers.append(f"radius_{_radius_key(radius)}_unfrozen_gate1_canary_receipt")
         if (
             _is_hex_digest(campaign_commit, length=40)
             and _is_hex_digest(config_sha256, length=64)
@@ -725,7 +759,7 @@ def _campaign_provenance_blockers(  # noqa: C901
     common_bindings = {(commit, canary) for _, commit, _, canary in bindings}
     if len(common_bindings) > 1:
         blockers.append("mixed_campaign_provenance")
-    if len(bindings) != len(radii) or len(common_bindings) != 1:
+    if blockers or len(bindings) != len(radii) or len(common_bindings) != 1:
         return blockers, None
     campaign_commit, canary_receipt_sha256 = next(iter(common_bindings))
     config_by_radius = {radius: config for radius, _, config, _ in bindings}

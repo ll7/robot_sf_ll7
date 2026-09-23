@@ -46,6 +46,14 @@ from robot_sf.benchmark.radius_rank_stability import (
     validate_radius_sensitivity_payload,
     write_evidence_bundle,
 )
+from robot_sf.benchmark.radius_sweep_manifest import (
+    EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
+    EXPECTED_ARM_CAMPAIGN_CONFIGS,
+    EXPECTED_CAMPAIGN_GIT_COMMIT,
+    EXPECTED_GATE1_RECEIPT_SHA256,
+    PRODUCTION_RADII,
+    PRODUCTION_RADIUS_KEYS,
+)
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -53,6 +61,7 @@ if TYPE_CHECKING:
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RADII = (0.5, 0.8, 1.0)
 _BASELINE = 1.0
+_FROZEN_BASELINE_CONFIG_PATH = _REPO_ROOT / EXPECTED_ARM_CAMPAIGN_CONFIGS["r1p0"]
 
 
 def _load_cli() -> ModuleType:
@@ -158,31 +167,31 @@ def _complete_paired_observations(tables: dict) -> dict:
     }
 
 
-def _campaign_provenance(
-    config_sha256: str = "f" * 64, canary_receipt_sha256: str = "d" * 64
-) -> dict:
-    """Return one immutable campaign/config/canary binding for all arms."""
+def _campaign_provenance() -> dict:
+    """Return frozen campaign, per-arm config, and Gate 1 receipt identities."""
     return {
-        radius: {
-            "campaign_commit": "c" * 40,
-            "config_sha256": config_sha256,
-            "gate1_canary_receipt_sha256": canary_receipt_sha256,
+        f"{radius:g}": {
+            "campaign_commit": EXPECTED_CAMPAIGN_GIT_COMMIT,
+            "config_path": EXPECTED_ARM_CAMPAIGN_CONFIGS[arm_key],
+            "config_sha256": EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[arm_key],
+            "gate1_canary_receipt_sha256": EXPECTED_GATE1_RECEIPT_SHA256,
         }
-        for radius in ("0.5", "0.8", "1.0")
+        for radius, arm_key in zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True)
     }
 
 
-def _bind_summary_evidence(summary: dict, config_path: Path, canary_receipt_path: Path) -> dict:
-    """Bind a synthetic summary to its actual config and Gate 1 receipt fixtures."""
-    summary["campaign_provenance"] = _campaign_provenance(
-        hashlib.sha256(config_path.read_bytes()).hexdigest(),
-        hashlib.sha256(canary_receipt_path.read_bytes()).hexdigest(),
+def _bind_summary_to_frozen_campaign(summary: dict, config_path: Path) -> dict:
+    """Set frozen metadata after checking the actual tracked baseline config bytes."""
+    assert (
+        hashlib.sha256(config_path.read_bytes()).hexdigest()
+        == (EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256["r1p0"])
     )
+    summary["campaign_provenance"] = _campaign_provenance()
     return summary
 
 
 def _write_gate1_receipt(path: Path, *, go: bool = True) -> None:
-    """Write a minimal schema-valid Gate 1 report fixture."""
+    """Write a synthetic shape fixture, not the frozen Gate 1 receipt bytes."""
     surfaces = (
         "simulator_collision_geometry",
         "obstacle_pedestrian_contact_logic",
@@ -295,8 +304,8 @@ def test_gate1_canary_surface_vocabulary_matches_real_emitter() -> None:
     assert "metric_metadata" not in GATE1_CANARY_SURFACES
 
 
-def test_real_gate1_receipt_shape_passes_checker(tmp_path: Path) -> None:
-    """A schema-valid Gate 1 report with the emitter surface names is accepted."""
+def test_synthetic_gate1_receipt_shape_passes_checker(tmp_path: Path) -> None:
+    """A synthetic report proves structure, not identity with the frozen receipt."""
     from robot_sf.benchmark.radius_rank_stability import _gate1_canary_receipt_is_passing
 
     receipt_path = tmp_path / "canary.json"
@@ -1153,48 +1162,99 @@ def test_analyze_radius_sensitivity_rejects_missing_or_mixed_campaign_commits() 
 
 
 def test_analyze_radius_sensitivity_allows_distinct_arm_configs_but_rejects_mixed_canary() -> None:
-    """Arm configs differ by treatment; the Gate 1 receipt must remain shared."""
+    """Frozen treatment configs differ by radius; unfrozen digests fail closed."""
     summary = _sweep_summary(_stable_tables())
-    summary["campaign_provenance"]["0.8"]["config_sha256"] = "a" * 64
+    assert len({row["config_sha256"] for row in summary["campaign_provenance"].values()}) == 3
     config_report = analyze_radius_sensitivity(summary)
     assert config_report.verdict.verdict == VERDICT_STABLE
 
+    summary["campaign_provenance"]["0.8"]["config_sha256"] = "a" * 64
+    config_report = analyze_radius_sensitivity(summary)
+    assert config_report.verdict.verdict == VERDICT_INVALID
+    assert "radius_0.8_unfrozen_config_sha256" in config_report.verdict.reasons
+
+    summary = _sweep_summary(_stable_tables())
     summary["campaign_provenance"]["0.5"]["gate1_canary_receipt_sha256"] = "b" * 64
     report = analyze_radius_sensitivity(summary)
     assert report.verdict.verdict == VERDICT_INVALID
-    assert "mixed_campaign_provenance" in report.verdict.reasons
+    assert "radius_0.5_unfrozen_gate1_canary_receipt" in report.verdict.reasons
 
 
-def test_evidence_provenance_binds_supplied_config_to_baseline_arm(tmp_path: Path) -> None:
-    """The bundle config is the 1.0 m baseline config, not another arm config."""
-    config_path = tmp_path / "baseline.yaml"
-    config_path.write_text("radius: 1.0\n", encoding="utf-8")
-    canary_receipt_path = tmp_path / "canary.json"
-    _write_gate1_receipt(canary_receipt_path)
+def test_evidence_provenance_binds_supplied_config_to_baseline_arm() -> None:
+    """Frozen source/config binding passes without claiming receipt verification."""
+    from robot_sf.benchmark.radius_rank_stability import _campaign_provenance_blockers
+
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
     summary = _sweep_summary(_stable_tables())
-    summary["campaign_provenance"] = _campaign_provenance(
-        canary_receipt_sha256=hashlib.sha256(canary_receipt_path.read_bytes()).hexdigest()
+    blockers, source_binding = _campaign_provenance_blockers(summary, PRODUCTION_RADII)
+    assert blockers == []
+    assert source_binding == (
+        EXPECTED_CAMPAIGN_GIT_COMMIT,
+        {
+            radius: EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[arm_key]
+            for radius, arm_key in zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True)
+        },
+        EXPECTED_GATE1_RECEIPT_SHA256,
     )
-    summary["campaign_provenance"]["0.5"]["config_sha256"] = "a" * 64
-    summary["campaign_provenance"]["0.8"]["config_sha256"] = "b" * 64
-    summary["campaign_provenance"]["1.0"]["config_sha256"] = hashlib.sha256(
-        config_path.read_bytes()
-    ).hexdigest()
-    summary_path = tmp_path / "summary.json"
-    summary_path.write_text(json.dumps(summary), encoding="utf-8")
 
     provenance = build_evidence_provenance(
         analyze_radius_sensitivity(summary),
         config_path=str(config_path),
         command="cmd",
-        campaign_commit="c" * 40,
-        input_paths={
-            "sweep_summary.json": summary_path,
-            "gate1_canary_receipt.json": canary_receipt_path,
-        },
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
         sweep_summary=summary,
     )
-    assert provenance.campaign_provenance_verified is True
+    assert provenance.campaign_commit == EXPECTED_CAMPAIGN_GIT_COMMIT
+    assert provenance.config_sha256 == EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256["r1p0"]
+    assert provenance.gate1_canary_receipt_sha256 == EXPECTED_GATE1_RECEIPT_SHA256
+    assert provenance.gate1_canary_receipt_verified is False
+    assert provenance.campaign_provenance_verified is False
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    (
+        "campaign_commit",
+        "treatment_config_sha256",
+        "config_path",
+        "gate1_receipt_sha256",
+    ),
+)
+def test_evidence_provenance_rejects_valid_format_unfrozen_campaign_values(mismatch: str) -> None:
+    """Well-formed but unfrozen campaign/config/receipt metadata is invalid."""
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
+    summary = _bind_summary_to_frozen_campaign(_sweep_summary(_stable_tables()), config_path)
+    campaign_commit = EXPECTED_CAMPAIGN_GIT_COMMIT
+    expected_blocker: str
+    if mismatch == "campaign_commit":
+        campaign_commit = "c" * 40
+        for arm in summary["campaign_provenance"].values():
+            arm["campaign_commit"] = campaign_commit
+        expected_blocker = "radius_0.5_unfrozen_campaign_commit"
+    elif mismatch == "gate1_receipt_sha256":
+        for arm in summary["campaign_provenance"].values():
+            arm["gate1_canary_receipt_sha256"] = "a" * 64
+        expected_blocker = "radius_0.5_unfrozen_gate1_canary_receipt"
+    else:
+        arm = summary["campaign_provenance"]["0.5"]
+        if mismatch == "treatment_config_sha256":
+            arm["config_sha256"] = "a" * 64
+            expected_blocker = "radius_0.5_unfrozen_config_sha256"
+        else:
+            arm["config_path"] = "configs/benchmarks/unfrozen_arm.yaml"
+            expected_blocker = "radius_0.5_unfrozen_config_path"
+
+    report = analyze_radius_sensitivity(summary)
+    assert report.verdict.verdict == VERDICT_INVALID
+    assert expected_blocker in report.verdict.reasons
+    provenance = build_evidence_provenance(
+        report,
+        config_path=str(config_path),
+        command="cmd",
+        campaign_commit=campaign_commit,
+        sweep_summary=summary,
+    )
+    assert provenance.campaign_provenance_verified is False
 
 
 # --- evidence tier ---------------------------------------------------------
@@ -1216,28 +1276,14 @@ def test_evidence_tier_for_verdict() -> None:
 
 
 def test_write_evidence_bundle_writes_checksummed_files(tmp_path: Path) -> None:
-    """The bundle writes five files and records matching output checksums."""
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("radius: 1.0\n", encoding="utf-8")
-    canary_receipt_path = tmp_path / "canary.json"
-    _write_gate1_receipt(canary_receipt_path)
-    input_path = tmp_path / "sweep.json"
-    summary = _bind_summary_evidence(
-        _sweep_summary(_stable_tables()), config_path, canary_receipt_path
-    )
-    input_path.write_text(json.dumps(summary), encoding="utf-8")
-    report = analyze_radius_sensitivity(summary)
+    """Diagnostic bundles remain checksum-covered without inventing campaign evidence."""
+    report = analyze_radius_sensitivity(None)
     provenance = build_evidence_provenance(
         report,
-        config_path=str(config_path),
+        config_path="not supplied (blocked before Gate 2)",
         command="uv run python scripts/benchmark/analyze_radius_rank_stability_issue_6643.py",
-        campaign_commit="c" * 40,
+        campaign_commit=None,
         analysis_commit="a" * 40,
-        input_paths={
-            "sweep_summary.json": input_path,
-            "gate1_canary_receipt.json": canary_receipt_path,
-        },
-        sweep_summary=summary,
     )
     written = write_evidence_bundle(report, provenance, tmp_path)
     assert set(written) == {
@@ -1252,10 +1298,8 @@ def test_write_evidence_bundle_writes_checksummed_files(tmp_path: Path) -> None:
 
     provenance_payload = json.loads(written["analysis_provenance.json"].read_text())
     assert provenance_payload["schema_version"] == RADIUS_EVIDENCE_BUNDLE_SCHEMA
-    assert provenance_payload["evidence_status"] == "nominal_benchmark_radius_sensitivity"
-    assert provenance_payload["provenance"]["campaign_commit"] == "c" * 40
-    assert provenance_payload["provenance"]["config_sha256"]
-    assert provenance_payload["provenance"]["input_sha256"]["sweep_summary.json"]
+    assert provenance_payload["evidence_status"] == "diagnostic-only"
+    assert provenance_payload["provenance"]["campaign_commit"] is None
 
     import hashlib
 
@@ -1265,7 +1309,7 @@ def test_write_evidence_bundle_writes_checksummed_files(tmp_path: Path) -> None:
 
     result_payload = json.loads(written["result.json"].read_text())
     assert result_payload["schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
-    assert result_payload["verdict"]["verdict"] == VERDICT_STABLE
+    assert result_payload["verdict"]["verdict"] == ANALYSIS_BLOCKED_PENDING_GATE2
 
 
 def test_write_evidence_bundle_blocked_is_diagnostic(tmp_path: Path) -> None:
@@ -1275,7 +1319,7 @@ def test_write_evidence_bundle_blocked_is_diagnostic(tmp_path: Path) -> None:
         report,
         config_path="configs/benchmarks/radius_sensitivity_v1.yaml",
         command="cmd",
-        campaign_commit="c" * 40,
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
         analysis_commit="a" * 40,
     )
     written = write_evidence_bundle(report, provenance, tmp_path)
@@ -1300,19 +1344,14 @@ def test_write_promoted_bundle_requires_input_checksums(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="config"):
         write_evidence_bundle(report, provenance, tmp_path / "missing-config-bundle")
 
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("radius: 1.0\n", encoding="utf-8")
-    canary_receipt_path = tmp_path / "canary.json"
-    _write_gate1_receipt(canary_receipt_path)
-    summary = _bind_summary_evidence(
-        _sweep_summary(_stable_tables()), config_path, canary_receipt_path
-    )
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
+    summary = _bind_summary_to_frozen_campaign(_sweep_summary(_stable_tables()), config_path)
     report = analyze_radius_sensitivity(summary)
     provenance = build_evidence_provenance(
         report,
         config_path=str(config_path),
         command="cmd",
-        campaign_commit="c" * 40,
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
         analysis_commit="a" * 40,
         sweep_summary=summary,
     )
@@ -1320,15 +1359,12 @@ def test_write_promoted_bundle_requires_input_checksums(tmp_path: Path) -> None:
         write_evidence_bundle(report, provenance, tmp_path / "missing-input-bundle")
 
 
-def test_write_promoted_bundle_requires_bound_campaign_config_and_canary(tmp_path: Path) -> None:
-    """Caller-provided provenance cannot override the Gate 2 summary binding."""
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("radius: 1.0\n", encoding="utf-8")
+def test_write_promoted_bundle_rejects_synthetic_gate1_receipt(tmp_path: Path) -> None:
+    """Passing-shaped synthetic receipt bytes cannot satisfy the frozen digest pin."""
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
     canary_receipt_path = tmp_path / "canary.json"
     _write_gate1_receipt(canary_receipt_path)
-    summary = _bind_summary_evidence(
-        _sweep_summary(_stable_tables()), config_path, canary_receipt_path
-    )
+    summary = _bind_summary_to_frozen_campaign(_sweep_summary(_stable_tables()), config_path)
     input_path = tmp_path / "sweep.json"
     input_path.write_text(json.dumps(summary), encoding="utf-8")
     report = analyze_radius_sensitivity(summary)
@@ -1336,26 +1372,24 @@ def test_write_promoted_bundle_requires_bound_campaign_config_and_canary(tmp_pat
         report,
         config_path=str(config_path),
         command="cmd",
-        campaign_commit="e" * 40,
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
         input_paths={
             "sweep_summary.json": input_path,
             "gate1_canary_receipt.json": canary_receipt_path,
         },
         sweep_summary=summary,
     )
+    assert provenance.campaign_provenance_verified is False
     with pytest.raises(ValueError, match="campaign/config/canary"):
-        write_evidence_bundle(report, provenance, tmp_path / "mismatched-provenance-bundle")
+        write_evidence_bundle(report, provenance, tmp_path / "synthetic-gate1-bundle")
 
 
 def test_write_promoted_bundle_rejects_failed_gate1_receipt(tmp_path: Path) -> None:
-    """A checksum-matching failed canary cannot promote nominal evidence."""
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("radius: 1.0\n", encoding="utf-8")
+    """A failed synthetic canary structure cannot promote nominal evidence."""
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
     canary_receipt_path = tmp_path / "canary.json"
     _write_gate1_receipt(canary_receipt_path, go=False)
-    summary = _bind_summary_evidence(
-        _sweep_summary(_stable_tables()), config_path, canary_receipt_path
-    )
+    summary = _bind_summary_to_frozen_campaign(_sweep_summary(_stable_tables()), config_path)
     input_path = tmp_path / "sweep.json"
     input_path.write_text(json.dumps(summary), encoding="utf-8")
     report = analyze_radius_sensitivity(summary)
@@ -1363,7 +1397,7 @@ def test_write_promoted_bundle_rejects_failed_gate1_receipt(tmp_path: Path) -> N
         report,
         config_path=str(config_path),
         command="cmd",
-        campaign_commit="c" * 40,
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
         input_paths={
             "sweep_summary.json": input_path,
             "gate1_canary_receipt.json": canary_receipt_path,
@@ -1479,18 +1513,17 @@ def test_cli_blocked_exits_nonzero(
     assert provenance["analysis_commit"] == "b" * 40
 
 
-def test_cli_verdict_exits_zero(tmp_path: Path) -> None:
-    """A complete sweep summary produces a scientific verdict and exit code zero."""
+def test_cli_refuses_synthetic_gate1_receipt(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The CLI cannot promote a summary using synthetic Gate 1 receipt bytes."""
     cli = _load_cli()
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("radius: 1.0\n", encoding="utf-8")
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
     canary_receipt_path = tmp_path / "canary.json"
     _write_gate1_receipt(canary_receipt_path)
     summary_path = tmp_path / "sweep.json"
     summary_path.write_text(
-        json.dumps(
-            _bind_summary_evidence(_sweep_summary(_flip_tables()), config_path, canary_receipt_path)
-        ),
+        json.dumps(_bind_summary_to_frozen_campaign(_sweep_summary(_flip_tables()), config_path)),
         encoding="utf-8",
     )
     exit_code = cli.main(
@@ -1502,14 +1535,14 @@ def test_cli_verdict_exits_zero(tmp_path: Path) -> None:
             "--config",
             str(config_path),
             "--campaign-commit",
-            "c" * 40,
+            EXPECTED_CAMPAIGN_GIT_COMMIT,
             "--gate1-canary-receipt",
             str(canary_receipt_path),
         ]
     )
-    assert exit_code == cli.EXIT_VERDICT_PRODUCED
-    payload = json.loads((tmp_path / "bundle" / "result.json").read_text())
-    assert payload["verdict"]["verdict"] == VERDICT_RADIUS_DEPENDENT
+    assert exit_code == cli.EXIT_UNEXPECTED_ERROR
+    assert "campaign/config/canary provenance" in capsys.readouterr().err
+    assert not (tmp_path / "bundle" / "result.json").exists()
 
 
 def test_cli_malformed_summary_exits_error(tmp_path: Path) -> None:

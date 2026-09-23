@@ -7635,7 +7635,15 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

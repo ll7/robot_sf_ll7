@@ -1,5 +1,6 @@
 {
-  "base_config_reward_block_sha256": "332810bc1a9e3e22915967c57eeae155b3f7b72cc89fb0032d4e96b0d17733d0",
+  "base_config_env_factory_kwargs_sha256": "332810bc1a9e3e22915967c57eeae155b3f7b72cc89fb0032d4e96b0d17733d0",
+  "base_config_final_stage_reward_kwargs_sha256": "fc940972bcb0ec84f39d2752bfe1099f00c8ee1ecbb8886e0051f0e9837cb903",
   "baseline_preflight_config": "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml",
   "baseline_preflight_config_sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
   "checkpoint_gamma_embedded": 0.99,
@@ -16,8 +17,7 @@
   "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
   "gamma_training_config_declared": null,
   "gamma_used_for_discounted_replay": 0.99,
-  "generated_at_utc": "2026-09-23T12:39:16.904516+00:00",
-  "git_head": "8e28e31cf75a8b04d6daf817128e45525d2dce12",
+  "generated_at_utc": "2026-09-23T13:35:09.334297+00:00",
   "observation_contract": {
     "fallback_or_degraded_execution": false,
     "occupancy_grid_preserved": true,
@@ -29,7 +29,19 @@
   "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
   "predictive_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
   "producer_script": "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py",
-  "producer_script_sha256": "5014465b6f194bee2d82df26e82968fe23aa318db80d263c6dae25abb0f47797",
+  "producer_script_sha256": "58dfdfaa117342dc04f9ef0ae7d63934d12a81dd79ceae7238ef4dd397789afc",
+  "producer_source_blob_sha256": "58dfdfaa117342dc04f9ef0ae7d63934d12a81dd79ceae7238ef4dd397789afc",
+  "producer_source_commit": "28dcb472ca4fce2584456cac27c878bed1b021c5",
+  "producer_source_commit_note": "This is the source/code commit used to generate the evidence. Generated evidence is committed later in a separate artifact commit; this binding intentionally does not self-reference that later artifact commit.",
+  "resolved_cli": {
+    "hold_start_offset": 20,
+    "hold_steps": 60,
+    "seeds": [
+      225,
+      226,
+      227
+    ]
+  },
   "reward_curriculum": "2 stages; stage0 until_episodes=100 (progress/collision/timeout/terminal only); final stage = full weights above. Checkpoint at ~10M steps is past stage 0; stage-at-checkpoint is inferred, not logged.",
   "reward_impl": "robot_sf/gym_env/reward.py:route_completion_v3_reward",
   "reward_impl_git_blob_sha": "73d9315ad48a0f9da55389088275c760f140b081",
@@ -55,7 +67,7 @@
     226,
     227
   ],
-  "schema": "issue_9545_binding.v1",
+  "schema": "issue_9545_binding.v2",
   "termination_semantics": "terminated = route_complete OR timeout(timestep>=max_sim_steps) OR ped/robot/obstacle collision; RobotEnv returns truncated=False always; reward timeout term fires only on non-collision, non-success timeout",
   "training_base_config": "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml",
   "training_base_config_sha256": "76a6f8251e7ea6c61f326db88443d08e71751206f94393894b68c6655f2b799c",

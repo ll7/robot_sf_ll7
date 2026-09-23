@@ -462,6 +462,11 @@ def _assert_full_source_provenance(binding: dict) -> None:
     producer_path = REPO_ROOT / "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py"
     assert binding["producer_script"] == producer_path.relative_to(REPO_ROOT).as_posix()
     assert binding["producer_script_sha256"] == _sha256_file(producer_path)
+    assert binding["producer_source_blob_sha256"] == _sha256_file(producer_path)
+    # The commit is a provenance pointer; squash merge need not retain it as an ancestor.
+    source_commit = binding["producer_source_commit"]
+    assert len(source_commit) == 40
+    assert all(character in "0123456789abcdef" for character in source_commit)
 
 
 def test_binding_records_full_source_provenance(tmp_path: Path) -> None:

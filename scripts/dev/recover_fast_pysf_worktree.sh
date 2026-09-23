@@ -786,7 +786,7 @@ restore_seed_venv() {
     return 1
   fi
   if ! env -u PYTHONPATH "$seed_dir/bin/python" "$profile_checker" \
-    --profile "$dependency_profile" >/dev/null 2>&1; then
+    --profile "$dependency_profile" --check-entry-points >/dev/null 2>&1; then
     echo "recover_fast_pysf_worktree: seed environment lacks dependency profile '$dependency_profile'; using full sync" >&2
     return 1
   fi
@@ -1008,7 +1008,7 @@ if [[ -x "$local_venv/bin/python" ]]; then
   profile_report=""
   dependency_profile_complete=0
   if profile_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
-    --profile "$dependency_profile" 2>&1)"; then
+    --profile "$dependency_profile" --check-entry-points 2>&1)"; then
     dependency_profile_complete=1
   fi
 
@@ -1086,9 +1086,10 @@ printf '%s\n' "$final_report" >&2
 # Issue #8811: certify the requested dependency profile as part of the recovery
 # postcondition, so callers can rely on a successful recovery satisfying the
 # shared wrapper's own profile preflight.
+# Issue #9591: certify declared entry points match installed package metadata.
 profile_final_report=""
 if ! profile_final_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
-  --profile "$dependency_profile" 2>&1)"; then
+  --profile "$dependency_profile" --check-entry-points 2>&1)"; then
   echo "recover_fast_pysf_worktree: post-sync dependency profile '$dependency_profile' is incomplete in $local_venv" >&2
   printf '%s\n' "$profile_final_report" >&2
   echo "No wrapped command was started because the requested dependency profile is incomplete." >&2

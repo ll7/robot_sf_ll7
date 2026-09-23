@@ -12,7 +12,11 @@ import pytest
 import yaml
 
 from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
+    BASELINE_PREFLIGHT_CONFIG,
     FINAL_STAGE_WEIGHTS,
+    SCENARIO_YAML,
+    TRAINING_BASE_CONFIG,
+    TRAINING_CONFIG,
     _discounted_return,
     _min_obstacle_clearance,
     _physical_pedestrian_ttc,
@@ -20,6 +24,7 @@ from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     _rollout_policy,
     _serialize_env_action,
     _serialize_trace_row,
+    _sha256_file,
     _step_trace_state,
     build_binding,
 )
@@ -405,6 +410,66 @@ def test_binding_records_gamma_provenance_gap(tmp_path: Path) -> None:
     assert binding["checkpoint_gamma_embedded"] == 0.99
     assert binding["gamma_training_config_declared"] is None
     assert "not proof of the training-time objective" in binding["gamma_provenance_note"]
+
+
+def _assert_full_source_provenance(binding: dict) -> None:
+    """Require every declared replay input and the producer source to be bound."""
+    source_files = {
+        "scenario_file": SCENARIO_YAML,
+        "training_config": TRAINING_CONFIG,
+        "training_base_config": TRAINING_BASE_CONFIG,
+        "baseline_preflight_config": BASELINE_PREFLIGHT_CONFIG,
+    }
+    for binding_key, relative_path in source_files.items():
+        assert binding[binding_key] == relative_path
+        assert binding[f"{binding_key}_sha256"] == _sha256_file(REPO_ROOT / relative_path)
+
+    producer_path = REPO_ROOT / "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py"
+    assert binding["producer_script"] == producer_path.relative_to(REPO_ROOT).as_posix()
+    assert binding["producer_script_sha256"] == _sha256_file(producer_path)
+
+
+def test_binding_records_full_source_provenance(tmp_path: Path) -> None:
+    """Generated binding identity covers all declared replay inputs and producer source."""
+    _assert_full_source_provenance(build_binding(tmp_path, 0.99))
+
+
+def test_committed_binding_records_full_source_provenance() -> None:
+    """The committed evidence binding must match the current source identities."""
+    binding = json.loads((EVIDENCE_DIR / "binding.json").read_text(encoding="utf-8"))
+    _assert_full_source_provenance(binding)
+
+
+def test_committed_traces_use_final_action_velocity_ttc_schema() -> None:
+    """Every durable measured/counterfactual row uses the final producer schema."""
+    trace_paths = sorted(EVIDENCE_DIR.glob("trace_seed*.jsonl")) + sorted(
+        EVIDENCE_DIR.glob("counterfactual_seed*.jsonl")
+    )
+    assert len(trace_paths) == 9
+    required_fields = {
+        "env_action",
+        "robot_velocity_mps",
+        "ped_velocities_mps",
+        "pedestrian_ttc",
+    }
+    required_ttc_fields = {
+        "schema_version",
+        "definition",
+        "estimate_s",
+        "status",
+        "reason",
+        "pedestrian_index",
+        "robot_radius_m",
+        "pedestrian_radius_m",
+        "combined_radius_m",
+    }
+    for path in trace_paths:
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        assert rows, path.name
+        for row in rows:
+            assert required_fields <= row.keys(), (path.name, sorted(required_fields - row.keys()))
+            assert isinstance(row["pedestrian_ttc"], dict)
+            assert required_ttc_fields <= row["pedestrian_ttc"].keys()
 
 
 def test_committed_return_table_prefers_wait() -> None:

@@ -53,6 +53,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 SCENARIO_YAML = "configs/scenarios/single/francis2023_narrow_doorway.yaml"
+BASELINE_PREFLIGHT_CONFIG = "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
 CANONICAL_SEEDS = (225, 226, 227)
 MODEL_ID = "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
 PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v2_full"
@@ -788,12 +789,16 @@ def _replay_branch_from_prefix(
 
 def build_binding(out_dir: Path, gamma: float) -> dict:
     """Record the immutable checkpoint/objective/configuration binding."""
+    scenario_path = REPO_ROOT / SCENARIO_YAML
+    training_path = REPO_ROOT / TRAINING_CONFIG
+    training_base_path = REPO_ROOT / TRAINING_BASE_CONFIG
+    producer_path = Path(__file__).resolve()
     scenarios = load_scenarios(SCENARIO_YAML)
     scenario = next(s for s in scenarios if s.get("name") == "francis2023_narrow_doorway")
     cap = int(scenario["simulation_config"]["max_episode_steps"])
     model_path = resolve_model_path(MODEL_ID)
     predictive_model_path = resolve_model_path(PREDICTIVE_MODEL_ID)
-    base_cfg = yaml.safe_load((REPO_ROOT / TRAINING_BASE_CONFIG).read_text(encoding="utf-8"))
+    base_cfg = yaml.safe_load(training_base_path.read_text(encoding="utf-8"))
     gamma_embedded, gamma_source = _checkpoint_gamma()
     binding = {
         "schema": "issue_9545_binding.v1",
@@ -801,6 +806,7 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
         "git_head": _git_head(),
         "scenario": "francis2023_narrow_doorway",
         "scenario_file": SCENARIO_YAML,
+        "scenario_file_sha256": _sha256_file(scenario_path),
         "scenario_cap_steps": cap,
         "scenario_seeds": list(scenario.get("seeds", [])),
         "checkpoint_model_id": MODEL_ID,
@@ -828,7 +834,13 @@ def build_binding(out_dir: Path, gamma: float) -> dict:
         "final stage = full weights above. Checkpoint at ~10M steps is past stage 0; "
         "stage-at-checkpoint is inferred, not logged.",
         "training_config": TRAINING_CONFIG,
+        "training_config_sha256": _sha256_file(training_path),
         "training_base_config": TRAINING_BASE_CONFIG,
+        "training_base_config_sha256": _sha256_file(training_base_path),
+        "baseline_preflight_config": BASELINE_PREFLIGHT_CONFIG,
+        "baseline_preflight_config_sha256": _sha256_file(REPO_ROOT / BASELINE_PREFLIGHT_CONFIG),
+        "producer_script": _portable_path(producer_path),
+        "producer_script_sha256": _sha256_file(producer_path),
         "base_config_reward_block_sha256": hashlib.sha256(
             json.dumps(base_cfg.get("env_factory_kwargs", {}), sort_keys=True).encode()
         ).hexdigest(),

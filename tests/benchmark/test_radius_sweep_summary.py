@@ -52,6 +52,16 @@ _FIXTURE_CONFIG_PATHS = {
     "r0p8": "configs/benchmarks/fixture_arm_0p8.yaml",
     "r1p0": "configs/benchmarks/fixture_arm_1p0.yaml",
 }
+_FIXTURE_PLANNER_CONFIG_PATH = "configs/algos/fixture_goal.yaml"
+_FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH = "configs/benchmarks/fixture_family_roster.yaml"
+_FIXTURE_FAMILY_CONFIG_PATHS = {
+    "scenario_adaptive_hybrid_orca_v1": "configs/algos/fixture_hybrid_v1.yaml",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": "configs/algos/fixture_hybrid_v2.yaml",
+    "hybrid_rule_v3_fast_progress_static_escape": "configs/algos/fixture_hybrid_v3_static.yaml",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": (
+        "configs/algos/fixture_hybrid_v3_continuous.yaml"
+    ),
+}
 
 
 def _fixture_family_feasibility_evaluator(
@@ -80,13 +90,50 @@ class _GitConfigFixture:
 def git_config_fixture(tmp_path_factory: pytest.TempPathFactory) -> _GitConfigFixture:
     """Create exact committed config bytes for Git-blob provenance tests."""
     root = tmp_path_factory.mktemp("radius-sweep-source")
+    planner_config = root / _FIXTURE_PLANNER_CONFIG_PATH
+    planner_config.parent.mkdir(parents=True, exist_ok=True)
+    planner_config.write_text("fixture: goal\n", encoding="utf-8")
     for arm_key, relative in _FIXTURE_CONFIG_PATHS.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"fixture_arm: {arm_key}\n", encoding="utf-8")
+        path.write_text(
+            f"fixture_arm: {arm_key}\n"
+            "planners:\n"
+            "  - key: goal\n"
+            "    algo: goal\n"
+            f"    algo_config: {_FIXTURE_PLANNER_CONFIG_PATH}\n",
+            encoding="utf-8",
+        )
+    for planner_key, relative in _FIXTURE_FAMILY_CONFIG_PATHS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"fixture_variant: {planner_key}\n", encoding="utf-8")
+    family_campaign = root / _FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH
+    family_campaign.parent.mkdir(parents=True, exist_ok=True)
+    family_lines = ["planners:"]
+    for planner_key, relative in _FIXTURE_FAMILY_CONFIG_PATHS.items():
+        family_lines.extend(
+            (
+                f"  - key: {planner_key}",
+                "    algo: hybrid_rule_local_planner",
+                f"    algo_config: {relative}",
+            )
+        )
+    family_campaign.write_text("\n".join(family_lines) + "\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "init", "--quiet"], check=True)
     subprocess.run(
-        ["git", "-C", str(root), "add", "--", *_FIXTURE_CONFIG_PATHS.values()], check=True
+        [
+            "git",
+            "-C",
+            str(root),
+            "add",
+            "--",
+            *_FIXTURE_CONFIG_PATHS.values(),
+            _FIXTURE_PLANNER_CONFIG_PATH,
+            _FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH,
+            *_FIXTURE_FAMILY_CONFIG_PATHS.values(),
+        ],
+        check=True,
     )
     subprocess.run(
         [
@@ -260,7 +307,11 @@ def _write_arm(
                         "contradictions": [],
                         "effective_view": {"degraded": False},
                     },
-                    "scenario_params": {"robot_config": {"radius": radius}},
+                    "scenario_params": {
+                        "algo": "goal",
+                        "algo_config_hash": composer._config_hash({"fixture": "goal"}),
+                        "robot_config": {"radius": radius},
+                    },
                     "metrics": {
                         "success": scenario_index == 0,
                         "ped_collision_count": scenario_index,
@@ -328,6 +379,7 @@ def test_compose_summary_is_deterministic_and_preserves_per_arm_configs(
         "algo",
         "algorithm_metadata.algorithm",
         "algorithm_metadata.canonical_algorithm",
+        "scenario_params.algo",
         "result_provenance.planner_key",
     ],
 )
@@ -339,16 +391,19 @@ def test_composer_rejects_each_mismatched_episode_planner_carrier(
     episode_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
     lines = episode_path.read_text(encoding="utf-8").splitlines()
     episode = json.loads(lines[0])
-    episode.pop("algo")
-    episode.pop("algorithm_metadata")
-    episode.pop("result_provenance")
+    if carrier == "result_provenance.planner_key":
+        episode["result_provenance"]["planner_key"] = "orca"
+    else:
+        episode.pop("algo")
+        episode.pop("algorithm_metadata")
+        episode["scenario_params"].pop("algo")
     if carrier == "algo":
         episode["algo"] = "orca"
     elif carrier.startswith("algorithm_metadata."):
         field = carrier.rsplit(".", maxsplit=1)[-1]
         episode["algorithm_metadata"] = {field: "orca"}
-    else:
-        episode["result_provenance"] = {"planner_key": "orca"}
+    elif carrier == "scenario_params.algo":
+        episode["scenario_params"]["algo"] = "orca"
     lines[0] = json.dumps(episode)
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -384,6 +439,7 @@ def test_composer_rejects_episode_without_planner_identity_carriers(
     episode["algorithm_metadata"].pop("algorithm")
     episode["algorithm_metadata"].pop("canonical_algorithm")
     episode["result_provenance"].pop("planner_key")
+    episode["scenario_params"].pop("algo")
     lines[0] = json.dumps(episode)
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -404,6 +460,79 @@ def test_composer_accepts_canonical_alias_for_episode_algorithm(
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_frozen_hybrid_roster_algorithms_and_configs_bind_each_alias(
+    monkeypatch: pytest.MonkeyPatch, git_config_fixture: _GitConfigFixture
+) -> None:
+    """Shared family algorithms remain distinct through committed per-arm config hashes."""
+    planner_keys = tuple(_FIXTURE_FAMILY_CONFIG_PATHS)
+    monkeypatch.setattr(composer, "SOURCE_REPOSITORY_ROOT", git_config_fixture.root)
+    monkeypatch.setattr(composer, "RELEASE_PLANNER_KEYS", planner_keys)
+    identities = composer._committed_planner_identities(
+        git_config_fixture.commit, _FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH
+    )
+
+    assert tuple(identities) == planner_keys
+    assert {identity.algorithm for identity in identities.values()} == {"hybrid_rule_local_planner"}
+    assert len({identity.algo_config_hash for identity in identities.values()}) == len(planner_keys)
+
+    def episode_row(planner_key: str) -> dict[str, object]:
+        identity = identities[planner_key]
+        return {
+            "algo": "hybrid_rule_local_planner",
+            "algorithm_metadata": {
+                "algorithm": "hybrid_rule_local_planner",
+                "canonical_algorithm": "hybrid_rule_local_planner",
+            },
+            "scenario_params": {
+                "algo": "hybrid_rule_local_planner",
+                "algo_config_hash": identity.algo_config_hash,
+            },
+            "result_provenance": {"planner_key": planner_key},
+        }
+
+    for planner_key in planner_keys:
+        composer._validate_episode_planner_identity(
+            episode_row(planner_key),
+            planner=planner_key,
+            expected=identities[planner_key],
+            radius=1.0,
+        )
+
+    first_key, second_key = planner_keys[:2]
+    shared_identity = composer._PlannerIdentity(
+        algorithm=identities[first_key].algorithm,
+        algo_config_hash=identities[first_key].algo_config_hash,
+        planner_key_required=True,
+    )
+    no_key_row = episode_row(first_key)
+    no_key_row.pop("result_provenance")
+    with pytest.raises(RadiusSweepSummaryError, match="no embedded planner_key carrier"):
+        composer._validate_episode_planner_identity(
+            no_key_row,
+            planner=first_key,
+            expected=shared_identity,
+            radius=1.0,
+        )
+
+    with pytest.raises(RadiusSweepSummaryError, match="algo_config_hash"):
+        composer._validate_episode_planner_identity(
+            episode_row(second_key),
+            planner=first_key,
+            expected=identities[first_key],
+            radius=1.0,
+        )
+
+    wrong_key_row = episode_row(first_key)
+    wrong_key_row["result_provenance"] = {"planner_key": second_key}
+    with pytest.raises(RadiusSweepSummaryError, match="planner-key carriers"):
+        composer._validate_episode_planner_identity(
+            wrong_key_row,
+            planner=first_key,
+            expected=identities[first_key],
+            radius=1.0,
+        )
 
 
 def test_composer_rejects_missing_authoritative_family_semantics(

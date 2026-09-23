@@ -17,8 +17,10 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
 from robot_sf.benchmark.radius_rank_stability import (
@@ -37,6 +39,7 @@ from robot_sf.benchmark.radius_sweep_manifest import (
     PRODUCTION_RADII,
     RELEASE_PLANNER_KEYS,
 )
+from robot_sf.benchmark.utils import _config_hash
 
 CAMPAIGN_SCHEMA = "benchmark-camera-ready-campaign.v1"
 FAMILY_FEASIBILITY_SCHEMA = "issue_6642_family_feasibility.v1"
@@ -65,6 +68,15 @@ class _Episode:
     obstacle_collisions: float
     typed_collisions: float
     snqi: float
+
+
+@dataclass(frozen=True, slots=True)
+class _PlannerIdentity:
+    """Frozen algorithm and config identity expected for one campaign planner key."""
+
+    algorithm: str
+    algo_config_hash: str
+    planner_key_required: bool = False
 
 
 _FamilyFeasibilityEvaluator = Callable[
@@ -224,63 +236,132 @@ def _validate_planner_aggregates(
                 )
 
 
-def _canonical_planner_carrier(label: str, value: object, radius: float) -> tuple[str, str]:
+def _canonical_algorithm_carrier(label: str, value: object, radius: float) -> tuple[str, str]:
     if not isinstance(value, str) or not value.strip():
         raise RadiusSweepSummaryError(
-            f"radius {radius:g} episode {label} must be a non-empty planner identity"
+            f"radius {radius:g} episode {label} must be a non-empty algorithm identity"
         )
     return label, canonical_algorithm_name(value)
 
 
-def _episode_planner_carriers(record: Mapping[str, Any], radius: float) -> list[tuple[str, str]]:
+def _episode_algorithm_carriers(record: Mapping[str, Any], radius: float) -> list[tuple[str, str]]:
     carriers: list[tuple[str, str]] = []
     if "algo" in record:
-        carriers.append(_canonical_planner_carrier("algo", record["algo"], radius))
+        carriers.append(_canonical_algorithm_carrier("algo", record["algo"], radius))
 
     if "algorithm_metadata" in record:
         metadata = _mapping(record["algorithm_metadata"], "episode algorithm_metadata")
         for field in ("algorithm", "canonical_algorithm"):
             if field in metadata:
                 carriers.append(
-                    _canonical_planner_carrier(
+                    _canonical_algorithm_carrier(
                         f"algorithm_metadata.{field}", metadata[field], radius
                     )
                 )
 
+    if "scenario_params" in record:
+        scenario_params = _mapping(record["scenario_params"], "episode scenario_params")
+        if "algo" in scenario_params:
+            carriers.append(
+                _canonical_algorithm_carrier(
+                    "scenario_params.algo", scenario_params["algo"], radius
+                )
+            )
+
+    return carriers
+
+
+def _episode_planner_key_carriers(
+    record: Mapping[str, Any], radius: float
+) -> list[tuple[str, str]]:
+    carriers: list[tuple[str, str]] = []
+    if "planner_key" in record:
+        value = record["planner_key"]
+        if not isinstance(value, str) or not value.strip():
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} episode planner_key must be a non-empty planner identity"
+            )
+        carriers.append(("planner_key", value))
+
+    if "scenario_params" in record:
+        scenario_params = _mapping(record["scenario_params"], "episode scenario_params")
+        if "planner_key" in scenario_params:
+            value = scenario_params["planner_key"]
+            if not isinstance(value, str) or not value.strip():
+                raise RadiusSweepSummaryError(
+                    "radius "
+                    f"{radius:g} episode scenario_params.planner_key must be a non-empty "
+                    "planner identity"
+                )
+            carriers.append(("scenario_params.planner_key", value))
+
     if "result_provenance" in record:
         provenance = _mapping(record["result_provenance"], "episode result_provenance")
         if "planner_key" in provenance:
-            carriers.append(
-                _canonical_planner_carrier(
-                    "result_provenance.planner_key", provenance["planner_key"], radius
+            value = provenance["planner_key"]
+            if not isinstance(value, str) or not value.strip():
+                raise RadiusSweepSummaryError(
+                    f"radius {radius:g} episode result_provenance.planner_key must be "
+                    "a non-empty planner identity"
                 )
-            )
+            carriers.append(("result_provenance.planner_key", value))
     return carriers
 
 
 def _validate_episode_planner_identity(
-    record: Mapping[str, Any], *, planner: str, radius: float
+    record: Mapping[str, Any],
+    *,
+    planner: str,
+    expected: _PlannerIdentity,
+    radius: float,
 ) -> None:
-    """Reject any declared episode planner identity that conflicts with its run directory."""
-    expected = canonical_algorithm_name(planner)
-    carriers = _episode_planner_carriers(record, radius)
-    if not carriers:
+    """Bind episode algorithm, per-arm config, and any explicit planner key."""
+    algorithm_carriers = _episode_algorithm_carriers(record, radius)
+    if not algorithm_carriers:
         raise RadiusSweepSummaryError(
             f"radius {radius:g} episode has no embedded planner identity carrier; "
             f"cannot validate it against directory planner {planner!r}"
         )
 
-    distinct = {canonical for _, canonical in carriers}
+    distinct = {canonical for _, canonical in algorithm_carriers}
     if len(distinct) > 1:
-        details = dict(carriers)
+        details = dict(algorithm_carriers)
         raise RadiusSweepSummaryError(
             f"radius {radius:g} episode planner identity carriers conflict: {details}"
         )
-    mismatched = {label: canonical for label, canonical in carriers if canonical != expected}
+    mismatched = {
+        label: canonical
+        for label, canonical in algorithm_carriers
+        if canonical != expected.algorithm
+    }
     if mismatched:
         raise RadiusSweepSummaryError(
             f"radius {radius:g} episode planner identity mismatch for directory planner "
-            f"{planner!r}: {mismatched}"
+            f"{planner!r}; expected algorithm {expected.algorithm!r}: {mismatched}"
+        )
+
+    params = _mapping(record.get("scenario_params"), "episode scenario_params")
+    config_hash = _hex(
+        params.get("algo_config_hash"), 16, "episode scenario_params.algo_config_hash"
+    )
+    if config_hash != expected.algo_config_hash:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode planner identity mismatch for directory planner "
+            f"{planner!r}: algo_config_hash={config_hash!r}; "
+            f"expected={expected.algo_config_hash!r}"
+        )
+
+    key_carriers = _episode_planner_key_carriers(record, radius)
+    if expected.planner_key_required and not key_carriers:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode has no embedded planner_key carrier for directory "
+            f"planner {planner!r}; algorithm/config identity is shared by multiple roster keys"
+        )
+    mismatched_keys = {label: value for label, value in key_carriers if value != planner}
+    if mismatched_keys:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} episode planner identity mismatch for directory planner "
+            f"{planner!r}: planner-key carriers={mismatched_keys}"
         )
 
 
@@ -437,9 +518,19 @@ def _require_family_feasibility_evaluator_match(
 
 
 def _episode_from_record(
-    record: Mapping[str, Any], *, planner: str, radius: float, commit: str
+    record: Mapping[str, Any],
+    *,
+    planner: str,
+    planner_identity: _PlannerIdentity,
+    radius: float,
+    commit: str,
 ) -> _Episode:
-    _validate_episode_planner_identity(record, planner=planner, radius=radius)
+    _validate_episode_planner_identity(
+        record,
+        planner=planner,
+        expected=planner_identity,
+        radius=radius,
+    )
     scenario = str(record.get("scenario_id") or "")
     if scenario not in EXPECTED_SCENARIO_NAMES:
         raise RadiusSweepSummaryError(f"radius {radius:g} has unexpected scenario {scenario!r}")
@@ -489,7 +580,12 @@ def _episode_from_record(
     )
 
 
-def _load_episodes(root: Path, radius: float, commit: str) -> tuple[_Episode, ...]:
+def _load_episodes(
+    root: Path,
+    radius: float,
+    commit: str,
+    planner_identities: Mapping[str, _PlannerIdentity],
+) -> tuple[_Episode, ...]:
     episodes: list[_Episode] = []
     identities: set[tuple[str, str, int]] = set()
     runs_root = root / "runs"
@@ -520,7 +616,13 @@ def _load_episodes(root: Path, radius: float, commit: str) -> tuple[_Episode, ..
                     f"invalid JSON at {episodes_path}:{line_number}: {exc}"
                 ) from exc
             record = _mapping(raw, f"episode at {episodes_path}:{line_number}")
-            episode = _episode_from_record(record, planner=planner, radius=radius, commit=commit)
+            episode = _episode_from_record(
+                record,
+                planner=planner,
+                planner_identity=planner_identities[planner],
+                radius=radius,
+                commit=commit,
+            )
             identity = (planner, episode.scenario, episode.seed)
             if identity in identities:
                 raise RadiusSweepSummaryError(
@@ -544,12 +646,15 @@ def _load_episodes(root: Path, radius: float, commit: str) -> tuple[_Episode, ..
     return tuple(episodes)
 
 
-def _committed_config_sha256(commit: str, config_path: str) -> str:
-    """Hash config bytes from the source commit, never from a mutable worktree file.
+def _committed_config_blob(commit: str, config_path: str) -> bytes:
+    """Read config bytes from the source commit, never from a mutable worktree file.
 
     Returns:
-        The SHA-256 digest of the committed config bytes.
+        Exact config bytes committed at the requested path.
     """
+    parsed_path = PurePosixPath(config_path)
+    if parsed_path.is_absolute() or ".." in parsed_path.parts or not parsed_path.parts:
+        raise RadiusSweepSummaryError(f"invalid committed config path: {config_path!r}")
     try:
         result = subprocess.run(
             ["git", "-C", str(SOURCE_REPOSITORY_ROOT), "show", f"{commit}:{config_path}"],
@@ -561,7 +666,108 @@ def _committed_config_sha256(commit: str, config_path: str) -> str:
         raise RadiusSweepSummaryError(
             f"frozen campaign config blob is unavailable: {commit}:{config_path}"
         ) from exc
-    return sha256(result.stdout).hexdigest()
+    return result.stdout
+
+
+def _committed_config_sha256(commit: str, config_path: str) -> str:
+    """Hash config bytes from the source commit, never from a mutable worktree file.
+
+    Returns:
+        The SHA-256 digest of the committed config bytes.
+    """
+    return sha256(_committed_config_blob(commit, config_path)).hexdigest()
+
+
+def _committed_yaml_mapping(commit: str, config_path: str, label: str) -> Mapping[str, Any]:
+    """Load one mapping-valued YAML config directly from an immutable Git commit.
+
+    Returns:
+        Parsed YAML mapping, or an empty mapping for an empty config.
+    """
+    raw = _committed_config_blob(commit, config_path)
+    try:
+        payload = yaml.safe_load(raw.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise RadiusSweepSummaryError(
+            f"invalid committed {label} YAML: {commit}:{config_path}"
+        ) from exc
+    if payload is None:
+        return {}
+    if not isinstance(payload, Mapping):
+        raise RadiusSweepSummaryError(
+            f"committed {label} must be a YAML mapping: {commit}:{config_path}"
+        )
+    return payload
+
+
+def _committed_planner_identities(
+    commit: str, campaign_config_path: str
+) -> dict[str, _PlannerIdentity]:
+    """Bind roster keys to the algorithm and config recorded by map-runner episodes.
+
+    Returns:
+        Frozen planner identities in campaign roster order.
+    """
+    campaign_config = _committed_yaml_mapping(
+        commit, campaign_config_path, "radius-sweep campaign config"
+    )
+    raw_planners = campaign_config.get("planners")
+    if not isinstance(raw_planners, list):
+        raise RadiusSweepSummaryError(
+            f"committed radius-sweep config has no planner roster: {campaign_config_path}"
+        )
+
+    identities: dict[str, _PlannerIdentity] = {}
+    for index, raw_planner in enumerate(raw_planners):
+        planner = _mapping(raw_planner, f"committed planner roster row {index}")
+        key = planner.get("key")
+        algorithm = planner.get("algo")
+        if not isinstance(key, str) or not key.strip() or key in identities:
+            raise RadiusSweepSummaryError(
+                f"committed planner roster row {index} has an invalid or duplicate key"
+            )
+        if not isinstance(algorithm, str) or not algorithm.strip():
+            raise RadiusSweepSummaryError(f"committed planner {key!r} has no configured algorithm")
+
+        algo_config_path = planner.get("algo_config")
+        if algo_config_path is None:
+            algo_config: Mapping[str, Any] = {}
+        elif isinstance(algo_config_path, str) and algo_config_path.strip():
+            algo_config = _committed_yaml_mapping(
+                commit, algo_config_path, f"planner {key!r} algorithm config"
+            )
+        else:
+            raise RadiusSweepSummaryError(
+                f"committed planner {key!r} has an invalid algo_config path"
+            )
+        try:
+            config_hash = _config_hash(dict(algo_config))
+            canonical_algorithm = canonical_algorithm_name(algorithm)
+        except (TypeError, ValueError) as exc:
+            raise RadiusSweepSummaryError(
+                f"cannot resolve committed algorithm/config identity for planner {key!r}"
+            ) from exc
+        identities[key] = _PlannerIdentity(
+            algorithm=canonical_algorithm,
+            algo_config_hash=config_hash,
+        )
+
+    if tuple(identities) != RELEASE_PLANNER_KEYS:
+        raise RadiusSweepSummaryError(
+            "committed planner algorithm/config roster does not match the frozen release keys"
+        )
+
+    counts: dict[tuple[str, str], int] = defaultdict(int)
+    for identity in identities.values():
+        counts[(identity.algorithm, identity.algo_config_hash)] += 1
+    return {
+        key: _PlannerIdentity(
+            algorithm=identity.algorithm,
+            algo_config_hash=identity.algo_config_hash,
+            planner_key_required=counts[(identity.algorithm, identity.algo_config_hash)] > 1,
+        )
+        for key, identity in identities.items()
+    }
 
 
 def _load_arm(root: Path) -> _Arm:
@@ -616,7 +822,8 @@ def _load_arm(root: Path) -> _Arm:
         != EXPECTED_SEEDS
     ):
         raise RadiusSweepSummaryError(f"radius {radius:g} campaign identity mismatch")
-    episodes = _load_episodes(root, radius, commit)
+    planner_identities = _committed_planner_identities(commit, config_path)
+    episodes = _load_episodes(root, radius, commit, planner_identities)
     _validate_planner_aggregates(planner_rows, episodes, radius)
     (
         family_definition_id,

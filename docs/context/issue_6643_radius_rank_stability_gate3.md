@@ -123,10 +123,15 @@ Each root must contain its canonical `campaign_manifest.json`,
 `runs/<planner>__differential_drive/episodes.jsonl` for every frozen planner. The composer verifies
 the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
 derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
-Each episode must carry at least one planner identity in `algo`,
-`algorithm_metadata.algorithm` / `canonical_algorithm`, or `result_provenance.planner_key`; every
-present identity must canonicalize to its run-directory planner, and missing or conflicting
-identities fail closed.
+Each episode's algorithm fields (`algo`, `scenario_params.algo`, and any
+`algorithm_metadata.algorithm` / `canonical_algorithm`) must canonicalize to the algorithm frozen
+for that planner key in the campaign config at the pinned source commit. Its
+`scenario_params.algo_config_hash` must match the loaded per-arm algorithm-config mapping at that
+same commit, so distinct planner keys that share an algorithm remain distinguishable. Any explicit
+planner-key carrier (`planner_key`, `scenario_params.planner_key`, or
+`result_provenance.planner_key`) must exactly match the run-directory planner key; a shared
+algorithm/config identity without a key carrier is rejected. Missing, conflicting, or mismatched
+identity inputs fail closed.
 It also reconciles each planner row's serialized success, pedestrian-collision,
 obstacle-collision, total-collision, and SNQI means against those same records at the camera-ready
 four-decimal precision; status/count metadata alone is insufficient.

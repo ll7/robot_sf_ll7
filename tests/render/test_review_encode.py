@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.analysis_workbench.review_contracts import (
+    SourceRef,
     component_descriptor_from_dict,
     component_request_from_dict,
     component_result_from_dict,
@@ -30,6 +31,24 @@ def _sha256(path: Path) -> str:
     """Return the digest used by a fixture source reference."""
 
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _replace_in_place_preserving_signature(path: Path, replacement: bytes) -> None:
+    """Replace same-size bytes while preserving the loader's stat signature."""
+
+    before = path.stat()
+    assert len(replacement) == before.st_size
+    with path.open("r+b") as handle:
+        handle.write(replacement)
+        handle.truncate()
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    after = path.stat()
+    assert (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) == (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+    )
 
 
 def _write_source(tmp_path: Path, *, count: int = 30, variation: int = 0) -> str:
@@ -645,6 +664,99 @@ def test_source_clip_is_decoded_and_bound(tmp_path: Path) -> None:
     mapping = _time_map(tmp_path / "clip-out")
     assert mapping["source_frames"] == 4
     assert mapping["frame_order_source_indices"] == [0, 1, 2, 3]
+
+
+def test_manifest_snapshot_binds_digest_to_parsed_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-signature manifest replacement cannot change parsed source identity."""
+
+    import numpy as np
+    from PIL import Image
+
+    frames_dir = tmp_path / "frames"
+    frames_dir.mkdir()
+    original_frame_path = frames_dir / "frame-a.png"
+    replacement_frame_path = frames_dir / "frame-b.png"
+    original_frame = np.full((6, 8, 3), (12, 34, 56), dtype=np.uint8)
+    replacement_frame = np.full((6, 8, 3), (210, 180, 150), dtype=np.uint8)
+    Image.fromarray(original_frame).save(original_frame_path, format="PNG")
+    Image.fromarray(replacement_frame).save(replacement_frame_path, format="PNG")
+
+    original_frame_digest = _sha256(original_frame_path)
+    replacement_frame_digest = _sha256(replacement_frame_path)
+    original_document = {
+        "schema_version": "frame-sequence-manifest.v1",
+        "source_fps": 10,
+        "source_frames": 1,
+        "frame_paths": ["frames/frame-a.png"],
+        "frame_digests": [original_frame_digest],
+    }
+    replacement_document = {
+        **original_document,
+        "frame_paths": ["frames/frame-b.png"],
+        "frame_digests": [replacement_frame_digest],
+    }
+    original_bytes = (json.dumps(original_document, sort_keys=True) + "\n").encode()
+    replacement_bytes = (json.dumps(replacement_document, sort_keys=True) + "\n").encode()
+    assert len(original_bytes) == len(replacement_bytes)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(original_bytes)
+    source_ref = SourceRef(
+        artifact_id="frames",
+        uri="manifest.json",
+        format="frame-sequence-manifest.v1",
+        sha256=_sha256(manifest_path),
+    )
+
+    original_read_json = review_encode._read_json
+
+    def replace_before_parse(source: object, **kwargs: object) -> object:
+        _replace_in_place_preserving_signature(manifest_path, replacement_bytes)
+        return original_read_json(source, **kwargs)
+
+    monkeypatch.setattr(review_encode, "_read_json", replace_before_parse)
+    loaded = review_encode._load_manifest_source(source_ref, tmp_path)
+
+    assert loaded.observed_sha256 == review_encode._sha256_bytes(original_bytes)
+    assert loaded.source_document["frame_paths"] == ["frames/frame-a.png"]
+    assert loaded.frame_digests == (original_frame_digest,)
+    assert np.array_equal(loaded.frames[0], original_frame)
+
+
+def test_clip_snapshot_binds_digest_to_decoded_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-signature clip replacement cannot change decoded source identity."""
+
+    import numpy as np
+
+    original_bytes = b"original-clip-bytes" * 4
+    replacement_bytes = b"replacement-clip-by" * 4
+    assert len(original_bytes) == len(replacement_bytes)
+    clip_path = tmp_path / "source.mp4"
+    clip_path.write_bytes(original_bytes)
+    source_ref = SourceRef(
+        artifact_id="clip",
+        uri="source.mp4",
+        format="source-clip",
+        sha256=_sha256(clip_path),
+    )
+    original_frame = np.full((2, 3, 3), (10, 20, 30), dtype=np.uint8)
+    replacement_frame = np.full((2, 3, 3), (230, 220, 210), dtype=np.uint8)
+
+    def replace_then_decode(path: Path) -> tuple[list[np.ndarray], float]:
+        _replace_in_place_preserving_signature(clip_path, replacement_bytes)
+        if path.read_bytes() == original_bytes:
+            return [original_frame], 10.0
+        return [replacement_frame], 10.0
+
+    monkeypatch.setattr(review_encode, "_decode_clip_frames", replace_then_decode)
+    loaded = review_encode._load_clip_source(source_ref, tmp_path)
+
+    assert loaded.observed_sha256 == review_encode._sha256_bytes(original_bytes)
+    assert loaded.frame_digests == (review_encode._sha256_bytes(original_frame.tobytes()),)
+    assert np.array_equal(loaded.frames[0], original_frame)
 
 
 def test_missing_source_family_is_unavailable(tmp_path: Path) -> None:

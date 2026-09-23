@@ -921,19 +921,27 @@ def threading_is_not_main() -> bool:
     return threading.current_thread() is not threading.main_thread()
 
 
-def _read_json(path: Path) -> Any:
+def _read_json(source: Path | Any, *, name: str | None = None) -> Any:
     """Read a UTF-8 JSON document or raise a stable source failure.
 
     Returns:
         Parsed JSON value.
     """
 
+    source_name = name or (source.name if isinstance(source, Path) else "source")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(source, Path):
+            payload = source.read_bytes()
+        else:
+            source.seek(0)
+            payload = source.read()
+        if isinstance(payload, str):
+            payload = payload.encode("utf-8")
+        return json.loads(payload.decode("utf-8"))
     except FileNotFoundError as error:
-        raise _SourceLoadError(f"{path.name}: source_missing") from error
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise _SourceLoadError(f"{path.name}: source_unreadable") from error
+        raise _SourceLoadError(f"{source_name}: source_missing") from error
+    except (OSError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise _SourceLoadError(f"{source_name}: source_unreadable") from error
 
 
 def _resolve_under(path_value: str, root: Path) -> Path | None:
@@ -1090,6 +1098,53 @@ def _verified_file_snapshot(path: Path, *, max_bytes: int) -> Iterator[tuple[Any
             _require_unchanged_file(path, before)
 
 
+@contextmanager
+def _verified_named_file_snapshot(path: Path, *, max_bytes: int) -> Iterator[tuple[Path, str, int]]:
+    """Expose a bounded named snapshot for decoders that require a path.
+
+    The decoder receives the private snapshot path, never the mutable source
+    path.  The source signature checks remain defense in depth: the snapshot
+    is the integrity binding, while the checks still reject ordinary source
+    mutation when the filesystem exposes a changed signature.
+
+    Yields:
+        Snapshot path, its SHA-256 digest, and the encoded byte count.
+    """
+
+    try:
+        before = _file_signature(path)
+    except OSError as error:
+        raise OSError(f"source file is not readable: {path.name}") from error
+    if max_bytes < 1 or before[2] > max_bytes:
+        raise _SourceLoadError(f"resource_limit: source_bytes>{max_bytes}")
+
+    snapshot_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix="review-encode-", suffix=".source", mode="w+b", delete=False
+        ) as snapshot:
+            snapshot_path = Path(snapshot.name)
+            with path.open("rb") as source:
+                digest, total = _copy_to_snapshot(
+                    source=source,
+                    snapshot=snapshot,
+                    name=path.name,
+                    max_bytes=max_bytes,
+                )
+            snapshot.flush()
+        _require_unchanged_file(path, before)
+        try:
+            yield snapshot_path, digest.hexdigest(), total
+        finally:
+            _require_unchanged_file(path, before)
+    finally:
+        if snapshot_path is not None:
+            try:
+                snapshot_path.unlink()
+            except FileNotFoundError:
+                pass
+
+
 def _copy_to_snapshot(source: Any, snapshot: Any, name: str, max_bytes: int) -> tuple[Any, int]:
     """Copy one source into a bounded snapshot while computing its digest.
 
@@ -1226,23 +1281,23 @@ def _load_manifest_source(ref: SourceRef, root: Path) -> _Source:
         raise _SourceLoadError(f"{ref.artifact_id}: source_uri_escapes_root")
     if not ref.sha256:
         raise _SourceLoadError(f"source_digest_missing: {ref.artifact_id}")
-    manifest_signature = _file_signature(manifest_path)
-    manifest_digest, manifest_bytes = _sha256_file(manifest_path, max_bytes=MAX_SOURCE_FILE_BYTES)
-    if manifest_digest.lower() != ref.sha256.lower():
-        raise _SourceLoadError(
-            f"source_digest_mismatch: {ref.artifact_id}",
-            diagnostics=(
-                {
-                    "code": "source_digest_mismatch",
-                    "artifact_id": ref.artifact_id,
-                    "declared_sha256": ref.sha256.lower(),
-                    "observed_sha256": manifest_digest,
-                },
-            ),
-        )
-    document = _read_json(manifest_path)
-    if manifest_signature != _file_signature(manifest_path):
-        raise _SourceLoadError(f"source_changed_during_read: {manifest_path.name}")
+    with _verified_file_snapshot(
+        manifest_path,
+        max_bytes=MAX_SOURCE_FILE_BYTES,
+    ) as (snapshot, manifest_digest, manifest_bytes):
+        if manifest_digest.lower() != ref.sha256.lower():
+            raise _SourceLoadError(
+                f"source_digest_mismatch: {ref.artifact_id}",
+                diagnostics=(
+                    {
+                        "code": "source_digest_mismatch",
+                        "artifact_id": ref.artifact_id,
+                        "declared_sha256": ref.sha256.lower(),
+                        "observed_sha256": manifest_digest,
+                    },
+                ),
+            )
+        document = _read_json(snapshot, name=manifest_path.name)
     manifest, error = _validate_manifest(document)
     if manifest is None or error is not None:
         raise _SourceLoadError(error or "manifest_invalid")
@@ -1475,26 +1530,23 @@ def _load_clip_source(ref: SourceRef, root: Path) -> _Source:
         raise _SourceLoadError(f"{ref.artifact_id}: source_uri_escapes_root")
     if not ref.sha256:
         raise _SourceLoadError(f"source_digest_missing: {ref.artifact_id}")
-    clip_signature = _file_signature(clip_path)
-    try:
-        observed, _size = _sha256_file(clip_path, max_bytes=MAX_SOURCE_FILE_BYTES)
-    except OSError as error:
-        raise _SourceLoadError(f"source_unreadable: {ref.artifact_id}") from error
-    if observed.lower() != ref.sha256.lower():
-        raise _SourceLoadError(
-            f"source_digest_mismatch: {ref.artifact_id}",
-            diagnostics=(
-                {
-                    "code": "source_digest_mismatch",
-                    "artifact_id": ref.artifact_id,
-                    "declared_sha256": ref.sha256.lower(),
-                    "observed_sha256": observed,
-                },
-            ),
-        )
-    frames, source_fps = _decode_clip_frames(clip_path)
-    if clip_signature != _file_signature(clip_path):
-        raise _SourceLoadError(f"source_changed_during_read: {clip_path.name}")
+    with _verified_named_file_snapshot(
+        clip_path,
+        max_bytes=MAX_SOURCE_FILE_BYTES,
+    ) as (snapshot_path, observed, _size):
+        if observed.lower() != ref.sha256.lower():
+            raise _SourceLoadError(
+                f"source_digest_mismatch: {ref.artifact_id}",
+                diagnostics=(
+                    {
+                        "code": "source_digest_mismatch",
+                        "artifact_id": ref.artifact_id,
+                        "declared_sha256": ref.sha256.lower(),
+                        "observed_sha256": observed,
+                    },
+                ),
+            )
+        frames, source_fps = _decode_clip_frames(snapshot_path)
     duration = len(frames) / source_fps
     if duration > MAX_SOURCE_DURATION_S:
         raise _SourceLoadError(f"resource_limit: source_duration_s>{MAX_SOURCE_DURATION_S:g}")

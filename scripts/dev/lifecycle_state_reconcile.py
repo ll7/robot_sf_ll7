@@ -740,6 +740,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Apply planned label removals with drift checks; default is a read-only report.",
     )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Explicit read-only report mode (default); accepted as an alias so "
+        "documented `--report --json` invocations parse.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit the summary as JSON.")
     parser.add_argument(
         "--max-pages",

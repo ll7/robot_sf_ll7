@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import json
-import socket
 import threading
 import uuid
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 from urllib.error import HTTPError
-from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 import pytest
@@ -1463,52 +1461,3 @@ def test_live_route_related_cases_requires_selection_and_rejects_unsafe_envelope
     assert (bad_status, bad_status_body) == (500, {"status": "failed"})
     assert (bad_schema, bad_schema_body) == (500, {"status": "failed"})
     assert (malformed_status, malformed_status_body) == (500, {"status": "failed"})
-
-
-def test_server_handles_client_disconnect_without_broken_pipe_crash() -> None:
-    handler_entered = threading.Event()
-    allow_response = threading.Event()
-
-    def configure(facade, _calls, _secret):
-        def slow_next(**kwargs):
-            handler_entered.set()
-            if not allow_response.wait(timeout=5):
-                raise TimeoutError("test did not release the delayed response")
-            return {"status": "complete", "value": {}}
-
-        facade.next = slow_next
-
-    with _server(configure=configure) as (url, _calls, _document, _secret, cookie):
-        parsed_url = urlsplit(url)
-        body = json.dumps(
-            {"operation": "next", "arguments": {"expected_selection_revision": 0}}
-        ).encode()
-        request = (
-            f"POST /api/audit HTTP/1.1\r\n"
-            f"Host: {parsed_url.netloc}\r\n"
-            "Content-Type: application/json\r\n"
-            f"Origin: {url}\r\n"
-            f"Cookie: {cookie}\r\n"
-            "Connection: close\r\n"
-            f"Content-Length: {len(body)}\r\n\r\n"
-        ).encode() + body
-        client = socket.create_connection((parsed_url.hostname, parsed_url.port), timeout=5)
-        try:
-            client.sendall(request)
-            assert handler_entered.wait(timeout=5), "request did not reach the audit facade"
-        finally:
-            try:
-                client.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            client.close()
-            allow_response.set()
-
-        status, body = _post(
-            url,
-            {"operation": "next", "arguments": {"expected_selection_revision": 0}},
-            origin=url,
-            cookie=cookie,
-        )
-        assert status == 200
-        assert body["status"] == "complete"

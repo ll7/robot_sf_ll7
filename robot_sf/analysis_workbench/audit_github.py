@@ -1960,6 +1960,19 @@ class GitHubSync:
                         reason=reason,
                         remote_write=remote_write,
                     )
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue update capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    if claim is not None:
+                        self._mark_claim(claim, "failed", reason)
+                    return self._result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        entry,
+                        reason=reason,
+                        remote_write="none",
+                    )
                 except Exception as exc:  # noqa: BLE001 - update may have applied remotely.
                     reason = f"update outcome is ambiguous: {type(exc).__name__}: {exc}"
                     remote_write = (
@@ -2625,7 +2638,9 @@ class GitHubSync:
                     except GitHubSyncError as conflict:
                         return _stale(str(conflict), remote)
                     status = "reconciled"
-                    remote_write = "none"
+                    # Complete exact-marker readback confirms that this create
+                    # was accepted despite the lost provider response.
+                    remote_write = "applied"
 
                 # Persist the local receipt before the post-create reread.  A
                 # missing/transport-failed reread must not erase evidence that

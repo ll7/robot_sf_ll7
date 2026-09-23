@@ -337,7 +337,7 @@ def test_append_only_create_timeout_reconciles_or_preserves_ambiguity(tmp_path: 
             operation_id="create-timeout-reconciled",
         )
     assert reconciled.status == "reconciled"
-    assert reconciled.remote_write == "none"
+    assert reconciled.remote_write == "applied"
     assert len(accepted.create_calls) == 1
 
     class LostCreateProvider(AppendOnlyProvider):

@@ -25,6 +25,7 @@ from robot_sf.analysis_workbench.audit_github import (
     GitHubTransportError,
     GitHubValidationError,
     SearchResult,
+    _adopt_initial_publication_snapshot,
     _coerce_comment_write,
     _comment_payload_without_request_marker,
     _find_exact_publication_comment,
@@ -32,6 +33,8 @@ from robot_sf.analysis_workbench.audit_github import (
     _parse_publication_marker,
     _publication_request_marker,
     _select_marker_issue,
+    _validate_initial_entry_identity,
+    _validate_publication_entry_payload,
     render_finding_issue,
 )
 from robot_sf.analysis_workbench.audit_github_rest import auditor_request_marker
@@ -1128,3 +1131,106 @@ def test_append_only_exact_comment_lookup_rejects_forged_or_newer_comments(
             publication_digest=digest,
             expected_body=payload.lstrip("\n"),
         )
+
+
+@pytest.mark.parametrize("tamper", ("expected-block", "provenance"))
+def test_append_only_publication_payload_validator_rejects_receipt_tampering(
+    tmp_path: Path,
+    tamper: str,
+) -> None:
+    finding = _finding(f"payload-validator-{tamper}")
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="payload-validator-initial",
+        )
+    assert published.outbox is not None
+    entry = published.outbox
+    rendered = render_finding_issue(finding, repository=REPOSITORY)
+    arguments = {
+        "finding_revision": entry.publication_revision,
+        "publication_kind": entry.publication_kind,
+        "publication_digest": entry.publication_digest,
+        "publication_key": entry.publication_key,
+        "body": entry.body,
+    }
+    _validate_publication_entry_payload(entry, rendered, **arguments)
+
+    if tamper == "expected-block":
+        entry = replace(entry, expected_block_digest="0" * 64)
+    else:
+        provenance = dict(entry.publication_provenance or {})
+        provenance["repository"] = "other/repository"
+        entry = replace(entry, publication_provenance=provenance)
+
+    with pytest.raises(GitHubConflictError, match="payload/provenance mismatch"):
+        _validate_publication_entry_payload(entry, rendered, **arguments)
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        "different-rendered-identity",
+        "expected-block",
+        "duplicate-publication-marker",
+        "publication-marker-identity",
+        "auditor-block",
+        "provenance",
+        "adoption-mode",
+        "publication-key",
+        "request-digest",
+    ),
+)
+def test_append_only_initial_receipt_identity_rejects_tampering(
+    tmp_path: Path,
+    tamper: str,
+) -> None:
+    finding = _finding(f"initial-identity-{tamper}")
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="identity-validator-initial",
+        )
+    assert published.outbox is not None and published.issue is not None
+    entry = published.outbox
+    rendered = render_finding_issue(finding, repository=REPOSITORY)
+
+    if tamper == "different-rendered-identity":
+        rendered = render_finding_issue(finding, repository="other/repository")
+    elif tamper == "expected-block":
+        entry = replace(entry, expected_block_digest="0" * 64)
+    elif tamper == "duplicate-publication-marker":
+        marker_line = entry.body.splitlines()[0]
+        entry = replace(entry, body=f"{entry.body}\n{marker_line}")
+    elif tamper == "publication-marker-identity":
+        entry = replace(
+            entry,
+            body=entry.body.replace(
+                f"finding_id={finding.finding_id}", "finding_id=forged-finding", 1
+            ),
+        )
+    elif tamper == "auditor-block":
+        entry = replace(
+            entry,
+            body=entry.body.replace("Confirmed episodes (", "Tampered episodes (", 1),
+        )
+    elif tamper == "provenance":
+        provenance = dict(entry.publication_provenance or {})
+        provenance["repository"] = "other/repository"
+        entry = replace(entry, publication_provenance=provenance)
+    elif tamper == "adoption-mode":
+        entry = _adopt_initial_publication_snapshot(entry, published.issue)
+        provenance = dict(entry.publication_provenance or {})
+        provenance["adoption_mode"] = "unrecognized"
+        entry = replace(entry, publication_provenance=provenance)
+    elif tamper == "publication-key":
+        entry = replace(entry, publication_key="0" * 64)
+    else:
+        entry = replace(entry, request_digest="0" * 64)
+
+    with pytest.raises(GitHubConflictError, match="identity mismatch|malformed"):
+        _validate_initial_entry_identity(entry, rendered)

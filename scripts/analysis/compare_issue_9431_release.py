@@ -17,20 +17,102 @@ import json
 import sys
 import tarfile
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
+from collections.abc import Set as AbstractSet
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from robot_sf.benchmark.release_acceptance import _algorithm_metadata_runtime_marker
 
 OUTCOME_KEYS = ("route_complete", "collision_event", "timeout_event")
 # A release row may be wholly native, use an explicit adapter, or combine
 # native and adapter components (for example a guarded PPO wrapper).  All
 # three are contract-valid; fallback/degraded flags remain disqualifying.
 EXECUTION_MODES = {"native", "adapter", "mixed"}
-EXPECTED_ARM_COUNT = 14
-EXPECTED_ROWS_PER_ARM = 1440
-EXPECTED_TOTAL_ROWS = 20160
+# Frozen from the accepted issue #9431 S30/H600 campaign identity. Counts alone
+# are not enough: each arm must contain this exact planner × scenario × seed
+# Cartesian product. The scenario IDs resolve from the pinned 0.0.7 source
+# matrix (configs/scenarios/classic_interactions_francis2023.yaml).
+EXPECTED_ARM_KEYS = frozenset(
+    {
+        "goal",
+        "guarded_ppo",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca",
+        "ppo",
+        "prediction_planner",
+        "predictive_mppi",
+        "risk_dwa",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "social_force",
+        "socnav_sampling",
+    }
+)
+EXPECTED_SCENARIO_IDS = frozenset(
+    {
+        "classic_bottleneck_high",
+        "classic_bottleneck_low",
+        "classic_bottleneck_medium",
+        "classic_cross_trap_high",
+        "classic_cross_trap_low",
+        "classic_cross_trap_medium",
+        "classic_doorway_high",
+        "classic_doorway_low",
+        "classic_doorway_medium",
+        "classic_group_crossing_high",
+        "classic_group_crossing_low",
+        "classic_group_crossing_medium",
+        "classic_head_on_corridor_low",
+        "classic_head_on_corridor_medium",
+        "classic_merging_low",
+        "classic_merging_medium",
+        "classic_overtaking_low",
+        "classic_overtaking_medium",
+        "classic_realworld_double_bottleneck_high",
+        "classic_station_platform_medium",
+        "classic_t_intersection_low",
+        "classic_t_intersection_medium",
+        "classic_urban_crossing_medium",
+        "francis2023_accompanying_peer",
+        "francis2023_blind_corner",
+        "francis2023_circular_crossing",
+        "francis2023_crowd_navigation",
+        "francis2023_down_path",
+        "francis2023_entering_elevator",
+        "francis2023_entering_room",
+        "francis2023_exiting_elevator",
+        "francis2023_exiting_room",
+        "francis2023_following_human",
+        "francis2023_frontal_approach",
+        "francis2023_intersection_no_gesture",
+        "francis2023_intersection_proceed",
+        "francis2023_intersection_wait",
+        "francis2023_join_group",
+        "francis2023_leading_human",
+        "francis2023_leave_group",
+        "francis2023_narrow_doorway",
+        "francis2023_narrow_hallway",
+        "francis2023_parallel_traffic",
+        "francis2023_pedestrian_obstruction",
+        "francis2023_pedestrian_overtaking",
+        "francis2023_perpendicular_traffic",
+        "francis2023_robot_crowding",
+        "francis2023_robot_overtaking",
+    }
+)
+EXPECTED_SEEDS = frozenset(range(111, 141))
+EXPECTED_SCENARIO_MATRIX_SHA256 = "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+EXPECTED_SCENARIO_MANIFEST_SHA256 = (
+    "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+)
+EXPECTED_ARM_COUNT = len(EXPECTED_ARM_KEYS)
+EXPECTED_ROWS_PER_ARM = len(EXPECTED_SCENARIO_IDS) * len(EXPECTED_SEEDS)
+EXPECTED_TOTAL_ROWS = EXPECTED_ARM_COUNT * EXPECTED_ROWS_PER_ARM
 BOOTSTRAP_SAMPLES = 3000
 BOOTSTRAP_SEED = 123
 
@@ -43,17 +125,6 @@ def _row_outcome(row: Mapping[str, Any]) -> dict[str, bool]:
     if invalid:
         raise ValueError("row outcome requires explicit boolean values for " + ", ".join(invalid))
     return {key: outcome[key] for key in OUTCOME_KEYS}
-
-
-def _nested_values(value: Any) -> Iterable[Any]:
-    if isinstance(value, Mapping):
-        for child in value.values():
-            yield child
-            yield from _nested_values(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield child
-            yield from _nested_values(child)
 
 
 def _goal_adjacent_status(row: Mapping[str, Any]) -> str:
@@ -73,7 +144,7 @@ def _goal_adjacent_status(row: Mapping[str, Any]) -> str:
     return "unavailable"
 
 
-def _execution_audit(row: Mapping[str, Any]) -> list[str]:
+def _execution_audit(row: Mapping[str, Any], *, expected_algorithm: str | None = None) -> list[str]:
     issues: list[str] = []
     metadata = row.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
@@ -86,9 +157,14 @@ def _execution_audit(row: Mapping[str, Any]) -> list[str]:
             mode = kinematics.get("execution_mode")
             if not isinstance(mode, str) or mode not in EXECUTION_MODES:
                 issues.append(f"execution_mode={mode if mode is not None else 'missing'}")
-        for key in ("fallback_used", "degraded", "unavailable"):
-            if metadata.get(key) is True:
-                issues.append(f"{key}=true")
+        runtime_marker = _algorithm_metadata_runtime_marker(
+            metadata, expected_algorithm=expected_algorithm
+        )
+        if runtime_marker is not None:
+            marker_path, marker_value = runtime_marker
+            issues.append(f"algorithm_metadata.{marker_path}={marker_value}")
+        if metadata.get("unavailable") is True:
+            issues.append("unavailable=true")
     # Outcome statuses are not execution degradation.  A valid benchmark row
     # may finish as success, collision, timeout, or failure; only explicit
     # runtime/error/unavailable markers are disqualifying here.
@@ -104,11 +180,6 @@ def _execution_audit(row: Mapping[str, Any]) -> list[str]:
         "timeout_event",
     }:
         issues.append(f"status={row.get('status')}")
-    for value in _nested_values(row):
-        if isinstance(value, str) and value.lower() in {"fallback", "degraded", "unavailable"}:
-            # A row may mention ``unavailable`` for a diagnostic predicate; do
-            # not fail the execution gate on that wording alone.
-            continue
     return issues
 
 
@@ -236,6 +307,31 @@ def _archive_source_commit(archive: Path) -> str:
     return source_commit
 
 
+def _bundle_campaign_id(bundle: Path) -> str:
+    """Read the stable campaign ID from the verified successor bundle."""
+    manifest_suffix = "/payload/campaign_manifest.json"
+    with tarfile.open(bundle, "r:gz") as handle:
+        matches = [
+            member
+            for member in handle.getmembers()
+            if member.isfile() and member.name.endswith(manifest_suffix)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"successor bundle must contain exactly one campaign manifest; found {len(matches)}"
+            )
+        extracted = handle.extractfile(matches[0])
+        if extracted is None:
+            raise ValueError(f"cannot read campaign manifest {matches[0].name}")
+        manifest = json.load(extracted)
+    if not isinstance(manifest, Mapping):
+        raise ValueError("successor campaign manifest must be a JSON object")
+    campaign_id = manifest.get("campaign_id")
+    if not isinstance(campaign_id, str) or not campaign_id.strip():
+        raise ValueError("successor campaign manifest is missing a campaign ID")
+    return campaign_id
+
+
 def _read_successor(root: Path) -> dict[str, dict[tuple[str, int], dict[str, Any]]]:
     result: dict[str, dict[tuple[str, int], dict[str, Any]]] = {}
     for path in sorted(root.glob("runs/*/episodes.jsonl")):
@@ -309,20 +405,24 @@ def _validate_matrix(
     old: Mapping[str, Mapping[tuple[str, int], Mapping[str, Any]]],
     new: Mapping[str, Mapping[tuple[str, int], Mapping[str, Any]]],
     *,
-    expected_arm_count: int,
-    expected_rows_per_arm: int,
-    expected_total_rows: int,
+    expected_arm_keys: AbstractSet[str] = EXPECTED_ARM_KEYS,
+    expected_scenario_ids: AbstractSet[str] = EXPECTED_SCENARIO_IDS,
+    expected_seeds: AbstractSet[int] = EXPECTED_SEEDS,
 ) -> None:
     old_arms = set(old)
     new_arms = set(new)
-    if old_arms != new_arms:
+    expected_arms = set(expected_arm_keys)
+    if old_arms != expected_arms or new_arms != expected_arms:
         raise ValueError(
-            "predecessor/successor arm sets differ: "
-            f"predecessor_only={sorted(old_arms - new_arms)}, "
-            f"successor_only={sorted(new_arms - old_arms)}"
+            "predecessor/successor arm sets do not match the canonical matrix: "
+            f"predecessor_missing={sorted(expected_arms - old_arms)}, "
+            f"predecessor_unexpected={sorted(old_arms - expected_arms)}, "
+            f"successor_missing={sorted(expected_arms - new_arms)}, "
+            f"successor_unexpected={sorted(new_arms - expected_arms)}"
         )
-    if len(old_arms) != expected_arm_count:
-        raise ValueError(f"expected {expected_arm_count} arms, got {len(old_arms)}")
+    expected_keys = {
+        (scenario_id, seed) for scenario_id in expected_scenario_ids for seed in expected_seeds
+    }
     for arm in sorted(old_arms):
         old_keys = set(old[arm])
         new_keys = set(new[arm])
@@ -332,10 +432,15 @@ def _validate_matrix(
                 f"predecessor_only={sorted(old_keys - new_keys)}, "
                 f"successor_only={sorted(new_keys - old_keys)}"
             )
-        if len(old_keys) != expected_rows_per_arm:
-            raise ValueError(f"{arm} expected {expected_rows_per_arm} rows, got {len(old_keys)}")
+        if old_keys != expected_keys:
+            raise ValueError(
+                f"{arm} does not match the canonical scenario/seed matrix: "
+                f"missing={sorted(expected_keys - old_keys)[:10]}, "
+                f"unexpected={sorted(old_keys - expected_keys)[:10]}"
+            )
     old_total = sum(len(rows) for rows in old.values())
     new_total = sum(len(rows) for rows in new.values())
+    expected_total_rows = len(expected_arms) * len(expected_keys)
     if old_total != expected_total_rows or new_total != expected_total_rows:
         raise ValueError(
             f"expected {expected_total_rows} rows in each release, "
@@ -362,7 +467,7 @@ def _validate_successor_rows(
                 issues.append(
                     f"{context}: source commit {commit} does not match {successor_source_sha}"
                 )
-            for issue in _execution_audit(row):
+            for issue in _execution_audit(row, expected_algorithm=arm):
                 issues.append(f"{context}: {issue}")
     if issues:
         preview = "; ".join(issues[:20])
@@ -431,13 +536,7 @@ def compare(
         )
     old = _read_predecessor(predecessor_archive)
     new = _read_successor(successor_root)
-    _validate_matrix(
-        old,
-        new,
-        expected_arm_count=EXPECTED_ARM_COUNT,
-        expected_rows_per_arm=EXPECTED_ROWS_PER_ARM,
-        expected_total_rows=EXPECTED_TOTAL_ROWS,
-    )
+    _validate_matrix(old, new)
     _validate_successor_rows(new, successor_source_sha=successor_source_sha)
     arms = sorted(old)
     execution_issues: dict[str, list[str]] = defaultdict(list)
@@ -505,7 +604,26 @@ def compare(
             "source_commit": successor_source_sha,
             "bundle_sha256": verified_successor_bundle_sha256,
             "bundle": successor_bundle.name,
-            "campaign_root": successor_root.name,
+            "campaign_root": _bundle_campaign_id(successor_bundle),
+        },
+        "matrix_identity": {
+            "planner_arms": sorted(EXPECTED_ARM_KEYS),
+            "scenario_ids": sorted(EXPECTED_SCENARIO_IDS),
+            "seeds": sorted(EXPECTED_SEEDS),
+            "episodes_per_arm": EXPECTED_ROWS_PER_ARM,
+            "total_episodes": EXPECTED_TOTAL_ROWS,
+            "scenario_manifest": "configs/scenarios/classic_interactions_francis2023.yaml",
+            "scenario_manifest_sha256": EXPECTED_SCENARIO_MANIFEST_SHA256,
+            "scenario_matrix_sha256": EXPECTED_SCENARIO_MATRIX_SHA256,
+        },
+        "comparison_design": {
+            "classification": "descriptive multi-change release comparison",
+            "causal_ablation": False,
+            "note": (
+                "The source range includes the social-force goal-approach repair, the goal-zone "
+                "success-definition repair, and runtime-admission corrections; it does not "
+                "isolate one causal change."
+            ),
         },
         "arms": arm_reports,
         "arm_count": len(arms),
@@ -532,6 +650,11 @@ def _markdown(report: Mapping[str, Any]) -> str:
         "# Issue #9431 release diff: 0.0.6 → corrected 0.0.7",
         "",
         "This report pairs rows by planner, scenario, and seed. Successor execution is admitted only when every row is native, adapter, or mixed mode with no fallback/degraded row. Trace-dependent goal-adjacent timeout labels remain `unavailable` when step traces were not recorded.",
+        "",
+        "This is a **descriptive multi-change release comparison**, not a single-change causal ablation. The source range includes the social-force goal-approach repair, the goal-zone success-definition repair, and runtime-admission corrections.",
+        "",
+        f"- validated matrix: **{len(report['matrix_identity']['planner_arms'])} arms × {len(report['matrix_identity']['scenario_ids'])} scenarios × {len(report['matrix_identity']['seeds'])} seeds** = {report['matrix_identity']['total_episodes']} rows",
+        f"- scenario-matrix SHA-256: `{report['matrix_identity']['scenario_matrix_sha256']}`; source manifest `{report['matrix_identity']['scenario_manifest']}` SHA-256: `{report['matrix_identity']['scenario_manifest_sha256']}`",
         "",
         f"- predecessor archive SHA-256: `{report['predecessor']['archive_sha256']}`",
         f"- exact source range: `{report['predecessor']['source_commit']}..{report['successor']['source_commit']}`",

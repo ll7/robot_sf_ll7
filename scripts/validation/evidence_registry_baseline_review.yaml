@@ -154,7 +154,9 @@ decision_summary: >-
   Preserve the diagnostic-only claim boundary and the separately disclosed startup/admission
   receipt exception; no benchmark, statistical, or causal claim is promoted. This targeted
   provenance disposition refreshes the machine baseline from 436 findings across 97 files to 438
-  across 98 files, and records the 38-file evidence-tree addition.
+  across 98 files, and records the 40-file evidence-tree addition: 38 diagnostic trace files plus
+  two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
+  campaign provenance bytes without modifying either artifact.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

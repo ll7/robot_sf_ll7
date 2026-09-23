@@ -430,15 +430,6 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_references=("#9489",),
     ),
     (
-        "robot_sf/benchmark/diagnostic_report.py",
-        "_check_cost_scale",
-        "isinstance(candidates, list) and isinstance(scale, Mapping)",
-    ): _review(
-        "The missing-cost-input gate returns early when candidates/scale are absent; reaching the scorer narrows both mappings for candidate-order comparison.",
-        ownership_status="unowned_residual",
-        ownership_references=("#9489",),
-    ),
-    (
         "robot_sf/render/audit_workbench_launch.py",
         "_load_native_diagnostic_config",
         "selected is not None",

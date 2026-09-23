@@ -46,20 +46,25 @@ class AppendOnlyProvider:
         self.issues: list[GitHubIssue] = []
         self.create_calls: list[dict[str, Any]] = []
         self.comment_calls: list[dict[str, Any]] = []
+        self.get_issue_calls: list[tuple[str, int]] = []
         self.update_calls = 0
         self.timeout_after_comment = False
         self.search_error: Exception | None = None
         self.search_complete = True
+        self.hide_issues_from_search = False
         self.create_error: Exception | None = None
         self.create_error_after_success = False
         self.comment_error: Exception | None = None
         self.comment_error_after_success = False
+        self.tamper_comment_after_success = False
         self.next_number = 10
 
     def search_issues(self, repository: str, *, marker: str) -> SearchResult:
         del marker
         if self.search_error is not None:
             raise self.search_error
+        if self.hide_issues_from_search:
+            return SearchResult((), complete=True)
         return SearchResult(
             tuple(self.issues),
             complete=self.search_complete,
@@ -92,6 +97,7 @@ class AppendOnlyProvider:
         return issue
 
     def get_issue(self, repository: str, number: int) -> GitHubIssue:
+        self.get_issue_calls.append((repository, number))
         for issue in self.issues:
             if issue.repository == repository and issue.number == number:
                 return issue
@@ -116,6 +122,12 @@ class AppendOnlyProvider:
         comment = {"id": 100 + len(issue.comments), "body": comment_body}
         self.comment_calls.append({"number": number, "body": comment_body})
         updated = replace(issue, comments=(*issue.comments, comment))
+        if self.tamper_comment_after_success:
+            tampered = dict(comment)
+            tampered["body"] = comment_body.replace(
+                "robot_sf_audit_publication:v1", "robot_sf_audit_publication:forged", 1
+            )
+            updated = replace(issue, comments=(*issue.comments, tampered))
         self.issues = [updated if item.number == number else item for item in self.issues]
         if self.comment_error_after_success:
             raise self.comment_error or TimeoutError(
@@ -193,9 +205,30 @@ def test_timeout_after_comment_is_reconciled_without_duplicate(tmp_path: Path) -
         replay = sync.sync(REPOSITORY, revised, operation_id="comment-timeout-replay")
 
     assert result.status == "reconciled"
+    assert result.remote_write == "ambiguous"
     assert replay.status == "unchanged"
     assert len(provider.comment_calls) == 1
     assert provider.update_calls == 0
+
+
+def test_append_only_conflicting_comment_readback_is_retained_not_raised(
+    tmp_path: Path,
+) -> None:
+    provider = AppendOnlyProvider()
+    finding = _finding("comment-conflicting-readback")
+    with GitHubOutbox(tmp_path) as outbox:
+        sync = GitHubSync(provider, outbox)
+        sync.sync(REPOSITORY, finding, operation_id="create")
+        revised = replace(finding, observations=("conflicting comment",))
+        provider.comment_error_after_success = True
+        provider.tamper_comment_after_success = True
+        result = sync.sync(REPOSITORY, revised, operation_id="comment-conflicting-readback")
+
+    assert result.status in {"conflict", "ambiguous"}
+    assert result.outbox is not None
+    assert result.outbox.state in {"conflict", "ambiguous"}
+    assert "publication" in result.reason or "comment" in result.reason
+    assert len(provider.comment_calls) == 1
 
 
 def test_initial_publication_body_carries_immutable_revision_identity() -> None:
@@ -262,7 +295,7 @@ def test_append_only_create_timeout_reconciles_or_preserves_ambiguity(tmp_path: 
     assert "create outcome is ambiguous" in ambiguous.reason
 
 
-def test_append_only_preexisting_issue_is_migrated_without_body_rewrite(tmp_path: Path) -> None:
+def test_append_only_preexisting_issue_is_adopted_without_body_rewrite(tmp_path: Path) -> None:
     finding = _finding("append-preexisting")
     seed = AppendOnlyProvider()
     with GitHubOutbox(tmp_path / "seed") as outbox:
@@ -281,13 +314,17 @@ def test_append_only_preexisting_issue_is_migrated_without_body_rewrite(tmp_path
             operation_id="migrate-existing-issue",
         )
     assert created.status == "created"
-    assert result.status == "commented"
+    # A marker-discovered issue with no local receipt is adopted as the
+    # immutable initial publication.  Adoption must not append a synthetic
+    # revision comment for the initial finding.
+    assert result.status == "unchanged"
+    assert result.replayed
     assert provider.issues[0].body == original_body
     assert len(provider.create_calls) == 0
-    assert len(provider.comment_calls) == 1
+    assert len(provider.comment_calls) == 0
 
 
-def test_append_only_comment_failure_without_marker_is_ambiguous(tmp_path: Path) -> None:
+def test_append_only_comment_failure_requires_explicit_retry_opt_in(tmp_path: Path) -> None:
     provider = AppendOnlyProvider()
     finding = _finding("append-comment-ambiguous")
     with GitHubOutbox(tmp_path) as outbox:
@@ -298,14 +335,309 @@ def test_append_only_comment_failure_without_marker_is_ambiguous(tmp_path: Path)
         )
         assert first.status == "created"
         provider.comment_error = TimeoutError("comment response lost before apply")
-        result = GitHubSync(provider, outbox).sync(
+        sync = GitHubSync(provider, outbox)
+        result = sync.sync(
             REPOSITORY,
             replace(finding, observations=("comment failed",)),
             operation_id="comment-ambiguous",
         )
+        refused = sync.sync(
+            REPOSITORY,
+            replace(finding, observations=("comment failed",)),
+            operation_id="comment-ambiguous-replay",
+        )
+        provider.comment_error = None
+        retried = sync.sync(
+            REPOSITORY,
+            replace(finding, observations=("comment failed",)),
+            operation_id="comment-ambiguous-authorized-replay",
+            retry_ambiguous=True,
+        )
     assert result.status == "ambiguous"
     assert result.remote_write == "ambiguous"
     assert "comment outcome is ambiguous" in result.reason
+    assert refused.status == "ambiguous"
+    assert refused.remote_write == "none"
+    assert "retry_ambiguous=True" in refused.reason
+    assert retried.status == "commented"
+    assert len(provider.comment_calls) == 1
+
+
+def test_append_only_canonical_link_is_read_before_create(tmp_path: Path) -> None:
+    finding = _finding("append-link-readback")
+    seed = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path / "seed") as outbox:
+        seeded = GitHubSync(seed, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="link-seed",
+        )
+    assert seeded.finding is not None and seeded.finding.github_issue is not None
+    provider = AppendOnlyProvider()
+    provider.issues = list(seed.issues)
+    provider.hide_issues_from_search = True
+    linked = replace(finding, github_issue=seeded.finding.github_issue)
+    with GitHubOutbox(tmp_path / "recovery") as outbox:
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            linked,
+            operation_id="link-readback",
+        )
+
+    assert result.status == "unchanged"
+    assert result.replayed
+    assert provider.create_calls == []
+    assert provider.get_issue_calls
+    assert provider.get_issue_calls[0] == (REPOSITORY, seeded.issue.number)
+
+
+def test_append_only_canonical_link_conflict_with_marker_search_is_explicit(
+    tmp_path: Path,
+) -> None:
+    finding = _finding("append-link-conflict")
+    seed = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path / "seed") as outbox:
+        seeded = GitHubSync(seed, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="link-conflict-seed",
+        )
+    assert seeded.finding is not None and seeded.finding.github_issue is not None
+    provider = AppendOnlyProvider()
+    provider.issues = list(seed.issues)
+    linked = dict(seeded.finding.github_issue)
+    linked["number"] = seeded.issue.number + 100
+    linked["url"] = f"https://github.com/{REPOSITORY}/issues/{linked['number']}"
+    with GitHubOutbox(tmp_path / "recovery") as outbox:
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            replace(finding, github_issue=linked),
+            operation_id="link-conflict",
+        )
+
+    assert result.status == "conflict"
+    assert "canonical finding link" in result.reason
+    assert provider.create_calls == []
+    assert result.outbox is not None and result.outbox.state == "conflict"
+
+
+def test_append_only_same_revision_outbox_loss_reconciles_existing_comment(
+    tmp_path: Path,
+) -> None:
+    finding = _finding("append-outbox-loss")
+    provider = AppendOnlyProvider()
+    revised = replace(finding, observations=("same semantic revision",))
+    with GitHubOutbox(tmp_path / "original") as outbox:
+        initial = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="outbox-loss-initial",
+        )
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id="outbox-loss-comment",
+        )
+    assert initial.status == "created"
+    assert published.status == "commented"
+    assert published.finding is not None and published.finding.github_issue is not None
+    assert published.outbox is not None and published.outbox.publication_revision == 0
+    assert published.finding.github_issue["publication_kind"] == "revision_comment"
+    assert len(provider.comment_calls) == 1
+    provider.hide_issues_from_search = True
+
+    with GitHubOutbox(tmp_path / "recovered") as outbox:
+        replay = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            published.finding,
+            operation_id="outbox-loss-replay",
+        )
+
+    assert replay.status == "reconciled"
+    assert replay.replayed
+    assert replay.comment == published.comment
+    assert len(provider.create_calls) == 1
+    assert len(provider.comment_calls) == 1
+
+    with GitHubOutbox(tmp_path / "recovered") as outbox:
+        second_replay = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            replay.finding or published.finding,
+            operation_id="outbox-loss-second-replay",
+        )
+
+    assert second_replay.status == "unchanged"
+    assert second_replay.replayed
+    assert len(provider.create_calls) == 1
+    assert len(provider.comment_calls) == 1
+
+
+def test_append_only_current_comment_link_id_mismatch_is_conflict(tmp_path: Path) -> None:
+    finding = _finding("append-link-comment-id-conflict")
+    provider = AppendOnlyProvider()
+    revised = replace(finding, observations=("same semantic revision",))
+    with GitHubOutbox(tmp_path / "original") as outbox:
+        GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="comment-id-initial",
+        )
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id="comment-id-revision",
+        )
+    assert published.finding is not None and published.finding.github_issue is not None
+    linked = dict(published.finding.github_issue)
+    linked["comment_id"] = int(linked["comment_id"]) + 1
+    create_count = len(provider.create_calls)
+    comment_count = len(provider.comment_calls)
+
+    with GitHubOutbox(tmp_path / "recovery") as outbox:
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            replace(published.finding, github_issue=linked),
+            operation_id="comment-id-recovery",
+        )
+
+    assert result.status == "conflict"
+    assert "exact remote publication comment" in result.reason
+    assert len(provider.create_calls) == create_count
+    assert len(provider.comment_calls) == comment_count
+
+
+@pytest.mark.parametrize("tamper", ("provenance", "body"))
+def test_append_only_comment_readback_rejects_forged_provenance_or_body(
+    tmp_path: Path,
+    tamper: str,
+) -> None:
+    finding = _finding(f"append-comment-{tamper}")
+    revised = replace(finding, observations=("immutable comment payload",))
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id=f"{tamper}-initial",
+        )
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id=f"{tamper}-comment",
+        )
+        assert published.outbox is not None
+        assert published.outbox.comment is not None
+        issue = provider.issues[0]
+        comment = dict(issue.comments[0])
+        body = str(comment["body"])
+        request_marker, payload = body.split("\n", 1)
+        if tamper == "provenance":
+            expected = f"revision=0 digest={published.outbox.publication_digest}"
+            assert expected in payload
+            payload = payload.replace(expected, f"revision=0 digest={'0' * 64}", 1)
+        else:
+            assert "**Candidate episodes:**" in payload
+            payload = payload.replace("**Candidate episodes:**", "**Tampered episodes:**", 1)
+        comment["body"] = f"{request_marker}\n{payload}"
+        provider.issues = [replace(issue, comments=(comment,))]
+
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id=f"{tamper}-replay",
+        )
+
+    assert result.status == "conflict"
+    assert "publication" in result.reason or "comment" in result.reason
+    assert len(provider.comment_calls) == 1
+
+
+def test_append_only_deleted_remote_issue_preserves_local_receipt_as_conflict(
+    tmp_path: Path,
+) -> None:
+    finding = _finding("append-issue-deleted")
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        created = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="issue-deleted-create",
+        )
+        assert created.outbox is not None and created.outbox.issue is not None
+        provider.issues = []
+        replay = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="issue-deleted-replay",
+        )
+
+    assert replay.status == "conflict"
+    assert "missing" in replay.reason
+    assert replay.outbox is not None and replay.outbox.state == "conflict"
+    assert replay.outbox.issue == created.outbox.issue
+    assert replay.issue is not None and replay.issue.number == created.issue.number
+    assert len(provider.create_calls) == 1
+
+
+def test_append_only_legacy_issue_publication_marker_is_a_conflict(tmp_path: Path) -> None:
+    finding = _finding("append-legacy-marker")
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        created = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="legacy-marker-create",
+        )
+        assert created.outbox is not None and created.outbox.issue is not None
+        issue = provider.issues[0]
+        legacy_body = "\n".join(
+            line for line in issue.body.splitlines() if "robot_sf_audit_publication:v1" not in line
+        )
+        provider.issues = [replace(issue, body=legacy_body)]
+        replay = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="legacy-marker-replay",
+        )
+
+    assert replay.status == "conflict"
+    assert "publication" in replay.reason
+    assert replay.outbox is not None and replay.outbox.state == "conflict"
+    assert replay.outbox.issue == created.outbox.issue
+    assert provider.create_calls and len(provider.create_calls) == 1
+
+
+def test_append_only_deleted_remote_comment_preserves_local_receipt_as_conflict(
+    tmp_path: Path,
+) -> None:
+    finding = _finding("append-comment-deleted")
+    revised = replace(finding, observations=("comment to delete",))
+    provider = AppendOnlyProvider()
+    with GitHubOutbox(tmp_path) as outbox:
+        GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="comment-deleted-initial",
+        )
+        published = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id="comment-deleted-create",
+        )
+        assert published.outbox is not None and published.outbox.comment is not None
+        issue = provider.issues[0]
+        provider.issues = [replace(issue, comments=())]
+        replay = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            revised,
+            operation_id="comment-deleted-replay",
+        )
+
+    assert replay.status == "conflict"
+    assert "comment" in replay.reason
+    assert replay.outbox is not None and replay.outbox.state == "conflict"
+    assert replay.outbox.comment == published.outbox.comment
+    assert len(provider.comment_calls) == 1
 
 
 def test_append_only_publication_identity_validation_and_lookup(tmp_path: Path) -> None:
@@ -385,5 +717,7 @@ def test_append_only_claim_repair_settles_crash_left_initial_claim(tmp_path: Pat
             operation_id="publication-crash-left",
         )
         repaired = outbox.get_claim(REPOSITORY, finding.finding_id)
-    assert result.status == "commented"
+    assert result.status == "unchanged"
+    assert result.replayed
+    assert provider.comment_calls == []
     assert repaired is not None and repaired.state == "succeeded"

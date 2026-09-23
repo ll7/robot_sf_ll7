@@ -1,7 +1,10 @@
 # Finding-level GitHub synchronization
 
-This document describes the bounded BA-05 GitHub synchronization slice. The renderer/outbox core
-and the authenticated `AuditService.sync_finding`/MCP route are implemented and tested offline.
+This note describes the append-only GitHub route, which preserves the initial issue body, and what
+the offline tests do not prove. It covers the bounded Benchmark Auditor issue 5 (BA-05)
+GitHub synchronization slice. The renderer/outbox core and authenticated
+`AuditService.sync_finding` route through the Model Context Protocol (MCP) are implemented and
+tested offline.
 No live GitHub client or external issue write is claimed by this slice.
 
 ## What the slice provides
@@ -23,13 +26,15 @@ crash-interrupted entry whose claim is still in flight.
 
 `GitHubSync` depends on the small `GitHubProvider` protocol. A provider must search by the exact
 marker before creating an issue and return complete issue snapshots. Existing-issue updates require
-`update_issue_if_unchanged`, implemented by a live adapter with an ETag or equivalent conditional
-request. A provider without that CAS/ETag seam is rejected before a body mutation. When a
+`update_issue_if_unchanged`, implemented by a live adapter with a provider-side compare-and-swap
+(CAS) via an entity tag (ETag) or equivalent conditional request. A provider without that CAS/ETag
+seam is rejected before a body mutation. When a
 canonical `FindingStore` is supplied, the provider must additionally implement
 `create_issue_with_finding_revision` and `update_issue_with_finding_revision`; these are an explicit
 service/provider reservation boundary for the expected canonical revision. A generic provider is
-rejected before remote mutation, so the module does not claim to close a canonical revision TOCTOU
-on behalf of a live adapter. The supplied tests use a fake provider only; they do not require
+rejected before remote mutation, so the module does not claim to close a canonical revision
+time-of-check-to-time-of-use (TOCTOU) race on behalf of a live adapter. The supplied tests use a
+fake provider only; they do not require
 credentials or mutate GitHub.
 
 `AuditService.sync_finding` is the service-owned entry point. It accepts a finding ID rather than a
@@ -45,6 +50,38 @@ The closed `AuditMCPDispatcher` operation and stdio tool are both named `sync_fi
 the finding ID, repository, expected canonical finding revision, optional source-bound evidence,
 and the explicit ambiguous-retry flag. Provider construction remains server-owned; MCP payloads
 cannot nominate a client or credentials.
+
+### Append-only GitHub publication protocol
+
+When the injected provider exposes `append_auditor_comment`, the route keeps the initial issue
+immutable and publishes later finding revisions as comments. The initial issue is identified by the
+finding-wide `(repository, finding_id, initial_issue)` identity. A current-schema marker discovered
+without a local receipt is adopted as that immutable initial publication: recovery reports
+`unchanged` and does not append a synthetic same-revision comment. Legacy or forged publication
+markers remain conflicts until their provenance is independently established.
+
+Each revision comment has a semantic `(repository, finding_id, revision, publication_digest)` key,
+an exact request marker, and an exact publication marker. Recovery reads the complete comment
+collection before posting. If the outbox was lost but the exact same-revision comment is present,
+the provider fake route reconciles it without a duplicate POST. An ambiguous comment remains
+ambiguous unless the caller explicitly sets `retry_ambiguous=True`.
+
+When the canonical finding link points to that current revision comment, recovery validates the
+linked issue and exact comment ID, digest, and body before adopting an older immutable initial
+snapshot. The mismatched local create intent is retained as a conflict receipt; the observed issue
+snapshot is stored separately under its own semantic key. This preserves the outbox's immutable
+request-digest contract while allowing a later revision to reuse the verified initial issue.
+
+The authenticated service response is a bounded projection: issue/comment identities and SHA-256
+body digests are returned, while complete bodies remain in the local outbox and direct typed sync
+result. This avoids duplicating large snapshots in the MCP/service envelope without weakening the
+durable readback record.
+
+The canonical `finding.github_issue` link is validated and reread before create. A link/search or
+link/snapshot disagreement is a visible conflict. Every adopted or reconciled publication checks
+the issue identity, finding marker, expected revision, auditor-block digest, publication provenance,
+comment ID, and exact comment body. If a remote issue or comment disappears after local success,
+the local receipt is retained and downgraded to a conflict; it is never silently erased.
 
 ## Safety and conflict rules
 
@@ -84,14 +121,14 @@ executable instructions.
 
 The service accepts an injected provider-neutral seam for tests and a future authenticated adapter;
 it does not construct credentials, read environment tokens, or make network calls. A live adapter
-must provide complete marker-search pagination/readback and a provider-side issue CAS/ETag (or an
-equivalent atomic reservation) before any body replacement. A read-then-PATCH sequence is not a
-CAS and is rejected by `GitHubSync`. The conservative append-only auditor-comment update route is
-not implemented in this slice because no provider contract here proves complete comment
-pagination, marker uniqueness, create-timeout reconciliation, and comment-idempotency. Therefore
-body updates without `update_issue_if_unchanged` remain explicitly unavailable/conflict, not
-successful live evidence. No live write, capability probe with mutation, push, or PR is part of
-the validation below.
+must provide complete marker and comment pagination/readback, authenticated repository scope,
+canonical revision reservation, and explicit handling for provider transport uncertainty. Mutable
+issue-body routes still require a provider-side CAS/ETag (or equivalent atomic reservation); a
+read-then-PATCH sequence is not a CAS. The append-only fake-provider protocol does not establish
+provider-side exactly-once delivery, cross-system CAS, or physical provider write caps. Those live
+CAS/exactly-once/provider-cap gates remain unresolved and are not claimed by this slice. No live
+GitHub application programming interface (API) write or mutation-based capability probe is part of
+the offline validation below.
 
 ## Offline fake-provider route
 
@@ -99,20 +136,22 @@ The exercised route is the focused test module:
 
 ```text
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest \
+  tests/analysis_workbench/test_audit_github_append_only.py \
   tests/analysis_workbench/test_audit_github.py \
   tests/analysis_workbench/test_audit_github_service.py -q
 ```
 
-The fake-provider tests cover success-then-timeout reconciliation, crash/reopen without a blind
-duplicate, block-only updates with human text and labels preserved, human-edit conflicts after
-search, concurrent-marker conflict, finding-wide claim recovery, stale-operation rollback
-protection, private-path/secret/media filtering, malformed responses, and outbox request identity.
-A later live adapter must provide the same protocol and separately prove authenticated repository
-scope, pagination completeness, provider CAS/ETag behavior, canonical revision reservation,
-write-budget admission, and origin/session-token checks in `audit_service.py`. The service tests
-also cover wrong repository, exhausted budget with zero provider calls, stale source/context and
-finding revisions, durable replay, timeout-after-create reconciliation, duplicate markers, and the
-same operation through MCP.
+The append-only fake-provider tests cover immutable-issue adoption without a synthetic comment,
+canonical-link readback and link/search conflicts, same-revision outbox-loss deduplication, exact
+publication provenance and comment-body validation, explicit ambiguous-comment retry, and remote
+issue/comment deletion with the local receipt retained as conflict. The general fake-provider tests
+cover success-then-timeout reconciliation, block-only updates with human text and labels preserved,
+human-edit conflicts after search, concurrent-marker conflict, finding-wide claim recovery,
+stale-operation rollback protection, private-path/secret/media filtering, malformed responses, and
+outbox request identity. A later live adapter must separately prove authenticated repository scope,
+pagination completeness, provider CAS/ETag behavior, canonical revision reservation, write-budget
+admission, and origin/session-token checks in `audit_service.py`; none of that is established by
+these offline fakes.
 
 ## Evidence and missing artifacts
 
@@ -125,11 +164,14 @@ materialization remains outside this module.
 
 ## Recovery and integration boundary
 
-The outbox is the recovery point. On process interruption, reopen the same `AuditStore` path and
-reuse the same operation ID. A `succeeded` entry is an idempotent receipt and repairs a claim left
-in flight by an older crash boundary; an `ambiguous` entry requires another exact-marker search
-and explicit `retry_ambiguous=True` before a create retry. A deleted claimed issue is terminalized
-as failed and can be replaced only after a complete search confirms no marker. An older ambiguous
+The outbox is the local recovery point. On process interruption, reopen the same `AuditStore` path
+and reuse the same operation ID. A current-schema marker-discovered initial issue is adopted as
+`unchanged` without a synthetic comment, and a crash-left canonical claim is repaired locally. A
+same-revision comment found after outbox loss is reconciled from its exact markers and body without
+a duplicate POST. An `ambiguous` comment requires a complete reread and explicit
+`retry_ambiguous=True` before another POST. If a previously successful issue or comment is deleted
+or cannot be reread, the durable receipt is retained and reported as `conflict`; the protocol does
+not erase local accounting intent or silently replace the remote publication. An older ambiguous
 request cannot take over a different newer succeeded request for the same finding.
 The optional `FindingStore` adapter binds the issue URL/number, marker, source revision, and
 auditor-block digest to the current finding revision.

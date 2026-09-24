@@ -93,6 +93,12 @@ removing the new `snqi_v2_spec` block. That block names the weights, anchors, an
 anchors and their checksum remain unfrozen until the 1,344-row development-seed calibration is
 accepted. This template comparison establishes configuration scope only, not episode equivalence.
 
+The predecessor is `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`,
+as named by `payload/release/release_manifest.resolved.json` inside the checksum-verified 0.0.7
+publication archive. The older
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml` is not that
+archive's canonical campaign config.
+
 The 0.0.7 full campaign used Slurm job `15715`: 36 allocated CPUs and 03:00:36 elapsed. Its
 terminal scheduler state was `FAILED (2:0)` because of a documented post-run custody promotion
 error; the accepted 20,160 episode rows and independently preserved publication bundle remain

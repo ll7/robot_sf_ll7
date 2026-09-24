@@ -12,7 +12,8 @@ Never write close/fix/resolve #<id> (including owner/repo#<id> or a GitHub issue
 even negated (e.g. "does not close #<id>"):
 GitHub parses the keyword without negation awareness and auto-closes the issue on merge
 (issue #9566). Rephrase as "leaves #<id> open". Native Parent/Blocked by/Blocking links belong on the issue
-in GitHub's Relationships panel; do not duplicate them in this PR body. See
+in GitHub's Relationships panel; do not duplicate them in this PR body. `Relates to #<id>` is only a
+PR-to-issue context reference; it does not declare an issue-to-issue relationship. See
 `docs/context/issue_relationships.md`. -->
 - Closes #<id>
 - Refs #<id>

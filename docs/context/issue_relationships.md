@@ -74,6 +74,14 @@ The audit reads explicit legacy `## Relationships` blocks as candidate evidence 
 old issue bodies. A missing block is normal and is not an audit failure. Legacy headings and
 incidental mentions remain review-only; the audit does not infer or write links from them. Use its
 explicit confirmation-gated apply mode only for reviewed, complete, unambiguous legacy declarations.
+For one issue, the reviewed migration command is:
+
+```bash
+uv run python scripts/dev/audit_issue_relationships.py \
+  --issue 123 --apply --confirm RELATIONSHIP_MIGRATION --format json
+```
+
+The command adds only supported Parent/Blocked by/Blocking links and does not edit the issue body.
 For the current native graph, read `parent`, `blockedBy`, and `blocking` through `gh issue view` or
 `gh issue list`; native state takes precedence over any older body text.
 

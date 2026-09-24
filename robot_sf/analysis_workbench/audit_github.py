@@ -2635,6 +2635,24 @@ class GitHubSync:
                             reason=reason,
                             remote_write="ambiguous",
                         )
+                    except GitHubTransportError as transport_error:
+                        reason = (
+                            "create outcome remains ambiguous after exact-marker recovery: "
+                            f"{type(transport_error).__name__}: {transport_error}"
+                        )
+                        entry = self._mark(entry, "ambiguous", reason)
+                        self._mark_claim(claim, "ambiguous", reason)
+                        return self._append_result(
+                            "ambiguous",
+                            repository,
+                            finding,
+                            operation_id,
+                            entry,
+                            remote,
+                            finding,
+                            reason=reason,
+                            remote_write="ambiguous",
+                        )
                     except GitHubSyncError as conflict:
                         return _stale(str(conflict), remote)
                     status = "reconciled"

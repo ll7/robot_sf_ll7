@@ -330,33 +330,50 @@ def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
         service.close()
 
 
+def _respond_with_posted_issue(issue: dict[str, Any]) -> HttpResponse:
+    return HttpResponse(200, issue)
+
+
+def _timeout_posted_issue_readback(_issue: dict[str, Any]) -> HttpResponse:
+    raise TimeoutError("issue reread timed out after marker recovery")
+
+
 @pytest.mark.parametrize(
     (
         "persist_post",
+        "timeout_issue_get",
         "expected_result_status",
         "expected_value_status",
         "expected_remote_write",
         "expected_outbox_state",
     ),
     [
-        (False, "unavailable", "ambiguous", "ambiguous", "ambiguous"),
-        (True, "committed", "reconciled", "applied", "succeeded"),
+        (False, False, "unavailable", "ambiguous", "ambiguous", "ambiguous"),
+        (True, False, "committed", "reconciled", "applied", "succeeded"),
+        (True, True, "unavailable", "ambiguous", "ambiguous", "ambiguous"),
     ],
 )
 def test_service_rest_post_timeout_is_accounted_after_readback(
     tmp_path: Path,
     persist_post: bool,
+    timeout_issue_get: bool,
     expected_result_status: str,
     expected_value_status: str,
     expected_remote_write: str,
     expected_outbox_state: str,
 ) -> None:
+    issue_get_handler = {
+        False: _respond_with_posted_issue,
+        True: _timeout_posted_issue_readback,
+    }[timeout_issue_get]
+
     class PostTimeoutHTTP:
-        """Injected transport can confirm an accepted POST after its response is lost."""
+        """Inject a lost POST response and an optional issue-readback timeout."""
 
         def __init__(self) -> None:
             self.calls: list[tuple[str, str]] = []
             self.issue: dict[str, Any] | None = None
+            self.issue_get_handler = issue_get_handler
 
         def request(
             self,
@@ -396,7 +413,7 @@ def test_service_rest_post_timeout_is_accounted_after_readback(
             if self.issue is not None:
                 issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
                 if path == issue_path:
-                    return HttpResponse(200, self.issue)
+                    return self.issue_get_handler(self.issue)
                 if path == f"{issue_path}/comments":
                     return HttpResponse(200, [])
             raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
@@ -439,6 +456,9 @@ def test_service_rest_post_timeout_is_accounted_after_readback(
         assert result.value.remote_write == expected_remote_write
         assert result.value.outbox is not None
         assert result.value.outbox.state == expected_outbox_state
+        assert service._github_outbox is not None
+        claim = service._github_outbox.get_claim(REPOSITORY, finding.finding_id)
+        assert claim is not None and claim.state == expected_outbox_state
         assert [method for method, _url in http.calls].count("POST") == 1
         assert service.get_session(session).usage.issue_writes == 1
         assert not service.authority.snapshot()["reservations"]

@@ -151,7 +151,13 @@ the envelope and certificate assumptions remain attached to the verdict. A
 conflicting evidence remains `admissible_feasibility_unknown`. Since `scenario_cert.v1` reports the
 highest-severity route at the scenario level, geometry or kinematic exclusion requires every
 applicable route certificate to support the same excluded classification; a different or usable
-route keeps the whole case unknown.
+route keeps the whole case unknown. Each route's reason must also match check data from the
+canonical certifier: a blocked inflated path, a validated swept-envelope clearance failure, a
+validated runtime collision with the same first-collision sample, or a bicycle turning-radius or
+steering-limit failure with matching kinematic values. The scenario-level reason list must match
+the route-level reasons. Labels without those checks, empty reasons, or contradictory values stay
+`admissible_feasibility_unknown`; an unsupported robot model does not establish kinodynamic
+impossibility.
 
 Execution inputs are normalized records with `case_id`, `scenario_id`, `scenario_variant`,
 `planner_id`, `run_status`, the explicit boolean `fallback_or_degraded`, `route_complete`, `seed`,

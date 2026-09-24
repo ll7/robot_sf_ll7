@@ -28,8 +28,8 @@ asks to fix known review comments.
 ## Scope
 
 - Fetch PR context for current branch.
-- Read `docs/context/issue_relationships.md` and the linked issue's canonical relationship block;
-  preserve the PR's `## Issue Relationship Mirror` while fixing comments.
+- Read `docs/context/issue_relationships.md` and the linked issue's current native relationship
+  state while fixing comments. PR bodies do not mirror those links.
 - Collect review threads and top-level PR comments.
 - Apply only fixable-now items that stay inside PR scope.
 - Run proof at the tightest practical level, then push and resolve threads.
@@ -49,8 +49,7 @@ asks to fix known review comments.
 7. Rebuild the final PR title/body from the post-fix diff and validation, then run the REST
    reconciliation helper with the final title and body. A no-op is valid; any metadata change
    invalidates prior final-state review evidence and requires a fresh exact-head review trailer.
-   Preserve the explicit `## Issue Relationship Mirror`; do not infer or silently change graph edges
-   while applying review fixes.
+   Do not infer or silently change graph edges while applying review fixes.
 8. Re-query unresolved review threads after the push and metadata reconciliation before resolving anything. Bots may add fresh
    findings once a draft PR becomes ready or after the first fix commit.
 9. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.

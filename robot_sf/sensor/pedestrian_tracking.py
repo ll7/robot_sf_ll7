@@ -53,6 +53,23 @@ class TrackStatus(StrEnum):
     RETIRED = "retired"
 
 
+def _validate_track_observation_state(
+    observed_this_step: bool,
+    missed_steps: int,
+    status: TrackStatus,
+) -> None:
+    """Require observation marker, miss count, and lifecycle status to agree."""
+    if type(observed_this_step) is not bool:
+        raise TypeError("observed_this_step must be a bool")
+    if status in {TrackStatus.LOST, TrackStatus.RETIRED}:
+        if observed_this_step:
+            raise ValueError("LOST and RETIRED tracks cannot be observed_this_step")
+        if missed_steps == 0:
+            raise ValueError("LOST and RETIRED tracks must have missed steps")
+    elif missed_steps > 0:
+        raise ValueError("only LOST and RETIRED tracks may have missed steps")
+
+
 # These aliases make the contract discoverable from either the domain-specific
 # or the shorter adapter vocabulary without changing the serialized values.
 CoordinateFrame = PedestrianCoordinateFrame
@@ -1105,7 +1122,12 @@ class TrackAssociation:
 
 @dataclass(frozen=True, slots=True)
 class PedestrianTrack:
-    """Immutable per-track output consumed by future prediction adapters."""
+    """Immutable per-track output consumed by future prediction adapters.
+
+    ``observed_this_step`` is producer-owned evidence for this result's decision
+    point. It is distinct from ``last_observation_slot``, which is retained only
+    as diagnostic source-row metadata.
+    """
 
     track_id: int
     timestamp_s: float
@@ -1126,6 +1148,7 @@ class PedestrianTrack:
     timestamp_history_s: np.ndarray
     blockers: tuple[str, ...]
     config_hash: str
+    observed_this_step: bool = False
 
     def __post_init__(self) -> None:  # noqa: C901
         """Validate and defensively freeze track state."""
@@ -1146,6 +1169,7 @@ class PedestrianTrack:
         except ValueError as exc:
             raise ValueError("status must be tentative, confirmed, lost, or retired") from exc
         object.__setattr__(self, "status", status)
+        _validate_track_observation_state(self.observed_this_step, self.missed_steps, status)
         confidence = _finite_scalar(self.association_confidence, "association_confidence")
         if not 0.0 <= confidence <= 1.0:
             raise ValueError("association_confidence must be between 0 and 1")
@@ -1250,6 +1274,7 @@ class PedestrianTrack:
             "age_steps": self.age_steps,
             "visible_age_steps": self.visible_age_steps,
             "missed_steps": self.missed_steps,
+            "observed_this_step": self.observed_this_step,
             "status": (self.status.value if isinstance(self.status, TrackStatus) else self.status),
             "association_confidence": self.association_confidence,
             "last_observation_slot": self.last_observation_slot,
@@ -1401,6 +1426,29 @@ class PedestrianTrackingResult:
             for association in associations
         ):
             raise ValueError("associations must match each track's last_observation_slot")
+        associated_track_ids = set(association_track_ids)
+        for track in tracks:
+            associated = track.track_id in associated_track_ids
+            status = TrackStatus(track.status)
+            if associated and (
+                not track.observed_this_step
+                or status in {TrackStatus.LOST, TrackStatus.RETIRED}
+                or track.missed_steps > 0
+            ):
+                raise ValueError("associations conflict with current track lifecycle state")
+            if (
+                track.observed_this_step
+                and not associated
+                and not (
+                    track.age_steps == 1
+                    and track.visible_age_steps == 1
+                    and track.missed_steps == 0
+                    and status in {TrackStatus.TENTATIVE, TrackStatus.CONFIRMED}
+                )
+            ):
+                raise ValueError("observed unassociated tracks must be current-step births")
+            if not associated and not track.observed_this_step and track.missed_steps == 0:
+                raise ValueError("unobserved tracks must have missed steps")
         object.__setattr__(self, "tracks", tracks)
         object.__setattr__(self, "associations", associations)
         if self.history_order != HISTORY_ORDER:
@@ -1435,6 +1483,7 @@ class _TrackState:
     age_steps: int
     visible_age_steps: int
     missed_steps: int
+    observed_this_step: bool
     missed_seconds: float
     status: TrackStatus
     association_confidence: float
@@ -1459,6 +1508,7 @@ def _clone_track_state(state: _TrackState) -> _TrackState:
         age_steps=state.age_steps,
         visible_age_steps=state.visible_age_steps,
         missed_steps=state.missed_steps,
+        observed_this_step=state.observed_this_step,
         missed_seconds=state.missed_seconds,
         status=state.status,
         association_confidence=state.association_confidence,
@@ -1990,6 +2040,7 @@ class PedestrianTracker:
             age_steps=1,
             visible_age_steps=1,
             missed_steps=0,
+            observed_this_step=True,
             missed_seconds=0.0,
             status=(
                 TrackStatus.CONFIRMED
@@ -2057,6 +2108,7 @@ class PedestrianTracker:
         state.age_steps += gap_steps
         state.visible_age_steps += 1
         state.missed_steps = 0
+        state.observed_this_step = True
         state.missed_seconds = 0.0
         if state.status is not TrackStatus.CONFIRMED:
             state.status = (
@@ -2093,6 +2145,7 @@ class PedestrianTracker:
         state.step_index = observation.step_index
         state.age_steps += gap_steps
         state.missed_steps += gap_steps
+        state.observed_this_step = False
         state.missed_seconds += dt_s
         should_retire = retire or self._exceeds_missed_limit(
             state.missed_steps, state.missed_seconds
@@ -2141,6 +2194,7 @@ class PedestrianTracker:
             age_steps=state.age_steps,
             visible_age_steps=state.visible_age_steps,
             missed_steps=state.missed_steps,
+            observed_this_step=state.observed_this_step,
             status=state.status,
             association_confidence=state.association_confidence,
             last_observation_slot=state.last_observation_slot,

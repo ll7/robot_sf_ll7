@@ -446,15 +446,11 @@ This mode is read-only and emits no credentials. A passing report is still
 only an acceptance gate: publication requires the independent GitHub/Zenodo
 cold-download checks below, and SNQI remains advisory when calibration fails.
 
-For a future release, reserve a fresh benchmark-data
-concept/version before freezing the DOI into its v0.2 manifest:
-
-```bash
-uv run robot-sf release zenodo reserve \
-  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
-  --state <credential-free-zenodo-state.json> \
-  --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
-```
+For a new v0.2 release, use only the DOI-pending metadata produced by the
+`bootstrap-metadata` step above for its one fresh `reserve`. The tracked
+`benchmark_data_release_s30_h600_zenodo_metadata.json` is a historical v0.1
+artifact; do not use it to create a new draft or DOI. Follow the complete
+bootstrap, reservation, and final-identity sequence above instead.
 
 Keep the token file outside Git with mode `0600`. The state file contains no
 credential. This initial `reserve` is intentionally the only unbound
@@ -717,13 +713,15 @@ is immutable; its authoritative source identity is the manifest/bundle SHA
 
 ## Credential-free public audit
 
-After publication, a reviewer can start the cold audit with only the exact
-public GitHub tag and Zenodo version DOI:
+After publication, take the exact public GitHub tag and version DOI from the
+resolved identity and use them for the cold audit:
 
 ```bash
+RELEASE_TAG=<exact-published-tag-from-resolved-identity>
+VERSION_DOI=<published-version-doi-from-resolved-identity>
 uv run robot-sf release audit-published \
-  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
-  --doi 10.5281/zenodo.22077448 \
+  --tag "$RELEASE_TAG" \
+  --doi "$VERSION_DOI" \
   --output /tmp/published-release-audit.json
 ```
 

@@ -124,7 +124,9 @@ the 20,160-row predecessor equivalence and robot-force gates, repeats full
 release acceptance on the candidate, then exports and preflights the bundle.
 Failed gates leave the candidate marked invalid and preserve the producer.
 Its sibling `*.finalization_receipt.json` records the source and output hashes.
-the exported archive stays in a candidate-owned `*.publication_candidate/`
+The receipt is written through a pending file and renamed only after the
+archive and cold preflight pass.
+The exported archive stays in a candidate-owned `*.publication_candidate/`
 directory. An archive without the matching finalization receipt is incomplete
 and must not be published, even when an interrupted export left files behind.
 The finalizer refuses an existing candidate publication directory and removes

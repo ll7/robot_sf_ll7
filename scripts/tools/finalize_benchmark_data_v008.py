@@ -17,7 +17,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.artifact_publication import PublicationPreflightError
 from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
 from robot_sf.benchmark.release_protocol import (
     load_release_campaign_config,
@@ -125,7 +124,7 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
     if not producer_path.is_file() or _read_mapping(producer_path) != producer_result:
         raise ValueError("candidate producer result snapshot is missing or changed")
     publication_output = _publication_output(candidate_root)
-    if publication_output.exists():
+    if publication_output.exists() or publication_output.is_symlink():
         raise FileExistsError(f"candidate publication output already exists: {publication_output}")
     result = dict(producer_result)
     result.update(
@@ -169,21 +168,22 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
             raise ValueError("publication export did not leave a bundle directory and archive")
         _assert_no_historical_release_identity(bundle_dir)
         _run_publication_preflight(bundle_dir)
-    except (OSError, ValueError, PublicationPreflightError) as exc:
+    except BaseException as exc:
         result.update(
             {
                 "publication_bundle": None,
                 "publication_preflight_status": "fail",
-                "publication_preflight_violations": [str(exc)],
+                "publication_preflight_violations": [str(exc) or type(exc).__name__],
                 "release_benchmark_success": False,
                 "release_status": "publication_preflight_failed",
                 "release_status_reason": "post-run publication bundle failed validation",
                 "release_exit_code": 2,
             }
         )
-        _write_json(result_path, result)
-        if publication_output.exists():
-            shutil.rmtree(publication_output)
+        try:
+            _write_json(result_path, result)
+        finally:
+            _remove_owned_output(candidate_root)
         raise
     return archive
 
@@ -196,8 +196,20 @@ def _publication_output(candidate_root: Path) -> Path:
 def _remove_owned_output(candidate_root: Path) -> None:
     """Remove only the export namespace reserved for this candidate."""
     publication_output = _publication_output(candidate_root)
-    if publication_output.exists():
+    if publication_output.is_symlink():
+        publication_output.unlink()
+    elif publication_output.exists():
         shutil.rmtree(publication_output)
+
+
+def _receipt_paths(candidate_root: Path) -> tuple[Path, Path]:
+    """Return the atomic pending and final candidate receipt paths."""
+    parent = candidate_root.parent
+    name = candidate_root.name
+    return (
+        parent / f"{name}.finalization_receipt.pending.json",
+        parent / f"{name}.finalization_receipt.json",
+    )
 
 
 def _publication_path(payload: dict[str, Any], key: str) -> Path:
@@ -241,7 +253,7 @@ def _copy_producer(producer_root: Path, candidate_root: Path) -> None:
     """Stage the copy with a rejected release result before exposing its final path."""
     candidate_root.parent.mkdir(parents=True, exist_ok=True)
     staging_root = candidate_root.with_name(f"{candidate_root.name}.copying")
-    if staging_root.exists():
+    if staging_root.exists() or staging_root.is_symlink():
         raise FileExistsError(f"incomplete candidate copy already exists: {staging_root}")
 
     def exclude_active_result(source: str, names: list[str]) -> set[str]:
@@ -258,6 +270,37 @@ def _copy_producer(producer_root: Path, candidate_root: Path) -> None:
     staging_root.rename(candidate_root)
 
 
+def _prepare_candidate(
+    producer_root: Path, candidate_root: Path, source_sha: str, manifest: Any
+) -> tuple[Path, Path, dict[str, Any]]:
+    """Validate exact-source paths and make one fail-closed derivative copy.
+
+    Returns:
+        Resolved producer, resolved candidate, and original producer result.
+    """
+    if producer_root.is_symlink():
+        raise ValueError("producer root is a symlink")
+    producer_root = producer_root.resolve(strict=True)
+    if candidate_root.is_symlink():
+        raise ValueError("publication candidate must not be a symlink")
+    candidate_root = candidate_root.resolve()
+    if not candidate_root.is_relative_to(get_repository_root().resolve()):
+        raise ValueError("publication candidate must be inside the source checkout")
+    if candidate_root == producer_root or producer_root in candidate_root.parents:
+        raise ValueError("publication candidate must be separate from the producer")
+    producer_result = _require_producer_identity(producer_root, source_sha, manifest)
+    _require_copyable_producer(producer_root)
+    if candidate_root.exists() or candidate_root.is_symlink():
+        raise FileExistsError(f"publication candidate already exists: {candidate_root}")
+    publication_output = _publication_output(candidate_root)
+    if publication_output.exists() or publication_output.is_symlink():
+        raise FileExistsError("candidate publication output already exists")
+    if any(path.exists() or path.is_symlink() for path in _receipt_paths(candidate_root)):
+        raise FileExistsError("candidate finalization receipt already exists")
+    _copy_producer(producer_root, candidate_root)
+    return producer_root, candidate_root, producer_result
+
+
 def finalize(
     *,
     producer_root: Path,
@@ -272,21 +315,9 @@ def finalize(
         raise ValueError("0.0.8 resolved identity has the wrong scientific source")
     if _sha256(baseline_archive) != BASELINE_ARCHIVE_SHA256:
         raise ValueError("frozen 0.0.7 archive checksum mismatch")
-    if producer_root.is_symlink():
-        raise ValueError("producer root is a symlink")
-    producer_root = producer_root.resolve(strict=True)
-    candidate_root = candidate_root.resolve()
-    if not candidate_root.is_relative_to(get_repository_root().resolve()):
-        raise ValueError("publication candidate must be inside the source checkout")
-    if candidate_root == producer_root or producer_root in candidate_root.parents:
-        raise ValueError("publication candidate must be separate from the producer")
-    producer_result = _require_producer_identity(producer_root, expected_source_sha, manifest)
-    _require_copyable_producer(producer_root)
-    if candidate_root.exists():
-        raise FileExistsError(f"publication candidate already exists: {candidate_root}")
-    if _publication_output(candidate_root).exists():
-        raise FileExistsError("candidate publication output already exists")
-    _copy_producer(producer_root, candidate_root)
+    producer_root, candidate_root, producer_result = _prepare_candidate(
+        producer_root, candidate_root, expected_source_sha, manifest
+    )
     report_dir = candidate_root / "reports"
     equivalence = report_dir / "metric_equivalence.json"
     equivalence_log = candidate_root.parent / f"{candidate_root.name}.equivalence.log"
@@ -366,12 +397,16 @@ def finalize(
             "publication_archive_sha256": _sha256(archive),
             "publication_archive": str(archive),
         }
-        receipt_path = candidate_root.parent / f"{candidate_root.name}.finalization_receipt.json"
-        _write_json(receipt_path, receipt)
+        pending_receipt, receipt_path = _receipt_paths(candidate_root)
+        _write_json(pending_receipt, receipt)
+        pending_receipt.rename(receipt_path)
         return receipt
-    except Exception:
+    except BaseException:
         _mark_candidate_failure(candidate_root, stage)
-        _remove_owned_output(candidate_root)
+        if stage == "finalization_receipt":
+            _remove_owned_output(candidate_root)
+        for path in _receipt_paths(candidate_root):
+            path.unlink(missing_ok=True)
         raise
 
 

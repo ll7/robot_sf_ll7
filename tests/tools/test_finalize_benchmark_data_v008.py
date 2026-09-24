@@ -356,6 +356,15 @@ def test_failed_preflight_removes_owned_publication_export(
         finalizer._publish_copy(candidate, original, manifest)
     assert sentinel.read_text(encoding="utf-8") == "preserve"
 
+    sentinel.unlink()
+    output.rmdir()
+    external = tmp_path / "external_missing"
+    output.symlink_to(external, target_is_directory=True)
+    with pytest.raises(FileExistsError, match="already exists"):
+        finalizer._publish_copy(candidate, original, manifest)
+    assert output.is_symlink()
+    assert not external.exists()
+
 
 def test_receipt_write_failure_invalidates_candidate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -396,7 +405,7 @@ def test_receipt_write_failure_invalidates_candidate(
     real_write = finalizer._write_json
 
     def fail_receipt(path: Path, payload: dict) -> None:
-        if path.name.endswith(".finalization_receipt.json"):
+        if path.name.endswith(".finalization_receipt.pending.json"):
             raise OSError("receipt storage failed")
         real_write(path, payload)
 
@@ -420,3 +429,58 @@ def test_receipt_write_failure_invalidates_candidate(
     assert result["release_benchmark_success"] is False
     assert result["finalization_failed_stage"] == "finalization_receipt"
     assert not finalizer._publication_output(candidate).exists()
+    assert not any(path.exists() for path in finalizer._receipt_paths(candidate))
+
+
+def test_interrupted_export_invalidates_candidate_and_removes_partial_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+    output = finalizer._publication_output(candidate)
+
+    def interrupt_export(**kwargs: object) -> dict:
+        output.mkdir()
+        (output / "partial.tar.gz").write_bytes(b"partial")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(finalizer, "_build_publication_payload", interrupt_export)
+    with pytest.raises(KeyboardInterrupt):
+        finalizer._publish_copy(
+            candidate,
+            original,
+            SimpleNamespace(
+                release_tag="benchmark-data-0.0.8",
+                doi="10.5281/zenodo.123456",
+                repository_url="https://example.org/repository",
+            ),
+        )
+    assert not output.exists()
+    result = finalizer._read_mapping(candidate / "release" / "release_result.json")
+    assert result["release_benchmark_success"] is False
+    assert result["publication_preflight_violations"] == ["KeyboardInterrupt"]
+
+
+def test_prepare_candidate_preserves_preexisting_dangling_output_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    candidate = tmp_path / "candidate"
+    outside = tmp_path / "missing_elsewhere"
+    output = finalizer._publication_output(candidate)
+    output.symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    manifest = SimpleNamespace(
+        release_tag="benchmark-data-0.0.8",
+        version_doi="10.5281/zenodo.123456",
+        resolved_manifest_payload=finalizer._read_mapping(
+            producer / "release" / "release_manifest.resolved.json"
+        ),
+    )
+    with pytest.raises(FileExistsError, match="publication output already exists"):
+        finalizer._prepare_candidate(producer, candidate, SOURCE_SHA, manifest)
+    assert output.is_symlink()
+    assert not outside.exists()
+    assert not candidate.exists()

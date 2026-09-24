@@ -1,0 +1,1 @@
+{"audio_policy": "silent", "edits": [{"end_s": 2.0, "op": "cut", "start_s": 1.0}, {"at_s": 0.5, "duration_s": 0.5, "op": "pause"}, {"end_s": 3.0, "factor": 2.0, "op": "speed", "start_s": 2.0}], "preset": {"fps": 10, "height": 120, "width": 160}}

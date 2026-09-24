@@ -1081,7 +1081,17 @@ def _render_direct_replay(
             "artifacts": [],
         }
 
-    episode_file = campaign_root / case["source"]["episode_file"]
+    episode_file, source_record_error = _verified_episode_source(campaign_root, case, row)
+    if source_record_error:
+        return {
+            "status": "mismatch",
+            "artifact_status": "not_generated",
+            "reason": source_record_error,
+            "renderer_called": False,
+            "artifacts": [],
+        }
+    assert episode_file is not None
+
     case_output = output_dir / "renders" / case["case_id"]
     command = [
         sys.executable,
@@ -1153,6 +1163,121 @@ def _render_direct_replay(
         "provenance_sidecar_sha256": sha256_file(sidecar_path),
         "artifacts": artifact_paths,
     }
+
+
+def _read_episode_source_binding(
+    episode_file: Path, line_number: int, episode_id: str
+) -> tuple[dict[str, Any] | None, str | None, int]:
+    """Return the exact source row, its line digest, and renderer-ID match count."""
+    selected_raw: dict[str, Any] | None = None
+    selected_digest: str | None = None
+    matching_episode_ids = 0
+    with episode_file.open("rb") as handle:
+        for current_line, raw_bytes in enumerate(handle, 1):
+            if not raw_bytes.strip():
+                continue
+            try:
+                parsed = json.loads(raw_bytes)
+            except (UnicodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            matching_episode_ids += parsed.get("episode_id") == episode_id
+            if current_line == line_number:
+                selected_raw = parsed
+                selected_digest = hashlib.sha256(raw_bytes).hexdigest()
+    return selected_raw, selected_digest, matching_episode_ids
+
+
+def _verified_episode_source(
+    campaign_root: Path, case: dict[str, Any], row: dict[str, Any]
+) -> tuple[Path | None, str | None]:
+    """Resolve the source file and verify its selected row before renderer invocation."""
+    episode_file, path_error = _resolve_episode_file(campaign_root, case)
+    if path_error:
+        return None, path_error
+    assert episode_file is not None
+    record_error = _selected_episode_record_error(episode_file, case, row)
+    if record_error:
+        return None, record_error
+    return episode_file, None
+
+
+def _resolve_episode_file(
+    campaign_root: Path, case: dict[str, Any]
+) -> tuple[Path | None, str | None]:
+    """Resolve the selected episode path without allowing it to escape the campaign root."""
+    source = case.get("source")
+    episode_file_value = source.get("episode_file") if isinstance(source, dict) else None
+    if not isinstance(episode_file_value, str) or not episode_file_value:
+        return None, "selected source row has incomplete episode-file provenance"
+    campaign_root_resolved = campaign_root.resolve()
+    episode_file = (campaign_root_resolved / episode_file_value).resolve()
+    try:
+        episode_file.relative_to(campaign_root_resolved)
+    except ValueError:
+        return None, "selected episode file escapes the campaign root"
+    return episode_file, None
+
+
+def _selected_episode_record_error(
+    episode_file: Path, case: dict[str, Any], row: dict[str, Any]
+) -> str | None:
+    """Fail closed unless the renderer's episode ID resolves to this exact source record."""
+    source = case.get("source")
+    selected_raw = row.get("raw")
+    if not isinstance(source, dict) or not isinstance(selected_raw, dict):
+        return "selected source row has incomplete provenance"
+    expected_file_sha256 = source.get("episode_file_sha256")
+    line_number = source.get("line_number")
+    record_sha256 = source.get("record_sha256")
+    episode_id = case.get("episode_id")
+    if (
+        not isinstance(expected_file_sha256, str)
+        or not SHA256_RE.fullmatch(expected_file_sha256)
+        or type(line_number) is not int
+        or line_number < 1
+        or not isinstance(record_sha256, str)
+        or not SHA256_RE.fullmatch(record_sha256)
+        or not isinstance(episode_id, str)
+        or not episode_id
+    ):
+        return "selected source row has incomplete provenance or identity"
+
+    try:
+        actual_file_sha256 = sha256_file(episode_file)
+        persisted_raw, persisted_digest, matching_episode_ids = _read_episode_source_binding(
+            episode_file, line_number, episode_id
+        )
+    except OSError as exc:
+        return f"could not verify selected source file: {exc}"
+    if actual_file_sha256 != expected_file_sha256:
+        return "source episodes file changed since the selected row was read"
+    if persisted_raw is None or persisted_digest != record_sha256:
+        return "selected source row record digest changed or its line is unavailable"
+    try:
+        persisted_canonical = json.dumps(
+            persisted_raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        selected_canonical = json.dumps(
+            selected_raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+    except (TypeError, ValueError) as exc:
+        return f"selected source row payload could not be compared: {exc}"
+    if persisted_canonical != selected_canonical:
+        return "selected source row payload differs from the replay input"
+    if (
+        persisted_raw.get("episode_id") != episode_id
+        or persisted_raw.get("scenario_id") != case.get("scenario_id")
+        or persisted_raw.get("seed") != case.get("seed")
+    ):
+        return "selected source row identity does not match the replay case"
+    if matching_episode_ids != 1:
+        return (
+            f"duplicate or unresolved episode ID {episode_id!r} appears "
+            f"{matching_episode_ids} times; renderer cannot bind it to the selected row"
+        )
+    return None
 
 
 def _recorded_replay_validation_error(raw: dict[str, Any]) -> str | None:

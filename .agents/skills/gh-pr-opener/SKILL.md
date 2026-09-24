@@ -38,8 +38,8 @@ merge-review authority.
 - Branch corresponds to a single clear issue scope.
 - Issue contract and PR diff match (or deferred work is captured by follow-up issues).
 - Current branch head differs from stale readiness stamps (freshness required).
-- Read `docs/context/issue_relationships.md` and the linked issue's canonical `## Relationships`
-  block before preparing the PR. Do not infer a graph edge from a title or prose mention.
+- Read `docs/context/issue_relationships.md` and the linked issue's current native relationships
+  before preparing the PR. Do not infer a graph edge from an issue mention alone.
 
 Freshness check:
 - `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main --require-clean-tree`
@@ -93,12 +93,12 @@ Remote-state check (issues #6916 and #7515):
 ## Workflow
 
 1. Confirm branch/issue alignment.
-2. Verify scope completion and linked issue status, including native Parent/Blocked by/Blocking
-   state and any explicit relationship declaration.
+2. Verify scope completion and linked issue status, including fresh native Parent/Blocked
+   by/Blocking state where it affects the PR scope.
 3. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` before final readiness so the
    PR contract gate can read it.
-   - Fill `## Issue Relationship Mirror` with the reviewed native state. Keep `Closes`/`Refs`
-     coverage references in `## Linked Issues`; they are not graph edges.
+   - Keep `Closes`/`Refs` coverage references in `## Linked Issues`; they are not graph edges.
+     Native relationships remain on the linked issue and are not copied into the PR body.
    - For evidence-producing PRs, fill `Downstream Propagation` instead of leaving it implicit.
      Check the parent issue, claim map or benchmark report, leaderboard or artifact catalog,
      registry or config index, context index or memory note, and follow-up issue rows.
@@ -139,7 +139,7 @@ Remote-state check (issues #6916 and #7515):
 
 - PR body must state:
   - implementation summary,
-  - explicit issue relationship mirror, or `none` with a support-only rationale,
+  - linked issue references with accurate `Closes`/`Refs` semantics,
   - validation evidence,
   - artifact classification and provenance decision,
   - downstream propagation decisions for evidence-producing changes,

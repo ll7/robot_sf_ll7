@@ -2732,10 +2732,12 @@ those refs point to the same SHA. Followers wait for that owner: they mirror
 only a completed exact-head success/failure from a configured full-matrix event
 (`push`, `pull_request`, or `merge_group`). A completed `workflow_dispatch` is
 decisive only when the Actions jobs API proves that at least one `compat-matrix`
-job was admitted; an all-skipped matrix, missing admission proof, or
-missing/malformed/unknown event cannot suppress a full run. Otherwise a
-follower can take ownership if the prior run becomes stale or cancelled. Set
-the `retry_failed` workflow input only for one justified retry;
+job was admitted; an all-skipped matrix or missing/empty/unknown event is
+non-decisive, so a follower can take ownership and run full CI. Malformed run
+data or unreadable/missing `compat-matrix` job evidence fails the ownership
+gate closed: it cannot establish a verdict or authorize a new matrix.
+Otherwise a follower can take ownership if the prior run becomes stale or
+cancelled. Set the `retry_failed` workflow input only for one justified retry;
 the run title is its idempotent receipt. Repeated ordinary watcher dispatches
 therefore cannot cancel the owner or start duplicate full matrices. The job-level
 election concurrency key is shared only by manual runs for the same SHA; push,

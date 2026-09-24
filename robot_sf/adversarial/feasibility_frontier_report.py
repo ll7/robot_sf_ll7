@@ -1,6 +1,6 @@
 """Build a provenance-bound, fixture-first report of planner/search rounds.
 
-The input is a persisted ``adversarial-coevolution-evidence.v1`` bundle. This
+The input is a persisted ``adversarial-coevolution-evidence.v2`` bundle. This
 module summarizes the supplied records; it does not run planners, infer dynamic
 feasibility, or turn a finite no-discovery result into a claim of absence.
 """
@@ -21,10 +21,11 @@ from typing import Any
 from urllib.parse import quote
 
 from robot_sf.benchmark.figures.export import save_publication_figure
+from robot_sf.benchmark.figures.provenance import build_provenance
 from robot_sf.benchmark.figures.style import planner_color, publication_style
 
-INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v1"
-REPORT_SCHEMA_VERSION = "adversarial-feasibility-frontier.v1"
+INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v2"
+REPORT_SCHEMA_VERSION = "adversarial-feasibility-frontier.v2"
 _GIT_SHA = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 _ADMISSIBILITY_VERDICTS = {
@@ -62,7 +63,8 @@ _CORPUS_DISPOSITIONS = {
 _EVALUATION_SETS = ("fixed", "regression", "held_out")
 _OPTIMIZER_SELECTION_SCHEMA = "frontier-optimizer-selection.v1"
 _FALSIFICATION_SOURCE_SCHEMA = "frontier-falsification-source.v1"
-_EVALUATION_SOURCE_SCHEMA = "frontier-evaluation-source.v1"
+_EVALUATION_SOURCE_SCHEMA = "frontier-evaluation-source.v2"
+_CORPUS_CASE_STATUS_SCHEMA = "frontier-corpus-case-status.v1"
 _SEARCH_CANDIDATE_SOURCE_FIELDS = (
     "candidate_id",
     "case_id",
@@ -75,6 +77,8 @@ _SEARCH_CANDIDATE_SOURCE_FIELDS = (
 )
 _EVALUATION_ROW_SOURCE_FIELDS = (
     "record_id",
+    "scenario_id",
+    "scenario_seed",
     "evidence_status",
     "execution_mode",
     "readiness_status",
@@ -148,6 +152,7 @@ def build_frontier_report(
             name: _summarize_evaluation_set(round_data["evaluation_sets"][name])
             for name in _EVALUATION_SETS
         }
+        _add_cohort_comparability(eval_summary, round_data, round_reports)
         candidates = round_data["falsification"]["candidates"]
         (
             verified_case_ids,
@@ -403,7 +408,11 @@ def render_frontier_markdown(
                 f"{summary['expected_episode_count']} expected rows benchmark-eligible; "
                 f"{summary['reported_episode_count']} reported, "
                 f"identity accounting `{summary['identity_accounting_status']}` "
-                f"(ID manifest SHA-256 `{summary['expected_episode_ids_sha256'][:12]}`); "
+                f"(ID manifest SHA-256 `{summary['expected_episode_ids_sha256'][:12]}`, "
+                f"scenario/seed manifest SHA-256 "
+                f"`{summary['scenario_seed_manifest_sha256'][:12]}`; cohort comparison "
+                f"`{summary['cohort_comparison_status']}`; success-rate comparison "
+                f"`{summary['success_rate_comparison_status']}`); "
                 f"{summary['missing_record_count']} expected rows missing "
                 f"`{summary['missing_record_ids']}`, "
                 f"{summary['unexpected_record_count']} unexpected; "
@@ -492,6 +501,76 @@ def render_frontier_markdown(
     return "\n".join(lines)
 
 
+def _plot_evaluation_performance(
+    axis: Any, rounds: list[dict[str, Any]], x_values: list[int]
+) -> None:
+    """Plot rates as points and connect only adjacent, cohort-comparable rounds."""
+    for set_name, label in (
+        ("fixed", "Fixed"),
+        ("regression", "Regression"),
+        ("held_out", "Held out"),
+    ):
+        values = [item["evaluation_sets"][set_name]["success_rate"] for item in rounds]
+        color = planner_color(f"frontier_{set_name}")
+        axis.plot(
+            x_values,
+            [float("nan") if value is None else value for value in values],
+            marker="o",
+            linestyle="None",
+            color=color,
+            label=label,
+        )
+        for index in range(1, len(rounds)):
+            current_summary = rounds[index]["evaluation_sets"][set_name]
+            previous_value = values[index - 1]
+            current_value = values[index]
+            if (
+                current_summary["success_rate_comparable_to_previous_round"] is True
+                and previous_value is not None
+                and current_value is not None
+            ):
+                axis.plot(
+                    x_values[index - 1 : index + 1],
+                    [previous_value, current_value],
+                    linewidth=1.8,
+                    color=color,
+                    label="_nolegend_",
+                )
+        for x, item in zip(x_values, rounds, strict=True):
+            summary = item["evaluation_sets"][set_name]
+            value = summary["success_rate"]
+            if value is not None:
+                marker = (
+                    "*"
+                    if summary["success_rate_comparison_status"]
+                    in {"non_comparable_cohort", "non_comparable_success_sample"}
+                    else ""
+                )
+                axis.annotate(
+                    f"{summary['successes']}/{summary['success_denominator']}{marker}",
+                    (x, value),
+                    xytext=(0, 5),
+                    textcoords="offset points",
+                    ha="center",
+                    fontsize=7,
+                )
+    has_changed_cohort = any(
+        item["evaluation_sets"][set_name]["success_rate_comparison_status"]
+        in {"non_comparable_cohort", "non_comparable_success_sample"}
+        for item in rounds
+        for set_name in _EVALUATION_SETS
+    )
+    if has_changed_cohort:
+        axis.text(
+            0.01,
+            0.01,
+            "* cohort or eligible success sample changed; trend segment omitted",
+            transform=axis.transAxes,
+            fontsize=7,
+            va="bottom",
+        )
+
+
 def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Path]:
     """Write the performance/discovery figure with the repository figure helpers."""
     try:
@@ -504,32 +583,7 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
     with publication_style(size="double"):
         figure, axes = plt.subplots(2, 1, figsize=(7.0, 7.1), constrained_layout=True)
         performance_axis, cases_axis = axes
-        for set_name, label in (
-            ("fixed", "Fixed"),
-            ("regression", "Regression"),
-            ("held_out", "Held out"),
-        ):
-            values = [item["evaluation_sets"][set_name]["success_rate"] for item in rounds]
-            performance_axis.plot(
-                x_values,
-                [float("nan") if value is None else value for value in values],
-                marker="o",
-                linewidth=1.8,
-                color=planner_color(f"frontier_{set_name}"),
-                label=label,
-            )
-            for x, item in zip(x_values, rounds, strict=True):
-                summary = item["evaluation_sets"][set_name]
-                value = summary["success_rate"]
-                if value is not None:
-                    performance_axis.annotate(
-                        f"{summary['successes']}/{summary['success_denominator']}",
-                        (x, value),
-                        xytext=(0, 5),
-                        textcoords="offset points",
-                        ha="center",
-                        fontsize=7,
-                    )
+        _plot_evaluation_performance(performance_axis, rounds, x_values)
         performance_axis.set_ylim(-0.05, 1.05)
         performance_axis.set_xticks(x_values)
         performance_axis.set_xlabel("Round")
@@ -660,8 +714,8 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
         )
         figure.suptitle(figure_title)
 
-        provenance = {
-            "source_artifacts": [
+        provenance = build_provenance(
+            source_artifacts=[
                 {"path": item["path"], "hash": item["sha256"]}
                 for item in (
                     [*report["source_artifacts"], report["input_artifact"]]
@@ -669,13 +723,17 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
                     else report["source_artifacts"]
                 )
             ],
-            "repo_commit": report["source_revision"],
-            "generator_command": "build_adversarial_feasibility_frontier_report",
-            "evidence_kind": report["evidence_kind"],
-            "figure_title": figure_title,
-            "claim_boundary": report["claim_boundary"],
-            "figure_formats": ["png", "pdf"],
-        }
+            generator_command="build_adversarial_feasibility_frontier_report",
+            figure_formats=["png", "pdf"],
+            claim_boundary=report["claim_boundary"],
+        )
+        provenance.update(
+            {
+                "source_revision": report["source_revision"],
+                "evidence_kind": report["evidence_kind"],
+                "figure_title": figure_title,
+            }
+        )
         try:
             return save_publication_figure(
                 figure,
@@ -746,11 +804,10 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
     errors: list[str] = []
     if evidence.get("schema_version") != INPUT_SCHEMA_VERSION:
         errors.append(f"schema_version must be {INPUT_SCHEMA_VERSION!r}")
-    if evidence.get("evidence_kind") not in {
-        "synthetic_fixture",
-        "simulator_run",
-        "historical_artifact",
-    }:
+    if not _is_allowed(
+        evidence.get("evidence_kind"),
+        {"synthetic_fixture", "simulator_run", "historical_artifact"},
+    ):
         errors.append(
             "evidence_kind must be synthetic_fixture, simulator_run, or historical_artifact"
         )
@@ -800,12 +857,13 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
 
     _validate_case_dispositions(rounds, errors)
     _validate_case_observation_origins(rounds, round_candidates, round_search_artifacts, errors)
+    _validate_evaluation_cohorts(rounds, errors)
 
     if errors:
         raise FrontierReportError("invalid frontier evidence:\n- " + "\n- ".join(errors))
 
 
-def _validate_case_observation_origins(
+def _validate_case_observation_origins(  # noqa: C901 - history-linked origin checks share ordered state.
     rounds: list[Any],
     round_candidates: dict[int, dict[str, dict[str, Any]]],
     round_search_artifacts: dict[int, Any],
@@ -823,6 +881,8 @@ def _validate_case_observation_origins(
             origin_round = observation.get("origin_round")
             case_id = observation.get("case_id")
             _validate_case_origin_identity(current_round, observation, case_origins, errors)
+            if not isinstance(case_id, str):
+                continue
             if isinstance(origin_round, int) and origin_round > 0:
                 _validate_discovered_case_observation(
                     current_round,
@@ -970,7 +1030,7 @@ def _validate_followup_case_observation(
     evidence = observation.get("admissibility_evidence_artifact")
     valid_upgrade = (
         previous_verdict == "admissible_feasibility_unknown"
-        and observed_verdict in _CONFIRMED_FEASIBILITY_VERDICTS
+        and _is_allowed(observed_verdict, _CONFIRMED_FEASIBILITY_VERDICTS)
         and observation.get("evidence_status") == "complete"
         and isinstance(evidence, dict)
         and evidence.get("role") == "admissibility-evidence"
@@ -1142,7 +1202,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         "stop_reason",
     ):
         _require_text(falsification, field, errors, f"{prefix}.falsification")
-    if falsification.get("stop_reason") not in _STOP_REASONS:
+    if not _is_allowed(falsification.get("stop_reason"), _STOP_REASONS):
         errors.append(f"{prefix}.falsification.stop_reason is unsupported")
     _validate_seeds(falsification.get("seeds"), f"{prefix}.falsification.seeds", errors)
     _validate_artifact_role(
@@ -1205,21 +1265,18 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             if candidate_id in seen_candidates:
                 errors.append(f"{candidate_prefix}.candidate_id is duplicated")
             seen_candidates.add(candidate_id)
-        if candidate.get("evaluation_status") not in _CANDIDATE_STATUSES:
+        if not _is_allowed(candidate.get("evaluation_status"), _CANDIDATE_STATUSES):
             errors.append(f"{candidate_prefix}.evaluation_status is unsupported")
-        if candidate.get("admissibility_verdict") not in _ADMISSIBILITY_VERDICTS:
+        if not _is_allowed(candidate.get("admissibility_verdict"), _ADMISSIBILITY_VERDICTS):
             errors.append(f"{candidate_prefix}.admissibility_verdict is unsupported")
         if candidate.get("target_failure_observed") not in (True, False, None):
             errors.append(f"{candidate_prefix}.target_failure_observed must be boolean or null")
-        if candidate.get("replay_status") not in {
-            "verified",
-            "unavailable",
-            "mismatch",
-            "not_attempted",
-            "unknown",
-        }:
+        if not _is_allowed(
+            candidate.get("replay_status"),
+            {"verified", "unavailable", "mismatch", "not_attempted", "unknown"},
+        ):
             errors.append(f"{candidate_prefix}.replay_status is unsupported")
-        if candidate.get("corpus_disposition") not in _CORPUS_DISPOSITIONS:
+        if not _is_allowed(candidate.get("corpus_disposition"), _CORPUS_DISPOSITIONS):
             errors.append(f"{candidate_prefix}.corpus_disposition is unsupported")
         case_id = candidate.get("case_id")
         corpus_disposition = candidate.get("corpus_disposition")
@@ -1238,10 +1295,10 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 )
             if candidate.get("replay_status") != "verified":
                 errors.append(f"{candidate_prefix} admitted record requires verified replay")
-            if candidate.get("admissibility_verdict") in {
-                "structurally_invalid",
-                "geometric_or_kinodynamic_impossibility",
-            }:
+            if _is_allowed(
+                candidate.get("admissibility_verdict"),
+                {"structurally_invalid", "geometric_or_kinodynamic_impossibility"},
+            ):
                 errors.append(f"{candidate_prefix} excluded scenario cannot be admitted")
         elif case_id is not None and (not isinstance(case_id, str) or not case_id):
             errors.append(f"{candidate_prefix}.case_id must be non-empty text or null")
@@ -1319,11 +1376,11 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 errors.append(f"{obs_prefix} historical origin must have null origin_candidate_id")
         else:
             _require_text(observation, "origin_candidate_id", errors, obs_prefix)
-        if observation.get("planner_status") not in _PLANNER_STATUSES:
+        if not _is_allowed(observation.get("planner_status"), _PLANNER_STATUSES):
             errors.append(f"{obs_prefix}.planner_status is unsupported")
-        if observation.get("admissibility_verdict") not in _ADMISSIBILITY_VERDICTS:
+        if not _is_allowed(observation.get("admissibility_verdict"), _ADMISSIBILITY_VERDICTS):
             errors.append(f"{obs_prefix}.admissibility_verdict is unsupported")
-        if observation.get("evidence_status") not in _EVIDENCE_STATUSES:
+        if not _is_allowed(observation.get("evidence_status"), _EVIDENCE_STATUSES):
             errors.append(f"{obs_prefix}.evidence_status is unsupported")
         if (
             observation.get("evidence_status") != "complete"
@@ -1331,7 +1388,10 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         ):
             errors.append(f"{obs_prefix} incomplete evidence must retain planner_status=unknown")
         replay_status = observation.get("replay_status")
-        if replay_status not in {"verified", "unavailable", "mismatch", "not_attempted", "unknown"}:
+        if not _is_allowed(
+            replay_status,
+            {"verified", "unavailable", "mismatch", "not_attempted", "unknown"},
+        ):
             errors.append(f"{obs_prefix}.replay_status is unsupported")
         expected_roles = {
             "origin_search_artifact": "falsification-search",
@@ -1341,9 +1401,26 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             _validate_artifact_role(
                 observation.get(key), f"{obs_prefix}.{key}", expected_role, errors
             )
-            _validate_artifact(
-                observation.get(key), f"{obs_prefix}.{key}", evidence_root, artifacts, errors
+            source = _validate_artifact(
+                observation.get(key),
+                f"{obs_prefix}.{key}",
+                evidence_root,
+                artifacts,
+                errors,
+                parse_json=key == "corpus_artifact",
             )
+            if key == "corpus_artifact":
+                _validate_source_identity(
+                    source,
+                    observation.get(key),
+                    expected_schema=_CORPUS_CASE_STATUS_SCHEMA,
+                    experiment_id=experiment_id,
+                    round_number=number,
+                    source_revision=data.get("source_revision"),
+                    prefix=f"{obs_prefix}.corpus_artifact",
+                    errors=errors,
+                )
+                _validate_case_status_source(source, observation, planner, obs_prefix, errors)
         replay_artifact = observation.get("replay_artifact")
         if replay_status == "verified" or replay_artifact is not None:
             _validate_artifact_role(
@@ -1373,7 +1450,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             )
 
 
-def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-level evidence findings.
+def _validate_evaluation_set(  # noqa: C901, PLR0912, PLR0915 - report all independent row-evidence defects.
     value: Any,
     prefix: str,
     expected_artifact_role: str,
@@ -1429,6 +1506,39 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
             "of unique stable IDs"
         )
         expected_ids = []
+    expected_identities = value.get("expected_episode_identities")
+    identity_by_record_id: dict[str, tuple[str, int]] = {}
+    if not isinstance(expected_identities, list):
+        errors.append(
+            f"{prefix}.expected_episode_identities must be an array bound to expected IDs"
+        )
+        expected_identities = []
+    for idx, identity in enumerate(expected_identities):
+        identity_prefix = f"{prefix}.expected_episode_identities[{idx}]"
+        if not isinstance(identity, dict):
+            errors.append(f"{identity_prefix} must be an object")
+            continue
+        for field in ("record_id", "scenario_id"):
+            _require_text(identity, field, errors, identity_prefix)
+        record_id = identity.get("record_id")
+        scenario_id = identity.get("scenario_id")
+        scenario_seed = identity.get("scenario_seed")
+        if not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool):
+            errors.append(f"{identity_prefix}.scenario_seed must be an integer")
+        if isinstance(record_id, str) and isinstance(scenario_id, str):
+            if record_id in identity_by_record_id:
+                errors.append(f"{identity_prefix}.record_id is duplicated")
+            else:
+                identity_by_record_id[record_id] = (scenario_id, scenario_seed)
+    identity_ids = [item.get("record_id") for item in expected_identities if isinstance(item, dict)]
+    if identity_ids != expected_ids:
+        errors.append(
+            f"{prefix}.expected_episode_identities must match expected_episode_ids in order"
+        )
+    if len(expected_identities) != len(expected_ids):
+        errors.append(
+            f"{prefix}.expected_episode_identities count does not match expected_episode_ids"
+        )
     if (
         isinstance(expected, int)
         and not isinstance(expected, bool)
@@ -1451,13 +1561,23 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
             if record_id in seen:
                 errors.append(f"{row_prefix}.record_id is duplicated")
             seen.add(record_id)
-        if episode.get("evidence_status") not in _EVIDENCE_STATUSES:
+        _require_text(episode, "scenario_id", errors, row_prefix)
+        scenario_id = episode.get("scenario_id")
+        scenario_seed = episode.get("scenario_seed")
+        if not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool):
+            errors.append(f"{row_prefix}.scenario_seed must be an integer")
+        if isinstance(record_id, str) and isinstance(scenario_id, str):
+            if identity_by_record_id.get(record_id) != (scenario_id, scenario_seed):
+                errors.append(
+                    f"{row_prefix} scenario/seed identity does not match the expected manifest"
+                )
+        if not _is_allowed(episode.get("evidence_status"), _EVIDENCE_STATUSES):
             errors.append(f"{row_prefix}.evidence_status is unsupported")
-        if episode.get("execution_mode") not in _EXECUTION_MODES:
+        if not _is_allowed(episode.get("execution_mode"), _EXECUTION_MODES):
             errors.append(f"{row_prefix}.execution_mode is unsupported")
-        if episode.get("readiness_status") not in _READINESS_STATUSES:
+        if not _is_allowed(episode.get("readiness_status"), _READINESS_STATUSES):
             errors.append(f"{row_prefix}.readiness_status is unsupported")
-        if episode.get("availability_status") not in _AVAILABILITY_STATUSES:
+        if not _is_allowed(episode.get("availability_status"), _AVAILABILITY_STATUSES):
             errors.append(f"{row_prefix}.availability_status is unsupported")
         if episode.get("eligible") not in (True, False, None):
             errors.append(f"{row_prefix}.eligible must be boolean or null")
@@ -1473,6 +1593,39 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
             ):
                 errors.append(f"{row_prefix}.{field} must be a finite number or null")
     _validate_evaluation_source_rows(source, value, episodes, context, prefix, errors)
+
+
+def _validate_case_status_source(
+    source: Any,
+    observation: dict[str, Any],
+    planner: dict[str, Any],
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Bind each corpus status artifact to its case and round observation."""
+    if not isinstance(source, dict):
+        return
+    expected_fields = (
+        "case_id",
+        "origin_round",
+        "origin_candidate_id",
+        "planner_status",
+        "admissibility_verdict",
+        "replay_status",
+        "evidence_status",
+    )
+    mismatched = [field for field in expected_fields if source.get(field) != observation.get(field)]
+    if mismatched:
+        errors.append(
+            f"{prefix}.corpus_artifact case/status identity does not match the observation: "
+            f"{mismatched}"
+        )
+    if source.get("planner_id") != planner.get("planner_id"):
+        errors.append(f"{prefix}.corpus_artifact planner does not match the round planner")
+    if not _same_text_identity(
+        source.get("config_identity_sha256"), planner.get("config_identity_sha256")
+    ):
+        errors.append(f"{prefix}.corpus_artifact config does not match the round planner")
 
 
 def _validate_evaluation_source_rows(
@@ -1501,6 +1654,11 @@ def _validate_evaluation_source_rows(
             f"{prefix} identity accounting unknown: expected episode IDs do not match "
             "the checksummed evaluation source"
         )
+    expected_identities = value.get("expected_episode_identities")
+    if source.get("expected_episode_identities") != expected_identities:
+        errors.append(
+            f"{prefix} scenario/seed manifest does not match the checksummed evaluation source"
+        )
     source_rows = source.get("episodes")
     row_projection = _source_projection(episodes, _EVALUATION_ROW_SOURCE_FIELDS)
     if source_rows != row_projection:
@@ -1521,6 +1679,143 @@ def _validate_evaluation_source_rows(
             f"{prefix} identity accounting unknown: unexpected evaluation row IDs "
             f"{unexpected_ids} are absent from expected_episode_ids"
         )
+
+
+def _evaluation_identity_sets(
+    round_data: dict[str, Any], round_number: Any, errors: list[str]
+) -> tuple[dict[str, set[tuple[str, int]]], dict[str, set[str]]]:
+    """Collect valid scenario/seed and record IDs while reporting per-set duplicates."""
+    pair_sets: dict[str, set[tuple[str, int]]] = {}
+    record_sets: dict[str, set[str]] = {}
+    evaluation_sets = round_data.get("evaluation_sets")
+    if not isinstance(evaluation_sets, dict):
+        return pair_sets, record_sets
+    for set_name in _EVALUATION_SETS:
+        evaluation = evaluation_sets.get(set_name)
+        identities = (
+            evaluation.get("expected_episode_identities") if isinstance(evaluation, dict) else None
+        )
+        if not isinstance(identities, list):
+            continue
+        pairs: list[tuple[str, int]] = []
+        record_ids: set[str] = set()
+        for identity in identities:
+            if not isinstance(identity, dict):
+                continue
+            record_id = identity.get("record_id")
+            scenario_id = identity.get("scenario_id")
+            scenario_seed = identity.get("scenario_seed")
+            if (
+                isinstance(record_id, str)
+                and isinstance(scenario_id, str)
+                and isinstance(scenario_seed, int)
+                and not isinstance(scenario_seed, bool)
+            ):
+                pairs.append((scenario_id, scenario_seed))
+                record_ids.add(record_id)
+        if len(pairs) != len(set(pairs)):
+            errors.append(
+                f"round {round_number} {set_name} scenario/seed identities must be unique"
+            )
+        pair_sets[set_name] = set(pairs)
+        record_sets[set_name] = record_ids
+    return pair_sets, record_sets
+
+
+def _validate_evaluation_cohorts(rounds: list[Any], errors: list[str]) -> None:
+    """Reject split leakage and require a stable fixed evaluation cohort."""
+    previous_fixed: set[tuple[str, int]] | None = None
+    historical_held_out: set[tuple[str, int]] = set()
+    historical_held_out_record_ids: set[str] = set()
+    for round_data in rounds:
+        if not isinstance(round_data, dict):
+            continue
+        round_number = round_data.get("round_number")
+        pair_sets, record_sets = _evaluation_identity_sets(round_data, round_number, errors)
+        for exposed_set in ("fixed", "regression"):
+            shared_pairs = pair_sets.get("held_out", set()) & pair_sets.get(exposed_set, set())
+            shared_record_ids = record_sets.get("held_out", set()) & record_sets.get(
+                exposed_set, set()
+            )
+            shared_historical_pairs = historical_held_out & pair_sets.get(exposed_set, set())
+            shared_historical_ids = historical_held_out_record_ids & record_sets.get(
+                exposed_set, set()
+            )
+            if (
+                shared_pairs
+                or shared_record_ids
+                or shared_historical_pairs
+                or shared_historical_ids
+            ):
+                errors.append(
+                    f"round {round_number} held_out overlaps {exposed_set} evaluation identities"
+                )
+        historical_held_out.update(pair_sets.get("held_out", set()))
+        historical_held_out_record_ids.update(record_sets.get("held_out", set()))
+        fixed = pair_sets.get("fixed")
+        if fixed is not None:
+            if previous_fixed is not None and fixed != previous_fixed:
+                errors.append(
+                    f"round {round_number} fixed evaluation scenario/seed cohort changed; "
+                    "fixed-cohort comparisons require identical identities across rounds"
+                )
+            previous_fixed = fixed
+
+
+def _scenario_seed_manifest_digest(evaluation: dict[str, Any]) -> str:
+    identities = evaluation.get("expected_episode_identities", [])
+    pairs = sorted(
+        {
+            (item["scenario_id"], item["scenario_seed"])
+            for item in identities
+            if isinstance(item, dict)
+            and isinstance(item.get("scenario_id"), str)
+            and isinstance(item.get("scenario_seed"), int)
+            and not isinstance(item.get("scenario_seed"), bool)
+        }
+    )
+    payload = json.dumps(pairs, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _scenario_seed_rows_digest(rows: list[dict[str, Any]]) -> str:
+    pairs = sorted((row["scenario_id"], row["scenario_seed"]) for row in rows)
+    payload = json.dumps(pairs, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _add_cohort_comparability(
+    evaluation_summaries: dict[str, dict[str, Any]],
+    round_data: dict[str, Any],
+    prior_round_reports: list[dict[str, Any]],
+) -> None:
+    previous_sets = prior_round_reports[-1]["evaluation_sets"] if prior_round_reports else None
+    for set_name, summary in evaluation_summaries.items():
+        digest = _scenario_seed_manifest_digest(round_data["evaluation_sets"][set_name])
+        summary["scenario_seed_manifest_sha256"] = digest
+        if previous_sets is None:
+            summary["cohort_comparable_to_previous_round"] = None
+            summary["cohort_comparison_status"] = "baseline"
+            summary["success_rate_comparable_to_previous_round"] = None
+            summary["success_rate_comparison_status"] = "baseline"
+            continue
+        comparable = digest == previous_sets[set_name]["scenario_seed_manifest_sha256"]
+        summary["cohort_comparable_to_previous_round"] = comparable
+        summary["cohort_comparison_status"] = (
+            "comparable" if comparable else "non_comparable_cohort"
+        )
+        success_sample_comparable = (
+            summary["success_rate_sample_sha256"]
+            == previous_sets[set_name]["success_rate_sample_sha256"]
+        )
+        success_comparable = comparable and success_sample_comparable
+        summary["success_rate_comparable_to_previous_round"] = success_comparable
+        if not comparable:
+            summary["success_rate_comparison_status"] = "non_comparable_cohort"
+        elif not success_sample_comparable:
+            summary["success_rate_comparison_status"] = "non_comparable_success_sample"
+        else:
+            summary["success_rate_comparison_status"] = "comparable"
 
 
 def _validate_budget(
@@ -1566,6 +1861,11 @@ def _source_projection(rows: Any, fields: tuple[str, ...]) -> list[dict[str, Any
 
 def _same_text_identity(left: Any, right: Any) -> bool:
     return isinstance(left, str) and isinstance(right, str) and left.lower() == right.lower()
+
+
+def _is_allowed(value: Any, choices: set[str]) -> bool:
+    """Check a categorical value without hashing malformed JSON values."""
+    return isinstance(value, str) and value in choices
 
 
 def _validate_source_identity(
@@ -1719,6 +2019,7 @@ def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:
         "unexpected_record_ids": unexpected_ids,
         "eligible_episode_count": len(eligible_rows),
         "success_denominator": len(success_rows),
+        "success_rate_sample_sha256": _scenario_seed_rows_digest(success_rows),
         "collision_denominator": len(collision_rows),
         "excluded_episode_count": reported_count - len(eligible_rows),
         "accounting_complete": not missing_ids and not unexpected_ids,

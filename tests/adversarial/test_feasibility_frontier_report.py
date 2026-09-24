@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from typing import TYPE_CHECKING, Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -18,12 +19,14 @@ from robot_sf.adversarial.feasibility_frontier_report import (
     write_frontier_figure,
     write_frontier_report,
 )
+from robot_sf.benchmark.figures.provenance import _git_sha_short
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 _REVISION = "a" * 40
 _CONFIG = "b" * 64
+_EXPERIMENT_ID = "fixture-two-round-loop"
 
 
 def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:
@@ -54,6 +57,31 @@ def _write_source_artifact(
     reference["sha256"] = hashlib.sha256(content).hexdigest()
     reference["source_revision"] = payload["source_revision"]
     reference["schema_version"] = schema_version
+
+
+def _case_status_source_payload(
+    observation: dict[str, Any],
+    *,
+    experiment_id: str,
+    round_number: int,
+    source_revision: str,
+    planner: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": frontier_module._CORPUS_CASE_STATUS_SCHEMA,
+        "experiment_id": experiment_id,
+        "round_number": round_number,
+        "source_revision": source_revision,
+        "case_id": observation["case_id"],
+        "origin_round": observation["origin_round"],
+        "origin_candidate_id": observation["origin_candidate_id"],
+        "planner_id": planner["planner_id"],
+        "config_identity_sha256": planner["config_identity_sha256"],
+        "planner_status": observation["planner_status"],
+        "admissibility_verdict": observation["admissibility_verdict"],
+        "replay_status": observation["replay_status"],
+        "evidence_status": observation["evidence_status"],
+    }
 
 
 def _refresh_source_artifacts(evidence: dict[str, Any], root: Path) -> None:
@@ -105,12 +133,27 @@ def _refresh_source_artifacts(evidence: dict[str, Any], root: Path) -> None:
             else:
                 expected_ids = list(expected_ids)
             expected_id_set = set(expected_ids)
+            expected_identities = evaluation.get("expected_episode_identities", [])
+            identity_by_id = {
+                item["record_id"]: item
+                for item in expected_identities
+                if isinstance(item, dict) and isinstance(item.get("record_id"), str)
+            }
             for row in evaluation["episodes"]:
                 record_id = row.get("record_id")
                 if isinstance(record_id, str) and record_id not in expected_id_set:
                     expected_ids.append(record_id)
                     expected_id_set.add(record_id)
+                if isinstance(record_id, str) and record_id not in identity_by_id:
+                    identity = {
+                        "record_id": record_id,
+                        "scenario_id": row.get("scenario_id"),
+                        "scenario_seed": row.get("scenario_seed"),
+                    }
+                    expected_identities.append(identity)
+                    identity_by_id[record_id] = identity
             evaluation["expected_episode_ids"] = expected_ids
+            evaluation["expected_episode_identities"] = expected_identities
             _write_source_artifact(
                 root,
                 evaluation["artifact"],
@@ -121,6 +164,7 @@ def _refresh_source_artifacts(evidence: dict[str, Any], root: Path) -> None:
                     "planner_id": planner["planner_id"],
                     "config_identity_sha256": planner["config_identity_sha256"],
                     "expected_episode_ids": expected_ids,
+                    "expected_episode_identities": expected_identities,
                     "episodes": [
                         {
                             field: row.get(field)
@@ -132,30 +176,53 @@ def _refresh_source_artifacts(evidence: dict[str, Any], root: Path) -> None:
                 schema_version=frontier_module._EVALUATION_SOURCE_SCHEMA,
             )
 
+    _refresh_case_status_artifacts(evidence, root)
+
+
+def _refresh_case_status_artifacts(evidence: dict[str, Any], root: Path) -> None:
+    """Rebind each fixture case row to a unique checksummed corpus snapshot."""
+    rounds = evidence["rounds"]
     for round_data in rounds:
         for observation in round_data["case_observations"]:
             origin_round = observation.get("origin_round")
-            if not isinstance(origin_round, int) or origin_round < 1 or origin_round > len(rounds):
-                continue
-            origin_data = rounds[origin_round - 1]
-            observation["origin_search_artifact"] = origin_data["falsification"]["artifact"]
-            candidate = next(
-                (
-                    item
-                    for item in origin_data["falsification"]["candidates"]
-                    if item.get("candidate_id") == observation.get("origin_candidate_id")
-                    and item.get("case_id") == observation.get("case_id")
-                    and item.get("corpus_disposition") == "admitted"
-                ),
-                None,
+            if isinstance(origin_round, int) and 1 <= origin_round <= len(rounds):
+                origin_data = rounds[origin_round - 1]
+                observation["origin_search_artifact"] = origin_data["falsification"]["artifact"]
+                candidate = next(
+                    (
+                        item
+                        for item in origin_data["falsification"]["candidates"]
+                        if item.get("candidate_id") == observation.get("origin_candidate_id")
+                        and item.get("case_id") == observation.get("case_id")
+                        and item.get("corpus_disposition") == "admitted"
+                    ),
+                    None,
+                )
+                if candidate is not None:
+                    observation["replay_artifact"] = candidate.get("replay_artifact")
+            planner = round_data["planner"]
+            corpus_digest = hashlib.sha256(observation["case_id"].encode("utf-8")).hexdigest()[:12]
+            observation["corpus_artifact"]["path"] = (
+                f"evidence/round-{round_data['round_number']}-case-status-{corpus_digest}.json"
             )
-            if candidate is not None:
-                observation["replay_artifact"] = candidate.get("replay_artifact")
+            _write_source_artifact(
+                root,
+                observation["corpus_artifact"],
+                _case_status_source_payload(
+                    observation,
+                    experiment_id=evidence["experiment_id"],
+                    round_number=round_data["round_number"],
+                    source_revision=round_data["source_revision"],
+                    planner=planner,
+                ),
+                schema_version=frontier_module._CORPUS_CASE_STATUS_SCHEMA,
+            )
 
 
 def _episode(
     record_id: str,
     *,
+    scenario_identity: tuple[str, int],
     success: bool | None,
     collision: bool | None = False,
     execution_mode: str = "native",
@@ -163,8 +230,11 @@ def _episode(
     availability_status: str = "available",
     eligible: bool = True,
 ) -> dict[str, Any]:
+    scenario_id, scenario_seed = scenario_identity
     return {
         "record_id": record_id,
+        "scenario_id": scenario_id,
+        "scenario_seed": scenario_seed,
         "evidence_status": "complete",
         "execution_mode": execution_mode,
         "readiness_status": readiness_status,
@@ -181,12 +251,21 @@ def _evaluation_set(
     root: Path, name: str, *, round_number: int, success_count: int
 ) -> dict[str, Any]:
     rows = [
-        _episode(f"{name}-{round_number}-1", success=success_count >= 1),
         _episode(
-            f"{name}-{round_number}-2", success=success_count >= 2, collision=round_number == 1
+            f"{name}-{round_number}-1",
+            scenario_identity=(f"{name}-scenario-1", 1101),
+            success=success_count >= 1,
+        ),
+        _episode(
+            f"{name}-{round_number}-2",
+            scenario_identity=(f"{name}-scenario-2", 2202),
+            success=success_count >= 2,
+            collision=round_number == 1,
         ),
         {
             "record_id": f"{name}-{round_number}-fallback",
+            "scenario_id": f"{name}-scenario-fallback",
+            "scenario_seed": 3303,
             "evidence_status": "complete",
             "execution_mode": "native",
             "readiness_status": "fallback",
@@ -198,8 +277,19 @@ def _evaluation_set(
             "ped_force_q95": 3.2,
         },
     ]
+    expected_ids = [row["record_id"] for row in rows]
+    expected_identities = [
+        {
+            "record_id": row["record_id"],
+            "scenario_id": row["scenario_id"],
+            "scenario_seed": row["scenario_seed"],
+        }
+        for row in rows
+    ]
     return {
         "expected_episode_count": len(rows),
+        "expected_episode_ids": expected_ids,
+        "expected_episode_identities": expected_identities,
         "artifact": _artifact(
             root, f"round-{round_number}-{name}.jsonl", role=f"{name}-evaluation"
         ),
@@ -241,26 +331,49 @@ def _observation(
     verdict: str,
     replay_status: str,
 ) -> dict[str, Any]:
-    return {
+    evidence_status = "complete" if planner_status != "unknown" else "unknown"
+    corpus_ref = _artifact(
+        root,
+        f"round-{round_number}-case-status-{hashlib.sha256(case_id.encode()).hexdigest()[:12]}.json",
+        role="corpus",
+    )
+    observation = {
         "case_id": case_id,
         "origin_round": origin_round,
         "origin_candidate_id": origin_candidate_id,
         "planner_status": planner_status,
         "admissibility_verdict": verdict,
         "replay_status": replay_status,
-        "evidence_status": "complete" if planner_status != "unknown" else "unknown",
+        "evidence_status": evidence_status,
         "origin_search_artifact": _artifact(
             root,
             f"round-{origin_round or 'historical'}-search.json",
             role="falsification-search",
         ),
-        "corpus_artifact": _artifact(root, f"round-{round_number}-corpus.json", role="corpus"),
+        "corpus_artifact": corpus_ref,
         "replay_artifact": (
             _artifact(root, f"round-{round_number}-{case_id}-replay.json", role="replay")
             if replay_status == "verified"
             else None
         ),
     }
+    planner = {
+        "planner_id": "goal",
+        "config_identity_sha256": _CONFIG if round_number == 1 else "c" * 64,
+    }
+    _write_source_artifact(
+        root,
+        corpus_ref,
+        _case_status_source_payload(
+            observation,
+            experiment_id=_EXPERIMENT_ID,
+            round_number=round_number,
+            source_revision=_REVISION,
+            planner=planner,
+        ),
+        schema_version=frontier_module._CORPUS_CASE_STATUS_SCHEMA,
+    )
+    return observation
 
 
 def _round(root: Path, round_number: int) -> dict[str, Any]:
@@ -426,7 +539,7 @@ def _evidence(root: Path) -> dict[str, Any]:
     evidence = {
         "schema_version": INPUT_SCHEMA_VERSION,
         "evidence_kind": "synthetic_fixture",
-        "experiment_id": "fixture-two-round-loop",
+        "experiment_id": _EXPERIMENT_ID,
         "source_revision": _REVISION,
         "simulator_identity": "robot-sf-fixture-simulator.v1",
         "scenario_space_id": "crossing-gap-v1",
@@ -993,6 +1106,151 @@ def test_frontier_report_binds_evaluation_metrics_and_ids_to_checksums(tmp_path:
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_rejects_held_out_identity_overlap_with_tuning_sets(
+    tmp_path: Path,
+) -> None:
+    """Held-out scenarios cannot share a scenario/seed identity with fixed or regression."""
+    payload = _evidence(tmp_path)
+    round_data = payload["rounds"][0]
+    fixed_identity = round_data["evaluation_sets"]["fixed"]["expected_episode_identities"][0]
+    held_out = round_data["evaluation_sets"]["held_out"]
+    held_out_row = held_out["episodes"][0]
+    held_out_identity = next(
+        item
+        for item in held_out["expected_episode_identities"]
+        if item["record_id"] == held_out_row["record_id"]
+    )
+    held_out_row["scenario_id"] = fixed_identity["scenario_id"]
+    held_out_row["scenario_seed"] = fixed_identity["scenario_seed"]
+    held_out_identity["scenario_id"] = fixed_identity["scenario_id"]
+    held_out_identity["scenario_seed"] = fixed_identity["scenario_seed"]
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(FrontierReportError, match="held_out overlaps fixed evaluation identities"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_marks_changed_held_out_cohort_non_comparable(
+    tmp_path: Path,
+) -> None:
+    """A changed hidden cohort is reported but cannot create a connected trend claim."""
+    payload = _evidence(tmp_path)
+    held_out = payload["rounds"][1]["evaluation_sets"]["held_out"]
+    row = held_out["episodes"][0]
+    identity = next(
+        item
+        for item in held_out["expected_episode_identities"]
+        if item["record_id"] == row["record_id"]
+    )
+    row["scenario_id"] = "new-held-out-case"
+    row["scenario_seed"] = 9999
+    identity["scenario_id"] = "new-held-out-case"
+    identity["scenario_seed"] = 9999
+    _refresh_source_artifacts(payload, tmp_path)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    first, second = report["rounds"]
+    assert first["evaluation_sets"]["held_out"]["cohort_comparison_status"] == "baseline"
+    assert second["evaluation_sets"]["held_out"]["cohort_comparison_status"] == (
+        "non_comparable_cohort"
+    )
+    assert second["evaluation_sets"]["held_out"]["cohort_comparable_to_previous_round"] is False
+    assert second["evaluation_sets"]["held_out"]["success_rate_comparison_status"] == (
+        "non_comparable_cohort"
+    )
+    assert second["evaluation_sets"]["fixed"]["cohort_comparable_to_previous_round"] is True
+    assert "cohort comparison `non_comparable_cohort`" in render_frontier_markdown(report)
+    axis = Mock()
+    frontier_module._plot_evaluation_performance(axis, report["rounds"], [1, 2])
+    connecting_segments = [
+        call for call in axis.plot.call_args_list if call.kwargs.get("label") == "_nolegend_"
+    ]
+    assert len(connecting_segments) == 2
+    write_frontier_figure(report, tmp_path / "changed-cohort-frontier")
+
+
+def test_frontier_report_omits_success_trend_when_eligible_sample_changes(
+    tmp_path: Path,
+) -> None:
+    """Same planned cohort does not imply comparable rates when eligible denominators change."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][1]["evaluation_sets"]["fixed"]["episodes"][0]["eligible"] = False
+    _refresh_source_artifacts(payload, tmp_path)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    fixed_summary = report["rounds"][1]["evaluation_sets"]["fixed"]
+    assert fixed_summary["cohort_comparison_status"] == "comparable"
+    assert fixed_summary["success_rate_comparison_status"] == "non_comparable_success_sample"
+    assert fixed_summary["success_rate_comparable_to_previous_round"] is False
+
+    axis = Mock()
+    frontier_module._plot_evaluation_performance(axis, report["rounds"], [1, 2])
+    connecting_segments = [
+        call for call in axis.plot.call_args_list if call.kwargs.get("label") == "_nolegend_"
+    ]
+    assert len(connecting_segments) == 2
+
+
+def test_frontier_report_rejects_fixed_cohort_manifest_drift(tmp_path: Path) -> None:
+    """Fixed evaluation comparisons retain the same scenario/seed cohort across rounds."""
+    payload = _evidence(tmp_path)
+    fixed = payload["rounds"][1]["evaluation_sets"]["fixed"]
+    row = fixed["episodes"][0]
+    identity = next(
+        item
+        for item in fixed["expected_episode_identities"]
+        if item["record_id"] == row["record_id"]
+    )
+    row["scenario_id"] = "replaced-fixed-case"
+    identity["scenario_id"] = "replaced-fixed-case"
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(FrontierReportError, match="fixed evaluation scenario/seed cohort changed"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_keeps_prior_held_out_cases_out_of_regression(
+    tmp_path: Path,
+) -> None:
+    """A former held-out case cannot enter a later optimization-facing regression set."""
+    payload = _evidence(tmp_path)
+    first_held_out = payload["rounds"][0]["evaluation_sets"]["held_out"]
+    held_out_identity = first_held_out["expected_episode_identities"][0]
+    second_sets = payload["rounds"][1]["evaluation_sets"]
+    changed_held_out = second_sets["held_out"]
+    changed_row = changed_held_out["episodes"][0]
+    changed_identity = changed_held_out["expected_episode_identities"][0]
+    changed_row["scenario_id"] = changed_identity["scenario_id"] = "replacement-held-out"
+    changed_row["scenario_seed"] = changed_identity["scenario_seed"] = 9900
+    regression = second_sets["regression"]
+    regression_row = regression["episodes"][0]
+    regression_identity = regression["expected_episode_identities"][0]
+    regression_row["scenario_id"] = regression_identity["scenario_id"] = held_out_identity[
+        "scenario_id"
+    ]
+    regression_row["scenario_seed"] = regression_identity["scenario_seed"] = held_out_identity[
+        "scenario_seed"
+    ]
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(
+        FrontierReportError, match="held_out overlaps regression evaluation identities"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize("malformed_status", [{}, []])
+def test_frontier_report_wraps_unhashable_candidate_status_as_report_error(
+    tmp_path: Path, malformed_status: Any
+) -> None:
+    """Malformed enum values fail through the public report error contract."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["falsification"]["candidates"][0]["evaluation_status"] = malformed_status
+
+    with pytest.raises(FrontierReportError, match="evaluation_status is unsupported"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_rejects_malformed_evaluation_record_id(tmp_path: Path) -> None:
     """Malformed row identities must produce a report error, not a Python TypeError."""
     payload = _evidence(tmp_path)
@@ -1063,6 +1321,26 @@ def test_frontier_report_binds_case_observation_refs_to_origin_evidence(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_binds_corpus_status_artifact_to_case_identity(
+    tmp_path: Path,
+) -> None:
+    """A valid digest for a corpus row naming another case cannot support this status."""
+    payload = _evidence(tmp_path)
+    observation = payload["rounds"][0]["case_observations"][0]
+    reference = observation["corpus_artifact"]
+    source = json.loads((tmp_path / reference["path"]).read_text(encoding="utf-8"))
+    source["case_id"] = "different-case"
+    _write_source_artifact(
+        tmp_path,
+        reference,
+        source,
+        schema_version=frontier_module._CORPUS_CASE_STATUS_SCHEMA,
+    )
+
+    with pytest.raises(FrontierReportError, match="corpus_artifact case/status identity"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_rejects_missing_budget_and_incomplete_candidate_ledger(
     tmp_path: Path,
 ) -> None:
@@ -1112,7 +1390,8 @@ def test_frontier_report_writer_emits_deterministic_json_markdown_and_figure(
     ):
         for name, expected_sha256 in provenance["output_hashes"].items():
             assert hashlib.sha256((report_dir / name).read_bytes()).hexdigest() == expected_sha256
-    assert sidecar["repo_commit"] == _REVISION
+    assert sidecar["repo_commit"] == _git_sha_short()
+    assert sidecar["source_revision"] == _REVISION
     assert sidecar["evidence_kind"] == "synthetic_fixture"
     assert sidecar["figure_title"].startswith("Synthetic Fixture evidence")
     assert sidecar["claim_boundary"] == first["claim_boundary"]
@@ -1175,6 +1454,7 @@ def test_frontier_report_uses_canonical_execution_readiness_and_availability_axe
     rows.append(
         _episode(
             "held_out-1-degraded",
+            scenario_identity=("held_out-scenario-degraded", 4404),
             success=False,
             collision=True,
             execution_mode="mixed",
@@ -1186,6 +1466,7 @@ def test_frontier_report_uses_canonical_execution_readiness_and_availability_axe
     rows.append(
         _episode(
             "held_out-1-partial",
+            scenario_identity=("held_out-scenario-partial", 5505),
             success=True,
             collision=False,
             execution_mode="adapter",

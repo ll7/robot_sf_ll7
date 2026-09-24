@@ -3,8 +3,8 @@
 **Status:** current fixture-backed report implementation for issue #9654. Full empirical
 acceptance remains pending a completed small persisted loop from #9653.
 
-The report builder consumes a versioned `adversarial-coevolution-evidence.v1` JSON bundle and
-produces `adversarial-feasibility-frontier.v1` JSON, a compact Markdown report, and a two-panel
+The report builder consumes a versioned `adversarial-coevolution-evidence.v2` JSON bundle and
+produces `adversarial-feasibility-frontier.v2` JSON, a compact Markdown report, and a two-panel
 publication-style figure. It does not launch a planner, search, replay, or simulator. It summarizes
 the records in the persisted input bundle, checks every referenced artifact against its SHA-256,
 and keeps each source path and revision in the output.
@@ -29,9 +29,9 @@ The command writes:
   cumulative known counterexample count, per-round solved/unsolved/mixed/unknown/not-observed case
   status, current unknown-feasibility count, and per-round structurally invalid and
   geometric/kinodynamic-impossibility candidate counts;
-- `frontier.provenance.json` — source-artifact digests, evidence kind, visible figure title, and the
-  claim boundary for the figure. The evidence kind is printed in the figure so a detached fixture
-  image remains visibly synthetic.
+- `frontier.provenance.json` — source-artifact digests, the generating checkout's `repo_commit`,
+  the evidence `source_revision`, evidence kind, visible figure title, and claim boundary. The
+  evidence kind is printed in the figure so a detached fixture image remains visibly synthetic.
 
 Use a new or empty output directory for each generation. The command refuses to overwrite any of
 its expected report files, preserving prior report bundles.
@@ -47,7 +47,10 @@ reason.
 
 Optimizer, search, evaluation, corpus, replay, and later admissibility-evidence artifacts use
 relative paths inside the evidence bundle and carry a full source revision, schema label, role, and
-SHA-256. Round-level optimizer, search, and evaluation references require the `optimization`,
+SHA-256. Each per-round corpus status artifact uses `frontier-corpus-case-status.v1`; its case ID,
+origin round/candidate, planner/config identity, and recorded status fields must match the enclosing
+observation. A checksummed artifact for a different case cannot substantiate that observation.
+Round-level optimizer, search, and evaluation references require the `optimization`,
 `falsification-search`, `fixed-evaluation`, `regression-evaluation`, and `held_out-evaluation` roles,
 respectively. Case observations require `falsification-search`, `corpus`, and
 `admissibility-evidence` on their corresponding references. Escaping paths, absent files, changed
@@ -112,18 +115,26 @@ complete candidate ledger fields consumed by the report. The selected optimizer 
 target must match the enclosing round planner/configuration, and the report's candidate rows must
 match that checksummed search ledger.
 
-Each evaluation artifact uses `frontier-evaluation-source.v1`. It records the experiment, round,
-source revision, evaluation-set name, planner/config identity, ordered `expected_episode_ids`, and
-the complete normalized episode rows consumed by the report. The outer evaluation set repeats the
-expected IDs and rows; both must match the checksummed source exactly, and `expected_episode_count`
-must equal the number of unique IDs. Reported rows must use IDs in that expected set; known expected
-IDs with no reported row remain visible as missing. If canonical source artifacts do not expose
-stable episode IDs, identity accounting is `unknown` and report generation fails closed. A count
-match alone cannot establish which episodes were evaluated. Successful summaries expose
-`identity_accounting_status: verified` and a digest of the ordered expected-ID manifest; the
-checksummed evaluation source remains the owner of the full ID list. These normalized envelopes are
-a fixture-first #9654 input contract; adapters from future #9653 artifacts must prove the same
-identity bindings rather than filling summary fields independently.
+Each evaluation artifact uses `frontier-evaluation-source.v2`. It records the experiment, round,
+source revision, evaluation-set name, planner/config identity, ordered `expected_episode_ids`, an
+ordered `expected_episode_identities` manifest (`record_id`, `scenario_id`, integer
+`scenario_seed`), and the complete normalized episode rows consumed by the report. The outer
+evaluation set repeats these manifests and rows; they must match the checksummed source exactly,
+and every reported row's scenario/seed pair must match its expected identity. Expected identities
+are retained when a row is missing. If canonical source artifacts do not expose stable episode and
+scenario/seed identities, accounting is unknown and report generation fails closed. A count match
+alone cannot establish which episodes were evaluated. A scenario/seed pair may appear only once
+within a set, and held-out identities must be disjoint from both fixed and regression identities in
+each round. Fixed evaluation cohorts must retain the same scenario/seed manifest across rounds.
+Held-out or regression cohorts may legitimately change, but summaries explicitly mark a changed
+cohort as `non_comparable_cohort`; the figure omits the connecting trend segment across that change.
+Success-rate segments also require the same eligible outcome sample in adjacent rounds. If fallback,
+missing, or otherwise excluded rows change the rate denominator, the summary uses
+`non_comparable_success_sample` and the figure leaves a gap. Each evaluation summary includes the
+ordered episode-ID digest, sorted scenario/seed identity digest, and success-rate sample digest.
+These normalized envelopes are a fixture-first #9654 input contract;
+adapters from future #9653 artifacts must prove the same identity bindings rather than filling
+summary fields independently.
 
 ## Evidence limits and integration
 
@@ -140,7 +151,9 @@ simulator runs. Acceptance for Issue #9654 additionally requires generating this
 from a real completed 2+ round #9653 run, with held-out/regression evidence and representative replay
 links.
 
-The focused fixture contract is exercised in
+The figure sidecar distinguishes `repo_commit` (the checkout that generated the figure) from
+`source_revision` (the revision named by the evidence bundle). Neither field changes the evidence
+claim boundary. The focused fixture contract is exercised in
 `tests/adversarial/test_feasibility_frontier_report.py`. The tests create synthetic source artifacts
 in temporary directories, check digests and fail-closed cases, cover repeated known cases and a flat
 campaign with no verified discovery, and render the figure without starting a simulator.

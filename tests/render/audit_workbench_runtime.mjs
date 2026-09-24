@@ -1872,6 +1872,24 @@ assert.match(renderedText(xssRoot), /<img src=x onerror=alert/);
 assert.equal(renderedTags(xssRoot).includes("IMG"), false);
 assert.equal(renderedText(xssRoot).includes("/private/provider"), false);
 assert.match(renderedText(xssRoot), /no durable transcript is exposed/i);
+assert.match(renderedText(xssRoot), /Activity is process-scoped/i);
+xssCodexFacade.codex_read = async () => ({
+  status: "complete",
+  operation_id: "audit-operation-1",
+  activity_scope: "durable_lifecycle",
+  activity: [{
+    message: "Codex start operation was admitted.",
+    operation_id: "audit-operation-1",
+    timestamp: "2026-09-24T13:00:00Z",
+    source_digest: "private-digest-must-not-render",
+  }],
+});
+const lifecycleRead = await xssCodexController.codexRead();
+assert.equal(lifecycleRead.activity_scope, "durable_lifecycle");
+assert.match(renderedText(xssRoot), /Durable operation summaries only/i);
+assert.match(renderedText(xssRoot), /audit-operation-1/);
+assert.match(renderedText(xssRoot), /2026-09-24T13:00:00Z/);
+assert.equal(renderedText(xssRoot).includes("private-digest-must-not-render"), false);
 const cancelled = await xssCodexController.codexCancel("post-turn review");
 assert.equal(cancelled.status, "cancelled");
 xssCodexController.unmount();

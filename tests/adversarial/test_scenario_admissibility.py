@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from robot_sf.adversarial import (
     ADMISSIBLE_FEASIBILITY_UNKNOWN,
@@ -28,12 +30,15 @@ from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_CONTRACT_VERSION,
     SCENARIO_FEASIBILITY_PREDICATE_NAMES,
 )
+from robot_sf.scenario_certification import v1 as scenario_certification_v1
 from robot_sf.scenario_certification.feasibility_oracle import (
     FEASIBILITY_ORACLE_SCHEMA,
     ISSUE_5574_REPORT_SCHEMA,
 )
+from robot_sf.scenario_certification.input_identity import scenario_input_identity
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
+    ScenarioCertificate,
     certificate_to_dict,
     certify_scenario_file,
 )
@@ -231,6 +236,56 @@ def _execution(
     if planner_id == "replay" or replay:
         record.update(determinism_check_status="pass", resimulated=True)
     return record
+
+
+def _referenced_scenario(tmp_path: Path, *, route_override: bool = True) -> Path:
+    """Materialize a canonical scenario with separately hashed runtime resources."""
+    scenario_path = tmp_path / "scenario.yaml"
+    map_path = tmp_path / "map.svg"
+    shutil.copyfile(_REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg", map_path)
+    scenario: dict[str, Any] = {
+        "name": "case-static",
+        "map_file": map_path.name,
+        "simulation_config": {"max_episode_steps": 200, "ped_density": 0.0},
+        "robot_config": {},
+        "metadata": {"archetype": "head_on_corridor"},
+        "seeds": [19],
+    }
+    if route_override:
+        scenario["route_overrides_file"] = "routes.yaml"
+        (tmp_path / "routes.yaml").write_text("routes: []\n", encoding="utf-8")
+    scenario_path.write_text(
+        yaml.safe_dump({"scenarios": [scenario]}, sort_keys=False), encoding="utf-8"
+    )
+    return scenario_path
+
+
+def _bind_certificate_to_scenario(path: Path) -> dict[str, Any]:
+    """Attach raw and runtime-input identities to a schema-valid fixture certificate."""
+    identity = scenario_input_identity(path, scenario_id="case-static")
+    assert identity["status"] == "available"
+    certificate = _certificate()
+    certificate["source"] = path.as_posix()
+    certificate["evidence"].update(
+        source_artifact_sha256=identity["source_artifact_sha256"],
+        effective_input_sha256=identity["effective_input_sha256"],
+        effective_input_identity_stable=True,
+    )
+    return certificate
+
+
+def _bind_oracle_to_scenario(path: Path) -> dict[str, Any]:
+    """Attach raw and runtime-input identities to a fixture oracle report."""
+    identity = scenario_input_identity(path, scenario_id="case-static")
+    assert identity["status"] == "available"
+    oracle = _oracle()
+    oracle.update(
+        scenario_manifest=path.as_posix(),
+        source_artifact_sha256=identity["source_artifact_sha256"],
+        effective_input_sha256=identity["effective_input_sha256"],
+        effective_input_identity_stable=True,
+    )
+    return oracle
 
 
 def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
@@ -930,6 +985,80 @@ def test_producer_certificate_digest_is_bound_through_admissibility_adapter(
     assert "scenario_certificate_producer_source_digest_missing_or_mismatch" in (
         verdict.reason_codes
     )
+
+
+@pytest.mark.parametrize("referenced_file", ["map.svg", "routes.yaml"])
+def test_certificate_and_oracle_reject_stale_runtime_input_bytes(
+    tmp_path: Path, referenced_file: str
+) -> None:
+    """Same manifest bytes cannot preserve evidence after a referenced input changes."""
+    scenario_path = _referenced_scenario(tmp_path)
+    certificate = _bind_certificate_to_scenario(scenario_path)
+    oracle = _bind_oracle_to_scenario(scenario_path)
+    original_identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    original_manifest_digest = original_identity["source_artifact_sha256"]
+    execution = _execution("reference", route_complete=True)
+    execution.update(
+        scenario_sha256=original_identity["source_artifact_sha256"],
+        effective_input_sha256=original_identity["effective_input_sha256"],
+        effective_input_identity_stable=True,
+    )
+    referenced_path = tmp_path / referenced_file
+    referenced_path.write_bytes(referenced_path.read_bytes() + b"\n# changed input\n")
+
+    verdict = _classify_scenario_admissibility(
+        "case-static",
+        scenario_artifact_path=scenario_path,
+        scenario_id="case-static",
+        scenario_certificate=certificate,
+        feasibility_evidence=oracle,
+        reference_execution=execution,
+    )
+
+    assert hashlib.sha256(scenario_path.read_bytes()).hexdigest() == original_manifest_digest
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable" in (
+        verdict.reason_codes
+    )
+    assert "feasibility_oracle_effective_input_identity_missing_mismatch_or_unstable" in (
+        verdict.reason_codes
+    )
+    assert "reference_execution_effective_input_identity_missing_or_mismatch" in (
+        verdict.reason_codes
+    )
+
+
+def test_certificate_producer_marks_referenced_input_change_unstable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A map edit during certification clears the producer's effective-input binding."""
+    scenario_path = _referenced_scenario(tmp_path)
+    map_path = tmp_path / "map.svg"
+
+    def certify_then_mutate(
+        scenario: dict[str, Any], *, scenario_path: Path, **_kwargs: Any
+    ) -> ScenarioCertificate:
+        map_path.write_bytes(map_path.read_bytes() + b"\n<!-- concurrent edit -->\n")
+        return ScenarioCertificate(
+            schema_version=CERT_SCHEMA_VERSION,
+            scenario_id="case-static",
+            source=scenario_path.as_posix(),
+            classification="valid",
+            benchmark_eligibility="eligible",
+            reasons=[],
+            checks={"route_count": 1},
+            route_certificates=[],
+        )
+
+    monkeypatch.setattr(scenario_certification_v1, "certify_scenario", certify_then_mutate)
+
+    certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    )
+
+    assert certificate["evidence"]["effective_input_sha256"] is None
+    assert certificate["evidence"]["effective_input_identity_stable"] is False
 
 
 def test_actor_free_oracle_success_does_not_resolve_unknown_invalid_certificate() -> None:

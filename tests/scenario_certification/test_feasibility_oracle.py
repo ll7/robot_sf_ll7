@@ -15,6 +15,7 @@ plus one real end-to-end rollout for integration coverage.
 from __future__ import annotations
 
 import hashlib
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -785,6 +786,41 @@ def test_issue_5574_report_marks_source_manifest_changed_during_run(tmp_path: Pa
     assert report["source_artifact_sha256"] == hashlib.sha256(source.encode()).hexdigest()
     assert report["source_artifact_identity_stable"] is False
     assert report["cells"][0]["source_artifact_identity_stable"] is False
+
+
+def test_issue_5574_report_marks_referenced_map_change_unstable(tmp_path: Path) -> None:
+    """Map mutation is detected even when the scenario manifest itself is unchanged."""
+    scenario_path = tmp_path / "candidates.yaml"
+    map_path = tmp_path / "map.svg"
+    shutil.copyfile(_REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg", map_path)
+    source = """scenarios:
+  - name: cell_a
+    map_file: map.svg
+    simulation_config:
+      max_episode_steps: 500
+    robot_config: {}
+    metadata:
+      archetype: head_on_corridor
+    seeds: [13]
+"""
+    scenario_path.write_text(source, encoding="utf-8")
+
+    def runner(_scenario, _seed, _horizon, _algo):
+        map_path.write_bytes(map_path.read_bytes() + b"\n<!-- concurrent edit -->\n")
+        return _successful_rollout(200)
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("cell_a",),
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=runner,
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["source_artifact_identity_stable"] is True
+    assert report["cells"][0]["source_artifact_identity_stable"] is True
+    assert report["cells"][0]["effective_input_identity_stable"] is False
+    assert report["cells"][0]["effective_input_sha256"] is None
 
 
 def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> None:

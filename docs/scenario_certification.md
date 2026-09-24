@@ -28,7 +28,9 @@ Each certificate includes:
 - `route_certificates`: per-route evidence for every applicable robot route.
 - `evidence`: optional scenario metadata and scenario-difficulty provenance. File-based
   certificates also record `source_artifact_sha256`, captured when the certifier reads the
-  manifest; the adversarial adapter requires it to match the candidate's current bytes.
+  manifest, and `effective_input_sha256` plus `effective_input_identity_stable`. The effective
+  identity covers included manifests and the selected scenario's resolved map and route-override
+  files; the adapter requires it to match current bytes when those inputs exist.
 
 Benchmark inclusion policy:
 
@@ -184,6 +186,16 @@ the route-level reasons. Labels without those checks, empty reasons, or contradi
 `admissible_feasibility_unknown`; an unsupported robot model does not establish kinodynamic
 impossibility.
 
+Before planner evaluation, the target outcome is `not_evaluated`. After an evaluation attempt, the
+search updates it to `route_completed`, `route_incomplete`, or `unavailable` and records the episode
+JSONL digest, episode/scenario/planner IDs, seed, source commit, and terminal outcome. A completed or
+incomplete outcome is recorded only when the episode matches the selected candidate and configured
+planner, its episode integrity and termination fields agree, runtime availability is native and
+clean, and the scenario's manifest/map/route input identity still matches the pre-evaluation
+snapshot. Missing or inconsistent records remain `unavailable`. This observation never changes the
+feasibility verdict by itself: target failure alone does not establish infeasibility or
+`planner_specific_failure`.
+
 Whenever a certificate, oracle, reference, target, or replay row is supplied, callers must also pass
 the expected `scenario_id`. The adapter does not infer that binding from a certificate or execution
 row; named evidence without it remains unknown.
@@ -212,9 +224,13 @@ configuration match. Incomplete records stay visible in `evidence` and do not es
 
 Artifact provenance is bound across evidence sources: the certificate `source` and oracle
 `scenario_manifest` references must resolve to bytes with the same SHA-256 as
-`scenario_artifact_path`, and each execution's `scenario_sha256` must equal that digest. A
-certificate's captured `evidence.source_artifact_sha256` must also equal that digest, so reusing a
-certificate after editing the source file at the same path leaves it unbound. A
+`scenario_artifact_path`, and each execution's `scenario_sha256` must equal that digest. When a
+scenario uses included manifests, a map file, or route overrides, certificates, oracle cells, and
+normalized execution records must also carry the matching `effective_input_sha256`; producers must
+record that the referenced bytes stayed stable while evidence was generated. The search checks the
+same input closure again after planner evaluation before recording a target outcome. A
+certificate's captured `evidence.source_artifact_sha256` must also equal the manifest digest, so
+reusing a certificate after editing the source file at the same path leaves it unbound. A
 missing or unavailable canonical artifact, an unresolvable source reference, or any mismatch
 leaves that evidence unusable for rejection or feasibility classification while preserving the
 captured input and reason code. For multi-scenario manifests, callers should pass the exact

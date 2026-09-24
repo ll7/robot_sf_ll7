@@ -57,6 +57,7 @@ from robot_sf.scenario_certification.feasibility_diagnostics import (
     SOLVABLE_ROUTE_CLASSES,
     make_actor_free_scenario,
 )
+from robot_sf.scenario_certification.input_identity import scenario_input_identity
 from robot_sf.scenario_certification.v1 import (
     GEOMETRICALLY_INFEASIBLE,
     KINODYNAMICALLY_INFEASIBLE,
@@ -450,6 +451,10 @@ def build_issue_5574_feasibility_report(  # noqa: C901
     if missing:
         raise ValueError("requested scenario ids are missing from manifest: " + ", ".join(missing))
 
+    input_identities_before = {
+        scenario_id: scenario_input_identity(source, scenario_id=scenario_id)
+        for scenario_id in requested_ids
+    }
     cells: list[dict[str, Any]] = []
     for scenario_id in requested_ids:
         scenario = by_id[scenario_id]
@@ -476,8 +481,30 @@ def build_issue_5574_feasibility_report(  # noqa: C901
     source_artifact_identity_stable = (
         source_artifact_sha256 is not None and source_artifact_sha256 == _file_sha256(source)
     )
+    input_identities_after = {
+        scenario_id: scenario_input_identity(source, scenario_id=scenario_id)
+        for scenario_id in requested_ids
+    }
     for cell in cells:
         cell["source_artifact_identity_stable"] = source_artifact_identity_stable
+        scenario_id = str(cell["scenario_id"])
+        identity_before = input_identities_before[scenario_id]
+        identity_after = input_identities_after[scenario_id]
+        effective_input_identity_stable = (
+            source_artifact_identity_stable
+            and identity_before.get("status") == "available"
+            and identity_after.get("status") == "available"
+            and identity_before.get("effective_input_sha256") is not None
+            and identity_before.get("effective_input_sha256")
+            == identity_after.get("effective_input_sha256")
+        )
+        cell["effective_input_sha256"] = (
+            identity_before.get("effective_input_sha256")
+            if effective_input_identity_stable
+            else None
+        )
+        cell["effective_input_identity_stable"] = effective_input_identity_stable
+        cell["effective_input_files"] = identity_before.get("files", [])
 
     return {
         "schema_version": ISSUE_5574_REPORT_SCHEMA,

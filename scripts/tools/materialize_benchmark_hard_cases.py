@@ -26,8 +26,11 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.event_ledger import build_event_ledger
+
 SCHEMA_VERSION = "benchmark-hard-case-slice.v1"
 SHOWCASE_SCHEMA = "benchmark-showcase.v1"
+REPLAY_CHECKOUT_SNAPSHOT_SCHEMA = "replay-checkout-snapshot.v1"
 CASE_ID_RE = re.compile(r"case-[0-9a-f]{16}\Z")
 MAX_CASES = 50
 MAX_REPLAYS = 5
@@ -961,7 +964,11 @@ def _runtime_status_marker_issue(key: str, value: Any) -> str | None:
     normalized = value.strip().lower().replace("-", "_") if isinstance(value, str) else ""
     if normalized in {"fallback", "degraded"}:
         return "fallback"
-    return "failed" if normalized in FAILED_EXECUTION_STATUSES else None
+    if normalized in {"unknown", "unavailable", "not_available", "missing", "not_run"}:
+        return "unavailable"
+    if normalized in FAILED_EXECUTION_STATUSES:
+        return "failed"
+    return None if normalized in AVAILABLE_EXECUTION_STATUSES else "unavailable"
 
 
 def _runtime_marker_issue(key: str, value: Any) -> str | None:
@@ -1040,13 +1047,48 @@ def _row_execution_evidence_status(row: dict[str, Any]) -> str:
     return "available"
 
 
+def _row_invalid_run_status(row: dict[str, Any]) -> str:
+    """Classify canonical or explicit invalid-run evidence without treating outcomes as failures."""
+    explicit_status = row.get("invalid_run")
+    if "invalid_run" in row:
+        if explicit_status is True:
+            return "invalid"
+        if explicit_status is not False:
+            return "unavailable"
+
+    stored_ledger = row.get("event_ledger")
+    if isinstance(stored_ledger, dict):
+        exact_events = stored_ledger.get("exact_events")
+        if isinstance(exact_events, dict) and "invalid_run" in exact_events:
+            stored_invalid_run = exact_events["invalid_run"]
+            if stored_invalid_run is True:
+                return "invalid"
+            if stored_invalid_run is not False:
+                return "unavailable"
+
+    try:
+        canonical_ledger = build_event_ledger(row)
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+        return "unavailable"
+    canonical_exact_events = canonical_ledger.get("exact_events")
+    if not isinstance(canonical_exact_events, dict):
+        return "unavailable"
+    return "invalid" if canonical_exact_events.get("invalid_run") is True else "available"
+
+
 def _replay_execution_evidence_status(
     case: dict[str, Any], source_row: dict[str, Any], replay_row: dict[str, Any]
-) -> tuple[str, str, str | None]:
+) -> tuple[str, str, str, str, str | None]:
     """Summarize source and replay runtime evidence before metric comparison."""
     source_status = _row_execution_evidence_status(source_row)
     replay_status = _row_execution_evidence_status(replay_row)
-    if case.get("benchmark_eligible") is not True:
+    source_invalid_run = _row_invalid_run_status(source_row)
+    replay_invalid_run = _row_invalid_run_status(replay_row)
+    if "invalid" in {source_invalid_run, replay_invalid_run}:
+        rejection = "invalid_run_not_evidence"
+    elif "unavailable" in {source_invalid_run, replay_invalid_run}:
+        rejection = "unavailable_invalid_run_evidence"
+    elif case.get("benchmark_eligible") is not True:
         rejection = "unavailable_source_row_not_benchmark_eligible"
     elif "fallback_or_degraded_not_evidence" in {source_status, replay_status}:
         rejection = "fallback_or_degraded_not_evidence"
@@ -1054,7 +1096,7 @@ def _replay_execution_evidence_status(
         rejection = "unavailable_execution_evidence"
     else:
         rejection = None
-    return source_status, replay_status, rejection
+    return source_status, replay_status, source_invalid_run, replay_invalid_run, rejection
 
 
 def _exact_match_checkout_status(
@@ -1117,11 +1159,17 @@ def _classify_replay_row(
         result["status"] = "replay_identity_mismatch"
         return result
 
-    source_execution_status, replay_execution_status, execution_rejection = (
-        _replay_execution_evidence_status(case, source_row, replay_row)
-    )
+    (
+        source_execution_status,
+        replay_execution_status,
+        source_invalid_run_status,
+        replay_invalid_run_status,
+        execution_rejection,
+    ) = _replay_execution_evidence_status(case, source_row, replay_row)
     result["execution_evidence_source"] = source_execution_status
     result["execution_evidence_replay"] = replay_execution_status
+    result["invalid_run_evidence_source"] = source_invalid_run_status
+    result["invalid_run_evidence_replay"] = replay_invalid_run_status
     if execution_rejection is not None:
         result["status"] = execution_rejection
         return result
@@ -1176,6 +1224,7 @@ def _replay_checkout_provenance() -> dict[str, Any]:
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         ).stdout.strip()
         status_output = subprocess.run(
             ["git", "status", "--porcelain", "--untracked-files=all"],
@@ -1183,6 +1232,7 @@ def _replay_checkout_provenance() -> dict[str, Any]:
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         ).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
         raise MaterializationError(f"could not identify replay source checkout: {exc}") from exc
@@ -1190,6 +1240,7 @@ def _replay_checkout_provenance() -> dict[str, Any]:
         raise MaterializationError("could not identify replay source revision")
     status_entries = [line for line in status_output.splitlines() if line]
     return {
+        "schema": REPLAY_CHECKOUT_SNAPSHOT_SCHEMA,
         "revision": revision,
         "clean": not status_entries,
         "status_sha256": hashlib.sha256(status_output.encode("utf-8")).hexdigest(),
@@ -1209,14 +1260,29 @@ def _replay_checkout_stability_status(before: Any, after: Any, replay_revision: 
     """Validate the replay's before/after checkout binding, failing closed on gaps."""
 
     def valid_snapshot(snapshot: Any) -> bool:
-        return (
-            isinstance(snapshot, dict)
-            and isinstance(snapshot.get("revision"), str)
-            and bool(snapshot["revision"].strip())
-            and isinstance(snapshot.get("clean"), bool)
-            and isinstance(snapshot.get("status_sha256"), str)
-            and re.fullmatch(r"[0-9a-f]{64}", snapshot["status_sha256"]) is not None
-        )
+        if not isinstance(snapshot, dict):
+            return False
+        revision = snapshot.get("revision")
+        clean = snapshot.get("clean")
+        entries = snapshot.get("status_entries")
+        status_sha256 = snapshot.get("status_sha256")
+        if (
+            snapshot.get("schema") != REPLAY_CHECKOUT_SNAPSHOT_SCHEMA
+            or not isinstance(revision, str)
+            or not revision.strip()
+            or not isinstance(clean, bool)
+            or not isinstance(entries, list)
+            or any(
+                not isinstance(entry, str) or not entry or "\n" in entry or "\r" in entry
+                for entry in entries
+            )
+            or not isinstance(status_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", status_sha256) is None
+            or clean is not (len(entries) == 0)
+        ):
+            return False
+        status_output = "\n".join(entries) + ("\n" if entries else "")
+        return hashlib.sha256(status_output.encode("utf-8")).hexdigest() == status_sha256
 
     if not valid_snapshot(before) or not valid_snapshot(after):
         return "unavailable"
@@ -1352,8 +1418,12 @@ def _annotate_reused_replay_classification(
     case_dir: Path,
     *,
     prior_checksum_verified: bool,
+    manifest_receipt_matches: bool,
 ) -> None:
     """Recompute a reused result from its copied row and checksum-pinned source row."""
+    replay["resume_receipt_consistency_status"] = (
+        "match" if manifest_receipt_matches else "manifest_case_replay_mismatch"
+    )
     checksum_mismatch = replay.get("episode_output_checksum_status") == "mismatch"
     episode_output = replay.get("episode_output")
     if not isinstance(episode_output, str):
@@ -1415,6 +1485,9 @@ def _annotate_reused_replay_classification(
     replay.update(classification)
     if checksum_mismatch:
         replay["status"] = "replay_artifact_checksum_mismatch"
+    elif not manifest_receipt_matches and classification.get("status") == "exact_match":
+        replay["resume_receipt_consistency_status"] = "manifest_case_replay_mismatch"
+        replay["status"] = "replay_receipt_manifest_mismatch"
     elif not prior_checksum_verified and classification.get("status") == "exact_match":
         replay["checksum_unverified_derived_status"] = "exact_match"
         replay["status"] = "replay_artifact_checksum_unverified"
@@ -1526,6 +1599,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
         if previous and previous_file and previous_file.is_file():
             previous_case = _read_object(previous_file)
             previous_replay = previous_case.get("replay")
+            manifest_receipt_matches = previous.get("replay") == previous_replay
             same_row = (
                 previous_case.get("source", {}).get("record_sha256") == source_ref["record_sha256"]
             )
@@ -1560,6 +1634,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                             and previous_replay.get("episode_output_checksum_origin")
                             == "captured_at_run"
                         ),
+                        manifest_receipt_matches=manifest_receipt_matches,
                     )
                     record["replay"] = {
                         **previous_replay,

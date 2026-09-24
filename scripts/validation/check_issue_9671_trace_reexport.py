@@ -13,6 +13,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.utils import _config_hash
+
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
 TRACE_KEYS = ("record_forces", "record_planner_decision_trace", "record_simulation_step_trace")
@@ -99,12 +101,17 @@ def _validate_bindings(
         if (
             manifest.get("git", {}).get("commit") != SOURCE_SHA
             or manifest.get("config_hash") != effective_hash[name]
+            or manifest.get("campaign_id") != manifest_paths[name].parent.name
+            or not manifest.get("scenario_matrix_hash")
             or manifest.get("scenario_matrix") != config["scenario_matrix"]
             or set(manifest.get("seed_policy", {}).get("resolved_seeds", []))
             != set(config["seed_policy"]["seeds"])
         ):
             raise ValueError(f"{name} campaign manifest identity mismatch")
         bound[name] = {
+            "campaign_id": manifest.get("campaign_id"),
+            "scenario_matrix_hash": manifest.get("scenario_matrix_hash"),
+            "tuples": sorted(selected),
             "config_path": str(path),
             "config_sha256": digest,
             "campaign_manifest_path": str(manifest_paths[name]),
@@ -116,6 +123,56 @@ def _validate_bindings(
     if tuples != required:
         raise ValueError("diagnostic configs do not declare exactly the requested tuple inventory")
     return bound
+
+
+def _validate_producer_manifest(
+    path: Path, data: bytes, rows: list[dict[str, Any]], bindings: dict[str, Any]
+) -> str:
+    """Bind each JSONL byte stream and row to its frozen runner sidecar and campaign."""
+    sidecar_path = path.with_name(path.name + ".provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    raw_artifacts = sidecar.get("raw_artifacts") or []
+    if not any(
+        artifact.get("kind") == "episodes_jsonl"
+        and artifact.get("sha256") == hashlib.sha256(data).hexdigest()
+        for artifact in raw_artifacts
+    ):
+        raise ValueError(f"{path} producer manifest does not bind JSONL bytes")
+    producer_rows = sidecar.get("rows") or []
+    if len(producer_rows) != len(rows):
+        raise ValueError(f"{path} producer manifest row count mismatch")
+    campaign = sidecar.get("campaign_identity") or {}
+    matched = []
+    for name, binding in bindings.items():
+        campaign_root = Path(binding["campaign_manifest_path"]).parent
+        if (
+            path.parent.parent == campaign_root / "runs"
+            and campaign.get("scenario_matrix_hash") == binding["scenario_matrix_hash"]
+            and all(_key(row) in binding["tuples"] for row in rows)
+        ):
+            matched.append(name)
+    if len(matched) != 1:
+        raise ValueError(f"{path} producer manifest has no unique diagnostic campaign binding")
+    name = matched[0]
+    if sidecar.get("run", {}).get("repo_commit") != SOURCE_SHA:
+        raise ValueError(f"{path} producer manifest has wrong source commit")
+    if campaign.get("algorithm") != path.parent.name.split("__", 1)[0]:
+        raise ValueError(f"{path} producer manifest planner mismatch")
+    for index, (row, producer) in enumerate(zip(rows, producer_rows, strict=True)):
+        row_hash = _config_hash(row["scenario_params"])
+        if (
+            producer.get("jsonl_line") != index
+            or producer.get("episode_id") != row.get("episode_id")
+            or producer.get("scenario_id") != row.get("scenario_id")
+            or producer.get("seed") != row.get("seed")
+            or producer.get("repo_commit") != SOURCE_SHA
+            or producer.get("config_hash") != row_hash
+            or row.get("config_hash") != row_hash
+            or (row.get("result_provenance") or {}).get("config_hash") != row_hash
+            or _key(row)[0] != campaign["algorithm"]
+        ):
+            raise ValueError(f"{path} producer manifest row {index} identity mismatch")
+    return hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
 
 
 def _vector2(value: Any) -> bool:
@@ -225,10 +282,15 @@ def check(
     )
     trace_rows: dict[tuple[str, str, int], dict[str, Any]] = {}
     digests: dict[str, str] = {}
+    producer_digests: dict[str, str] = {}
     for path in traces:
         data = path.read_bytes()
         digests[str(path)] = hashlib.sha256(data).hexdigest()
-        for row in _rows(data.splitlines()):
+        rows = _rows(data.splitlines())
+        producer_digests[str(path.with_name(path.name + ".provenance.json"))] = (
+            _validate_producer_manifest(path, data, rows, bindings)
+        )
+        for row in rows:
             key = _key(row)
             if key in trace_rows:
                 raise ValueError(f"duplicate trace tuple {key}")
@@ -264,6 +326,7 @@ def check(
         "release_archive_sha256": archive_sha256,
         "diagnostic_inputs": bindings,
         "trace_inputs_sha256": digests,
+        "producer_manifests_sha256": producer_digests,
         "comparisons": comparisons,
         "comparison_counts": counts,
     }

@@ -32,8 +32,13 @@ Each certificate includes:
   identity covers included manifests and the selected scenario's resolved map and route-override
   files, including the resolved `map_id` path and parser selected by its suffix; the adapter
   requires it to match current bytes when those inputs exist. Validation loading records each
-  manifest digest from the same byte buffer it parsed, and file-based producers bracket scenario
-  loading and evidence generation with matching input identities.
+  manifest digest from the same byte buffer it parsed. File-based certification and feasibility
+  reports reuse that parsed validation report when computing input identity, so an include that
+  changes and is restored during loading cannot be paired with a digest from a later parse. Map
+  definitions are cached by source-content digest and geometry contract, and SVG/serialized-map
+  parsers consume the same immutable bytes used for that digest. A legacy root-only identity is
+  available only when no populated include, map, map-search-path, or route-override reference is
+  declared.
 
 Benchmark inclusion policy:
 
@@ -193,11 +198,14 @@ Before planner evaluation, the target outcome is `not_evaluated`. After an evalu
 search updates it to `route_completed`, `route_incomplete`, or `unavailable` and records the episode
 JSONL digest, episode/scenario/planner IDs, seed, source commit, and terminal outcome. A completed or
 incomplete outcome is recorded only when the episode matches the selected candidate and configured
-planner, its episode integrity and termination fields agree, runtime availability is native and
-clean, and the scenario's manifest/map/route input identity still matches the pre-evaluation
-snapshot. Missing or inconsistent records remain `unavailable`. This observation never changes the
-feasibility verdict by itself: target failure alone does not establish infeasibility or
-`planner_specific_failure`.
+planner config, its episode integrity and termination fields agree, runtime availability is native
+and clean, and the scenario's manifest/map/route input identity still matches the pre-evaluation
+snapshot. The default evaluator copies the selected planner config bytes to
+`planner_config.snapshot.yaml` in the candidate bundle and runs the benchmark against that snapshot;
+the target observation compares the episode's effective config with the captured selection and
+records its source digest. Missing or inconsistent records remain `unavailable`. This observation
+never changes the feasibility verdict by itself: target failure alone does not establish
+infeasibility or `planner_specific_failure`.
 
 Whenever a certificate, oracle, reference, target, or replay row is supplied, callers must also pass
 the expected `scenario_id`. The adapter does not infer that binding from a certificate or execution

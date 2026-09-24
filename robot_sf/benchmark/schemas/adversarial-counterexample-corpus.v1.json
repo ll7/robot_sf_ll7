@@ -290,7 +290,59 @@
             }
           },
           "termination_reason": {"type": ["string", "null"], "minLength": 1},
-          "metrics": {"type": "object"}
+          "metrics": {"type": "object"},
+          "replay_receipt": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "verification_status",
+              "artifact_path",
+              "artifact_sha256",
+              "case_id",
+              "effective_scenario_sha256",
+              "scenario_id",
+              "scenario_seed",
+              "scenario_input_sha256",
+              "route_overrides_sha256",
+              "planner_id",
+              "planner_config_identity",
+              "source_revision",
+              "episode_sha256",
+              "outcome",
+              "termination_reason",
+              "metrics",
+              "selected_event_identity",
+              "execution_mode",
+              "readiness_status",
+              "availability_status",
+              "fallback_or_degraded"
+            ],
+            "properties": {
+              "schema_version": {"const": "adversarial-planner-replay-receipt.v1"},
+              "verification_status": {"const": "artifact_projection_match"},
+              "artifact_path": {"type": "string", "minLength": 1},
+              "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "case_id": {"type": "string", "minLength": 1},
+              "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "scenario_id": {"type": "string", "minLength": 1},
+              "scenario_seed": {"type": "integer"},
+              "scenario_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "route_overrides_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "planner_id": {"type": "string", "minLength": 1},
+              "planner_config_identity": {"type": "string", "minLength": 1},
+              "source_revision": {"type": "string", "minLength": 1},
+              "episode_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "outcome": {"type": "object"},
+              "termination_reason": {"type": "string", "minLength": 1},
+              "metrics": {"type": "object"},
+              "selected_event_identity": {"type": "object"},
+              "execution_mode": {"enum": ["native", "adapter", "mixed", "unknown"]},
+              "readiness_status": {"enum": ["native", "adapter", "fallback", "degraded", "unknown"]},
+              "availability_status": {"type": "string", "minLength": 1},
+              "fallback_or_degraded": {"type": "boolean"}
+            },
+            "additionalProperties": false
+          }
         },
         "allOf": [
           {

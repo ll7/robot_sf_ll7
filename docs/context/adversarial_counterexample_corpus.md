@@ -107,10 +107,49 @@ checks pass.
 An evaluation JSON object can be appended with `record-evaluation`. Complete
 observations require canonical outcome flags, a replay episode digest, metrics,
 planner/config identity, and explicit execution/readiness/availability state.
-Failed, partial, missing, and unknown observations can also be retained with an
-explicit `evidence_status` and a reason; they contribute `unknown` status rather
-than being dropped or counted as a solve. Fallback or degraded complete rows
-remain visible and also cannot count as a solve.
+They also require a `replay_receipt` that points to a one-record episode JSONL
+artifact stored under the directory containing `corpus.json`. The public
+`create_planner_replay_receipt` helper builds the receipt from that stored file;
+it checks the case and seed, planner/config identity, source revision, outcomes,
+selected metrics and exact event identities. Both append and status recomputation
+recheck the artifact checksum and projection. A changed or missing artifact makes
+the observation `unknown`; a digest alone is not accepted as episode evidence.
+The receipt also pins the case's materialized scenario and route input digests.
+
+Build the receipt after placing the one-row JSONL artifact below the corpus root:
+
+```python
+from robot_sf.adversarial.counterexample_corpus import (
+    create_planner_replay_receipt,
+    load_corpus,
+)
+
+corpus_root = "output/adversarial-corpus"
+corpus = load_corpus(f"{corpus_root}/corpus.json")
+case = next(row for row in corpus["cases"] if row["case_id"] == observation["case_id"])
+receipt = create_planner_replay_receipt(
+    observation,
+    case,
+    artifact_path="replay_artifacts/planner-run.jsonl",
+    corpus_root=corpus_root,
+)
+observation["episode_sha256"] = receipt["episode_sha256"]
+observation["replay_receipt"] = receipt
+```
+
+The receipt proves that the retained artifact agrees with the observation. It
+does not rerun the simulator or independently authenticate who produced the
+artifact. The source revision and case input identity remain explicit, and the
+case's admission receipt records its own replay-verification boundary. Native
+execution is eligible with native readiness; declared adapter and mixed
+execution are eligible with adapter readiness. Every complete evaluation must
+also be available and free of fallback or degraded markers. Failed, partial,
+missing, and unknown observations can be retained with an explicit
+`evidence_status` and a reason; they contribute `unknown` status rather than
+being dropped or counted as a solve.
+Legacy complete evaluation rows without a replay receipt remain loadable and
+visible, but recomputation reports them as `unknown`. New complete rows cannot
+be appended without a receipt.
 
 ```bash
 uv run python scripts/tools/manage_adversarial_counterexample_corpus.py record-evaluation \
@@ -138,7 +177,11 @@ The slice contains a canonical scenario matrix, copied route overrides, a
 planner configuration snapshot per case, a checksum manifest, and a replay
 command for each case. Export refuses to overwrite an existing directory and
 checks the stored scenario/route bytes against their recorded digests and
-effective scenario identity.
+effective scenario identity. Each case manifest preserves its source case ID
+and records an explicit identity mapping from the source effective-scenario
+hash to the exported hash after `route_overrides_file` is normalized to the
+slice's `routes/` path. The exporter recomputes both identities and verifies the
+exported matrix against the mapping.
 
 ```bash
 uv run python scripts/tools/manage_adversarial_counterexample_corpus.py export-slice \

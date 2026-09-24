@@ -71,7 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "record-evaluation":
             evaluation = _read_json_object(args.observation)
-            append_planner_evaluation(corpus, evaluation)
+            corpus_root = Path(args.corpus).resolve().parent
+            append_planner_evaluation(corpus, evaluation, corpus_root=corpus_root)
             save_corpus(args.corpus, corpus)
             _write_json(
                 {
@@ -86,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
                 corpus,
                 planner_id=args.planner_id,
                 planner_config_identity=args.planner_config_identity,
+                corpus_root=Path(args.corpus).resolve().parent,
             )
             _write_json(report, args.output)
             return 0

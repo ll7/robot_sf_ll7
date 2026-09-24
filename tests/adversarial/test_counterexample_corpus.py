@@ -18,6 +18,7 @@ from robot_sf.adversarial import counterexample_corpus
 from robot_sf.adversarial.counterexample_corpus import (
     CorpusError,
     append_planner_evaluation,
+    create_planner_replay_receipt,
     export_regression_slice,
     import_issue9645_packet,
     import_issue9656_candidates,
@@ -271,6 +272,87 @@ def _import(tmp_path: Path, payload: Path | None = None):
         payload or _SOURCE_PACKET, new_corpus(), corpus_root=corpus_root
     )
     return corpus, receipt, corpus_root
+
+
+def _append_episode_evaluation(
+    corpus: dict[str, object],
+    corpus_root: Path,
+    *,
+    planner_id: str,
+    config_identity: str,
+    execution_mode: str,
+    outcome: dict[str, bool] | None = None,
+    degraded: bool = False,
+) -> dict[str, object]:
+    """Append a fixture observation whose receipt is derived from its stored JSONL row."""
+    case = corpus["cases"][0]
+    record_path = _SOURCE_PACKET / "historical_issue_1501_failure_0002/replay_1.jsonl"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    selected_outcome = outcome or {
+        "collision_event": True,
+        "route_complete": False,
+        "timeout_event": False,
+    }
+    record["algo"] = planner_id
+    record["algorithm_metadata"]["algorithm"] = planner_id
+    record["algorithm_metadata"]["canonical_algorithm"] = planner_id
+    record["algorithm_metadata"]["config_hash"] = config_identity
+    record["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = execution_mode
+    record["outcome"] = selected_outcome
+    record["event_ledger"]["planner"] = planner_id
+    record["event_ledger"]["exact_events"] = {
+        "collision": selected_outcome["collision_event"],
+        "goal_reached": selected_outcome["route_complete"],
+        "timeout": selected_outcome["timeout_event"],
+        "invalid_run": False,
+    }
+    record["event_ledger"]["software_commit"] = record["git_hash"]
+    if selected_outcome["route_complete"]:
+        record["termination_reason"] = "success"
+        record["status"] = "success"
+        record["metrics"]["success"] = 1
+        record["metrics"]["collisions"] = 0
+        record["metrics"]["total_collision_count"] = 0
+        record["event_ledger"]["reconciliation"]["collision_metric_value"] = 0
+    if degraded:
+        record["integrity"]["effective_view"]["degraded"] = True
+    else:
+        record["integrity"]["effective_view"]["degraded"] = False
+
+    relative_artifact_path = f"replay_artifacts/{planner_id}-{execution_mode}.jsonl"
+    artifact_path = corpus_root / relative_artifact_path
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = json.dumps(record, sort_keys=True) + "\n"
+    artifact_path.write_text(rendered, encoding="utf-8")
+    episode_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    metrics = {
+        key: record["metrics"][key] for key in ("success", "collisions", "total_collision_count")
+    }
+    evaluation = {
+        "case_id": case["case_id"],
+        "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "planner_id": planner_id,
+        "planner_config_identity": config_identity,
+        "source_revision": record["git_hash"],
+        "episode_sha256": episode_sha256,
+        "execution_mode": execution_mode,
+        "readiness_status": "native" if execution_mode == "native" else "adapter",
+        "availability_status": "available",
+        "fallback_or_degraded": degraded,
+        "evidence_status": "complete",
+        "error": None,
+        "outcome": selected_outcome,
+        "termination_reason": record["termination_reason"],
+        "metrics": metrics,
+    }
+    evaluation["replay_receipt"] = create_planner_replay_receipt(
+        evaluation,
+        case,
+        artifact_path=relative_artifact_path,
+        corpus_root=corpus_root,
+    )
+    append_planner_evaluation(corpus, evaluation, corpus_root=corpus_root)
+    return evaluation
 
 
 def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibility(
@@ -804,17 +886,18 @@ def test_duplicate_import_is_deterministic_and_later_planner_solve_keeps_case(
     old_case = corpus["cases"][0]
     config_identity = old_case["target_planner"]["config_identity"]
     old_status = recompute_planner_status(
-        corpus, planner_id="goal", planner_config_identity=config_identity
+        corpus,
+        planner_id="goal",
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
     )
     assert old_status["status_counts"]["unsolved"] == 1
 
-    solved = copy.deepcopy(corpus["planner_evaluations"][0])
-    solved.update(
+    unsupported_claim = copy.deepcopy(corpus["planner_evaluations"][0])
+    unsupported_claim.update(
         {
             "planner_id": "goal-optimized",
             "planner_config_identity": "goal-config-v2",
-            "source_revision": "b" * 40,
-            "episode_sha256": "a" * 64,
             "outcome": {
                 "collision_event": False,
                 "route_complete": True,
@@ -829,14 +912,66 @@ def test_duplicate_import_is_deterministic_and_later_planner_solve_keeps_case(
             "error": None,
         }
     )
-    append_planner_evaluation(corpus, solved)
+    unsupported_claim.pop("replay_receipt")
+    with pytest.raises(CorpusError, match="replay_receipt_missing"):
+        append_planner_evaluation(corpus, unsupported_claim, corpus_root=corpus_root)
+    assert len(corpus["planner_evaluations"]) == 2
+
+    forged_solve = copy.deepcopy(corpus["planner_evaluations"][0])
+    forged_solve.update(
+        {
+            "planner_id": "goal-optimized",
+            "planner_config_identity": "goal-config-v2",
+            "outcome": {"collision_event": False, "route_complete": True, "timeout_event": False},
+            "termination_reason": "success",
+            "metrics": {"success": True, "collisions": 0, "total_collision_count": 0},
+        }
+    )
+    forged_receipt = forged_solve["replay_receipt"]
+    forged_receipt.update(
+        {
+            "planner_id": "goal-optimized",
+            "planner_config_identity": "goal-config-v2",
+            "outcome": forged_solve["outcome"],
+            "termination_reason": "success",
+            "metrics": forged_solve["metrics"],
+        }
+    )
+    with pytest.raises(CorpusError, match="replay_artifact_planner_id_mismatch"):
+        append_planner_evaluation(corpus, forged_solve, corpus_root=corpus_root)
+    assert len(corpus["planner_evaluations"]) == 2
+
+    solved = _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id="goal-optimized",
+        config_identity="goal-config-v2",
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
     optimized_status = recompute_planner_status(
-        corpus, planner_id="goal-optimized", planner_config_identity="goal-config-v2"
+        corpus,
+        planner_id="goal-optimized",
+        planner_config_identity="goal-config-v2",
+        corpus_root=corpus_root,
     )
     assert optimized_status["status_counts"]["solved"] == 1
     assert len(corpus["cases"]) == 1
     assert len(corpus["planner_evaluations"]) == 3
     assert sum(row["planner_id"] == "goal" for row in corpus["planner_evaluations"]) == 2
+
+    artifact_path = corpus_root / solved["replay_receipt"]["artifact_path"]
+    artifact_path.write_text(artifact_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    after_tamper = recompute_planner_status(
+        corpus,
+        planner_id="goal-optimized",
+        planner_config_identity="goal-config-v2",
+        corpus_root=corpus_root,
+    )
+    assert after_tamper["status_counts"]["unknown"] == 1
+    assert "replay_artifact_checksum_mismatch" in after_tamper["cases"][0]["reason_codes"]
+    assert len(corpus["cases"]) == 1
+    assert len(corpus["planner_evaluations"]) == 3
 
 
 def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Path) -> None:
@@ -865,13 +1000,91 @@ def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Pa
         corpus,
         planner_id="candidate-planner",
         planner_config_identity="config-under-test",
+        corpus_root=_corpus_root,
     )
     assert status["status_counts"]["unknown"] == 1
     assert status["cases"][0]["unknown_observation_count"] == 1
     assert status["cases"][0]["reason_codes"] == ["evaluation_evidence_failed"]
     assert len(corpus["planner_evaluations"]) == 3
-    assert corpus["planner_evaluations"][-1]["episode_sha256"] is None
+    incomplete_row = next(
+        row for row in corpus["planner_evaluations"] if row["planner_id"] == "candidate-planner"
+    )
+    assert incomplete_row["episode_sha256"] is None
     validate_corpus(corpus)
+
+
+def test_legacy_complete_evaluation_without_receipt_is_retained_as_unknown(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id="legacy-planner",
+        config_identity="legacy-config",
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
+    legacy = copy.deepcopy(corpus)
+    legacy_row = next(
+        row for row in legacy["planner_evaluations"] if row["planner_id"] == "legacy-planner"
+    )
+    legacy_row.pop("replay_receipt")
+
+    validate_corpus(legacy)
+    status = recompute_planner_status(
+        legacy,
+        planner_id="legacy-planner",
+        planner_config_identity="legacy-config",
+        corpus_root=corpus_root,
+    )
+    assert status["status_counts"]["unknown"] == 1
+    assert status["cases"][0]["reason_codes"] == ["replay_receipt_missing"]
+    assert len(legacy["cases"]) == len(corpus["cases"]) == 1
+    assert len(legacy["planner_evaluations"]) == len(corpus["planner_evaluations"]) == 3
+
+
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_benchmark_capable_adapter_modes_count_and_fallback_stays_unknown(
+    tmp_path: Path, execution_mode: str
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    planner_id = f"{execution_mode}-planner"
+    config_identity = f"{execution_mode}-config"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=planner_id,
+        config_identity=config_identity,
+        execution_mode=execution_mode,
+    )
+
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+    assert status["status_counts"]["unsolved"] == 1
+    assert status["cases"][0]["valid_observation_count"] == 1
+
+    fallback_planner = f"{execution_mode}-fallback-planner"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=fallback_planner,
+        config_identity=f"{execution_mode}-fallback-config",
+        execution_mode=execution_mode,
+        degraded=True,
+    )
+    fallback_status = recompute_planner_status(
+        corpus,
+        planner_id=fallback_planner,
+        planner_config_identity=f"{execution_mode}-fallback-config",
+        corpus_root=corpus_root,
+    )
+    assert fallback_status["status_counts"]["unknown"] == 1
+    assert "fallback_or_degraded_execution" in fallback_status["cases"][0]["reason_codes"]
 
 
 def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
@@ -895,6 +1108,34 @@ def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
     slice_root = tmp_path / "slice-a"
     assert case["planner_config_path"] == (f"planner_configs/{case['case_id']}.yaml")
     assert case["case_id"] == f"case-{case['effective_scenario_sha256']}"
+    identity_mapping = case["identity_mapping"]
+    assert identity_mapping["schema_version"] == "adversarial-slice-identity-mapping.v1"
+    assert identity_mapping["verification_status"] == "source_and_export_hashes_verified"
+    assert identity_mapping["normalization_fields"] == ["route_overrides_file"]
+    assert identity_mapping["source_effective_scenario_sha256"] == case["effective_scenario_sha256"]
+    assert (
+        identity_mapping["source_route_overrides_file"]
+        != identity_mapping["exported_route_overrides_file"]
+    )
+    matrix = yaml.safe_load((slice_root / "replay_matrix.yaml").read_text(encoding="utf-8"))
+    exported_scenario = matrix["scenarios"][0]
+    exported_route = yaml.safe_load(
+        (slice_root / identity_mapping["exported_route_overrides_file"]).read_text(encoding="utf-8")
+    )
+    assert (
+        counterexample_corpus.compute_effective_scenario_hash(exported_scenario, exported_route)
+        == identity_mapping["exported_effective_scenario_sha256"]
+    )
+    source_scenario_path = corpus_root / corpus["cases"][0]["inputs"]["scenario_path"]
+    source_route_path = corpus_root / corpus["cases"][0]["inputs"]["route_overrides_path"]
+    source_scenario = yaml.safe_load(source_scenario_path.read_text(encoding="utf-8"))["scenarios"][
+        0
+    ]
+    source_route = yaml.safe_load(source_route_path.read_text(encoding="utf-8"))
+    assert (
+        counterexample_corpus.compute_effective_scenario_hash(source_scenario, source_route)
+        == identity_mapping["source_effective_scenario_sha256"]
+    )
     assert (
         hashlib.sha256((slice_root / case["planner_config_path"]).read_bytes()).hexdigest()
         == (case["planner_config_sha256"])
@@ -910,7 +1151,7 @@ def test_append_evaluation_rejects_case_hash_mismatch(tmp_path: Path) -> None:
     corpus, _receipt, _corpus_root = _import(tmp_path)
     wrong = copy.deepcopy(corpus["planner_evaluations"][0])
     wrong["effective_scenario_sha256"] = "0" * 64
-    with pytest.raises(CorpusError, match="input hash does not match"):
+    with pytest.raises(CorpusError, match="replay_receipt_effective_scenario_sha256_mismatch"):
         append_planner_evaluation(corpus, wrong)
 
 

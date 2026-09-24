@@ -27,6 +27,7 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.adversarial.bundle import compute_effective_scenario_hash
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.termination_reason import outcome_contradictions
 from robot_sf.cli_scenarios import validate_scenario_payload
 
@@ -34,6 +35,7 @@ CORPUS_SCHEMA_VERSION = "adversarial-counterexample-corpus.v1"
 CASE_SCHEMA_VERSION = "adversarial-counterexample.v1"
 ATTEMPT_SCHEMA_VERSION = "adversarial-counterexample-admission-attempt.v1"
 EVALUATION_SCHEMA_VERSION = "adversarial-counterexample-planner-evaluation.v1"
+EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION = "adversarial-planner-replay-receipt.v1"
 SLICE_SCHEMA_VERSION = "adversarial-counterexample-slice.v1"
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v1"
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
@@ -281,10 +283,17 @@ def import_issue9645_packet(
         _merge_source_evidence(existing, case["source_evidence"])
         stored_case_id = existing["case_id"]
 
-    for observation in observations:
+    stored_case = existing if existing is not None else case
+    for index, observation in enumerate(observations, start=1):
         observation["case_id"] = stored_case_id
         observation["effective_scenario_sha256"] = case["effective_scenario_sha256"]
-        corpus = append_planner_evaluation(corpus, observation)
+        observation["replay_receipt"] = create_planner_replay_receipt(
+            observation,
+            stored_case,
+            artifact_path=(f"cases/{stored_case_id}/source_evidence/replay_{index}.jsonl"),
+            corpus_root=root,
+        )
+        corpus = append_planner_evaluation(corpus, observation, corpus_root=root)
 
     corpus, receipt = _record_attempt(
         corpus,
@@ -1328,12 +1337,66 @@ def _promote_issue9656_candidate_artifacts(
         raise
 
 
+def create_planner_replay_receipt(
+    observation: Mapping[str, Any],
+    case: Mapping[str, Any],
+    *,
+    artifact_path: str,
+    corpus_root: str | Path,
+) -> dict[str, Any]:
+    """Build a receipt only when one stored episode artifact matches the observation."""
+    item = dict(observation)
+    root = Path(corpus_root).resolve()
+    artifact = _resolve_corpus_artifact(artifact_path, root)
+    episode_sha256 = _sha256_file(artifact)
+    if item.get("episode_sha256") is None:
+        item["episode_sha256"] = episode_sha256
+    record = _read_single_jsonl_record(artifact)
+    inputs = case.get("inputs")
+    inputs = inputs if isinstance(inputs, dict) else {}
+    receipt = {
+        "schema_version": EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION,
+        "verification_status": "artifact_projection_match",
+        "artifact_path": PurePosixPath(artifact_path).as_posix(),
+        "artifact_sha256": episode_sha256,
+        "case_id": item.get("case_id"),
+        "effective_scenario_sha256": item.get("effective_scenario_sha256"),
+        "scenario_id": case.get("scenario_id"),
+        "scenario_seed": case.get("scenario_seed"),
+        "scenario_input_sha256": inputs.get("scenario_sha256"),
+        "route_overrides_sha256": inputs.get("route_overrides_sha256"),
+        "planner_id": item.get("planner_id"),
+        "planner_config_identity": item.get("planner_config_identity"),
+        "source_revision": item.get("source_revision"),
+        "episode_sha256": episode_sha256,
+        "outcome": item.get("outcome"),
+        "termination_reason": item.get("termination_reason"),
+        "metrics": item.get("metrics"),
+        "selected_event_identity": _selected_event_identity(record),
+        "execution_mode": item.get("execution_mode"),
+        "readiness_status": item.get("readiness_status"),
+        "availability_status": item.get("availability_status"),
+        "fallback_or_degraded": item.get("fallback_or_degraded"),
+    }
+    errors = _validate_replay_artifact(item, case, receipt, root)
+    if errors:
+        raise CorpusError("replay receipt rejected: " + "; ".join(errors))
+    return receipt
+
+
 def append_planner_evaluation(
-    corpus: dict[str, Any], observation: Mapping[str, Any]
+    corpus: dict[str, Any],
+    observation: Mapping[str, Any],
+    *,
+    corpus_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Append a planner result only when its case, planner, and input binding are explicit."""
     validate_corpus(corpus)
     item = dict(observation)
+    if item.get("evidence_status") == "complete" and not isinstance(
+        item.get("replay_receipt"), dict
+    ):
+        raise CorpusError("planner evaluation rejected: replay_receipt_missing")
     errors = _validate_evaluation(item)
     if errors:
         raise CorpusError("planner evaluation rejected: " + "; ".join(errors))
@@ -1342,8 +1405,18 @@ def append_planner_evaluation(
         raise CorpusError(f"unknown case_id: {item['case_id']}")
     if item["effective_scenario_sha256"] != case["effective_scenario_sha256"]:
         raise CorpusError("planner evaluation input hash does not match the corpus case")
+    if item.get("evidence_status") == "complete":
+        if corpus_root is None:
+            raise CorpusError("complete planner evaluations require a replay artifact corpus_root")
+        replay_errors = _validate_replay_artifact(
+            item, case, item["replay_receipt"], Path(corpus_root).resolve()
+        )
+        if replay_errors:
+            raise CorpusError(
+                "planner evaluation replay evidence rejected: " + "; ".join(replay_errors)
+            )
     identity = {
-        key: item[key]
+        key: item.get(key)
         for key in (
             "case_id",
             "effective_scenario_sha256",
@@ -1360,6 +1433,7 @@ def append_planner_evaluation(
             "fallback_or_degraded",
             "evidence_status",
             "error",
+            "replay_receipt",
         )
     }
     item["schema_version"] = EVALUATION_SCHEMA_VERSION
@@ -1372,7 +1446,11 @@ def append_planner_evaluation(
 
 
 def recompute_planner_status(
-    corpus: Mapping[str, Any], *, planner_id: str, planner_config_identity: str
+    corpus: Mapping[str, Any],
+    *,
+    planner_id: str,
+    planner_config_identity: str,
+    corpus_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Derive solved/unsolved/mixed/unknown status for every case and planner config."""
     validate_corpus(corpus)
@@ -1387,7 +1465,14 @@ def recompute_planner_status(
             and item["planner_id"] == planner_id
             and item["planner_config_identity"] == planner_config_identity
         ]
-        states = [_evaluation_state(row) for row in rows]
+        states = [
+            _evaluation_state(
+                row,
+                case=case,
+                corpus_root=Path(corpus_root).resolve() if corpus_root is not None else None,
+            )
+            for row in rows
+        ]
         valid_states = [state for state in states if state["status"] in {"solved", "unsolved"}]
         invalid_rows = [state for state in states if state["status"] == "unknown"]
         distinct = {state["status"] for state in valid_states}
@@ -1460,11 +1545,13 @@ def export_regression_slice(
                 or not isinstance(scenarios[0], dict)
             ):
                 raise CorpusError(f"{case['case_id']}: scenario input must contain one scenario")
-            scenario = dict(scenarios[0])
+            source_scenario = dict(scenarios[0])
+            route_payload = _load_yaml_object(route_path, "route overrides")
             route_relative = f"routes/{case['case_id']}.yaml"
             config_relative = f"planner_configs/{case['case_id']}.yaml"
-            scenario["route_overrides_file"] = route_relative
-            scenario["seeds"] = [int(case["scenario_seed"])]
+            scenario, identity_mapping = _map_slice_scenario_identity(
+                case, source_scenario, route_payload, route_relative
+            )
             matrix_entries.append(scenario)
             route_output = staging / route_relative
             shutil.copyfile(route_path, route_output)
@@ -1491,6 +1578,7 @@ def export_regression_slice(
                     "scenario_id": case["scenario_id"],
                     "seed": case["scenario_seed"],
                     "effective_scenario_sha256": case["effective_scenario_sha256"],
+                    "identity_mapping": identity_mapping,
                     "planner": case["target_planner"],
                     "scenario_source_sha256": _sha256_file(scenario_path),
                     "route_overrides_sha256": _sha256_file(route_output),
@@ -1505,6 +1593,21 @@ def export_regression_slice(
             yaml.safe_dump({"scenarios": matrix_entries}, sort_keys=True, allow_unicode=True),
             encoding="utf-8",
         )
+        exported_matrix = _load_yaml_object(matrix_path, "exported replay matrix")
+        exported_rows = exported_matrix.get("scenarios")
+        if not isinstance(exported_rows, list) or len(exported_rows) != len(manifest_cases):
+            raise CorpusError("exported replay matrix does not preserve the case rows")
+        for scenario, manifest_case in zip(exported_rows, manifest_cases, strict=True):
+            route_ref = scenario.get("route_overrides_file")
+            route_doc = _load_yaml_object(staging / str(route_ref), "exported route overrides")
+            actual_hash = compute_effective_scenario_hash(scenario, route_doc)
+            if (
+                actual_hash
+                != manifest_case["identity_mapping"]["exported_effective_scenario_sha256"]
+            ):
+                raise CorpusError(
+                    f"{manifest_case['case_id']}: exported scenario identity mapping is invalid"
+                )
         manifest = {
             "schema_version": SLICE_SCHEMA_VERSION,
             "source_corpus_schema_version": corpus["schema_version"],
@@ -1526,6 +1629,32 @@ def export_regression_slice(
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def _map_slice_scenario_identity(
+    case: Mapping[str, Any],
+    source_scenario: Mapping[str, Any],
+    route_payload: Mapping[str, Any],
+    route_relative: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    source_hash = compute_effective_scenario_hash(source_scenario, route_payload)
+    if source_hash != case["effective_scenario_sha256"]:
+        raise CorpusError(f"{case['case_id']}: source scenario identity changed")
+    scenario = dict(source_scenario)
+    source_route = scenario.get("route_overrides_file")
+    scenario["route_overrides_file"] = route_relative
+    scenario["seeds"] = [int(case["scenario_seed"])]
+    exported_hash = compute_effective_scenario_hash(scenario, route_payload)
+    mapping = {
+        "schema_version": "adversarial-slice-identity-mapping.v1",
+        "verification_status": "source_and_export_hashes_verified",
+        "normalization_fields": ["route_overrides_file"],
+        "source_effective_scenario_sha256": source_hash,
+        "exported_effective_scenario_sha256": exported_hash,
+        "source_route_overrides_file": source_route,
+        "exported_route_overrides_file": route_relative,
+    }
+    return scenario, mapping
 
 
 def _verify_issue9645_pilot(payload: Path) -> dict[str, Any]:
@@ -2799,6 +2928,311 @@ def _validate_evaluation_identity(item: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+def _validate_replay_artifact(
+    item: Mapping[str, Any],
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    corpus_root: Path,
+) -> list[str]:
+    """Verify a stored one-episode artifact against its receipt, case, and evaluation."""
+    errors = _evaluation_receipt_binding_errors(item, case, receipt)
+    try:
+        _scenario_input_paths(case, corpus_root)
+    except (CorpusError, OSError, ValueError, TypeError) as exc:
+        errors.append(f"case_input_binding_invalid:{exc}")
+    try:
+        artifact = _resolve_corpus_artifact(receipt.get("artifact_path"), corpus_root)
+    except CorpusError as exc:
+        errors.append(f"replay_artifact_path_invalid:{exc}")
+        return errors
+    artifact_sha256 = _sha256_file(artifact) if artifact.is_file() else None
+    if artifact_sha256 is None:
+        errors.append("replay_artifact_missing")
+        return errors
+    if artifact_sha256 != receipt.get("artifact_sha256"):
+        errors.append("replay_artifact_checksum_mismatch")
+        return errors
+    if artifact_sha256 != item.get("episode_sha256"):
+        errors.append("episode_sha256_does_not_match_replay_artifact")
+        return errors
+    try:
+        record = _read_single_jsonl_record(artifact)
+        event_identity = _selected_event_identity(record)
+    except CorpusError as exc:
+        errors.append(f"replay_artifact_invalid:{exc}")
+        return errors
+    errors.extend(_validate_replay_record_projection(item, case, receipt, record, event_identity))
+    errors.extend(_validate_replay_execution_evidence(item, record))
+    return errors
+
+
+def _validate_replay_record_projection(
+    item: Mapping[str, Any],
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    record: Mapping[str, Any],
+    event_identity: Mapping[str, Any],
+) -> list[str]:
+    errors = []
+    if record.get("scenario_id") != case.get("scenario_id"):
+        errors.append("replay_artifact_scenario_id_mismatch")
+    if isinstance(record.get("seed"), bool) or record.get("seed") != case.get("scenario_seed"):
+        errors.append("replay_artifact_scenario_seed_mismatch")
+    metadata = record.get("algorithm_metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    if record.get("algo") != item.get("planner_id"):
+        errors.append("replay_artifact_planner_id_mismatch")
+    if metadata.get("config_hash") != item.get("planner_config_identity"):
+        errors.append("replay_artifact_planner_config_mismatch")
+    if record.get("git_hash") != item.get("source_revision"):
+        errors.append("replay_artifact_source_revision_mismatch")
+
+    artifact_outcome = record.get("outcome")
+    if not isinstance(artifact_outcome, dict) or any(
+        artifact_outcome.get(key) != item.get("outcome", {}).get(key)
+        for key in ("collision_event", "route_complete", "timeout_event")
+    ):
+        errors.append("replay_artifact_outcome_mismatch")
+    if record.get("termination_reason") != item.get("termination_reason"):
+        errors.append("replay_artifact_termination_reason_mismatch")
+    artifact_metrics = record.get("metrics")
+    if not isinstance(artifact_metrics, dict) or any(
+        artifact_metrics.get(key) != value for key, value in item.get("metrics", {}).items()
+    ):
+        errors.append("replay_artifact_selected_metrics_mismatch")
+    errors.extend(_validate_replay_event_projection(item, case, receipt, event_identity))
+    return errors
+
+
+def _validate_replay_event_projection(
+    item: Mapping[str, Any],
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    event_identity: Mapping[str, Any],
+) -> list[str]:
+    errors = []
+    if event_identity != receipt.get("selected_event_identity"):
+        errors.append("replay_artifact_event_identity_mismatch")
+    expected_event_outcome = {
+        "collision": item.get("outcome", {}).get("collision_event"),
+        "goal_reached": item.get("outcome", {}).get("route_complete"),
+        "timeout": item.get("outcome", {}).get("timeout_event"),
+    }
+    if event_identity.get("exact_events") != expected_event_outcome:
+        errors.append("replay_artifact_event_outcome_mismatch")
+    if event_identity.get("scenario_id") != case.get("scenario_id") or event_identity.get(
+        "seed"
+    ) != case.get("scenario_seed"):
+        errors.append("replay_artifact_event_case_identity_mismatch")
+    if event_identity.get("planner_id") != item.get("planner_id") or event_identity.get(
+        "source_revision"
+    ) != item.get("source_revision"):
+        errors.append("replay_artifact_event_planner_identity_mismatch")
+    return errors
+
+
+def _validate_replay_execution_evidence(
+    item: Mapping[str, Any], record: Mapping[str, Any]
+) -> list[str]:
+    errors = []
+    metadata = record.get("algorithm_metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    kinematics = metadata.get("planner_kinematics")
+    kinematics = kinematics if isinstance(kinematics, dict) else {}
+    actual_mode = kinematics.get("execution_mode")
+    if actual_mode != item.get("execution_mode"):
+        errors.append("replay_artifact_execution_mode_mismatch")
+    expected_readiness = {
+        "native": "native",
+        "adapter": "adapter",
+        "mixed": "adapter",
+    }.get(actual_mode)
+    if expected_readiness is None:
+        errors.append("replay_artifact_execution_mode_unsupported")
+    else:
+        recorded_readiness = record.get("readiness_status") or metadata.get(
+            "readiness_status", metadata.get("benchmark_readiness_status")
+        )
+        if recorded_readiness is not None and recorded_readiness != expected_readiness:
+            errors.append("replay_artifact_readiness_mode_mismatch")
+        if item.get("readiness_status") != expected_readiness:
+            errors.append("replay_artifact_readiness_not_benchmark_capable")
+
+    benchmark_availability = record.get("benchmark_availability")
+    benchmark_availability = (
+        benchmark_availability if isinstance(benchmark_availability, dict) else {}
+    )
+    recorded_availability = (
+        record.get("availability_status")
+        or benchmark_availability.get("availability_status")
+        or metadata.get("availability_status")
+    )
+    if recorded_availability is not None and recorded_availability != "available":
+        errors.append("replay_artifact_availability_not_available")
+    elif metadata.get("status") not in {"ok", "available"}:
+        errors.append("replay_artifact_planner_status_not_available")
+    if item.get("availability_status") != "available":
+        errors.append("replay_artifact_evaluation_availability_not_available")
+
+    actual_fallback_or_degraded = _replay_fallback_marker(record, metadata)
+    if actual_fallback_or_degraded is None:
+        errors.append("replay_artifact_fallback_status_missing")
+    elif item.get("fallback_or_degraded") is not actual_fallback_or_degraded:
+        errors.append("replay_artifact_fallback_status_mismatch")
+    return errors
+
+
+def _replay_fallback_marker(record: Mapping[str, Any], metadata: Mapping[str, Any]) -> bool | None:
+    integrity = record.get("integrity")
+    integrity = integrity if isinstance(integrity, dict) else {}
+    effective_view = integrity.get("effective_view", {})
+    effective_view = effective_view if isinstance(effective_view, dict) else {}
+    runtime_metadata = {
+        key: value
+        for key, value in {
+            "status": metadata.get("status"),
+            "readiness_status": metadata.get("readiness_status"),
+            "availability_status": metadata.get("availability_status"),
+            "fallback_or_degraded": metadata.get("fallback_or_degraded"),
+            "planner_runtime": metadata.get("planner_runtime"),
+        }.items()
+        if value is not None
+    }
+    execution_fields = {
+        "algorithm_metadata": runtime_metadata,
+        "integrity": {"effective_view": effective_view},
+    }
+    for key in (
+        "benchmark_availability",
+        "readiness_status",
+        "availability_status",
+        "fallback_or_degraded",
+    ):
+        if record.get(key) is not None:
+            execution_fields[key] = record[key]
+    if runtime_fallback_or_degraded_marker(execution_fields) is not None:
+        return True
+    explicit_marker = record.get("fallback_or_degraded", metadata.get("fallback_or_degraded"))
+    degraded = effective_view.get("degraded")
+    if isinstance(degraded, bool):
+        return degraded
+    if isinstance(explicit_marker, bool):
+        return explicit_marker
+    return None
+
+
+def _evaluation_receipt_binding_errors(
+    item: Mapping[str, Any], case: Mapping[str, Any], receipt: Mapping[str, Any]
+) -> list[str]:
+    if not isinstance(receipt, Mapping):
+        return ["replay_receipt_missing"]
+    errors = []
+    if receipt.get("schema_version") != EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION:
+        errors.append("replay_receipt_schema_invalid")
+    if receipt.get("verification_status") != "artifact_projection_match":
+        errors.append("replay_receipt_verification_status_invalid")
+    errors.extend(_validate_replay_receipt_bindings(item, case, receipt))
+    errors.extend(_validate_replay_receipt_artifact_fields(item, receipt))
+    errors.extend(_validate_replay_receipt_case_fields(receipt))
+    return errors
+
+
+def _validate_replay_receipt_bindings(
+    item: Mapping[str, Any], case: Mapping[str, Any], receipt: Mapping[str, Any]
+) -> list[str]:
+    inputs = case.get("inputs")
+    inputs = inputs if isinstance(inputs, dict) else {}
+    expected = {
+        "case_id": item.get("case_id"),
+        "effective_scenario_sha256": item.get("effective_scenario_sha256"),
+        "scenario_id": case.get("scenario_id"),
+        "scenario_seed": case.get("scenario_seed"),
+        "scenario_input_sha256": inputs.get("scenario_sha256"),
+        "route_overrides_sha256": inputs.get("route_overrides_sha256"),
+        "planner_id": item.get("planner_id"),
+        "planner_config_identity": item.get("planner_config_identity"),
+        "source_revision": item.get("source_revision"),
+        "episode_sha256": item.get("episode_sha256"),
+        "outcome": item.get("outcome"),
+        "termination_reason": item.get("termination_reason"),
+        "metrics": item.get("metrics"),
+        "execution_mode": item.get("execution_mode"),
+        "readiness_status": item.get("readiness_status"),
+        "availability_status": item.get("availability_status"),
+        "fallback_or_degraded": item.get("fallback_or_degraded"),
+    }
+    errors = []
+    for field, value in expected.items():
+        if receipt.get(field) != value:
+            errors.append(f"replay_receipt_{field}_mismatch")
+    return errors
+
+
+def _validate_replay_receipt_artifact_fields(
+    item: Mapping[str, Any], receipt: Mapping[str, Any]
+) -> list[str]:
+    errors = []
+    if not _is_sha256(receipt.get("artifact_sha256")):
+        errors.append("replay_receipt_artifact_sha256_invalid")
+    if receipt.get("artifact_sha256") != item.get("episode_sha256"):
+        errors.append("replay_receipt_episode_sha256_mismatch")
+    for field in ("scenario_input_sha256", "route_overrides_sha256"):
+        if not _is_sha256(receipt.get(field)):
+            errors.append(f"replay_receipt_{field}_invalid")
+    if not isinstance(receipt.get("artifact_path"), str) or not receipt["artifact_path"]:
+        errors.append("replay_receipt_artifact_path_missing")
+    return errors
+
+
+def _validate_replay_receipt_case_fields(receipt: Mapping[str, Any]) -> list[str]:
+    errors = []
+    if not isinstance(receipt.get("selected_event_identity"), dict):
+        errors.append("replay_receipt_selected_event_identity_missing")
+    if not isinstance(receipt.get("scenario_id"), str) or not receipt["scenario_id"].strip():
+        errors.append("replay_receipt_scenario_id_missing")
+    if not isinstance(receipt.get("scenario_seed"), int) or isinstance(
+        receipt.get("scenario_seed"), bool
+    ):
+        errors.append("replay_receipt_scenario_seed_invalid")
+    return errors
+
+
+def _selected_event_identity(record: Mapping[str, Any]) -> dict[str, Any]:
+    ledger = record.get("event_ledger")
+    if not isinstance(ledger, dict):
+        raise CorpusError("replay episode event ledger is missing")
+    exact_events = ledger.get("exact_events")
+    event_fields = ("collision", "goal_reached", "timeout")
+    if not isinstance(exact_events, dict) or any(
+        not isinstance(exact_events.get(key), bool) for key in event_fields
+    ):
+        raise CorpusError("replay episode exact event identities are incomplete")
+    return {
+        "schema_version": ledger.get("schema_version"),
+        "scenario_id": ledger.get("scenario_id"),
+        "seed": ledger.get("seed"),
+        "planner_id": ledger.get("planner"),
+        "source_revision": ledger.get("software_commit"),
+        "exact_events": {key: exact_events[key] for key in event_fields},
+    }
+
+
+def _resolve_corpus_artifact(path_value: Any, corpus_root: Path) -> Path:
+    if not isinstance(path_value, str) or not path_value.strip():
+        raise CorpusError("replay artifact path must be a non-empty relative path")
+    relative = PurePosixPath(path_value)
+    if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+        raise CorpusError(f"unsafe replay artifact path: {path_value}")
+    path = (corpus_root / Path(*relative.parts)).resolve()
+    try:
+        path.relative_to(corpus_root.resolve())
+    except ValueError as exc:
+        raise CorpusError(f"replay artifact path escapes corpus root: {path_value}") from exc
+    if not path.is_file():
+        raise CorpusError(f"replay artifact is missing: {path_value}")
+    return path
+
+
 def _validate_evaluation_execution_metadata(item: Mapping[str, Any]) -> list[str]:
     errors = []
     evidence_status = item.get("evidence_status")
@@ -2835,6 +3269,22 @@ def _validate_complete_evaluation(item: Mapping[str, Any]) -> list[str]:
         for field in ("collision_event", "route_complete", "timeout_event")
     ):
         errors.append("canonical_outcome_flags_missing")
+    receipt = item.get("replay_receipt")
+    if isinstance(receipt, dict):
+        errors.extend(
+            _evaluation_receipt_binding_errors(
+                item,
+                {
+                    "scenario_id": receipt.get("scenario_id"),
+                    "scenario_seed": receipt.get("scenario_seed"),
+                    "inputs": {
+                        "scenario_sha256": receipt.get("scenario_input_sha256"),
+                        "route_overrides_sha256": receipt.get("route_overrides_sha256"),
+                    },
+                },
+                receipt,
+            )
+        )
     return errors
 
 
@@ -2860,7 +3310,12 @@ def _validate_incomplete_evaluation(item: Mapping[str, Any]) -> list[str]:
     return errors
 
 
-def _evaluation_state(item: Mapping[str, Any]) -> dict[str, Any]:
+def _evaluation_state(
+    item: Mapping[str, Any],
+    *,
+    case: Mapping[str, Any],
+    corpus_root: Path | None,
+) -> dict[str, Any]:
     reasons = _validate_evaluation(item)
     if reasons:
         return {"status": "unknown", "reason_codes": reasons}
@@ -2869,6 +3324,13 @@ def _evaluation_state(item: Mapping[str, Any]) -> dict[str, Any]:
             "status": "unknown",
             "reason_codes": [f"evaluation_evidence_{item['evidence_status']}"],
         }
+    if not isinstance(item.get("replay_receipt"), Mapping):
+        return {"status": "unknown", "reason_codes": ["replay_receipt_missing"]}
+    if corpus_root is None:
+        return {"status": "unknown", "reason_codes": ["replay_artifact_root_required"]}
+    replay_errors = _validate_replay_artifact(item, case, item.get("replay_receipt"), corpus_root)
+    if replay_errors:
+        return {"status": "unknown", "reason_codes": sorted(set(replay_errors))}
     reasons = _complete_evaluation_eligibility_errors(item)
     if reasons:
         return {"status": "unknown", "reason_codes": sorted(set(reasons))}
@@ -2877,10 +3339,15 @@ def _evaluation_state(item: Mapping[str, Any]) -> dict[str, Any]:
 
 def _complete_evaluation_eligibility_errors(item: Mapping[str, Any]) -> list[str]:
     reasons = []
-    if item["execution_mode"] != "native":
-        reasons.append("execution_mode_not_native")
-    if item["readiness_status"] != "native":
-        reasons.append("readiness_not_native")
+    expected_readiness = {
+        "native": "native",
+        "adapter": "adapter",
+        "mixed": "adapter",
+    }.get(item["execution_mode"])
+    if expected_readiness is None:
+        reasons.append("execution_mode_not_benchmark_capable")
+    elif item["readiness_status"] != expected_readiness:
+        reasons.append("readiness_not_benchmark_capable")
     if item["availability_status"] != "available":
         reasons.append("availability_not_available")
     if item["fallback_or_degraded"] is not False:

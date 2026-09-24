@@ -305,12 +305,22 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         return None, _accounting_row(index, candidate_payload, "episode_record_missing")
     if scenario_path is None or not scenario_path.is_file():
         return None, _accounting_row(index, candidate_payload, "scenario_input_missing")
-    source_record = _read_single_episode(episode_path)
+    try:
+        source_episode_bytes = episode_path.read_bytes()
+    except OSError:
+        return None, _accounting_row(index, candidate_payload, "episode_record_unreadable")
+    source_episode_sha256 = hashlib.sha256(source_episode_bytes).hexdigest()
+    source_record = _read_single_episode_bytes(source_episode_bytes)
     if source_record is None:
         return None, _accounting_row(
             index, candidate_payload, "episode_record_invalid_or_ambiguous"
         )
-    scenario_identity, scenario_error = _scenario_identity(scenario_path)
+    try:
+        scenario_bytes = scenario_path.read_bytes()
+    except OSError:
+        return None, _accounting_row(index, candidate_payload, "scenario_input_unreadable")
+    scenario_sha256 = hashlib.sha256(scenario_bytes).hexdigest()
+    scenario_identity, scenario_error = _scenario_identity_bytes(scenario_bytes)
     if scenario_error is not None or scenario_identity is None:
         return None, _accounting_row(
             index, candidate_payload, scenario_error or "scenario_identity_unavailable"
@@ -318,6 +328,19 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
     effective_hash, hash_error = _source_effective_scenario_hash(
         scenario_path, scenario_identity, source_root=source_root, root=root
     )
+    try:
+        scenario_unchanged = _sha256_file(scenario_path) == scenario_sha256
+    except OSError:
+        scenario_unchanged = False
+    if not scenario_unchanged:
+        return None, _accounting_row(index, candidate_payload, "scenario_changed_during_selection")
+    try:
+        if hashlib.sha256(episode_path.read_bytes()).hexdigest() != source_episode_sha256:
+            return None, _accounting_row(
+                index, candidate_payload, "episode_record_changed_during_selection"
+            )
+    except OSError:
+        return None, _accounting_row(index, candidate_payload, "episode_record_unreadable")
     if hash_error is not None:
         return None, _accounting_row(index, candidate_payload, hash_error)
     declared_hash = candidate_payload.get("effective_scenario_hash")
@@ -356,8 +379,10 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         "episode_path": episode_path,
         "scenario_path": scenario_path,
         "source_record": source_record,
+        "source_episode_sha256": source_episode_sha256,
         "source_revision": source_revision,
         "source_root": source_root,
+        "scenario_sha256": scenario_sha256,
         "effective_scenario_hash": effective_hash,
         "dedupe_key": dedupe_key,
         "mechanism_cluster": mechanism_cluster,
@@ -406,10 +431,37 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         root=context.root,
         source_root=selected["source_root"],
     )
-    shutil.copyfile(selected["episode_path"], case_dir / "source_episode.jsonl")
+    try:
+        source_episode_bytes = selected["episode_path"].read_bytes()
+    except OSError:
+        source_episode_bytes = None
+    if source_episode_bytes is not None:
+        (case_dir / "source_episode.jsonl").write_bytes(source_episode_bytes)
     result = _initial_case_result(selected, context, materialization)
+    source_episode_sha256 = (
+        hashlib.sha256(source_episode_bytes).hexdigest()
+        if source_episode_bytes is not None
+        else None
+    )
+    if source_episode_sha256 != selected["source_episode_sha256"]:
+        result["verification_status"] = "not_replayed_source_episode_changed_after_selection"
+        result["materialization"]["source_episode_selection_binding"] = {
+            "status": "mismatch" if source_episode_bytes is not None else "unavailable",
+            "selected_source_sha256": selected["source_episode_sha256"],
+            "materialized_source_sha256": source_episode_sha256,
+        }
+        return _complete_case(result, case_dir, context.output_dir)
+    result["materialization"]["source_episode_selection_binding"] = {
+        "status": "bound",
+        "source_episode_sha256": selected["source_episode_sha256"],
+    }
     if materialization["status"] != "materialized":
         result["verification_status"] = "not_replayed_inputs_unavailable"
+        return _complete_case(result, case_dir, context.output_dir)
+    selection_error, selection_binding = _materialized_selection_binding(selected, materialization)
+    result["materialization"]["selection_binding"] = selection_binding
+    if selection_error is not None:
+        result["verification_status"] = selection_error
         return _complete_case(result, case_dir, context.output_dir)
 
     replay_dir = case_dir / "replay"
@@ -461,6 +513,9 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
             "availability_error": replay_availability_error,
         }
         return _complete_case(result, case_dir, context.output_dir)
+    replay_record_availability_error = _replay_record_availability(replay_record)
+    if replay_availability_error is None:
+        replay_availability_error = replay_record_availability_error
 
     _record_replay_comparison(
         selected,
@@ -476,6 +531,33 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         replay_availability_error=replay_availability_error,
     )
     return _complete_case(result, case_dir, context.output_dir)
+
+
+def _materialized_selection_binding(
+    selected: dict[str, Any], materialization: dict[str, Any]
+) -> tuple[str | None, dict[str, Any]]:
+    """Bind source and effective scenario inputs again at the replay boundary."""
+    source_digest = selected["scenario_sha256"]
+    materialized_digest = materialization.get("source_scenario_sha256")
+    if materialized_digest != source_digest:
+        return "not_replayed_scenario_changed_after_selection", {
+            "status": "mismatch",
+            "selected_source_sha256": source_digest,
+            "materialized_source_sha256": materialized_digest,
+        }
+    effective_hash = selected["effective_scenario_hash"]
+    materialized_hash = materialization.get("effective_scenario_hash")
+    if materialized_hash != effective_hash:
+        return "not_replayed_effective_scenario_changed_after_selection", {
+            "status": "mismatch",
+            "selected_effective_scenario_hash": effective_hash,
+            "materialized_effective_scenario_hash": materialized_hash,
+        }
+    return None, {
+        "status": "bound",
+        "source_scenario_sha256": source_digest,
+        "effective_scenario_hash": effective_hash,
+    }
 
 
 def _initial_case_result(
@@ -510,10 +592,10 @@ def _initial_case_result(
             "search_budget": config.get("budget"),
             "manifest_sha256": context.source_manifest_sha256,
             "episode_record_path": _display_path(selected["episode_path"], selected["source_root"]),
-            "episode_record_sha256": _sha256_file(selected["episode_path"]),
+            "episode_record_sha256": selected["source_episode_sha256"],
             "bundled_episode_record_path": "source_episode.jsonl",
             "scenario_yaml_path": _display_path(selected["scenario_path"], selected["source_root"]),
-            "scenario_yaml_sha256": _sha256_file(selected["scenario_path"]),
+            "scenario_yaml_sha256": selected["scenario_sha256"],
             "episode_id": selected["source_record"].get("episode_id"),
             "scenario_id": selected["source_record"].get("scenario_id"),
             "seed": selected["source_record"].get("seed"),
@@ -733,8 +815,11 @@ def _replay_availability(  # noqa: C901 - keep independent runner evidence gates
     algorithm_contract = summary.get("algorithm_metadata_contract")
     if not isinstance(algorithm_contract, dict) or algorithm_contract.get("status") != "ok":
         return None, "replay_algorithm_metadata_unavailable"
-    if resolve_execution_mode(algorithm_contract) == "unknown":
+    execution_mode = resolve_execution_mode(algorithm_contract)
+    if execution_mode == "unknown":
         return None, "replay_execution_mode_unknown"
+    if execution_mode != "native":
+        return None, "replay_execution_mode_not_native"
 
     try:
         expected = availability_payload(summary)
@@ -752,13 +837,28 @@ def _replay_availability(  # noqa: C901 - keep independent runner evidence gates
     return expected, None
 
 
-def _materialize_scenario(
+def _replay_record_availability(record: dict[str, Any]) -> str | None:
+    """Reject episode-row execution metadata that contradicts native replay provenance."""
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, dict) or str(metadata.get("status", "")).strip().lower() != "ok":
+        return "replay_episode_algorithm_metadata_unavailable"
+    if resolve_execution_mode(metadata) != "native":
+        return "replay_episode_execution_mode_not_native"
+    if runtime_fallback_or_degraded_marker(record) is not None:
+        return "replay_episode_runtime_fallback_or_degraded"
+    return None
+
+
+def _materialize_scenario(  # noqa: C901 - ordered fail-closed provenance gates
     source: Path, input_dir: Path, *, root: Path, source_root: Path
 ) -> dict[str, Any]:
     """Copy a generated scenario and its declared file inputs into a stable bundle."""
     try:
-        payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+        source_bytes = source.read_bytes()
+        payload = yaml.safe_load(source_bytes.decode("utf-8"))
     except (OSError, yaml.YAMLError) as exc:
+        return {"status": "unavailable", "reason": f"scenario_read_failed: {exc}"}
+    except UnicodeDecodeError as exc:
         return {"status": "unavailable", "reason": f"scenario_read_failed: {exc}"}
     if not isinstance(payload, dict) or not isinstance(payload.get("scenarios"), list):
         return {"status": "unavailable", "reason": "scenario_matrix_shape_invalid"}
@@ -766,37 +866,42 @@ def _materialize_scenario(
     assets_dir = input_dir / "assets"
     assets_dir.mkdir()
     copied_assets: list[dict[str, str]] = []
+    effective_hashes: list[str] = []
+    referenced_asset_bytes: dict[tuple[int, str], bytes] = {}
     for scenario_index, scenario in enumerate(payload["scenarios"]):
         if not isinstance(scenario, dict):
             return {"status": "unavailable", "reason": f"scenario_{scenario_index}_invalid"}
+        route_payload, route_bytes, route_error = _materialized_route_payload(
+            scenario, source=source, root=root, source_root=source_root
+        )
+        if route_error is not None or route_payload is None:
+            return {
+                "status": "unavailable",
+                "reason": route_error or "route_overrides_file_invalid",
+            }
+        if route_bytes is not None:
+            referenced_asset_bytes[(scenario_index, "route_overrides_file")] = route_bytes
+        try:
+            effective_hashes.append(compute_effective_scenario_hash(scenario, route_payload))
+        except (TypeError, ValueError):
+            return {"status": "unavailable", "reason": "effective_scenario_hash_unavailable"}
         for field in ("map_file", "route_overrides_file"):
             raw_ref = scenario.get(field)
             if raw_ref is None:
                 continue
-            asset_path = _resolve_referenced_file(raw_ref, source.parent, source_root, root)
-            if asset_path is None or not asset_path.is_file():
-                return {
-                    "status": "unavailable",
-                    "reason": f"{field}_missing",
-                    "reference": str(raw_ref),
-                }
-            digest = _sha256_file(asset_path)
-            name = f"{digest[:12]}-{asset_path.name}"
-            destination = assets_dir / name
-            if not destination.exists():
-                shutil.copyfile(asset_path, destination)
-            scenario[field] = (Path("assets") / name).as_posix()
-            copied_assets.append(
-                {
-                    "field": field,
-                    "source_path": _display_path(asset_path, source_root),
-                    "source_path_repository_relative": _is_repository_relative_path(
-                        asset_path, source_root
-                    ),
-                    "source_sha256": digest,
-                    "bundle_path": (Path("inputs") / "assets" / name).as_posix(),
-                }
+            asset, asset_name, asset_error = _copy_materialized_asset(
+                raw_ref,
+                field=field,
+                source=source,
+                assets_dir=assets_dir,
+                source_root=source_root,
+                root=root,
+                pinned_bytes=referenced_asset_bytes.get((scenario_index, field)),
             )
+            if asset_error is not None or asset is None or asset_name is None:
+                return {"status": "unavailable", "reason": asset_error or f"{field}_missing"}
+            scenario[field] = (Path("assets") / asset_name).as_posix()
+            copied_assets.append(asset)
     scenario_path = input_dir / "scenario.yaml"
     scenario_path.write_text(
         yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8"
@@ -805,9 +910,71 @@ def _materialize_scenario(
         "status": "materialized",
         "scenario_path": "inputs/scenario.yaml",
         "scenario_sha256": _sha256_file(scenario_path),
-        "source_scenario_sha256": _sha256_file(source),
+        "source_scenario_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "effective_scenario_hash": effective_hashes[0] if len(effective_hashes) == 1 else None,
         "assets": copied_assets,
     }
+
+
+def _materialized_route_payload(
+    scenario: dict[str, Any], *, source: Path, root: Path, source_root: Path
+) -> tuple[dict[str, Any] | None, bytes | None, str | None]:
+    """Read route overrides once so the hash and bundled bytes describe one input."""
+    route_ref = scenario.get("route_overrides_file")
+    if route_ref is None:
+        route_payload = scenario.get("route_overrides") or {}
+        if not isinstance(route_payload, dict):
+            return None, None, "route_overrides_file_invalid"
+        return route_payload, None, None
+    route_path = _resolve_referenced_file(route_ref, source.parent, source_root, root)
+    if route_path is None or not route_path.is_file():
+        return None, None, "route_overrides_file_missing"
+    try:
+        route_bytes = route_path.read_bytes()
+        route_payload = yaml.safe_load(route_bytes.decode("utf-8")) or {}
+    except (OSError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        return None, None, f"route_overrides_file_invalid: {exc}"
+    if not isinstance(route_payload, dict):
+        return None, None, "route_overrides_file_invalid"
+    return route_payload, route_bytes, None
+
+
+def _copy_materialized_asset(
+    raw_ref: Any,
+    *,
+    field: str,
+    source: Path,
+    assets_dir: Path,
+    source_root: Path,
+    root: Path,
+    pinned_bytes: bytes | None,
+) -> tuple[dict[str, str] | None, str | None, str | None]:
+    """Copy one scenario asset and return its immutable bundle and source receipt."""
+    asset_path = _resolve_referenced_file(raw_ref, source.parent, source_root, root)
+    if asset_path is None or not asset_path.is_file():
+        return None, None, f"{field}_missing"
+    try:
+        asset_bytes = pinned_bytes if pinned_bytes is not None else asset_path.read_bytes()
+    except OSError as exc:
+        return None, None, f"{field}_read_failed: {exc}"
+    digest = hashlib.sha256(asset_bytes).hexdigest()
+    name = f"{digest[:12]}-{asset_path.name}"
+    destination = assets_dir / name
+    if not destination.exists():
+        destination.write_bytes(asset_bytes)
+    return (
+        {
+            "field": field,
+            "source_path": _display_path(asset_path, source_root),
+            "source_path_repository_relative": _is_repository_relative_path(
+                asset_path, source_root
+            ),
+            "source_sha256": digest,
+            "bundle_path": (Path("inputs") / "assets" / name).as_posix(),
+        },
+        name,
+        None,
+    )
 
 
 def _runner_config(
@@ -1604,8 +1771,17 @@ def _manifest_attribution_matches(candidate: dict[str, Any], record: dict[str, A
 def _scenario_identity(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     """Read a one-scenario generated search bundle without interpreting rendered output."""
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+        scenario_bytes = path.read_bytes()
+    except OSError:
+        return None, "scenario_yaml_invalid"
+    return _scenario_identity_bytes(scenario_bytes)
+
+
+def _scenario_identity_bytes(raw: bytes) -> tuple[dict[str, Any] | None, str | None]:
+    """Parse one generated scenario from the exact bytes whose digest is recorded."""
+    try:
+        payload = yaml.safe_load(raw.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError):
         return None, "scenario_yaml_invalid"
     scenarios = payload.get("scenarios") if isinstance(payload, dict) else None
     if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
@@ -1616,11 +1792,20 @@ def _scenario_identity(path: Path) -> tuple[dict[str, Any] | None, str | None]:
 def _read_single_episode(path: Path) -> dict[str, Any] | None:
     """Return one JSONL episode record only when the file contains exactly one row."""
     try:
-        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    return _read_single_episode_bytes(raw)
+
+
+def _read_single_episode_bytes(raw: bytes) -> dict[str, Any] | None:
+    """Parse one JSONL episode from the exact bytes whose digest is retained."""
+    try:
+        lines = [line for line in raw.decode("utf-8").splitlines() if line.strip()]
         if len(lines) != 1:
             return None
         record = json.loads(lines[0])
-    except (OSError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     return record if isinstance(record, dict) else None
 

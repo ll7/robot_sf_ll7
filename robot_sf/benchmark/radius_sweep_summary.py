@@ -642,6 +642,64 @@ def _validate_episode_evidence_eligibility(
         )
 
 
+def _has_normalizable_empty_fallback_reason(value: Mapping[str, Any]) -> bool:
+    """Check for the explicit clean fallback shape for an empty reason.
+
+    Returns:
+        Whether the mapping can safely receive the shared checker's false alias.
+    """
+    return (
+        "fallback_reason" in value
+        and (value["fallback_reason"] is None or value["fallback_reason"] == "")
+        and value.get("fallback") is False
+        and "fallback_used" not in value
+        and "fallback_triggered" not in value
+    )
+
+
+def _copy_clean_episode_planner_diagnostics(
+    value: Any, *, path: str, planner: str, radius: float
+) -> Any:
+    """Copy diagnostics while normalizing only known clean producer fields.
+
+    Returns:
+        A nested copy suitable for the shared runtime fallback checker.
+    """
+    if isinstance(value, Mapping):
+        copied: dict[Any, Any] = {}
+        for key, item in value.items():
+            item_path = f"{path}.{key}"
+            if key == "fallback_reasons":
+                if not isinstance(item, Mapping) or bool(item):
+                    raise RadiusSweepSummaryError(
+                        f"radius {radius:g} planner {planner!r} episode contains a "
+                        "fallback/degraded runtime marker: "
+                        f"{item_path}=non-empty-or-invalid"
+                    )
+                # The shared runtime checker interprets every key containing
+                # "fallback" as a numeric counter; a validated empty reason map
+                # is producer metadata, not a counter.
+                continue
+            copied[key] = _copy_clean_episode_planner_diagnostics(
+                item, path=item_path, planner=planner, radius=radius
+            )
+
+        if _has_normalizable_empty_fallback_reason(value):
+            # This producer's explicit false marker is equivalent to the shared
+            # checker's canonical false marker for an empty reason. Normalize only
+            # this copied mapping; source diagnostics remain untouched at any depth.
+            copied["fallback_used"] = False
+        return copied
+    if isinstance(value, list):
+        return [
+            _copy_clean_episode_planner_diagnostics(
+                item, path=f"{path}[{index}]", planner=planner, radius=radius
+            )
+            for index, item in enumerate(value)
+        ]
+    return value
+
+
 def _validate_episode_planner_diagnostics(
     metadata: Mapping[str, Any], *, planner: str, radius: float
 ) -> None:
@@ -653,30 +711,14 @@ def _validate_episode_planner_diagnostics(
             "algorithm_metadata.planner_diagnostics (expected an object)"
         )
     if isinstance(diagnostics, Mapping):
-        fallback_reasons = diagnostics.get("fallback_reasons")
-        if "fallback_reasons" in diagnostics and (
-            not isinstance(fallback_reasons, Mapping) or bool(fallback_reasons)
-        ):
-            raise RadiusSweepSummaryError(
-                f"radius {radius:g} planner {planner!r} episode contains a "
-                "fallback/degraded runtime marker: "
-                "algorithm_metadata.planner_diagnostics.fallback_reasons=non-empty-or-invalid"
-            )
-        # Inspect all diagnostics so unknown fallback-shaped fields fail closed. The
-        # empty fallback_reasons map was validated above; the shared runtime checker
-        # otherwise treats every key containing "fallback" as a numeric counter.
-        diagnostic_payload = dict(diagnostics)
-        diagnostic_payload.pop("fallback_reasons", None)
-        if (
-            "fallback_reason" in diagnostics
-            and diagnostics["fallback_reason"] in (None, "")
-            and diagnostics.get("fallback") is False
-            and "fallback_used" not in diagnostics
-            and "fallback_triggered" not in diagnostics
-        ):
-            # This producer's explicit ``fallback: false`` is equivalent to the
-            # shared checker's canonical false marker for an empty reason.
-            diagnostic_payload["fallback_used"] = False
+        # Recursively inspect all diagnostics so unknown fallback-shaped fields fail
+        # closed, including fields nested inside planner-specific producer payloads.
+        diagnostic_payload = _copy_clean_episode_planner_diagnostics(
+            diagnostics,
+            path="algorithm_metadata.planner_diagnostics",
+            planner=planner,
+            radius=radius,
+        )
         marker = runtime_fallback_or_degraded_marker(diagnostic_payload)
         if marker is not None:
             marker_path, marker_value = marker

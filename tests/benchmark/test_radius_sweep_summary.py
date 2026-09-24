@@ -565,6 +565,28 @@ def test_composer_rejects_non_object_planner_diagnostics_even_with_matching_rece
             "algorithm_metadata.planner_diagnostics.planner_fallback=invalid",
             id="unknown-fallback-status",
         ),
+        pytest.param(
+            {"fast_pysf_wrapper": {"fallback_reason": None}},
+            "algorithm_metadata.planner_diagnostics.fast_pysf_wrapper.fallback_reason=invalid",
+            id="nested-reason-without-explicit-false-flag",
+        ),
+        pytest.param(
+            {"fast_pysf_wrapper": {"planner_fallback": "used"}},
+            "algorithm_metadata.planner_diagnostics.fast_pysf_wrapper.planner_fallback=invalid",
+            id="nested-unknown-fallback-status",
+        ),
+        pytest.param(
+            {"fast_pysf_wrapper": {"fallback_reasons": {"wrapper_exception": 1}}},
+            "algorithm_metadata.planner_diagnostics.fast_pysf_wrapper.fallback_reasons="
+            "non-empty-or-invalid",
+            id="nested-non-empty-fallback-reasons",
+        ),
+        pytest.param(
+            {"fast_pysf_wrapper": {"fallback_reasons": []}},
+            "algorithm_metadata.planner_diagnostics.fast_pysf_wrapper.fallback_reasons="
+            "non-empty-or-invalid",
+            id="nested-non-mapping-fallback-reasons",
+        ),
     ),
 )
 def test_composer_rejects_unvalidated_planner_diagnostic_markers(
@@ -607,6 +629,40 @@ def test_episode_status_allows_empty_social_force_diagnostics() -> None:
         expected_algorithm="social_force",
         radius=0.5,
     )
+
+
+def test_episode_status_allows_nested_clean_fast_pysf_diagnostics() -> None:
+    """The clean nested FastPysfWrapper producer shape remains admissible."""
+    diagnostics = {
+        "planner_type": "FastPysfPlannerPolicy",
+        "fallback": False,
+        "fallback_count": 0,
+        "fallback_reason": None,
+        "fallback_reasons": {},
+        "fast_pysf_wrapper": {
+            "planner_type": "FastPysfWrapper",
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        },
+    }
+    composer._validate_episode_runtime_status(
+        {
+            "status": "success",
+            "algorithm_metadata": {
+                "algorithm": "social_force",
+                "canonical_algorithm": "social_force",
+                "status": "ok",
+                "planner_diagnostics": diagnostics,
+            },
+        },
+        planner="social_force",
+        expected_algorithm="social_force",
+        radius=0.5,
+    )
+    assert diagnostics["fast_pysf_wrapper"]["fallback_reasons"] == {}
+    assert "fallback_used" not in diagnostics["fast_pysf_wrapper"]
 
 
 @pytest.mark.parametrize("field", ("jsonl_line", "seed"))

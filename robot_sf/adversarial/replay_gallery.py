@@ -484,6 +484,7 @@ def _initial_case_result(
         "replay_match": "unavailable",
         "verification_status": "not_replayed",
         "replay": None,
+        "video_status": _video_status(context.video, [], attempted=False),
         "rendering": {"status": "not_attempted", "artifacts": []},
     }
 
@@ -572,6 +573,9 @@ def _record_replay_comparison(
         result["replay_match"] = "mismatch"
         result["verification_status"] = "replay_mismatch"
 
+    video_artifacts = _video_artifacts(replay_dir, output_dir)
+    video_status = _video_status(context.video, video_artifacts, attempted=True)
+    result["video_status"] = video_status
     result["replay"] = {
         "summary": replay_summary,
         "episode_record_path": "replay/episode_records.jsonl",
@@ -589,7 +593,8 @@ def _record_replay_comparison(
         "identity_comparison": identity_details,
         "outcome_matches": outcome_match,
         "outcome_comparison": outcome_details,
-        "video_artifacts": _video_artifacts(replay_dir, output_dir),
+        "video_artifacts": video_artifacts,
+        "video_status": video_status,
     }
     _write_json(case_dir / "replay_comparison.json", result["replay"])
     if context.render:
@@ -1408,6 +1413,27 @@ def _video_artifacts(replay_dir: Path, output_dir: Path) -> list[str]:
         and path.stat().st_size > 0
     )
     return paths
+
+
+def _video_status(requested: bool, artifacts: list[str], *, attempted: bool) -> dict[str, Any]:
+    """Report whether the canonical replay actually emitted an optional video."""
+    status = "disabled"
+    reason = None
+    if requested and not attempted:
+        status = "not_attempted"
+        reason = "replay_did_not_complete"
+    elif requested and artifacts:
+        status = "rendered"
+    elif requested:
+        status = "unavailable"
+        reason = "canonical_runner_did_not_emit_video_artifact"
+    return {
+        "requested": bool(requested),
+        "renderer": "synthetic" if requested else "none",
+        "status": status,
+        "reason": reason,
+        "artifacts": artifacts,
+    }
 
 
 def _json_values_match(left: Any, right: Any, *, tolerance: float) -> bool:

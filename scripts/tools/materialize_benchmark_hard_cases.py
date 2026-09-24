@@ -998,6 +998,14 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     anomaly_counts = Counter(
         anomaly for record in case_records for anomaly in record["criticality"]["anomalies"]
     )
+    replay_revisions = sorted(
+        {
+            replay["replay_revision"]
+            for record in case_records
+            if (replay := record.get("replay", {})).get("attempted") is True
+            and isinstance(replay.get("replay_revision"), str)
+        }
+    )
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "status": "materialized",
@@ -1045,7 +1053,9 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
             "new_attempted": len(attempted_cases),
             "reused_attempts": reused_count,
             "status_counts": dict(sorted(replay_counts.items())),
-            "replay_revision": replay_revision,
+            "replay_revision": replay_revisions[0] if len(replay_revisions) == 1 else None,
+            "replay_revisions": replay_revisions,
+            "materializer_revision": replay_revision,
             "source_revision": source_provenance["source_revision"],
         },
         "cases": [

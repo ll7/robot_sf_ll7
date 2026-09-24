@@ -322,6 +322,7 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
         "attempted": True,
         "status": "mismatch",
         "returncode": 0,
+        "replay_revision": "prior-replay-revision",
         "episode_output": "replay/episodes.jsonl",
     }
     case_record["replay"] = replay
@@ -343,6 +344,9 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
     resumed_case = json.loads((tmp_path / "resumed" / case_relative).read_text())
     assert resumed["replay"]["reused_attempts"] == 1
     assert resumed["replay"]["new_attempted"] == 0
+    assert resumed["replay"]["replay_revision"] == "prior-replay-revision"
+    assert resumed["replay"]["replay_revisions"] == ["prior-replay-revision"]
+    assert resumed["replay"]["materializer_revision"] != "prior-replay-revision"
     assert resumed_case["replay"]["reused"] is True
     replay_artifact = (
         tmp_path / "resumed" / case_relative.replace("case.json", "replay/episodes.jsonl")

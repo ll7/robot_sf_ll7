@@ -9,7 +9,7 @@ It points to the smallest authority surface for common agent questions.
 
 | Need | Read first | Why |
 | --- | --- | --- |
-| Bounded planner configuration optimization | `contracts/planner_optimizer_manifest.v1.md`, `../../../configs/policy_search/planner_optimizer_issue9650.yaml` | Reuses the canonical policy-search evaluator; defines equal Random/TPE budgets, lexicographic selection, held-out separation, replayable exports, and #9653 handoff. |
+| Bounded planner configuration optimization | `contracts/planner_optimizer_manifest.v1.md`, `../../../configs/policy_search/planner_optimizer_issue9650.yaml`, `validation/issue_9650_planner_optimizer_pilot_v1/report.md`, `validation/issue_9650_planner_optimizer_pilot_v1/pilot_summary.json` | Reuses the canonical policy-search evaluator; defines equal Random/TPE budgets, lexicographic selection, held-out separation, replayable exports, and #9653 handoff; includes the small #9650 diagnostic pilot and its null task-completion result. |
 | Current runnable candidate list | `candidate_registry.yaml` | Canonical machine-readable list of concrete Robot SF candidates with config pointers. |
 | Candidate lifecycle buckets | `candidate_registry_summary.md` | Compact routing summary for active, diagnostic, learned, SLURM, monitor, and historical lanes. |
 | Local execution workflow | `contracts/agent_runbook.md` | How to pick and run candidate stages without overclaiming evidence. |

@@ -8,8 +8,12 @@ the campaign synthesizer and recorded file checksums. The same 76 source files a
 now preserved in the immutable W&B artifact
 `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0`. The artifact
 manifest and every stored and decompressed source object were checked against
-SHA-256 and byte-size records. This closes the custody gap, but does not by itself
-admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
+SHA-256 and byte-size records. This closeout also re-hydrated the compact
+`synthesis.json.gz` and `cell_summaries.jsonl.gz` members, verified their stored
+and decompressed hashes and byte sizes, and reproduced the synthesis after
+normalizing only `source_path`. The exact synthesis-member receipt and independent
+row crosswalk are recorded below. This closes source-member custody only; it does
+not admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 
 ## What was verified
 
@@ -23,6 +27,8 @@ admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 | Campaign synthesis re-check | `grid_complete=true`, `all_native=true`, 2,160 cells |
 | Independent source copy | W&B artifact `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0` |
 | Artifact verification | 76/76 stored objects and 76/76 decompressed sources match manifest digests and sizes |
+| Authenticated synthesis member | `synthesis.json.gz` hash and byte size match the pinned preservation manifest and W&B artifact digest |
+| Source-row crosswalk | All 24 canonical decision rows match the authenticated synthesis member |
 | Canonical synthesis parity | Stored and current outputs match after normalizing only `source_path` |
 | Admission | **not admitted**; exact-digest review is complete, but separate admission is required |
 
@@ -44,6 +50,12 @@ surface, manifest identity hash, artifact receipt, full verification result, and
 canonical synthesis parity. This tracked projection is review metadata, not a
 replacement for the raw artifact and not an admission receipt.
 
+The compact [authenticated source receipt](source_ingestion_receipt.issue_7980.authenticated.json)
+pins the immutable W&B artifact and exact compressed/decompressed synthesis
+hashes. The separate [source-row crosswalk](source_row_crosswalk.issue_7980.authenticated.json)
+binds the 24 canonical decision rows. Their ignored hydration paths are not
+durable inputs; the W&B artifact remains the source for future retrieval.
+
 The result packet is `result_interpretation_packet.v1.json`. Its deterministic
 caption, exact-digest review report, and source/output checksums are recorded in
 `result_interpretation_caption.txt`, `result_interpretation_review.v1.json`, and
@@ -55,12 +67,13 @@ visual assertion.
 From a checkout containing a verified artifact hydration:
 
 ```bash
-uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --synthesize output/issue_7792/job13828_wandb_v0/cell_summaries.jsonl --synthesis-out output/issue_7792/current_synthesis.json --json
-uv run python scripts/analysis/build_result_interpretation_packet.py --input docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json --validate-only
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --synthesize output/issue_7980/source/cell_summaries.jsonl --synthesis-out output/issue_7980/source/recomputed_synthesis.json --json
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/analysis/build_result_interpretation_packet.py --input docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json --validate-only
 ```
 
-The first command reproduces the compact synthesis; the second validates the
-tracked interpretation boundary. Neither command grants paper-facing eligibility.
+The first command reproduces the compact synthesis; compare it with the hydrated
+source after normalizing only `source_path`. The second validates the tracked
+interpretation boundary. Neither command grants paper-facing eligibility.
 
 ## Next decision
 

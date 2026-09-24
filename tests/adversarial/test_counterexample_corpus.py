@@ -1013,6 +1013,39 @@ def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Pa
     validate_corpus(corpus)
 
 
+def test_replay_artifact_path_escape_stays_unknown(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    planner_id = "path-escape-planner"
+    config_identity = "path-escape-config"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=planner_id,
+        config_identity=config_identity,
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
+    row = next(item for item in corpus["planner_evaluations"] if item["planner_id"] == planner_id)
+    row["replay_receipt"]["artifact_path"] = "../outside.jsonl"
+
+    validate_corpus(corpus)
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+
+    assert status["status_counts"]["unknown"] == 1
+    assert any(
+        reason.startswith("replay_artifact_path_invalid:")
+        and "unsafe replay artifact path" in reason
+        for reason in status["cases"][0]["reason_codes"]
+    )
+    assert len(corpus["cases"]) == 1
+    assert len(corpus["planner_evaluations"]) == 3
+
+
 def test_legacy_complete_evaluation_without_receipt_is_retained_as_unknown(
     tmp_path: Path,
 ) -> None:

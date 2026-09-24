@@ -8,11 +8,13 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+import robot_sf.adversarial.feasibility_frontier_report as frontier_module
 from robot_sf.adversarial.feasibility_frontier_report import (
     INPUT_SCHEMA_VERSION,
     FrontierReportError,
     build_frontier_report,
     render_frontier_markdown,
+    write_frontier_figure,
     write_frontier_report,
 )
 
@@ -354,6 +356,7 @@ def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
         == "mismatch"
     )
     assert second["case_frontier"]["admissibility_partition_counts"]["feasibility_unknown"] == 1
+    assert second["case_frontier"]["current_unknown_feasibility_case_count"] == 1
     assert second["falsification"]["no_verified_counterexample_statement"].endswith(
         "This does not establish that no counterexample exists."
     )
@@ -363,6 +366,94 @@ def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
     assert "case-unknown" in markdown
     assert "replay artifact" in markdown.lower()
     assert "Search candidate accounting" in markdown
+
+
+def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path: Path) -> None:
+    """A verified repeat is visible, but does not restart the unique discovery count."""
+    payload = _evidence(tmp_path)
+    repeat_replay = _artifact(tmp_path, "round-2-repeat-case-001-replay.json", role="replay")
+    second_search = payload["rounds"][1]["falsification"]
+    second_search["candidates"].append(
+        _candidate(
+            candidate_id="c-repeat-known",
+            evaluation_status="complete",
+            verdict="empirically_feasible",
+            failure=True,
+            replay_status="verified",
+            disposition="duplicate",
+            case_id="case-001",
+            replay_artifact=repeat_replay,
+        )
+    )
+    second_search["budget"]["candidate_limit"] = 5
+    second_search["budget"]["candidates_completed"] = len(second_search["candidates"])
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    second = report["rounds"][1]
+    assert second["falsification"]["verified_counterexample_case_ids"] == []
+    assert second["falsification"]["repeated_verified_counterexample_case_ids"] == ["case-001"]
+    assert second["case_frontier"]["verified_counterexamples_cumulative"] == 1
+    statement = second["falsification"]["no_verified_counterexample_statement"]
+    assert "No new unique replay-verified" in statement
+    assert "1 known corpus case(s) were replay-verified again." in statement
+
+
+def test_frontier_report_rejects_re_admission_of_known_case(tmp_path: Path) -> None:
+    """Known stable IDs use duplicate disposition instead of a second admission."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][1]["falsification"]["candidates"][0]["case_id"] = "case-001"
+    with pytest.raises(FrontierReportError, match="re-admits known case"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_uses_later_historical_rows_to_guard_case_identity(
+    tmp_path: Path,
+) -> None:
+    """Historical corpus IDs are known even if their first observation is in a later round."""
+    payload = _evidence(tmp_path)
+    first = payload["rounds"][0]
+    historical_id = "historical-known-case"
+    first_search = first["falsification"]
+    first_search["candidates"].append(
+        _candidate(
+            candidate_id="c-reimports-historical",
+            evaluation_status="complete",
+            verdict="empirically_feasible",
+            failure=True,
+            replay_status="verified",
+            disposition="admitted",
+            case_id=historical_id,
+            replay_artifact=_artifact(tmp_path, "historical-reimport-replay.json", role="replay"),
+        )
+    )
+    first_search["budget"]["candidates_completed"] = len(first_search["candidates"])
+    first["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id=historical_id,
+            origin_round=1,
+            origin_candidate_id="c-reimports-historical",
+            planner_status="unsolved",
+            verdict="empirically_feasible",
+            replay_status="verified",
+        )
+    )
+    payload["rounds"][1]["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=2,
+            case_id=historical_id,
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unknown",
+            verdict="admissible_feasibility_unknown",
+            replay_status="unavailable",
+        )
+    )
+
+    with pytest.raises(FrontierReportError, match="re-admits known case"):
+        build_frontier_report(payload, evidence_root=tmp_path)
 
 
 def test_frontier_report_rejects_missing_provenance_and_artifact_digest_mismatch(
@@ -631,6 +722,8 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
         ]
         assert second["case_frontier"]["verified_counterexamples_cumulative"] == 2
         assert second["case_frontier"]["verified_counterexample_status"]["solved"] == 2
+        assert second["case_frontier"]["current_unknown_feasibility_case_count"] == 1
+        assert second["case_frontier"]["admitted_unknown_feasibility_cases_cumulative"] == 2
     else:
         with pytest.raises(FrontierReportError, match="unsupported admissibility-verdict"):
             build_frontier_report(payload, evidence_root=tmp_path)
@@ -672,3 +765,32 @@ def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified
     assert "finite search budget" in markdown
     assert (output_dir / "frontier.png").is_file()
     assert (output_dir / "frontier.pdf").is_file()
+
+
+def test_frontier_figure_labels_planner_and_scenario_dispositions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The figure distinguishes current planner outcomes and invalid/infeasible candidates."""
+    report = build_frontier_report(_evidence(tmp_path), evidence_root=tmp_path)
+    captured: dict[str, Any] = {}
+
+    def capture_figure(figure: Any, _output_base: Path, **_kwargs: Any) -> list[Path]:
+        captured["legend_labels"] = [
+            item.get_text() for item in figure.axes[1].get_legend().get_texts()
+        ]
+        captured["title"] = figure._suptitle.get_text()
+        return []
+
+    monkeypatch.setattr(frontier_module, "save_publication_figure", capture_figure)
+    write_frontier_figure(report, tmp_path / "frontier")
+
+    labels = captured["legend_labels"]
+    assert "Known cases solved by current planner" in labels
+    assert "Known cases still failing for current planner" in labels
+    assert "Known cases with mixed planner outcomes" in labels
+    assert "Known cases with unknown planner outcome" in labels
+    assert "Known cases not observed in round" in labels
+    assert "Cases currently with unknown feasibility" in labels
+    assert "Structurally invalid search candidates (round)" in labels
+    assert "Geometric/kinodynamic impossibilities (round)" in labels
+    assert "Synthetic Fixture evidence" in captured["title"]

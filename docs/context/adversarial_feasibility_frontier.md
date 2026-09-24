@@ -26,7 +26,9 @@ The command writes:
 - `frontier_report.md` — concise round-by-round performance and case tables, including invalid,
   failed, unknown, and replay-unavailable search rows;
 - `frontier.png` and `frontier.pdf` — eligible complete success fractions by evaluation set and the
-  cumulative known counterexample, solved-case, and unknown-feasibility counts;
+  cumulative known counterexample count, per-round solved/unsolved/mixed/unknown/not-observed case
+  status, current unknown-feasibility count, and per-round structurally invalid and
+  geometric/kinodynamic-impossibility candidate counts;
 - `frontier.provenance.json` — source-artifact digests, evidence kind, visible figure title, and the
   claim boundary for the figure. The evidence kind is printed in the figure so a detached fixture
   image remains visibly synthetic.
@@ -55,7 +57,11 @@ case solved when the search recorded its target failure. Later planner-status ch
 `unsolved` to `solved` are allowed. Later feasibility updates are limited to
 `admissible_feasibility_unknown` → `empirically_feasible` or `planner_specific_failure`, and require
 complete evidence plus a checksummed artifact whose role is `admissibility-evidence`. The report
-does not infer stronger feasibility from a replay alone.
+does not infer stronger feasibility from a replay alone. A stable case ID may be admitted only once;
+later verified repeats use `corpus_disposition=duplicate`, remain visible in candidate accounting,
+and do not count as new unique discoveries. The unknown-feasibility cumulative count means cases
+ever admitted with that initial verdict; the current unknown count follows the latest recorded
+admissibility evidence and can decrease after a valid evidence-backed upgrade.
 
 The v1 schema uses the current #9651 admissibility verdicts and #9652 planner statuses:
 `solved`, `unsolved`, `mixed`, and `unknown`. The report preserves those upstream values; it does
@@ -63,7 +69,9 @@ not infer dynamic feasibility from a planner failure. `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
 `empirically_feasible`, and `planner_specific_failure` remain separate. Only a complete, admitted,
 replay-verified target failure with `empirically_feasible` or `planner_specific_failure` status is
-counted as a confirmed counterexample. Admitted unknown-feasibility cases are tracked separately.
+counted as a confirmed counterexample. Admitted unknown-feasibility cases are tracked separately. A
+no-discovery statement counts unique newly confirmed cases, reports verified matches to known corpus
+cases, and remains qualified by the finite search budget.
 
 Evaluation rows keep three canonical runtime axes separate: `execution_mode` is `native`, `adapter`,
 `mixed`, or `unknown`; `readiness_status` is `native`, `adapter`, `fallback`, or `degraded`; and
@@ -92,5 +100,5 @@ links.
 
 The focused fixture contract is exercised in
 `tests/adversarial/test_feasibility_frontier_report.py`. The tests create synthetic source artifacts
-in temporary directories, check digests and fail-closed cases, cover a flat campaign with no
-verified discovery, and render the figure without starting a simulator.
+in temporary directories, check digests and fail-closed cases, cover repeated known cases and a flat
+campaign with no verified discovery, and render the figure without starting a simulator.

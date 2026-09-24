@@ -347,6 +347,9 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
         for line in checksums.splitlines()
         for digest, relative_path in [line.split("  ", maxsplit=1)]
     }
+    assert set(checksum_entries) == {
+        f"payload/{entry['path']}" for entry in manifest["files"]
+    }
     for entry in manifest["files"]:
         relative_path = f"payload/{entry['path']}"
         payload_path = bundle_dir / relative_path

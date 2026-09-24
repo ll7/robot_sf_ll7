@@ -904,6 +904,21 @@ def test_release_rights_statement_uses_safe_defaults() -> None:
     assert "authoritative release creators" in statement
     assert "recorded in release_result.json" in statement
     assert "credentials" not in statement.lower()
+    assert "SNQI-v2 boundary" not in statement
+
+
+def test_release_rights_statement_declares_v2_model_boundary() -> None:
+    """A v2 bundle carries the simulator-force limitation with its index assets."""
+    statement = _build_rights_provenance_statement(
+        resolved_manifest={"metrics": {"snqi_v2_weights_path": "weights.v2.0.json"}},
+        release_result={},
+        zenodo_metadata={},
+    )
+
+    assert "SNQI-v2 boundary" in statement
+    assert "release_metadata/snqi_v2/" in statement
+    assert "not measured pedestrian discomfort" in statement
+    assert "does not establish deployment fitness" in statement
 
 
 def test_release_metadata_resolver_distinguishes_nonrelease_and_malformed(

@@ -610,6 +610,16 @@ def _build_rights_provenance_statement(
         ", ".join(creator_names) if creator_names else "the authoritative release creators"
     )
     repository_text = repository_url or "the repository URL recorded in the resolved manifest"
+    metric_declarations = resolved_manifest.get("metrics")
+    metric_declarations = metric_declarations if isinstance(metric_declarations, Mapping) else {}
+    snqi_v2_statement = (
+        "- SNQI-v2 boundary: its declared weights, calibration anchors, and robustness family "
+        "are included under `release_metadata/snqi_v2/`. Its force term is a simulator model "
+        "quantity, not measured pedestrian discomfort; the index is advisory and does not "
+        "establish deployment fitness.\n"
+        if any(str(key).startswith("snqi_v2_") for key in metric_declarations)
+        else ""
+    )
 
     return f"""# Benchmark-data release rights and provenance
 
@@ -633,7 +643,7 @@ download can be checked without access to the build workspace.
   for this release and must not be used as a planner-ranking authority. The
   pinned weights and baseline are included under `release_metadata/snqi/` for
   checksum-bound diagnostic recomputation.
-- Rights boundary: this statement does not grant rights to external datasets,
+{snqi_v2_statement}- Rights boundary: this statement does not grant rights to external datasets,
   learned checkpoints, or private operational logs that are not listed in the
   bundle manifest.
 
@@ -2380,6 +2390,182 @@ def _check_snqi_field_consistency(
     return _snqi_build_consistency_result(scan, diagnostics_ordering, rejections, integrity)
 
 
+def _validate_snqi_v2_family_vectors(vectors: list[Any]) -> None:
+    """Reject a sensitivity grid that differs from the versioned family asset."""
+    from robot_sf.benchmark.snqi.v2_reports import family_vectors  # noqa: PLC0415
+
+    for index, (stored, declared) in enumerate(zip(vectors, family_vectors(), strict=True)):
+        if not isinstance(stored, Mapping) or any(
+            stored.get(field) != declared[field] for field in ("name", "kind", "weights")
+        ):
+            raise ValueError(f"weight-family vector {index} differs from the declared grid")
+
+
+def _snqi_v2_report_problem(
+    path: Path, name: str, spec: Any, metrics: Mapping[str, Any]
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """Check a report against bundled assets and source manifest paths.
+
+    Returns:
+        The decoded report and no error, or a located error message.
+    """
+    try:
+        report = _read_json_file(path)
+        provenance = report["provenance"]
+        if report.get("episode_count") is None or not isinstance(provenance, Mapping):
+            raise ValueError("missing episode count or provenance")
+        for role in ("weights", "anchors", "family"):
+            if provenance.get(f"snqi_v2_{role}_sha256") != spec.hashes[role] or provenance.get(
+                f"snqi_v2_{role}_path"
+            ) != metrics.get(f"snqi_v2_{role}_path"):
+                raise ValueError(f"{role} provenance disagrees with bundled specification")
+        if provenance.get("snqi_v2_force_source") != spec.force_source:
+            raise ValueError("force source disagrees with bundled specification")
+        if name == "family" and (
+            report.get("family") != "V2-F"
+            or not isinstance(report.get("vectors"), list)
+            or len(report["vectors"]) != 2013
+            or report.get("stratified_count") != 2011
+        ):
+            raise ValueError("missing declared weight family")
+        if name == "family":
+            _validate_snqi_v2_family_vectors(report["vectors"])
+        if name == "diagnostics" and report.get("family_report") != "snqi_v2_family.json":
+            raise ValueError("paired family report is not named")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        return None, f"SNQI-v2 {name} report is invalid: {exc}"
+    return report, None
+
+
+def _snqi_v2_row_problem(row: Mapping[str, Any], spec: Any) -> str | None:
+    """Return a mismatch reason for one row, using the declared v2 scalarizer."""
+    from robot_sf.benchmark.snqi.compute import (  # noqa: PLC0415
+        compute_snqi_v2,
+        normalize_snqi_v2_terms,
+    )
+    from robot_sf.benchmark.snqi.v2_spec import TERMS  # noqa: PLC0415
+
+    recorded = row["metrics"]
+    inputs = {**recorded, "executed_steps": row["steps"]}
+    expected_terms = normalize_snqi_v2_terms(inputs, spec)
+    recorded_terms = recorded["snqi_v2_terms"]
+    if not isinstance(recorded_terms, Mapping) or set(recorded_terms) != set(TERMS):
+        return "term set is incomplete"
+    for term in TERMS:
+        value = recorded_terms[term]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or abs(value - expected_terms[term]) > 1e-12
+        ):
+            return f"term {term} differs from recomputation"
+    stored_score = recorded["snqi_v2"]
+    if (
+        isinstance(stored_score, bool)
+        or not isinstance(stored_score, (int, float))
+        or not math.isfinite(stored_score)
+        or abs(stored_score - compute_snqi_v2(inputs, spec)) > 1e-12
+    ):
+        return "score differs from recomputation"
+    return None
+
+
+def _snqi_v2_scan_rows(payload_dir: Path, spec: Any) -> tuple[int, int, list[str]]:
+    """Count every v2 row mismatch and retain a bounded, located sample.
+
+    Returns:
+        Row count, mismatch count, and a bounded list of located problems.
+    """
+    rows = 0
+    mismatches = 0
+    violations: list[str] = []
+    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        try:
+            stream = episodes_path.open(encoding="utf-8")
+        except OSError as exc:
+            violations.append(f"cannot read SNQI-v2 episodes {episodes_path}: {exc}")
+            continue
+        with stream:
+            for line_number, line in enumerate(stream, 1):
+                if not line.strip():
+                    continue
+                rows += 1
+                try:
+                    problem = _snqi_v2_row_problem(json.loads(line), spec)
+                except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                    problem = str(exc)
+                if problem is not None:
+                    mismatches += 1
+                    if mismatches <= 20:
+                        violations.append(f"{episodes_path}:{line_number}: {problem}")
+    return rows, mismatches, violations
+
+
+def _check_snqi_v2_field_consistency(payload_dir: Path) -> dict[str, Any]:
+    """Recompute every declared v2 field from the bundle's three pinned assets.
+
+    Returns:
+        Row counts, bounded mismatch locations, and asset integrity evidence.
+    """
+    declarations: list[str] = []
+    metrics = _read_snqi_v2_manifest_metrics(payload_dir, required=True, violations=declarations)
+    if not any(str(key).startswith("snqi_v2_") for key in metrics):
+        return {"checked": False, "violation_count": 0, "violations": []}
+
+    # The assets are verified against checksums.sha256 and the resolved manifest
+    # elsewhere in this preflight. Never consult checkout assets.
+    from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec  # noqa: PLC0415
+
+    asset_dir = payload_dir / "release_metadata" / "snqi_v2"
+    violations = list(declarations)
+    try:
+        spec = load_snqi_v2_spec(
+            asset_dir / "weights.v2.0.json",
+            asset_dir / "anchors.v2.0.json",
+            asset_dir / "family.v2.0.yaml",
+        )
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        violations.append(f"bundled SNQI-v2 specification is invalid: {exc}")
+        return {
+            "checked": True,
+            "rows": 0,
+            "violation_count": len(violations),
+            "violations": violations,
+        }
+
+    reports: dict[str, Mapping[str, Any]] = {}
+    for name in ("family", "diagnostics"):
+        report, problem = _snqi_v2_report_problem(
+            payload_dir / "reports" / f"snqi_v2_{name}.json", name, spec, metrics
+        )
+        if problem is not None:
+            violations.append(problem)
+        elif report is not None:
+            reports[name] = report
+
+    rows, mismatch_count, row_problems = _snqi_v2_scan_rows(payload_dir, spec)
+    other_violation_count = len(violations) + len(row_problems) - min(mismatch_count, 20)
+    violations.extend(row_problems)
+    if not rows:
+        violations.append("declared SNQI-v2 bundle has no episode rows")
+        other_violation_count += 1
+    for name, report in reports.items():
+        if report.get("episode_count") != rows:
+            violations.append(f"SNQI-v2 {name} episode count disagrees with bundled rows")
+            other_violation_count += 1
+    if mismatch_count > 20:
+        violations.append(f"SNQI-v2 mismatch sample omits {mismatch_count - 20} further rows")
+    return {
+        "checked": True,
+        "rows": rows,
+        "mismatch_count": mismatch_count,
+        "violation_count": other_violation_count + mismatch_count,
+        "violations": violations,
+        "integrity": dict(spec.hashes),
+    }
+
+
 def _manifest_checksum_mapping(
     manifest_files: list[object],
     *,
@@ -2819,6 +3005,8 @@ def verify_publication_bundle_preflight(
     # bundles report checked=False and are unaffected.
     snqi_evidence = _check_snqi_field_consistency(payload_dir)
     violations.extend(snqi_evidence.get("violations", []))
+    snqi_v2_evidence = _check_snqi_v2_field_consistency(payload_dir)
+    violations.extend(snqi_v2_evidence.get("violations", []))
 
     status = "pass" if not violations else "fail"
     report = {
@@ -2834,6 +3022,11 @@ def verify_publication_bundle_preflight(
             "publication_commit": repository_commit,
             "goal_reached_timeout_rows": goal_timeout_rows,
             "snqi_field_consistency": snqi_evidence,
+            **(
+                {"snqi_v2_field_consistency": snqi_v2_evidence}
+                if snqi_v2_evidence["checked"]
+                else {}
+            ),
         },
     }
     if status == "fail":

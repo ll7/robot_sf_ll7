@@ -85,6 +85,14 @@ been submitted, so the actual 0.0.7-to-0.0.8 equivalence result is unavailable.
 
 ## Compute and release boundaries
 
+The tracked 0.0.8 campaign draft is
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml`
+(SHA-256 `bf3139e6b2d127e897a26f94bdcba6783c2fecaa59980f526963d0c25775ccb0`). Parsed YAML
+comparison with the predecessor campaign template found every existing field identical after
+removing the new `snqi_v2_spec` block. That block names the weights, anchors, and family files; the
+anchors and their checksum remain unfrozen until the 1,344-row development-seed calibration is
+accepted. This template comparison establishes configuration scope only, not episode equivalence.
+
 The 0.0.7 full campaign used Slurm job `15715`: 36 allocated CPUs and 03:00:36 elapsed. Its
 terminal scheduler state was `FAILED (2:0)` because of a documented post-run custody promotion
 error; the accepted 20,160 episode rows and independently preserved publication bundle remain

@@ -22,6 +22,7 @@ from scripts.dev.main_ci_is_green import (
     build_signal,
     classify,
     decide,
+    decide_verified_main_ci_signal,
     dispatch_decision,
     dispatch_gate_decision,
     fetch_dispatch_retry_matrix_admitted,
@@ -33,13 +34,22 @@ from scripts.dev.main_ci_is_green import (
 )
 
 
-def _run(rid: int, status: str, conclusion: str | None, created: str) -> dict:
+def _run(
+    rid: int,
+    status: str,
+    conclusion: str | None,
+    created: str,
+    *,
+    event: str = "push",
+    head_sha: str | None = None,
+) -> dict:
     return {
         "databaseId": rid,
         "status": status,
         "conclusion": conclusion,
-        "headSha": f"{rid:040x}",
+        "headSha": head_sha or f"{rid:040x}",
         "createdAt": created,
+        "event": event,
     }
 
 
@@ -97,6 +107,207 @@ def test_stale_only_window_is_not_green_and_has_no_deciding_run() -> None:
         is_green, run = decide([_run(1, "completed", stale, "2026-07-12T12:00:00Z")])
         assert is_green is False, stale
         assert run is None, stale  # stale is skipped -> no deciding run
+
+
+def test_gate_only_dispatch_failure_uses_same_head_matrix_verdict() -> None:
+    """A gate-only failure is not red when an older same-SHA run has a verdict."""
+    sha = "a" * 40
+    runs = [
+        _run(
+            11,
+            "completed",
+            "failure",
+            "2026-09-24T13:35:04Z",
+            event="workflow_dispatch",
+            head_sha=sha,
+        ),
+        _run(10, "completed", "success", "2026-09-24T13:00:00Z", head_sha=sha),
+    ]
+
+    is_green, deciding_run = decide_verified_main_ci_signal(
+        runs,
+        matrix_admission_lookup=lambda run_id: run_id != 11,
+    )
+
+    assert is_green is True
+    assert deciding_run is not None
+    assert deciding_run["databaseId"] == 10
+
+
+def test_gate_only_failure_does_not_reuse_a_different_head_verdict() -> None:
+    """A failed gate-only run on a new SHA cannot inherit an older SHA's green."""
+    runs = [
+        _run(
+            11,
+            "completed",
+            "failure",
+            "2026-09-24T13:35:04Z",
+            event="workflow_dispatch",
+            head_sha="b" * 40,
+        ),
+        _run(10, "completed", "success", "2026-09-24T13:00:00Z", head_sha="a" * 40),
+    ]
+
+    is_green, deciding_run = decide_verified_main_ci_signal(
+        runs,
+        matrix_admission_lookup=lambda _run_id: False,
+    )
+
+    assert is_green is False
+    assert deciding_run is None
+
+
+def test_all_skipped_dispatch_success_is_not_green_for_a_new_head() -> None:
+    """A gate-only success with explicit all-skipped matrix cannot claim green."""
+    runs = [
+        _run(
+            11,
+            "completed",
+            "success",
+            "2026-09-24T13:35:04Z",
+            event="workflow_dispatch",
+            head_sha="b" * 40,
+        ),
+        _run(10, "completed", "success", "2026-09-24T13:00:00Z", head_sha="a" * 40),
+    ]
+
+    is_green, deciding_run = decide_verified_main_ci_signal(
+        runs,
+        matrix_admission_lookup=lambda _run_id: False,
+    )
+
+    assert is_green is False
+    assert deciding_run is None
+
+
+def test_admitted_workflow_dispatch_matrix_failure_remains_red() -> None:
+    """A manual run is decisive red when its compatibility matrix was admitted."""
+    manual_failure = _run(
+        11,
+        "completed",
+        "failure",
+        "2026-09-24T13:35:04Z",
+        event="workflow_dispatch",
+        head_sha="b" * 40,
+    )
+
+    is_green, deciding_run = decide_verified_main_ci_signal(
+        [manual_failure],
+        matrix_admission_lookup=lambda _run_id: True,
+    )
+
+    assert is_green is False
+    assert deciding_run is manual_failure
+    assert deciding_run["fullMatrixAdmitted"] is True
+
+
+def test_manual_run_admission_lookup_error_propagates_fail_closed() -> None:
+    """Unreadable admission evidence must become stale, not a guessed verdict."""
+    manual_failure = _run(
+        11,
+        "completed",
+        "failure",
+        "2026-09-24T13:35:04Z",
+        event="workflow_dispatch",
+        head_sha="b" * 40,
+    )
+
+    with pytest.raises(MainCiRunFetchError, match="job API unavailable"):
+        decide_verified_main_ci_signal(
+            [manual_failure],
+            matrix_admission_lookup=lambda _run_id: (_ for _ in ()).throw(
+                MainCiRunFetchError("job API unavailable")
+            ),
+        )
+
+
+def test_json_signal_does_not_count_all_skipped_dispatch_as_green(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """An all-skipped manual success is stale in the actual machine signal."""
+    manual_success = _run(
+        11,
+        "completed",
+        "success",
+        "2026-09-24T13:35:04Z",
+        event="workflow_dispatch",
+        head_sha="b" * 40,
+    )
+    monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *a, **k: [manual_success])
+
+    def fake_rest_runner(path: str, *_args: object, **_kwargs: object):
+        assert path == "repos/ll7/robot_sf_ll7/actions/runs/11/jobs?per_page=100&page=1"
+        jobs = {
+            "jobs": [
+                {
+                    "name": "compat-matrix (ubuntu-latest, 3.11)",
+                    "status": "completed",
+                    "conclusion": "skipped",
+                }
+            ]
+        }
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps(jobs), "")
+
+    monkeypatch.setattr(main_ci_is_green, "_default_rest_runner", fake_rest_runner)
+    monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
+
+    rc = main_ci_is_green.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["status"] == "stale"
+    assert payload["is_green"] is False
+    assert payload["deciding_run"] is None
+
+
+@pytest.mark.parametrize(
+    "job_payload",
+    [
+        None,
+        {"jobs": []},
+        {
+            "jobs": [
+                {
+                    "name": "compat-matrix (ubuntu-latest, 3.11)",
+                    "status": "completed",
+                    "conclusion": None,
+                }
+            ]
+        },
+    ],
+    ids=["transport-error", "missing-matrix", "malformed-matrix"],
+)
+def test_json_signal_matrix_admission_failure_is_stale(
+    monkeypatch: pytest.MonkeyPatch, capsys, job_payload: dict | None
+) -> None:
+    """Transport or malformed matrix evidence cannot turn a manual run green."""
+    manual_success = _run(
+        11,
+        "completed",
+        "success",
+        "2026-09-24T13:35:04Z",
+        event="workflow_dispatch",
+        head_sha="b" * 40,
+    )
+    monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *a, **k: [manual_success])
+
+    def fake_rest_runner(path: str, *_args: object, **_kwargs: object):
+        assert path == "repos/ll7/robot_sf_ll7/actions/runs/11/jobs?per_page=100&page=1"
+        if job_payload is None:
+            return subprocess.CompletedProcess(["gh"], 1, "", "jobs API unavailable")
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps(job_payload), "")
+
+    monkeypatch.setattr(main_ci_is_green, "_default_rest_runner", fake_rest_runner)
+    monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
+
+    rc = main_ci_is_green.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["status"] == "stale"
+    assert payload["is_green"] is False
+    assert payload["deciding_run"] is None
+    assert "error" in payload
 
 
 def test_cancelled_newest_is_skipped_and_older_green_decides() -> None:
@@ -431,31 +642,22 @@ def test_fetch_dispatch_window_preserves_event_and_retry_receipt_title() -> None
     assert runs[0]["displayTitle"].endswith("retry_failed=true")
 
 
-def test_fetch_dispatch_window_paginates_until_older_same_head_active_run() -> None:
-    """An older exact-head run on page two keeps the current run waiting."""
+@pytest.mark.parametrize("active_status", ["queued", "in_progress"])
+def test_fetch_dispatch_window_filters_exact_head_and_finds_active_owner(
+    active_status: str,
+) -> None:
+    """Exact-head filtering finds queued or running ownership without scanning unrelated runs."""
     sha = "9" * 40
-    unrelated = [
-        _actions_run(
-            {
-                "databaseId": 1000 + index,
-                "status": "completed",
-                "conclusion": "cancelled",
-                "headSha": "8" * 40,
-                "createdAt": f"2026-09-23T00:{index:02d}:00Z",
-            }
-        )
-        for index in range(100)
-    ]
     older_active = _actions_run(
         {
             "databaseId": 11,
-            "status": "waiting",
+            "status": active_status,
             "conclusion": None,
             "headSha": sha,
             "createdAt": "2026-09-22T12:00:00Z",
         }
     )
-    fake = _FakeRunREST([unrelated, [older_active]])
+    fake = _FakeRunREST([[older_active]])
 
     runs = fetch_dispatch_run_window(
         target_sha=sha,
@@ -467,7 +669,49 @@ def test_fetch_dispatch_window_paginates_until_older_same_head_active_run() -> N
     assert decision["action"] == "wait"
     assert decision["reason"] == "older_same_head_run_active"
     assert decision["owner_run_id"] == 11
-    assert any(call.endswith("page=2") for call in fake.calls)
+    assert any(
+        f"runs?branch=main&head_sha={sha}&per_page=100&page=1" in call for call in fake.calls
+    )
+    assert not any("&page=2" in call for call in fake.calls)
+    assert not any("/jobs?" in call for call in fake.calls)
+
+
+def test_fetch_dispatch_window_paginates_filtered_head_until_active_owner() -> None:
+    """Pagination still finds an owner behind a full page for the exact SHA."""
+    sha = "9" * 40
+    completed_page = [
+        _actions_run(
+            {
+                "databaseId": 1000 + index,
+                "status": "completed",
+                "conclusion": "cancelled",
+                "headSha": sha,
+                "createdAt": f"2026-09-23T00:{index:02d}:00Z",
+            }
+        )
+        for index in range(100)
+    ]
+    older_active = _actions_run(
+        {
+            "databaseId": 11,
+            "status": "in_progress",
+            "conclusion": None,
+            "headSha": sha,
+            "createdAt": "2026-09-22T12:00:00Z",
+        }
+    )
+    fake = _FakeRunREST([completed_page, [older_active]])
+
+    runs = fetch_dispatch_run_window(
+        target_sha=sha,
+        current_run_id=20,
+        runner=fake,
+    )
+    decision = dispatch_gate_decision(sha, 20, runs)
+
+    assert decision["action"] == "wait"
+    assert decision["owner_run_id"] == 11
+    assert any(f"head_sha={sha}&per_page=100&page=2" in call for call in fake.calls)
     assert not any("/jobs?" in call for call in fake.calls)
 
 
@@ -479,7 +723,7 @@ def test_fetch_dispatch_window_fails_closed_when_page_budget_is_exhausted() -> N
                 "databaseId": 1000 + index,
                 "status": "completed",
                 "conclusion": "cancelled",
-                "headSha": "8" * 40,
+                "headSha": "9" * 40,
                 "createdAt": f"2026-09-23T00:{index:02d}:00Z",
             }
         )
@@ -512,7 +756,7 @@ def test_retry_receipt_requires_non_skipped_compatibility_job(
         assert payload is None
         if path.endswith("actions/workflows?per_page=100&page=1"):
             body = {"workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]}
-        elif "/actions/workflows/77/runs?branch=main&per_page=100&page=1" in path:
+        elif f"/actions/workflows/77/runs?branch=main&head_sha={sha}&per_page=100&page=1" in path:
             body = {
                 "workflow_runs": [
                     {
@@ -641,7 +885,7 @@ def test_retry_matrix_admission_lookup_failure_fails_closed() -> None:
         if path.endswith("actions/workflows?per_page=100&page=1"):
             body = {"workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]}
             return subprocess.CompletedProcess(["gh"], 0, json.dumps(body), "")
-        if "/actions/workflows/77/runs?branch=main&per_page=100&page=1" in path:
+        if f"/actions/workflows/77/runs?branch=main&head_sha={sha}&per_page=100&page=1" in path:
             body = {
                 "workflow_runs": [
                     {
@@ -857,6 +1101,28 @@ def test_fetch_runs_rejects_non_list_json(monkeypatch: pytest.MonkeyPatch, paylo
 
 
 @pytest.mark.parametrize(
+    ("missing_field", "message"),
+    [("event", "event"), ("headSha", "head SHA"), ("createdAt", "createdAt")],
+)
+def test_fetch_runs_requires_signal_identity_fields(
+    monkeypatch: pytest.MonkeyPatch, missing_field: str, message: str
+) -> None:
+    """Missing run identity fields cannot let unverified data claim green."""
+    payload = [_run(1, "completed", "success", "2026-09-24T12:00:00Z")]
+    payload[0].pop(missing_field)
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "_gh",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=["gh"], returncode=0, stdout=json.dumps(payload), stderr=""
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match=f"no usable {message}"):
+        fetch_runs()
+
+
+@pytest.mark.parametrize(
     ("workflow", "expected_selector"),
     [
         (main_ci_is_green.DEFAULT_WORKFLOW, main_ci_is_green.DEFAULT_WORKFLOW_FILE),
@@ -1032,12 +1298,9 @@ class _FakeRunREST:
                 "workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]
             }
             return subprocess.CompletedProcess(["gh"], 0, json.dumps(inventory), "")
-        prefix = (
-            f"repos/{main_ci_is_green.DEFAULT_REPO}"
-            "/actions/workflows/77/runs?branch=main&per_page=100&page="
-        )
+        prefix = f"repos/{main_ci_is_green.DEFAULT_REPO}/actions/workflows/77/runs?branch=main&"
         if path.startswith(prefix):
-            page = int(path.removeprefix(prefix))
+            page = int(path.rsplit("&page=", 1)[1])
             return subprocess.CompletedProcess(
                 ["gh"], 0, json.dumps({"workflow_runs": self.pages[page - 1]}), ""
             )
@@ -1052,6 +1315,7 @@ def _actions_run(run: dict) -> dict:
         "conclusion": run["conclusion"],
         "head_sha": run["headSha"],
         "created_at": run["createdAt"],
+        "event": run.get("event", "push"),
     }
 
 
@@ -1136,6 +1400,8 @@ def test_raw_fetch_runs_keeps_single_bounded_limit_call(
     assert captured["args"][captured["args"].index("--limit") + 1] == "7"
     assert "--status" in captured["args"]
     assert captured["args"][captured["args"].index("--status") + 1] == "completed"
+    json_fields = captured["args"][captured["args"].index("--json") + 1]
+    assert "event" in json_fields.split(",")
 
 
 def test_direct_file_execution_imports_without_installed_package() -> None:

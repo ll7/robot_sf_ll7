@@ -11,11 +11,11 @@ must not merge (except the unbreak-main fix itself) until main is green again.
 This helper is the deterministic green/red signal that hold consults. The one
 rule that matters — learned the hard way when the escalation guard stayed
 silent on 2026-07-11 — is that an IN-PROGRESS run must never count as evidence
-either way: only the most recent *completed* run decides. The fetch uses
-``--status completed`` so in-progress runs are excluded at the API, and the
-pure decision function filters defensively on top so the rule is unit-tested.
+either way: only a completed run with an actual matrix verdict decides. The
+fetch uses ``--status completed`` so in-progress runs are excluded at the API;
+manual dispatch candidates also require compatibility-matrix admission proof.
 
-Exit code: 0 == green (latest completed CI run on main concluded ``success``),
+Exit code: 0 == green (latest verified completed CI run on main concluded ``success``),
 1 == not green (red, or no completed run to judge from). Prints the run id and
 conclusion it decided from. The ``--json`` flag emits the machine-readable
 main-signal schema (``main_ci_is_green.v1``) with the same green/red/stale
@@ -335,7 +335,7 @@ def fetch_dispatch_run_window(
     )
     endpoint_base = (
         f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
-        f"?{urlencode({'branch': branch})}"
+        f"?{urlencode({'branch': branch, **({'head_sha': target} if target else {})})}"
     )
     runs: list[dict[str, Any]] = []
     for page in range(1, max_pages + 1):
@@ -625,6 +625,61 @@ def decide(runs: list[Any]) -> tuple[bool, dict[str, Any] | None]:
     return classify(run.get("conclusion")) == "green", run
 
 
+def decide_verified_main_ci_signal(
+    runs: list[Any],
+    *,
+    repo: str = DEFAULT_REPO,
+    matrix_admission_lookup: Callable[[int], bool] | None = None,
+) -> tuple[bool, dict[str, Any] | None]:
+    """Select a decisive run, requiring matrix proof for manual dispatch runs.
+
+    The raw run history is supplied by the existing bounded ``gh run list``
+    query. A successful or failed ``workflow_dispatch`` is decisive only when
+    its compatibility matrix was admitted. Explicitly all-skipped gate-only
+    dispatches are ignored, but older evidence can decide only for that same
+    exact head; crossing to another SHA is stale rather than an unjustified
+    green or red. Unreadable or ambiguous job evidence raises so callers fail
+    closed.
+    """
+    if matrix_admission_lookup is None:
+
+        def fetch_matrix_for_signal(run_id: int) -> bool:
+            return fetch_dispatch_retry_matrix_admitted(
+                repo=repo,
+                run_id=run_id,
+                runner=_default_rest_runner,
+            )
+
+        matrix_admission_lookup = fetch_matrix_for_signal
+
+    completed = [
+        run for run in runs if isinstance(run, dict) and str(run.get("status")) == "completed"
+    ]
+    completed.sort(key=lambda run: str(run.get("createdAt", "")), reverse=True)
+    gate_only_head: str | None = None
+
+    for run in completed:
+        if classify(run.get("conclusion")) not in {"green", "red"}:
+            continue
+        head_sha = run.get("headSha")
+        normalized_head = head_sha.strip().lower() if isinstance(head_sha, str) else ""
+        if gate_only_head is not None and normalized_head != gate_only_head:
+            return False, None
+
+        if str(run.get("event") or "") == "workflow_dispatch":
+            if not normalized_head:
+                return False, None
+            run_id = _positive_int(run.get("databaseId"), field="workflow run id")
+            if not matrix_admission_lookup(run_id):
+                gate_only_head = normalized_head
+                continue
+            run["fullMatrixAdmitted"] = True
+
+        return classify(run.get("conclusion")) == "green", run
+
+    return False, None
+
+
 def dispatch_decision(
     target_sha: str,
     runs: Sequence[Mapping[str, Any]],
@@ -880,7 +935,7 @@ def fetch_runs(
             "--limit",
             str(limit),
             "--json",
-            "databaseId,status,conclusion,headSha,createdAt",
+            "databaseId,status,conclusion,headSha,createdAt,event",
         ]
     )
     if proc.returncode != 0:
@@ -888,6 +943,15 @@ def fetch_runs(
     data = json.loads(proc.stdout or "[]")
     if not isinstance(data, list):
         raise RuntimeError(f"Unexpected JSON response type: {type(data).__name__}")
+    for index, run in enumerate(data):
+        if not isinstance(run, Mapping):
+            raise RuntimeError(f"Unexpected run row type at index {index}: {type(run).__name__}")
+        if not isinstance(run.get("event"), str) or not run["event"]:
+            raise RuntimeError(f"Run row {index} has no usable event")
+        if not isinstance(run.get("headSha"), str) or not run["headSha"]:
+            raise RuntimeError(f"Run row {index} has no usable head SHA")
+        if not isinstance(run.get("createdAt"), str) or not run["createdAt"]:
+            raise RuntimeError(f"Run row {index} has no usable createdAt")
     return data
 
 
@@ -899,7 +963,7 @@ def main(argv: list[str] | None = None) -> int:
     emits the machine-readable main-signal schema (issue #5571) and still exits
     0/1, so the gate contract can be satisfied without parsing text.
     """
-    ap = argparse.ArgumentParser(description="Is main CI green (latest completed run)?")
+    ap = argparse.ArgumentParser(description="Is main CI green (latest verified completed run)?")
     ap.add_argument("--repo", default=DEFAULT_REPO)
     ap.add_argument("--workflow", default=DEFAULT_WORKFLOW)
     ap.add_argument("--limit", type=int, default=5)
@@ -969,6 +1033,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         runs = fetch_runs(args.repo, args.workflow, args.limit)
+        is_green, run = decide_verified_main_ci_signal(runs, repo=args.repo)
     except (RuntimeError, json.JSONDecodeError) as exc:
         # Fail closed: an unreadable signal is treated as NOT green so a merge
         # hold errs toward holding, never toward merging on unknown state.
@@ -992,7 +1057,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"main CI status UNKNOWN ({exc}) -> treated as not-green", file=sys.stderr)
         return 1
 
-    is_green, run = decide(runs)
     if args.as_json:
         print(json.dumps(build_signal(is_green, run, args.repo, args.workflow)))
     elif not args.quiet:

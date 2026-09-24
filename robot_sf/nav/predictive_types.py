@@ -531,7 +531,8 @@ class MultimodalPrediction:
         forecasts: Mapping from pedestrian_id to PedestrianForecast.
         prediction_horizon: Forecast horizon in seconds.
         prediction_dt: Timestep between consecutive predicted positions in seconds.
-        timestamp: Simulation timestamp (seconds) at which this prediction was produced.
+        timestamp: Simulation timestamp (seconds) at which this prediction was produced. ``-1.0``
+            means the caller did not provide an absolute simulation timestamp.
         sample_count: Number of samples used to derive uncertainty.
         schema_version: Version identifier for contract reproducibility.
         metadata: Free-form key-value store for predictor-specific metadata.

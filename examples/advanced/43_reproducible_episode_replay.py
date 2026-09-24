@@ -67,7 +67,7 @@ def _run_record(seed: int, max_steps: int) -> EpisodeRecord:
 
 
 def _input_identity() -> dict[str, str]:
-    """Return source and canonical-config identity for the selected scenario."""
+    """Return source, map, and canonical-config identity for the selected scenario."""
     scenario = load_scenario(SCENARIO)
     raw_source_path = scenario.get("__scenario_path__")
     if not isinstance(raw_source_path, str) or not raw_source_path:
@@ -80,10 +80,23 @@ def _input_identity() -> dict[str, str]:
     except ValueError as exc:
         raise ValueError("selected scenario source must be inside the repository") from exc
 
+    raw_map_path = scenario.get("map_file")
+    if not isinstance(raw_map_path, str) or not raw_map_path:
+        raise ValueError("selected scenario did not expose its map file")
+    map_path = (source_path.parent / raw_map_path).resolve()
+    try:
+        relative_map_path = map_path.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError("selected scenario map must be inside the repository") from exc
+    if not map_path.is_file():
+        raise ValueError(f"selected scenario map does not exist: {relative_map_path}")
+
     config_payload = {key: value for key, value in scenario.items() if key != "__scenario_path__"}
     return {
         "scenario_source": relative_source_path.as_posix(),
         "source_sha256": sha256_file(source_path),
+        "map_source": relative_map_path.as_posix(),
+        "map_sha256": sha256_file(map_path),
         "config_digest": stable_hash(config_payload),
     }
 
@@ -97,6 +110,8 @@ def _identity(record: EpisodeRecord) -> dict[str, Any]:
         "seed": record.seed,
         "scenario_source": metadata.get("scenario_source"),
         "source_sha256": metadata.get("source_sha256"),
+        "map_source": metadata.get("map_source"),
+        "map_sha256": metadata.get("map_sha256"),
         "config_digest": metadata.get("config_digest"),
     }
 

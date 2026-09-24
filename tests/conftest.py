@@ -882,8 +882,10 @@ _FAST_FILES = {
     # The release-publication contract is deterministic schema/CLI coverage for
     # the changed release_publication_contract.py producer.
     "test_release_publication_contract.py",
-    # Radius rank-stability schema tests exercise the changed benchmark producer;
-    # keep their deterministic contract coverage in pull-request fast shards.
+    # Radius sweep summary and rank-stability schema tests exercise the changed
+    # benchmark producers; keep their deterministic contract coverage in
+    # pull-request fast shards.
+    "test_radius_sweep_summary.py",
     "test_radius_rank_stability.py",
     # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
     # keep coverage for the changed producer in pull-request fast shards.

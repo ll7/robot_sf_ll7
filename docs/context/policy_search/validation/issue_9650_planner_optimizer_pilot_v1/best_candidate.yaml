@@ -1,0 +1,7 @@
+name: issue_9650_planner_optimizer_pilot_v1_best_random
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  max_linear_speed: 2.166092040005835
+  max_linear_accel: 3.0
+  goal_progress_weight: 5.975093803501739

@@ -22,6 +22,7 @@ from scripts.dev.main_ci_is_green import (
     decide,
     dispatch_decision,
     dispatch_gate_decision,
+    fetch_dispatch_retry_matrix_admitted,
     fetch_dispatch_run_window,
     fetch_run_window,
     fetch_runs,
@@ -547,6 +548,86 @@ def test_retry_receipt_requires_non_skipped_compatibility_job(
     assert runs[0]["fullMatrixAdmitted"] is expected_admission
     assert decision["action"] == expected_action
     assert decision["retry_receipt_seen"] is expected_admission
+
+
+@pytest.mark.parametrize(
+    "jobs",
+    [
+        [],
+        [{"name": "fast-feedback (1)", "status": "completed", "conclusion": "success"}],
+    ],
+    ids=["empty-page", "unrelated-job-only"],
+)
+def test_retry_matrix_without_recognized_compat_job_is_unknown(jobs: list[dict]) -> None:
+    """A complete jobs response without compat-matrix is not proof of a skip."""
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        assert path == "repos/ll7/robot_sf_ll7/actions/runs/11/jobs?per_page=100&page=1"
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps({"jobs": jobs}), "")
+
+    with pytest.raises(MainCiRunFetchError, match="no recognized compat-matrix job"):
+        fetch_dispatch_retry_matrix_admitted(
+            repo="ll7/robot_sf_ll7",
+            run_id=11,
+            runner=fake_runner,
+        )
+
+
+def test_retry_matrix_paginates_to_explicit_all_skipped_job() -> None:
+    """A later recognized all-skipped matrix remains known-not-admitted."""
+    unrelated_page = [
+        {"name": f"fast-feedback ({index})", "status": "completed", "conclusion": "success"}
+        for index in range(100)
+    ]
+    calls: list[str] = []
+    pages = [
+        unrelated_page,
+        [
+            {
+                "name": "compat-matrix (ubuntu-latest, 3.11)",
+                "status": "completed",
+                "conclusion": "skipped",
+            }
+        ],
+    ]
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        calls.append(path)
+        page = int(path.rsplit("page=", 1)[1])
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps({"jobs": pages[page - 1]}), "")
+
+    admitted = fetch_dispatch_retry_matrix_admitted(
+        repo="ll7/robot_sf_ll7",
+        run_id=11,
+        runner=fake_runner,
+        max_pages=2,
+    )
+
+    assert admitted is False
+    assert calls[-1].endswith("page=2")
+
+
+def test_retry_matrix_page_budget_without_compat_job_fails_closed() -> None:
+    """A full bounded page without a recognized matrix cannot mean skipped."""
+    full_page = [
+        {"name": f"fast-feedback ({index})", "status": "completed", "conclusion": "success"}
+        for index in range(100)
+    ]
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        assert path.endswith("/jobs?per_page=100&page=1")
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps({"jobs": full_page}), "")
+
+    with pytest.raises(MainCiRunFetchError, match="no recognized compat-matrix job"):
+        fetch_dispatch_retry_matrix_admitted(
+            repo="ll7/robot_sf_ll7",
+            run_id=11,
+            runner=fake_runner,
+            max_pages=1,
+        )
 
 
 def test_retry_matrix_admission_lookup_failure_fails_closed() -> None:

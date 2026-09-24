@@ -448,7 +448,7 @@ def fetch_dispatch_retry_matrix_admitted(
     runner: Callable[..., Any],
     max_pages: int = DEFAULT_MAX_PAGES,
 ) -> bool:
-    """Prove a retry run admitted at least one non-skipped compatibility job."""
+    """Prove compatibility-job admission or explicit skips; reject missing evidence."""
     if max_pages <= 0:
         raise ValueError("max_pages must be positive")
     checked_run_id = _positive_int(run_id, field="retry workflow run id")
@@ -456,6 +456,7 @@ def fetch_dispatch_retry_matrix_admitted(
         f"repos/{quote(repo, safe='/')}/actions/runs/{checked_run_id}/jobs"
         f"?{urlencode({'per_page': REST_PAGE_SIZE})}"
     )
+    recognized_matrix_rows = False
     for page in range(1, max_pages + 1):
         payload = _rest_json(
             f"{endpoint_base}&page={page}",
@@ -463,13 +464,26 @@ def fetch_dispatch_retry_matrix_admitted(
             operation=f"retry workflow run {checked_run_id} jobs page {page}",
         )
         jobs = _fetch_retry_jobs_page(payload, run_id=checked_run_id, page=page)
-        if _compatibility_page_admission(jobs, run_id=checked_run_id) is True:
+        page_admission = _compatibility_page_admission(jobs, run_id=checked_run_id)
+        if page_admission is True:
             return True
+        if page_admission is False:
+            recognized_matrix_rows = True
         if len(jobs) < REST_PAGE_SIZE:
-            return False
+            if recognized_matrix_rows:
+                return False
+            raise MainCiRunFetchError(
+                f"retry workflow run {checked_run_id} jobs exhausted with no recognized "
+                f"{DISPATCH_MATRIX_JOB_NAME} job; refusing to infer matrix admission"
+            )
+    if not recognized_matrix_rows:
+        raise MainCiRunFetchError(
+            f"retry workflow run {checked_run_id} jobs reached the {max_pages}-page budget "
+            f"with no recognized {DISPATCH_MATRIX_JOB_NAME} job; refusing to infer matrix admission"
+        )
     raise MainCiRunFetchError(
         f"retry workflow run {checked_run_id} jobs exceeded the {max_pages}-page budget; "
-        "refusing to infer matrix admission"
+        "refusing to treat a partial all-skipped window as complete"
     )
 
 

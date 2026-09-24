@@ -48,6 +48,25 @@ def test_smoke_release_manifest_validates_against_campaign_config() -> None:
     assert not any(key.startswith("snqi_v2_") for key in resolved["metrics"])
 
 
+def test_v008_campaign_defers_publication_without_changing_scientific_inputs() -> None:
+    """Post-run validation needs the accepted episodes before bundle export."""
+    root = Path("configs/benchmarks")
+    predecessor = yaml.safe_load(
+        (root / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    candidate = yaml.safe_load(
+        (
+            root / "paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    assert predecessor.pop("export_publication_bundle") is True
+    assert candidate.pop("export_publication_bundle") is False
+    assert set(candidate.pop("snqi_v2_spec")) == {"weights_path", "anchors_path", "family_path"}
+    assert candidate == predecessor
+
+
 def test_snqi_v2_manifest_assets_are_complete_and_hash_bound(tmp_path: Path) -> None:
     """A v2 release binds all three declared source files to the campaign config."""
     source = load_release_manifest(

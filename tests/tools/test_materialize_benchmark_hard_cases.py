@@ -152,12 +152,35 @@ def _build_inputs(root: Path, *, include_unavailable: bool = True) -> tuple[Path
 
 
 def _case_for_row(row: dict[str, Any], index: int, group: str) -> dict[str, Any]:
+    source_metrics = row["metrics"]
+    showcase_metrics = {
+        "minimum_clearance_m": source_metrics.get("clearing_distance_min"),
+        "near_misses": source_metrics.get("near_misses"),
+        "force_exceed_events": source_metrics.get("force_exceed_events"),
+        "comfort_exposure": source_metrics.get("comfort_exposure"),
+        "time_to_goal_norm": source_metrics.get("time_to_goal_norm"),
+        "path_efficiency": source_metrics.get("path_efficiency"),
+        "snqi": source_metrics.get("snqi"),
+        "success_metric": (
+            float(source_metrics["success"])
+            if isinstance(source_metrics.get("success"), bool)
+            else source_metrics.get("success")
+        ),
+        "collisions_metric": source_metrics.get("collisions"),
+        "total_collision_count": source_metrics.get("total_collision_count"),
+    }
     return {
         "benchmark_eligible": True,
         "case_id": f"case-{index + 1:016x}",
         "episode_id": row["episode_id"],
-        "metrics": row["metrics"],
-        "outcome": row["outcome"],
+        "metrics": showcase_metrics,
+        "outcome": {
+            "route_complete": row["outcome"].get("route_complete", row["outcome"].get("success")),
+            "collision_event": row["outcome"].get(
+                "collision_event", row["outcome"].get("collision")
+            ),
+            "timeout_event": row["outcome"].get("timeout_event", row["outcome"].get("timeout")),
+        },
         "planner_key": row["algo"],
         "replay": {"status": "unavailable", "renderer_called": False},
         "scenario_family": "fixture",
@@ -310,19 +333,25 @@ def test_replay_identity_requires_selected_case_planner_scenario_and_seed() -> N
 
 
 @pytest.mark.parametrize(
-    ("observed_mode", "expected_status"),
+    ("source_mode", "observed_mode", "expected_status"),
     [
-        ("native", "exact_match"),
-        ("adapter", "execution_mode_identity_mismatch"),
-        ("malformed-extra-line", "invalid_output"),
+        ("native", "native", "exact_match"),
+        ("native", "adapter", "execution_mode_identity_mismatch"),
+        ("unknown", "unknown", "unavailable_execution_mode_identity"),
+        ("native", "malformed-extra-line", "invalid_output"),
     ],
 )
 def test_replay_records_episode_checksum_and_row_count(
-    tmp_path: Path, monkeypatch, observed_mode: str, expected_status: str
+    tmp_path: Path,
+    monkeypatch,
+    source_mode: str,
+    observed_mode: str,
+    expected_status: str,
 ) -> None:
     row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = source_mode
     case = {"planner_key": "goal", "scenario_id": "scenario_a", "seed": 111}
-    case_dir = tmp_path / observed_mode
+    case_dir = tmp_path / f"{source_mode}-{observed_mode}"
     observed = json.loads(json.dumps(row))
     observed["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = observed_mode
 
@@ -353,7 +382,7 @@ def test_replay_records_episode_checksum_and_row_count(
     assert replay["episode_output_sha256"] == _sha256(episode_path)
     assert replay["episode_output_checksum_status"] == "captured_at_run"
     if observed_mode != "malformed-extra-line":
-        assert replay["execution_mode_source"] == "native"
+        assert replay["execution_mode_source"] == source_mode
         assert replay["execution_mode"] == observed_mode
 
 
@@ -369,6 +398,34 @@ def test_source_checksum_mismatch_fails_closed(tmp_path: Path) -> None:
     episode.write_text(episode.read_text() + "{}\n", encoding="utf-8")
     with pytest.raises(MaterializationError, match="checksum mismatch"):
         materialize(_args(summary, campaign_root, matrix, tmp_path / "output"))
+
+
+@pytest.mark.parametrize(
+    ("measurement", "field", "replacement", "message"),
+    [
+        ("outcome", "collision_event", False, "showcase outcome collision_event differs"),
+        ("metrics", "near_misses", 99.0, "showcase metric near_misses differs"),
+        ("selected_groups", None, ["timeout_event"], "selected event group timeout_event"),
+    ],
+)
+def test_summary_measurements_and_event_groups_are_bound_to_hashed_source_row(
+    tmp_path: Path,
+    measurement: str,
+    field: str | None,
+    replacement: Any,
+    message: str,
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    case = summary["cases"][0]
+    if measurement == "selected_groups":
+        case[measurement] = replacement
+    else:
+        case[measurement][field] = replacement
+    summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(MaterializationError, match=message):
+        materialize(_args(summary_path, campaign_root, matrix, tmp_path / "output"))
 
 
 def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> None:
@@ -422,3 +479,149 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
     )
     assert resumed_case["replay"]["execution_mode_source"] == "native"
     assert resumed_case["replay"]["execution_mode"] == "native"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_status"),
+    [
+        ("metrics", "mismatch_same_revision"),
+        ("identity", "replay_identity_mismatch"),
+        ("unchanged", "replay_artifact_checksum_unverified"),
+    ],
+)
+def test_resume_rederives_classification_when_prior_episode_checksum_is_absent(
+    tmp_path: Path, mutation: str, expected_status: str
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    source_episode = campaign_root / "runs/goal__differential_drive/episodes.jsonl"
+    source_row = json.loads(source_episode.read_text(encoding="utf-8").splitlines()[0])
+    observed = json.loads(json.dumps(source_row))
+    if mutation == "metrics":
+        observed["metrics"]["near_misses"] = 99.0
+    elif mutation == "identity":
+        observed["seed"] = 112
+
+    replay_dir = case_file.parent / "replay"
+    replay_dir.mkdir()
+    (replay_dir / "episodes.jsonl").write_text(json.dumps(observed) + "\n", encoding="utf-8")
+    replay = {
+        "attempted": True,
+        "status": "exact_match",
+        "returncode": 0,
+        "source_revision": "source-revision",
+        "replay_revision": "source-revision",
+        "same_repository_revision": True,
+        "identity": {"status": "match"},
+        "comparison": {"overall": "match"},
+        "execution_mode": "native",
+        "execution_mode_source": "native",
+        "config_hash_source": source_row["algorithm_metadata"]["config_hash"],
+        "config_hash_replay": observed["algorithm_metadata"]["config_hash"],
+        "episode_output": "replay/episodes.jsonl",
+    }
+    # Deliberately omit episode_output_sha256 to model a prior receipt that did
+    # not bind the preserved replay bytes.
+    case_record["replay"] = replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = replay
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    args = _args(summary, campaign_root, matrix, tmp_path / "resumed")
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    resumed_case = json.loads(
+        (tmp_path / "resumed" / resumed["cases"][0]["case_file"]).read_text(encoding="utf-8")
+    )
+
+    assert resumed_case["replay"]["status"] == expected_status
+    assert resumed_case["replay"]["status"] != "exact_match"
+    assert (
+        resumed_case["replay"]["episode_output_checksum_status"]
+        == "calculated_on_resume_prior_receipt_unavailable"
+    )
+    if mutation == "metrics":
+        assert resumed_case["replay"]["comparison"]["overall"] == "mismatch"
+    elif mutation == "identity":
+        assert resumed_case["replay"]["identity"]["status"] == "mismatch"
+    else:
+        assert resumed_case["replay"]["checksum_unverified_derived_status"] == "exact_match"
+        repeated_args = _args(summary, campaign_root, matrix, tmp_path / "resumed-again")
+        repeated_args.resume_from = tmp_path / "resumed"
+        repeated = materialize(repeated_args)
+        repeated_case = json.loads(
+            (tmp_path / "resumed-again" / repeated["cases"][0]["case_file"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        assert repeated_case["replay"]["status"] == "replay_artifact_checksum_unverified"
+
+
+def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(
+    tmp_path: Path,
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    source_episode = campaign_root / "runs/goal__differential_drive/episodes.jsonl"
+    source_row = json.loads(source_episode.read_text(encoding="utf-8").splitlines()[0])
+    original_bytes = (json.dumps(source_row) + "\n").encode()
+    observed = json.loads(json.dumps(source_row))
+    observed["metrics"]["near_misses"] = 99.0
+    replay_dir = case_file.parent / "replay"
+    replay_dir.mkdir()
+    episode_path = replay_dir / "episodes.jsonl"
+    episode_path.write_text(json.dumps(observed) + "\n", encoding="utf-8")
+    replay = {
+        "attempted": True,
+        "status": "exact_match",
+        "returncode": 0,
+        "source_revision": "source-revision",
+        "replay_revision": "source-revision",
+        "same_repository_revision": True,
+        "identity": {"status": "match"},
+        "comparison": {"overall": "match"},
+        "execution_mode": "native",
+        "execution_mode_source": "native",
+        "config_hash_source": source_row["algorithm_metadata"]["config_hash"],
+        "config_hash_replay": observed["algorithm_metadata"]["config_hash"],
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_sha256": hashlib.sha256(original_bytes).hexdigest(),
+        "episode_output_checksum_origin": "captured_at_run",
+        "episode_output_checksum_status": "captured_at_run",
+    }
+    case_record["replay"] = replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = replay
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    args = _args(summary, campaign_root, matrix, tmp_path / "resumed")
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    resumed_case_path = tmp_path / "resumed" / resumed["cases"][0]["case_file"]
+    resumed_case = json.loads(resumed_case_path.read_text(encoding="utf-8"))
+    observed_hash = _sha256(resumed_case_path.parent / resumed_case["replay"]["episode_output"])
+    expected_hash = hashlib.sha256(original_bytes).hexdigest()
+    assert resumed_case["replay"]["status"] == "replay_artifact_checksum_mismatch"
+    assert resumed_case["replay"]["episode_output_sha256"] == expected_hash
+    assert resumed_case["replay"]["episode_output_observed_sha256"] == observed_hash
+
+    repeated_args = _args(summary, campaign_root, matrix, tmp_path / "resumed-again")
+    repeated_args.resume_from = tmp_path / "resumed"
+    repeated = materialize(repeated_args)
+    repeated_case = json.loads(
+        (tmp_path / "resumed-again" / repeated["cases"][0]["case_file"]).read_text(encoding="utf-8")
+    )
+    assert repeated_case["replay"]["status"] == "replay_artifact_checksum_mismatch"
+    assert repeated_case["replay"]["episode_output_sha256"] == expected_hash

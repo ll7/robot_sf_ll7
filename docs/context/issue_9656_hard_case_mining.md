@@ -53,7 +53,13 @@ release and all source episode rows remain the durable raw evidence; extracted p
 JSON files, replay matrices/configs, and replay episode rows stay in ignored `output/` caches.
 Source cases can be rematerialized from the release. The summary retains hashes and metrics for the
 four replay rows, but not their raw bytes; verify those exact receipts only while the local cache is
-preserved. A later replay is a new evaluation, not a reconstruction of those bytes.
+preserved. A later replay is a new evaluation, not a reconstruction of those bytes. On
+`--resume-from`, replay identity, execution mode, planner config, events, and metrics are recomputed
+from the copied episode row against its checksum-pinned source row. Only matching, resolved
+`native`, `adapter`, or `mixed` execution modes are eligible; `unknown` does not establish an exact
+replay. If the prior receipt did not contain an episode-output checksum, an otherwise exact
+comparison is retained as `replay_artifact_checksum_unverified`; capturing the current file hash
+establishes custody from that resume onward, not integrity of the original output at run time.
 
 ## Replay boundary and failed attempt
 
@@ -70,10 +76,11 @@ Five selected PPO rows remain unavailable because their archived model files are
 selected cases were not attempted. The release contains no `replay_steps`, so the showcase renderer
 reports all 36 source trajectories as unavailable. No trajectory/video renderer was called.
 Replay episode checksums were first captured while resuming existing output because those original
-receipts lacked output hashes; later copies matched. This records local artifact custody from the
-hash capture onward, not a signed checksum emitted by the original runner process. The historical
-release does not record its execution environment; replay Python/platform and `uv.lock` digest are
-included in the summary.
+receipts lacked output hashes; later copies matched. The source-row comparison is rederived on
+resume, and no successful comparison without its prior checksum is promoted to an exact match. This
+records local artifact custody from the hash capture onward, not a signed checksum emitted by the
+original runner process. The historical release does not record its execution environment; replay
+Python/platform and `uv.lock` digest are included in the summary.
 
 ## Claim boundary and ownership
 

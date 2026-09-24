@@ -42,6 +42,35 @@ METRIC_FIELDS = (
     "time_to_goal_norm",
     "path_efficiency",
 )
+# `benchmark-showcase.v1` stores selected measurements under these normalized
+# output names. Keep this mapping aligned with `scripts/tools/benchmark_showcase.py`;
+# materialization verifies those values against the checksum-pinned raw episode row.
+SHOWCASE_METRIC_FIELDS = (
+    ("clearing_distance_min", "minimum_clearance_m"),
+    ("near_misses", "near_misses"),
+    ("force_exceed_events", "force_exceed_events"),
+    ("comfort_exposure", "comfort_exposure"),
+    ("time_to_goal_norm", "time_to_goal_norm"),
+    ("path_efficiency", "path_efficiency"),
+    ("snqi", "snqi"),
+    ("success", "success_metric"),
+    ("collisions", "collisions_metric"),
+    ("total_collision_count", "total_collision_count"),
+)
+SHOWCASE_EVENT_GROUPS = {
+    "collision_event": ("collision_event", True),
+    "timeout_event": ("timeout_event", True),
+    "route_not_complete": ("route_complete", False),
+}
+SHOWCASE_METRIC_GROUPS = {
+    "minimum_clearance": "minimum_clearance_m",
+    "near_miss_extreme": "near_misses",
+    "force_exceed_extreme": "force_exceed_events",
+    "comfort_exposure_extreme": "comfort_exposure",
+    "slow_normalized_time": "time_to_goal_norm",
+    "low_path_efficiency": "path_efficiency",
+}
+SUPPORTED_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -72,6 +101,119 @@ def _finite_number(value: Any) -> float | None:
         return None
     result = float(value)
     return result if math.isfinite(result) else None
+
+
+def _showcase_bool(value: Any) -> bool | None:
+    """Normalize source event values the same way as the showcase selector."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float) and not isinstance(value, bool) and value in (0, 1):
+        return bool(value)
+    return None
+
+
+def _showcase_measurements(
+    row: dict[str, Any],
+) -> tuple[dict[str, bool | None], dict[str, float | None]]:
+    """Derive the v1 selector's event and metric snapshot from one raw episode row."""
+    outcome = row.get("outcome") if isinstance(row.get("outcome"), dict) else {}
+    raw_metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+    events = {
+        "route_complete": _showcase_bool(outcome.get("route_complete", outcome.get("success"))),
+        "collision_event": _showcase_bool(outcome.get("collision_event", outcome.get("collision"))),
+        "timeout_event": _showcase_bool(outcome.get("timeout_event", outcome.get("timeout"))),
+    }
+    metrics: dict[str, float | None] = {}
+    for source_key, output_key in SHOWCASE_METRIC_FIELDS:
+        value = raw_metrics.get(source_key)
+        if source_key == "success" and isinstance(value, bool):
+            metrics[output_key] = float(value)
+        else:
+            metrics[output_key] = _finite_number(value)
+    return events, metrics
+
+
+def _verify_selector_events(case: dict[str, Any], expected: dict[str, bool | None]) -> None:
+    """Require the selector's normalized event snapshot to match the source row."""
+    case_id = case.get("case_id", "unknown case")
+    supplied = case.get("outcome")
+    if not isinstance(supplied, dict) or set(supplied) != set(expected):
+        raise MaterializationError(
+            f"{case_id}: showcase outcome fields do not match the canonical source-row fields"
+        )
+    for field, expected_value in expected.items():
+        observed = supplied.get(field)
+        if (
+            observed is not None and not isinstance(observed, bool)
+        ) or observed is not expected_value:
+            raise MaterializationError(
+                f"{case_id}: showcase outcome {field} differs from the checksum-pinned source row"
+            )
+
+
+def _verify_selector_metrics(case: dict[str, Any], expected: dict[str, float | None]) -> None:
+    """Require the selector's normalized metrics snapshot to match the source row."""
+    case_id = case.get("case_id", "unknown case")
+    supplied = case.get("metrics")
+    if not isinstance(supplied, dict) or set(supplied) != set(expected):
+        raise MaterializationError(
+            f"{case_id}: showcase metric fields do not match the canonical source-row fields"
+        )
+    for field, expected_value in expected.items():
+        observed = supplied.get(field)
+        if expected_value is None:
+            matches = observed is None
+        else:
+            matches = _finite_number(observed) == expected_value
+        if not matches:
+            raise MaterializationError(
+                f"{case_id}: showcase metric {field} differs from the checksum-pinned source row"
+            )
+
+
+def _verify_selector_groups(
+    case: dict[str, Any],
+    events: dict[str, bool | None],
+    metrics: dict[str, float | None],
+) -> None:
+    """Reject selected event/metric groups unsupported by the checksum-pinned row."""
+    case_id = case.get("case_id", "unknown case")
+    groups = case.get("selected_groups")
+    if (
+        not isinstance(groups, list)
+        or not groups
+        or any(not isinstance(group, str) or not group for group in groups)
+        or len(set(groups)) != len(groups)
+    ):
+        raise MaterializationError(
+            f"{case_id}: selected groups are missing, malformed, or repeated"
+        )
+    for group in groups:
+        if group in SHOWCASE_EVENT_GROUPS:
+            event, selected_value = SHOWCASE_EVENT_GROUPS[group]
+            if events.get(event) is not selected_value:
+                raise MaterializationError(
+                    f"{case_id}: selected event group {group} is not supported by the source row"
+                )
+        elif group in SHOWCASE_METRIC_GROUPS:
+            metric = SHOWCASE_METRIC_GROUPS[group]
+            if metrics.get(metric) is None:
+                raise MaterializationError(
+                    f"{case_id}: selected metric group {group} has no source-row value"
+                )
+        else:
+            raise MaterializationError(f"{case_id}: unsupported showcase selection group {group!r}")
+
+
+def _selector_case_measurements(
+    case: dict[str, Any], row: dict[str, Any]
+) -> tuple[dict[str, bool | None], dict[str, float | None]]:
+    """Bind selector-reported outcomes, metrics, and event groups to the pinned row."""
+    events, metrics = _showcase_measurements(row)
+    _verify_selector_events(case, events)
+    _verify_selector_metrics(case, metrics)
+    _verify_selector_groups(case, events, metrics)
+    return events, metrics
 
 
 def _safe_relative(root: Path, value: Any, *, label: str) -> Path:
@@ -663,50 +805,7 @@ def _run_replay(
         )
         return result
     actual = replay_rows[0]
-    identity = _replay_identity(case, actual)
-    result["identity"] = identity
-    if identity["status"] != "match":
-        result["status"] = "replay_identity_mismatch"
-        return result
-    metadata = (
-        actual.get("algorithm_metadata")
-        if isinstance(actual.get("algorithm_metadata"), dict)
-        else {}
-    )
-    execution_mode = _execution_mode_identity(row, actual)
-    result["execution_mode"] = execution_mode["replay"]
-    result["execution_mode_source"] = execution_mode["source"]
-    result["episode_status"] = actual.get("status")
-    result["config_hash_source"] = (
-        (row.get("algorithm_metadata") or {}).get("config_hash")
-        if isinstance(row.get("algorithm_metadata"), dict)
-        else None
-    )
-    result["config_hash_replay"] = metadata.get("config_hash")
-    if execution_mode["status"] != "match":
-        result["status"] = execution_mode["status"]
-        return result
-    if result["config_hash_source"] != result["config_hash_replay"]:
-        result["status"] = "planner_config_identity_mismatch"
-        return result
-    comparison = _compare(row, actual)
-    result["comparison"] = comparison
-    if comparison["overall"] == "mismatch":
-        result["status"] = (
-            "mismatch_same_revision"
-            if result["same_repository_revision"]
-            else "mismatch_different_revision"
-        )
-    elif not result["same_repository_revision"]:
-        result["status"] = (
-            "matched_different_revision"
-            if comparison["overall"] == "match"
-            else "incomplete_different_revision"
-        )
-    else:
-        result["status"] = (
-            "exact_match" if comparison["overall"] == "match" else "incomplete_same_revision"
-        )
+    result.update(_classify_replay_row(case, row, actual, replay_revision))
     return result
 
 
@@ -762,16 +861,89 @@ def _execution_mode_identity(source: dict[str, Any], replay: dict[str, Any]) -> 
     replay_kinematics = replay_kinematics if isinstance(replay_kinematics, dict) else {}
     source_mode = source_kinematics.get("execution_mode")
     replay_mode = replay_kinematics.get("execution_mode")
-    if replay_mode in {"fallback", "degraded"} or replay_metadata.get("status") in {
-        "fallback",
-        "degraded",
-    }:
+    statuses = (
+        source_mode,
+        replay_mode,
+        source_metadata.get("status"),
+        replay_metadata.get("status"),
+    )
+    if any(isinstance(value, str) and value in {"fallback", "degraded"} for value in statuses):
         status = "fallback_or_degraded_not_evidence"
-    elif not isinstance(source_mode, str) or not isinstance(replay_mode, str):
+    elif (
+        not isinstance(source_mode, str)
+        or source_mode not in SUPPORTED_EXECUTION_MODES
+        or not isinstance(replay_mode, str)
+        or replay_mode not in SUPPORTED_EXECUTION_MODES
+    ):
         status = "unavailable_execution_mode_identity"
     else:
         status = "match" if source_mode == replay_mode else "execution_mode_identity_mismatch"
     return {"source": source_mode, "replay": replay_mode, "status": status}
+
+
+def _classify_replay_row(
+    case: dict[str, Any],
+    source_row: dict[str, Any],
+    replay_row: dict[str, Any],
+    replay_revision: Any,
+) -> dict[str, Any]:
+    """Derive replay classification from the checksum-pinned source and replay rows."""
+    source_revision = source_row.get("git_hash")
+    same_revision = (
+        isinstance(source_revision, str)
+        and bool(source_revision)
+        and isinstance(replay_revision, str)
+        and bool(replay_revision)
+        and source_revision == replay_revision
+    )
+    result: dict[str, Any] = {
+        "source_revision": source_revision,
+        "replay_revision": replay_revision,
+        "same_repository_revision": same_revision,
+        "identity": _replay_identity(case, replay_row),
+        "episode_status": replay_row.get("status"),
+        "config_hash_source": (
+            (source_row.get("algorithm_metadata") or {}).get("config_hash")
+            if isinstance(source_row.get("algorithm_metadata"), dict)
+            else None
+        ),
+        "config_hash_replay": (
+            (replay_row.get("algorithm_metadata") or {}).get("config_hash")
+            if isinstance(replay_row.get("algorithm_metadata"), dict)
+            else None
+        ),
+    }
+    if result["identity"]["status"] != "match":
+        result["status"] = "replay_identity_mismatch"
+        return result
+
+    mode_identity = _execution_mode_identity(source_row, replay_row)
+    result["execution_mode"] = mode_identity["replay"]
+    result["execution_mode_source"] = mode_identity["source"]
+    if mode_identity["status"] != "match":
+        result["status"] = mode_identity["status"]
+        return result
+    if result["config_hash_source"] != result["config_hash_replay"]:
+        result["status"] = "planner_config_identity_mismatch"
+        return result
+
+    comparison = _compare(source_row, replay_row)
+    result["comparison"] = comparison
+    if comparison["overall"] == "mismatch":
+        result["status"] = (
+            "mismatch_same_revision" if same_revision else "mismatch_different_revision"
+        )
+    elif not same_revision:
+        result["status"] = (
+            "matched_different_revision"
+            if comparison["overall"] == "match"
+            else "incomplete_different_revision"
+        )
+    else:
+        result["status"] = (
+            "exact_match" if comparison["overall"] == "match" else "incomplete_same_revision"
+        )
+    return result
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -856,36 +1028,67 @@ def _annotate_reused_episode_checksum(
     if isinstance(previous_hash, str) and previous_hash != copied_hash:
         replay["status"] = "replay_artifact_checksum_mismatch"
         replay["episode_output_checksum_status"] = "mismatch"
+        replay["episode_output_sha256"] = previous_hash
+        replay["episode_output_observed_sha256"] = copied_hash
     elif isinstance(previous_hash, str):
         replay["episode_output_checksum_status"] = "verified"
+        replay["episode_output_sha256"] = previous_hash
+        replay["episode_output_observed_sha256"] = copied_hash
     else:
         replay["episode_output_checksum_status"] = "calculated_on_resume_prior_receipt_unavailable"
-    replay["episode_output_sha256"] = copied_hash
+        replay["episode_output_sha256"] = copied_hash
 
 
-def _annotate_reused_execution_mode(
-    replay: dict[str, Any], row: dict[str, Any], case_dir: Path
+def _annotate_reused_replay_classification(
+    replay: dict[str, Any],
+    case: dict[str, Any],
+    row: dict[str, Any],
+    case_dir: Path,
+    *,
+    prior_checksum_verified: bool,
 ) -> None:
-    """Recheck source/replay execution mode from the copied replay episode row."""
+    """Recompute a reused result from its copied row and checksum-pinned source row."""
+    checksum_mismatch = replay.get("episode_output_checksum_status") == "mismatch"
     episode_output = replay.get("episode_output")
     if not isinstance(episode_output, str):
+        replay["status"] = (
+            "replay_artifact_checksum_mismatch" if checksum_mismatch else "unavailable_output"
+        )
         return
     episode_path = _safe_relative(case_dir, episode_output, label="reused replay episode output")
     replay_rows, malformed_rows = _read_replay_rows(episode_path)
     replay["replay_row_count"] = len(replay_rows)
     replay["replay_malformed_line_count"] = malformed_rows
     if len(replay_rows) != 1 or malformed_rows:
-        if replay.get("status") != "replay_artifact_checksum_mismatch":
-            replay["status"] = "invalid_output" if malformed_rows else "unavailable_output"
+        replay["status"] = (
+            "replay_artifact_checksum_mismatch"
+            if checksum_mismatch
+            else "invalid_output"
+            if malformed_rows
+            else "unavailable_output"
+        )
         return
-    identity = _execution_mode_identity(row, replay_rows[0])
-    replay["execution_mode_source"] = identity["source"]
-    replay["execution_mode"] = identity["replay"]
-    if (
-        identity["status"] != "match"
-        and replay.get("status") != "replay_artifact_checksum_mismatch"
-    ):
-        replay["status"] = identity["status"]
+    returncode = replay.get("returncode")
+    if not isinstance(returncode, int) or isinstance(returncode, bool):
+        replay["status"] = (
+            "replay_artifact_checksum_mismatch"
+            if checksum_mismatch
+            else "resume_runner_returncode_unavailable"
+        )
+        return
+    if returncode != 0:
+        replay["status"] = (
+            "replay_artifact_checksum_mismatch" if checksum_mismatch else "runner_failed"
+        )
+        return
+
+    classification = _classify_replay_row(case, row, replay_rows[0], replay.get("replay_revision"))
+    replay.update(classification)
+    if checksum_mismatch:
+        replay["status"] = "replay_artifact_checksum_mismatch"
+    elif not prior_checksum_verified and classification.get("status") == "exact_match":
+        replay["checksum_unverified_derived_status"] = "exact_match"
+        replay["status"] = "replay_artifact_checksum_unverified"
 
 
 def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates share one output transaction
@@ -929,6 +1132,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     reused_count = 0
     for case in cases:
         row, source_ref = _load_source_row(campaign_root, case)
+        selector_outcome, selector_metrics = _selector_case_measurements(case, row)
         if case.get("benchmark_eligible") is True:
             ineligible = _replay_ineligibility(row, matrix, True)
         else:
@@ -944,8 +1148,8 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                 "selection_contract": summary.get("selection", {}),
             },
             "criticality": {
-                "outcome": case.get("outcome"),
-                "metrics": case.get("metrics"),
+                "outcome": selector_outcome,
+                "metrics": selector_metrics,
                 "anomalies": _case_anomalies(case, row),
                 "evidence_tier": "diagnostic_only",
             },
@@ -1021,7 +1225,17 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                     _annotate_reused_episode_checksum(
                         previous_replay, previous_file.parent, case_dir
                     )
-                    _annotate_reused_execution_mode(previous_replay, row, case_dir)
+                    _annotate_reused_replay_classification(
+                        previous_replay,
+                        case,
+                        row,
+                        case_dir,
+                        prior_checksum_verified=(
+                            previous_replay.get("episode_output_checksum_status") == "verified"
+                            and previous_replay.get("episode_output_checksum_origin")
+                            == "captured_at_run"
+                        ),
+                    )
                     record["replay"] = {
                         **previous_replay,
                         "reused": True,

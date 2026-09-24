@@ -46,8 +46,11 @@ archive, both episode JSONL files, both diagnostic config files, and both produc
 `campaign_manifest.json` files. Retain each runner-produced
 `episodes.jsonl.provenance.json` beside its JSONL: the comparator checks its whole-file checksum,
 every row's line, episode, scenario, seed, source, and scenario-parameter hash, then binds the
-producer file to the matching diagnostic campaign directory and scenario-matrix hash. A mixed
-or unmanifested JSONL fails admission. The comparator requires the frozen source SHA, the separately
+producer file to the matching diagnostic campaign directory and scenario-matrix hash. The
+producer invocation must match the campaign invocation, including the named `--config` and
+`--campaign-id`; its schema, scenario-matrix, and planner configuration input checksums must
+match bytes pinned from the frozen source. A mixed, swapped, or unmanifested JSONL fails
+admission. The comparator requires the frozen source SHA, the separately
 pinned config SHA-256 values and effective hashes, per-step finite robot/pedestrian states and
 total pedestrian force vectors, and release-equivalent scientific parameters apart from the
 three recording flags. For seeds 22–24, the parameters are compared to the same release

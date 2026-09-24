@@ -34,12 +34,15 @@ with a candidate campaign by arm, scenario, and seed. It checks every predecesso
 `metrics` and `metric_values`, plus outcome, status, and executed steps. New metric fields are
 permitted; missing old fields, missing or extra identities, and changed finite values beyond
 absolute tolerance `1e-12` fail the gate. Existing nonfinite unavailable sentinels must match
-their class exactly; they are never counted as finite measurements.
+their class exactly; they are never counted as finite measurements. It also requires a resolved
+manifest at each source and compares the predecessor matrix, scenario, seed policy, planner roster,
+kinematics, and legacy SNQI asset declarations; new v2 declarations are permitted.
 
 The gate's archive self-test on the actual 0.0.7 bundle paired all 20,160 rows with zero
-mismatches. It found the historical `min_separation_corrupted_m` field is NaN on every row;
+mismatches and zero scientific-manifest differences. It found the historical
+`min_separation_corrupted_m` field is NaN on every row;
 420 rows also use NaN in `min_predicted_separation_m`. These are predecessor sentinels, not new
-0.0.8 results. Five focused comparator tests and Ruff passed. A successor campaign has not yet
+0.0.8 results. Seven focused comparator tests and Ruff passed. A successor campaign has not yet
 been submitted, so the actual 0.0.7-to-0.0.8 equivalence result is unavailable.
 
 ## Compute and release boundaries

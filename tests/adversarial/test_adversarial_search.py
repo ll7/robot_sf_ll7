@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import dataclasses
+import hashlib
 import json
 import sys
 import types
@@ -175,6 +176,62 @@ def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
         pedestrian_delay_s=0.0,
         scenario_seed=seed,
     )
+
+
+def _bound_episode_record(
+    config: SearchConfig,
+    scenario_yaml_path: Path,
+    candidate: CandidateSpec,
+    *,
+    route_complete: bool,
+) -> dict[str, Any]:
+    """Build a canonical-shaped fixture bound to the materialized candidate/config."""
+    scenario_payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
+    scenario = scenario_payload["scenarios"][0]
+    scenario_id = str(scenario["name"])
+    planner_config: dict[str, Any] = {}
+    if config.algo_config_path is not None:
+        parsed_planner_config = yaml.safe_load(config.algo_config_path.read_text(encoding="utf-8"))
+        planner_config = dict(parsed_planner_config or {})
+    planner_config_hash = search._config_hash(planner_config)
+    scenario_params = {key: value for key, value in scenario.items() if key != "seeds"}
+    scenario_params["id"] = scenario_id
+    scenario_params["algo"] = config.policy
+    scenario_params["algo_config_hash"] = planner_config_hash
+    termination_reason = "success" if route_complete else "collision"
+    return {
+        "version": "v1",
+        "episode_id": f"episode-{candidate.scenario_seed}",
+        "scenario_id": scenario_id,
+        "seed": candidate.scenario_seed,
+        "algo": config.policy,
+        "scenario_params": scenario_params,
+        "config_hash": search._config_hash(scenario_params),
+        "git_hash": "a" * 40,
+        "status": termination_reason,
+        "steps": 3,
+        "termination_reason": termination_reason,
+        "outcome": {
+            "route_complete": route_complete,
+            "collision_event": not route_complete,
+            "timeout_event": False,
+        },
+        "integrity": {"contradictions": []},
+        "algorithm_metadata": {
+            "algorithm": config.policy,
+            "canonical_algorithm": config.policy,
+            "baseline_category": "classical",
+            "execution_mode": "native",
+            "status": "ok",
+            "config_hash": planner_config_hash,
+            "config": planner_config,
+        },
+        "metrics": {
+            "snqi": 0.5,
+            "success": float(route_complete),
+            "collisions": int(not route_complete),
+        },
+    }
 
 
 def _runtime_base_map(*, obstacles: list[Obstacle] | None = None) -> MapDefinition:
@@ -1257,38 +1314,13 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
         """Write a provenance-complete planner episode and return its evaluation."""
         snqi = scores.pop(0)
         route_complete = snqi > 0.5
-        scenario_id = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))["scenarios"][
-            0
-        ]["name"]
-        record: dict[str, Any] = {
-            "version": "v1",
-            "episode_id": f"episode-{candidate.scenario_seed}",
-            "scenario_id": scenario_id,
-            "seed": candidate.scenario_seed,
-            "algo": _config.policy,
-            "git_hash": "a" * 40,
-            "status": "success" if route_complete else "collision",
-            "steps": 3,
-            "termination_reason": "success" if route_complete else "collision",
-            "outcome": {
-                "route_complete": route_complete,
-                "collision_event": not route_complete,
-                "timeout_event": False,
-            },
-            "integrity": {"contradictions": []},
-            "algorithm_metadata": {
-                "algorithm": _config.policy,
-                "canonical_algorithm": _config.policy,
-                "baseline_category": "classical",
-                "execution_mode": "native",
-                "status": "ok",
-            },
-            "metrics": {
-                "snqi": snqi,
-                "success": float(route_complete),
-                "collisions": int(not route_complete),
-            },
-        }
+        record = _bound_episode_record(
+            _config,
+            scenario_yaml_path,
+            candidate,
+            route_complete=route_complete,
+        )
+        record["metrics"]["snqi"] = snqi
         episode_path = candidate_dir / "episode_records.jsonl"
         episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
         trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
@@ -1346,6 +1378,194 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
         == 64
         for row in manifest["candidates"]
     )
+
+
+def test_target_episode_observation_hashes_and_parses_one_byte_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replacing an episode path after its read cannot swap the parsed outcome."""
+    config = _config(tmp_path)
+    candidate = _candidate(7)
+    scenario_path, _ = write_candidate_inputs(
+        config=config,
+        candidate=candidate,
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    record_a = _bound_episode_record(config, scenario_path, candidate, route_complete=False)
+    record_b = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
+    record_a_bytes = (json.dumps(record_a) + "\n").encode("utf-8")
+    record_b_bytes = (json.dumps(record_b) + "\n").encode("utf-8")
+    episode_path = tmp_path / "candidate" / "episode_records.jsonl"
+    episode_path.write_bytes(record_a_bytes)
+    attribution = dataclasses.replace(
+        attribution_from_episode_record(record_a),
+        details={
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
+    )
+    payload = search.classify_scenario_admissibility(
+        "candidate_0000",
+        scenario_artifact_path=scenario_path,
+        scenario_id=_candidate_scenario_id_for_test(scenario_path),
+    ).to_dict()
+    original_read_bytes = Path.read_bytes
+    replaced = False
+
+    def read_episode_then_replace(path: Path) -> bytes:
+        nonlocal replaced
+        content = original_read_bytes(path)
+        if path == episode_path and not replaced:
+            replaced = True
+            episode_path.write_bytes(record_b_bytes)
+        return content
+
+    monkeypatch.setattr(Path, "read_bytes", read_episode_then_replace)
+
+    observed = search._post_evaluation_admissibility(
+        payload,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_path,
+        episode_record_path=episode_path,
+        failure_attribution=attribution,
+    )
+
+    target_observation = observed["evidence"]["target_planner_observation"]
+    assert replaced is True
+    assert episode_path.read_bytes() == record_b_bytes
+    assert (
+        target_observation["episode_records_jsonl_sha256"]
+        == hashlib.sha256(record_a_bytes).hexdigest()
+    )
+    assert target_observation["scenario_config_hash"] == record_a["config_hash"]
+    assert (
+        target_observation["planner_config_hash"] == record_a["algorithm_metadata"]["config_hash"]
+    )
+    assert target_observation["route_complete"] is False
+    assert observed["target_planner_outcome"] == "route_incomplete"
+
+
+def test_target_episode_observation_binds_candidate_and_planner_config(
+    tmp_path: Path,
+) -> None:
+    """The native record must identify the exact sampled candidate and planner config."""
+    config = _config(tmp_path)
+    candidate = _candidate(7)
+    scenario_path, _ = write_candidate_inputs(
+        config=config,
+        candidate=candidate,
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
+    attribution = dataclasses.replace(
+        attribution_from_episode_record(record),
+        details={
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
+    )
+
+    assert (
+        search._target_episode_observation_reason(
+            record,
+            config=config,
+            candidate=candidate,
+            scenario_yaml_path=scenario_path,
+            failure_attribution=attribution,
+        )[0]
+        is None
+    )
+
+    changed_candidate = json.loads(json.dumps(record))
+    changed_candidate["scenario_params"]["metadata"]["adversarial_candidate"]["goal"]["x"] = 8.0
+    assert (
+        search._target_episode_observation_reason(
+            changed_candidate,
+            config=config,
+            candidate=candidate,
+            scenario_yaml_path=scenario_path,
+            failure_attribution=attribution,
+        )[0]
+        == "target_episode_record_candidate_parameters_mismatch"
+    )
+
+    changed_config = json.loads(json.dumps(record))
+    changed_config["scenario_params"]["algo_config_hash"] = "0" * 16
+    changed_config["config_hash"] = search._config_hash(changed_config["scenario_params"])
+    assert (
+        search._target_episode_observation_reason(
+            changed_config,
+            config=config,
+            candidate=candidate,
+            scenario_yaml_path=scenario_path,
+            failure_attribution=attribution,
+        )[0]
+        == "target_episode_planner_config_hash_mismatch"
+    )
+
+
+def test_target_episode_observation_rechecks_scenario_inputs_after_parse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scenario edit during observation cannot leave a bound target outcome."""
+    config = _config(tmp_path)
+    candidate = _candidate(7)
+    scenario_path, _ = write_candidate_inputs(
+        config=config,
+        candidate=candidate,
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    original_scenario_bytes = scenario_path.read_bytes()
+    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
+    episode_path = tmp_path / "candidate" / "episode_records.jsonl"
+    episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    attribution = dataclasses.replace(
+        attribution_from_episode_record(record),
+        details={
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
+    )
+    payload = search.classify_scenario_admissibility(
+        "candidate_0000",
+        scenario_artifact_path=scenario_path,
+        scenario_id=_candidate_scenario_id_for_test(scenario_path),
+    ).to_dict()
+    original_parse = search.parse_first_jsonl_record
+
+    def parse_then_mutate(data: bytes, *, source: str) -> dict[str, Any] | None:
+        parsed = original_parse(data, source=source)
+        scenario_path.write_bytes(original_scenario_bytes + b"# changed during observation\n")
+        return parsed
+
+    monkeypatch.setattr(search, "parse_first_jsonl_record", parse_then_mutate)
+
+    observed = search._post_evaluation_admissibility(
+        payload,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_path,
+        episode_record_path=episode_path,
+        failure_attribution=attribution,
+    )
+
+    assert observed["target_planner_outcome"] == "unavailable"
+    assert observed["evidence"]["target_planner_observation"]["reason_code"] == (
+        "target_scenario_runtime_input_changed_during_observation"
+    )
+
+
+def _candidate_scenario_id_for_test(scenario_yaml_path: Path) -> str:
+    """Read a single materialized scenario ID for direct observation fixtures."""
+    payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
+    return str(payload["scenarios"][0]["name"])
 
 
 def test_search_applies_and_records_admissibility_rejection(

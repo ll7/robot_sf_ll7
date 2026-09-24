@@ -62,8 +62,21 @@ arm/scenario/seed combinations. It computes episode-level Spearman correlation
 between simulated force impulse and normalized N. At absolute rho >= .90 it
 selects `robot_force_pp_equiv_impulse_total`; otherwise it retains the simulated
 component. It records the choice and correlation, linear-interpolated p95 F/J/K,
-run ID, source commit, episode hash, split identity and grid hash. A constant
+run ID, source commit, episode hash, split identity and grid hash. The helper also
+records the unsaturated exposure-fraction correlation for comparison; only clipped N
+is the preregistered decision input. A constant
 correlation, nonpositive p95, missing row or undefined selected source fails.
+Derive the reviewed artifact with:
+
+```bash
+uv run python scripts/tools/analyze_snqi_contract.py \
+  --campaign-root /durable/calibration-campaign \
+  --freeze-v2-anchors configs/benchmarks/snqi_v2/anchors.v2.0.json
+```
+
+The helper confines source files to the archived `runs/` directory, verifies row
+source commits against the campaign manifest, and records per-file hashes.
+
 In particular, undefined pedestrian–pedestrian-equivalent force on one-step
 traces is never replaced with zero. The 384-row four-arm diagnostic is not this
 calibration split and cannot establish the switch.
@@ -87,6 +100,8 @@ Every scored report emits both `reports/snqi_v2_diagnostics.{json,md}` and
 `reports/snqi_v2_family.{json,md}`. They include declared planner means and paired
 seed-bootstrap 95% intervals, rank correlations against declared/success ordering,
 top-1 frequencies, top-3 overlap, pairwise flips, and leave-one-out rank changes.
+The separate existing ranking-stability helper resamples seeds independently per
+planner and is explicitly labeled unpaired; the confidence intervals share seed draws.
 Undefined correlations are null. Correlations use average ties; tied top-1 values
 split credit; top-3 boundary ties use lexical arm identity. Bootstrap intervals
 with very few seeds are diagnostic and do not establish population precision.

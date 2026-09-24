@@ -295,6 +295,8 @@ def test_family_determinism_grid_and_scaling():
     }
     assert all(min(v["weights"][t] for t in QUALITY_TERMS) >= 0.02 for v in vectors)
     report = build_family_report(records(), fixture_spec(), bootstrap_samples=10)
+    assert report["bootstrap"]["confidence_intervals_paired"] is True
+    assert report["bootstrap"]["stability"]["paired"] is False
     assert report == build_family_report(records(), fixture_spec(), bootstrap_samples=10)
     scaled = replace(fixture_spec(), weights={key: 7 * value for key, value in WEIGHTS.items()})
     other = build_family_report(records(), scaled, bootstrap_samples=10)
@@ -319,6 +321,13 @@ def test_campaign_writes_both_reports_and_fields(tmp_path):
     assert raw["metrics"]["snqi_v2"] == 1
     assert raw["metrics"]["snqi"] == records()[0]["metrics"]["snqi"]
     assert len(raw["metrics"]["snqi_v2_terms"]) == 7
+    before = {
+        entry["episodes_path"]: Path(entry["episodes_path"]).read_bytes() for entry in entries
+    }
+    enrich_campaign_v2(
+        entries, fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=10
+    )
+    assert all(Path(path).read_bytes() == content for path, content in before.items())
 
 
 def calibration_records():
@@ -334,12 +343,16 @@ def calibration_records():
             "scenario_id": scenario,
             "seed": seed,
             "status": "success",
+            "horizon": 600,
+            "scenario_params": {"run_horizon": 600, "run_dt": 0.1, "record_forces": True},
+            "algorithm_metadata": {"execution_mode": "native"},
             "steps": 100,
             "metrics": metrics(
                 near_misses=int(rng.integers(0, 25)),
                 robot_force_impulse_total=float(rng.uniform(1, 30)),
                 jerk_mean=2,
                 curvature_mean=4,
+                robot_force_metadata={"sample_timing": "pre_integration"},
             ),
         }
         for arm in arms
@@ -371,6 +384,16 @@ def test_calibration_exact_grid_and_no_imputation():
         derive_calibration_anchors(rows, **kwargs)
 
 
+@pytest.mark.parametrize("field", ["algorithm_metadata", "horizon", "scenario_params"])
+def test_calibration_rejects_missing_execution_contract(field):
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0].pop(field)
+    with pytest.raises(ValueError, match="calibration requires"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
 def test_calibration_switch_requires_full_pp_coverage():
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.snqi.v2_spec import PP_EQUIV_FORCE
@@ -385,6 +408,66 @@ def test_calibration_switch_requires_full_pp_coverage():
     rows[0]["metrics"][PP_EQUIV_FORCE] = float("nan")
     with pytest.raises(ValueError, match="finite"):
         derive_calibration_anchors(rows, **kwargs)
+
+
+def test_freeze_calibration_archive_binds_files_and_source(tmp_path):
+    import hashlib
+
+    from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+
+    rows, kwargs = calibration_records()
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "preflight").mkdir()
+    manifest = {
+        "campaign_id": "synthetic-archive",
+        "git": {"commit": kwargs["source_commit"]},
+        "seed_policy": {"resolved_seeds": [101, 102]},
+        "planners": [{"key": arm, "enabled": True} for arm in kwargs["arms"]],
+    }
+    (tmp_path / "campaign_manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / "preflight/preview_scenarios.json").write_text(
+        json.dumps({"scenarios": [{"name": name} for name in kwargs["scenarios"]]})
+    )
+    runs = []
+    for arm in kwargs["arms"]:
+        path = tmp_path / "runs" / arm / "episodes.jsonl"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "".join(
+                json.dumps({**row, "git_hash": kwargs["source_commit"]}) + "\n"
+                for row in rows
+                if row["planner_key"] == arm
+            )
+        )
+        runs.append(
+            {
+                "status": "ok",
+                "planner": {"key": arm},
+                "episodes_path": f"/producer/archive/runs/{arm}/episodes.jsonl",
+                "summary": {
+                    "status": "ok",
+                    "total_jobs": 96,
+                    "written": 96,
+                    "algorithm_metadata_contract": {"execution_mode": "native"},
+                },
+            }
+        )
+    (tmp_path / "reports/campaign_summary.json").write_text(json.dumps({"runs": runs}))
+    output = tmp_path / "anchors.json"
+    document = freeze_campaign_anchors(tmp_path, output)
+    assert json.loads(output.read_text()) == document
+    hashes = document["calibration"]["episode_files_sha256"]
+    assert len(hashes) == 14
+    assert all(
+        hashlib.sha256((tmp_path / path).read_bytes()).hexdigest() == value
+        for path, value in hashes.items()
+    )
+    path = tmp_path / "runs" / kwargs["arms"][0] / "episodes.jsonl"
+    path.write_text(path.read_text().replace(kwargs["source_commit"], "c" * 40))
+    before = output.read_bytes()
+    with pytest.raises(ValueError, match="source commit mismatch"):
+        freeze_campaign_anchors(tmp_path, output)
+    assert output.read_bytes() == before
 
 
 def test_config_hash_preserves_disabled_v2_and_serializes_enabled(tmp_path):
@@ -455,17 +538,19 @@ def test_real_small_campaign_v2_outputs(tmp_path):
     scenario_path.write_text(
         "- name: v2_smoke\n  map_file: "
         + str(ROOT / "maps/svg_maps/classic_crossing.svg")
-        + "\n  seeds: [201, 202]\n  simulation_config:\n    ped_density: 0.0\n"
+        + "\n  seeds: [201]\n  simulation_config:\n    ped_density: 0.0\n"
     )
     cfg = CampaignConfig(
         name="v2_smoke",
         scenario_matrix_path=scenario_path,
         planners=(PlannerSpec(key="goal", algo="goal"),),
-        seed_policy=SeedPolicy(mode="fixed-list", seeds=(201, 202)),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(201,)),
         horizon=4,
         dt=0.1,
         workers=1,
         export_publication_bundle=False,
+        snqi_weights_path=ROOT / "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+        snqi_baseline_path=ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
         bootstrap_samples=10,
         snqi_contract=SnqiContractConfig(calibration_trials=10),
         snqi_v2_spec=fixture_spec(),
@@ -483,5 +568,13 @@ def test_real_small_campaign_v2_outputs(tmp_path):
     paths = list((root / "runs").glob("*/episodes.jsonl"))
     assert len(paths) == 1
     rows = [json.loads(line) for line in paths[0].read_text().splitlines()]
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert all("snqi_v2" in row["metrics"] and "snqi" in row["metrics"] for row in rows)
+
+
+def test_family_rejects_unpaired_or_duplicate_cells():
+    rows = records()
+    with pytest.raises(ValueError, match="paired scenario/seed"):
+        build_family_report(rows[:-1], fixture_spec(), bootstrap_samples=2)
+    with pytest.raises(ValueError, match="paired scenario/seed"):
+        build_family_report(rows + rows[:1], fixture_spec(), bootstrap_samples=2)

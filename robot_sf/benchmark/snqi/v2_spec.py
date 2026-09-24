@@ -10,14 +10,16 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.common.artifact_paths import get_repository_root
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    from pathlib import Path
 
 TERMS = ("S", "C", "T", "N", "F", "J", "K")
 QUALITY_TERMS = TERMS[2:]
@@ -163,7 +165,7 @@ class SnqiV2Spec:
             "snqi_v2_version": "SNQI-v2",
             "snqi_v2_calibration_split_id": self.calibration_split_id,
             "snqi_v2_force_source": self.force_source,
-            **{f"snqi_v2_{key}_path": value for key, value in self.paths.items()},
+            **{f"snqi_v2_{key}_path": _provenance_path(value) for key, value in self.paths.items()},
             **{f"snqi_v2_{key}_sha256": value for key, value in self.hashes.items()},
         }
 
@@ -227,7 +229,9 @@ def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
     calibration = anchors_doc["calibration"]
     if (
         calibration.get("episode_count") != 1344
+        or len(calibration["arms"]) != 14
         or len(set(calibration["arms"])) != 14
+        or len(calibration["scenarios"]) != 48
         or len(set(calibration["scenarios"])) != 48
         or calibration.get("execution_mode") != "native"
     ):
@@ -240,3 +244,12 @@ def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
         raise ValueError("SNQI-v2 calibration run_id is required")
     if any(anchors_doc["anchors"][key].get("type") != "calibration_p95" for key in ("F", "J", "K")):
         raise ValueError("SNQI-v2 F/J/K must be calibration p95 anchors")
+
+
+def _provenance_path(value: str) -> str:
+    """Return repository-relative asset locations for portable public provenance."""
+    path = Path(value)
+    try:
+        return str(path.relative_to(get_repository_root()))
+    except ValueError:
+        return str(path)

@@ -247,11 +247,15 @@ def build_family_report(
         "tie_policy": "average ranks for rho; split top-1 credit; lexical top-3 boundary",
         "bootstrap": {
             "unit": "seed",
-            "paired": True,
+            "confidence_intervals_paired": True,
             "samples": bootstrap_samples,
             "confidence": 0.95,
             "seed_count": len(seeds),
-            "stability": stability,
+            "stability": {
+                **stability,
+                "paired": False,
+                "resampling": "independent_per_planner_seed_resampling",
+            },
         },
         "declared_ranking": [
             {

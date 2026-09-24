@@ -17,6 +17,7 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from robot_sf.benchmark.fallback_policy import (
+    resolve_execution_mode,
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.snqi.v2_reports import read_episode_files, validate_episode_execution
@@ -44,8 +45,15 @@ def derive_calibration_anchors(
     Returns:
         A JSON-serializable anchor document ready for review and commit.
     """
+    _validate_provenance(run_id, source_commit, episodes_sha256)
     expected = set(product(arms, scenarios, (101, 102)))
-    if len(set(arms)) != 14 or len(set(scenarios)) != 48 or len(episodes) != 1344:
+    if (
+        len(arms) != 14
+        or len(set(arms)) != 14
+        or len(scenarios) != 48
+        or len(set(scenarios)) != 48
+        or len(episodes) != 1344
+    ):
         raise ValueError("SNQI-v2 calibration requires 14 arms x48 scenarios x2 seeds =1344")
     observed = set()
     force, exposure, fractions = [], [], []
@@ -54,11 +62,7 @@ def derive_calibration_anchors(
         if identity in observed or identity not in expected:
             raise ValueError(f"SNQI-v2 calibration duplicate or out-of-split identity: {identity}")
         observed.add(identity)
-        validate_episode_execution(episode)
-        if episode.get("status") not in {"success", "collision", "failure"}:
-            raise ValueError(
-                f"SNQI-v2 calibration rejects failed/fallback/degraded row: {identity}"
-            )
+        _validate_calibration_episode(episode)
         metrics = episode["metrics"]
         steps = finite_nonnegative(episode.get("steps"), "executed steps")
         near = finite_nonnegative(metrics.get("near_misses"), "near_misses")
@@ -172,3 +176,36 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False) + "\n")
     temporary.replace(output_path)
     return document
+
+
+def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) -> None:
+    """Require a named run and exact hexadecimal source/input identities."""
+    for label, value, length in (
+        ("source_commit", source_commit, 40),
+        ("episodes_sha256", episodes_sha256, 64),
+    ):
+        if len(value) != length or any(char not in "0123456789abcdef" for char in value):
+            raise ValueError(f"SNQI-v2 invalid calibration {label}")
+    if not run_id:
+        raise ValueError("SNQI-v2 calibration run_id is required")
+
+
+def _validate_calibration_episode(episode: Mapping[str, Any]) -> None:
+    """Require the frozen horizon, timestep, recording phase and known planner mode."""
+    validate_episode_execution(episode)
+    if episode.get("status") not in {"success", "collision", "failure"}:
+        raise ValueError("SNQI-v2 calibration rejects invalid episode execution status")
+    mode = resolve_execution_mode(episode.get("algorithm_metadata"))
+    if mode not in {"native", "adapter"}:
+        raise ValueError("SNQI-v2 calibration requires explicit native or adapter planner mode")
+    params = episode.get("scenario_params", {})
+    if (
+        episode.get("horizon") != 600
+        or params.get("run_horizon") != 600
+        or params.get("run_dt") != 0.1
+        or params.get("record_forces") is not True
+    ):
+        raise ValueError("SNQI-v2 calibration requires H600/dt0.1 with recorded forces")
+    metadata = episode.get("metrics", {}).get("robot_force_metadata", {})
+    if metadata.get("sample_timing") != "pre_integration":
+        raise ValueError("SNQI-v2 calibration requires pre-integration robot force samples")

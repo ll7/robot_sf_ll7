@@ -355,6 +355,33 @@ def _append_episode_evaluation(
     return evaluation
 
 
+def _refresh_evaluation_id(evaluation: dict[str, object]) -> None:
+    identity = {
+        key: evaluation.get(key)
+        for key in (
+            "case_id",
+            "effective_scenario_sha256",
+            "planner_id",
+            "planner_config_identity",
+            "source_revision",
+            "episode_sha256",
+            "outcome",
+            "termination_reason",
+            "metrics",
+            "execution_mode",
+            "readiness_status",
+            "availability_status",
+            "fallback_or_degraded",
+            "evidence_status",
+            "error",
+            "replay_receipt",
+        )
+    }
+    evaluation["evaluation_id"] = hashlib.sha256(
+        counterexample_corpus._stable_json(identity).encode("utf-8")
+    ).hexdigest()
+
+
 def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibility(
     tmp_path: Path,
 ) -> None:
@@ -1011,6 +1038,108 @@ def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Pa
     )
     assert incomplete_row["episode_sha256"] is None
     validate_corpus(corpus)
+
+
+def test_complete_evaluation_with_unknown_revision_stays_unknown(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    planner_id = "unknown-revision-planner"
+    config_identity = "unknown-revision-config"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=planner_id,
+        config_identity=config_identity,
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
+    row = next(item for item in corpus["planner_evaluations"] if item["planner_id"] == planner_id)
+    artifact = corpus_root / row["replay_receipt"]["artifact_path"]
+    record = json.loads(artifact.read_text(encoding="utf-8"))
+    record["git_hash"] = "unknown"
+    record["event_ledger"]["software_commit"] = "unknown"
+    artifact.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    row["source_revision"] = "unknown"
+    row["episode_sha256"] = artifact_sha256
+    row["replay_receipt"].update(
+        {
+            "source_revision": "unknown",
+            "episode_sha256": artifact_sha256,
+            "artifact_sha256": artifact_sha256,
+            "selected_event_identity": counterexample_corpus._selected_event_identity(record),
+        }
+    )
+    _refresh_evaluation_id(row)
+
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+
+    assert status["status_counts"]["solved"] == 0
+    assert status["status_counts"]["unknown"] == 1
+    assert "source_revision_invalid" in status["cases"][0]["reason_codes"]
+
+
+def test_invalid_run_replay_stays_unknown_not_unsolved(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    planner_id = "invalid-run-planner"
+    config_identity = "invalid-run-config"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=planner_id,
+        config_identity=config_identity,
+        execution_mode="native",
+        outcome={"collision_event": True, "route_complete": False, "timeout_event": False},
+    )
+    row = next(item for item in corpus["planner_evaluations"] if item["planner_id"] == planner_id)
+    artifact = corpus_root / row["replay_receipt"]["artifact_path"]
+    record = json.loads(artifact.read_text(encoding="utf-8"))
+    outcome = {"collision_event": False, "route_complete": False, "timeout_event": False}
+    metrics = {"success": False, "collisions": 0, "total_collision_count": 0}
+    record["status"] = "invalid"
+    record["termination_reason"] = "error"
+    record["outcome"] = outcome
+    record["metrics"].update(metrics)
+    record["event_ledger"]["exact_events"] = {
+        "collision": False,
+        "goal_reached": False,
+        "timeout": False,
+        "invalid_run": True,
+    }
+    record["event_ledger"]["collision_events"] = []
+    record["event_ledger"]["reconciliation"]["collision_metric_value"] = 0
+    artifact.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    row["outcome"] = outcome
+    row["termination_reason"] = "error"
+    row["metrics"] = metrics
+    row["episode_sha256"] = artifact_sha256
+    row["replay_receipt"].update(
+        {
+            "outcome": outcome,
+            "termination_reason": "error",
+            "metrics": metrics,
+            "episode_sha256": artifact_sha256,
+            "artifact_sha256": artifact_sha256,
+            "selected_event_identity": counterexample_corpus._selected_event_identity(record),
+        }
+    )
+    _refresh_evaluation_id(row)
+
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+
+    assert status["status_counts"]["unsolved"] == 0
+    assert status["status_counts"]["unknown"] == 1
+    assert "replay_artifact_invalid_run" in status["cases"][0]["reason_codes"]
 
 
 def test_replay_artifact_path_escape_stays_unknown(tmp_path: Path) -> None:

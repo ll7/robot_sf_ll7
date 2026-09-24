@@ -111,10 +111,14 @@ They also require a `replay_receipt` that points to a one-record episode JSONL
 artifact stored under the directory containing `corpus.json`. The public
 `create_planner_replay_receipt` helper builds the receipt from that stored file;
 it checks the case and seed, planner/config identity, source revision, outcomes,
-selected metrics and exact event identities. Both append and status recomputation
-recheck the artifact checksum and projection. A changed or missing artifact makes
-the observation `unknown`; a digest alone is not accepted as episode evidence.
-The receipt also pins the case's materialized scenario and route input digests.
+selected metrics, exact event identities, raw episode status, and the event
+ledger's `invalid_run` flag. A complete evaluation requires the same full Git
+commit identifier in the evaluation, episode, event ledger, and receipt; a
+placeholder such as `unknown` is insufficient. Both append and status
+recomputation recheck the artifact checksum and projection. A changed or missing
+artifact makes the observation `unknown`; a digest alone is not accepted as
+episode evidence. The receipt also pins the case's materialized scenario and
+route input digests.
 
 Build the receipt after placing the one-row JSONL artifact below the corpus root:
 
@@ -146,7 +150,10 @@ execution are eligible with adapter readiness. Every complete evaluation must
 also be available and free of fallback or degraded markers. Failed, partial,
 missing, and unknown observations can be retained with an explicit
 `evidence_status` and a reason; they contribute `unknown` status rather than
-being dropped or counted as a solve.
+being dropped or counted as a solve. Episodes marked invalid or error, and
+receipts that do not bind raw status plus `invalid_run`, remain `unknown` rather
+than being counted as planner-specific failures. Older receipts missing those
+bindings remain loadable but recompute as `unknown`.
 Legacy complete evaluation rows without a replay receipt remain loadable and
 visible, but recomputation reports them as `unknown`. New complete rows cannot
 be appended without a receipt.

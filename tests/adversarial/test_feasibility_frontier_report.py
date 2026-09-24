@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -521,6 +522,86 @@ def test_frontier_report_does_not_count_historical_upgrade_without_verified_fail
     assert second["case_frontier"]["confirmed_counterexamples_in_corpus"] == 1
 
 
+def test_frontier_report_credits_historical_upgrade_when_replay_evidence_arrives(
+    tmp_path: Path,
+) -> None:
+    """A later replay can validate an earlier upgrade only from its own round onward."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id="historical-delayed-replay",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unsolved",
+            verdict="admissible_feasibility_unknown",
+            replay_status="unavailable",
+        )
+    )
+    upgraded = _observation(
+        tmp_path,
+        round_number=2,
+        case_id="historical-delayed-replay",
+        origin_round=0,
+        origin_candidate_id=None,
+        planner_status="solved",
+        verdict="empirically_feasible",
+        replay_status="unavailable",
+    )
+    upgraded["admissibility_evidence_artifact"] = _artifact(
+        tmp_path, "historical-delayed-feasibility-proof.json", role="admissibility-evidence"
+    )
+    payload["rounds"][1]["case_observations"].append(upgraded)
+    third = _round(tmp_path, 3)
+    third["falsification"]["candidates"] = []
+    third["falsification"]["budget"]["candidates_completed"] = 0
+    third["case_observations"] = [
+        _observation(
+            tmp_path,
+            round_number=3,
+            case_id="historical-delayed-replay",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unsolved",
+            verdict="empirically_feasible",
+            replay_status="verified",
+        ),
+        _observation(
+            tmp_path,
+            round_number=3,
+            case_id="historical-late-confirmed",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unsolved",
+            verdict="empirically_feasible",
+            replay_status="verified",
+        ),
+    ]
+    payload["rounds"].append(third)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    first_report, second, third_report = report["rounds"]
+    assert first_report["case_frontier"]["confirmed_counterexamples_in_corpus"] == 1
+    assert second["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == []
+    assert second["falsification"][
+        "feasibility_upgrades_without_verified_counterexample_case_ids"
+    ] == ["historical-delayed-replay"]
+    assert second["case_frontier"]["verified_counterexamples_cumulative"] == 1
+    assert second["case_frontier"]["confirmed_counterexamples_in_corpus"] == 1
+    assert third_report["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == [
+        "historical-delayed-replay"
+    ]
+    assert third_report["falsification"]["verified_counterexample_case_ids"] == [
+        "historical-delayed-replay"
+    ]
+    assert third_report["falsification"][
+        "historical_counterexamples_confirmed_this_round_case_ids"
+    ] == ["historical-delayed-replay", "historical-late-confirmed"]
+    assert third_report["case_frontier"]["verified_counterexamples_cumulative"] == 2
+    assert third_report["case_frontier"]["confirmed_counterexamples_in_corpus"] == 3
+
+
 def test_frontier_report_rejects_case_origin_identity_changes(tmp_path: Path) -> None:
     """Stable case IDs retain the same origin round and candidate across observations."""
     payload = _evidence(tmp_path)
@@ -574,6 +655,34 @@ def test_frontier_report_requires_typed_case_artifact_roles(
     with pytest.raises(
         FrontierReportError,
         match=rf"{field}\.role must be '{expected_role}'",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field_path", "expected_role"),
+    [
+        (("optimization", "artifact"), "optimization"),
+        (("falsification", "artifact"), "falsification-search"),
+        (("evaluation_sets", "fixed", "artifact"), "fixed-evaluation"),
+        (("evaluation_sets", "regression", "artifact"), "regression-evaluation"),
+        (("evaluation_sets", "held_out", "artifact"), "held_out-evaluation"),
+    ],
+)
+def test_frontier_report_requires_round_artifact_roles(
+    tmp_path: Path, field_path: tuple[str, ...], expected_role: str
+) -> None:
+    """Typed round artifacts must declare the role their field claims to reference."""
+    payload = _evidence(tmp_path)
+    target: dict[str, Any] = payload["rounds"][0]
+    for key in field_path[:-1]:
+        target = target[key]
+    target[field_path[-1]]["role"] = "wrong-role"
+
+    field_name = ".".join(("rounds[0]", *field_path))
+    with pytest.raises(
+        FrontierReportError,
+        match=re.escape(f"{field_name}.role must be '{expected_role}'"),
     ):
         build_frontier_report(payload, evidence_root=tmp_path)
 

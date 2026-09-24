@@ -93,21 +93,22 @@ def build_frontier_report(
     round_reports: list[dict[str, Any]] = []
     discovered_counterexamples: dict[str, int] = {}
     historical_case_states = _historical_case_states(evidence["rounds"])
-    admitted_unknown_cases = {
-        case_id: 0
-        for case_id, state in historical_case_states.items()
-        if state["admissibility_verdict"] == "admissible_feasibility_unknown"
-    }
+    admitted_unknown_cases: dict[str, int] = {}
     current_case_verdicts: dict[str, str] = {}
-    known_confirmed_case_ids = {
-        case_id
-        for case_id, state in historical_case_states.items()
-        if state["admissibility_verdict"] in _CONFIRMED_FEASIBILITY_VERDICTS
-        and state["verified_target_failure"]
-    }
+    known_confirmed_case_ids: set[str] = set()
 
     for round_data in evidence["rounds"]:
         number = round_data["round_number"]
+        historical_confirmed_this_round = [
+            case_id
+            for case_id, state in historical_case_states.items()
+            if state["confirmed_counterexample_evidence_round"] == number
+        ]
+        for case_id, state in historical_case_states.items():
+            if state["initial_unknown_round"] == number:
+                admitted_unknown_cases.setdefault(case_id, number)
+            if state["confirmed_counterexample_evidence_round"] == number:
+                known_confirmed_case_ids.add(case_id)
         eval_summary = {
             name: _summarize_evaluation_set(round_data["evaluation_sets"][name])
             for name in _EVALUATION_SETS
@@ -127,23 +128,29 @@ def build_frontier_report(
         )
 
         observations = round_data["case_observations"]
-        feasibility_upgrade_observations = [
+        loop_feasibility_upgrade_observations = [
             observation
             for observation in observations
+            if observation["origin_round"] > 0
             if _is_followup_feasibility_upgrade(number, observation, current_case_verdicts)
         ]
-        feasibility_upgrades = [
-            observation["case_id"]
-            for observation in feasibility_upgrade_observations
-            if _upgrade_has_verified_counterexample_evidence(observation, historical_case_states)
+        historical_verified_upgrades = [
+            case_id
+            for case_id, state in historical_case_states.items()
+            if state["feasibility_upgrade_credit_round"] == number
         ]
         unverified_feasibility_upgrades = [
-            observation["case_id"]
-            for observation in feasibility_upgrade_observations
-            if not _upgrade_has_verified_counterexample_evidence(
-                observation, historical_case_states
+            case_id
+            for case_id, state in historical_case_states.items()
+            if state["feasibility_upgrade_round"] == number
+            and (
+                state["first_verified_target_failure_round"] is None
+                or state["first_verified_target_failure_round"] > number
             )
         ]
+        feasibility_upgrades = [
+            observation["case_id"] for observation in loop_feasibility_upgrade_observations
+        ] + historical_verified_upgrades
         verified_case_ids.extend(feasibility_upgrades)
         for case_id in feasibility_upgrades:
             discovered_counterexamples.setdefault(case_id, number)
@@ -161,7 +168,10 @@ def build_frontier_report(
         falsification = round_data["falsification"]
         candidate_status_counts = Counter(item["evaluation_status"] for item in candidates)
         candidate_verdict_counts = Counter(item["admissibility_verdict"] for item in candidates)
-        no_verified_counterexample = not verified_case_ids
+        search_verified_case_ids = [
+            case_id for case_id in verified_case_ids if case_id not in historical_verified_upgrades
+        ]
+        no_verified_counterexample = not search_verified_case_ids
         no_discovery_statement = None
         if no_verified_counterexample:
             repeated_clause = (
@@ -170,11 +180,17 @@ def build_frontier_report(
                 if repeated_verified_case_ids
                 else ""
             )
+            historical_clause = (
+                f"{len(historical_confirmed_this_round)} historical case(s) reached "
+                "replay-verified counterexample status from persisted follow-up evidence. "
+                if historical_confirmed_this_round
+                else ""
+            )
             no_discovery_statement = (
                 "No new unique replay-verified planner counterexample was recorded by this round's "
                 f"finite search budget ({falsification['budget']['candidate_limit']} candidates, "
                 f"{falsification['budget']['simulator_invocations']} simulator invocations). "
-                f"{repeated_clause}"
+                f"{repeated_clause}{historical_clause}"
                 "This does not establish that no counterexample exists."
             )
 
@@ -205,6 +221,9 @@ def build_frontier_report(
                     ),
                     "feasibility_upgrades_without_verified_counterexample_case_ids": sorted(
                         set(unverified_feasibility_upgrades)
+                    ),
+                    "historical_counterexamples_confirmed_this_round_case_ids": sorted(
+                        historical_confirmed_this_round
                     ),
                     "candidate_records": candidates,
                     "no_verified_counterexample_statement": no_discovery_statement,
@@ -900,36 +919,62 @@ def _is_followup_feasibility_upgrade(
     return latest_verdicts.get(observation["case_id"]) == "admissible_feasibility_unknown"
 
 
-def _upgrade_has_verified_counterexample_evidence(
-    observation: dict[str, Any], historical_case_states: dict[str, dict[str, Any]]
-) -> bool:
-    """Require historical replay of an observed target failure before upgrade credit."""
-    if observation["origin_round"] != 0:
-        # Discovered cases are admitted only after a complete failed evaluation and verified replay.
-        return True
-    state = historical_case_states.get(observation["case_id"])
-    return state is not None and state["verified_target_failure"]
-
-
 def _historical_case_states(rounds: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Return first feasibility plus any persisted replay-verified target failure."""
+    """Return round-indexed evidence milestones for origin-zero historical cases."""
     states: dict[str, dict[str, Any]] = {}
     for round_data in rounds:
+        number = round_data["round_number"]
         for observation in round_data["case_observations"]:
-            if observation["origin_round"] == 0:
-                state = states.setdefault(
-                    observation["case_id"],
-                    {
-                        "admissibility_verdict": observation["admissibility_verdict"],
-                        "replay_status": observation["replay_status"],
-                        "verified_target_failure": False,
-                    },
-                )
-                if observation["replay_status"] == "verified" and observation["planner_status"] in {
-                    "unsolved",
-                    "mixed",
-                }:
-                    state["verified_target_failure"] = True
+            if observation["origin_round"] != 0:
+                continue
+            case_id = observation["case_id"]
+            verdict = observation["admissibility_verdict"]
+            state = states.setdefault(
+                case_id,
+                {
+                    "first_observed_round": number,
+                    "initial_unknown_round": (
+                        number if verdict == "admissible_feasibility_unknown" else None
+                    ),
+                    "first_confirmed_round": None,
+                    "feasibility_upgrade_round": None,
+                    "first_verified_target_failure_round": None,
+                    "latest_verdict": None,
+                },
+            )
+            previous_verdict = state["latest_verdict"]
+            if (
+                state["first_confirmed_round"] is None
+                and verdict in _CONFIRMED_FEASIBILITY_VERDICTS
+            ):
+                state["first_confirmed_round"] = number
+            if (
+                state["feasibility_upgrade_round"] is None
+                and previous_verdict == "admissible_feasibility_unknown"
+                and verdict in _CONFIRMED_FEASIBILITY_VERDICTS
+            ):
+                state["feasibility_upgrade_round"] = number
+            if (
+                state["first_verified_target_failure_round"] is None
+                and observation["replay_status"] == "verified"
+                and observation["planner_status"] in {"unsolved", "mixed"}
+            ):
+                state["first_verified_target_failure_round"] = number
+            state["latest_verdict"] = verdict
+    for state in states.values():
+        confirmed_round = state["first_confirmed_round"]
+        failure_round = state["first_verified_target_failure_round"]
+        upgrade_round = state["feasibility_upgrade_round"]
+        state["confirmed_counterexample_evidence_round"] = (
+            max(confirmed_round, failure_round)
+            if confirmed_round is not None and failure_round is not None
+            else None
+        )
+        state["feasibility_upgrade_credit_round"] = (
+            max(upgrade_round, failure_round)
+            if upgrade_round is not None and failure_round is not None
+            else None
+        )
     return states
 
 
@@ -965,6 +1010,12 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
     for field in ("method", "objective", "selection_rule"):
         _require_text(optimization, field, errors, f"{prefix}.optimization")
     _validate_seeds(optimization.get("seeds"), f"{prefix}.optimization.seeds", errors)
+    _validate_artifact_role(
+        optimization.get("artifact"),
+        f"{prefix}.optimization.artifact",
+        "optimization",
+        errors,
+    )
     _validate_budget(
         optimization.get("budget"),
         f"{prefix}.optimization.budget",
@@ -995,6 +1046,12 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
     if falsification.get("stop_reason") not in _STOP_REASONS:
         errors.append(f"{prefix}.falsification.stop_reason is unsupported")
     _validate_seeds(falsification.get("seeds"), f"{prefix}.falsification.seeds", errors)
+    _validate_artifact_role(
+        falsification.get("artifact"),
+        f"{prefix}.falsification.artifact",
+        "falsification-search",
+        errors,
+    )
     _validate_budget(
         falsification.get("budget"),
         f"{prefix}.falsification.budget",
@@ -1096,6 +1153,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         _validate_evaluation_set(
             evaluation_sets.get(set_name),
             f"{prefix}.evaluation_sets.{set_name}",
+            f"{set_name}-evaluation",
             evidence_root,
             artifacts,
             errors,
@@ -1165,6 +1223,12 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             )
         admissibility_evidence = observation.get("admissibility_evidence_artifact")
         if admissibility_evidence is not None:
+            _validate_artifact_role(
+                admissibility_evidence,
+                f"{obs_prefix}.admissibility_evidence_artifact",
+                "admissibility-evidence",
+                errors,
+            )
             _validate_artifact(
                 admissibility_evidence,
                 f"{obs_prefix}.admissibility_evidence_artifact",
@@ -1177,6 +1241,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
 def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-level evidence findings.
     value: Any,
     prefix: str,
+    expected_artifact_role: str,
     evidence_root: Path,
     artifacts: dict[str, dict[str, str]],
     errors: list[str],
@@ -1187,6 +1252,9 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
     expected = value.get("expected_episode_count")
     if not isinstance(expected, int) or isinstance(expected, bool) or expected < 0:
         errors.append(f"{prefix}.expected_episode_count must be a non-negative integer")
+    _validate_artifact_role(
+        value.get("artifact"), f"{prefix}.artifact", expected_artifact_role, errors
+    )
     _validate_artifact(
         value.get("artifact"), f"{prefix}.artifact", evidence_root, artifacts, errors
     )

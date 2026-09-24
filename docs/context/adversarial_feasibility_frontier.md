@@ -47,8 +47,12 @@ reason.
 
 Optimizer, search, evaluation, corpus, replay, and later admissibility-evidence artifacts use
 relative paths inside the evidence bundle and carry a full source revision, schema label, role, and
-SHA-256. Escaping paths, absent files, changed bytes, missing budgets, abbreviated source revisions,
-duplicate identities, and candidate-ledger/budget count mismatches fail closed. Candidate rows retain
+SHA-256. Round-level optimizer, search, and evaluation references require the `optimization`,
+`falsification-search`, `fixed-evaluation`, `regression-evaluation`, and `held_out-evaluation` roles,
+respectively. Case observations require `falsification-search`, `corpus`, and
+`admissibility-evidence` on their corresponding references. Escaping paths, absent files, changed
+bytes, missing budgets, abbreviated source revisions, duplicate identities, and candidate-ledger/budget
+count mismatches fail closed. Candidate rows retain
 evaluation status, admissibility verdict, target-failure observation, replay result, corpus
 disposition, and stable case ID. Case observations use the `falsification-search` role for their
 origin search artifact and the `corpus` role for their corpus artifact. A case ID's origin round and
@@ -62,7 +66,10 @@ complete evidence plus a checksummed artifact whose role is `admissibility-evide
 does not infer stronger feasibility from a replay alone. Transitions are checked against the latest
 recorded verdict: an unknown-to-confirmed upgrade counts once, repeated observations at the confirmed
 verdict remain in the corpus without repeated discovery credit, and verdict downgrades fail closed.
-A historical unknown-feasibility case receives follow-up discovery credit only if a persisted
+A historical case is confirmed as a planner counterexample only from the later of its first confirmed
+feasibility verdict and its first replay-verified unsolved or mixed planner outcome. A later replay
+cannot backdate confirmation or feasibility-upgrade credit into an earlier round. A historical
+unknown-feasibility case receives follow-up discovery credit only if a persisted
 historical observation has both a verified replay and an unsolved or mixed planner outcome. Otherwise
 its evidence-backed feasibility upgrade is retained in
 `feasibility_upgrades_without_verified_counterexample_case_ids` and is not counted as a verified

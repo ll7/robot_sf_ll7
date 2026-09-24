@@ -3,7 +3,7 @@
 **Status:** current fixture-backed report implementation for issue #9654. Full empirical
 acceptance remains pending a completed small persisted loop from #9653.
 
-The report builder consumes a versioned `adversarial-coevolution-evidence.v2` JSON bundle and
+The report builder consumes a versioned `adversarial-coevolution-evidence.v3` JSON bundle and
 produces `adversarial-feasibility-frontier.v2` JSON, a compact Markdown report, and a two-panel
 publication-style figure. It does not launch a planner, search, replay, or simulator. It summarizes
 the records in the persisted input bundle, checks every referenced artifact against its SHA-256,
@@ -47,13 +47,23 @@ reason.
 
 Optimizer, search, evaluation, corpus, replay, and admissibility-evidence artifacts use relative
 paths inside the evidence bundle and carry a full source revision, schema label, role, and SHA-256.
-Each per-round corpus status artifact uses `frontier-corpus-case-status.v1`; its case ID, origin
-round/candidate, planner/config identity, and recorded status fields must match the enclosing
-observation. Admissibility evidence uses `scenario_admissibility.v1`; its case ID, verdict, and
-retain/reject disposition must match the candidate or observation. The report parses the JSON and
-checks those content bindings rather than treating a role label and digest as sufficient. Confirmed
-feasibility additionally requires a named completed execution or a bound feasible oracle result.
-A checksummed artifact for a different case or verdict cannot substantiate the observation.
+Each per-round corpus status artifact uses `frontier-corpus-case-status.v2`; its case ID, origin
+round/candidate, scenario ID and scenario-artifact digest, admissibility artifact reference,
+planner/config identity, and recorded status fields must match the enclosing observation.
+Admissibility evidence uses the producer's `scenario_admissibility.v1` contract; its case ID,
+scenario ID, verdict, and retain/reject disposition must match the candidate or observation. The
+report parses the JSON and binds the captured scenario bytes to the candidate and corpus record.
+For a confirmed verdict, named execution records must include the producer's run status, original
+scenario variant, fallback state, seed/horizon, scenario/robot/simulator/planner/environment
+digests, source commit, and execution reference. Their scenario digest and source commit must match
+the case and enclosing round; target/replay planner ID and config digest must match that round's
+planner. A planner-specific failure also requires a completed reference, incomplete target, and
+deterministic resimulated replay with the same target episode, source episode-store digest, planner
+config, checkpoint, seed, and horizon. A feasible-oracle result is accepted only when its named
+actor-free rollout record passes the producer's completion and source-digest checks. Unknown
+feasibility remains valid when the case and scenario bytes are bound, even if no completed run is
+available. A checksummed artifact for a different case, scenario, round, source revision, or target
+planner/config cannot substantiate the observation.
 Round-level optimizer, search, and evaluation references require the `optimization`,
 `falsification-search`, `fixed-evaluation`, `regression-evaluation`, and `held_out-evaluation` roles,
 respectively. Case observations require `falsification-search`, `corpus`, and
@@ -115,7 +125,7 @@ outcomes are reported separately; neither is synthesized as a success or failure
 
 The optimizer artifact content uses `frontier-optimizer-selection.v1` and records its experiment,
 round, source revision, selected planner ID, and selected config SHA-256. The search artifact uses
-`frontier-falsification-source.v2` and records the same round identity, target planner/config, and
+`frontier-falsification-source.v3` and records the same round identity, target planner/config, and
 the complete candidate ledger fields consumed by the report, including each admissibility-evidence
 reference. The selected optimizer identity and search
 target must match the enclosing round planner/configuration, and the report's candidate rows must

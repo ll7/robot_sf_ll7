@@ -1,6 +1,6 @@
 """Build a provenance-bound, fixture-first report of planner/search rounds.
 
-The input is a persisted ``adversarial-coevolution-evidence.v2`` bundle. This
+The input is a persisted ``adversarial-coevolution-evidence.v3`` bundle. This
 module summarizes the supplied records; it does not run planners, infer dynamic
 feasibility, or turn a finite no-discovery result into a claim of absence.
 """
@@ -24,7 +24,7 @@ from robot_sf.benchmark.figures.export import save_publication_figure
 from robot_sf.benchmark.figures.provenance import build_provenance
 from robot_sf.benchmark.figures.style import planner_color, publication_style
 
-INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v2"
+INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v3"
 REPORT_SCHEMA_VERSION = "adversarial-feasibility-frontier.v2"
 _GIT_SHA = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -62,13 +62,21 @@ _CORPUS_DISPOSITIONS = {
 }
 _EVALUATION_SETS = ("fixed", "regression", "held_out")
 _OPTIMIZER_SELECTION_SCHEMA = "frontier-optimizer-selection.v1"
-_FALSIFICATION_SOURCE_SCHEMA = "frontier-falsification-source.v2"
+_FALSIFICATION_SOURCE_SCHEMA = "frontier-falsification-source.v3"
 _EVALUATION_SOURCE_SCHEMA = "frontier-evaluation-source.v2"
-_CORPUS_CASE_STATUS_SCHEMA = "frontier-corpus-case-status.v1"
+_CORPUS_CASE_STATUS_SCHEMA = "frontier-corpus-case-status.v2"
 _ADMISSIBILITY_EVIDENCE_SCHEMA = "scenario_admissibility.v1"
+_DIAGNOSTIC_CLAIM_BOUNDARY = "diagnostic_only_not_benchmark_evidence"
+_ORACLE_EVIDENCE_SCHEMAS = {
+    "scenario_feasibility_oracle.v1",
+    "envelope_sensitivity_axis.v1",
+    "issue_5574_feasibility_oracle_report.v1",
+}
 _SEARCH_CANDIDATE_SOURCE_FIELDS = (
     "candidate_id",
     "case_id",
+    "scenario_id",
+    "scenario_artifact_sha256",
     "evaluation_status",
     "admissibility_verdict",
     "admissibility_evidence_artifact",
@@ -110,6 +118,17 @@ class _EvaluationSetContext:
     experiment_id: Any
     round_number: int
     set_name: str
+    planner: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _AdmissibilityContext:
+    case_id: Any
+    verdict: Any
+    scenario_id: Any
+    scenario_artifact_sha256: Any
+    target_failure_observed: Any
+    source_revision: Any
     planner: dict[str, Any]
 
 
@@ -872,7 +891,7 @@ def _validate_case_observation_origins(  # noqa: C901 - history-linked origin ch
     errors: list[str],
 ) -> None:
     latest_observations: dict[str, dict[str, Any]] = {}
-    case_origins: dict[str, tuple[int, Any]] = {}
+    case_origins: dict[str, tuple[int, Any, Any, Any]] = {}
     for round_data in rounds:
         if not isinstance(round_data, dict) or not isinstance(round_data.get("round_number"), int):
             continue
@@ -913,7 +932,7 @@ def _validate_case_observation_origins(  # noqa: C901 - history-linked origin ch
 def _validate_case_origin_identity(
     current_round: int,
     observation: dict[str, Any],
-    case_origins: dict[str, tuple[int, Any]],
+    case_origins: dict[str, tuple[int, Any, Any, Any]],
     errors: list[str],
 ) -> None:
     case_id = observation.get("case_id")
@@ -924,7 +943,12 @@ def _validate_case_origin_identity(
         or isinstance(origin_round, bool)
     ):
         return
-    identity = (origin_round, observation.get("origin_candidate_id"))
+    identity = (
+        origin_round,
+        observation.get("origin_candidate_id"),
+        observation.get("scenario_id"),
+        observation.get("scenario_artifact_sha256"),
+    )
     previous_identity = case_origins.setdefault(case_id, identity)
     if previous_identity != identity:
         errors.append(
@@ -956,6 +980,15 @@ def _validate_discovered_case_observation(
         errors.append(
             f"round {current_round} case {case_id!r} origin candidate does not match "
             "its discovery record"
+        )
+        return
+    if any(
+        observation.get(field) != origin_candidate.get(field)
+        for field in ("scenario_id", "scenario_artifact_sha256")
+    ):
+        errors.append(
+            f"round {current_round} case {case_id!r} scenario identity does not match "
+            "its discovery candidate"
         )
         return
     expected_search = round_search_artifacts.get(origin_round)
@@ -1015,6 +1048,14 @@ def _validate_same_round_case_observation(
         errors.append(
             f"round {current_round} case {case_id!r} conflicts with its "
             "same-round discovery admissibility verdict"
+        )
+    if not _same_artifact_reference(
+        observation.get("admissibility_evidence_artifact"),
+        origin_candidate.get("admissibility_evidence_artifact"),
+    ):
+        errors.append(
+            f"round {current_round} case {case_id!r} admissibility evidence does not match "
+            "its origin candidate"
         )
     if observation.get("replay_status") != origin_candidate.get("replay_status"):
         errors.append(
@@ -1317,6 +1358,14 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             errors.append(f"{candidate_prefix}.case_id must be non-empty text or null")
         elif corpus_disposition == "duplicate" and not isinstance(case_id, str):
             errors.append(f"{candidate_prefix} duplicate record requires case_id")
+        if corpus_disposition in {"admitted", "duplicate"}:
+            _require_text(candidate, "scenario_id", errors, candidate_prefix)
+            _require_sha(
+                candidate.get("scenario_artifact_sha256"),
+                f"{candidate_prefix}.scenario_artifact_sha256",
+                _SHA256,
+                errors,
+            )
         admissibility_artifact = candidate.get("admissibility_evidence_artifact")
         if corpus_disposition in {"admitted", "duplicate"}:
             _validate_artifact_role(
@@ -1336,10 +1385,17 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             _validate_admissibility_evidence_source(
                 admissibility_source,
                 admissibility_artifact,
-                case_id,
-                candidate.get("admissibility_verdict"),
-                f"{candidate_prefix}.admissibility_evidence_artifact",
-                errors,
+                context=_AdmissibilityContext(
+                    case_id=case_id,
+                    verdict=candidate.get("admissibility_verdict"),
+                    scenario_id=candidate.get("scenario_id"),
+                    scenario_artifact_sha256=candidate.get("scenario_artifact_sha256"),
+                    target_failure_observed=candidate.get("target_failure_observed"),
+                    source_revision=data.get("source_revision"),
+                    planner=planner,
+                ),
+                prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
+                errors=errors,
             )
         elif admissibility_artifact is not None:
             _validate_artifact_role(
@@ -1359,10 +1415,17 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             _validate_admissibility_evidence_source(
                 admissibility_source,
                 admissibility_artifact,
-                case_id,
-                candidate.get("admissibility_verdict"),
-                f"{candidate_prefix}.admissibility_evidence_artifact",
-                errors,
+                context=_AdmissibilityContext(
+                    case_id=case_id,
+                    verdict=candidate.get("admissibility_verdict"),
+                    scenario_id=candidate.get("scenario_id"),
+                    scenario_artifact_sha256=candidate.get("scenario_artifact_sha256"),
+                    target_failure_observed=candidate.get("target_failure_observed"),
+                    source_revision=data.get("source_revision"),
+                    planner=planner,
+                ),
+                prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
+                errors=errors,
             )
         replay_artifact = candidate.get("replay_artifact")
         if candidate.get("replay_status") == "verified" or replay_artifact is not None:
@@ -1422,6 +1485,13 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             errors.append(f"{obs_prefix} must be an object")
             continue
         _require_text(observation, "case_id", errors, obs_prefix)
+        _require_text(observation, "scenario_id", errors, obs_prefix)
+        _require_sha(
+            observation.get("scenario_artifact_sha256"),
+            f"{obs_prefix}.scenario_artifact_sha256",
+            _SHA256,
+            errors,
+        )
         case_id = observation.get("case_id")
         if isinstance(case_id, str):
             if case_id in seen_cases:
@@ -1512,10 +1582,17 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             _validate_admissibility_evidence_source(
                 admissibility_source,
                 admissibility_evidence,
-                observation.get("case_id"),
-                observation.get("admissibility_verdict"),
-                f"{obs_prefix}.admissibility_evidence_artifact",
-                errors,
+                context=_AdmissibilityContext(
+                    case_id=observation.get("case_id"),
+                    verdict=observation.get("admissibility_verdict"),
+                    scenario_id=observation.get("scenario_id"),
+                    scenario_artifact_sha256=observation.get("scenario_artifact_sha256"),
+                    target_failure_observed=None,
+                    source_revision=data.get("source_revision"),
+                    planner=planner,
+                ),
+                prefix=f"{obs_prefix}.admissibility_evidence_artifact",
+                errors=errors,
             )
         else:
             errors.append(
@@ -1682,6 +1759,8 @@ def _validate_case_status_source(
         "case_id",
         "origin_round",
         "origin_candidate_id",
+        "scenario_id",
+        "scenario_artifact_sha256",
         "planner_status",
         "admissibility_verdict",
         "replay_status",
@@ -1692,6 +1771,13 @@ def _validate_case_status_source(
         errors.append(
             f"{prefix}.corpus_artifact case/status identity does not match the observation: "
             f"{mismatched}"
+        )
+    if not _same_artifact_reference(
+        source.get("admissibility_evidence_artifact"),
+        observation.get("admissibility_evidence_artifact"),
+    ):
+        errors.append(
+            f"{prefix}.corpus_artifact admissibility evidence does not match the observation"
         )
     if source.get("planner_id") != planner.get("planner_id"):
         errors.append(f"{prefix}.corpus_artifact planner does not match the round planner")
@@ -2053,11 +2139,10 @@ def _validate_artifact_role(value: Any, prefix: str, expected_role: str, errors:
         errors.append(f"{prefix}.role must be {expected_role!r}")
 
 
-def _validate_admissibility_evidence_source(
+def _validate_admissibility_evidence_source(  # noqa: C901 - report independent binding defects.
     source: Any,
     artifact: Any,
-    case_id: Any,
-    verdict: Any,
+    context: _AdmissibilityContext,
     prefix: str,
     errors: list[str],
 ) -> None:
@@ -2065,13 +2150,19 @@ def _validate_admissibility_evidence_source(
     if not isinstance(source, dict):
         return
     _validate_admissibility_record_shape(source, artifact, prefix, errors)
-    if source.get("case_id") != case_id:
+    if source.get("case_id") != context.case_id:
         errors.append(f"{prefix}.case_id does not match the candidate or observation")
-    if source.get("verdict") != verdict:
+    if source.get("verdict") != context.verdict:
         errors.append(f"{prefix}.verdict does not match the candidate or observation")
+    if source.get("scenario_id") != context.scenario_id:
+        errors.append(f"{prefix}.scenario_id does not match the candidate or observation")
+    if not isinstance(artifact, dict) or not _same_text_identity(
+        artifact.get("source_revision"), context.source_revision
+    ):
+        errors.append(f"{prefix}.source_revision does not match the enclosing round")
     expected_disposition = (
         "reject"
-        if verdict in {"structurally_invalid", "geometric_or_kinodynamic_impossibility"}
+        if context.verdict in {"structurally_invalid", "geometric_or_kinodynamic_impossibility"}
         else "retain"
     )
     if source.get("search_disposition") != expected_disposition:
@@ -2080,7 +2171,30 @@ def _validate_admissibility_evidence_source(
     if not isinstance(evidence, dict):
         errors.append(f"{prefix}.evidence must be an object")
         return
-    _validate_confirmed_admissibility_support(source, evidence, case_id, prefix, errors)
+    scenario_identity = evidence.get("scenario_artifact_identity")
+    _validate_scenario_artifact_identity(
+        scenario_identity,
+        context.scenario_artifact_sha256,
+        prefix,
+        errors,
+    )
+    if context.verdict in _CONFIRMED_FEASIBILITY_VERDICTS:
+        _validate_confirmed_admissibility_support(
+            source,
+            evidence,
+            context,
+            prefix,
+            errors,
+        )
+        target_outcome = source.get("target_planner_outcome")
+        if isinstance(context.target_failure_observed, bool) and target_outcome in {
+            "route_completed",
+            "route_incomplete",
+        }:
+            if (target_outcome == "route_incomplete") is not context.target_failure_observed:
+                errors.append(
+                    f"{prefix}.target_planner_outcome does not match the candidate failure record"
+                )
 
 
 def _validate_admissibility_record_shape(  # noqa: C901 - report independent schema-field defects.
@@ -2111,8 +2225,10 @@ def _validate_admissibility_record_shape(  # noqa: C901 - report independent sch
     if source.get("schema_version") != _ADMISSIBILITY_EVIDENCE_SCHEMA:
         errors.append(f"{prefix} must contain a {_ADMISSIBILITY_EVIDENCE_SCHEMA} record")
     scenario_id = source.get("scenario_id")
-    if scenario_id is not None and (not isinstance(scenario_id, str) or not scenario_id.strip()):
-        errors.append(f"{prefix}.scenario_id must be non-empty text or null")
+    if not isinstance(scenario_id, str) or not scenario_id.strip():
+        errors.append(f"{prefix}.scenario_id must be non-empty text to bind the case")
+    if not _is_allowed(source.get("verdict"), _ADMISSIBILITY_VERDICTS):
+        errors.append(f"{prefix}.verdict is unsupported")
     if source.get("target_planner_outcome") not in {
         "not_evaluated",
         "unavailable",
@@ -2135,50 +2251,443 @@ def _validate_admissibility_record_shape(  # noqa: C901 - report independent sch
         errors.append(f"{prefix}.evidence must be an object")
 
 
-def _validate_confirmed_admissibility_support(
-    source: dict[str, Any], evidence: dict[str, Any], case_id: Any, prefix: str, errors: list[str]
+def _validate_scenario_artifact_identity(
+    identity: Any,
+    expected_sha256: Any,
+    prefix: str,
+    errors: list[str],
 ) -> None:
-    """Require the evidence shape that the #9651 confirmed verdict names."""
+    """Bind the producer's captured scenario bytes to the search and corpus identity."""
+    if not isinstance(identity, dict):
+        errors.append(f"{prefix}.evidence.scenario_artifact_identity must be an object")
+        return
+    actual_sha256 = identity.get("sha256")
+    if (
+        identity.get("status") != "available"
+        or not isinstance(actual_sha256, str)
+        or _SHA256.fullmatch(actual_sha256) is None
+        or not isinstance(expected_sha256, str)
+        or actual_sha256.lower() != expected_sha256.lower()
+    ):
+        errors.append(
+            f"{prefix}.scenario_artifact_identity does not match the candidate or corpus scenario"
+        )
+    requires_effective = identity.get("requires_effective_input_binding")
+    if not isinstance(requires_effective, bool):
+        errors.append(
+            f"{prefix}.scenario_artifact_identity.requires_effective_input_binding must be boolean"
+        )
+    elif requires_effective:
+        effective_sha256 = identity.get("effective_input_sha256")
+        if not isinstance(effective_sha256, str) or _SHA256.fullmatch(effective_sha256) is None:
+            errors.append(f"{prefix}.scenario_artifact_identity.effective_input_sha256 is required")
+
+
+def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proof diagnostics explicit.
+    source: dict[str, Any],
+    evidence: dict[str, Any],
+    context: _AdmissibilityContext,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Require producer-shaped runs bound to this round before confirming feasibility."""
     verdict = source.get("verdict")
     reason_codes = source.get("reason_codes")
+    runs = {name: evidence.get(f"{name}_execution") for name in ("reference", "target", "replay")}
+    valid_runs: dict[str, bool] = {}
+    for role, run in runs.items():
+        if run is None:
+            valid_runs[role] = False
+            continue
+        valid_runs[role] = _validate_admissibility_execution(
+            run,
+            role=role,
+            context=context,
+            scenario_identity=evidence.get("scenario_artifact_identity"),
+            prefix=f"{prefix}.evidence.{role}_execution",
+            errors=errors,
+        )
+    target_run = runs["target"]
+    target_observation_bound = _validate_target_planner_observation(
+        evidence.get("target_planner_observation"),
+        context=context,
+        scenario_identity=evidence.get("scenario_artifact_identity"),
+        prefix=f"{prefix}.evidence.target_planner_observation",
+        errors=errors,
+    )
+    target_bound = valid_runs["target"] or target_observation_bound
+    target_observation = evidence.get("target_planner_observation")
+    if target_observation_bound and isinstance(target_observation, dict):
+        expected_outcome = (
+            "route_completed"
+            if target_observation.get("route_complete") is True
+            else "route_incomplete"
+        )
+        if source.get("target_planner_outcome") != expected_outcome:
+            errors.append(f"{prefix}.target_planner_outcome conflicts with its target observation")
+    if target_bound and isinstance(target_run, dict):
+        expected_outcome = (
+            "route_completed" if target_run.get("route_complete") else "route_incomplete"
+        )
+        if source.get("target_planner_outcome") != expected_outcome:
+            errors.append(f"{prefix}.target_planner_outcome conflicts with its target execution")
+
     if verdict == "empirically_feasible":
         completed_execution = any(
-            isinstance(execution, dict)
-            and execution.get("case_id") == case_id
-            and execution.get("route_complete") is True
-            for execution in (
-                evidence.get("reference_execution"),
-                evidence.get("target_execution"),
-                evidence.get("replay_execution"),
-            )
+            valid_runs[role]
+            and isinstance(runs[role], dict)
+            and runs[role].get("route_complete") is True
+            for role in ("reference", "target", "replay")
         )
-        assumptions = source.get("assumptions")
-        oracle = assumptions.get("feasibility_oracle") if isinstance(assumptions, dict) else None
-        oracle_support = (
-            isinstance(oracle, dict)
-            and oracle.get("empirical_scope") == "named_actor_free_rollout_of_original_static_case"
-            and isinstance(evidence.get("feasibility_evidence"), dict)
+        oracle_support = _validate_admissibility_oracle_support(
+            source,
+            evidence,
+            context.scenario_id,
+            context.scenario_artifact_sha256,
+            prefix,
+            errors,
         )
+        if not target_bound:
+            errors.append(f"{prefix} lacks a complete target-planner execution bound to this round")
         if not completed_execution and not oracle_support:
             errors.append(f"{prefix} does not contain evidence supporting empirical feasibility")
     elif verdict == "planner_specific_failure":
-        reference = evidence.get("reference_execution")
-        target = evidence.get("target_execution")
-        replay = evidence.get("replay_execution")
+        reference = runs["reference"]
+        target = runs["target"]
+        replay = runs["replay"]
         matched_failure = (
-            isinstance(reference, dict)
+            valid_runs["reference"]
+            and valid_runs["target"]
+            and valid_runs["replay"]
+            and isinstance(reference, dict)
             and isinstance(target, dict)
             and isinstance(replay, dict)
-            and all(item.get("case_id") == case_id for item in (reference, target, replay))
+            and _admissibility_runs_share_case(reference, target)
+            and _admissibility_replay_matches_target(replay, target)
             and reference.get("route_complete") is True
             and target.get("route_complete") is False
             and replay.get("route_complete") is False
             and reference.get("planner_id") != target.get("planner_id")
-            and replay.get("planner_id") == target.get("planner_id")
             and "matched_reference_target_failure_reproduced_by_replay" in (reason_codes or [])
         )
         if not matched_failure:
             errors.append(f"{prefix} does not contain matched planner-specific failure evidence")
+
+
+def _admissibility_runs_share_case(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Match the producer's reference/target scenario, environment, and seed identity."""
+    fields = (
+        "case_id",
+        "scenario_id",
+        "scenario_variant",
+        "scenario_sha256",
+        "robot_model_sha256",
+        "simulator_config_sha256",
+        "environment_sha256",
+        "source_commit",
+        "seed",
+        "horizon_steps",
+    )
+    return all(left.get(field) == right.get(field) for field in fields)
+
+
+def _admissibility_replay_matches_target(replay: dict[str, Any], target: dict[str, Any]) -> bool:
+    """Require the deterministic replay to match all target case and episode bindings."""
+    return (
+        _admissibility_runs_share_case(replay, target)
+        and replay.get("planner_id") == target.get("planner_id")
+        and replay.get("planner_config_sha256") == target.get("planner_config_sha256")
+        and replay.get("planner_checkpoint_sha256") == target.get("planner_checkpoint_sha256")
+        and replay.get("episode_id") == target.get("episode_id")
+        and replay.get("source_episodes_jsonl_sha256") == target.get("source_episodes_jsonl_sha256")
+        and replay.get("determinism_check_status") == "pass"
+        and replay.get("resimulated") is True
+    )
+
+
+def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-field defects.
+    run: Any,
+    role: str,
+    context: _AdmissibilityContext,
+    scenario_identity: Any,
+    prefix: str,
+    errors: list[str],
+) -> bool:
+    """Validate the normalized execution record emitted by scenario_admissibility.v1."""
+    start_errors = len(errors)
+    if not isinstance(run, dict):
+        errors.append(f"{prefix} must be an object")
+        return False
+    required = {
+        "case_id",
+        "scenario_id",
+        "scenario_variant",
+        "planner_id",
+        "run_status",
+        "fallback_or_degraded",
+        "route_complete",
+        "seed",
+        "horizon_steps",
+        "scenario_sha256",
+        "robot_model_sha256",
+        "simulator_config_sha256",
+        "planner_config_sha256",
+        "planner_checkpoint_sha256",
+        "environment_sha256",
+        "source_commit",
+        "evidence_ref",
+    }
+    if role in {"target", "replay"}:
+        required.update({"episode_id", "source_episodes_jsonl_sha256"})
+    missing = sorted(required - run.keys())
+    if missing:
+        errors.append(f"{prefix} is missing producer fields: {missing}")
+    if run.get("case_id") != context.case_id or run.get("scenario_id") != context.scenario_id:
+        errors.append(f"{prefix} case/scenario identity does not match its case record")
+    if run.get("scenario_variant") != "original" or run.get("run_status") != "ok":
+        errors.append(f"{prefix} is not a completed original-scenario run")
+    if run.get("fallback_or_degraded") is not False:
+        errors.append(f"{prefix}.fallback_or_degraded must be false")
+    if not isinstance(run.get("planner_id"), str) or not run["planner_id"].strip():
+        errors.append(f"{prefix}.planner_id must be non-empty text")
+    if not isinstance(run.get("evidence_ref"), str) or not run["evidence_ref"].strip():
+        errors.append(f"{prefix}.evidence_ref must be non-empty text")
+    if not isinstance(run.get("source_commit"), str) or not _same_text_identity(
+        run.get("source_commit"), context.source_revision
+    ):
+        errors.append(f"{prefix}.source_commit does not match the enclosing round")
+    for field in (
+        "scenario_sha256",
+        "robot_model_sha256",
+        "simulator_config_sha256",
+        "planner_config_sha256",
+        "environment_sha256",
+    ):
+        value = run.get(field)
+        if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+            errors.append(f"{prefix}.{field} must be a SHA-256 digest")
+    if not _same_text_identity(run.get("scenario_sha256"), context.scenario_artifact_sha256):
+        errors.append(f"{prefix}.scenario_sha256 does not match the case scenario artifact")
+    checkpoint = run.get("planner_checkpoint_sha256")
+    if not (
+        isinstance(checkpoint, str)
+        and (
+            _SHA256.fullmatch(checkpoint) is not None
+            or (
+                checkpoint == "not_applicable"
+                and run.get("planner_id") in {"goal", "orca", "social_force"}
+            )
+        )
+    ):
+        errors.append(f"{prefix}.planner_checkpoint_sha256 is unsupported")
+    seed, horizon = run.get("seed"), run.get("horizon_steps")
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        errors.append(f"{prefix}.seed must be a non-negative integer")
+    if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon <= 0:
+        errors.append(f"{prefix}.horizon_steps must be a positive integer")
+    if not isinstance(run.get("route_complete"), bool):
+        errors.append(f"{prefix}.route_complete must be boolean")
+    if role in {"target", "replay"}:
+        if not isinstance(run.get("episode_id"), str) or not run["episode_id"].strip():
+            errors.append(f"{prefix}.episode_id must be non-empty text")
+        if (
+            not isinstance(run.get("source_episodes_jsonl_sha256"), str)
+            or _SHA256.fullmatch(run["source_episodes_jsonl_sha256"]) is None
+        ):
+            errors.append(f"{prefix}.source_episodes_jsonl_sha256 must be a SHA-256 digest")
+    identity = scenario_identity if isinstance(scenario_identity, dict) else {}
+    if identity.get("requires_effective_input_binding") is True:
+        expected_effective = identity.get("effective_input_sha256")
+        actual_effective = run.get("effective_input_sha256")
+        if (
+            not isinstance(expected_effective, str)
+            or _SHA256.fullmatch(expected_effective) is None
+            or not isinstance(actual_effective, str)
+            or _SHA256.fullmatch(actual_effective) is None
+            or not _same_text_identity(actual_effective, expected_effective)
+            or run.get("effective_input_identity_stable") is not True
+        ):
+            errors.append(f"{prefix} effective scenario input identity is missing or mismatched")
+    if role in {"target", "replay"} and (
+        run.get("planner_id") != context.planner.get("planner_id")
+        or not _same_text_identity(
+            run.get("planner_config_sha256"), context.planner.get("config_identity_sha256")
+        )
+    ):
+        errors.append(f"{prefix} planner/config does not match the enclosing round")
+    if role == "replay" and (
+        run.get("determinism_check_status") != "pass" or run.get("resimulated") is not True
+    ):
+        errors.append(f"{prefix} must pass replay determinism and simulator resimulation")
+    return len(errors) == start_errors
+
+
+def _validate_target_planner_observation(  # noqa: C901 - collect case/planner binding defects.
+    observation: Any,
+    context: _AdmissibilityContext,
+    scenario_identity: Any,
+    prefix: str,
+    errors: list[str],
+) -> bool:
+    """Bind a post-search target observation to this case and planner configuration."""
+    if not isinstance(observation, dict) or observation.get("status") != "available":
+        return False
+    start_errors = len(errors)
+    if observation.get("scenario_id") != context.scenario_id:
+        errors.append(f"{prefix}.scenario_id does not match the case")
+    if observation.get("planner_id") != context.planner.get("planner_id"):
+        errors.append(f"{prefix}.planner_id does not match the round planner")
+    if not _same_text_identity(observation.get("source_commit"), context.source_revision):
+        errors.append(f"{prefix}.source_commit does not match the enclosing round")
+    if not _same_text_identity(
+        observation.get("planner_config_hash"), context.planner.get("config_identity_sha256")
+    ):
+        errors.append(f"{prefix}.planner_config_hash does not match the round planner")
+    runtime_identity = observation.get("runtime_input_identity")
+    producer_identity = scenario_identity if isinstance(scenario_identity, dict) else {}
+    if (
+        not isinstance(runtime_identity, dict)
+        or runtime_identity.get("status") != "available"
+        or not _same_text_identity(
+            runtime_identity.get("source_artifact_sha256"), context.scenario_artifact_sha256
+        )
+    ):
+        errors.append(f"{prefix}.runtime_input_identity does not match the case scenario")
+    elif producer_identity.get("requires_effective_input_binding") is True and not (
+        _same_text_identity(
+            runtime_identity.get("effective_input_sha256"),
+            producer_identity.get("effective_input_sha256"),
+        )
+    ):
+        errors.append(f"{prefix}.runtime_input_identity effective inputs do not match")
+    if not isinstance(observation.get("episode_id"), str) or not observation["episode_id"].strip():
+        errors.append(f"{prefix}.episode_id must be non-empty text")
+    seed = observation.get("seed")
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        errors.append(f"{prefix}.seed must be a non-negative integer")
+    if not isinstance(observation.get("route_complete"), bool):
+        errors.append(f"{prefix}.route_complete must be boolean")
+    if observation.get("reason_code") is not None:
+        errors.append(f"{prefix}.reason_code must be null for an available outcome")
+    expected_outcome = (
+        "route_completed" if observation.get("route_complete") is True else "route_incomplete"
+    )
+    return len(errors) == start_errors and expected_outcome in {
+        "route_completed",
+        "route_incomplete",
+    }
+
+
+def _validate_admissibility_oracle_support(
+    source: dict[str, Any],
+    evidence: dict[str, Any],
+    scenario_id: Any,
+    scenario_artifact_sha256: Any,
+    prefix: str,
+    errors: list[str],
+) -> bool:
+    """Accept only a producer-bound actor-free feasible rollout, never a bare oracle label."""
+    assumptions = source.get("assumptions")
+    oracle_assumptions = (
+        assumptions.get("feasibility_oracle") if isinstance(assumptions, dict) else None
+    )
+    raw = evidence.get("feasibility_evidence")
+    if (
+        not isinstance(oracle_assumptions, dict)
+        or oracle_assumptions.get("empirical_scope")
+        != "named_actor_free_rollout_of_original_static_case"
+        or not isinstance(raw, dict)
+        or raw.get("schema_version") not in _ORACLE_EVIDENCE_SCHEMAS
+    ):
+        return False
+    selected: dict[str, Any] | None = None
+    report = raw
+    if raw.get("schema_version") == "issue_5574_feasibility_oracle_report.v1":
+        cells = raw.get("cells")
+        matches = (
+            [
+                cell
+                for cell in cells
+                if isinstance(cell, dict) and cell.get("scenario_id") == scenario_id
+            ]
+            if isinstance(cells, list)
+            else []
+        )
+        if len(matches) != 1:
+            return False
+        selected = matches[0]
+    elif raw.get("schema_version") == "envelope_sensitivity_axis.v1":
+        selected = raw
+    else:
+        selected = raw
+    nominal = selected.get("nominal_verdict", selected)
+    if not isinstance(nominal, dict):
+        return False
+    source_records = (report, selected, nominal)
+    for record in source_records:
+        if record.get("source_artifact_sha256") != scenario_artifact_sha256:
+            return False
+        if record.get("source_artifact_identity_stable") is not True:
+            return False
+    completion = nominal.get("completion")
+    geometric = nominal.get("geometric")
+    assumptions_match = (
+        oracle_assumptions.get("scenario_id") == scenario_id
+        and oracle_assumptions.get("source_artifact_sha256") == scenario_artifact_sha256
+    )
+    completion_steps = (
+        completion.get("min_completion_steps") if isinstance(completion, dict) else None
+    )
+    horizon = completion.get("horizon_steps") if isinstance(completion, dict) else None
+    termination = completion.get("termination_reason") if isinstance(completion, dict) else None
+    completion_valid = (
+        isinstance(completion, dict)
+        and completion.get("route_completion_feasible") is True
+        and completion.get("status") == "passed"
+        and completion.get("blocker") is None
+        and completion.get("fallback_or_degraded") is False
+        and completion.get("observed_route_completion_feasible") is True
+        and completion.get("fallback_marker") is None
+        and completion.get("rollout_blocker") is None
+        and isinstance(completion_steps, int)
+        and not isinstance(completion_steps, bool)
+        and completion_steps > 0
+        and isinstance(horizon, int)
+        and not isinstance(horizon, bool)
+        and horizon >= completion_steps
+        and completion.get("completion_horizon_margin_steps") == horizon - completion_steps
+        and termination
+        in {
+            "success",
+            "goal_reached",
+            "route_complete",
+            "completed",
+            "route_follow_reached_destination",
+        }
+    )
+    rollout_seed = selected.get("rollout_seed", report.get("rollout_seed"))
+    rollout_algo = selected.get("rollout_algo", report.get("rollout_algo"))
+    manifest = selected.get("scenario_manifest", report.get("scenario_manifest"))
+    return (
+        assumptions_match
+        and nominal.get("schema_version") == "scenario_feasibility_oracle.v1"
+        and nominal.get("scenario_id") == scenario_id
+        and nominal.get("status") == "feasible"
+        and nominal.get("feasible") is True
+        and nominal.get("claim_boundary") == _DIAGNOSTIC_CLAIM_BOUNDARY
+        and isinstance(geometric, dict)
+        and geometric.get("route_geometrically_feasible") is True
+        and completion_valid
+        and isinstance(rollout_algo, str)
+        and bool(rollout_algo.strip())
+        and isinstance(rollout_seed, int)
+        and not isinstance(rollout_seed, bool)
+        and rollout_seed >= 0
+        and isinstance(manifest, str)
+        and bool(manifest.strip())
+        and report.get("claim_boundary", nominal.get("claim_boundary"))
+        == _DIAGNOSTIC_CLAIM_BOUNDARY
+    )
 
 
 def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:

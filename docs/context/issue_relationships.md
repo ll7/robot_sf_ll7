@@ -1,155 +1,82 @@
-# Explicit issue relationships
+# Native GitHub issue relationships
 
 [Back to Documentation Index](../README.md)
 
-Issue references in prose are useful context, but they are not a machine-readable issue graph.
-For every issue, declare intentional relationships explicitly and mirror them in GitHub's
-**Relationships** panel when the issue is created or updated.
+GitHub's native issue relationships are the source of truth for issue dependencies and hierarchy.
+Do not duplicate those links in issue or pull request (PR) bodies. Issue bodies and comments may
+explain why a relationship exists; they are evidence for deciding whether to create a native link,
+not a second relationship store.
 
-## Canonical body block
+## Supported relationships
 
-Use one `## Relationships` block in every issue body:
+| Relationship | Meaning | Native workflow |
+| --- | --- | --- |
+| Parent | This issue is a child of the named issue | Supported; one parent at most. Use for clear epic/child hierarchy. |
+| Blocked by | This issue cannot proceed until the named issue is resolved | Supported; use only for a current prerequisite. |
+| Blocking | The named issue cannot proceed until this issue is resolved | Supported; usually add `Blocked by` on the dependent issue instead. |
+| Relates to | Informational association without a dependency | Excluded from the CLI relationship workflow; `gh issue` has no supported write flag. |
 
-```markdown
-## Relationships
+GitHub may display issue references from prose, but a mention alone does not create a dependency.
+Use body and comment context to establish intent. A blocker may be inferred when the discussion
+clearly says the target must be resolved before the issue can proceed. Do not create blockers from
+parallel work, optional inputs, downstream consumers, completed ordering predecessors, or vague
+references. If evidence conflicts or the prerequisite is unclear, leave the relationship untouched
+and record the issue for review.
 
-<!-- Native GitHub relationships are canonical. Mirror every intentional link here for review and
-auditability. Use `none` when a relationship does not apply. Do not infer a relationship from a
-mention in another section. -->
-- Parent issue: none
-- Blocked by: none
-- Blocking: none
-- Relates to: none
-```
+Keep links within the same repository. Do not create an issue edge for an external artifact,
+runtime, license, or decision. A parent must be unambiguous and must not create a hierarchy cycle.
 
-Replace `none` with one or more same-repository issue references (`#123` or a canonical issue URL)
-when the relationship is intentional. Keep external dependencies as prose in the relevant
-contract section; do not invent an issue number for an external artifact, runtime, license, or
-decision.
+## GitHub CLI
 
-Use references that remain unambiguous outside the immediate issue view:
-
-- In human-facing issue and PR body mirrors, prefer `#123` for an issue in this repository.
-- In automation input, audit output, or a cross-repository context, use the canonical URL
-  `https://github.com/<owner>/<repository>/issues/123`.
-- In a CLI command, an issue number is valid only with an explicit `--repo <owner>/<repository>`;
-  use the canonical URL when the repository context is not fixed.
-- Do not use a title, a bare number in prose, a PR URL, or an external issue URL as a relationship
-  declaration. `none` means an explicit, reviewed absence—not an unknown or unsupported field.
-
-The fields have these meanings:
-
-| Field | Direction | Native GitHub support | Use |
-| --- | --- | --- | --- |
-| Parent issue | This issue is a child of the named issue | Yes | One parent at most; use for epics and extracted child work. |
-| Blocked by | This issue cannot proceed until the named issue is resolved | Yes | Name only concrete issue blockers. Typed dependency packets remain the source for richer predicates. |
-| Blocking | The named issue cannot proceed until this issue is resolved | Yes | Prefer adding the reciprocal `Blocked by` link on the blocked issue. |
-| Relates to | Informational association | UI preview/manual | Keep the body mirror; do not assume a REST/CLI write path. |
-
-“Security alert” in the GitHub menu is a Dependabot-specific association, not a general-purpose
-relationship field for repository issues.
-
-## GitHub CLI capability gate
-
-The direct command-line relationship workflow requires GitHub CLI (`gh`) **2.100.0 or newer**.
-This is the repository-tested floor (not a claim about the upstream feature's first release). Check
-the installed version before using relationship flags:
+Direct CLI relationship operations require GitHub CLI (`gh`) **2.100.0 or newer**. Check the local
+version and use an explicit repository context:
 
 ```bash
 gh version
-gh issue view <issue> --repo <owner>/<repository> --json parent,blockedBy,blocking
-```
-
-If the version is older than 2.100.0, or the readback reports `Unknown JSON field`, stop using
-`--parent`, `--blocked-by`, `--blocking`, and the `--add/remove-*` relationship flags. Upgrade
-`gh`, use the GitHub Relationships panel, or use the REST-backed
-`scripts/dev/audit_issue_relationships.py` route. Never turn an unsupported field into `none`.
-
-With a supported CLI, use explicit repository context and read the native state back:
-
-```bash
-gh issue create --repo <owner>/<repository> --title "..." --body-file issue.md \
-  --parent 123 --blocked-by 456,457 --blocking 890
-gh issue edit 999 --repo <owner>/<repository> \
-  --add-blocked-by 456 --add-blocking 890
+gh issue create --repo <owner>/<repository> --title "..." --body-file issue.md --parent 123
+gh issue edit 999 --repo <owner>/<repository> --add-blocked-by 456
+gh issue edit 999 --repo <owner>/<repository> --add-blocking 890
 gh issue view 999 --repo <owner>/<repository> --json number,parent,blockedBy,blocking
 ```
 
-The CLI still does not expose `Relates to`; create that informational link in the panel and keep
-the body mirror.
+`--parent`, `--add-sub-issue`, `--add-blocked-by`, and `--add-blocking` set native relationships.
+The corresponding `--remove-*` flags remove them. Read native state back after every write; command
+success output alone is not proof that GitHub changed the relationship. If a relationship field is
+unsupported by the installed CLI, stop and use the supported GitHub Relationships panel or the
+documented REST route. Never report an unsupported field as absent.
 
-## PR and worktree handoff
+## Review and write boundary
 
-Pull requests do not replace the issue graph. Keep the existing `Closes`/`Refs` entries in the PR
-template for closure and coverage semantics, and add one explicit mirror for graph edges:
+For a relationship decision, inspect the current issue body, relevant comments, target issue, and
+existing native state. Record the source issue and body/comment evidence in the review artifact so
+the decision can be checked later. Refresh the issue immediately before writing if its discussion
+changed after review.
 
-```markdown
-## Issue Relationship Mirror
+Relationship writes are remote control-plane mutations. Make them from the owning writable
+implementation/publication worktree after a fresh read. Review-only worktrees may inspect the graph
+but never write links. Add only reviewed links; do not replace a different parent or remove an
+existing edge without explicit evidence that it is wrong. Read back every changed issue and preserve
+the exact issue numbers, evidence references, commands, and final native state in the handoff.
 
-<!-- The linked issue's native relationships are canonical. Mirror only intentional same-repository
-links here so a PR can be reviewed from its owning worktree. Use `none` when a field does not apply. -->
-- Parent issue: none
-- Blocked by: none
-- Blocking: none
-- Relates to: none
+PRs continue to use `Closes` and `Refs` for closure and coverage semantics. Reviewers verify the
+linked issue's current native Parent/Blocked by/Blocking state directly; PR text does not mirror the
+graph. A closing reference is not itself a parent or dependency relationship.
+
+## Auditing existing issues
+
+Use the read-only relationship audit before a migration:
+
+```bash
+uv run python scripts/dev/audit_issue_relationships.py --state open --format json
 ```
 
-For a PR that changes relationship intent, update the issue body and native GitHub relationship
-first, then mirror the resulting state in the PR body. A PR may use `Closes` or `Refs` for its
-primary issue without treating that coverage reference as a parent, blocker, or informational
-relationship. A PR with no issue relationship should say so explicitly with `none` and explain the
-support-only scope in its summary.
+The audit reads explicit legacy `## Relationships` blocks as candidate evidence when they remain in
+old issue bodies. A missing block is normal and is not an audit failure. Legacy headings and
+incidental mentions remain review-only; the audit does not infer or write links from them. Use its
+explicit confirmation-gated apply mode only for reviewed, complete, unambiguous legacy declarations.
+For the current native graph, read `parent`, `blockedBy`, and `blocking` through `gh issue view` or
+`gh issue list`; native state takes precedence over any older body text.
 
-Relationship writes are remote control-plane mutations. Perform them from the owning writable
-implementation/publication worktree after a fresh issue read; never write them from a review-only
-worktree. Review-only worktrees may inspect the issue graph and verify the PR mirror, but must not
-push, edit bodies, or create native links. Preserve the exact issue, PR, branch, and head-SHA
-evidence in the handoff so another worktree can re-read before publishing.
-
-## Creation and migration workflow
-
-1. Fill the relationship block before creating the issue. Use `none` explicitly when there is no
-   relationship.
-2. Create the issue from one of the repository templates or forms.
-3. Set Parent, Blocked by, and Blocking in GitHub's Relationships panel or through the CLI gate
-   above. The native links are the operational source of truth; the body block is a reviewable
-   mirror.
-4. Add Relates to links manually in the panel when useful, and keep their body mirrors until a
-   supported API is available.
-5. For existing issues, run the bounded, read-only audit first:
-
-   ```bash
-   uv run python scripts/dev/audit_issue_relationships.py --state open --format json
-   ```
-
-   Use `--state all` for a bounded review that includes closed issues; increase `--max-pages` only
-   when the report remains complete.
-
-   The audit considers only canonical `## Relationships` declarations safe for a migration
-   proposal. Legacy headings such as `## Parent`, `## Related`, or free-form mentions are reported
-   as review candidates, never silently converted. A migration is opt-in and fails closed on
-   ambiguous, conflicting, cross-repository, or external references:
-
-   ```bash
-   uv run python scripts/dev/audit_issue_relationships.py \
-     --issue 123 --apply --confirm RELATIONSHIP_MIGRATION
-   ```
-
-   Review the JSON report before applying a larger scope. The command never writes `Relates to`
-   links and never replaces an existing different parent.
-
-6. For PRs opened from a worktree, copy the reviewed native state into the PR's `## Issue
-   Relationship Mirror` section. Re-read the linked issue and PR head immediately before publication;
-   if either changed, stop and refresh the mirror and validation evidence.
-
-The repository audit uses the REST endpoints when an explicit apply is requested so the workflow
-remains usable with older CLI versions; authentication, permissions, and a fresh read-back are
-required. Direct CLI writes remain gated at `gh >= 2.100.0` as described above.
-
-Reference documentation: [`gh issue create`](https://cli.github.com/manual/gh_issue_create),
-[`gh issue edit` flags](https://cli.github.com/manual/gh_help_reference), and
-[GitHub issue dependencies](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-issue-dependencies).
-
-This contract complements, rather than replaces, typed dependency packets. A relationship says
-which issue is connected; a dependency packet records the predicate, evidence, freshness, and
-unblock condition needed to decide whether work may proceed.
+For large reviews, capture one complete issue and comment inventory, verify pagination and comment
+counts, and divide disjoint issue sets among read-only reviewers. Every proposed edge must carry its
+source body/comment evidence, reason, and uncertainty. Re-read changed issues before applying links.

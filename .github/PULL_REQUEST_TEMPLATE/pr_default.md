@@ -11,21 +11,12 @@ the scheduled reconciler closes them only after two newer, consecutive decisive 
 Never write close/fix/resolve #<id> (including owner/repo#<id> or a GitHub issue URL) in prose,
 even negated (e.g. "does not close #<id>"):
 GitHub parses the keyword without negation awareness and auto-closes the issue on merge
-(issue #9566). Rephrase as "leaves #<id> open". -->
+(issue #9566). Rephrase as "leaves #<id> open". Native Parent/Blocked by/Blocking links belong on the issue
+in GitHub's Relationships panel; do not duplicate them in this PR body. See
+`docs/context/issue_relationships.md`. -->
 - Closes #<id>
 - Refs #<id>
 - Relates to #<id>
-
-## Issue Relationship Mirror
-
-<!-- The linked issue's native GitHub relationships are canonical. Mirror only intentional
-same-repository graph edges here so the PR remains auditable from its owning worktree. Use `none`
-when a field does not apply; do not infer a relationship from a mention or a closing reference.
-See `docs/context/issue_relationships.md` for the workflow. -->
-- Parent issue: none
-- Blocked by: none
-- Blocking: none
-- Relates to: none
 
 ## Stack / Dependency
 

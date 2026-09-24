@@ -1,5 +1,10 @@
 # Adversarial counterexample corpus
 
+Current contract: [issue #9652](https://github.com/ll7/robot_sf_ll7/issues/9652). The
+versioned corpus API and CLI are the implementation surface for the planned #9653 loop; the
+initial fixture is the persisted [#9645 bounded pilot](https://github.com/ll7/robot_sf_ll7/issues/9645)
+and its separately replay-verified #1501 case.
+
 The versioned corpus in `robot_sf.adversarial.counterexample_corpus` stores
 admitted challenge cases, search-run provenance, admission attempts, and planner
 observations. A case remains in the corpus after another planner solves it.

@@ -62,9 +62,15 @@ comparison is retained as `replay_artifact_checksum_unverified`; capturing the c
 establishes custody from that resume onward, not integrity of the original output at run time.
 An `exact_match` also requires an eligible source case, successful and available source/replay
 execution metadata, no nested fallback or degraded marker (including positive fallback counters),
-matching non-empty planner config hashes, and clean, unchanged checkout snapshots immediately
-before and after replay at the recorded revision. A dirty checkout, a moved `HEAD`, a changed
-working-tree status digest, or an unavailable/malformed snapshot blocks exact-match classification.
+no canonical invalid-run state on either row, matching non-empty planner config hashes, and clean,
+unchanged checkout snapshots immediately before and after replay at the recorded revision.
+Nested runtime status values must be recognized available statuses; unknown or malformed values
+remain unavailable. Each `replay-checkout-snapshot.v1` snapshot must include its status-entry list,
+agree that `clean` is true exactly when that list is empty, and bind the list to its recorded
+porcelain SHA-256 digest. A dirty checkout, invalid-run row, unknown runtime status, moved `HEAD`,
+changed working-tree status digest, or unavailable/malformed snapshot blocks exact-match
+classification. On resume, the manifest replay receipt must also match its per-case receipt before
+an otherwise exact replay can remain `exact_match`.
 A resumed attempt whose replay directory is missing remains `attempted` and is counted as
 `replay_artifact_missing_on_resume`; the missing artifact does not reset it to `not_attempted`.
 Legacy receipts without both checkout

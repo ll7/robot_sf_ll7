@@ -57,6 +57,7 @@ results.
 Issue #9431 remains open and a native blocker for #9668. Its existing 0.0.7 Zenodo deposition
 22814343 was published on 2026-09-24, and the public archive passed anonymous checksum readback
 at the same SHA-256 above. The issue records an explicit release-owner exception to the prospective
-doctor's tag-collision gate; DOI resolver registration was still pending at its latest check.
+doctor's tag-collision gate. A later #9431 readback at 2026-09-24 11:55 UTC found the DOI resolver
+and DataCite record live (HTTP 200); the published 0.0.7 files were unchanged.
 This programme does not authorize changing the frozen 0.0.7 record. No 0.0.8 tag, Zenodo
 reservation, DOI, or publication action follows from this audit.

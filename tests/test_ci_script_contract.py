@@ -386,11 +386,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     duration_checkout = next(
         step
         for step in aggregate["steps"]
-        if step.get("name") == "Checkout for duration-cache update"
+        if step.get("name") == "Checkout source for aggregate CI checks and duration-cache update"
     )
-    assert duration_checkout["id"] == "checkout_duration_cache"
+    assert duration_checkout["id"] == "checkout_ci_source"
     assert "always()" in duration_checkout["if"]
-    assert duration_checkout["continue-on-error"] is True
+    assert "dispatch-ownership.result != 'success'" in duration_checkout["if"]
+    assert "run_full_ci == 'true'" in duration_checkout["if"]
+    needs_check = next(
+        step for step in aggregate["steps"] if step.get("name") == "Check split job results"
+    )
+    assert "steps.checkout_ci_source.outcome == 'success'" in needs_check["if"]
     duration_download = next(
         step for step in aggregate["steps"] if step.get("name") == "Download test-duration shards"
     )
@@ -406,11 +411,11 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
         "path": ".duration-artifacts",
     }
     assert "always()" in duration_download["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_download["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_download["if"]
     assert duration_merge["id"] == "merge-test-durations"
     assert duration_merge["continue-on-error"] is True
     assert "always()" in duration_merge["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_merge["if"]
     # The inline merge program is replaced by the tested helper.
     assert "merge_test_durations.py" in duration_merge["run"]
     assert "--artifact-dir .duration-artifacts" in duration_merge["run"]
@@ -420,7 +425,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "merged.update(durations)" not in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
     assert "always()" in duration_save["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
     assert duration_save["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
@@ -499,7 +504,7 @@ def test_ci_aggregate_uses_declarative_needs_checker() -> None:
     checkout_index = next(
         index
         for index, step in enumerate(aggregate["steps"])
-        if step.get("id") == "checkout_duration_cache"
+        if step.get("id") == "checkout_ci_source"
     )
     result_index = aggregate["steps"].index(result_step)
     assert checkout_index < result_index

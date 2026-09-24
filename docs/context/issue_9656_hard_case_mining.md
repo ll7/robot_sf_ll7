@@ -31,14 +31,17 @@ SHA-256 `64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90`. Its 
 exact source matrix is `configs/scenarios/classic_interactions_francis2023.yaml`, SHA-256
 `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`.
 
-Case selection is owned by `benchmark-showcase.v1` from PR #9662. This packet records selector
-revision `477f14c1b4b052ad407a34a71caace6618a75eeb` and summary SHA-256
-`c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f`. The same command at the
-same output path produced the same summary hash on repetition and the same case IDs at another
-output path. The full analyzer subreport records absolute output paths, so running in a different
-directory changes that subreport's hashes. The materializer consumes that JSON contract without
-copying or reranking the selector; the producer must be available in the checkout to reproduce the
-selection command.
+Case selection is owned by the merged `benchmark-showcase.v1` capability from PR #9662. This packet
+labels the upstream campaign as `source_campaign_id` so the mined slice is not represented as a
+second campaign. It preserves the selector's original execution revision
+`477f14c1b4b052ad407a34a71caace6618a75eeb`
+and summary SHA-256 `c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f`. The three
+selector source-file SHA-256 values are retained in the evidence summary and match the reachable
+snapshot at `0a5f73283b98279900797b75d20adf6d4676086b`; this verifies matching source files without
+rewriting the historical execution revision. Repeated selection at the same output path produced
+the same summary hash and the same case IDs at another output path. The full analyzer subreport
+records absolute output paths, so running in a different directory changes that subreport's hashes.
+The materializer consumes the versioned JSON contract without copying or reranking the selector.
 
 Reproduction commands and the machine-readable 36-case inventory are in the tracked
 [evidence bundle](evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json), with a
@@ -47,8 +50,9 @@ Reproduction commands and the machine-readable 36-case inventory are in the trac
 and [checksums](evidence/issue_9656_hard_case_mining_2026-09-24/checksums.sha256). The original
 release and all source episode rows remain the durable raw evidence; extracted payloads, case
 JSON files, replay matrices/configs, and replay episode rows stay in ignored `output/` caches.
-Their file and row hashes are preserved in the summary so a maintainer can regenerate and verify
-them without copying the release payload into git.
+Source cases can be rematerialized from the release. The summary retains hashes and metrics for the
+four replay rows, but not their raw bytes; verify those exact receipts only while the local cache is
+preserved. A later replay is a new evaluation, not a reconstruction of those bytes.
 
 ## Replay boundary and failed attempt
 
@@ -75,8 +79,10 @@ included in the summary.
 This is diagnostic evidence from one historical simulator release and four bounded reruns. It is
 not a planner ranking, generalization result, safety claim, or real-world safety statement. It does
 not admit cases into issue #9652's versioned corpus and does not build visualizations owned by
-#9647. Cases remain regression candidates pending the corpus owner's admission rules.
+Issue #9647. Cases remain regression candidates pending the corpus owner's admission rules.
 
-The selector producer remains owned by PR #9662; this implementation consumes its versioned
-summary and does not duplicate case ranking. The source collision/count inconsistency is retained as
-a data-quality limitation rather than a reason to infer or rewrite the canonical event.
+The selector producer is the merged capability from PR #9662; this implementation consumes its
+versioned summary and does not duplicate case ranking. The derived packet labels the upstream
+identifier `source_campaign_id`, so it does not register a second campaign. The source
+collision/count inconsistency is retained as a data-quality limitation rather than a reason to infer
+or rewrite the canonical event.

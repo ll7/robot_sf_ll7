@@ -325,9 +325,18 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
         "summary.json",
         "trace_manifest.yaml",
     ]
+    assert [entry["location"] for entry in manifest["files"]] == [
+        "payload/claim_boundary.md",
+        "payload/metric_table.csv",
+        "payload/summary.json",
+        "payload/trace_manifest.yaml",
+    ]
     checksums = checksums_path.read_text(encoding="utf-8")
-    assert "summary.json" in checksums
-    assert "metric_table.csv" in checksums
+    assert "  payload/summary.json\n" in checksums
+    assert "  payload/metric_table.csv\n" in checksums
+    assert {line.split(maxsplit=1)[1] for line in checksums.splitlines()} == {
+        f"payload/{entry['path']}" for entry in manifest["files"]
+    }
 
 
 def test_evidence_bundle_command_writes_dry_run_mirror_manifest(

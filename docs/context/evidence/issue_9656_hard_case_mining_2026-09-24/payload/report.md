@@ -5,10 +5,10 @@ Evidence tier: `diagnostic_only`. The artifacts describe one checksum-pinned his
 ## Source
 
 - Public Release 0.0.2 bundle SHA-256: `64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90`.
-- Campaign: `paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316`; source commit `f7ebdcae2375d085e925213197a75a386e26a79c`.
+- Source campaign ID: `paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316`; source commit `f7ebdcae2375d085e925213197a75a386e26a79c`. This is the upstream campaign identity, not a second campaign created by the derived slice.
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`; SHA-256 `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`.
-- Selector: `benchmark-showcase.v1` at PR #9662 head `477f14c1b4b052ad407a34a71caace6618a75eeb`; selected summary SHA-256 `c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f`.
-- Materializer commit: `a752661b3518a0d5776b785516dec614e7035f27`; the four replay receipts retain their actual evaluator commit `5cccee50be333adceee4c978b54bf63d32454cc9`. The final resume/materialization did not rerun simulations.
+- Selector: `benchmark-showcase.v1` executed at the pre-squash PR #9662 head `477f14c1b4b052ad407a34a71caace6618a75eeb`; selected summary SHA-256 `c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f`. The three selector source-file SHA-256 values are preserved in `summary.json` and match the reachable snapshot at `0a5f73283b98279900797b75d20adf6d4676086b`. This records source equivalence without rewriting the original execution revision.
+- Provenance refresh: materializer commit `0a5f73283b98279900797b75d20adf6d4676086b`; the four replay receipts retain evaluator commit `5cccee50be333adceee4c978b54bf63d32454cc9`. The refresh reused all four prior receipts, started zero new evaluations, and did not rerun simulations.
 - Historical denominator: 987/987 episode rows present; 0 missing, 0 duplicate, and 0 malformed rows.
 - Existing camera-ready analyzer status: `passed`; 7 planner-level findings were retained.
 
@@ -43,6 +43,6 @@ The original replay outputs predate output hashing in the first receipt. Their S
 
 ## Reproduction and limits
 
-The machine-readable summary contains the exact input digests, row hashes, selected case inventory, per-case replay command, outcomes, named metrics, checksums, and availability state. Reproduction commands are also embedded in the summary. Failed-command paths are normalized to repository-root-relative paths; run those receipts from the repository root. The raw bundle and case/replay output trees are not copied into git; source cases are recoverable from the public release and per-row source references.
+The machine-readable summary contains the exact input digests, row hashes, selected case inventory, per-case replay command, outcomes, named metrics, checksums, and availability state. Local artifact paths use `${ISSUE9656_LOCAL_ROOT}`; set it to the local cache directory containing the preserved source and replay artifacts before resolving those paths. Failed-command paths are normalized to repository-root-relative paths; run those receipts from the repository root. The raw bundle and case/replay trees are not copied into git. Source cases are recoverable from the public release and per-row source references; the compact summary retains replay-row hashes and metrics, but does not contain the raw replay rows themselves.
 
 This produces an evidence-backed historical challenge slice only. It does not run a new benchmark campaign or search, render new trajectories, admit cases into issue #9652’s versioned corpus, or support planner-ranking/safety claims. Cases remain historical regression candidates pending the corpus owner’s admission policy.

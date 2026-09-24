@@ -24,7 +24,9 @@ Checks performed:
   manifest, must match current file contents.
 - Evidence ``README.md`` classification fields cannot disagree with adjacent
   machine-readable ``summary.json`` fields.
-- Cited script/config paths in changed docs or evidence files must exist.
+- Cited script/config paths in changed docs or evidence files must exist. Paths
+  serialized inside test fixtures remain historical source data, not current
+  workflow citations.
 
 The check is independent from the full Python test suite.
 """
@@ -835,6 +837,14 @@ def _is_artifact_registry(path: Path) -> bool:
 def _cited_path_problems(path: Path, *, root: Path) -> list[str]:
     """Return missing cited command/config path diagnostics."""
     if path.suffix.lower() not in {".md", ".json", ".yaml", ".yml"}:
+        return []
+    try:
+        relative_path = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return []
+    if relative_path.parts[:2] == ("tests", "fixtures"):
+        # Serialized source snapshots can preserve commands and config paths from
+        # historical revisions. They are test data, not current workflow citations.
         return []
     if _is_artifact_registry(path):
         return []

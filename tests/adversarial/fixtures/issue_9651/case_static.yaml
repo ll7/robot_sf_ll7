@@ -1,0 +1,11 @@
+id: case-static
+description: Deterministic scenario-artifact identity fixture for admissibility tests.
+map_file: null
+repeats: 1
+pedestrians:
+  total_count: 0
+robot:
+  start: [0.5, 3.0]
+  goal: [9.5, 3.0]
+settings:
+  time_limit: 30.0

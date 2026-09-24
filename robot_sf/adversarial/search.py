@@ -173,6 +173,10 @@ def _default_evaluator(
 ) -> CandidateEvaluation:
     """Evaluate one candidate through the existing benchmark batch runner."""
     episode_path = candidate_dir / "episode_records.jsonl"
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    planner_config, planner_config_source_sha256, planner_config_snapshot = (
+        _load_planner_config_snapshot(config, snapshot_dir=candidate_dir)
+    )
     snqi_weights = config.load_optional_json(config.snqi_weights_path)
     snqi_baseline = config.load_optional_json(config.snqi_baseline_path)
     summary = run_batch(
@@ -185,7 +189,9 @@ def _default_evaluator(
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
         algo=config.policy,
-        algo_config_path=str(config.algo_config_path) if config.algo_config_path else None,
+        algo_config_path=(
+            str(planner_config_snapshot) if planner_config_snapshot is not None else None
+        ),
         benchmark_profile=config.benchmark_profile,
         workers=config.workers,
         resume=False,
@@ -215,7 +221,35 @@ def _default_evaluator(
         trajectory_csv_path=trajectory_path,
         scenario_yaml_path=scenario_yaml_path,
         bundle_path=candidate_dir,
+        effective_planner_config=planner_config,
+        planner_config_source_sha256=planner_config_source_sha256,
     )
+
+
+def _load_planner_config_snapshot(
+    config: SearchConfig,
+    *,
+    snapshot_dir: Path | None = None,
+) -> tuple[dict[str, Any], str | None, Path | None]:
+    """Read the selected planner config once and optionally persist its exact bytes.
+
+    Returns:
+        Parsed effective config, source-byte SHA-256, and snapshot path when written.
+    """
+    if config.algo_config_path is None:
+        return {}, None, None
+    source_path = config.algo_config_path.expanduser().resolve()
+    source_bytes = source_path.read_bytes()
+    payload = yaml.safe_load(source_bytes.decode("utf-8")) or {}
+    if not isinstance(payload, Mapping):
+        raise TypeError(f"Algorithm config must be a mapping: {source_path}")
+    parsed = dict(payload)
+    digest = hashlib.sha256(source_bytes).hexdigest()
+    if snapshot_dir is None:
+        return parsed, digest, None
+    snapshot_path = snapshot_dir / "planner_config.snapshot.yaml"
+    snapshot_path.write_bytes(source_bytes)
+    return parsed, digest, snapshot_path
 
 
 def _default_certifier(
@@ -343,7 +377,7 @@ def _admissibility_rejection_reason(payload: Mapping[str, Any]) -> str:
     return f"scenario admissibility rejected candidate: {reasons or 'explicit exclusion'}"
 
 
-def _post_evaluation_admissibility(
+def _post_evaluation_admissibility(  # noqa: C901, PLR0912, PLR0915 - fail-closed evidence checks stay explicit.
     payload: Mapping[str, Any],
     *,
     config: SearchConfig,
@@ -351,6 +385,7 @@ def _post_evaluation_admissibility(
     scenario_yaml_path: Path,
     episode_record_path: Path | None,
     failure_attribution: FailureAttribution | None,
+    planner_config_provenance: Mapping[str, Any] | None = None,
     evaluation_error: str | None = None,
 ) -> dict[str, Any]:
     """Attach a provenance-checked planner observation without changing feasibility."""
@@ -360,6 +395,28 @@ def _post_evaluation_admissibility(
         "status": "unavailable",
         "reason_code": "target_planner_observation_unavailable",
     }
+    effective_planner_config = (
+        planner_config_provenance.get("config")
+        if isinstance(planner_config_provenance, Mapping)
+        else None
+    )
+    planner_config_source_sha256 = (
+        planner_config_provenance.get("source_sha256")
+        if isinstance(planner_config_provenance, Mapping)
+        else None
+    )
+    planner_config_capture_error = None
+    if planner_config_provenance is not None:
+        if not isinstance(effective_planner_config, Mapping):
+            planner_config_capture_error = "target_episode_selected_planner_config_not_captured"
+        elif config.algo_config_path is not None and (
+            not isinstance(planner_config_source_sha256, str)
+            or len(planner_config_source_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in planner_config_source_sha256.lower())
+        ):
+            planner_config_capture_error = (
+                "target_episode_selected_planner_config_digest_missing_or_malformed"
+            )
     target_outcome = "unavailable"
     scenario_identity_snapshot: Mapping[str, Any] | None = None
     if evaluation_error is not None:
@@ -411,13 +468,17 @@ def _post_evaluation_admissibility(
             observation.setdefault("reason_code", "target_episode_record_missing_or_malformed")
         else:
             record_metadata = record.get("algorithm_metadata")
-            reason_code, route_complete = _target_episode_observation_reason(
-                record,
-                config=config,
-                candidate=candidate,
-                scenario_yaml_path=scenario_yaml_path,
-                failure_attribution=failure_attribution,
-            )
+            if planner_config_capture_error is not None:
+                reason_code, route_complete = planner_config_capture_error, None
+            else:
+                reason_code, route_complete = _target_episode_observation_reason(
+                    record,
+                    config=config,
+                    candidate=candidate,
+                    scenario_yaml_path=scenario_yaml_path,
+                    failure_attribution=failure_attribution,
+                    effective_planner_config=effective_planner_config,
+                )
             observation.update(
                 {
                     "episode_id": record.get("episode_id"),
@@ -431,6 +492,12 @@ def _post_evaluation_admissibility(
                         if isinstance(record_metadata, Mapping)
                         else None
                     ),
+                    "selected_planner_config_hash": (
+                        _config_hash(dict(effective_planner_config))
+                        if isinstance(effective_planner_config, Mapping)
+                        else None
+                    ),
+                    "selected_planner_config_source_sha256": planner_config_source_sha256,
                     "termination_reason": record.get("termination_reason"),
                     "route_complete": route_complete,
                 }
@@ -469,6 +536,7 @@ def _target_episode_observation_reason(  # noqa: C901 - fail-closed evidence che
     candidate: CandidateSpec,
     scenario_yaml_path: Path,
     failure_attribution: FailureAttribution | None,
+    effective_planner_config: Mapping[str, Any] | None = None,
 ) -> tuple[str | None, bool | None]:
     """Require a native, internally consistent episode matching the search candidate."""
     details = failure_attribution.details if failure_attribution is not None else {}
@@ -512,6 +580,7 @@ def _target_episode_observation_reason(  # noqa: C901 - fail-closed evidence che
         config=config,
         candidate=candidate,
         scenario_yaml_path=scenario_yaml_path,
+        effective_planner_config=effective_planner_config,
     )
     if binding_reason is not None:
         return binding_reason, None
@@ -584,13 +653,14 @@ def _guard_target_observation_input_stability(
     return "unavailable"
 
 
-def _target_episode_candidate_binding_reason(
+def _target_episode_candidate_binding_reason(  # noqa: C901 - fail-closed binding remains explicit.
     record: Mapping[str, Any],
     *,
     metadata: Mapping[str, Any],
     config: SearchConfig,
     candidate: CandidateSpec,
     scenario_yaml_path: Path,
+    effective_planner_config: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Bind a native episode row to its materialized candidate and planner config."""
     scenario_error, materialized_candidate = _materialized_candidate_provenance(scenario_yaml_path)
@@ -630,6 +700,17 @@ def _target_episode_candidate_binding_reason(
         or metadata.get("config_hash") != expected_planner_config_hash
     ):
         return "target_episode_planner_config_hash_mismatch"
+    if effective_planner_config is None:
+        try:
+            effective_planner_config, _selected_source_sha256, _snapshot = (
+                _load_planner_config_snapshot(config)
+            )
+        except (OSError, UnicodeDecodeError, TypeError, ValueError, yaml.YAMLError):
+            return "target_episode_selected_planner_config_unavailable"
+    if dict(recorded_planner_config) != dict(effective_planner_config):
+        return "target_episode_planner_config_selected_config_mismatch"
+    if expected_planner_config_hash != _config_hash(dict(effective_planner_config)):
+        return "target_episode_planner_config_selected_hash_mismatch"
     return None
 
 
@@ -680,6 +761,10 @@ def _store_post_evaluation_admissibility(
         scenario_yaml_path=scenario_yaml_path,
         episode_record_path=episode_path,
         failure_attribution=evaluation.failure_attribution,
+        planner_config_provenance={
+            "config": evaluation.effective_planner_config,
+            "source_sha256": evaluation.planner_config_source_sha256,
+        },
         evaluation_error=evaluation_error,
     )
     attribution = evaluation.failure_attribution

@@ -10,7 +10,10 @@ from typing import Any
 
 import yaml
 
-from robot_sf.training.scenario_loader import load_scenarios_for_validation
+from robot_sf.training.scenario_loader import (
+    ScenarioValidationReport,
+    load_scenarios_for_validation,
+)
 
 SCENARIO_INPUT_IDENTITY_SCHEMA = "scenario_runtime_input_identity.v1"
 
@@ -19,6 +22,7 @@ def scenario_input_identity(
     scenario_path: str | Path,
     *,
     scenario_id: str | None = None,
+    validation_report: ScenarioValidationReport | None = None,
 ) -> dict[str, Any]:
     """Hash a scenario manifest, its includes, and referenced map/route files.
 
@@ -27,7 +31,7 @@ def scenario_input_identity(
         runtime-referenced input closure. An incomplete or unreadable closure has no
         effective digest, so consumers must retain the candidate as unknown.
     """
-    loaded = _load_scenario_report(scenario_path)
+    loaded = _load_scenario_report(scenario_path, validation_report=validation_report)
     if isinstance(loaded, dict):
         return loaded
     root, root_digest, report = loaded
@@ -71,37 +75,42 @@ def scenario_input_identity(
 
 def _load_scenario_report(
     scenario_path: str | Path,
+    *,
+    validation_report: ScenarioValidationReport | None = None,
 ) -> tuple[Path, str, Any] | dict[str, Any]:
-    """Resolve and load a scenario file while capturing its root digest.
+    """Resolve and verify a scenario parse against the exact bytes it consumed.
 
     Returns:
-        The resolved path, root digest, and validation report, or an unavailable payload.
+        The resolved path, parser-consumed root digest, and validation report, or
+        an unavailable payload. A supplied report lets producers bind identity to
+        the exact parse they use instead of reparsing an include graph.
     """
     try:
         root = Path(scenario_path).expanduser().resolve(strict=True)
         if not root.is_file():
             return _unavailable(str(root), "scenario_manifest_not_a_file")
-        root_digest_before = _file_sha256(root)
-        if root_digest_before is None:
-            return _unavailable(str(root), "scenario_manifest_unreadable")
-        report = load_scenarios_for_validation(root)
-        root_digest_after = _file_sha256(root)
-        if root_digest_after != root_digest_before:
-            return _unavailable(str(root), "scenario_manifest_changed_during_load")
+        report = validation_report or load_scenarios_for_validation(root)
         root_source = next(
             (item for item in report.manifest_sources if item.path.resolve() == root),
             None,
         )
-        if root_source is not None and root_source.content_sha256 != root_digest_before:
-            return _unavailable(str(root), "scenario_manifest_changed_during_load")
+        root_digest = root_source.content_sha256 if root_source is not None else None
+        if root_digest is None:
+            return _unavailable(str(root), "scenario_manifest_read_digest_missing")
+        if _file_sha256(root) != root_digest:
+            return _unavailable_with_root(
+                root, root_digest, "scenario_manifest_changed_during_load"
+            )
         for source in report.manifest_sources:
             if source.content_sha256 is None:
                 return _unavailable(source.path.as_posix(), "scenario_manifest_read_digest_missing")
             if _file_sha256(source.path) != source.content_sha256:
-                return _unavailable(
-                    source.path.as_posix(), "included_scenario_manifest_changed_during_load"
+                return _unavailable_with_root(
+                    root,
+                    root_digest,
+                    "included_scenario_manifest_changed_during_load",
                 )
-        return root, root_digest_before, report
+        return root, root_digest, report
     except (OSError, RuntimeError, ValueError, TypeError):
         return _unavailable(str(scenario_path), "scenario_manifest_unavailable")
 
@@ -295,10 +304,27 @@ def _legacy_root_only_identity(
         Root-only identity when unreferenced, otherwise ``None``.
     """
     try:
-        payload = yaml.safe_load(root.read_text(encoding="utf-8"))
+        root_bytes = root.read_bytes()
+        if hashlib.sha256(root_bytes).hexdigest() != root_digest:
+            return None
+        payload = yaml.safe_load(root_bytes.decode("utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return None
-    if not isinstance(payload, Mapping) or "scenarios" in payload or "include" in payload:
+    if not isinstance(payload, Mapping) or "scenarios" in payload:
+        return None
+    external_reference_keys = {
+        "includes",
+        "include",
+        "scenario_files",
+        "map_id",
+        "map_file",
+        "map_search_paths",
+        "route_overrides_file",
+    }
+    if any(
+        key in payload and _has_external_reference_value(payload[key])
+        for key in external_reference_keys
+    ):
         return None
     candidate_id = next(
         (
@@ -309,11 +335,6 @@ def _legacy_root_only_identity(
         None,
     )
     if scenario_id is not None and scenario_id != candidate_id:
-        return None
-    if any(
-        isinstance(payload.get(key), str) and payload[key].strip()
-        for key in ("map_file", "route_overrides_file")
-    ):
         return None
     return {
         "status": "available",
@@ -331,6 +352,17 @@ def _legacy_root_only_identity(
         ],
         "reason_code": None,
     }
+
+
+def _has_external_reference_value(value: Any) -> bool:
+    """Return whether an optional loader reference declares an external input."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, Mapping)):
+        return bool(value)
+    return True
 
 
 def _file_sha256(path: Path) -> str | None:

@@ -1,0 +1,117 @@
+{
+  "schema_version": "benchmark_result_provenance.v1",
+  "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
+  "run": {
+    "run_id": "5b3f00154f784808826b3090d764d868",
+    "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+    "python_version": "3.13.14",
+    "invocation": "scripts/tools/compare_adversarial_samplers.py --scenario-template configs/scenarios/templates/crossing_ttc.yaml --search-space configs/adversarial/issue_9645_pilot_space.v1.yaml --policy goal --objective constraints_first_lexicographic_v1 --budget 1 --seed 910 --sampler random --require-certification --empirical --output-dir output/issue9645-smoke-v2/results --out-json output/issue9645-smoke-v2/comparison.json --out-md output/issue9645-smoke-v2/comparison.md",
+    "benchmark_profile": "baseline-safe",
+    "runner": "map_runner.run_map_batch",
+    "protocol_version": "0.1.0",
+    "execution_context": {
+      "hostname": "auxme-imech039",
+      "schema_version": "benchmark_execution_context.v1",
+      "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+      "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",
+      "python_version": "3.13.14",
+      "thread_env": {
+        "OMP_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null
+      },
+      "numpy_version": "2.4.6",
+      "numba_version": "0.67.0",
+      "execution_context_sha256": "6dc34a26c637cb84a21fd1414db605253bb550465504b5d3da40cf90de4ae244"
+    }
+  },
+  "inputs": {
+    "schema_path": {
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
+      "artifact_status": "available"
+    },
+    "scenario_matrix": {
+      "path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/scenario.yaml",
+      "sha256": "8a1dc0727d05ee5d283b03e870c757e28751083be296b8963ed12dd4d88c512f",
+      "artifact_status": "available"
+    },
+    "algo_config": {
+      "path": null,
+      "sha256": null,
+      "artifact_status": "not_provided"
+    }
+  },
+  "campaign_identity": {
+    "scenario_matrix_hash": "67d5ee7119d4fa7e",
+    "input_bundle_sha256": "8ace364077ff8070359267b26d5745ea62b8de7b41e0ef0fd9fc7f7707ccbf8c",
+    "algorithm": "goal",
+    "config_hash": "0b764a5b51c24585",
+    "suite_key": "default",
+    "total_jobs": 1,
+    "written": 1
+  },
+  "raw_artifacts": [
+    {
+      "kind": "episodes_jsonl",
+      "path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/episode_records.jsonl",
+      "sha256": "6dee284ba8c9b41441bd93ada3973da8a9a855a1501afef886c74f012aa15b2b",
+      "artifact_status": "available"
+    }
+  ],
+  "rows": [
+    {
+      "episode_id": "crossing_ttc_template_adversarial_0000--123--452237961366d22c",
+      "scenario_id": "crossing_ttc_template_adversarial_0000",
+      "seed": 123,
+      "config_hash": "452237961366d22c",
+      "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+      "raw_artifact": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/episode_records.jsonl",
+      "jsonl_line": 0,
+      "simulator_settings": {
+        "horizon": 100,
+        "dt": 0.1,
+        "record_forces": true,
+        "observation_mode": "goal_state",
+        "observation_level": "oracle_full_state",
+        "observation_noise_hash": "0a5609f0b2b1",
+        "tracking_precision_hash": "d06cee655fee"
+      },
+      "postprocessing": [
+        {
+          "step": "compute_all_metrics",
+          "status": "completed"
+        },
+        {
+          "step": "post_process_metrics",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "derived_artifacts": [],
+  "completeness": {
+    "status": "complete",
+    "required_fields_checked": [
+      "algorithm",
+      "campaign_identity",
+      "completeness",
+      "config_hash",
+      "episode_id",
+      "input_binding_schema_version",
+      "input_bundle_sha256",
+      "inputs",
+      "repo_commit",
+      "repo_commit",
+      "run",
+      "run_id",
+      "runner",
+      "scenario_id",
+      "scenario_matrix_hash",
+      "schema_version",
+      "seed",
+      "total_jobs",
+      "written"
+    ]
+  }
+}

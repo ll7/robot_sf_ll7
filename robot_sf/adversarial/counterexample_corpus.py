@@ -35,6 +35,7 @@ EVALUATION_SCHEMA_VERSION = "adversarial-counterexample-planner-evaluation.v1"
 SLICE_SCHEMA_VERSION = "adversarial-counterexample-slice.v1"
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v1"
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
+ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
@@ -456,11 +457,203 @@ def _verify_issue9645_pilot(payload: Path) -> dict[str, Any]:
     summary = _read_json_object(payload / "summary.json")
     metadata = _read_json_object(payload / "run_metadata.json")
     row_status = _read_json_object(payload / "row_status.json")
+    bundle_receipts = _verify_issue9645_bundle(
+        payload,
+        source_revision=str(metadata.get("experiment_source_commit") or ""),
+        source_file_hashes=metadata.get("source_file_sha256"),
+        required_payload_paths=_pilot_accounting_paths(payload),
+    )
     _validate_pilot_summary(summary, metadata)
     _validate_pilot_design(metadata)
     manifests_by_identity = _verify_pilot_manifests(payload, metadata)
     _verify_pilot_candidate_rows(payload, row_status)
-    return _pilot_search_run(summary, metadata, manifests_by_identity, payload)
+    return _pilot_search_run(summary, metadata, manifests_by_identity, payload, bundle_receipts)
+
+
+def _pilot_accounting_paths(payload: Path) -> list[str]:
+    source_manifests = sorted((payload / "source_manifests").glob("*.json"))
+    return [
+        "summary.json",
+        "run_metadata.json",
+        "row_status.json",
+        "candidate_evaluations.csv",
+        "source_hashes.sha256",
+        "report_provenance.json",
+        "inputs/crossing_ttc.yaml",
+        "inputs/issue_9645_pilot_space.v1.yaml",
+        *[path.relative_to(payload).as_posix() for path in source_manifests],
+    ]
+
+
+def _verify_issue9645_bundle(
+    payload: Path,
+    *,
+    source_revision: str,
+    source_file_hashes: Any,
+    required_payload_paths: Sequence[str],
+) -> list[dict[str, str]]:
+    """Verify the bundle's outer receipt and hashes for every consumed payload file."""
+    bundle_root = payload.parent
+    manifest_path, checksums_path, files_by_path = _read_issue9645_bundle_inventory(
+        bundle_root, source_revision
+    )
+    _verify_issue9645_payload_receipts(
+        payload,
+        source_revision=source_revision,
+        source_file_hashes=source_file_hashes,
+        required_payload_paths=required_payload_paths,
+        files_by_path=files_by_path,
+    )
+    return [
+        {
+            "source_path": "evidence_bundle_manifest.json",
+            "path": "packet_receipts/evidence_bundle_manifest.json",
+            "sha256": _sha256_file(manifest_path),
+        },
+        {
+            "source_path": "checksums.sha256",
+            "path": "packet_receipts/checksums.sha256",
+            "sha256": _sha256_file(checksums_path),
+        },
+    ]
+
+
+def _read_issue9645_bundle_inventory(
+    bundle_root: Path, source_revision: str
+) -> tuple[Path, Path, dict[str, dict[str, Any]]]:
+    manifest_path = bundle_root / "evidence_bundle_manifest.json"
+    checksums_path = bundle_root / "checksums.sha256"
+    manifest = _read_json_object(manifest_path)
+    if manifest.get("schema_version") != ISSUE_9645_BUNDLE_SCHEMA:
+        raise CorpusError("#9645 evidence bundle manifest schema is invalid")
+    if (
+        manifest.get("bundle_name") != "issue_9645_bounded_falsification_2026-09-24"
+        or manifest.get("commit") != source_revision
+    ):
+        raise CorpusError("#9645 evidence bundle identity differs from the source run")
+    bundle_files = manifest.get("files")
+    totals = manifest.get("totals")
+    if not isinstance(bundle_files, list) or not isinstance(totals, dict):
+        raise CorpusError("#9645 evidence bundle file inventory is incomplete")
+    files_by_path = _validated_bundle_file_map(bundle_files)
+    total_bytes = sum(item["size_bytes"] for item in files_by_path.values())
+    if totals.get("file_count") != len(files_by_path) or totals.get("total_bytes") != total_bytes:
+        raise CorpusError("#9645 evidence bundle totals disagree with its file inventory")
+
+    checksums = _parse_sha256_receipt(checksums_path, label="bundle checksums")
+    expected_checksums = {
+        f"payload/{relative}": item["sha256"] for relative, item in files_by_path.items()
+    }
+    if checksums != expected_checksums:
+        raise CorpusError("#9645 bundle checksum file disagrees with its manifest")
+    return manifest_path, checksums_path, files_by_path
+
+
+def _verify_issue9645_payload_receipts(
+    payload: Path,
+    *,
+    source_revision: str,
+    source_file_hashes: Any,
+    required_payload_paths: Sequence[str],
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> None:
+    source_hashes = _parse_sha256_receipt(payload / "source_hashes.sha256", label="source hashes")
+    if not isinstance(source_file_hashes, dict) or source_hashes != source_file_hashes:
+        raise CorpusError("#9645 source hashes disagree with run metadata")
+    for relative in required_payload_paths:
+        record = files_by_path.get(relative)
+        if record is None:
+            raise CorpusError(f"#9645 consumed file is absent from the bundle manifest: {relative}")
+        _verify_bundle_payload_file(payload, relative, record)
+
+    report = _read_json_object(payload / "report_provenance.json")
+    if (
+        report.get("schema_version") != "issue_9645_report_build_provenance.v1"
+        or report.get("source_search_commit") != source_revision
+    ):
+        raise CorpusError("#9645 report provenance does not bind the source search revision")
+    comparison_record = files_by_path.get("pilot_comparison.json")
+    if comparison_record is None:
+        raise CorpusError("#9645 pilot comparison is absent from the bundle manifest")
+    _verify_bundle_payload_file(payload, "pilot_comparison.json", comparison_record)
+    if report.get("comparison_sha256") != comparison_record["sha256"]:
+        raise CorpusError("#9645 report provenance does not bind the pilot comparison")
+
+
+def _validated_bundle_file_map(entries: list[Any]) -> dict[str, dict[str, Any]]:
+    files: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise CorpusError("#9645 bundle file inventory contains a malformed entry")
+        relative = entry.get("path")
+        size = entry.get("size_bytes")
+        digest = entry.get("sha256")
+        if (
+            not _safe_bundle_relative_path(relative)
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+            or not _is_sha256(digest)
+            or relative in files
+        ):
+            raise CorpusError("#9645 bundle file inventory contains invalid identity or checksum")
+        files[relative] = {"size_bytes": size, "sha256": digest}
+    if not files:
+        raise CorpusError("#9645 bundle file inventory is empty")
+    return files
+
+
+def _safe_bundle_relative_path(value: Any) -> bool:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or value != value.strip()
+        or "\\" in value
+        or "\x00" in value
+    ):
+        return False
+    path = PurePosixPath(value)
+    return (
+        value not in {"", "."}
+        and not path.is_absolute()
+        and path.as_posix() == value
+        and ".." not in path.parts
+    )
+
+
+def _parse_sha256_receipt(path: Path, *, label: str) -> dict[str, str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise CorpusError(f"could not read #9645 {label}: {exc}") from exc
+    records: dict[str, str] = {}
+    for line in lines:
+        fields = line.split(maxsplit=1)
+        if len(fields) != 2 or not _is_sha256(fields[0]):
+            raise CorpusError(f"#9645 {label} contains a malformed checksum line")
+        relative = fields[1].strip()
+        if not _safe_bundle_relative_path(relative) or relative in records:
+            raise CorpusError(f"#9645 {label} contains an unsafe or duplicate path")
+        records[relative] = fields[0]
+    if not records:
+        raise CorpusError(f"#9645 {label} is empty")
+    return records
+
+
+def _verify_bundle_payload_file(payload: Path, relative: str, record: Mapping[str, Any]) -> None:
+    if not _safe_bundle_relative_path(relative):
+        raise CorpusError("#9645 consumed payload path is unsafe")
+    source = (payload / Path(*PurePosixPath(relative).parts)).resolve()
+    try:
+        source.relative_to(payload.resolve())
+    except ValueError as exc:
+        raise CorpusError("#9645 consumed payload path escapes the packet") from exc
+    if (
+        not source.is_file()
+        or source.stat().st_size != record.get("size_bytes")
+        or _sha256_file(source) != record.get("sha256")
+    ):
+        raise CorpusError(f"#9645 consumed payload checksum differs: {relative}")
 
 
 def _validate_pilot_summary(summary: Mapping[str, Any], metadata: Mapping[str, Any]) -> None:
@@ -605,6 +798,7 @@ def _pilot_search_run(
     metadata: Mapping[str, Any],
     manifests_by_identity: Mapping[tuple[str, int], Mapping[str, Any]],
     payload: Path,
+    bundle_receipts: list[dict[str, str]],
 ) -> dict[str, Any]:
     return {
         "schema_version": "adversarial-counterexample-search-run.v1",
@@ -635,6 +829,7 @@ def _pilot_search_run(
             manifests_by_identity[key]
             for key in sorted(manifests_by_identity, key=lambda item: (item[1], item[0]))
         ],
+        "bundle_receipts": bundle_receipts,
     }
 
 
@@ -645,9 +840,11 @@ def _copy_pilot_evidence(payload: Path) -> list[dict[str, str]]:
         "run_metadata.json",
         "candidate_evaluations.csv",
         "row_status.json",
-        "replay_validation.json",
-        "path_normalization.json",
-        "historical_issue_1501_failure_0002.json",
+        "source_hashes.sha256",
+        "report_provenance.json",
+        "pilot_comparison.json",
+        "inputs/crossing_ttc.yaml",
+        "inputs/issue_9645_pilot_space.v1.yaml",
         "source_manifests/random_seed_1101.json",
         "source_manifests/random_seed_2202.json",
         "source_manifests/tpe_seed_1101.json",
@@ -662,31 +859,10 @@ def _persist_pilot_evidence(payload: Path, corpus_root: Path, pilot: dict[str, A
     """Copy the accounting rows/manifests into corpus custody and bind their hashes."""
     evidence_dir = corpus_root / "evidence" / "issue_9645_pilot"
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    source_paths = [item["path"] for item in pilot["source_files"]]
-    for manifest in pilot["manifest_files"]:
-        source_paths.append(manifest["path"])
-    persisted = []
-    for relative in sorted(set(source_paths)):
-        source = payload / relative
-        destination = evidence_dir / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        expected = _sha256_file(source)
-        if destination.exists():
-            if _sha256_file(destination) != expected:
-                raise CorpusError(f"corpus pilot evidence path conflicts: {relative}")
-        else:
-            shutil.copyfile(source, destination)
-        persisted.append(
-            {
-                "path": destination.resolve().relative_to(corpus_root.resolve()).as_posix(),
-                "sha256": expected,
-            }
-        )
+    persisted_paths = _persist_pilot_payload_files(payload, evidence_dir, corpus_root, pilot)
     pilot["source_files"] = [
         {
-            "path": next(
-                item["path"] for item in persisted if item["path"].endswith(f"/{source['path']}")
-            ),
+            "path": persisted_paths[source["path"]],
             "sha256": source["sha256"],
         }
         for source in pilot["source_files"]
@@ -694,18 +870,89 @@ def _persist_pilot_evidence(payload: Path, corpus_root: Path, pilot: dict[str, A
     pilot["manifest_files"] = [
         {
             **manifest,
-            "path": next(
-                item["path"] for item in persisted if item["path"].endswith(f"/{manifest['path']}")
-            ),
+            "path": persisted_paths[manifest["path"]],
         }
         for manifest in pilot["manifest_files"]
     ]
+    pilot["bundle_receipts"] = _persist_pilot_bundle_receipts(
+        payload, evidence_dir, corpus_root, pilot["bundle_receipts"]
+    )
     pilot["evidence_bundle_root"] = "evidence/issue_9645_pilot"
+
+
+def _persist_pilot_payload_files(
+    payload: Path,
+    evidence_dir: Path,
+    corpus_root: Path,
+    pilot: Mapping[str, Any],
+) -> dict[str, str]:
+    expected_hashes = {item["path"]: item["sha256"] for item in pilot["source_files"]}
+    expected_hashes.update({item["path"]: item["sha256"] for item in pilot["manifest_files"]})
+    persisted: dict[str, str] = {}
+    for relative, expected in sorted(expected_hashes.items()):
+        source = payload / relative
+        destination = evidence_dir / relative
+        _copy_verified_file(source, destination, expected, f"pilot evidence {relative}")
+        persisted[relative] = destination.resolve().relative_to(corpus_root.resolve()).as_posix()
+    return persisted
+
+
+def _persist_pilot_bundle_receipts(
+    payload: Path,
+    evidence_dir: Path,
+    corpus_root: Path,
+    receipts: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    persisted = []
+    for receipt in receipts:
+        source_path = receipt["source_path"]
+        relative = receipt["path"]
+        source = payload.parent / source_path
+        destination = evidence_dir / relative
+        _copy_verified_file(source, destination, receipt["sha256"], f"bundle receipt {source_path}")
+        persisted.append(
+            {
+                "source_path": source_path,
+                "path": destination.resolve().relative_to(corpus_root.resolve()).as_posix(),
+                "sha256": receipt["sha256"],
+            }
+        )
+    return persisted
+
+
+def _copy_verified_file(source: Path, destination: Path, expected_sha256: str, label: str) -> None:
+    if not source.is_file() or _sha256_file(source) != expected_sha256:
+        raise CorpusError(f"{label} does not match its verified source checksum")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        if _sha256_file(destination) != expected_sha256:
+            raise CorpusError(f"corpus path conflicts with {label}")
+    else:
+        shutil.copyfile(source, destination)
+    if _sha256_file(destination) != expected_sha256:
+        raise CorpusError(f"corpus copy changed {label}")
 
 
 def _build_issue9645_historical_case(
     payload: Path,
 ) -> tuple[dict[str, Any], dict[str, Path], list[dict[str, Any]]]:
+    metadata = _read_json_object(payload / "run_metadata.json")
+    _verify_issue9645_bundle(
+        payload,
+        source_revision=str(metadata.get("experiment_source_commit") or ""),
+        source_file_hashes=metadata.get("source_file_sha256"),
+        required_payload_paths=[
+            "historical_issue_1501_failure_0002.json",
+            "historical_issue_1501_failure_0002/scenario.yaml",
+            "historical_issue_1501_failure_0002/route_overrides.yaml",
+            "historical_issue_1501_failure_0002/replay_1.jsonl",
+            "historical_issue_1501_failure_0002/replay_1.provenance.json",
+            "historical_issue_1501_failure_0002/replay_2.jsonl",
+            "historical_issue_1501_failure_0002/replay_2.provenance.json",
+            "path_normalization.json",
+            "replay_validation.json",
+        ],
+    )
     context = _load_historical_case_context(payload)
     replay = _verify_historical_replay_pair(payload, context)
     case, observations = _materialize_historical_case(context, replay, payload)

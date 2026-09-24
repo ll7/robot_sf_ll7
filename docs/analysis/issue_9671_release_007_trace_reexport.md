@@ -48,17 +48,20 @@ receipt, producer checksums, result-root path, and cold-readback receipt. Preser
 and logs in durable artifact storage outside Git.
 
 After collection, run `scripts/validation/check_issue_9671_trace_reexport.py` with the exact
-archive, both episode JSONL files, both diagnostic config files, and both produced
+archive, all four episode JSONL files, both diagnostic config files, and both produced
 `campaign_manifest.json` files. Retain each runner-produced
 `episodes.jsonl.provenance.json` beside its JSONL: the comparator checks its whole-file checksum,
 every row's line, episode, scenario, seed, source, and scenario-parameter hash, then binds the
-producer file to the matching diagnostic campaign directory and scenario-matrix hash. The
+producer file to the matching diagnostic campaign directory. The producer's per-arm scenario
+hash differs from the full campaign scenario-matrix hash, so the comparator checks each hash
+within its own scope and checks the producer's scenario input SHA-256 against frozen bytes. The
 producer invocation must match the campaign invocation, including the named `--config` and
 `--campaign-id`; its schema, scenario-matrix, and planner configuration input checksums must
 match bytes pinned from the frozen source. A mixed, swapped, or unmanifested JSONL fails
 admission. The comparator requires the frozen source SHA, the separately
-pinned config SHA-256 values and effective hashes, per-step finite robot/pedestrian states and
-total pedestrian force vectors, and release-equivalent scientific parameters apart from the
+pinned config SHA-256 values and effective hashes, native or adapter execution without runtime
+fallback/degradation, complete contiguous per-step state with count matching the episode record,
+finite robot/pedestrian states and total pedestrian force vectors, and release-equivalent scientific parameters apart from the
 three recording flags. For seeds 22–24, the parameters are compared to the same release
 scenario/planner at a release seed with only `route_spawn_seed` substituted; their outcomes remain
 `no_release_row`. It writes every row's `match`, `mismatch`, or `no_release_row` classification
@@ -74,8 +77,24 @@ Both staged-configuration preflights passed on the SSH development host on 2026-
 canonical submission attempt stopped before `sbatch`: the clean-source guard rejected untracked
 config files inside the frozen worktree. Those exact bytes were then staged under ignored `output/`
 from the tracked PR source, verified by SHA-256, and the frozen worktree returned to a clean Git
-state. No #9671
-Slurm job or trace-result checksum is claimed here until its submission and cold readback are
-recorded. The 0.0.7 archive SHA above was rechecked locally. The legacy three-context Table 8.3
+state. Diagnostic jobs **15758** (head-on/group) and **15760** (doorway) completed with scheduler,
+producer, and sync exit code zero. Producer SHA256SUMS and cold retrieval checks passed (57 and
+51 files). Artifact-verification receipts passed. Both campaigns have verified W&B v0 and local
+snapshot copies with matching preservation manifests; private queue preservation closeout metadata
+is still pending.
+
+| Job | Raw producer SHA256SUMS SHA-256 | Verified W&B artifact | Preservation manifest digest |
+| --- | --- | --- | --- |
+| 15758 | `ec7d633dac430ddb36d78b9dc3a4a318d82e32041b9001080adf033b417082f4` | `wandb://ll7/robot_sf/campaign-issue9671_trace_headon_group_v007_07f7e8d_20260924:v0` | `sha256:b1109c1c085dd491f4f8538bfba68fc88c0e890b7fd75ade675b56bcb6904265` |
+| 15760 | `3f8fb73ae92431a46ab0dd5e45d72051d35f06d2ec1a3a06483c71d2bb8c1791` | `wandb://ll7/robot_sf/campaign-issue9671_trace_doorway_v007_07f7e8d_20260924:v0` | `sha256:73b264d8fb8910d0f2ddfffc074005c31eaadd6db9b72d8f23db8d32ffa3c5a9` |
+
+The comparator admitted 20 exact raw rows and wrote `release_007_trace_outcomes.json`, SHA-256
+`38fe7aa1321294c551aeaedd6af8e44871ee4e2c74a59de88063bd0a097fe2c5`: **2 matches,
+0 mismatches, 18 `no_release_row`**. Doorway PPO seeds 113 and 114 both ended in `collision`,
+matching their frozen release rows. The 18 head-on/group seeds 22–24 have no release row and are
+diagnostic observations only. These outcomes do not establish trajectory parity because the
+trace-only configs and one-worker context differ from the release campaign.
+
+The 0.0.7 archive SHA above was rechecked locally. The legacy three-context Table 8.3
 numbers concern the earlier 0.0.3 source and must be re-measured or relabelled before being
 presented as a 0.0.7 result.

@@ -14,9 +14,14 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.fallback_policy import (
+    resolve_execution_mode,
+    runtime_fallback_or_degraded_marker,
+)
 from robot_sf.benchmark.utils import _config_hash
 
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
+FROZEN_PUBLIC_ROOT = Path("/home/luttkule/git/robot_sf_ll7.worktrees/issue-9671-frozen-execution")
 ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
 TRACE_KEYS = ("record_forces", "record_planner_decision_trace", "record_simulation_step_trace")
 CONFIG_SHA256 = {
@@ -27,6 +32,10 @@ EFFECTIVE_HASH = {"headon_group": "b195d55f16871ba2", "doorway": "a30c4555ce8a3f
 DIAGNOSTIC_CONFIG = {
     "headon_group": "output/benchmarks/issue9671/inputs/issue_9671_trace_headon_group_v007.yaml",
     "doorway": "output/benchmarks/issue9671/inputs/issue_9671_trace_doorway_v007.yaml",
+}
+CAMPAIGN_ID = {
+    "headon_group": "issue9671_trace_headon_group_v007_07f7e8d_20260924",
+    "doorway": "issue9671_trace_doorway_v007_07f7e8d_20260924",
 }
 FROZEN_INPUT_SHA256 = {
     "robot_sf/benchmark/schemas/episode.schema.v1.json": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
@@ -141,12 +150,13 @@ def _validate_bindings(
         if (
             manifest.get("git", {}).get("commit") != SOURCE_SHA
             or manifest.get("config_hash") != effective_hash[name]
-            or manifest.get("campaign_id") != manifest_paths[name].parent.name
+            or manifest.get("campaign_id") != CAMPAIGN_ID[name]
             or not manifest.get("scenario_matrix_hash")
             or manifest.get("scenario_matrix") != config["scenario_matrix"]
             or set(manifest.get("seed_policy", {}).get("resolved_seeds", []))
             != set(config["seed_policy"]["seeds"])
-            or _argument(invocation, "--config") != DIAGNOSTIC_CONFIG[name]
+            or _argument(invocation, "--config")
+            != str(FROZEN_PUBLIC_ROOT / DIAGNOSTIC_CONFIG[name])
             or _argument(invocation, "--campaign-id") != manifest["campaign_id"]
             or _argument(invocation, "--mode") != "run"
         ):
@@ -229,7 +239,11 @@ def _validate_producer_manifest(
         campaign_root = Path(binding["campaign_manifest_path"]).parent
         if (
             path.parent.parent == campaign_root / "runs"
-            and campaign.get("scenario_matrix_hash") == binding["scenario_matrix_hash"]
+            # The producer's hash covers its selected planner arm, while the
+            # campaign hash covers the full matrix. Exact frozen input bytes
+            # are checked below, so these two hashes must not be equated.
+            and isinstance(campaign.get("scenario_matrix_hash"), str)
+            and bool(campaign["scenario_matrix_hash"])
             and all(_key(row) in binding["tuples"] for row in rows)
         ):
             matched.append(name)
@@ -259,11 +273,36 @@ def _vector2(value: Any) -> bool:
     )
 
 
-def _validate_steps(key: tuple[str, str, int], trace: dict[str, Any]) -> None:
+def _validate_steps(key: tuple[str, str, int], row: dict[str, Any], trace: dict[str, Any]) -> None:
     """Require robot, pedestrian, and available force state at each recorded step."""
     if not isinstance(trace.get("steps"), list) or not trace["steps"]:
         raise ValueError(f"trace tuple {key} has no per-step state")
+    count = row.get("steps")
+    if isinstance(count, bool) or not isinstance(count, int) or count != len(trace["steps"]):
+        raise ValueError(f"trace tuple {key} step count does not match episode")
+    if trace.get("schema_version") != "simulation-step-trace.v1":
+        raise ValueError(f"trace tuple {key} has wrong step-trace schema")
+    dt = trace.get("dt")
+    if (
+        isinstance(dt, bool)
+        or not isinstance(dt, (int, float))
+        or not math.isfinite(dt)
+        or dt <= 0
+        or not math.isclose(dt, row["scenario_params"]["run_dt"], abs_tol=1e-12)
+    ):
+        raise ValueError(f"trace tuple {key} has wrong step-trace timestep")
     for index, step in enumerate(trace["steps"]):
+        if (
+            not isinstance(step, dict)
+            or isinstance(step.get("step"), bool)
+            or not isinstance(step.get("step"), int)
+            or step.get("step") != index
+            or isinstance(step.get("time_s"), bool)
+            or not isinstance(step.get("time_s"), (int, float))
+            or not math.isfinite(step["time_s"])
+            or not math.isclose(step["time_s"], (index + 1) * dt, abs_tol=1e-9)
+        ):
+            raise ValueError(f"trace tuple {key} step {index} has noncontiguous index/time")
         robot = step.get("robot") if isinstance(step, dict) else None
         pedestrians = step.get("pedestrians") if isinstance(step, dict) else None
         if (
@@ -302,7 +341,22 @@ def _compare_row(
     trace = metadata.get("simulation_step_trace") or {}
     if row.get("git_hash") != SOURCE_SHA:
         raise ValueError(f"trace tuple {key} has wrong source commit")
-    _validate_steps(key, trace)
+    mode = resolve_execution_mode(metadata)
+    runtime = {
+        field: metadata[field]
+        for field in (
+            "execution_mode",
+            "planner_kinematics",
+            "adapter_impact",
+            "planner_runtime",
+            "planner_diagnostics",
+            "foresight_prediction",
+        )
+        if field in metadata
+    }
+    marker = runtime_fallback_or_degraded_marker(runtime)
+    if mode not in {"native", "adapter"} or marker is not None:
+        raise ValueError(f"trace tuple {key} has inadmissible runtime mode {mode}: {marker}")
     params = row.get("scenario_params") or {}
     if any(params.get(flag) is not True for flag in TRACE_KEYS):
         raise ValueError(f"trace tuple {key} lacks requested recording flags")
@@ -314,6 +368,7 @@ def _compare_row(
     frozen_params["simulation_config"]["route_spawn_seed"] = key[2]
     if frozen_params != rerun_params:
         raise ValueError(f"trace tuple {key} changes release scenario/planner parameters")
+    _validate_steps(key, row, trace)
     return {
         "planner": key[0],
         "scenario": key[1],

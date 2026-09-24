@@ -15,9 +15,9 @@ base_scenario:
 geometry:
   units: m
   gap_width_m:
-    - 0.8
-    - 2.0
-    - 2.2
+    - 3.6
+    - 4.2
+    - 4.8
   constriction_depth_m:
     - 1.0
   baseline:
@@ -31,12 +31,10 @@ geometry:
 
 width_selection_rationale:
   envelope_diameter_m: 2.0
-  narrow_m: 0.8
-  narrow_tier: infeasible_by_construction
-  middle_m: 2.0
-  middle_tier: boundary_tangent
-  wide_m: 2.2
-  wide_tier: geometrically_feasible_candidate
+  source: ll7/diss#2669 suggests positive-clearance ratios as candidates; the narrower 2.2 m and 2.8 m probes failed the current grid feasibility preflight, so these wider levels await the same preflight before freezing
+  ratios: [1.8, 2.1, 2.4]
+  clearance_m: [1.6, 2.2, 2.8]
+  baseline_2m_role: historical reference only; zero-clearance map excluded from comparison
 
 envelope:
   nominal_radius_m: 1.0
@@ -60,7 +58,9 @@ planner_protocol:
   seeds: [225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254]
   horizon_steps: 400
   execution_status: not_started
-  pairing: same seed shared across the three widths forms one pair_id; a matching seed alone is insufficient when geometry changes random draws, so pair records carry configuration and realization hashes
+  pairing: pair_id is shared across widths; admission requires matching recorded initial actor states and external RNG states before any width comparison; matching seed alone is insufficient
+  expected_rows: 180
+  pair_admission: fail_closed_until_initial_state_and_external_rng_hashes_match
   fallback_policy: record_unavailable_or_degraded; never silently coerce a cell into valid planner evidence
 
 execution:

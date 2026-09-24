@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+
+import numpy as np
+import pytest
+import yaml
 
 from robot_sf.benchmark.three_width_doorway_application import (
     build_pair_manifest,
+    build_pair_receipt,
+    check_pair_receipts,
     check_variant_diff,
     generate_application_assets,
     load_three_width_manifest,
@@ -70,23 +78,22 @@ def test_manifest_pins_three_width_tiers() -> None:
     """The application manifest must pin narrow/middle/wide tiers at fixed depth."""
     manifest = load_three_width_manifest(_MANIFEST)
     resolved = manifest["_resolved"]
-    assert tuple(resolved["gap_levels"]) == (0.8, 2.0, 2.2)
+    assert tuple(resolved["gap_levels"]) == (3.6, 4.2, 4.8)
     assert tuple(resolved["depth_levels"]) == (1.0,)
     assert float(resolved["nominal_radius_m"]) == 1.0
     assert tuple(resolved["planner_roster"]) == ("goal", "social_force")
     assert len(resolved["planner_seeds"]) == 30
 
 
-def test_matrix_covers_narrower_equal_wider_diameter(tmp_path: Path) -> None:
-    """Variant tiers must span infeasible, tangent, and feasible in width order."""
+def test_matrix_has_three_positive_clearance_widths(tmp_path: Path) -> None:
+    """All comparison widths must clear the collision diameter at fixed depth."""
     manifest = load_three_width_manifest(_MANIFEST)
     assets = generate_application_assets(manifest, tmp_path / "matrix")
-    assert [asset["gap_width_m"] for asset in assets] == [0.8, 2.0, 2.2]
-    assert [asset["expected_geometry_tier"] for asset in assets] == [
-        "infeasible_by_construction",
-        "boundary_tangent",
-        "geometrically_feasible_candidate",
-    ]
+    assert [asset["gap_width_m"] for asset in assets] == [3.6, 4.2, 4.8]
+    assert [round(asset["derived_clearance_margin_m"], 3) for asset in assets] == [1.6, 2.2, 2.8]
+    assert all(
+        asset["expected_geometry_tier"] == "geometrically_feasible_candidate" for asset in assets
+    )
     assert all(asset["constriction_depth_m"] == 1.0 for asset in assets)
 
 
@@ -100,6 +107,50 @@ def test_variant_assets_change_only_explained_fields(tmp_path: Path) -> None:
         variant_scenario = dict(load_scenarios(asset["scenario_path"])[0])
         assert check_variant_diff(base_scenario, variant_scenario) == []
         assert Path(asset["map_path"]).is_file()
+
+
+def test_generated_svg_changes_only_symmetric_wall_endpoints(tmp_path: Path) -> None:
+    """All map features except the two doorway wall endpoints are identical."""
+    manifest = load_three_width_manifest(_MANIFEST)
+    assets = generate_application_assets(manifest, tmp_path / "variants")
+    label = "{http://www.inkscape.org/namespaces/inkscape}label"
+    original = list(ET.parse(_BASE_MAP).getroot().iter())
+    original_sha = _sha256(_BASE_MAP)
+    for asset in assets:
+        changed = list(ET.parse(asset["map_path"]).getroot().iter())
+        assert len(changed) == len(original)
+        wall_changes = []
+        for before, after in zip(original, changed, strict=True):
+            assert before.tag == after.tag
+            if before.attrib != after.attrib:
+                assert before.attrib.get(label) == after.attrib.get(label) == "obstacle"
+                assert before.attrib["x"] == after.attrib["x"] == "15"
+                assert before.attrib["width"] == after.attrib["width"] == "1"
+                assert {k for k in before.attrib if before.attrib[k] != after.attrib[k]} <= {
+                    "y",
+                    "height",
+                }
+                wall_changes.append(after)
+        assert len(wall_changes) == 2
+        edges = sorted((float(w.attrib["y"]), float(w.attrib["height"])) for w in wall_changes)
+        lower_end = edges[0][0] + edges[0][1]
+        upper_start = edges[1][0]
+        assert (lower_end + upper_start) / 2 == pytest.approx(5.0)
+        assert upper_start - lower_end == pytest.approx(asset["gap_width_m"])
+    assert _sha256(_BASE_MAP) == original_sha
+
+
+@pytest.mark.parametrize("width", [1.9, 2.0])
+def test_manifest_rejects_nonpositive_clearance(tmp_path: Path, width: float) -> None:
+    """Infeasible and tangent widths cannot enter the comparison manifest."""
+    raw = yaml.safe_load(_MANIFEST.read_text(encoding="utf-8"))
+    raw["geometry"]["gap_width_m"][0] = width
+    for key in ("scenario_path", "map_path"):
+        raw["base_scenario"][key] = str(_REPO_ROOT / raw["base_scenario"][key])
+    candidate = tmp_path / "bad.yaml"
+    candidate.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="positive|exceed"):
+        load_three_width_manifest(candidate)
 
 
 def test_variant_diff_rejects_unexplained_changes() -> None:
@@ -127,15 +178,47 @@ def test_pair_manifest_shares_seeds_across_widths() -> None:
             "scenario_sha256": f"scenario-{token}",
             "map_sha256": f"map-{token}",
         }
-        for token, gap in (("0p80", 0.8), ("2p00", 2.0), ("2p20", 2.2))
+        for token, gap in (("3p60", 3.6), ("4p20", 4.2), ("4p80", 4.8))
     ]
     pairs = build_pair_manifest(assets, (225, 226), "manifest-sha")
     assert pairs["schema_version"] == "issue_9348_three_width_pair_manifest.v1"
-    assert pairs["realization_hash_status"] == "pending_campaign"
+    assert pairs["realization_hash_status"] == "pending_initial_and_external_rng_state_verification"
     assert [pair["pair_id"] for pair in pairs["pairs"]] == ["pair_00225", "pair_00226"]
     for pair in pairs["pairs"]:
-        assert [cell["gap_width_m"] for cell in pair["cells"]] == [0.8, 2.0, 2.2]
-        assert all(cell["realization_hash"] is None for cell in pair["cells"])
+        assert [cell["gap_width_m"] for cell in pair["cells"]] == [3.6, 4.2, 4.8]
+        assert all(cell["initial_actor_state_sha256"] is None for cell in pair["cells"])
+        assert all(cell["external_rng_state_sha256"] is None for cell in pair["cells"])
+    assert check_pair_receipts(pairs)
+    for pair in pairs["pairs"]:
+        for cell in pair["cells"]:
+            cell["initial_actor_state_sha256"] = "a" * 64
+            cell["external_rng_state_sha256"] = "b" * 64
+    assert check_pair_receipts(pairs) == []
+    pairs["pairs"][0]["cells"][1]["external_rng_state_sha256"] = "c" * 64
+    assert "differs across widths" in check_pair_receipts(pairs)[0]
+
+
+def test_pair_receipt_canonicalizes_actor_order_and_requires_rng() -> None:
+    """Identical reset states hash equally; missing RNG state blocks admission."""
+    reset = {
+        "robot": {"position": [4.0, 5.0], "velocity": [0.0, 0.0], "heading": 0.0},
+        "pedestrians": [
+            {"actor_id": "h1", "position": [27.0, 5.0], "velocity": [0.0, 0.0]},
+            {"actor_id": "h2", "position": [25.0, 5.0], "velocity": [0.0, 0.0]},
+        ],
+    }
+    snapshot = SimpleNamespace(
+        global_rng_state=("MT19937", np.asarray([1, 2], dtype=np.uint32), 0, 0, 0.0),
+        python_random_state=(3, (1, 2), None),
+        behavior_rng_states={"h1": {"state": 7}},
+        residual_adversary_state=None,
+    )
+    first = build_pair_receipt(reset, snapshot)
+    reversed_reset = {**reset, "pedestrians": list(reversed(reset["pedestrians"]))}
+    assert build_pair_receipt(reversed_reset, snapshot) == first
+    snapshot.python_random_state = None
+    with pytest.raises(ValueError, match="RNG snapshot is incomplete"):
+        build_pair_receipt(reset, snapshot)
 
 
 def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) -> None:
@@ -150,14 +233,14 @@ def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) ->
     assert report["go"] is True
     assert report["checks"]["baseline_passes"] is True
     assert report["checks"]["variant_count"] == 3
-    assert report["checks"]["covers_narrower_equal_wider_tiers"] is True
+    assert report["checks"]["all_widths_positive_clearance"] is True
     assert report["checks"]["oracle_available_for_every_variant"] is True
+    assert report["checks"]["nominal_grid_route_feasible_for_every_variant"] is True
     assert report["checks"]["planner_records_are_not_run"] is True
     assert report["checks"]["no_campaign_evidence"] is True
     assert all(item["planner"]["status"] == "not_run" for item in report["variants"])
     assert {item["oracle"]["nominal_verdict"]["status"] for item in report["variants"]} == {
-        "feasible",
-        "infeasible_by_construction",
+        "feasible"
     }
 
     report_path = tmp_path / "issue_9348_preflight.json"

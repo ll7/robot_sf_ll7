@@ -5,7 +5,7 @@ Consumes the versioned three-level application manifest
 geometry-family owners for computation: variant-map generation, the variant
 matrix, doorway-geometry derivation, clearance margins, and the
 oracle-first sensitivity sweep. This module adds no second generator; it pins
-the narrow/middle/wide application (0.8 m / 2.0 m / 2.2 m at fixed 1.0 m
+the narrow/middle/wide application (3.6 m / 4.2 m / 4.8 m at fixed 1.0 m
 depth), builds cross-width pair manifests, and checks that generated variant
 scenarios differ from the historical baseline only in explained fields.
 
@@ -21,12 +21,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import math
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import yaml
 
 from robot_sf.benchmark.narrow_doorway_geometry_family import (
@@ -57,11 +59,7 @@ CLAIM_BOUNDARY = (
     "or a general planner ranking"
 )
 DEFAULT_MANIFEST_PATH = Path("configs/benchmarks/issue_9348_three_width_doorway_v1.yaml")
-EXPECTED_TIERS = (
-    "infeasible_by_construction",
-    "boundary_tangent",
-    "geometrically_feasible_candidate",
-)
+EXPECTED_TIER = "geometrically_feasible_candidate"
 _TOLERANCE_M = 1e-9
 
 _ALLOWED_TOP_LEVEL_CHANGES = frozenset(
@@ -202,8 +200,8 @@ def _validate_application_geometry(geometry: Any) -> tuple[tuple[float, ...], ..
         field="geometry.baseline.constriction_depth_m",
         minimum=_TOLERANCE_M,
     )
-    if not any(math.isclose(baseline_gap, level, abs_tol=_TOLERANCE_M) for level in gap_levels):
-        raise ValueError("geometry.gap_width_m must contain the baseline gap")
+    if not all(level > baseline_gap for level in gap_levels):
+        raise ValueError("all comparison widths must exceed the zero-clearance baseline")
     if not any(math.isclose(baseline_depth, level, abs_tol=_TOLERANCE_M) for level in depth_levels):
         raise ValueError("geometry.constriction_depth_m must contain the baseline depth")
     return gap_levels, depth_levels, baseline_gap, baseline_depth
@@ -233,21 +231,11 @@ def _validate_application_envelope(envelope: Any) -> tuple[float, float]:
 
 
 def _check_width_tiers(gap_levels: tuple[float, ...], nominal_radius: float) -> None:
-    """Require narrower-than, equal-to, and wider-than tiers in width order."""
-    tiers = []
-    for gap in gap_levels:
-        margin = envelope_clearance_margin_m(gap, nominal_radius)
-        if margin < -_TOLERANCE_M:
-            tiers.append("infeasible_by_construction")
-        elif abs(margin) <= _TOLERANCE_M:
-            tiers.append("boundary_tangent")
-        else:
-            tiers.append("geometrically_feasible_candidate")
-    if tuple(tiers) != EXPECTED_TIERS:
-        raise ValueError(
-            "geometry.gap_width_m must span narrower-than, equal-to, and wider-than "
-            f"the collision diameter in order; got tiers {tiers}"
-        )
+    """Require three ascending widths with positive collision-envelope clearance."""
+    if tuple(sorted(gap_levels)) != gap_levels:
+        raise ValueError("geometry.gap_width_m must be strictly ascending")
+    if any(envelope_clearance_margin_m(gap, nominal_radius) <= _TOLERANCE_M for gap in gap_levels):
+        raise ValueError("all comparison widths must have positive collision-envelope clearance")
 
 
 def _validate_application_protocol(
@@ -280,6 +268,14 @@ def _validate_application_protocol(
         raise ValueError("oracle and planner protocol horizons must match")
     if str(planner.get("execution_status")) != "not_started":
         raise ValueError("planner_protocol.execution_status must remain not_started")
+    if _positive_int(planner.get("expected_rows"), field="planner_protocol.expected_rows") != (
+        3 * len(roster) * len(normalized_seeds)
+    ):
+        raise ValueError("planner_protocol.expected_rows must equal 3 * planners * seeds")
+    if planner.get("pair_admission") != (
+        "fail_closed_until_initial_state_and_external_rng_hashes_match"
+    ):
+        raise ValueError("planner_protocol.pair_admission must require verified portable pairing")
     return oracle_seed, horizon, tuple(str(item) for item in roster), tuple(normalized_seeds)
 
 
@@ -346,6 +342,84 @@ def _sha256(path: Path) -> str:
         Lower-case SHA-256 digest.
     """
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _canonical_receipt_value(value: Any) -> Any:
+    """Convert captured reset/RNG values into deterministic JSON primitives.
+
+    Returns:
+        A value supported by canonical JSON encoding.
+    """
+    if isinstance(value, np.ndarray):
+        return _canonical_receipt_value(value.tolist())
+    if isinstance(value, np.generic):
+        return _canonical_receipt_value(value.item())
+    if isinstance(value, Mapping):
+        return {str(key): _canonical_receipt_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_receipt_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    raise ValueError(f"unsupported or nonfinite receipt value: {type(value).__name__}")
+
+
+def _receipt_digest(payload: Any) -> str:
+    encoded = json.dumps(
+        _canonical_receipt_value(payload), sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_pair_receipt(reset: Mapping[str, Any], snapshot: Any) -> dict[str, str]:
+    """Hash reset actors and external streams from a pre-command simulator snapshot.
+
+    The caller must capture ``SimulatorCounterfactualModel.snapshot()`` directly
+    after ``env.reset(seed=...)`` and before the first policy command. The
+    snapshot is not a complete planner checkpoint; this receipt only checks
+    the external streams and actor states needed to admit a width pair.
+
+    Returns:
+        SHA-256 receipts for actor state and external RNG state.
+    """
+    robot = reset.get("robot")
+    pedestrians = reset.get("pedestrians")
+    if not isinstance(robot, Mapping) or not isinstance(pedestrians, list):
+        raise ValueError("reset actor state is unavailable")
+    if robot.get("position") is None or robot.get("velocity") is None:
+        raise ValueError("reset robot pose or velocity is unavailable")
+    actors = []
+    for actor in pedestrians:
+        if not isinstance(actor, Mapping) or actor.get("actor_id") is None:
+            raise ValueError("stable reset pedestrian identity is unavailable")
+        if actor.get("position") is None or actor.get("velocity") is None:
+            raise ValueError("reset pedestrian pose or velocity is unavailable")
+        actors.append(
+            {
+                "id": actor["actor_id"],
+                "position": actor["position"],
+                "velocity": actor["velocity"],
+                "heading": actor.get("heading"),
+            }
+        )
+    actors.sort(key=lambda actor: str(actor["id"]))
+    global_rng = getattr(snapshot, "global_rng_state", None)
+    python_rng = getattr(snapshot, "python_random_state", None)
+    behavior_rng = getattr(snapshot, "behavior_rng_states", None)
+    if global_rng is None or python_rng is None or behavior_rng is None:
+        raise ValueError("external RNG snapshot is incomplete")
+    return {
+        "initial_actor_state_sha256": _receipt_digest({"robot": dict(robot), "actors": actors}),
+        "external_rng_state_sha256": _receipt_digest(
+            {
+                "global_numpy": global_rng,
+                "python_random": python_rng,
+                "behavior_rng": behavior_rng,
+                "residual_adversary_rng": getattr(snapshot, "residual_adversary_state", None),
+            }
+        ),
+    }
 
 
 def _build_application_scenario(
@@ -491,7 +565,8 @@ def build_pair_manifest(
                         "gap_width_m": float(item["gap_width_m"]),
                         "scenario_sha256": str(item["scenario_sha256"]),
                         "map_sha256": str(item["map_sha256"]),
-                        "realization_hash": None,
+                        "initial_actor_state_sha256": None,
+                        "external_rng_state_sha256": None,
                     }
                     for item in ordered
                 ],
@@ -501,9 +576,33 @@ def build_pair_manifest(
         "schema_version": PAIR_MANIFEST_SCHEMA,
         "issue": 9348,
         "manifest_sha256": manifest_sha256,
-        "realization_hash_status": "pending_campaign",
+        "realization_hash_status": "pending_initial_and_external_rng_state_verification",
+        "admission": "blocked_until_all_three_cells_match_initial_and_external_rng_state_hashes",
         "pairs": pairs,
     }
+
+
+def check_pair_receipts(pair_manifest: Mapping[str, Any]) -> list[str]:
+    """Return reasons that any three-width pair lacks portable initial-state custody."""
+    failures: list[str] = []
+    for pair in pair_manifest.get("pairs", []):
+        pair_id = str(pair.get("pair_id"))
+        cells = pair.get("cells", [])
+        if len(cells) != 3:
+            failures.append(f"{pair_id}: expected exactly three width cells")
+            continue
+        for field in ("initial_actor_state_sha256", "external_rng_state_sha256"):
+            values = [cell.get(field) for cell in cells]
+            if any(
+                not isinstance(value, str)
+                or len(value) != 64
+                or any(character not in "0123456789abcdef" for character in value)
+                for value in values
+            ):
+                failures.append(f"{pair_id}: missing {field} receipt")
+            elif len(set(values)) != 1:
+                failures.append(f"{pair_id}: {field} differs across widths")
+    return failures
 
 
 def generate_application_assets(
@@ -516,7 +615,12 @@ def generate_application_assets(
     """
     resolved = manifest["_resolved"]
     _, map_path, base_scenario = _load_base_scenario(manifest)
-    variants = build_variant_matrix(manifest)
+    # The reusable #6644 matrix insists its diagnostic baseline be a matrix cell.
+    # This application deliberately excludes the historical zero-clearance baseline;
+    # supply a matrix-local anchor while retaining the true baseline for all checks.
+    matrix_manifest = copy.deepcopy(manifest)
+    matrix_manifest["_resolved"]["baseline_gap_m"] = float(resolved["gap_levels"][0])
+    variants = build_variant_matrix(matrix_manifest)
     root = Path(output_dir).resolve()
     root.mkdir(parents=True, exist_ok=True)
     assets: list[dict[str, Any]] = []
@@ -665,6 +769,14 @@ def run_three_width_preflight(
     oracle_available = all(
         item["oracle"].get("execution_status") == "available" for item in records
     )
+    geometry_feasible = all(
+        item["oracle"]
+        .get("nominal_verdict", {})
+        .get("geometric", {})
+        .get("route_geometrically_feasible")
+        is True
+        for item in records
+    )
     return {
         "schema_version": PREFLIGHT_SCHEMA,
         "issue": 9348,
@@ -697,11 +809,13 @@ def run_three_width_preflight(
         "checks": {
             "baseline_passes": all(baseline_checks.values()),
             "variant_count": len(records),
-            "covers_narrower_equal_wider_tiers": (
-                sorted(item["geometry"]["expected_geometry_tier"] for item in records)
-                == sorted(EXPECTED_TIERS)
+            "all_widths_positive_clearance": all(
+                item["geometry"]["derived_clearance_margin_m"] > _TOLERANCE_M
+                and item["geometry"]["expected_geometry_tier"] == EXPECTED_TIER
+                for item in records
             ),
             "oracle_available_for_every_variant": oracle_available,
+            "nominal_grid_route_feasible_for_every_variant": geometry_feasible,
             "planner_records_are_not_run": all(
                 item["planner"]["status"] == "not_run" for item in records
             ),
@@ -710,6 +824,8 @@ def run_three_width_preflight(
         "variants": records,
         "execution": {
             "campaign_submitted": False,
+            "confirmation_ready": False,
+            "confirmation_blocker": "portable_initial_and_external_rng_pair_receipts_not_recorded",
             "evidence_admission": "not_started",
             "missingness_policy": "blocked or degraded oracle/planner rows remain explicit and are not promoted",
         },
@@ -718,6 +834,7 @@ def run_three_width_preflight(
                 all(baseline_checks.values()),
                 bool(records),
                 oracle_available,
+                geometry_feasible,
                 all(item["planner"]["status"] == "not_run" for item in records),
             )
         ),
@@ -740,10 +857,12 @@ __all__ = [
     "APPLICATION_SCHEMA",
     "CLAIM_BOUNDARY",
     "DEFAULT_MANIFEST_PATH",
-    "EXPECTED_TIERS",
+    "EXPECTED_TIER",
     "PAIR_MANIFEST_SCHEMA",
     "PREFLIGHT_SCHEMA",
     "build_pair_manifest",
+    "build_pair_receipt",
+    "check_pair_receipts",
     "check_variant_diff",
     "generate_application_assets",
     "load_three_width_manifest",

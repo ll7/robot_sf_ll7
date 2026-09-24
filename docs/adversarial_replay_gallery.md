@@ -30,6 +30,9 @@ episode must also report successful algorithm metadata with no fallback/degraded
 Missing, fallback, degraded, or inconsistent source availability stays in candidate accounting and
 cannot be selected as a critical discovery. Successful episodes are accounted as
 `source_episode_not_a_failure` and are not shown as falsification cases.
+The fallback scan checks algorithm metadata but ignores unsupported statuses in the paired-metric
+and simulation-step-trace diagnostic products. Those statuses do not by themselves mean planner
+execution fell back; explicit fallback or degraded markers remain disqualifying.
 Selected cases are ranked by objective value, then source candidate index; exact scenario hashes
 and existing failure-mechanism clusters reduce duplicate displays.
 

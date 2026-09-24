@@ -315,6 +315,52 @@ def test_gallery_excludes_source_runtime_fallback_even_if_manifest_says_native(
     assert result["summary"]["dispositions"]["source_runtime_fallback_or_degraded"] == 1
 
 
+def test_gallery_does_not_treat_unavailable_diagnostic_metrics_as_runtime_fallback(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    source_episode_path = Path(payload["candidates"][0]["episode_record_path"])
+    source_episode = _episode()
+    source_episode["metrics"]["diagnostic_only"] = {"status": "unavailable"}
+    source_episode["algorithm_metadata"]["paired_effect_metric_producer"] = {
+        "status": "unavailable",
+        "fields": {"optional_metric": {"status": "unavailable"}},
+    }
+    source_episode["algorithm_metadata"]["simulation_step_trace"] = {
+        "reset": {"routes": {"status": "unavailable"}}
+    }
+    source_episode_path.write_text(json.dumps(source_episode) + "\n", encoding="utf-8")
+    _install_fake_replay(monkeypatch)
+    fake_run_batch = replay_gallery.run_batch
+
+    def replay_with_unavailable_diagnostic_metric(
+        scenario_path: Path, **kwargs: Any
+    ) -> dict[str, Any]:
+        summary = fake_run_batch(scenario_path, **kwargs)
+        record_path = kwargs["out_path"]
+        replay_episode = json.loads(record_path.read_text(encoding="utf-8"))
+        replay_episode["metrics"]["diagnostic_only"] = {"status": "unavailable"}
+        replay_episode["algorithm_metadata"]["paired_effect_metric_producer"] = {
+            "status": "unavailable",
+            "fields": {"optional_metric": {"status": "unavailable"}},
+        }
+        replay_episode["algorithm_metadata"]["simulation_step_trace"] = {
+            "reset": {"routes": {"status": "unavailable"}}
+        }
+        record_path.write_text(json.dumps(replay_episode) + "\n", encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(replay_gallery, "run_batch", replay_with_unavailable_diagnostic_metric)
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 1
+    assert result["cases"][0]["replay_match"] == "match"
+
+
 def test_gallery_does_not_verify_replay_from_a_dirty_checkout(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

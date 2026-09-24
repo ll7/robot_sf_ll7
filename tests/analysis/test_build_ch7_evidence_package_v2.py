@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from scripts.analysis import build_ch7_evidence_package_v2 as builder
+from scripts.analysis import verify_ch7_source_registry as source_registry
 
 SOURCE_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
@@ -35,6 +36,7 @@ def test_v2_projection_is_deterministic_and_contains_both_inversions(tmp_path: P
     assert manifest["status"] == "blocked_pending_domain_approval"
     assert manifest["admission_status"] == "not_admitted"
     assert manifest["source"]["v1_package_sha256sums"] == builder.SOURCE_PACKAGE_SHA256SUMS
+    assert manifest["source_registry"] == source_registry.verify_source_registry()
     assert len(cells) == 28
     assert sum(cell["panel"] == "cross_topology" for cell in cells) == 10
     assert sum(cell["panel"] == "cross_mechanism" for cell in cells) == 4

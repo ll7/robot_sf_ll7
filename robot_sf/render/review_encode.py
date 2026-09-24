@@ -98,6 +98,8 @@ MAX_ENCODER_SECONDS = 30.0
 MAX_DECODER_SECONDS = 30.0
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 MAX_CONFIG_BYTES = 1 * 1024 * 1024
+MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+MAX_JSON_NESTING_DEPTH = 64
 MAX_EDIT_COUNT = 128
 MIN_SPEED_FACTOR = 0.125
 MAX_SPEED_FACTOR = 8.0
@@ -896,10 +898,11 @@ def _require_imageio() -> Any:
         ImportError: If the configured encoder dependency is unavailable.
     """
 
-    try:
-        import imageio.v2 as imageio  # noqa: PLC0415
-    except ImportError as error:
-        raise ImportError("review encode requires imageio") from error
+    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
+
+    imageio = try_import("imageio.v2")
+    if imageio is None:
+        raise ImportError("review encode requires imageio")
     return imageio
 
 
@@ -938,7 +941,26 @@ def threading_is_not_main() -> bool:
     return threading.current_thread() is not threading.main_thread()
 
 
-def _read_json(source: Path | Any, *, name: str | None = None) -> Any:
+def _json_depth_exceeded(value: Any, *, limit: int = MAX_JSON_NESTING_DEPTH) -> bool:
+    """Return whether a parsed JSON value nests deeper than the hard bound.
+
+    The walk is iterative so adversarial nesting cannot exhaust the interpreter
+    stack while measuring.
+    """
+
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > limit:
+            return True
+        if isinstance(current, dict):
+            stack.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, (list, tuple)):
+            stack.extend((item, depth + 1) for item in current)
+    return False
+
+
+def _read_json(source: Path | Any, *, name: str | None = None, max_bytes: int | None = None) -> Any:
     """Read a UTF-8 JSON document or raise a stable source failure.
 
     Returns:
@@ -954,11 +976,18 @@ def _read_json(source: Path | Any, *, name: str | None = None) -> Any:
             payload = source.read()
         if isinstance(payload, str):
             payload = payload.encode("utf-8")
-        return json.loads(payload.decode("utf-8"))
+        if max_bytes is not None and len(payload) > max_bytes:
+            raise _SourceLoadError(f"{source_name}: source_exceeds_{max_bytes}_bytes")
+        document = json.loads(payload.decode("utf-8"))
     except FileNotFoundError as error:
         raise _SourceLoadError(f"{source_name}: source_missing") from error
     except (OSError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise _SourceLoadError(f"{source_name}: source_unreadable") from error
+    except RecursionError as error:
+        raise _SourceLoadError(f"{source_name}: source_nesting_too_deep") from error
+    if _json_depth_exceeded(document):
+        raise _SourceLoadError(f"{source_name}: source_nesting_too_deep")
+    return document
 
 
 def _resolve_under(path_value: str, root: Path) -> Path | None:
@@ -1314,7 +1343,7 @@ def _load_manifest_source(ref: SourceRef, root: Path) -> _Source:
                     },
                 ),
             )
-        document = _read_json(snapshot, name=manifest_path.name)
+        document = _read_json(snapshot, name=manifest_path.name, max_bytes=MAX_MANIFEST_BYTES)
     manifest, error = _validate_manifest(document)
     if manifest is None or error is not None:
         raise _SourceLoadError(error or "manifest_invalid")
@@ -1506,7 +1535,11 @@ def _decode_clip_frames(path: Path) -> tuple[list[Any], float]:
         Decoded RGB frames and the source fps.
     """
 
-    import imageio_ffmpeg  # noqa: PLC0415
+    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
+
+    imageio_ffmpeg = try_import("imageio_ffmpeg")
+    if imageio_ffmpeg is None:
+        raise _SourceLoadError("missing_decoder_backend: imageio_ffmpeg")
 
     frame_iterator = None
     try:
@@ -2968,12 +3001,29 @@ def _run_admission(
     return out_dir, None
 
 
-def run(request: ComponentRequest, base: Path | str = Path(".")) -> ComponentResult:
+def run(
+    request: ComponentRequest,
+    base: Path | str = Path("."),
+    *,
+    cancelled: Any | None = None,
+) -> ComponentResult:
     """Execute one bounded source-backed review encode request.
+
+    The optional ``cancelled`` hook is cooperative and pre-read only: when it
+    returns true before source reads or publication, the run stops with a
+    stable cancelled result instead of starting new backend work.  Active
+    decode/encode calls are still bounded by their own deadlines rather than
+    interrupted.
 
     Returns:
         Complete, partial, unavailable, or failed component result.
     """
+
+    def _is_cancelled() -> bool:
+        try:
+            return bool(cancelled()) if cancelled is not None else False
+        except Exception:
+            return False
 
     safe_request = _fallback_request(request)
     root, root_error = _resolve_root(base)
@@ -2984,6 +3034,8 @@ def run(request: ComponentRequest, base: Path | str = Path(".")) -> ComponentRes
     out_dir, admission_result = _run_admission(request, root)
     if out_dir is None or admission_result is not None:
         return admission_result or _failure(request, "request_admission_failed")
+    if _is_cancelled():
+        return _failure(request, "cancelled_before_read")
     prepared, early = _prepare(request, root, out_dir)
     if prepared is None or early is not None:
         return early if early is not None else _failure(request, "prepare_failed")
@@ -2999,6 +3051,8 @@ def run(request: ComponentRequest, base: Path | str = Path(".")) -> ComponentRes
             diagnostics=tuple({"code": diagnostic} for diagnostic in diagnostics),
             provenance={"source_kind": prepared.source.source_kind},
         )
+    if _is_cancelled():
+        return _failure(request, "cancelled_before_publish")
     return _publish_outputs(request, prepared, plan)
 
 
@@ -3020,6 +3074,15 @@ def _load_request(input_path: Path) -> ComponentRequest:
             [f"cannot read request: {type(error).__name__}"],
             source=input_path,
         ) from error
+    except RecursionError as error:
+        raise ReviewContractsValidationError(
+            ["cannot read request: request_nesting_too_deep"],
+            source=input_path,
+        ) from error
+    if _json_depth_exceeded(payload):
+        raise ReviewContractsValidationError(
+            ["cannot read request: request_nesting_too_deep"], source=input_path
+        )
     if not isinstance(payload, dict):
         raise ReviewContractsValidationError(["request must be an object"], source=input_path)
     return component_request_from_dict(payload, source=str(input_path))
@@ -3045,6 +3108,15 @@ def _load_config(config_path: Path | None) -> dict[str, Any]:
             [f"cannot read config: {type(error).__name__}"],
             source=config_path,
         ) from error
+    except RecursionError as error:
+        raise ReviewContractsValidationError(
+            ["cannot read config: config_nesting_too_deep"],
+            source=config_path,
+        ) from error
+    if _json_depth_exceeded(payload):
+        raise ReviewContractsValidationError(
+            ["cannot read config: config_nesting_too_deep"], source=config_path
+        )
     if not isinstance(payload, dict):
         raise ReviewContractsValidationError(["config must be an object"], source=config_path)
     return payload

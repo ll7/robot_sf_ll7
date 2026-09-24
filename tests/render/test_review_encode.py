@@ -1443,3 +1443,79 @@ def test_nested_output_parents_are_created(tmp_path: Path) -> None:
     result = run(request, base=tmp_path)
     assert result.status == "complete"
     assert (tmp_path / "nested" / "deep" / "out" / "edit.mp4").is_file()
+
+
+def test_require_imageio_uses_canonical_guard_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing imageio backend raises ImportError through the canonical guard."""
+
+    monkeypatch.setattr("robot_sf.common.optional_import.try_import", lambda name: None)
+    with pytest.raises(ImportError, match="review encode requires imageio"):
+        review_encode._require_imageio()
+
+
+def test_decode_clip_reports_missing_backend_without_import_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing decoder backend fails closed instead of leaking ModuleNotFoundError."""
+
+    monkeypatch.setattr("robot_sf.common.optional_import.try_import", lambda name: None)
+    with pytest.raises(review_encode._SourceLoadError, match="missing_decoder_backend"):
+        review_encode._decode_clip_frames(tmp_path / "clip.mp4")
+
+
+def test_load_request_rejects_deeply_nested_json(tmp_path: Path) -> None:
+    """Adversarial nesting fails with a stable error, never RecursionError."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    payload_path = tmp_path / "request.json"
+    nested: object = {}
+    for _ in range(200):
+        nested = [nested]
+    payload_path.write_text(json.dumps({"request": nested}), encoding="utf-8")
+    with pytest.raises(ReviewContractsValidationError, match="request_nesting_too_deep"):
+        review_encode._load_request(payload_path)
+
+
+def test_load_config_rejects_deeply_nested_json(tmp_path: Path) -> None:
+    """Adversarial config nesting fails with a stable error."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    config_path = tmp_path / "config.json"
+    nested: object = {}
+    for _ in range(200):
+        nested = {"level": nested}
+    config_path.write_text(json.dumps(nested), encoding="utf-8")
+    with pytest.raises(ReviewContractsValidationError, match="config_nesting_too_deep"):
+        review_encode._load_config(config_path)
+
+
+def test_read_json_rejects_oversized_manifest(tmp_path: Path) -> None:
+    """A manifest beyond the byte bound fails before parsing."""
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(b'{"frames": [' + b"0," * 1024 + b"0]}")
+    with pytest.raises(review_encode._SourceLoadError, match="source_exceeds"):
+        review_encode._read_json(manifest_path, max_bytes=64)
+
+
+def test_run_honors_cancellation_before_read(tmp_path: Path) -> None:
+    """A cancelled run stops with a stable reason before backend work."""
+
+    result = run(_request(tmp_path), base=tmp_path, cancelled=lambda: True)
+    assert result.status == "failed"
+    assert "cancelled_before_read" in result.reason
+
+
+def test_run_without_cancellation_hook_is_unchanged(tmp_path: Path) -> None:
+    """The default run path still reaches backend probing without a hook."""
+
+    result = run(_request(tmp_path), base=tmp_path)
+    assert "cancelled" not in result.reason

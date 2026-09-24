@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from scripts.tools.materialize_benchmark_hard_cases import (
+    REPLAY_CHECKOUT_SNAPSHOT_SCHEMA,
     MaterializationError,
     _classify_replay_row,
     _compare,
@@ -39,6 +40,7 @@ def _sha256(path: Path) -> str:
 
 def _clean_checkout_snapshot(revision: str) -> dict[str, Any]:
     return {
+        "schema": REPLAY_CHECKOUT_SNAPSHOT_SCHEMA,
         "revision": revision,
         "clean": True,
         "status_sha256": hashlib.sha256(b"").hexdigest(),
@@ -435,6 +437,113 @@ def test_nested_planner_diagnostics_fallback_markers_fail_closed(
     assert classification["status"] == expected_status
 
 
+@pytest.mark.parametrize(
+    ("side", "runtime_status", "expected_evidence"),
+    [
+        ("source", "mystery", "unavailable_execution_availability"),
+        ("replay", "mystery", "unavailable_execution_availability"),
+        ("source", "unknown", "unavailable_execution_availability"),
+        ("replay", "unknown", "unavailable_execution_availability"),
+        ("source", None, "unavailable_execution_availability"),
+        ("replay", 7, "unavailable_execution_availability"),
+        ("source", "ok", "available"),
+        ("replay", "success", "available"),
+    ],
+)
+def test_nested_runtime_status_requires_a_known_available_value(
+    side: str, runtime_status: Any, expected_evidence: str
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    observed = json.loads(json.dumps(source))
+    target = source if side == "source" else observed
+    target["algorithm_metadata"]["planner_runtime"] = {"status": runtime_status}
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        observed,
+        "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification[f"execution_evidence_{side}"] == expected_evidence
+    assert classification["status"] == (
+        "exact_match" if expected_evidence == "available" else "unavailable_execution_evidence"
+    )
+
+
+@pytest.mark.parametrize(
+    ("side", "mutation"),
+    [
+        ("source", ("status", "error")),
+        ("source", ("status", "invalid")),
+        ("source", ("termination_reason", "error")),
+        ("source", ("invalid_run", True)),
+        ("source", ("event_ledger", {"exact_events": {"invalid_run": True}})),
+        ("replay", ("status", "error")),
+        ("replay", ("status", "invalid")),
+        ("replay", ("termination_reason", "error")),
+        ("replay", ("invalid_run", True)),
+        ("replay", ("event_ledger", {"exact_events": {"invalid_run": True}})),
+    ],
+)
+def test_canonical_invalid_runs_are_never_exact_replay_evidence(
+    side: str, mutation: tuple[str, Any]
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    observed = json.loads(json.dumps(source))
+    target = source if side == "source" else observed
+    target[mutation[0]] = mutation[1]
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        observed,
+        "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "invalid_run_not_evidence"
+    assert classification[f"invalid_run_evidence_{side}"] == "invalid"
+
+
+def test_malformed_explicit_invalid_run_marker_is_unavailable() -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    source["invalid_run"] = "false"
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        json.loads(json.dumps(source)),
+        "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "unavailable_invalid_run_evidence"
+    assert classification["invalid_run_evidence_source"] == "unavailable"
+
+
 @pytest.mark.parametrize("missing_side", ["source", "replay", "both"])
 def test_exact_replay_requires_nonempty_planner_config_hashes(missing_side: str) -> None:
     source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
@@ -534,6 +643,46 @@ def test_replay_checkout_stability_requires_both_revision_and_status_hashes() ->
 
     after.pop("status_sha256")
     assert _replay_checkout_stability_status(before, after, "revision-a") == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_schema",
+        "missing_status_entries",
+        "clean_with_dirty_entries",
+        "arbitrary_digest",
+        "malformed_entry",
+    ],
+)
+def test_checkout_snapshot_schema_and_status_digest_must_be_consistent(mutation: str) -> None:
+    before = _clean_checkout_snapshot("revision-a")
+    after = _clean_checkout_snapshot("revision-a")
+    if mutation == "missing_schema":
+        before.pop("schema")
+    elif mutation == "missing_status_entries":
+        before.pop("status_entries")
+    elif mutation == "clean_with_dirty_entries":
+        before["status_entries"] = [" M robot_sf/planner/example.py"]
+        before["status_sha256"] = hashlib.sha256(b" M robot_sf/planner/example.py\n").hexdigest()
+    elif mutation == "arbitrary_digest":
+        before["status_sha256"] = "0" * 64
+    else:
+        before["status_entries"] = [" M robot_sf/planner/example.py\n"]
+        before["status_sha256"] = hashlib.sha256(b" M robot_sf/planner/example.py\n\n").hexdigest()
+
+    assert _replay_checkout_stability_status(before, after, "revision-a") == "unavailable"
+
+
+def test_checkout_snapshot_consistent_dirty_entries_are_not_clean() -> None:
+    before = _clean_checkout_snapshot("revision-a")
+    after = _clean_checkout_snapshot("revision-a")
+    for snapshot in (before, after):
+        snapshot["clean"] = False
+        snapshot["status_entries"] = [" M robot_sf/planner/example.py"]
+        snapshot["status_sha256"] = hashlib.sha256(b" M robot_sf/planner/example.py\n").hexdigest()
+
+    assert _replay_checkout_stability_status(before, after, "revision-a") == "dirty"
 
 
 @pytest.mark.parametrize(
@@ -853,6 +1002,105 @@ def test_resume_rederives_classification_when_prior_episode_checksum_is_absent(
             )
         )
         assert repeated_case["replay"]["status"] == "replay_artifact_checksum_unverified"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_stability", "expected_clean", "expected_status"),
+    [
+        ("valid", "clean_stable", True, "exact_match"),
+        (
+            "manifest_conflict",
+            "clean_stable",
+            True,
+            "replay_receipt_manifest_mismatch",
+        ),
+        ("missing_status_entries", "unavailable", None, "replay_checkout_cleanliness_unavailable"),
+        (
+            "clean_with_dirty_entries",
+            "unavailable",
+            None,
+            "replay_checkout_cleanliness_unavailable",
+        ),
+        ("arbitrary_digest", "unavailable", None, "replay_checkout_cleanliness_unavailable"),
+        ("missing_schema", "unavailable", None, "replay_checkout_cleanliness_unavailable"),
+    ],
+)
+def test_resume_recomputes_checkout_snapshot_consistency(
+    tmp_path: Path,
+    mutation: str,
+    expected_stability: str,
+    expected_clean: bool | None,
+    expected_status: str,
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    source_episode = campaign_root / "runs/goal__differential_drive/episodes.jsonl"
+    source_row = json.loads(source_episode.read_text(encoding="utf-8").splitlines()[0])
+    output_bytes = (json.dumps(source_row) + "\n").encode("utf-8")
+    replay_dir = case_file.parent / "replay"
+    replay_dir.mkdir()
+    (replay_dir / "episodes.jsonl").write_bytes(output_bytes)
+
+    before = _clean_checkout_snapshot("source-revision")
+    after = _clean_checkout_snapshot("source-revision")
+    if mutation == "missing_status_entries":
+        before.pop("status_entries")
+    elif mutation == "clean_with_dirty_entries":
+        for snapshot in (before, after):
+            snapshot["status_entries"] = [" M robot_sf/planner/example.py"]
+            snapshot["status_sha256"] = hashlib.sha256(
+                b" M robot_sf/planner/example.py\n"
+            ).hexdigest()
+    elif mutation == "arbitrary_digest":
+        before["status_sha256"] = "0" * 64
+    elif mutation == "missing_schema":
+        before.pop("schema")
+
+    replay = {
+        "attempted": True,
+        "status": "exact_match",
+        "returncode": 0,
+        "source_revision": "source-revision",
+        "replay_revision": "source-revision",
+        "replay_checkout_before": before,
+        "replay_checkout_after": after,
+        "replay_checkout_clean": True,
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_sha256": hashlib.sha256(output_bytes).hexdigest(),
+        "episode_output_checksum_origin": "captured_at_run",
+        "episode_output_checksum_status": "captured_at_run",
+    }
+    case_record["replay"] = replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = replay
+    if mutation == "manifest_conflict":
+        manifest["cases"][0]["replay"] = {"attempted": False, "status": "not_attempted"}
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    args = _args(summary, campaign_root, matrix, tmp_path / "resumed")
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    resumed_case = json.loads(
+        (tmp_path / "resumed" / resumed["cases"][0]["case_file"]).read_text(encoding="utf-8")
+    )
+
+    assert resumed_case["replay"]["episode_output_checksum_status"] == "verified"
+    assert resumed_case["replay"]["replay_checkout_stability_status"] == expected_stability
+    assert resumed_case["replay"]["replay_checkout_clean"] is expected_clean
+    assert resumed_case["replay"]["status"] == expected_status
+    if mutation == "manifest_conflict":
+        assert (
+            resumed_case["replay"]["resume_receipt_consistency_status"]
+            == "manifest_case_replay_mismatch"
+        )
+    elif mutation == "valid":
+        assert resumed_case["replay"]["resume_receipt_consistency_status"] == "match"
 
 
 def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(

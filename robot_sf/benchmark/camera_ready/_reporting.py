@@ -9,12 +9,29 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.algorithm_metadata import (
+    _KINEMATICS_PROFILE_BY_CANONICAL,
+    canonical_algorithm_name,
+)
 from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, PlannerSpec
-from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy
+from robot_sf.benchmark.camera_ready._summaries import (
+    _extract_amv_taxonomy,
+    _extract_archetype,
+    _join_archetype_tags,
+    _validate_archetype_tag,
+)
+from robot_sf.benchmark.camera_ready._util import _repo_relative
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+    _DEFAULT_SACADRL_MODEL_ID,
+    _iter_mapping_checkpoint_keys,
+)
 from robot_sf.benchmark.fairness_contract import build_fairness_report
 from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
@@ -26,9 +43,7 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import episode_metric_value
 from robot_sf.common.artifact_paths import get_repository_root
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from robot_sf.models.registry import get_registry_entry
 
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
@@ -490,6 +505,258 @@ def _build_planner_row_metrics(
     }
 
 
+def _resolve_arm_config_path(
+    planner: PlannerSpec,
+    summary: dict[str, Any],
+) -> str:
+    """Resolve the configuration path for a planner arm as a repo-relative POSIX string.
+
+    Returns:
+        Repo-relative path string, or empty string when no configuration path is associated.
+    """
+    raw_path = planner.algo_config_path or summary.get("algo_config_path")
+    if raw_path is None or not str(raw_path).strip():
+        return ""
+    return _repo_relative(Path(raw_path))
+
+
+_MODEL_ID_CONFIG_KEYS = (
+    "model_id",
+    "sacadrl_model_id",
+    "predictive_model_id",
+    "learned_policy_model_id",
+    "checkpoint",
+    "checkpoint_id",
+    "resume_model_id",
+    "checkpoint_path",
+    "model_path",
+    "learned_policy_checkpoint",
+    "sacadrl_checkpoint_path",
+    "predictive_checkpoint_path",
+)
+
+
+def _load_arm_algo_config(raw_path: Path | str | None) -> dict[str, Any] | None:
+    """Load and parse an arm's algo config mapping from a relative or absolute path.
+
+    Returns:
+        Parsed configuration dictionary, or None if the file is missing or invalid.
+    """
+    if raw_path is None or not str(raw_path).strip():
+        return None
+    path = Path(raw_path)
+    if not path.is_absolute():
+        resolved_candidate = (get_repository_root() / path).resolve()
+        path = resolved_candidate if resolved_candidate.is_file() else path.resolve()
+    if not path.is_file():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _model_id_from_summary(summary: dict[str, Any]) -> str:
+    containers = [
+        summary.get("checkpoint_provenance"),
+        summary.get("algorithm_metadata_contract", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata_contract"), dict)
+        else None,
+        summary.get("algorithm_metadata", {})
+        .get("planner_runtime", {})
+        .get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata"), dict)
+        and isinstance(summary.get("algorithm_metadata", {}).get("planner_runtime"), dict)
+        else None,
+        summary.get("preflight", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("preflight"), dict)
+        else None,
+    ]
+    for container in containers:
+        if isinstance(container, dict):
+            val = container.get("model_id") or container.get("checkpoint")
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+    for key in ("model_id", "checkpoint"):
+        val = summary.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
+def _model_id_from_config_file(raw_path: Path | str | None) -> str:
+    algo_config = _load_arm_algo_config(raw_path)
+    if algo_config is None:
+        return ""
+    for id_key in _MODEL_ID_CONFIG_KEYS:
+        val = algo_config.get(id_key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    for _, value in _iter_mapping_checkpoint_keys(algo_config):
+        if value:
+            return value
+    return ""
+
+
+def _resolve_arm_model_id(
+    planner: PlannerSpec,
+    summary: dict[str, Any],
+) -> str:
+    """Resolve the model or checkpoint identifier for a planner arm.
+
+    Returns:
+        Checkpoint identifier string, or empty string when the arm does not load a model.
+    """
+    model_id = _model_id_from_summary(summary)
+    if model_id:
+        return model_id
+
+    raw_path = planner.algo_config_path or summary.get("algo_config_path")
+    model_id = _model_id_from_config_file(raw_path)
+    if model_id:
+        return model_id
+
+    canonical = canonical_algorithm_name(planner.algo)
+    if canonical in {"sacadrl", "sa_cadrl"}:
+        return _DEFAULT_SACADRL_MODEL_ID
+
+    return ""
+
+
+def _resolve_arm_action_adapter(
+    planner: PlannerSpec,
+    planner_kinematics: dict[str, Any],
+) -> str:
+    """Resolve the action adapter class or key that converted planner output to commands.
+
+    Returns:
+        Action adapter class/key name, or empty string when running native commands.
+    """
+    adapter = str(planner_kinematics.get("adapter_name") or "").strip()
+    if adapter and adapter.lower() not in {"none", "unknown"}:
+        return adapter
+    canonical = canonical_algorithm_name(planner.algo)
+    profile = _KINEMATICS_PROFILE_BY_CANONICAL.get(canonical, {})
+    default_adapter = str(profile.get("default_adapter_name") or "").strip()
+    if default_adapter and default_adapter.lower() not in {"none", "unknown"}:
+        return default_adapter
+    return ""
+
+
+def _source_from_summary(summary: dict[str, Any] | None, valid_sources: set[str]) -> str | None:
+    """Extract explicit policy source from summary fields or checkpoint provenance.
+
+    Returns:
+        Explicit policy source string if present and valid, or None.
+    """
+    if summary is None:
+        return None
+    explicit = str(summary.get("policy_source") or "").strip()
+    if explicit in valid_sources:
+        return explicit
+    containers = (
+        summary.get("checkpoint_provenance"),
+        summary.get("algorithm_metadata_contract", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata_contract"), dict)
+        else None,
+        summary.get("algorithm_metadata", {})
+        .get("planner_runtime", {})
+        .get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata"), dict)
+        and isinstance(summary.get("algorithm_metadata", {}).get("planner_runtime"), dict)
+        else None,
+        summary.get("preflight", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("preflight"), dict)
+        else None,
+    )
+    for container in containers:
+        if isinstance(container, dict):
+            src = str(
+                container.get("policy_source") or container.get("weights_origin") or ""
+            ).strip()
+            if src in valid_sources:
+                return src
+    return None
+
+
+def _source_from_registry(model_id: str, valid_sources: set[str]) -> str | None:
+    """Resolve policy source from model registry metadata when verified.
+
+    Returns:
+        Policy source string derived from registry metadata, or None.
+    """
+    try:
+        entry = get_registry_entry(model_id)
+    except (KeyError, FileNotFoundError, ValueError, TypeError):
+        return None
+    if not isinstance(entry, dict):
+        return None
+    licensing = entry.get("licensing")
+    if isinstance(licensing, dict):
+        weights_origin = str(licensing.get("weights_origin") or "").strip()
+        if weights_origin in valid_sources:
+            return weights_origin
+
+    if entry.get("wandb_run_path") or entry.get("wandb_artifact_path"):
+        return "trained-here"
+
+    config_path = str(entry.get("config_path") or "").strip()
+    if config_path.startswith("configs/training/"):
+        return "trained-here"
+
+    tags = set(entry.get("tags") or ())
+    if tags & {"sacadrl", "ga3c", "cadrl", "literature", "external"}:
+        return "literature-pretrained"
+    return None
+
+
+def _resolve_arm_policy_source(
+    planner: PlannerSpec,
+    model_id: str,
+    summary: dict[str, Any] | None = None,
+) -> str:
+    """Resolve policy provenance: 'trained-here', 'literature-pretrained', 'rule-based', or 'unknown'.
+
+    Returns:
+        Policy source categorization string.
+    """
+    valid_sources = {"trained-here", "literature-pretrained", "rule-based", "unknown"}
+    from_summary = _source_from_summary(summary, valid_sources)
+    if from_summary is not None:
+        return from_summary
+
+    if not model_id:
+        return "rule-based"
+
+    canonical = canonical_algorithm_name(planner.algo)
+    if canonical in {
+        "sacadrl",
+        "sa_cadrl",
+        "sicnav",
+        "dr_mpc",
+        "crowdnav_height",
+        "sonic_crowdnav",
+    }:
+        return "literature-pretrained"
+
+    raw_path = planner.algo_config_path or (summary.get("algo_config_path") if summary else None)
+    algo_config = _load_arm_algo_config(raw_path)
+    if algo_config is not None:
+        cfg_source = str(
+            algo_config.get("policy_source") or algo_config.get("weights_origin") or ""
+        ).strip()
+        if cfg_source in valid_sources:
+            return cfg_source
+
+    from_registry = _source_from_registry(model_id, valid_sources)
+    if from_registry is not None:
+        return from_registry
+
+    return "unknown"
+
+
 def _build_planner_row_metadata(  # noqa: PLR0913
     planner: PlannerSpec,
     kinematics: str,
@@ -510,6 +777,11 @@ def _build_planner_row_metadata(  # noqa: PLR0913
     Returns:
         Dict of metadata field names to values.
     """
+    config_path = _resolve_arm_config_path(planner, summary)
+    model_id = _resolve_arm_model_id(planner, summary)
+    action_adapter = _resolve_arm_action_adapter(planner, planner_kinematics)
+    policy_source = _resolve_arm_policy_source(planner, model_id, summary)
+
     return {
         "planner_key": planner.key,
         "algo": planner.algo,
@@ -517,6 +789,10 @@ def _build_planner_row_metadata(  # noqa: PLR0913
         "human_model_source": planner.human_model_source or "",
         "planner_group": planner.planner_group,
         "kinematics": kinematics,
+        "config_path": config_path,
+        "model_id": model_id,
+        "action_adapter": action_adapter,
+        "policy_source": policy_source,
         "status": status,
         "episodes": int(episode_count),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
@@ -609,6 +885,10 @@ def _build_planner_row_base(  # noqa: PLR0913
         "human_model_source",
         "planner_group",
         "kinematics",
+        "config_path",
+        "model_id",
+        "action_adapter",
+        "policy_source",
         "status",
         "episodes",
         "started_at_utc",
@@ -738,12 +1018,24 @@ def _planner_report_row(
     return row
 
 
-def _scenario_family(record: dict[str, Any]) -> str:
+def _scenario_family(record: dict[str, Any], *, scenario_id: str | None = None) -> str:
     """Resolve scenario-family/archetype label from episode record metadata.
 
     Returns:
         Best-effort scenario family label.
     """
+    declared_family = _record_declared_scenario_family(record)
+    if declared_family:
+        return declared_family
+
+    resolved_scenario_id = scenario_id or record.get("scenario_id")
+    if isinstance(resolved_scenario_id, str) and resolved_scenario_id.strip():
+        return resolved_scenario_id.strip().split("_", 1)[0]
+    return "unknown"
+
+
+def _record_declared_scenario_family(record: dict[str, Any]) -> str:
+    """Return an explicitly declared record family, excluding ID fallback."""
     scenario_params = record.get("scenario_params")
     if not isinstance(scenario_params, dict):
         scenario_params = {}
@@ -753,11 +1045,10 @@ def _scenario_family(record: dict[str, Any]) -> str:
     for key in ("archetype", "scenario_family", "family"):
         value = metadata.get(key) or scenario_params.get(key) or record.get(key)
         if isinstance(value, str) and value.strip():
+            if key == "archetype":
+                return _validate_archetype_tag(value, source="episode record archetype")
             return value.strip()
-    scenario_id = record.get("scenario_id")
-    if isinstance(scenario_id, str) and scenario_id.strip():
-        return scenario_id.split("_", 1)[0]
-    return "unknown"
+    return ""
 
 
 def _campaign_scenario_id(scenario: dict[str, Any]) -> str:
@@ -787,10 +1078,66 @@ def _build_scenario_amv_lookup(
     return lookup
 
 
-def _build_breakdown_rows(  # noqa: C901
+def _build_scenario_archetype_lookup(scenarios: list[dict[str, Any]]) -> dict[str, str]:
+    """Build a lookup from scenario identifier to the config-declared archetype.
+
+    Repeated normalized identifiers are admitted only when their extracted
+    archetype declarations are identical. Conflicting declarations, including
+    a tagged and an untagged duplicate, fail closed before report rows are built.
+
+    Returns:
+        dict[str, str]: Mapping from scenario name/id to its ``metadata.archetype``
+        tag. Every normalized scenario identifier is retained; scenarios without
+        a declared archetype map to an empty string so config-declared absence
+        cannot be replaced by stale record metadata.
+
+    Raises:
+        ValueError: If duplicate normalized scenario identifiers carry different
+            archetype declarations.
+    """
+    archetypes_by_id: dict[str, str] = {}
+    conflicts: dict[str, set[str]] = {}
+    for scenario in scenarios:
+        scenario_id = _campaign_scenario_id(scenario)
+        archetype = _extract_archetype(scenario)
+        if scenario_id in archetypes_by_id:
+            previous_archetype = archetypes_by_id[scenario_id]
+            if previous_archetype != archetype:
+                conflicts.setdefault(scenario_id, {previous_archetype}).add(archetype)
+            continue
+        archetypes_by_id[scenario_id] = archetype
+
+    if conflicts:
+        details = "; ".join(
+            f"{scenario_id!r}: {sorted(archetypes)!r}"
+            for scenario_id, archetypes in sorted(conflicts.items())
+        )
+        raise ValueError(
+            "Camera-ready scenario archetype lookup found duplicate normalized "
+            f"scenario identifiers with conflicting archetypes: {details}"
+        )
+
+    return archetypes_by_id
+
+
+def _scenario_archetype(record: dict[str, Any]) -> str:
+    """Resolve the archetype carried by one episode record, if present.
+
+    Returns:
+        str: Stripped archetype tag from the record's embedded scenario metadata,
+        or ``""`` when the record carries none.
+    """
+    scenario_params = record.get("scenario_params")
+    if not isinstance(scenario_params, dict):
+        scenario_params = {}
+    return _extract_archetype(scenario_params) or _extract_archetype(record)
+
+
+def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
     run_entries: list[dict[str, Any]],
     *,
     scenario_amv_lookup: dict[str, dict[str, str]] | None = None,
+    scenario_archetype_lookup: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Build per-scenario and per-family campaign diagnostic rows.
 
@@ -803,16 +1150,35 @@ def _build_breakdown_rows(  # noqa: C901
     absent columns, so downstream consumers never mistake a missing column
     for an unavailable taxonomy dimension.
 
+    When ``scenario_archetype_lookup`` is provided, an ``archetype`` column is
+    emitted beside ``scenario_family``: per-scenario rows take the tag declared by
+    the scenario config the campaign loaded (falling back to the episode record's
+    embedded scenario metadata), and per-family rows join the distinct tags with
+    semicolons. Include files that deliberately share one tag therefore collapse to
+    a single published value rather than an include-file count. Archetype values are
+    validated against the canonical tag vocabulary. If a record explicitly declares
+    a non-empty family/archetype that conflicts with a non-empty config tag for the
+    same scenario, row construction fails closed with a deterministic diagnostic.
+
     Returns:
         Tuple of per-scenario rows and per-family rows.
     """
     amv_lookup = scenario_amv_lookup if scenario_amv_lookup is not None else {}
+    archetype_lookup = {
+        scenario_id: _validate_archetype_tag(
+            archetype,
+            source=f"scenario archetype lookup[{scenario_id!r}]",
+        )
+        for scenario_id, archetype in (scenario_archetype_lookup or {}).items()
+    }
     per_scenario: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     family_amv_values: defaultdict[tuple[str, str, str], defaultdict[str, set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )
+    family_archetypes: defaultdict[tuple[str, str, str], set[str]] = defaultdict(set)
+    archetype_mismatches: set[tuple[str, str, str]] = set()
 
     def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
         """Append one finite metric sample to an aggregation bucket."""
@@ -844,8 +1210,21 @@ def _build_breakdown_rows(  # noqa: C901
         for record in read_jsonl(str(candidate)):
             if not isinstance(record, dict):
                 continue
-            scenario_id = str(record.get("scenario_id", "unknown"))
-            family = _scenario_family(record)
+            scenario_id = str(record.get("scenario_id", "unknown")).strip()
+            declared_family = _record_declared_scenario_family(record)
+            family = declared_family or _scenario_family(record, scenario_id=scenario_id)
+            archetype = (
+                archetype_lookup[scenario_id]
+                if scenario_id in archetype_lookup
+                else _scenario_archetype(record)
+            )
+            if (
+                scenario_id in archetype_lookup
+                and declared_family
+                and archetype
+                and declared_family != archetype
+            ):
+                archetype_mismatches.add((scenario_id, declared_family, archetype))
             scenario_key = (planner_key, algo, scenario_id, family)
             family_key = (planner_key, algo, family)
 
@@ -856,6 +1235,7 @@ def _build_breakdown_rows(  # noqa: C901
                     "algo": algo,
                     "scenario_id": scenario_id,
                     "scenario_family": family,
+                    "archetype": archetype,
                     "episodes": 0,
                 },
             )
@@ -865,9 +1245,12 @@ def _build_breakdown_rows(  # noqa: C901
                     "planner_key": planner_key,
                     "algo": algo,
                     "scenario_family": family,
+                    "archetype": "",
                     "episodes": 0,
                 },
             )
+            if archetype:
+                family_archetypes[family_key].add(archetype)
             scenario_bucket["episodes"] += 1
             family_bucket["episodes"] += 1
             for metric in _REPORT_METRICS:
@@ -918,6 +1301,8 @@ def _build_breakdown_rows(  # noqa: C901
                 finalized[dimension] = ";".join(sorted(values))
             else:
                 finalized[dimension] = ""
+        archetypes = family_archetypes.get(family_key)
+        finalized["archetype"] = _join_archetype_tags(archetypes) if archetypes else ""
         family_rows_data.append(finalized)
 
     family_rows_data.sort(
@@ -926,6 +1311,16 @@ def _build_breakdown_rows(  # noqa: C901
             row.get("scenario_family", ""),
         ),
     )
+    if archetype_mismatches:
+        details = "; ".join(
+            f"{scenario_id!r}: record scenario_family={record_family!r}, "
+            f"config archetype={config_archetype!r}"
+            for scenario_id, record_family, config_archetype in sorted(archetype_mismatches)
+        )
+        raise ValueError(
+            "Camera-ready scenario metadata has conflicting record scenario_family "
+            f"and config archetype values: {details}"
+        )
     return scenario_rows, family_rows_data
 
 

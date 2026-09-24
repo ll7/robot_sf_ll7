@@ -1,0 +1,44 @@
+{
+  "$schema": "scripts/validation/evidence_registry_historical_bindings.v1.schema.json",
+  "schema_version": "robot_sf.evidence_registry_historical_bindings.v1",
+  "repository": "ll7/robot_sf_ll7",
+  "reviewed_ancestry_anchor": "15ce5856ab2d4561c6d000942559da194a120e9a",
+  "bindings": [
+    {
+      "repository": "ll7/robot_sf_ll7",
+      "reviewed_ancestry_anchor": "15ce5856ab2d4561c6d000942559da194a120e9a",
+      "consumer_path": "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+      "consumer_sha256": "f0afd953298ec33e660f812a43b7801f767642edb348c31d22ddd7523475e417",
+      "consumer_blob_sha1": "7695a4be6819e0c73fbddc723476a9ee5d40c109",
+      "reference_locator": "/review_binding/policy",
+      "reference_path": "scripts/validation/dependency_license_policy.v1.json",
+      "declared_sha256": "8c7b128c341668fed8731469f2fc0fffa4845b8dbe81c1450767ae0f7643d4eb",
+      "producer_commit": "bccb41eb0f0de2ab734f7492c10df72fc9b0e63d",
+      "producer_tree": "4ad9c891ad46773ac667966cea80573b9cae3bf8",
+      "producer_reference_sha256": "8c7b128c341668fed8731469f2fc0fffa4845b8dbe81c1450767ae0f7643d4eb",
+      "producer_reference_blob_sha1": "3ae972f614f7e946c2cb1d71aa3271ccd03031a2",
+      "producer_consumer_sha256": "f0afd953298ec33e660f812a43b7801f767642edb348c31d22ddd7523475e417",
+      "producer_consumer_blob_sha1": "7695a4be6819e0c73fbddc723476a9ee5d40c109",
+      "parent_commit": "e028b14b76412c3ecebb784ed8f73b620c77fdbe",
+      "parent_reference_sha256": "a2b481eefb91e9a9813d54800304c9c0abf153f437e98ce3d87a5f408662ef30"
+    },
+    {
+      "repository": "ll7/robot_sf_ll7",
+      "reviewed_ancestry_anchor": "15ce5856ab2d4561c6d000942559da194a120e9a",
+      "consumer_path": "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json",
+      "consumer_sha256": "c0a7378268c6567cde77448d610e921f4ac1b63428b001cb5b57e281328f8dc6",
+      "consumer_blob_sha1": "3a2b639a45ae3ea6eddb3fa5e192d0e9bb108af5",
+      "reference_locator": "/evidence_references/1",
+      "reference_path": "docs/context/dependency_license_inventory.md",
+      "declared_sha256": "2ce10f1e0d6009f73c4d83b9bbeb8519e88b7a8ce25bdcba1e44ecb9f7ef4d3d",
+      "producer_commit": "2550678b9a69ce653dbf85e3a7ba0d97147b9f42",
+      "producer_tree": "3d574e7cc0d0de7c52a776f618c7a9fadabdbb96",
+      "producer_reference_sha256": "2ce10f1e0d6009f73c4d83b9bbeb8519e88b7a8ce25bdcba1e44ecb9f7ef4d3d",
+      "producer_reference_blob_sha1": "c74614f319bb06bcff70c62c77013560c526659d",
+      "producer_consumer_sha256": "7e73baa50eeada36c417820660b3b1bd65af8257085551bb29d29e8cc3bc75c1",
+      "producer_consumer_blob_sha1": "db601b27761f95fac070c724d5974d6127634ced",
+      "parent_commit": "1f2d789898aa9d5bab047b0d95508267d66e09c1",
+      "parent_reference_sha256": "0c13151f9261c4f5838d80efbb71e62ae38bda0097e2ab8c37b750cb1a5fa38e"
+    }
+  ]
+}

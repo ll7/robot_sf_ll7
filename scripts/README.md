@@ -14,6 +14,9 @@ catalog (or script docstrings/`--help`) rather than this file's generated sectio
 * **Compare training runs** → `scripts/tools/compare_training_runs.py`
 * **Preview scenario trajectories** → `scripts/tools/preview_scenario_trajectories.py`
 * **Validate changes** → `scripts/validation/`
+* **Operate SLURM compute-window jobs** → [`docs/dev/slurm_submission.md`](../docs/dev/slurm_submission.md) plus `scripts/tools/classify_scheduler_failure.py`, `scripts/validation/harvest_terminal_job.py`, and `scripts/validation/verify_slurm_array_mapping.py`
+* **Find prior task context** → [`docs/context/INDEX.md`](../docs/context/INDEX.md)
+* **Capture an environment manifest** → `scripts/tools/capture_environment_manifest.py`
 * **Work with SNQI metrics** → SNQI commands in [Root-Level Entry Points](#root-level-entry-points) and [`README_SNQI_WEIGHTS.md`](README_SNQI_WEIGHTS.md)
 * **Check performance** → `scripts/validation/performance_smoke_test.py`
 * **Migrate artifacts** → `scripts/tools/migrate_artifacts.py`
@@ -86,7 +89,7 @@ compatibility entry has neither replacement nor rationale.
 | `run_classic_interactions.py` | canonical | Classic interaction scenario matrix runner. |
 | `run_social_navigation_benchmark.py` | compatibility | Older all-in-one social navigation benchmark runner. Prefer config-driven tools like classic_benchmark_full.py. |
 | `save-codex-token-checkpoint.py` | canonical | Build a compact token-saving checkpoint without duplicating route policy. |
-| `scale_svgs_to_50m.py` | debug-only | One-off SVG coordinate scaling utility. |
+| `scale_svgs_to_50m.py` | debug-only | One-off SVG coordinate scaling utility; inputs are always explicit. |
 | `seed_variance.py` | canonical | SNQI seed-variance analysis across benchmark episodes. |
 | `select_exemplar_episodes.py` | canonical | Select median/best/worst exemplar episodes from campaign JSONL into a manifest. |
 | `snqi_sensitivity_analysis.py` | canonical | Full SNQI sensitivity analysis with visualizations. |

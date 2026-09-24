@@ -93,6 +93,13 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed-file>
 scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check <changed-file>
 ```
 
+For instruction, execution-profile, or provider-adapter changes, one combined check covers the
+reference contract, adapter scope, and the focused instruction tests:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- scripts/dev/check_agent_instructions.sh
+```
+
 For broad pull request readiness, use the repository wrapper from the repository root:
 
 ```bash

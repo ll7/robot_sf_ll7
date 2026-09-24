@@ -48,6 +48,17 @@ DEFAULT_WORKFLOW = "CI"
 DEFAULT_SAMPLE_LIMIT = 10
 
 
+def _fetch_pr_status_with_cache(
+    fetch_status: Callable[..., dict[str, Any]],
+    pr_number: str,
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]],
+) -> dict[str, Any]:
+    """Call the production PR fetcher with one monitor-run changed-file cache."""
+    if fetch_status is _fetch_ci_status:
+        return fetch_status(pr_number, changed_files_cache=changed_files_cache)
+    return fetch_status(pr_number)
+
+
 @dataclass(frozen=True, slots=True)
 class DriftSample:
     """Recent successful CI timing sample collected after a timeout."""
@@ -597,6 +608,7 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
         budget_seconds = wait_budget_seconds(baseline_seconds, multiplier)
     deadline = monotonic() + budget_seconds
     last_status: dict[str, Any] = {}
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] = {}
     last_progress_at = 0.0
     poll_count = 0
 
@@ -604,7 +616,7 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
         last_status = (
             fetch_commit_status(post_merge_commit_sha)
             if post_merge_commit_sha
-            else fetch_status(pr_number)
+            else _fetch_pr_status_with_cache(fetch_status, pr_number, changed_files_cache)
         )
         poll_count += 1
         head_sha = str(last_status.get("head_sha") or "")
@@ -773,6 +785,16 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
         sleep(max(min(float(poll_interval_seconds), remaining), 0.0))
 
 
+def _append_status_disposition(lines: list[str], checks: dict[str, Any]) -> None:
+    """Append success or fail-closed docs-only disposition details."""
+    success_reason = checks.get("success_reason")
+    if success_reason:
+        lines.append(f"  disposition: {success_reason}")
+    docs_only = checks.get("docs_only")
+    if isinstance(docs_only, dict) and docs_only.get("status") == "unavailable":
+        lines.append("  docs_only: unavailable  |  fail-closed: true")
+
+
 def format_human(result: WatchResult) -> str:
     """Format a compact human-readable monitor summary."""
     if result.target_kind == "merge_commit":
@@ -801,6 +823,12 @@ def format_human(result: WatchResult) -> str:
         pending_reason = result.checks.get("pending_reason")
         if pending_reason:
             lines.append(f"  pending_reason: {pending_reason}")
+        required_checks = result.checks.get("required_checks")
+        if isinstance(required_checks, dict) and required_checks.get("reason"):
+            missing = required_checks.get("missing") or []
+            suffix = f"  |  missing: {', '.join(missing)}" if missing else ""
+            lines.append(f"  required_checks: {required_checks['reason']}{suffix}")
+        _append_status_disposition(lines, result.checks)
         if result.checks.get("setup_starvation"):
             lines.append("  setup_starvation: detected on hosted runner")
     if result.error:

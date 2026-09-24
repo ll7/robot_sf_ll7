@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Contract tests for ``frame_shape_from_map`` SVG dimension parsing."""
 
 import tempfile
 from pathlib import Path
@@ -11,14 +11,14 @@ from robot_sf.benchmark.visualization import frame_shape_from_map
 def make_svg(content: str, suffix: str = ".svg") -> Path:
     # Use NamedTemporaryFile with delete=False so the file persists for the
     # duration of the test run. The OS temp directory will be cleaned later.
-    """TODO docstring. Document this function.
+    """Write SVG content to a persistent temporary file for parsing.
 
     Args:
-        content: TODO docstring.
-        suffix: TODO docstring.
+        content: SVG document text to write.
+        suffix: File suffix controlling the temporary file extension.
 
     Returns:
-        TODO docstring.
+        Path to the written temporary SVG file.
     """
     tf = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, mode="w", encoding="utf-8")
     tf.write(content)
@@ -28,7 +28,7 @@ def make_svg(content: str, suffix: str = ".svg") -> Path:
 
 
 def test_frame_shape_from_map_width_height():
-    """TODO docstring. Document this function."""
+    """Verify width/height attributes are used when viewBox is absent."""
     svg = """<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg"></svg>"""
     p = make_svg(svg)
     w, h = frame_shape_from_map(str(p))
@@ -36,7 +36,7 @@ def test_frame_shape_from_map_width_height():
 
 
 def test_frame_shape_from_map_viewbox():
-    """TODO docstring. Document this function."""
+    """Verify the viewBox fallback yields its width and height."""
     svg = """<svg viewBox="0 0 1024 768" xmlns="http://www.w3.org/2000/svg"></svg>"""
     p = make_svg(svg)
     w, h = frame_shape_from_map(str(p))
@@ -59,7 +59,7 @@ def test_frame_shape_from_map_viewbox_with_commas(viewbox: str, expected: tuple[
 
 
 def test_frame_shape_from_map_invalid():
-    """TODO docstring. Document this function."""
+    """Verify an SVG lacking both dimensions raises ValueError."""
     svg = """<svg></svg>"""
     p = make_svg(svg)
     with pytest.raises(ValueError):

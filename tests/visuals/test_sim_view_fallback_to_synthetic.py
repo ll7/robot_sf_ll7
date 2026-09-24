@@ -13,7 +13,7 @@ from robot_sf.benchmark.full_classic.visuals import (
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub for auto renderer selection with replay capture and one video."""
 
     smoke = False
     disable_videos = False
@@ -23,11 +23,16 @@ class Cfg:
 
 
 def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
-    """TODO docstring. Document this function.
+    """Assert a failed SimulationView attempt is replaced by synthetic rendering.
+
+    The SimulationView attempt is stubbed to return one failed artifact with a
+    render-error note and the synthetic fallback is stubbed to return a successful
+    synthetic artifact. The manifest contains that synthetic artifact with the
+    fallback marker note, and performance reports the fallback note.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to stub both render attempts.
     """
     records = [
         {
@@ -42,13 +47,13 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
     groups: list = []
 
     def fake_attempt_sim_view(_records, _videos_dir, _cfg, _replay_map):
-        """TODO docstring. Document this function.
+        """Return one failed SimulationView artifact with a render-error:IndexError note.
 
         Args:
-            _records: TODO docstring.
-            _videos_dir: TODO docstring.
-            _cfg: TODO docstring.
-            _replay_map: TODO docstring.
+            _records: Records accepted and ignored.
+            _videos_dir: Video directory accepted and ignored.
+            _cfg: Config accepted and ignored.
+            _replay_map: Replay map accepted and ignored.
         """
         return [
             VideoArtifact(
@@ -65,12 +70,12 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
         ]
 
     def fake_synthetic(_records, _videos_dir, _cfg):
-        """TODO docstring. Document this function.
+        """Return one successful synthetic artifact for episode ep1.
 
         Args:
-            _records: TODO docstring.
-            _videos_dir: TODO docstring.
-            _cfg: TODO docstring.
+            _records: Records accepted and ignored.
+            _videos_dir: Video directory accepted and ignored.
+            _cfg: Config accepted and ignored.
         """
         return [
             VideoArtifact(
@@ -102,11 +107,15 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
 
 
 def test_fallback_appends_existing_note(tmp_path, monkeypatch):
-    """TODO docstring. Document this function.
+    """Assert an existing artifact note is preserved before the fallback marker.
+
+    The synthetic fallback returns a success artifact already carrying
+    "existing-note"; the manifest note becomes that note plus the
+    fallback-from-SimulationView marker, and performance reports the marker alone.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to stub both render attempts.
     """
     records = [
         {
@@ -121,13 +130,13 @@ def test_fallback_appends_existing_note(tmp_path, monkeypatch):
     groups: list = []
 
     def fake_attempt_sim_view(_records, _videos_dir, _cfg, _replay_map):
-        """TODO docstring. Document this function.
+        """Return one failed SimulationView artifact with a render-error:IndexError note.
 
         Args:
-            _records: TODO docstring.
-            _videos_dir: TODO docstring.
-            _cfg: TODO docstring.
-            _replay_map: TODO docstring.
+            _records: Records accepted and ignored.
+            _videos_dir: Video directory accepted and ignored.
+            _cfg: Config accepted and ignored.
+            _replay_map: Replay map accepted and ignored.
         """
         return [
             VideoArtifact(
@@ -144,12 +153,12 @@ def test_fallback_appends_existing_note(tmp_path, monkeypatch):
         ]
 
     def fake_synthetic(_records, _videos_dir, _cfg):
-        """TODO docstring. Document this function.
+        """Return one successful synthetic artifact for episode ep1 carrying an existing note.
 
         Args:
-            _records: TODO docstring.
-            _videos_dir: TODO docstring.
-            _cfg: TODO docstring.
+            _records: Records accepted and ignored.
+            _videos_dir: Video directory accepted and ignored.
+            _cfg: Config accepted and ignored.
         """
         return [
             VideoArtifact(

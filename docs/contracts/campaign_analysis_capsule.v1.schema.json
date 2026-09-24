@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf_ll7/schemas/campaign_analysis_capsule.v1.schema.json",
+  "title": "Campaign analysis capsule manifest v1",
+  "description": "Host-independent analysis capsule manifest for validating and regenerating campaign reports.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "capsule_id",
+    "campaign_id",
+    "source_commit",
+    "analysis_code_digest",
+    "dependency_digest",
+    "expected_row_digest",
+    "claim_boundary",
+    "data_files",
+    "report_commands",
+    "output_expectations",
+    "created_at_utc"
+  ],
+  "properties": {
+    "schema": { "const": "campaign_analysis_capsule.v1" },
+    "capsule_id": { "type": "string", "minLength": 1 },
+    "campaign_id": { "type": "string", "minLength": 1 },
+    "source_commit": { "type": "string", "pattern": "^[0-9a-fA-F]{7,40}$" },
+    "analysis_code_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "dependency_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "input_schema_version": { "type": ["string", "null"] },
+    "expected_row_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "expected_row_count": { "type": ["integer", "null"], "minimum": 0 },
+    "deterministic_seeds": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "claim_boundary": { "type": "string", "minLength": 1 },
+    "data_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "byte_size"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)[a-zA-Z0-9_./-]+$"
+          },
+          "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+          "byte_size": { "type": "integer", "minimum": 0 },
+          "row_count": { "type": ["integer", "null"], "minimum": 0 },
+          "durable_uri": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "report_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "command_tokens", "status"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "command_tokens": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "deterministic": { "type": "boolean" },
+          "claim_boundary": { "type": ["string", "null"] },
+          "status": { "enum": ["available", "unavailable", "unsupported"] },
+          "reason": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "output_expectations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content_type"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)[a-zA-Z0-9_./-]+$"
+          },
+          "content_type": { "type": "string" },
+          "expected_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$" }
+        }
+      }
+    },
+    "created_at_utc": { "type": "string" }
+  }
+}

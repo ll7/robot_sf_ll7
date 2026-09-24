@@ -41,7 +41,7 @@ RECOVERY_MANIFEST_PATH = EVIDENCE_DIR / "recovery_manifest.json"
 PREREGISTRATION_PATH = (
     REPO_ROOT / "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
 )
-EXPECTED_PACKET_DIGEST = "4c1624c37f6d897a868a9e0bb68b8e25bb642bdb10c3e17535e6bf2e759a7016"
+EXPECTED_PACKET_DIGEST = "9f3bf68bf4dc55b599a045aa208940ec477258a23c83483f2ae8c1c34664bb65"
 EXPECTED_ROW_DIGESTS = (
     "c204a1741a2d4bf77a1e757eb9614d77b6f721794bd51182bc34d922c2c48858",
     "35a90600f347363b74cf8c98fe8022a2b5b439cf3aea5e69f6a4c8e11707f85f",
@@ -536,6 +536,33 @@ def test_validation_rejects_non_integral_scenario_count() -> None:
     synthesis["decision_table"][0]["n_scenarios"] = 6.5
 
     with pytest.raises(ValueError, match="n_scenarios must equal"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("pooled_delta_mean", 1.01),
+        ("pooled_delta_se", -0.01),
+        ("harm_bound", -1.01),
+        ("p_value_harm_raw", 1.01),
+        ("p_value_noninferiority_holm", -0.01),
+        ("harm_adjusted_confidence_level", 1.0),
+        ("directional_family_alpha", 0.0),
+    ],
+)
+def test_validation_rejects_out_of_domain_synthesis_statistics(field: str, value: float) -> None:
+    """Reject finite values outside the registered rate and statistical domains."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    synthesis["decision_table"][0][field] = value
+
+    with pytest.raises(ValueError, match=field):
         _validate_synthesis(
             synthesis,
             synthesis_sha256=synthesis_sha,

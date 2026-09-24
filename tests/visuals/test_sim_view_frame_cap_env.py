@@ -9,13 +9,13 @@ from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 
 
 def _basic_state(t: int) -> VisualizableSimState:
-    """TODO docstring. Document this function.
+    """Build a minimal visualizable state for the given timestep.
 
     Args:
-        t: TODO docstring.
+        t: Timestep index forwarded to the state.
 
     Returns:
-        TODO docstring.
+        State with empty pedestrian, ray, and pedestrian-action arrays.
     """
     return VisualizableSimState(
         timestep=t,
@@ -29,12 +29,16 @@ def _basic_state(t: int) -> VisualizableSimState:
 
 @pytest.mark.parametrize("override, expected", [("5", 5), ("NONE", None), ("-1", None)])
 def test_env_override_max_frames(monkeypatch, override, expected):
-    """TODO docstring. Document this function.
+    """Assert ROBOT_SF_MAX_VIDEO_FRAMES controls the effective frame cap.
+
+    Numeric overrides set max_frames to that value and rendering 12 frames yields
+    exactly that many; "NONE" and "-1" leave the cap unset and rendering 12 frames
+    grows past 10.
 
     Args:
-        monkeypatch: TODO docstring.
-        override: TODO docstring.
-        expected: TODO docstring.
+        monkeypatch: Pytest fixture used to set the SDL driver and override env var.
+        override: Raw ROBOT_SF_MAX_VIDEO_FRAMES value under test.
+        expected: Expected effective cap, or None when the override disables the cap.
     """
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("ROBOT_SF_MAX_VIDEO_FRAMES", override)
@@ -59,10 +63,10 @@ def test_env_override_max_frames(monkeypatch, override, expected):
 
 
 def test_env_override_invalid_ignored(monkeypatch):
-    """TODO docstring. Document this function.
+    """Assert a non-integer ROBOT_SF_MAX_VIDEO_FRAMES value keeps the default cap.
 
     Args:
-        monkeypatch: TODO docstring.
+        monkeypatch: Pytest fixture used to set the invalid override.
     """
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("ROBOT_SF_MAX_VIDEO_FRAMES", "not-an-int")

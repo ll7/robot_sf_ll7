@@ -1,0 +1,95 @@
+# Issue #6561 pedestrian desired-speed activation preflight.
+#
+# Plain-language summary: check-only, disjoint-seed preflight specification that
+# proves the slow/typical desired-speed interventions activate before the
+# registered 111-140 rows are submitted. It executes no registered rows and
+# produces no benchmark evidence.
+
+schema_version: robot_sf.issue_6561_pedestrian_speed_activation_preflight.v1
+issue: 6561
+child_issue: 8888
+status: preflight_only
+protocol_config: configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml
+protocol_semantic_hash: 6dca14e2021394fcfc9116418d23ebd351cba5ffd135abfe84d6c140ee1ced3d
+
+claim_boundary: >-
+  Check-only disjoint-seed activation specification. This does not execute
+  registered episodes, establish planner behaviour, promote fallback or degraded
+  rows, or enter dissertation evidence. Activation output is a preflight gate
+  only; it is explicitly not benchmark evidence.
+
+registered_seed_block:
+  first: 111
+  last: 140
+
+preflight_seed_block:
+  source: disjoint_activation_preflight
+  seeds:
+    - 311
+    - 312
+    - 313
+    - 314
+  disjoint_from_registered: true
+  rationale: >-
+    Reserved disjoint block for the pedestrian desired-speed activation
+    preflight. Kept separate from the robot-speed preflight block 211-214 so
+    provenance cannot be confused across campaigns.
+
+treated_regimes:
+  - regime_id: slow_distributed
+    configured_desired_speed_mean_m_s: 0.65
+    configured_desired_speed_std_m_s: 0.2
+  - regime_id: typical_distributed
+    configured_desired_speed_mean_m_s: 1.3
+    configured_desired_speed_std_m_s: 0.2
+
+reference_regime:
+  regime_id: legacy_default
+  treatment: not_a_treated_intervention
+
+expected_preflight_scenario_count: 6
+expected_preflight_regime_count: 2
+expected_preflight_planner_count: 4
+expected_preflight_seed_count: 4
+expected_preflight_cell_count: 192
+
+activation_rule:
+  target_tolerance_m_s: 0.2
+  minimum_activation_fraction: 0.8
+  maximum_spawn_transient_seconds: 2.0
+  initial_spawn_speed_expected_m_s: 0.5
+  initial_spawn_speed_tolerance_m_s: 0.05
+  diagnostic_fields:
+    - configured_desired_speed_mean_m_s
+    - configured_desired_speed_std_m_s
+    - realized_desired_speed_mean_m_s
+    - realized_desired_speed_std_m_s
+    - initial_spawn_speed_mean_m_s
+    - initial_spawn_speed_peak_m_s
+    - time_to_desired_speed_target_seconds
+    - acceleration_transient_steps
+    - desired_speed_activation_fraction
+  classifications:
+    - intervention_activated
+    - intervention_inactive
+    - invalid_transient
+    - invalid_initial_speed
+    - not_evaluable
+  forbidden_row_statuses:
+    - missing
+    - duplicate
+    - failed
+    - fallback
+    - degraded
+    - provenance_invalid
+    - intervention_not_activated
+
+validation_contract:
+  check_only_command: >-
+    uv run python scripts/validation/check_issue_6561_activation_preflight.py
+    --check-only --format json
+  classification_command: >-
+    uv run python scripts/validation/check_issue_6561_activation_preflight.py
+    --diagnostics <path> --format json
+  production_execution_in_this_pr: false
+  registered_rows_allowed: false

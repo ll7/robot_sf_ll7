@@ -1385,6 +1385,13 @@ def test_create_worktree_without_flock_cli_cleans_failed_task_lease(
         "):\n"
         "    print('injected lease release failure', file=sys.stderr)\n"
         "    raise SystemExit(74)\n"
+        "if (\n"
+        "    len(sys.argv) > 2\n"
+        "    and sys.argv[1].endswith('/worktree_receipt.py')\n"
+        "    and sys.argv[2] == 'create'\n"
+        "):\n"
+        "    print('injected receipt creation failure', file=sys.stderr)\n"
+        "    raise SystemExit(1)\n"
         f"os.execv({sys.executable!r}, [{sys.executable!r}, '-S', *sys.argv[1:]])\n",
         encoding="utf-8",
     )
@@ -1395,9 +1402,7 @@ def test_create_worktree_without_flock_cli_cleans_failed_task_lease(
     branch = _unique_branch(tmp_path, "no-flock-failed-task-lease")
     target = _worktree_target(tmp_path, branch)
     lease_file = lease_path(target)
-    receipt_parent = tmp_path / "receipt-parent-file"
-    receipt_parent.write_text("not a directory\n", encoding="utf-8")
-    receipt_path = receipt_parent / "receipt.json"
+    receipt_path = tmp_path / "receipt.json"
     environment = {**git_identity_environment(os.environ), "PATH": str(stub_bin)}
     try:
         result = subprocess.run(
@@ -1935,6 +1940,155 @@ def test_worktree_creation_lock_helper_non_blocking_reports_contention(
         check=False,
     )
     assert free.returncode == 0, free.stderr
+
+
+def test_worktree_creation_lock_timeout_waits_and_acquires(tmp_path: Path) -> None:
+    """--timeout waits for a held lock and executes the child once released."""
+    lock_path = tmp_path / "test-timeout.lock"
+    held_marker = tmp_path / "test-timeout-held"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "from pathlib import Path; import sys, time; Path(sys.argv[1]).touch(); time.sleep(0.8)",
+            str(held_marker),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not held_marker.exists() and holder.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert held_marker.exists(), "holder did not acquire the lock before running the child"
+        waiter = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--timeout",
+                "5",
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert waiter.returncode == 0, waiter.stderr
+    finally:
+        holder.terminate()
+        holder.wait(timeout=15)
+
+
+def test_worktree_creation_lock_timeout_expires_with_contention_code(tmp_path: Path) -> None:
+    """--timeout exits 75 when lock cannot be acquired within the timeout window."""
+    lock_path = tmp_path / "test-timeout-expire.lock"
+    held_marker = tmp_path / "test-timeout-expire-held"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "from pathlib import Path; import sys, time; Path(sys.argv[1]).touch(); time.sleep(10)",
+            str(held_marker),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not held_marker.exists() and holder.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert held_marker.exists(), "holder did not acquire the lock before running the child"
+        start = time.monotonic()
+        waiter = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--timeout",
+                "0.2",
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        elapsed = time.monotonic() - start
+        assert waiter.returncode == 75, waiter.stderr
+        assert 0.15 <= elapsed <= 5.0
+    finally:
+        holder.terminate()
+        holder.wait(timeout=15)
+
+
+def test_worktree_creation_lock_invalid_timeout_reports_usage(tmp_path: Path) -> None:
+    """Invalid or non-finite --timeout arguments report an error and exit 2."""
+    lock_path = tmp_path / "test-invalid-timeout.lock"
+    for invalid_timeout in ("invalid", "nan", "inf", "-inf"):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--timeout",
+                invalid_timeout,
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert result.returncode == 2
+        assert "invalid timeout" in result.stderr
+
+
+def test_worktree_creation_lock_unknown_timeout_option_does_not_hang(tmp_path: Path) -> None:
+    """Unknown timeout-like options fail with usage instead of looping forever."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            "--timeoutx",
+            str(tmp_path / "test-unknown-timeout.lock"),
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "usage" in result.stderr
 
 
 def test_worktree_creation_lock_survives_detached_descendant_with_descriptor(

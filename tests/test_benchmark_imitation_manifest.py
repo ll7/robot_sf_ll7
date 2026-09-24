@@ -28,11 +28,10 @@ from robot_sf.common.artifact_paths import (
 
 @pytest.fixture(name="metrics_summary")
 def _metrics_summary() -> dict[str, MetricAggregate]:
-    """TODO docstring. Document this function.
-
+    """Provide sample aggregated success and collision rate metrics for manifest tests.
 
     Returns:
-        TODO docstring.
+        Mapping of metric names to MetricAggregate data objects.
     """
     return {
         "success_rate": MetricAggregate(mean=0.92, median=0.93, p95=0.98, ci95=(0.90, 0.99)),
@@ -41,13 +40,13 @@ def _metrics_summary() -> dict[str, MetricAggregate]:
 
 
 def _sample_expert_artifact(metrics: dict[str, MetricAggregate]) -> ExpertPolicyArtifact:
-    """TODO docstring. Document this function.
+    """Construct an ExpertPolicyArtifact instance populated with test metadata.
 
     Args:
-        metrics: TODO docstring.
+        metrics: Metric aggregate dictionary to bind to the policy artifact.
 
     Returns:
-        TODO docstring.
+        Populated ExpertPolicyArtifact instance with test configuration and checkpoint paths.
     """
     checkpoint = get_expert_policy_dir() / "ppo_expert_v1.zip"
     config_manifest = Path("configs/training/expert_ppo.yaml")
@@ -67,10 +66,10 @@ def _sample_expert_artifact(metrics: dict[str, MetricAggregate]) -> ExpertPolicy
 def test_serialize_expert_policy_makes_paths_relative(
     metrics_summary: dict[str, MetricAggregate],
 ) -> None:
-    """TODO docstring. Document this function.
+    """Verify that serializing an expert policy converts filesystem paths to relative strings.
 
     Args:
-        metrics_summary: TODO docstring.
+        metrics_summary: Test fixture containing sample metric aggregates.
     """
     artifact = _sample_expert_artifact(metrics_summary)
     record = imitation_manifest.serialize_expert_policy(artifact)
@@ -85,10 +84,10 @@ def test_serialize_expert_policy_makes_paths_relative(
 def test_write_expert_policy_manifest_round_trip(
     metrics_summary: dict[str, MetricAggregate],
 ) -> None:
-    """TODO docstring. Document this function.
+    """Verify that writing an expert policy manifest to disk and reading it back preserves payload.
 
     Args:
-        metrics_summary: TODO docstring.
+        metrics_summary: Test fixture containing sample metric aggregates.
     """
     artifact = _sample_expert_artifact(metrics_summary)
     expected = imitation_manifest.serialize_expert_policy(artifact)
@@ -101,7 +100,7 @@ def test_write_expert_policy_manifest_round_trip(
 
 
 def test_trajectory_manifest_serialization_handles_metadata() -> None:
-    """TODO docstring. Document this function."""
+    """Verify that trajectory dataset manifest serialization accurately encodes metadata fields."""
     dataset_dir = get_trajectory_dataset_dir()
     data_path = dataset_dir / "traj_v1.npz"
     metadata = {
@@ -149,10 +148,10 @@ def test_trajectory_manifest_serialization_handles_metadata() -> None:
 def test_training_run_manifest_writes_to_runs_folder(
     metrics_summary: dict[str, MetricAggregate],
 ) -> None:
-    """TODO docstring. Document this function.
+    """Verify that training run manifests write to the dedicated runs directory with relative paths.
 
     Args:
-        metrics_summary: TODO docstring.
+        metrics_summary: Test fixture containing sample metric aggregates.
     """
     episode_log = get_imitation_report_dir() / "ppo_imitation" / "episodes.jsonl"
     artifact = TrainingRunArtifact(
@@ -247,10 +246,10 @@ def test_training_run_manifest_preserves_completed_run_with_cross_worktree_confi
     [None, Path("custom/output/expert.json")],
 )
 def test_write_trajectory_manifest_allows_custom_path(manifest_path: Path | None) -> None:
-    """TODO docstring. Document this function.
+    """Verify that writing trajectory dataset manifests supports custom target file paths.
 
     Args:
-        manifest_path: TODO docstring.
+        manifest_path: Optional explicit output path or None for default artifact location.
     """
     artifact = TrajectoryDatasetArtifact(
         dataset_id="traj_custom",

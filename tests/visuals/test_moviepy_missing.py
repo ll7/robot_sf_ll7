@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub forcing the SimulationView renderer with replay capture enabled."""
 
     smoke = False
     disable_videos = False
@@ -31,11 +31,16 @@ class Cfg:
 
 def test_moviepy_missing_sim_view_forced(tmp_path: Path, monkeypatch):
     # Pretend SimulationView available
-    """TODO docstring. Document this function.
+    """Assert a missing moviepy dependency skips a two-step SimulationView attempt.
+
+    Patches SimulationView availability and readiness true, moviepy readiness
+    false, and the SimulationView attempt to return no artifacts; the record
+    produces one SimulationView-classified skipped artifact with the
+    moviepy-missing note.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to patch module readiness and attempt hooks.
     """
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)

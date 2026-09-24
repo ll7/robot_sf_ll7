@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 
 def test_collision_sanity(tmp_path: Path):
     # Prepare output path under pytest tmp dir
-    """TODO docstring. Document this function.
+    """Run the collision_sanity preset for one short episode and assert collisions > 0.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory for the episode JSONL output.
     """
     out_path = tmp_path / "episodes_collision_sanity.jsonl"
 

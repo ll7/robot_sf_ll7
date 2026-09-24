@@ -13,10 +13,10 @@ from robot_sf.gym_env.environment_factory import RecordingOptions, RenderOptions
 
 
 def test_convenience_boolean_creates_recording_options(tmp_path):
-    """TODO docstring. Document this function.
+    """record_video=True alone yields an env with a SimulationView for capture.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory supplying the video output path.
     """
     env = make_robot_env(record_video=True, video_path=str(tmp_path / "out.mp4"))
     # When record_video=True (and debug False) a SimulationView should be created for capturing frames.
@@ -24,10 +24,10 @@ def test_convenience_boolean_creates_recording_options(tmp_path):
 
 
 def test_explicit_options_override_boolean(tmp_path):
-    """TODO docstring. Document this function.
+    """record_video=True flips RecordingOptions.record to True on conflict.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory supplying the video output path.
     """
     rec = RecordingOptions(record=False)
     env = make_robot_env(
@@ -40,7 +40,7 @@ def test_explicit_options_override_boolean(tmp_path):
 
 
 def test_video_fps_to_render_options_precedence():
-    """TODO docstring. Document this function."""
+    """video_fps alone and video_fps with explicit RenderOptions both build envs."""
     env1 = make_robot_env(video_fps=20)
     # Provide explicit RenderOptions that should override video_fps when set
     ro = RenderOptions(max_fps_override=15)
@@ -50,7 +50,7 @@ def test_video_fps_to_render_options_precedence():
 
 
 def test_explicit_render_options_preserved_over_convenience():
-    """TODO docstring. Document this function."""
+    """make_robot_env accepts video_fps together with explicit RenderOptions."""
     ro = RenderOptions(max_fps_override=12)
     env = make_robot_env(video_fps=60, render_options=ro)
     assert env is not None

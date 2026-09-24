@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Contract test for the multi-extractor training summary JSON schema."""
 
 import json
 from pathlib import Path
@@ -18,10 +18,13 @@ SCHEMA_PATH = (
 
 
 def test_summary_json_matches_contract(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify written summary.json validates against the published contract schema.
+
+    Builds a fixed TrainingRunSummary with one successful extractor, writes summary
+    artifacts under tmp_path, and asserts the JSON payload has no schema violations.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory receiving the summary artifacts.
     """
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     validator = Draft7Validator(schema)

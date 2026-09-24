@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""CLI tests for loading SNQI weights dynamically from optimization report files."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_minimal_matrix(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal single-scenario matrix YAML file for testing.
 
     Args:
-        path: TODO docstring.
+        path: Output filesystem destination for the YAML matrix.
     """
     scenarios = [
         {
@@ -39,10 +39,10 @@ def _write_minimal_matrix(path: Path) -> None:
 
 
 def _write_minimal_baseline(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal baseline statistics JSON file with median and p95 values.
 
     Args:
-        path: TODO docstring.
+        path: Output filesystem destination for the baseline JSON.
     """
     baseline = {
         "collisions": {"med": 0.0, "p95": 1.0},
@@ -56,11 +56,11 @@ def _write_minimal_baseline(path: Path) -> None:
 
 def test_cli_run_with_snqi_weights_from(tmp_path: Path, capsys):
     # Prepare matrix and baseline
-    """TODO docstring. Document this function.
+    """Verify running benchmark CLI with weights loaded from an optimization report.
 
     Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
+        tmp_path: Temporary directory fixture for matrix, report, and episode files.
+        capsys: Pytest fixture capturing standard output and error streams.
     """
     matrix_path = tmp_path / "matrix.yaml"
     _write_minimal_matrix(matrix_path)

@@ -25,7 +25,7 @@
 #SBATCH --cpus-per-task=36
 #SBATCH --mem=256G
 #SBATCH --time=36:00:00
-#SBATCH --output=output/slurm-release-%j.log
+#SBATCH --output=output/slurm/%j-release-single-node.out
 set -euo pipefail
 MANIFEST="${1:?release manifest path required}"
 LABEL="${2:?release label required}"

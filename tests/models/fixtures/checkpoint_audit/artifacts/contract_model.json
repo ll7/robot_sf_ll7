@@ -1,0 +1,1 @@
+{"policy_class": "fixture.PPO", "observation": {"schema": "fixture_obs_v1", "shape": [4]}, "action": {"schema": "fixture_act_v1", "shape": [2]}, "normalizer": {"required": false, "embedded": false}, "parameters": [1.0, 0.5, 0.25], "custom_objects": [], "dependency_modules": []}

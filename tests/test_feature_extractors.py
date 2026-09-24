@@ -354,7 +354,7 @@ class TestIntegrationWithStableBaselines3:
         config = self._build_fast_config()
 
         def make_env():
-            """TODO docstring. Document this function."""
+            """Build a RobotEnv from the shared PPO smoke-test config."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)
@@ -385,7 +385,7 @@ class TestIntegrationWithStableBaselines3:
         config = self._build_fast_config()
 
         def make_env():
-            """TODO docstring. Document this function."""
+            """Build a RobotEnv from the shared PPO smoke-test config."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)
@@ -411,7 +411,7 @@ class TestIntegrationWithStableBaselines3:
         config = self._build_fast_config()
 
         def make_env():
-            """TODO docstring. Document this function."""
+            """Build a RobotEnv from the shared PPO smoke-test config."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)
@@ -437,7 +437,7 @@ class TestIntegrationWithStableBaselines3:
         config = self._build_fast_config()
 
         def make_env():
-            """TODO docstring. Document this function."""
+            """Build a RobotEnv from the shared PPO smoke-test config."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)

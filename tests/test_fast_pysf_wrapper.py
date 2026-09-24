@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for FastPysfWrapper force queries and fallback diagnostics."""
 
 from unittest.mock import Mock
 
@@ -14,7 +14,7 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 def make_simple_sim():
     # Create a minimal simulator with two pedestrians and a small obstacle
     # state shape for 2 peds: [x, y, vx, vy, goalx, goaly, tau]
-    """TODO docstring. Document this function."""
+    """Build a two-pedestrian simulator with one vertical obstacle segment."""
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
@@ -48,7 +48,7 @@ def make_no_pedestrian_sim():
 
 
 def test_get_forces_at_point():
-    """TODO docstring. Document this function."""
+    """get_forces_at returns a finite 2-element force vector at the query point."""
     sim = make_simple_sim()
     wrapper = FastPysfWrapper(sim)
 
@@ -453,7 +453,7 @@ def test_wrapper_init_raises_value_error_for_negative_agents(monkeypatch):
 
 
 def test_get_force_field():
-    """TODO docstring. Document this function."""
+    """get_force_field returns a (len(ys), len(xs), 2) finite force grid over the axes."""
     sim = make_simple_sim()
     wrapper = FastPysfWrapper(sim)
 

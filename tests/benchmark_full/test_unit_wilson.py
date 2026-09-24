@@ -10,12 +10,15 @@ from robot_sf.benchmark.full_classic.aggregation import _wilson_interval  # type
 
 
 def _approx(a: float, b: float, rel: float = 0.05):  # 5% relative tolerance
-    """TODO docstring. Document this function.
+    """Compare two floats with either exact equality or relative tolerance.
 
     Args:
-        a: TODO docstring.
-        b: TODO docstring.
-        rel: TODO docstring.
+        a: Computed value.
+        b: Reference value.
+        rel: Maximum allowed relative difference.
+
+    Returns:
+        True when the values are equal or within the relative tolerance.
     """
     if a == b:
         return True
@@ -25,7 +28,7 @@ def _approx(a: float, b: float, rel: float = 0.05):  # 5% relative tolerance
 
 
 def test_wilson_extremes_zero_events():
-    """TODO docstring. Document this function."""
+    """Verify the Wilson interval for zero events has a small positive upper bound."""
     low, high = _wilson_interval(0.0, 50, 0.95)
     # Expected high ~ 0.072 (reference from statistical tables)
     assert 0.05 < high < 0.09, f"Unexpected upper bound for zero events: {high}"
@@ -34,7 +37,7 @@ def test_wilson_extremes_zero_events():
 
 
 def test_wilson_midpoint_symmetry():
-    """TODO docstring. Document this function."""
+    """Verify the Wilson interval at p=0.5, n=100 matches reference bounds."""
     low, high = _wilson_interval(0.5, 100, 0.95)
     # For p=0.5, n=100, half-width ~0.096 (so interval ~0.404-0.596)
     assert _approx((high - low) / 2, 0.096, rel=0.15)

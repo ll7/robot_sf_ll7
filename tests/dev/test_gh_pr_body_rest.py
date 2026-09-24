@@ -248,6 +248,77 @@ def test_reconcile_pr_metadata_fails_closed_on_malformed_current_response(
     mock_patch.assert_not_called()
 
 
+def test_reconcile_pr_metadata_classifies_http_500_empty_body_without_retry(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """The CLI keeps a nonzero HTTP 500 unverified and on stderr without retry."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        mock_patch.return_value = _proc(
+            returncode=1,
+            stderr="gh: Server Error (HTTP 500)",
+        )
+        rc = main(
+            [
+                "5220",
+                "--repo",
+                "ll7/robot_sf_ll7",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    result = json.loads(captured.err)
+    assert result["status"] == "error"
+    assert result["transport"] == {
+        "schema": "github_transport_error.v1",
+        "phase": "PR metadata update",
+        "error_class": "http_5xx",
+        "http_status": 500,
+        "response_body": "empty",
+        "verified": False,
+        "retry_policy": "no_automatic_retry",
+        "next_action": "fresh_metadata_read_before_any_retry",
+    }
+    assert mock_get.call_count == 1
+    mock_patch.assert_called_once()
+
+
+def test_reconcile_pr_metadata_distinguishes_empty_malformed_json_from_http_500(
+    tmp_path: Path,
+) -> None:
+    """An empty successful response is malformed JSON, not an HTTP server error."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        mock_patch.return_value = _proc()
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "error"
+    assert result["transport"]["error_class"] == "malformed_json"
+    assert result["transport"]["http_status"] is None
+    assert result["transport"]["response_body"] == "empty"
+    assert result["transport"]["retry_policy"] == "no_automatic_retry"
+    assert mock_get.call_count == 1
+    mock_patch.assert_called_once()
+
+
 def test_reconcile_pr_metadata_rejects_invalid_title_before_reading_remote(
     tmp_path: Path,
 ) -> None:
@@ -531,3 +602,396 @@ def test_direct_invocation_without_ambient_pythonpath(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0
     assert "reconcile" in proc.stdout
+
+
+_VALID_V2_BODY = """## Summary
+
+Human-authored summary.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: []
+deferred_work:
+  status: none
+  issues: []
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+_DUPLICATE_ROLE_V2_BODY = """## Summary
+
+Human-authored summary.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: [42]
+deferred_work:
+  status: open
+  issues: [42]
+  reason: "follow-up work"
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+
+def test_reconcile_rejects_invalid_v2_contract_before_remote_write(tmp_path: Path) -> None:
+    """A present-but-invalid v2 contract fails closed before any PATCH (issue #8962)."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_DUPLICATE_ROLE_V2_BODY, encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "error"
+    assert "duplicate issue references" in result["error"]
+    mock_patch.assert_not_called()
+
+
+def test_update_pr_body_rejects_invalid_v2_contract_before_remote_write(tmp_path: Path) -> None:
+    """The direct body updater also fails closed on an invalid v2 contract."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_DUPLICATE_ROLE_V2_BODY, encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch:
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "error"
+    assert "duplicate issue references" in result["error"]
+    mock_patch.assert_not_called()
+
+
+def test_reconcile_accepts_valid_v2_contract_and_patches(tmp_path: Path) -> None:
+    """A valid v2 body still reconciles through the verified atomic PATCH."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_VALID_V2_BODY, encoding="utf-8")
+    response = {
+        "title": "final title",
+        "body": _VALID_V2_BODY,
+        "html_url": "https://example/pr/5220",
+    }
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.side_effect = [
+            _proc(stdout=json.dumps({"title": "old title", "body": "old body"})),
+            _proc(stdout=json.dumps(response)),
+        ]
+        mock_patch.return_value = _proc(stdout=json.dumps(response))
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "ok"
+    mock_patch.assert_called_once()
+
+
+def test_reconcile_keeps_unchanged_invalid_v2_body_as_explicit_noop(tmp_path: Path) -> None:
+    """An already-published invalid body is not rewritten and stays an explicit no-op."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_DUPLICATE_ROLE_V2_BODY, encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(
+            stdout=json.dumps({"title": "final title", "body": _DUPLICATE_ROLE_V2_BODY})
+        )
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "unchanged"
+    mock_patch.assert_not_called()
+
+
+def test_reconcile_issue_number_error_points_at_linked_pr(tmp_path: Path, capsys) -> None:
+    """Passing an issue number yields an actionable linked-PR diagnostic, not a bare 404."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    timeline = [
+        {"event": "commented"},
+        {
+            "event": "cross-referenced",
+            "source": {
+                "issue": {
+                    "number": 9109,
+                    "repository_url": "https://api.github.com/repos/ll7/robot_sf_ll7",
+                    "pull_request": {"url": "https://example"},
+                }
+            },
+        },
+    ]
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps(timeline)),
+        ]
+        exit_code = main(
+            [
+                "9101",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "is an issue, not a pull request" in payload["error"]
+    assert "linked PR is #9109" in payload["error"]
+
+
+def test_reconcile_issue_number_without_linkage_keeps_actionable_error(
+    tmp_path: Path, capsys
+) -> None:
+    """An issue without a linked PR still gets the pass-the-PR-number diagnostic."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps([{"event": "commented"}])),
+        ]
+        exit_code = main(
+            [
+                "9101",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert payload["error"].endswith("pass the PR number")
+
+
+def test_reconcile_missing_pr_keeps_original_error(tmp_path: Path, capsys) -> None:
+    """A 404 that is not an issue-number mixup is not misattributed."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+        ]
+        exit_code = main(
+            [
+                "999999",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "is an issue, not a pull request" not in payload["error"]
+
+
+def _cross_referenced(number: int, *, repo: str = "ll7/robot_sf_ll7") -> dict:
+    """Build one repository-qualified cross-referenced timeline event."""
+    return {
+        "event": "cross-referenced",
+        "source": {
+            "issue": {
+                "number": number,
+                "repository_url": f"https://api.github.com/repos/{repo}",
+                "pull_request": {"url": "https://example"},
+            }
+        },
+    }
+
+
+def _full_timeline_page(*entries: dict) -> str:
+    """Build a 100-entry timeline page so the bounded scan continues paginating."""
+    filler = [{"event": "commented"} for _ in range(100 - len(entries))]
+    return json.dumps([*entries, *filler])
+
+
+def test_update_issue_number_error_points_at_linked_pr(tmp_path: Path, capsys) -> None:
+    """Ordinary update mode, not just --reconcile, carries the linked-PR diagnostic."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("plain body without carriers", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+    ):
+        mock_patch.return_value = _proc(returncode=1, stderr="gh: Not Found (HTTP 404)")
+        mock_get.side_effect = [
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps([_cross_referenced(9109)])),
+        ]
+        exit_code = main(["9101", "--body-file", str(body_file)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "is an issue, not a pull request" in payload["error"]
+    assert "linked PR is #9109" in payload["error"]
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "gh: repository not found",
+        "gh: connection reset after 4043 bytes",
+        "gh: HTTP 500: Internal Server Error",
+    ],
+)
+def test_unconfirmed_or_unrelated_errors_skip_issue_diagnostic(
+    tmp_path: Path, capsys, stderr: str
+) -> None:
+    """Failures without a confirmed PR-endpoint 404 must not trigger diagnostic reads."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("plain body without carriers", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+    ):
+        mock_patch.return_value = _proc(returncode=1, stderr=stderr)
+        exit_code = main(["9101", "--body-file", str(body_file)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "is an issue, not a pull request" not in payload["error"]
+    mock_get.assert_not_called()
+
+
+def test_ambiguous_linked_prs_fail_closed(tmp_path: Path, capsys) -> None:
+    """Two repository-qualified linked PRs must not produce a single-PR suggestion."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    timeline = [_cross_referenced(9109), _cross_referenced(9110)]
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps(timeline)),
+        ]
+        exit_code = main(
+            ["9101", "--body-file", str(body_file), "--reconcile", "--title", "final title"]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "ambiguous" in payload["error"]
+    assert "linked PR is #" not in payload["error"]
+
+
+def test_external_linked_pr_is_not_suggested(tmp_path: Path, capsys) -> None:
+    """A cross-referenced PR from another repository is never the suggested number."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    external = _cross_referenced(9109, repo="other-owner/other-repo")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps([external])),
+        ]
+        exit_code = main(
+            ["9101", "--body-file", str(body_file), "--reconcile", "--title", "final title"]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert payload["error"].endswith("pass the PR number")
+    assert "9109" not in payload["error"]
+
+
+def test_linked_pr_scan_reads_later_timeline_pages(tmp_path: Path, capsys) -> None:
+    """A unique linked PR on a later timeline page is still reported."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=_full_timeline_page()),
+            _proc(stdout=json.dumps([_cross_referenced(9109)])),
+        ]
+        exit_code = main(
+            ["9101", "--body-file", str(body_file), "--reconcile", "--title", "final title"]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "linked PR is #9109" in payload["error"]
+
+
+def test_incomplete_linked_pr_scan_fails_closed(tmp_path: Path, capsys) -> None:
+    """A linked PR seen on an incomplete scan is not suggested."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=_full_timeline_page(_cross_referenced(9109))),
+            _proc(returncode=1, stderr="gh: HTTP 500: Internal Server Error"),
+        ]
+        exit_code = main(
+            ["9101", "--body-file", str(body_file), "--reconcile", "--title", "final title"]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "incomplete" in payload["error"]
+    assert "#9109" not in payload["error"]
+
+
+def test_linked_pr_scan_page_limit_fails_closed(tmp_path: Path, capsys) -> None:
+    """An unbounded timeline exhausts the page cap without a suggestion."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            *[_proc(stdout=_full_timeline_page()) for _ in range(10)],
+        ]
+        exit_code = main(
+            ["9101", "--body-file", str(body_file), "--reconcile", "--title", "final title"]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "incomplete" in payload["error"]
+    assert "linked PR is #" not in payload["error"]

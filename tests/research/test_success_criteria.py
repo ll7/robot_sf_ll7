@@ -10,10 +10,10 @@ from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestra
 
 
 def test_success_criteria_report(tmp_path):
-    """TODO docstring. Document this function.
+    """Generate a report bundle and assert its required sections and data files.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used as the report output parent.
     """
     seeds = [1, 2]
     metric_records = [
@@ -64,10 +64,10 @@ def test_success_criteria_report(tmp_path):
 
 
 def test_success_criteria_ablation(tmp_path):
-    """TODO docstring. Document this function.
+    """Run the ablation matrix and assert the report and decision states.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used as the ablation output parent.
     """
     ab_orch = AblationOrchestrator(
         experiment_name="sc_ablation",

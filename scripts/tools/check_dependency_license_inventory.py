@@ -1041,6 +1041,29 @@ def _candidate_provenance_contract(
     """Verify that candidate provenance exactly binds the manifest subjects."""
     provenance = _read_json(path)
     members = manifest["members"]
+    source_identity = provenance.get("source_identity")
+    if "source_identity" in provenance:
+        if not isinstance(source_identity, dict) or set(source_identity) != {
+            "observed_source_sha",
+            "requested_source_sha",
+        }:
+            raise ValueError("candidate provenance source identity is invalid")
+        observed_source_sha = source_identity["observed_source_sha"]
+        requested_source_sha = source_identity["requested_source_sha"]
+        if (
+            not isinstance(observed_source_sha, str)
+            or _CANDIDATE_SOURCE_SHA_RE.fullmatch(observed_source_sha) is None
+        ):
+            raise ValueError("candidate provenance observed source SHA is invalid")
+        if (
+            not isinstance(requested_source_sha, str)
+            or _CANDIDATE_SOURCE_SHA_RE.fullmatch(requested_source_sha) is None
+        ):
+            raise ValueError("candidate provenance requested source SHA is invalid")
+        if observed_source_sha != manifest["source_sha"]:
+            raise ValueError("candidate provenance observed source SHA differs from manifest")
+        if requested_source_sha != manifest["source_sha"]:
+            raise ValueError("candidate provenance requested source SHA differs from manifest")
     expected = {
         "build": {
             "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
@@ -1058,6 +1081,8 @@ def _candidate_provenance_contract(
     }
     if "materialization" in manifest:
         expected["materialization"] = manifest["materialization"]
+    if "source_identity" in provenance:
+        expected["source_identity"] = source_identity
     if provenance != expected:
         raise ValueError("candidate provenance does not exactly bind the manifest subjects")
 

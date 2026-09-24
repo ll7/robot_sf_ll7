@@ -389,7 +389,10 @@ Before each phase, run a delegation checkpoint:
   discovery scout.
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
   `uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json` for a
-  no-arg candidate queue (use only its live-admitted `claimable_issues`),
+  no-arg candidate queue (use only its live-admitted `claimable_issues`). The command fails closed
+  (non-zero exit plus a stderr note) when `queue_completeness` is not `complete`; treat
+  `--allow-incomplete` as bounded discovery only, and never conclude zero eligible work unless
+  `zero_work_authoritative` is true.
   `uv run python -m scripts.dev.snapshot_issue_batch <first> <last> --json`
   for explicit issue batches, `uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n>
   --json` for the active PR queue, and `uv run python -m scripts.dev.snapshot_pr_queue --prs <pr>
@@ -477,6 +480,8 @@ Treat monitor exit states as follows:
 - `pending timeout` / exit code `2`: keep the PR in `awaiting_ci`, record the pending checks, and
   continue other work.
 - `error`: record stale head, auth, API, or parsing failure; do not trust the waiter for readiness.
+- Do not rerun a full-budget monitor for the same head after a timeout; see
+  `Resume And Ownership Discipline`.
 
 ### Snapshot-First Parent Orientation
 
@@ -503,6 +508,8 @@ uv run python -m scripts.dev.compact_ci_snapshot <pr> [<pr> ...] \
 # Compact no-arg next-issue queue and explicit issue batch snapshots
 uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json
 # The command is a candidate queue; only its live-admitted `claimable_issues` are claimable.
+# It exits non-zero while `queue_completeness` is not `complete`; use `--allow-incomplete` only
+# for bounded discovery, and require `zero_work_authoritative: true` before any zero-work claim.
 uv run python -m scripts.dev.snapshot_issue_batch <first> <last> \
   --json --capsule-dir <artifact-dir>
 
@@ -615,6 +622,31 @@ plain `gh issue view --comments` fails on some GitHub CLI versions because it re
 deprecated classic-Projects field) or equivalent REST evidence.
 Do not claim or branch from scout text alone; stale state, wrong repo-owner URLs, missing recent
 comments, and duplicate PR coverage are known failure modes.
+
+### Resume And Ownership Discipline
+
+Apply these rules instead of rediscovering the same leaks each cycle:
+
+- **Resolve the worktree root before reading or editing.** Confirm `git rev-parse --show-toplevel`
+  matches the task worktree and use absolute paths under it. The long-lived main checkout may sit
+  on an unrelated user branch with different files; editing a path read from it moves the wrong
+  file and costs a copy/revert cycle.
+- **Trust claim refs over labels.** `agent-claims/issue-<n>` is authoritative; a `state:running`
+  label without a claim ref is stale and should be cleared when claiming.
+- **Do not chase a head owned by another lane.** When `merge-ready` application is refused because
+  an active exact-head review claim covers the live head, park the PR with its head SHA and
+  metadata digest; resume once the label appears instead of re-polling each new head.
+- **Run at most one bounded CI monitor per head.** Use `watch_pr_ci_status.py --once` for state and
+  start a monitor only when the next decision depends on it; on wall-budget expiry record
+  `awaiting_ci` and park rather than rerunning the same budget.
+- **Triage snapshots by label before reading bodies.** From `snapshot_issue_batch --claimable`,
+  skip rows labeled `decision-required` or `state:blocked`, and skip compute, experiment, or
+  campaign lanes unless the user prioritized them; record the exclusion from the snapshot alone.
+- **Recheck merged coverage before claiming.** A queue row can be stale: run the exact merged-fix
+  guard (named symbol, failing test, or file/line against `origin/main`) before claim or branch.
+- **Record parked work from a live read.** A parked PR, job, or delegate entry needs the head SHA
+  and state read at record time; re-read them before resume or admission, and name compute-gated
+  work with the canonical `resource:*` labels. Copied handoff claims are not freshness evidence.
 
 ### Usage Pause Guard
 

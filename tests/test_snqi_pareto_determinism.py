@@ -13,10 +13,10 @@ from scripts.recompute_snqi_weights import SNQIWeightRecomputer
 
 
 def _episodes(n: int = 10):
-    """TODO docstring. Document this function.
+    """Return ``n`` synthetic all-metric episodes from a fixed RNG seed (7).
 
     Args:
-        n: TODO docstring.
+        n: Number of episode records to generate.
     """
     rng = np.random.default_rng(7)
     eps = []
@@ -39,10 +39,10 @@ def _episodes(n: int = 10):
 
 
 def _baseline(episodes):
-    """TODO docstring. Document this function.
+    """Compute median/p95 baselines for the four normalized penalty metrics.
 
     Args:
-        episodes: TODO docstring.
+        episodes: Episode records whose ``metrics`` mappings supply the values.
     """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for ep in episodes:
@@ -56,7 +56,13 @@ def _baseline(episodes):
 
 
 def test_pareto_sampling_deterministic():
-    """TODO docstring. Document this function."""
+    """Pareto sampling is reproducible when the NumPy seed is reset.
+
+    Runs the ``pareto`` strategy twice with seed 999 and asserts both runs
+    select identical weights and identical top alternatives, with
+    ``discriminative_power``, ``stability``, and ``mean_score`` agreeing
+    within 1e-12.
+    """
     eps = _episodes()
     baseline = _baseline(eps)
 

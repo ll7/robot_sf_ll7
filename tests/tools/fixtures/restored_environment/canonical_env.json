@@ -1,0 +1,10 @@
+{
+  "schema": "environment_manifest.v1",
+  "environment_id": "env_surviving_host_001",
+  "python_version": "3.11",
+  "dependencies": {"numpy": ">=1.24"},
+  "optional_dependencies": {
+    "carla": {"available": false, "reason": "surviving host lacks carla simulator"},
+    "cuda": {"available": true}
+  }
+}

@@ -18,7 +18,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class BenchmarkConfig:  # lightweight test double; replaced by real implementation later
-    """TODO docstring. Document this class."""
+    """Lightweight config test double for full Classic benchmark contract tests.
+
+    Fields mirror the attributes consumed by the full_classic planning,
+    aggregation, effects, and orchestration modules.
+    """
 
     output_root: str
     scenario_matrix_path: str
@@ -60,10 +64,10 @@ def config_factory(temp_results_dir: Path):
     """Return factory producing BenchmarkConfig test doubles."""
 
     def _factory(**overrides):
-        """TODO docstring. Document this function.
+        """Build a BenchmarkConfig double rooted at the temporary results directory.
 
         Args:
-            overrides: TODO docstring.
+            overrides: Attribute names and values applied on top of the defaults.
         """
         base = BenchmarkConfig(
             output_root=str(temp_results_dir),
@@ -78,13 +82,13 @@ def config_factory(temp_results_dir: Path):
 
 @pytest.fixture()
 def synthetic_episode_record():
-    """TODO docstring. Document this function."""
+    """Return a factory that builds synthetic episode records for contract tests."""
 
     def _make(**overrides):
-        """TODO docstring. Document this function.
+        """Build one synthetic episode record with optional field overrides.
 
         Args:
-            overrides: TODO docstring.
+            overrides: Record fields replacing the defaults for this record.
         """
         rec = {
             "episode_id": overrides.get("episode_id", "ep-1"),

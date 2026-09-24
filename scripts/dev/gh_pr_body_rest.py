@@ -11,7 +11,9 @@ The ``--reconcile`` mode reads the current title/body first, performs one atomic
 title-and-body PATCH only when either field differs, and verifies both fields. All
 helper writers serialize per-PR through a host-local advisory lock held from the
 read through the post-update verification. A final read detects an external writer
-that does not use the lock and fails closed instead of claiming reconciliation.
+that does not use the lock and fails closed instead of claiming reconciliation. A failed
+write or malformed response is never retried automatically: the result carries a safe
+``transport`` diagnostic and requires a fresh metadata read before any retry or success claim.
 
 Usage
 -----
@@ -34,6 +36,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -49,6 +52,7 @@ from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
 from scripts.dev.github_transport_policy import get_transport_contract
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from scripts.dev.pr_loop_policy import (
     extract_sha_carriers,
     invalid_sha_carriers,
@@ -105,11 +109,212 @@ def _decode_object(
     try:
         response = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
-        return None, f"{operation} returned invalid JSON: {exc}; stdout snippet: {snippet!r}"
+        return None, f"{operation} returned invalid JSON: {exc}"
     if not isinstance(response, dict):
         return None, f"{operation} response was not an object"
     return response, None
+
+
+_HTTP_STATUS_RE = re.compile(
+    r"\bHTTP(?:/\d+(?:\.\d+)?)?\s*[: ]\s*(?P<status>[1-5]\d{2})\b",
+    re.IGNORECASE,
+)
+
+
+def _http_status(result: subprocess.CompletedProcess[str]) -> int | None:
+    """Extract an HTTP status from a bounded ``gh`` diagnostic, if present."""
+    diagnostic = "\n".join(
+        value for value in (result.stderr, result.stdout) if isinstance(value, str)
+    )
+    match = _HTTP_STATUS_RE.search(diagnostic)
+    return int(match.group("status")) if match else None
+
+
+def _transport_diagnostic(
+    result: subprocess.CompletedProcess[str],
+    *,
+    operation: str,
+    error: str | None = None,
+    error_class: str | None = None,
+) -> dict[str, Any]:
+    """Describe an unverified REST result without retaining response payloads."""
+    status = _http_status(result)
+    if error_class is None:
+        if status is not None:
+            error_class = "http_5xx" if status >= 500 else "http_4xx_or_other"
+        elif error is not None and "not an object" in error.casefold():
+            error_class = "invalid_response_shape"
+        elif error is not None and "invalid json" in error.casefold():
+            error_class = "malformed_json"
+        else:
+            error_class = "process_failure"
+    if status is not None and status >= 500:
+        next_action = "fresh_metadata_read_before_any_retry"
+    elif error_class == "malformed_json":
+        next_action = "fresh_metadata_read_before_claiming_or_retrying"
+    else:
+        next_action = "inspect_error_and_refresh_metadata_before_retrying"
+    return {
+        "schema": "github_transport_error.v1",
+        "phase": operation,
+        "error_class": error_class,
+        "http_status": status,
+        "response_body": "empty" if not str(result.stdout or "").strip() else "present",
+        "verified": False,
+        "retry_policy": "no_automatic_retry",
+        "next_action": next_action,
+    }
+
+
+def _structured_error(
+    error: str,
+    *,
+    result: subprocess.CompletedProcess[str] | None = None,
+    operation: str,
+    error_class: str | None = None,
+) -> dict[str, Any]:
+    """Return a fail-closed error with safe transport diagnostics when available."""
+    payload: dict[str, Any] = {"status": "error", "error": error}
+    if result is not None:
+        payload["transport"] = _transport_diagnostic(
+            result,
+            operation=operation,
+            error=error,
+            error_class=error_class,
+        )
+    return payload
+
+
+_PR_ENDPOINT_ERROR_PREFIXES = (
+    "PR body update failed:",
+    "PR live-head read failed:",
+    "PR metadata read failed:",
+    "PR metadata update failed:",
+    "PR metadata post-update verification failed:",
+)
+
+_HTTP_404_PATTERN = re.compile(
+    r"(?:\(\s*HTTP\s+404\s*\)|\bHTTP\s+404\b|\b404\s+Not\s+Found\b)",
+    re.IGNORECASE,
+)
+
+_TIMELINE_PAGE_SIZE = 100
+_TIMELINE_PAGE_LIMIT = 10
+
+
+def _confirmed_pr_endpoint_404(error: str) -> bool:
+    """Return whether *error* is a confirmed HTTP 404 from a pull-request endpoint.
+
+    The issue-number diagnostic only helps when the failure is provably a 404
+    from a pull-request endpoint, so both the failing operation and the HTTP
+    status must be readable from the error text. Unrelated failures that merely
+    contain the digits ``404`` (a commit SHA or a byte count) or that came from
+    another endpoint do not qualify.
+    """
+    if not any(prefix in error for prefix in _PR_ENDPOINT_ERROR_PREFIXES):
+        return False
+    return _HTTP_404_PATTERN.search(error) is not None
+
+
+def _repository_qualified_source(repo: str, issue: dict[str, Any]) -> bool:
+    """Return whether a timeline source issue provably belongs to *repo*."""
+    repository_url = issue.get("repository_url")
+    if isinstance(repository_url, str) and repository_url:
+        return repository_url.rstrip("/").lower().endswith(f"/repos/{repo}".lower())
+    html_url = issue.get("html_url")
+    if isinstance(html_url, str) and html_url:
+        return html_url.lower().startswith(f"https://github.com/{repo.lower()}/")
+    return False
+
+
+def _timeline_page_entries(
+    repo: str, number: int, page: int
+) -> tuple[list[Any] | None, str | None]:
+    """Read one bounded timeline page, returning entries or a fail-closed reason."""
+    result = _gh_api_get(
+        f"repos/{repo}/issues/{number}/timeline?per_page={_TIMELINE_PAGE_SIZE}&page={page}"
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+        return None, f"timeline page {page} read failed: {detail}"
+    try:
+        entries = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None, f"timeline page {page} returned invalid JSON"
+    if not isinstance(entries, list):
+        return None, f"timeline page {page} was not a list"
+    return entries, None
+
+
+def _qualified_linked_number(repo: str, entry: Any) -> int | None:
+    """Return the PR number of one repository-qualified cross-referenced event."""
+    if not isinstance(entry, dict) or entry.get("event") != "cross-referenced":
+        return None
+    source = entry.get("source")
+    issue = source.get("issue") if isinstance(source, dict) else None
+    if not isinstance(issue, dict) or issue.get("pull_request") is None:
+        return None
+    candidate = issue.get("number")
+    if isinstance(candidate, int) and _repository_qualified_source(repo, issue):
+        return candidate
+    return None
+
+
+def _scan_linked_pull_requests(repo: str, number: int) -> tuple[tuple[int, ...], str | None]:
+    """Return repository-qualified linked PR numbers from a complete timeline scan.
+
+    The scan fails closed: an unreadable page, malformed payload, or a timeline
+    longer than the bounded scan returns no numbers plus a reason instead of a
+    partially observed set. Only cross-references that are provably qualified to
+    *repo* are collected, so an external reference is never suggested as the
+    linked PR.
+    """
+    numbers: list[int] = []
+    for page in range(1, _TIMELINE_PAGE_LIMIT + 1):
+        entries, page_error = _timeline_page_entries(repo, number, page)
+        if page_error:
+            return (), page_error
+        assert entries is not None
+        for entry in entries:
+            candidate = _qualified_linked_number(repo, entry)
+            if candidate is not None and candidate not in numbers:
+                numbers.append(candidate)
+        if len(entries) < _TIMELINE_PAGE_SIZE:
+            return tuple(numbers), None
+    return (), f"timeline scan exceeded {_TIMELINE_PAGE_LIMIT} pages"
+
+
+def _issue_number_diagnostic(repo: str, number: int) -> str | None:
+    """Explain an issue-number mixup when *number* is not a pull request.
+
+    Only used after a confirmed 404 from a pull-request endpoint: when the
+    number resolves to an issue, point the caller at exactly one
+    repository-qualified linked PR, or state that no unique reference could be
+    proven, instead of leaving a bare ``Not Found`` or suggesting an unrelated
+    number.
+    """
+    issue_result = _gh_api_get(f"repos/{repo}/issues/{number}")
+    issue, error = _decode_object(issue_result, operation="issue diagnostic read")
+    if error or issue is None or issue.get("pull_request") is not None:
+        return None
+    linked, scan_error = _scan_linked_pull_requests(repo, number)
+    if scan_error:
+        return (
+            f"number {number} is an issue, not a pull request; the linked-PR lookup "
+            f"was incomplete ({scan_error}) - pass the PR number"
+        )
+    if len(linked) == 1:
+        return (
+            f"number {number} is an issue, not a pull request; its linked PR is #{linked[0]} - "
+            "pass the PR number"
+        )
+    if len(linked) > 1:
+        return (
+            f"number {number} is an issue, not a pull request; linked PR references are "
+            f"ambiguous ({len(linked)} repository-qualified candidates) - pass the PR "
+            "number explicitly"
+        )
+    return f"number {number} is an issue, not a pull request - pass the PR number"
 
 
 def _head_sha(payload: dict[str, Any]) -> str | None:
@@ -217,6 +422,21 @@ def _guard_reconcile_body(body: str, current: dict[str, Any]) -> str | None:
     return _validate_sha_carriers(body, head["sha"])
 
 
+def _guard_contract_v2(body: str) -> str | None:
+    """Fail closed when a body carries a present-but-invalid pr-contract:v2 block.
+
+    The v1 compatibility path (no v2 marker) is unchanged. This runs before any
+    remote write so the later readiness preflight cannot reject a defect the
+    writer could have detected locally (issue #8962); duplicate references across
+    ``linked_issues`` and ``deferred_work`` are reported with their exact paths.
+    """
+    result = parse_pr_contract_v2(body, source="body")
+    if result.status in {"ok", "absent"}:
+        return None
+    detail = "; ".join(result.errors) or result.message
+    return f"pr-contract:v2 validation failed ({result.status}): {detail}"
+
+
 def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Update PR *number* from *body_file* and verify the REST response.
 
@@ -230,6 +450,10 @@ def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) ->
         return {"status": "error", "error": body_error}
     assert body is not None
 
+    contract_error = _guard_contract_v2(body)
+    if contract_error:
+        return {"status": "error", "error": contract_error}
+
     try:
         with _metadata_write_lock(repo, number):
             guard_error = _guard_update_body(body, repo, number)
@@ -238,22 +462,34 @@ def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) ->
             result = _gh_api_patch(f"repos/{repo}/pulls/{number}", {"body": body})
             if result.returncode != 0:
                 detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-                return {"status": "error", "error": f"PR body update failed: {detail}"}
+                return _structured_error(
+                    f"PR body update failed: {detail}",
+                    result=result,
+                    operation="PR body update",
+                )
             try:
                 response = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
-                snippet = result.stdout.strip()[:200]
-                return {
-                    "status": "error",
-                    "error": f"PR body update returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
-                }
+                return _structured_error(
+                    f"PR body update returned invalid JSON: {exc}",
+                    result=result,
+                    operation="PR body update",
+                    error_class="malformed_json",
+                )
             if not isinstance(response, dict):
-                return {"status": "error", "error": "PR body update response was not an object"}
+                return _structured_error(
+                    "PR body update response was not an object",
+                    result=result,
+                    operation="PR body update",
+                    error_class="invalid_response_shape",
+                )
             if response.get("body") != body:
-                return {
-                    "status": "error",
-                    "error": "PR body update response did not preserve the requested body",
-                }
+                return _structured_error(
+                    "PR body update response did not preserve the requested body",
+                    result=result,
+                    operation="PR body update",
+                    error_class="response_mismatch",
+                )
             return {
                 "status": "ok",
                 "number": number,
@@ -292,7 +528,11 @@ def reconcile_pr_metadata(  # noqa: C901
             current_result = _gh_api_get(f"repos/{repo}/pulls/{number}")
             current, current_error = _decode_object(current_result, operation="PR metadata read")
             if current_error:
-                return {"status": "error", "error": current_error}
+                return _structured_error(
+                    current_error,
+                    result=current_result,
+                    operation="PR metadata read",
+                )
             assert current is not None
             current_title = current.get("title")
             current_body = current.get("body")
@@ -329,28 +569,40 @@ def reconcile_pr_metadata(  # noqa: C901
             if not changed_fields:
                 return {"status": "unchanged", **base_result, "changed": False}
 
+            contract_error = _guard_contract_v2(body)
+            if contract_error:
+                return {"status": "error", "error": contract_error}
+
             patch_result = _gh_api_patch(
                 f"repos/{repo}/pulls/{number}",
                 {"title": title, "body": body},
             )
             response, patch_error = _decode_object(patch_result, operation="PR metadata update")
             if patch_error:
-                return {"status": "error", "error": patch_error}
+                return _structured_error(
+                    patch_error,
+                    result=patch_result,
+                    operation="PR metadata update",
+                )
             assert response is not None
             if response.get("title") != title or response.get("body") != body:
-                return {
-                    "status": "error",
-                    "error": (
-                        "PR metadata update response did not preserve the requested title and body"
-                    ),
-                }
+                return _structured_error(
+                    "PR metadata update response did not preserve the requested title and body",
+                    result=patch_result,
+                    operation="PR metadata update",
+                    error_class="response_mismatch",
+                )
 
             verify_result = _gh_api_get(f"repos/{repo}/pulls/{number}")
             verified, verify_error = _decode_object(
                 verify_result, operation="PR metadata post-update verification"
             )
             if verify_error:
-                return {"status": "error", "error": verify_error}
+                return _structured_error(
+                    verify_error,
+                    result=verify_result,
+                    operation="PR metadata post-update verification",
+                )
             assert verified is not None
             if verified.get("title") != title or verified.get("body") != body:
                 observed_title = verified.get("title")
@@ -423,6 +675,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         result = update_pr_body(args.number, args.body_file, repo=args.repo)
+    if result.get("status") not in {"ok", "unchanged"} and _confirmed_pr_endpoint_404(
+        str(result.get("error", ""))
+    ):
+        diagnostic = _issue_number_diagnostic(args.repo, args.number)
+        if diagnostic:
+            result["error"] = f"{result['error']}. {diagnostic}"
     success = result["status"] in {"ok", "unchanged"}
     stream = sys.stdout if success else sys.stderr
     print(json.dumps(result, sort_keys=True), file=stream)

@@ -16,7 +16,11 @@ if TYPE_CHECKING:
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub for the auto renderer with videos enabled and replay capture off.
+
+    Disabling replay capture keeps the single record on the synthetic path instead
+    of reclassifying it as an insufficient-replay SimulationView skip.
+    """
 
     smoke = False
     disable_videos = False
@@ -27,10 +31,14 @@ class Cfg:
 
 def test_synthetic_fallback_when_sim_view_unavailable(tmp_path: Path):
     # Force SimulationView unavailable
-    """TODO docstring. Document this function.
+    """Assert an unavailable SimulationView yields one synthetic video artifact.
+
+    Forces the module SimulationView availability flag false and passes a record
+    without replay data; the single generated video is classified with the
+    synthetic renderer, not a native SimulationView render.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
     """
     visuals_mod._SIM_VIEW_AVAILABLE = False  # type: ignore[attr-defined]
     records = [

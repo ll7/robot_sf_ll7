@@ -48,10 +48,10 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix  # Shared helpe
 
 
 def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
-    """TODO docstring. Document this function.
+    """Apply the shared minimal-matrix tuning so the run finishes in two episodes.
 
     Args:
-        cfg: TODO docstring.
+        cfg: Benchmark config double mutated in place and returned.
     """
     for attr, value in [
         ("workers", 1),
@@ -69,10 +69,10 @@ def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
 
 
 def _inject_minimal_matrix(cfg):  # delegate to shared writer
-    """TODO docstring. Document this function.
+    """Point the config at a generated single-scenario matrix and return it.
 
     Args:
-        cfg: TODO docstring.
+        cfg: Benchmark config double whose matrix path is replaced.
     """
     root = Path(cfg.output_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -83,19 +83,19 @@ def _inject_minimal_matrix(cfg):  # delegate to shared writer
 
 
 def _read_lines(path: Path):
-    """TODO docstring. Document this function.
+    """Return non-blank lines from a text artifact.
 
     Args:
-        path: TODO docstring.
+        path: File to read.
     """
     return [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
 def _assert_no_video_artifacts(root: Path):
-    """TODO docstring. Document this function.
+    """Fail if any mp4 or gif artifacts exist under the given root.
 
     Args:
-        root: TODO docstring.
+        root: Output root scanned recursively for video files.
     """
     vids = list(root.rglob("*.mp4")) + list(root.rglob("*.gif"))
     assert not vids, f"Unexpected video artifacts produced: {vids}"
@@ -103,21 +103,21 @@ def _assert_no_video_artifacts(root: Path):
 
 @pytest.mark.timeout(60)
 def test_resume_skips_existing(config_factory, perf_policy):
-    """TODO docstring. Document this function.
+    """Verify a second identical run appends no episodes and emits no videos.
 
     Args:
-        config_factory: TODO docstring.
-        perf_policy: TODO docstring.
+        config_factory: Fixture building the smoke-mode benchmark config.
+        perf_policy: Timing policy used to reject hard-threshold overruns.
     """
     start = time.perf_counter()
     hard_timeout_sec = 60
 
     def _timeout_handler(signum, frame):  # pragma: no cover
-        """TODO docstring. Document this function.
+        """Raise TimeoutError when the test exceeds its alarm window.
 
         Args:
-            signum: TODO docstring.
-            frame: TODO docstring.
+            signum: Signal number delivered by the alarm.
+            frame: Interpreter frame at signal time (unused).
         """
         raise TimeoutError("Resume integration test exceeded hard timeout (60s)")
 

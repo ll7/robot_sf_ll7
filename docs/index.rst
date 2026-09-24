@@ -12,6 +12,7 @@ references.
 
    Docs Index <README>
    Repository Overview <ai/repo_overview>
+   Architecture Tour <architecture_tour>
    Maintainer Values <maintainer_values>
 
 .. toctree::

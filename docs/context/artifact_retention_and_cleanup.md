@@ -20,6 +20,14 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Read-only worktree hygiene snapshot | [worktree_hygiene_snapshot.py](../../scripts/dev/worktree_hygiene_snapshot.py) |
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
+| Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
+| Log retention and diagnostic excerpts | [check_log_retention.py](../../scripts/tools/check_log_retention.py) |
+| Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
+| Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
+| Dependency cache manifest and reconstruction status | [dependency_cache_manifest.py](../../scripts/tools/dependency_cache_manifest.py) |
+| Source bundle export and verification | [source_bundle_export.py](../../scripts/tools/source_bundle_export.py) |
+| Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -82,7 +90,7 @@ policy.
 
 ## 4. Checked workflows
 
-### 4.1 Inventory without deleting
+### Inventory without deleting
 
 ```bash
 uv run python scripts/dev/check_worktree_capacity.py --inventory --json
@@ -91,7 +99,7 @@ uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retiremen
 
 Both helpers are read-only and never delete files.
 
-### 4.2 Verify a large result tree
+### Verify a large result tree
 
 ```bash
 uv run python scripts/tools/chunk_manifest.py manifest --root <RESULT_TREE> --output <MANIFEST.json>
@@ -101,7 +109,7 @@ uv run python scripts/tools/chunk_manifest.py verify --root <RESULT_TREE> --mani
 `verify` fails closed with exact file or chunk locations on mutation, truncation, sparse/symlink/
 hardlink/special-file, path, collision, and partial-manifest conditions.
 
-### 4.3 Preserve
+### Preserve
 
 1. Produce or locate the result tree.
 2. Verify it with `chunk_manifest.py` (or the owning schema check for small artifacts).
@@ -110,12 +118,21 @@ hardlink/special-file, path, collision, and partial-manifest conditions.
 4. Link the durable copy from the owning context note or evidence README.
 5. Record whether an independent second copy exists and in which failure domain.
 
-### 4.4 Restore-test
+### Restore-test
 
 Hydrate the artifact from the durable copy into a scratch path and rerun the owning verification
 command. A successful restore test is required before claiming preservation or cleanup eligibility.
 
-### 4.5 Check cleanup eligibility
+```bash
+uv run python scripts/tools/verify_restored_environment.py --check \
+  --manifest <TRANSFERRED_MANIFEST> --root "$SCRATCH_ROOT" --format json
+```
+
+The verifier reconstructs the declared environment in a clean temporary root without source-host
+dependencies, validates all checksums, row/config/checkpoint identities, and executes safe
+read-only smoke assertions. The outcome is labelled restoration smoke, not scientific reproduction.
+
+### Check cleanup eligibility
 
 ```bash
 uv run python scripts/dev/stale_worktree_reaper.py --path "$WORKTREE_PATH" --json
@@ -138,7 +155,7 @@ Any deletion, symlink/path alias, identity drift, new content, lease, lookup err
 refuses removal. Normal worktree removal preserves the local branch and its commits; artifact
 preservation remains the owner's responsibility before retirement.
 
-### 4.6 Audit durable locality and failure domains
+### Audit durable locality and failure domains
 
 ```bash
 uv run python scripts/validation/check_durable_artifact_locality.py \
@@ -150,7 +167,143 @@ projection by artifact ID, version, and digest, and exits non-zero when an activ
 reference has no verified non-institutional custody or a release-facing reference lacks independent
 failure-domain copies. It reads sanitized inputs only and never emits locator values.
 
-### 4.7 Report a blocker
+### Gate source-host artifact pruning on verified custody
+
+```bash
+uv run python scripts/tools/check_prune_eligibility.py --check \
+  --source-manifest <SOURCE_MANIFEST> --destination-receipt <DESTINATION_RECEIPT> \
+  --format json
+```
+
+The guard verifies durable destination custody, checksums, consumer coverage, and retention
+dispositions before permitting deletion planning. Check mode performs zero file deletions;
+an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
+Custody proof requires a non-empty, policy-valid destination locator, an exact source-manifest binding
+(`manifest_digest`, `member_count`, and `total_bytes`), and strictly typed proof booleans without
+truthiness coercion (`independent_verification`, consumer migration). Missing, wildcard, malformed, or
+contradictory aliases fail closed.
+
+### Check checkpoint preservation custody
+
+```bash
+uv run python scripts/validation/check_checkpoint_preservation.py --check \
+  --fixture tests/validation/fixtures/checkpoint_preservation/complete.json --format json
+```
+
+The check-only inventory resolves `model_id` references through the model registry, binds producer
+data identity through the oracle trace-URI registry, recomputes byte and companion digests with the
+shared evidence writer, and reads metadata-only loadability from a checkpoint compatibility audit
+receipt (the existing owner's output; no inference and no reimplemented loader). Each artifact ends
+in one stable state: `preservation_ready` or a `blocked_*` state covering ambiguous identity,
+missing lineage, incomplete inventory, missing artifact or companion, partial copy, digest
+mismatch, loadability or contract failure, incomplete training, unsafe destination, and uncleared
+publication. Load status is reported separately (`verified_metadata`, `loadability_unavailable`,
+`loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
+The tool is read-only and emits no private paths.
+
+The durable destination custody proof has this exact required shape:
+
+```json
+{
+  "receipt_id": "opaque-safe-identifier",
+  "sha256": "<64 hexadecimal characters>",
+  "byte_size": 0,
+  "status": "verified"
+}
+```
+
+`status` must be `verified`, `transferred`, or `complete`. The checker accepts the legacy
+field aliases `receipt`, `artifact_sha256`/`digest`, `size`, and
+`transfer_status`/`verification` for `receipt_id`, `sha256`, `byte_size`, and `status`.
+One proof source is allowed: a mapping in `destination.custody_proof`, a mapping in
+`destination.receipt`, or flat proof fields on `destination`. A scalar top-level `receipt` is
+accepted as the flat `receipt_id` alias only when no nested proof mapping is present; a mapping
+in that field is the nested proof source. Supplied aliases must each be
+valid and normalize to the same value; falsey canonical fields paired with fallback aliases,
+contradictory aliases, and multiple or non-mapping proof sources fail closed with
+`destination_custody_incomplete`.
+Single-field failures retain the stable codes `destination_custody_missing`,
+`destination_digest_mismatch`, `destination_size_mismatch`, and
+`destination_transfer_incomplete`. The receipt ID is opaque: this check validates only the
+local receipt ID, digest, size, and status fields. It does not dereference the receipt or prove
+that the ID is cryptographically bound to the destination URI or storage class. Mutable and
+undeclared destinations retain their existing `mutable_destination` and
+`undeclared_destination` behavior.
+
+### Generate complete post-access handoff
+
+```bash
+uv run python scripts/tools/generate_post_access_handoff.py --check \
+  --inventory <COMPUTE_INVENTORY_JSON> --format json
+```
+
+The generator produces a deterministic, sanitized post-access handoff report in JSON or Markdown
+summarizing workloads, scheduler receipts, artifact custody, and environment recreation states.
+It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
+orphan records, and enforces actionable next commands for incomplete runs.
+
+### Freeze and rehearse a bootstrap recipe
+
+Each recipe in [configs/bootstrap_recipes/README.md](../../configs/bootstrap_recipes/README.md)
+freezes an execution class's setup, probe, and cleanup sequence with its source/lock and immutable
+identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/bootstrap_recipes`
+reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
+A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
+
+### Export a restorable source bundle
+
+```bash
+uv run python scripts/tools/source_bundle_export.py --export \
+  --repo "$SOURCE_REPO" --out "$BUNDLE_DIR" --workload-id <id> --format json
+uv run python scripts/tools/source_bundle_export.py --verify \
+  --bundle "$BUNDLE_DIR" --workdir "$SCRATCH_RESTORE" --format json
+```
+
+The bundle records repository URL classification, commit, tree, parents, ref context, vendored
+subproject revisions, generated-source provenance, admitted patch identity, and a compact
+tracked-file inventory, and verifies by cloning into a fresh repository and reproducing those
+identities. Dirty or untracked state is rejected unless an explicit patch is admitted and
+checksum-bound; private or credentialed remotes are never written into the public status.
+
+### Check log retention and bounded diagnostic excerpts
+
+```bash
+uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
+```
+
+The check-only helper requires per-log role, job/task identity, byte/line counts, encoding, completion,
+digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
+Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
+Pruning also requires source paths to stay inside the declared root without symlinks or `..`
+traversal, completion aliases (`completion`/`completion_status`) to agree on one established value,
+a well-formed excerpt policy, and custody with an approved durable class, matching member digests
+and sizes, plus explicit `true` values for `independent_verification`, `transfer_verification` (or
+`transfer_verified`), and `consumer_review` (or `consumer_reviewed`). Malformed or contradictory
+inputs keep eligibility blocked, and malformed structured identity suppresses the excerpt entirely.
+
+Bounded excerpts now prove structured values instead of pattern-matching them. Every structured
+span (a balanced object or array with a quoted key) must parse, and the proof walks it recursively:
+an escaped key, an unparsable span, a composite key that carries an identity or secret token
+(`db.user`, `user_name`, `account.id`), or a nested secret blocks the excerpt with the stable
+`redaction_failed` reason. Nested plain identity keys are still redacted in place, so ordinary
+`{"username": ...}` payloads keep their excerpt with the value replaced.
+
+Custody evidence must bind the transfer, not just assert it. `custody.job_id` (or `manifest_id`)
+must match the manifest job, `custody.destination.locator` (or `destination_locator`/`locator`) must
+name a non-empty immutable destination (the mutable suffixes `:latest`, `/latest`, `:head`, `/head`,
+`:main`, and `/main` are rejected), and `custody.consumer.identity` plus
+`custody.consumer.review_state` (one of `reviewed`, `accepted`, `consumed`, `verified`) must identify
+the reviewing consumer. The custody member set must exactly match the manifest logs: an undeclared
+member blocks with `custody_member_undeclared`, and a missing, mismatched, or unapproved member
+keeps `custody.verified` false.
+
+Source containment is verified at check time with symlink-free final components (`O_NOFOLLOW` on
+the read) and resolved-root containment for every source; concurrent mutation of parent directories
+is outside the static single-writer threat model. Reports expose that boundary explicitly as
+`containment.model: static_single_writer` with `atomic: false` and a pointer to this section, so a
+consumer never mistakes the diagnostic for a hard race-free guarantee.
+
+### Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

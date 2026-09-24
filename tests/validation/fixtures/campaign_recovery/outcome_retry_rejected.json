@@ -1,0 +1,57 @@
+{
+  "campaign_id": "camp_outcome_fail",
+  "runner_class": "benchmark_matrix",
+  "expected_rows": [
+    "camp_outcome_fail::orca::s1::101::r0",
+    "camp_outcome_fail::orca::s1::102::r0"
+  ],
+  "authority_inputs": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "model_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "interruption": {
+    "reason": "collision_failure",
+    "class": "outcome"
+  },
+  "initial_run": {
+    "attempt_index": 1,
+    "job_id": "slurm-2001",
+    "status": "failed",
+    "rows": [
+      {
+        "row_id": "camp_outcome_fail::orca::s1::101::r0",
+        "status": "failed",
+        "error": "robot_collision_with_pedestrian",
+        "artifact_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "artifact_uri": "output/r0.parquet"
+      }
+    ]
+  },
+  "resume_attempt": {
+    "attempt_index": 2,
+    "job_id": "slurm-2002",
+    "status": "completed",
+    "authority_inputs": {
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "model_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "rows": [
+      {
+        "row_id": "camp_outcome_fail::orca::s1::101::r0",
+        "status": "present",
+        "attempt": 2,
+        "artifact_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "artifact_uri": "output/r1.parquet"
+      },
+      {
+        "row_id": "camp_outcome_fail::orca::s1::102::r0",
+        "status": "present",
+        "attempt": 2,
+        "artifact_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "artifact_uri": "output/r2.parquet"
+      }
+    ]
+  }
+}

@@ -762,6 +762,45 @@ def _require_finite(row: Mapping[str, Any], fields: Sequence[str], test_id: str)
             raise ValueError(f"{test_id}: {field} must be finite")
 
 
+def _require_synthesis_domains(row: Mapping[str, Any], test_id: str) -> None:
+    """Require the bounded statistical domains used by the registered rate contrasts."""
+
+    for field in (
+        "pooled_delta_mean",
+        "harm_bound_unadjusted",
+        "noninferiority_bound_unadjusted",
+        "harm_bound",
+        "noninferiority_bound",
+    ):
+        value = float(row[field])
+        if not -1.0 <= value <= 1.0:
+            raise ValueError(f"{test_id}: {field} must be within [-1, 1]")
+
+    pooled_delta_se = float(row["pooled_delta_se"])
+    if pooled_delta_se < 0.0:
+        raise ValueError(f"{test_id}: pooled_delta_se must be non-negative")
+
+    for field in (
+        "p_value_harm_raw",
+        "p_value_harm_holm",
+        "p_value_noninferiority_raw",
+        "p_value_noninferiority_holm",
+    ):
+        value = float(row[field])
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{test_id}: {field} must be within [0, 1]")
+
+    for field in (
+        "harm_adjusted_confidence_level",
+        "noninferiority_adjusted_confidence_level",
+        "familywise_alpha",
+        "directional_family_alpha",
+    ):
+        value = float(row[field])
+        if not 0.0 < value < 1.0:
+            raise ValueError(f"{test_id}: {field} must be within (0, 1)")
+
+
 def _validate_synthesis_row_identity(row: Mapping[str, Any]) -> str:
     """Require a source row ID to agree with its planner, tier, and metric fields."""
 
@@ -797,6 +836,7 @@ def _validate_synthesis_row(
     row = dict(raw_row)
     test_id = _validate_synthesis_row_identity(row)
     _require_finite(row, numeric_fields, test_id)
+    _require_synthesis_domains(row, test_id)
     n_scenarios = row.get("n_scenarios")
     if isinstance(n_scenarios, bool) or not isinstance(n_scenarios, int) or n_scenarios != 6:
         raise ValueError(f"{test_id}: n_scenarios must equal the frozen six-scenario suite")

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark command-line interface entry points and subcommands."""
 
 from __future__ import annotations
 
@@ -20,12 +20,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 def test_cli_baseline_subcommand(tmp_path: Path, capsys):
     # Build a minimal scenario matrix YAML
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify running the baseline subcommand via CLI args executes and computes stats."""
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {
@@ -182,12 +177,7 @@ def test_cli_baseline_omitted_jsonl_forwards_default_sentinel(
 
 def test_cli_list_scenarios(tmp_path: Path, capsys):
     # Minimal scenario matrix YAML
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify listing scenarios from a matrix YAML prints the scenario identifiers."""
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {
@@ -219,12 +209,7 @@ def test_cli_list_scenarios(tmp_path: Path, capsys):
 
 
 def test_cli_validate_config_success(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify validating a valid scenario matrix config returns exit code 0."""
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "s1", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},
@@ -273,12 +258,7 @@ def test_cli_validate_config_marker_spawn_zero_density_is_not_empty_scene(tmp_pa
 
 
 def test_cli_validate_config_errors(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify validating an invalid scenario matrix config returns error details and non-zero exit."""
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "dup", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 0},
@@ -299,11 +279,7 @@ def test_cli_validate_config_errors(tmp_path: Path, capsys):
 
 
 def test_cli_list_algorithms_includes_random(capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        capsys: TODO docstring.
-    """
+    """Verify listing algorithms includes built-in policies such as random."""
     rc = cli_main(["list-algorithms"])
     captured = capsys.readouterr()
     assert rc == 0

@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from scripts.dev import (
+    agent_content_gate,
     blocker_transition,
     gh_issue_rest,
     goal_issue_admission,
@@ -787,6 +788,41 @@ def _body_excerpt(body: Any, *, limit: int) -> tuple[str, bool]:
     return text[:limit], len(text) > limit
 
 
+def _body_author_trust(issue: dict[str, Any], *, labels: list[str]) -> dict[str, Any]:
+    """Classify one issue or PR body through the canonical fail-closed gate.
+
+    The returned receipt entry carries ``classification``, ``reason``, and any
+    own-user flag attribution. Missing author metadata is untrusted.
+    """
+    receipt = agent_content_gate.receipt_for_rows(
+        [
+            {
+                "id": "body",
+                "kind": "pr_body" if issue.get("is_pull_request") else "issue_body",
+                "author": issue.get("user", ""),
+                "body": issue.get("body", ""),
+                "url": issue.get("url", ""),
+                "created_at": issue.get("created_at", ""),
+            }
+        ],
+        labels=labels,
+    )
+    entries = [*receipt["included"], *receipt["excluded"]]
+    return entries[0]
+
+
+def _gated_body_excerpt(body: Any, *, limit: int, trust: dict[str, Any]) -> tuple[str, bool, bool]:
+    """Return a body excerpt only when the author gate trusts the body.
+
+    Returns ``(excerpt, truncated, excluded)``; untrusted content always returns
+    an empty excerpt so it cannot enter a context capsule or prompt digest.
+    """
+    if trust["classification"] in agent_content_gate.TRUSTED_CLASSIFICATIONS:
+        excerpt, truncated = _body_excerpt(body, limit=limit)
+        return excerpt, truncated, False
+    return "", False, True
+
+
 def _load_blocker_decisions(  # noqa: C901 - fail-closed artifact parsing.
     paths: list[str],
 ) -> tuple[dict[int, dict[str, Any]], list[str]]:
@@ -970,17 +1006,26 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         fallback_classification=fallback_classification,
         fallback_reason=fallback_reason,
     )
-    excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
+    trust = _body_author_trust(issue, labels=labels)
+    excerpt, truncated, excerpt_excluded = _gated_body_excerpt(
+        issue.get("body"), limit=body_limit, trust=trust
+    )
     return {
         "number": issue.get("number", number),
         "status": "ok",
         "title": issue.get("title", ""),
         "state": state,
         "url": issue.get("url", ""),
+        "author": issue.get("user", ""),
+        "author_trust": trust["classification"],
+        "author_trust_reason": trust["reason"],
+        "author_trust_flag": trust.get("flag"),
         "labels": labels,
         "assignees": assignees,
         "body_excerpt": excerpt,
         "body_truncated": truncated,
+        "body_excerpt_excluded": excerpt_excluded,
+        "body_excerpt_reason": trust["reason"] if excerpt_excluded else "",
         "claim": _claim_payload(claim),
         "admission": admission,
         "transition": _transition_plan(issue),
@@ -1088,7 +1133,11 @@ def snapshot_claimable_issues(
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
     ``queue_completeness`` is ``complete``. The returned
     ``zero_work_authoritative`` flag makes that boundary machine-readable and
-    is true only for a complete, error-free page-one scan.
+    is true only for a complete, error-free page-one scan. The CLI enforces this
+    boundary at the process exit: an incomplete ``--claimable`` scan exits non-zero
+    after printing the payload. The opt-out restores exit zero only for the
+    literal ``queue_completeness == "incomplete"`` state; unavailable, unknown,
+    or inconsistent authority remains a failure.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1598,14 +1647,26 @@ def snapshot_active_issue_portfolio(
 
 def _context_capsule(issue: dict[str, Any]) -> dict[str, Any]:
     """Return a compact worker-seeding capsule for one issue snapshot."""
+    classification = str(issue.get("author_trust", agent_content_gate.CLASS_UNTRUSTED))
     return {
         "schema": "issue_context_capsule.v1",
         "issue": {
             "number": issue.get("number"),
             "title": issue.get("title", ""),
+            "author": issue.get("author", ""),
+            "author_trust": classification,
             "url": issue.get("url", ""),
             "labels": issue.get("labels", []),
             "body_excerpt": issue.get("body_excerpt", ""),
+            "body_excerpt_excluded": issue.get("body_excerpt_excluded", False),
+            "body_excerpt_reason": issue.get("body_excerpt_reason", ""),
+        },
+        "content_trust": {
+            "schema": agent_content_gate.SCHEMA,
+            "classification": classification,
+            "reason": issue.get("author_trust_reason", agent_content_gate.REASON_MISSING_AUTHOR),
+            "flag": issue.get("author_trust_flag"),
+            "auto_ingest_allowed": classification in agent_content_gate.TRUSTED_CLASSIFICATIONS,
         },
         "admission": issue.get("admission", {}),
         "claim": issue.get("claim", {}),
@@ -1678,12 +1739,25 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--claimable",
         action="store_true",
-        help="Discover bounded open claimable issues without explicit issue numbers.",
+        help=(
+            "Discover bounded open claimable issues without explicit issue numbers; an "
+            "incomplete scan exits non-zero unless --allow-incomplete is passed for the "
+            "literal incomplete state."
+        ),
     )
     parser.add_argument(
         "--include-blocked-external",
         action="store_true",
         help="Include blocked external-input issues in --claimable output.",
+    )
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help=(
+            "Allow only a literal queue_completeness=incomplete --claimable scan to exit "
+            "zero for intentional bounded discovery; unavailable or unknown authority "
+            "remains a failure."
+        ),
     )
     parser.add_argument(
         "--blocked-external-report",
@@ -1744,8 +1818,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _validate_args(args: argparse.Namespace) -> int:
-    """Return nonzero after printing a CLI contract error."""
+def _validate_mode_flags(args: argparse.Namespace) -> int:
+    """Return nonzero for incompatible mode-flag combinations."""
     if args.claimable and args.issues:
         print(
             "--claimable cannot be combined with explicit issue numbers",
@@ -1755,6 +1829,12 @@ def _validate_args(args: argparse.Namespace) -> int:
     if args.include_blocked_external and not args.claimable:
         print(
             "--include-blocked-external requires --claimable",
+            file=sys.stderr,
+        )
+        return 1
+    if args.allow_incomplete and not args.claimable:
+        print(
+            "--allow-incomplete requires --claimable",
             file=sys.stderr,
         )
         return 1
@@ -1780,6 +1860,14 @@ def _validate_args(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    return 0
+
+
+def _validate_args(args: argparse.Namespace) -> int:
+    """Return nonzero after printing a CLI contract error."""
+    mode_error = _validate_mode_flags(args)
+    if mode_error:
+        return mode_error
     if args.limit <= 0:
         print("--limit must be positive", file=sys.stderr)
         return 1
@@ -1832,6 +1920,44 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
     )
 
 
+def _claimable_authority_error(payload: dict[str, Any], *, allow_incomplete: bool) -> str | None:
+    """Return a fail-closed CLI error for claimable queue authority fields."""
+    if "queue_completeness" not in payload:
+        return "claimable queue scan is missing queue_completeness authority"
+    completeness = payload["queue_completeness"]
+    if not isinstance(completeness, str) or completeness not in {
+        "complete",
+        "incomplete",
+        "unavailable",
+    }:
+        return (
+            "claimable queue scan has unknown queue_completeness authority "
+            f"(queue_completeness={completeness!r})"
+        )
+    if "zero_work_authoritative" not in payload:
+        return "claimable queue scan is missing zero_work_authoritative authority"
+    zero_work_authoritative = payload["zero_work_authoritative"]
+    if not isinstance(zero_work_authoritative, bool):
+        return (
+            "claimable queue scan has invalid zero_work_authoritative authority "
+            f"(zero_work_authoritative={zero_work_authoritative!r})"
+        )
+    expected_authority = completeness == "complete"
+    if zero_work_authoritative is not expected_authority:
+        return (
+            "claimable queue scan has inconsistent authority fields "
+            f"(queue_completeness={completeness}, "
+            f"zero_work_authoritative={zero_work_authoritative})"
+        )
+    if completeness == "complete" or (completeness == "incomplete" and allow_incomplete):
+        return None
+    return (
+        "claimable queue scan is not authoritative for zero work "
+        f"(queue_completeness={completeness}); resume with --resume-page/--limit until "
+        "complete, or pass --allow-incomplete only for queue_completeness=incomplete"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
@@ -1857,9 +1983,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
-    if "issues" in payload:
-        return 1 if any(issue.get("status") == "error" for issue in payload["issues"]) else 0
-    return 1 if payload.get("errors") else 0
+    issue_errors = "issues" in payload and any(
+        issue.get("status") == "error" for issue in payload["issues"]
+    )
+    if issue_errors or payload.get("errors"):
+        return 1
+    if args.claimable:
+        authority_error = _claimable_authority_error(
+            payload, allow_incomplete=args.allow_incomplete
+        )
+        if authority_error:
+            print(authority_error, file=sys.stderr)
+            return 1
+    return 0
 
 
 if __name__ == "__main__":

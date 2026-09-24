@@ -21,31 +21,31 @@ class _DummyEnv(Env):
     metadata = {"render_modes": []}
 
     def __init__(self, observation_space: spaces.Space, action_space: spaces.Space) -> None:
-        """TODO docstring. Document this function.
+        """Initialize the env with the given observation and action spaces.
 
         Args:
-            observation_space: TODO docstring.
-            action_space: TODO docstring.
+            observation_space: Space sampled by reset and step.
+            action_space: Action space exposed for wrapper compatibility.
         """
         super().__init__()
         self.observation_space = observation_space
         self.action_space = action_space
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):  # type: ignore[override]
-        """TODO docstring. Document this function.
+        """Reset the env and return a sampled observation with empty info.
 
         Args:
-            seed: TODO docstring.
-            options: TODO docstring.
+            seed: Optional seed forwarded to the base reset.
+            options: Unused gymnasium reset options.
         """
         super().reset(seed=seed)
         return self.observation_space.sample(), {}
 
     def step(self, action):  # type: ignore[override]
-        """TODO docstring. Document this function.
+        """Return a sampled observation with zero reward and no termination.
 
         Args:
-            action: TODO docstring.
+            action: Unused action argument.
         """
         observation = self.observation_space.sample()
         reward = 0.0
@@ -55,12 +55,12 @@ class _DummyEnv(Env):
         return observation, reward, terminated, truncated, info
 
     def render(self):  # type: ignore[override]
-        """TODO docstring. Document this function."""
+        """Return None because this stub environment does not render."""
         return None
 
 
 def test_maybe_flatten_env_noop_for_box_space():
-    """TODO docstring. Document this function."""
+    """Box observation spaces pass through unchanged and keep their shape."""
     observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
     action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
     env = _DummyEnv(observation_space, action_space)
@@ -73,7 +73,7 @@ def test_maybe_flatten_env_noop_for_box_space():
 
 
 def test_maybe_flatten_env_wraps_dict_space():
-    """TODO docstring. Document this function."""
+    """Dict observation spaces are wrapped so flattened observations have shape (5,)."""
     observation_space = spaces.Dict(
         {
             "drive_state": spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32),

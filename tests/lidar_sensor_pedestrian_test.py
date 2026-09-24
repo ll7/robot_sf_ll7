@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for lidar ray scanning against pedestrian circles."""
 
 from math import cos, pi, sin
 
@@ -13,15 +13,15 @@ NO_SCAN_NOISE = [0.0, 0.0]
 
 
 def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D:
-    """TODO docstring. Document this function.
+    """Rotate a 2D point around a center by an angle in radians.
 
     Args:
-        point: TODO docstring.
-        rot_center: TODO docstring.
-        rot_angle_rad: TODO docstring.
+        point: Point to rotate as (x, y).
+        rot_center: Rotation center as (x, y).
+        rot_angle_rad: Counterclockwise rotation angle in radians.
 
     Returns:
-        TODO docstring.
+        Rotated point as (x, y).
     """
     x, y = point[0] - rot_center[0], point[1] - rot_center[1]
     s, c = sin(rot_angle_rad), cos(rot_angle_rad)
@@ -30,7 +30,7 @@ def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D
 
 
 def test_scanner_detects_single_pedestrian():
-    """TODO docstring. Document this function."""
+    """A pedestrian at (2.4, 0) yields a scan distance of 2."""
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -54,7 +54,7 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
     # construct 360 pedestrian circles arranges as isosceles,
     # scanned from the map's center where each ray hits a circle
     # orthogonally after a distance of 2.0
-    """TODO docstring. Document this function."""
+    """360 pedestrian circles around the map center return distance 2 on all rays."""
     lidar_n_rays = 360
     cached_angles = np.linspace(0, 2 * pi, lidar_n_rays + 1)[:-1]
     ped_pos = np.array([rotate((2.4, 0), (0, 0), rot) for rot in cached_angles])
@@ -76,7 +76,7 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
 
 
 def test_scanner_detects_only_closest_pedestrian():
-    """TODO docstring. Document this function."""
+    """With pedestrians at x=2.4 and x=3.4 the ray reports the nearer distance 2."""
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0], [3.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -97,7 +97,7 @@ def test_scanner_detects_only_closest_pedestrian():
 
 
 def test_scanner_detects_nothing_when_there_is_nothing():
-    """TODO docstring. Document this function."""
+    """An occupancy map with no obstacles or pedestrians returns the max range 5."""
     lidar_n_rays = 1
     occupancy = ContinuousOccupancy(
         10,
@@ -117,7 +117,7 @@ def test_scanner_detects_nothing_when_there_is_nothing():
 
 
 def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
-    """TODO docstring. Document this function."""
+    """A ray pointing away from the only pedestrian returns the max range 5."""
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -138,7 +138,7 @@ def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
 
 
 def test_scanner_detect_robot():
-    """TODO docstring. Document this function."""
+    """An ego-pedestrian occupancy with enemy at (3, 0) and radius 1 returns distance 2."""
     lidar_n_rays = 1
     occupancy = EgoPedContinuousOccupancy(
         10,
@@ -160,7 +160,7 @@ def test_scanner_detect_robot():
 
 
 def test_scanner_robot_detect_ego_ped():
-    """TODO docstring. Document this function."""
+    """A ray toward +x picks the nearest circle among two pedestrians and the ego pedestrian."""
     lidar_n_rays = 1
     ped_pos = np.array([[3.4, 0], [4.4, 0]])
     ego_ped_pos = (2.4, 0)

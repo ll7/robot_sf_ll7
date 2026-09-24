@@ -7,12 +7,24 @@ Start from the contract, then the release guide section:
 [benchmark_data_release_s30_h600_2026_09_erratum_1.json](../../configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json),
 [../RELEASE.md](../RELEASE.md), [../benchmark_release_reproducibility.md](../benchmark_release_reproducibility.md).
 
+Issue #8829 compute-window capacity planner: deterministic, fail-closed ranking
+of admitted workload metadata across CPU, GPU, CARLA, and host-pinned lanes;
+operational planning only, with no scheduler mutation or benchmark claim:
+[issue_8829_compute_window_capacity_planner.md](issue_8829_compute_window_capacity_planner.md).
+
 Issue #8566 source-bound uncertainty and component-contrast fixture packet: a deterministic,
 fixture-only adapter with source/release identity, paired scenario-block uncertainty, separate
 terminal-outcome, safety-wrapper, and Social Navigation Quality Index (SNQI) components, and
 explicitly unavailable #7980/September source-complete coverage. It is diagnostic-only and does
 not establish empirical, benchmark, safety, causal, planner-ranking, release, or paper claims:
 [evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md](evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md).
+
+Issue #6151 simulator-dependence synthesis: the bounded negative verdict is
+`invalid_missing_evidence` because the recovered job-13512 bundle has conflicting execution
+lineage and no materialized SNQI, while the older slice is rank-non-identifiable. The synthesis
+preserves checksum-covered custody and contradiction records without promoting ranking,
+benchmark, realism, sim-to-real, safety, or paper-facing claims:
+[evidence/issue_6151_simulator_dependence_synthesis_2026-09-13/README.md](evidence/issue_6151_simulator_dependence_synthesis_2026-09-13/README.md).
 
 Issue #8222 obstacle-force compatibility boundary: preserves frozen/unversioned historical laws,
 separates the fast-pysf segment kernel from the vectorized planner point site, and defines the
@@ -533,6 +545,15 @@ Recent camera-ready GPU lifecycle and cross-arm VRAM leak fix:
 
 Soft Social Navigation Quality Index (SNQI) warning exit-lane integration state:
 [issue_5244_state.yaml](issue_5244_state.yaml).
+
+Artifact retention, preservation, and cleanup guide: operational reference defining which Robot SF outputs are disposable, diagnostic, promoted, or protected; what counts as verified preservation; and when cleanup is safe:
+[artifact_retention_and_cleanup.md](artifact_retention_and_cleanup.md).
+
+Historical evidence registry bindings (`evidence_registry_historical_bindings.v1`): records reviewed historical references that remain valid for current evidence records after source file moves in repository history, verifying records against immutable Git identities before suppressing artifact checksum mismatches:
+[evidence_registry_historical_bindings.v1.md](evidence_registry_historical_bindings.v1.md).
+
+Issue #1496 BC-warm-start comparison packet: freezes the outcome-free comparison contract between an RL-only PPO arm and a behavior-cloning (BC) warm-start followed by approved PPO fine-tuning, with matched training seeds and validation checkpoints:
+[issue_1496_bc_warm_start_comparison_packet.md](issue_1496_bc_warm_start_comparison_packet.md).
 
 Recent hard-guarded hybrid-learning synthesis closure audit:
 [issue_1489_closure_audit_2026-07-05.md](evidence/issue_1489_closure_audit_2026-07-05.md).

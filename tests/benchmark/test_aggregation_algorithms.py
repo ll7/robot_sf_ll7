@@ -16,16 +16,18 @@ def _make_record(
     scenario_id: str = "scenario-1",
     success_rate: float = 1.0,
 ) -> dict[str, object]:
-    """TODO docstring. Document this function.
+    """Build a minimal episode record for algorithm-aware aggregation tests.
 
     Args:
-        algo: TODO docstring.
-        include_nested: TODO docstring.
-        scenario_id: TODO docstring.
-        success_rate: TODO docstring.
+        algo: Algorithm identifier stored in ``scenario_params``; when None the
+            record intentionally omits algorithm metadata.
+        include_nested: When True keep ``algo`` in ``scenario_params``; when False
+            leave the nested mapping empty to exercise top-level fallback.
+        scenario_id: Scenario identifier used for grouping and the episode id.
+        success_rate: Success-rate metric value stored under ``metrics``.
 
     Returns:
-        TODO docstring.
+        Episode record dictionary consumed by ``compute_aggregates_with_ci``.
     """
     record: dict[str, object] = {
         "episode_id": f"{scenario_id}-{algo or 'none'}",

@@ -19,28 +19,28 @@ class DummySensor:
     """Test sensor implementation."""
 
     def __init__(self, config):
-        """TODO docstring. Document this function.
+        """Store the supplied config and initialize the observation to None.
 
         Args:
-            config: TODO docstring.
+            config: Sensor configuration mapping stored on the instance.
         """
         self.config = config
         self.observation = None
 
     def reset(self) -> None:
-        """TODO docstring. Document this function."""
+        """Clear the stored observation."""
         self.observation = None
 
     def step(self, state) -> None:
-        """TODO docstring. Document this function.
+        """Record the given state as the current observation.
 
         Args:
-            state: TODO docstring.
+            state: State value stored as the observation.
         """
         self.observation = state
 
     def get_observation(self):
-        """TODO docstring. Document this function."""
+        """Return the most recently stored observation."""
         return self.observation
 
 
@@ -74,10 +74,10 @@ def test_register_duplicate_raises_error(clean_registry):
     """Test that registering duplicate sensor name raises error."""
 
     def dummy_factory(config):
-        """TODO docstring. Document this function.
+        """Build a DummySensor from the supplied config.
 
         Args:
-            config: TODO docstring.
+            config: Configuration mapping forwarded to DummySensor.
         """
         return DummySensor(config)
 
@@ -91,18 +91,18 @@ def test_register_duplicate_with_override(clean_registry):
     """Test that override=True allows re-registration."""
 
     def factory1(config):
-        """TODO docstring. Document this function.
+        """Build a DummySensor without modifying the config.
 
         Args:
-            config: TODO docstring.
+            config: Configuration mapping forwarded to DummySensor.
         """
         return DummySensor(config)
 
     def factory2(config):
-        """TODO docstring. Document this function.
+        """Build a DummySensor with an added overridden flag.
 
         Args:
-            config: TODO docstring.
+            config: Configuration mapping copied and extended with overridden=True.
         """
         return DummySensor({**config, "overridden": True})
 

@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev import check_ci_needs
 from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev.check_pr_ci_status import (
     _fetch_ci_status,
@@ -137,8 +138,12 @@ def test_main_with_explicit_pr_and_failure_exit(
 
 def test_main_ignores_superseded_failed_check_run_after_successful_pr_body_edit(
     capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A refreshed workflow job should replace its earlier failed run in the CI summary."""
+    # Scope the required-check gate to the job under test; required-identity
+    # enforcement itself is covered by the dedicated issue #9174 fixtures.
+    monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("pr-body-contracts",))
     mock_data = json.dumps(
         {
             "number": 5136,
@@ -300,7 +305,10 @@ def test_current_cancellation_remains_a_failure() -> None:
     assert superseded == 0
 
 
-def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
+def test_main_accepts_pr_flag_alias(
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """--pr should work as a named alias for the positional PR number."""
     mock_data = json.dumps(
         {
@@ -317,6 +325,11 @@ def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
         }
     )
 
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (None, "changed-file proof not exercised"),
+    )
     with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
         rc = main(["--pr", "42"])
@@ -329,7 +342,10 @@ def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
     assert "PR #42" in capsys.readouterr().out
 
 
-def test_main_passes_explicit_repo_to_normal_monitor(capsys: pytest.CaptureFixture) -> None:
+def test_main_passes_explicit_repo_to_normal_monitor(
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """An explicit repository must route the normal PR read away from the local remote."""
     mock_data = json.dumps(
         {
@@ -344,6 +360,11 @@ def test_main_passes_explicit_repo_to_normal_monitor(capsys: pytest.CaptureFixtu
         }
     )
 
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (None, "changed-file proof not exercised"),
+    )
     with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
         rc = main(["42", "--repo", "ll7/robot_sf_ll7"])
@@ -356,6 +377,7 @@ def test_main_passes_explicit_repo_to_normal_monitor(capsys: pytest.CaptureFixtu
 
 def test_main_passes_explicit_repo_when_resolving_pr_from_branch(
     capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Branch-based PR resolution and the subsequent CI read share the explicit repository."""
     pr_data = json.dumps(
@@ -371,6 +393,11 @@ def test_main_passes_explicit_repo_when_resolving_pr_from_branch(
         }
     )
 
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (None, "changed-file proof not exercised"),
+    )
     with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="42\n", stderr=""),
@@ -546,6 +573,435 @@ def test_main_treats_error_legacy_status_as_failure(
     captured = capsys.readouterr()
     assert "checks: failure" in captured.out
     assert "error=1" in captured.out
+
+
+# --- Required-check identity gate (issue #9174) --------------------------------------------
+
+BOT_ONLY_ROLLUP: list[dict[str, object]] = [
+    {"name": "CodeRabbit", "status": "completed", "conclusion": "success"},
+    {"name": "route-coderabbit", "status": "completed", "conclusion": "success"},
+]
+
+
+def _required_job_checks() -> list[dict[str, object]]:
+    """Return one green check per required identity, using real matrix display names."""
+    matrix_names = {
+        "fast-feedback": "fast-feedback (1)",
+        "compat-matrix": "compat-matrix (ubuntu-latest, 3.11)",
+    }
+    return [
+        {
+            "name": matrix_names.get(job, job),
+            "status": "completed",
+            "conclusion": "success",
+        }
+        for job in check_ci_needs.REQUIRED_JOBS
+    ]
+
+
+def _fetch_with_rollup(
+    monkeypatch: pytest.MonkeyPatch, rollup: list[dict[str, object]]
+) -> dict[str, Any]:
+    """Run the GraphQL fetch path over one fixture rollup."""
+    payload = {
+        "number": 9174,
+        "title": "required identity gate",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "required-identity",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": rollup,
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    return _fetch_ci_status("9174")
+
+
+def test_partial_bot_only_rollup_is_pending_and_names_missing_required_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #9174: non-CI bot checks must never read as a green required rollup."""
+    data = _fetch_with_rollup(monkeypatch, list(BOT_ONLY_ROLLUP))
+
+    checks = data["checks"]
+    assert checks["overall"] == "pending"
+    required = checks["required_checks"]
+    assert required["reason"] == "required_checks_absent"
+    assert required["present"] == []
+    assert required["missing"] == list(check_ci_needs.REQUIRED_JOBS)
+    assert checks["pending_reason"] == "required_checks_absent"
+
+
+def test_queued_dispatched_run_with_no_attached_check_runs_is_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #9174: a queued run with no attached check runs is absent, not green."""
+    data = _fetch_with_rollup(monkeypatch, [])
+
+    checks = data["checks"]
+    assert "ci" not in checks["names"]
+    assert checks["overall"] == "pending"
+    assert checks["required_checks"]["reason"] == "required_checks_absent"
+    assert checks["required_checks"]["missing"]
+
+
+def test_complete_green_required_rollup_reports_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """All declared required identities present and green is the only success shape."""
+    data = _fetch_with_rollup(monkeypatch, _required_job_checks())
+
+    checks = data["checks"]
+    assert checks["overall"] == "success"
+    assert checks["required_checks"]["missing"] == []
+    assert checks["required_checks"]["not_green"] == []
+    assert checks["required_checks"]["reason"] is None
+
+
+def test_green_aggregate_ci_check_proves_required_identities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A green aggregate ``ci`` check is the workflow's proof that required needs passed."""
+    rollup = [{"name": "ci", "status": "completed", "conclusion": "success"}, *BOT_ONLY_ROLLUP]
+    data = _fetch_with_rollup(monkeypatch, rollup)
+
+    checks = data["checks"]
+    assert checks["overall"] == "success"
+    assert checks["required_checks"]["missing"] == []
+    assert checks["required_checks"]["reason"] is None
+
+
+def test_complete_docs_only_scope_converts_absent_required_checks_to_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fully ignored changed-file set is the only absent-check success exception."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (["README.md", "docs/monitoring.md"], None),
+    )
+    data = _fetch_with_rollup(monkeypatch, list(BOT_ONLY_ROLLUP))
+
+    checks = data["checks"]
+    assert checks["overall"] == "success"
+    assert checks["success_reason"] == "ci_not_required_docs_only"
+    assert "pending_reason" not in checks
+    assert checks["docs_only"] == {
+        "source": "check_ci_needs.CI_PATHS_IGNORE_PATTERNS",
+        "patterns": ["**/*.md", "docs/**"],
+        "changed_file_count": 2,
+        "status": "proven",
+        "reason": "ci_not_required_docs_only",
+    }
+    assert checks["required_checks"]["reason"] == "required_checks_absent"
+    assert "disposition: ci_not_required_docs_only" in _format_human(data)
+
+
+@pytest.mark.parametrize("conclusion", ["skipped", "cancelled", "failure"])
+def test_non_green_required_identity_blocks_docs_only_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    conclusion: str,
+) -> None:
+    """A non-green required identity cannot be hidden by docs-only scope."""
+    rollup = [
+        *BOT_ONLY_ROLLUP,
+        {"name": "fast-feedback (1)", "status": "completed", "conclusion": conclusion},
+    ]
+    data = _fetch_with_rollup(monkeypatch, rollup)
+
+    checks = data["checks"]
+    assert checks["required_checks"]["not_green"] == ["fast-feedback"]
+    assert checks["overall"] in {"pending", "failure"}
+    assert checks.get("success_reason") != "ci_not_required_docs_only"
+
+
+def test_docs_only_exception_requires_expected_head_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing PR head cannot authorize a changed-file scope exception."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (["README.md"], None),
+    )
+    checks: dict[str, Any] = {
+        "overall": "pending",
+        "required_checks": {"missing": ["fast-feedback"], "not_green": []},
+    }
+
+    result = ci_status._apply_docs_only_exception(
+        checks,
+        list(BOT_ONLY_ROLLUP),
+        "9198",
+        repo="ll7/robot_sf_ll7",
+        head_sha="",
+    )
+
+    assert result is checks
+    assert checks["overall"] == "pending"
+    assert "docs_only" not in checks
+    assert "success_reason" not in checks
+
+
+def test_docs_only_success_is_exposed_in_monitor_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """The one-shot monitor carries the docs-only reason in JSON and human output."""
+    payload = {
+        "number": 9174,
+        "title": "docs-only monitor",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "docs-only",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": list(BOT_ONLY_ROLLUP),
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (["CHANGELOG.md"], None),
+    )
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")
+        rc = main(["9174", "--json"])
+
+    assert rc == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["checks"]["success_reason"] == "ci_not_required_docs_only"
+    assert result["monitor"]["success_reason"] == "ci_not_required_docs_only"
+    assert result["monitor"]["docs_only"]["status"] == "proven"
+
+
+def test_mixed_scope_keeps_absent_required_checks_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One code-bearing file prevents the docs-only exception."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (["docs/monitoring.md", "scripts/dev/check.py"], None),
+    )
+    data = _fetch_with_rollup(monkeypatch, list(BOT_ONLY_ROLLUP))
+
+    checks = data["checks"]
+    assert checks["overall"] == "pending"
+    assert checks["required_checks"]["reason"] == "required_checks_absent"
+    assert checks["pending_reason"] == "required_checks_absent"
+    assert checks["docs_only"]["status"] == "not_applicable"
+    assert "success_reason" not in checks
+
+
+@pytest.mark.parametrize(
+    "inventory",
+    [
+        (None, "changed-file response is unavailable"),
+        ([{"filename": "README.md"}], "changed-file response is malformed"),
+    ],
+)
+def test_incomplete_docs_only_inventory_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    inventory: tuple[object, str],
+) -> None:
+    """Unavailable or malformed scope evidence cannot authorize docs-only success."""
+    changed_files, error = inventory
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (changed_files, error),
+    )
+    data = _fetch_with_rollup(monkeypatch, list(BOT_ONLY_ROLLUP))
+
+    checks = data["checks"]
+    assert checks["overall"] == "pending"
+    assert checks["required_checks"]["reason"] == "required_checks_absent"
+    assert checks["docs_only"]["status"] == "unavailable"
+    assert "success_reason" not in checks
+
+
+def test_changed_file_inventory_is_cached_for_one_monitor_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated polls reuse one immutable changed-file read and its result."""
+    payload = {
+        "number": 9174,
+        "title": "cached docs-only monitor",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "cached-docs-only",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": list(BOT_ONLY_ROLLUP),
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        ci_status,
+        "_gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    calls: list[str] = []
+
+    def fetch_changed_file_page(*args: object, **kwargs: object) -> tuple[list[str], None]:
+        calls.append("read")
+        return ["README.md"], None
+
+    monkeypatch.setattr(ci_status, "_fetch_pr_changed_file_page", fetch_changed_file_page)
+    cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] = {}
+    ci_status._fetch_ci_status("9174", changed_files_cache=cache)
+    ci_status._fetch_ci_status("9174", changed_files_cache=cache)
+
+    assert calls == ["read"]
+
+
+def test_changed_file_inventory_requires_a_short_terminal_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full page at the pagination boundary cannot be treated as complete proof."""
+    monkeypatch.setattr(ci_status, "_MAX_CHANGED_FILES_PAGES", 1)
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_file_page",
+        lambda *args, **kwargs: (["README.md"] * ci_status._CHANGED_FILES_PAGE_SIZE, None),
+    )
+
+    changed_files, error = ci_status._fetch_pr_changed_files(
+        "9198",
+        repo="ll7/robot_sf_ll7",
+    )
+
+    assert changed_files is None
+    assert error == "changed-file response exceeded the bounded pagination limit"
+
+
+def test_changed_file_inventory_fails_closed_when_pr_head_moves_during_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed PR head invalidates the inventory used for docs-only evidence."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_file_page",
+        lambda *args, **kwargs: (["README.md"], None),
+    )
+    observed_paths: list[str] = []
+
+    def read_pr(path: str, repo: str) -> dict[str, object]:
+        observed_paths.append(path)
+        return {"head": {"sha": "b" * 40}}
+
+    monkeypatch.setattr(ci_status, "_rest_api_get_for_repo", read_pr)
+
+    changed_files, error = ci_status._fetch_pr_changed_files(
+        "9198",
+        repo="ll7/robot_sf_ll7",
+        head_sha=FULL_SHA,
+    )
+
+    assert changed_files is None
+    assert error == "PR head changed during changed-file inventory"
+    assert observed_paths == ["pulls/9198"]
+
+
+def test_changed_file_inventory_requires_expected_head_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A complete inventory without a requested head is unavailable evidence."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_file_page",
+        lambda *args, **kwargs: (["README.md"], None),
+    )
+
+    changed_files, error = ci_status._fetch_pr_changed_files(
+        "9198",
+        repo="ll7/robot_sf_ll7",
+    )
+
+    assert changed_files is None
+    assert error == "changed-file inventory head verification is unavailable"
+
+
+def test_changed_file_inventory_rejects_malformed_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed changed-file record is not valid docs-only evidence."""
+    monkeypatch.setattr(
+        ci_status,
+        "_rest_api_get",
+        lambda *args, **kwargs: [{"filename": "README.md"}, {"filename": ""}],
+    )
+
+    changed_files, error = ci_status._fetch_pr_changed_files(
+        "9198",
+        repo="ll7/robot_sf_ll7",
+    )
+
+    assert changed_files is None
+    assert error == "changed-file response contains an invalid filename"
+
+
+def test_partial_rollup_monitor_metadata_names_missing_required_checks(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Issue #9174: the JSON monitor metadata carries the reason and missing identities."""
+    mock_data = json.dumps(
+        {
+            "number": 9174,
+            "title": "partial monitor",
+            "state": "OPEN",
+            "mergeable": "UNKNOWN",
+            "headRefName": "partial-monitor",
+            "headRefOid": FULL_SHA,
+            "statusCheckRollup": list(BOT_ONLY_ROLLUP),
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["9174", "--json", "--poll-attempts", "2", "--poll-interval", "0"])
+
+    assert rc == 2
+    payloads = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    first = payloads[0]
+    assert first["checks"]["overall"] == "pending"
+    assert first["monitor"]["pending_reason"] == "required_checks_absent"
+    assert first["monitor"]["required_checks"]["reason"] == "required_checks_absent"
+    assert "fast-feedback" in first["monitor"]["required_checks"]["missing"]
+
+
+def test_no_required_checks_configured_is_unknown_with_stable_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Issue #9174: an empty identity set is named and can never report success."""
+    monkeypatch.setattr(ci_status, "required_check_identities", lambda: ())
+    mock_data = json.dumps(
+        {
+            "number": 9174,
+            "title": "no required contract",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "no-required-contract",
+            "headRefOid": FULL_SHA,
+            "statusCheckRollup": [
+                {"name": "ci", "status": "completed", "conclusion": "success"},
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        main(["9174", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["checks"]["overall"] == "unknown"
+    assert payload["checks"]["required_checks"]["reason"] == "no_required_checks_configured"
+    assert payload["monitor"]["required_checks"]["reason"] == "no_required_checks_configured"
 
 
 @pytest.mark.parametrize(
@@ -816,8 +1272,12 @@ def test_main_bounded_polling_stops_on_success(
 
 def test_main_bounded_polling_json_includes_monitor_metadata(
     capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """JSON polling should emit compact monitor metadata suitable for a delegation ledger."""
+    # The fixture drives one aggregate ``ci`` check; required-identity enforcement
+    # itself is covered by the dedicated issue #9174 fixtures.
+    monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("ci",))
     pending_data = json.dumps(
         {
             "number": 9,
@@ -1402,6 +1862,9 @@ def test_rest_workflow_identity_preserves_supersession_and_fail_closed_cases(
     expected_superseded: int,
 ) -> None:
     """REST workflow IDs must suppress only proven reruns and preserve every failure boundary."""
+    # Scope required-identity enforcement to the job under test (issue #9174 has
+    # dedicated fixtures for the required-check gate itself).
+    monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("pr-body-contracts",))
     runs = [
         _rest_check_run(
             run_id=101,
@@ -1766,6 +2229,9 @@ def test_summarize_check_runs_excludes_genuine_in_progress_job_from_lag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A workflow and job that are still running remain ordinary pending work."""
+    # Scope required-identity enforcement to the observed aggregate check; the
+    # required-check gate has dedicated issue #9174 fixtures.
+    monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("ci",))
     monkeypatch.setattr(
         "scripts.dev.check_pr_ci_status._rest_api_get",
         lambda path: (
@@ -2057,6 +2523,9 @@ def test_fetch_ci_status_prefers_queued_job_creation_over_workflow_age(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A newer queued job timestamp prevents an old workflow from creating a false stale gate."""
+    # Scope required-identity enforcement to the observed aggregate check; the
+    # required-check gate has dedicated issue #9174 fixtures.
+    monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("ci",))
     payload = {
         "number": 7003,
         "title": "newly queued job",

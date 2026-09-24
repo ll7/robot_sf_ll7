@@ -8,6 +8,7 @@ All tests use mocked GitHub CLI payloads — no network access required.
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -511,8 +512,11 @@ class TestMainCLI:
         )
         monkeypatch.setattr(
             scanner,
-            "fetch_merged_prs_for_issue",
-            lambda *, repo, issue_number, limit=30: [],
+            "fetch_merged_pr_inventory",
+            lambda *, repo, max_pages=scanner.DEFAULT_MAX_PR_PAGES: (
+                [],
+                {"mode": "rest", "truncated": False},
+            ),
         )
         monkeypatch.setattr(
             scanner,
@@ -540,7 +544,12 @@ class TestMainCLI:
         monkeypatch.setattr(scanner, "fetch_pr_files", lambda *, repo, pr_number: [])
         monkeypatch.setattr(scanner, "fetch_issue_state", lambda *, repo, number: "OPEN")
         monkeypatch.setattr(
-            scanner, "fetch_merged_prs_for_issue", lambda *, repo, issue_number, limit=30: []
+            scanner,
+            "fetch_merged_pr_inventory",
+            lambda *, repo, max_pages=scanner.DEFAULT_MAX_PR_PAGES: (
+                [],
+                {"mode": "rest", "truncated": False},
+            ),
         )
         monkeypatch.setattr(
             scanner,
@@ -571,7 +580,12 @@ class TestMainCLI:
         monkeypatch.setattr(scanner, "fetch_pr_files", lambda *, repo, pr_number: ["a.py"])
         monkeypatch.setattr(scanner, "fetch_issue_state", lambda *, repo, number: "OPEN")
         monkeypatch.setattr(
-            scanner, "fetch_merged_prs_for_issue", lambda *, repo, issue_number, limit=30: []
+            scanner,
+            "fetch_merged_pr_inventory",
+            lambda *, repo, max_pages=scanner.DEFAULT_MAX_PR_PAGES: (
+                [],
+                {"mode": "rest", "truncated": False},
+            ),
         )
         monkeypatch.setattr(
             scanner,
@@ -642,78 +656,329 @@ class TestMainCLI:
 
 
 # ---------------------------------------------------------------------------
-# fetch_merged_prs_for_issue pattern matching
+# Search-throttle regression (issue #8927)
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_merged_prs_pattern_matches_correctly() -> None:
-    """The pattern matching finds 'Closes #N' in PR body (case-insensitive, word boundary)."""
-    raw = [
-        {
-            "number": 10,
-            "title": "PR A",
-            "body": "Closes #42. Some text.",
-            "url": "https://example.com/pull/10",
-        },
-        {
-            "number": 11,
-            "title": "PR B",
-            "body": "Refs #42 no close.",
-            "url": "https://example.com/pull/11",
-        },
-        {
-            "number": 12,
-            "title": "PR C",
-            "body": "closes #42 and more.",
-            "url": "https://example.com/pull/12",
-        },
-        {
-            "number": 13,
-            "title": "PR D",
-            "body": "Closes #4200 not our issue.",
-            "url": "https://example.com/pull/13",
-        },
+def _draft_api_row(number: int, body: str) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": f"Draft PR #{number}",
+        "body": body,
+        "url": f"https://github.com/ll7/robot_sf_ll7/pull/{number}",
+        "createdAt": _now_iso(),
+        "updatedAt": _now_iso(),
+    }
+
+
+def _throttling_scanner_subprocess(
+    draft_rows: list[dict[str, Any]],
+    *,
+    search_calls: list[list[str]],
+) -> Any:
+    """A scanner subprocess stand-in whose search endpoint always returns HTTP 403."""
+
+    def fake_run(
+        command: list[str],
+        check: bool = False,
+        capture_output: bool = True,
+        text: bool = True,
+        **_: Any,
+    ) -> subprocess.CompletedProcess[str]:
+        if "search" in command:
+            search_calls.append(command)
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=command,
+                stderr="HTTP 403: API rate limit exceeded",
+            )
+        if command[:2] == ["gh", "pr"] and "list" in command:
+            stdout = json.dumps(draft_rows)
+        elif command[:2] == ["gh", "pr"] and "view" in command:
+            stdout = json.dumps({"commits": []})
+        elif command[:2] == ["gh", "issue"]:
+            stdout = json.dumps({"state": "OPEN"})
+        else:
+            stdout = ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    return fake_run
+
+
+def test_main_completes_from_rest_inventory_when_search_is_throttled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """A 403 search endpoint cannot block rule 2 once it is REST-backed."""
+    search_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        scanner.subprocess,
+        "run",
+        _throttling_scanner_subprocess(
+            [_draft_api_row(7, "Closes #42")],
+            search_calls=search_calls,
+        ),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_gh_api_get",
+        lambda path, **_: subprocess.CompletedProcess(
+            ["gh", "api", path],
+            0,
+            stdout=json.dumps([_rest_pr_row(9000, body="Closes #42")]),
+        ),
+    )
+    output_path = tmp_path / "search-throttled.json"
+
+    code = scanner.main(["--repo", "ll7/robot_sf_ll7", "--output", str(output_path)])
+
+    assert search_calls == []
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["quota_degraded"] is False
+    assert payload["candidate_count"] == 1
+    candidate = payload["candidates"][0]
+    assert candidate["pr"]["number"] == 7
+    assert "superseded_by_merged_pr" in candidate["rules"]
+    assert any("9000" in line for line in candidate["evidence"])
+    # The hard candidate still fails the run, but for the candidate reason, not quota.
+    assert payload["ok"] is False
+    assert payload["failure_summary"]["reason"] == "superseded_draft_candidates_found"
+    assert code == 1
+
+
+def test_main_reports_quota_degraded_when_rest_inventory_is_forbidden(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path,
+) -> None:
+    """A 403 REST inventory reports quota_degraded and exits nonzero, even with --check."""
+    search_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        scanner.subprocess,
+        "run",
+        _throttling_scanner_subprocess(
+            [_draft_api_row(7, "Closes #42")],
+            search_calls=search_calls,
+        ),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_gh_api_get",
+        lambda path, **_: subprocess.CompletedProcess(
+            ["gh", "api", path],
+            1,
+            stdout="",
+            stderr="HTTP 403: API rate limit exceeded",
+        ),
+    )
+    output_path = tmp_path / "degraded.json"
+
+    code = scanner.main(["--check", "--repo", "ll7/robot_sf_ll7", "--output", str(output_path)])
+
+    assert code == 1
+    assert search_calls == []
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["ok"] is False
+    assert payload["quota_degraded"] is True
+    assert "HTTP 403" in payload["degraded_reason"]
+    assert payload["merged_pr_inventory"]["error"]
+    assert payload["failure_summary"]["reason"] == "merged_pr_inventory_degraded"
+    assert "cannot verify" in capsys.readouterr().err
+
+
+def test_main_reports_quota_degraded_when_inventory_is_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Hitting the page budget marks coverage degraded instead of empty-clean."""
+    full_page = [_rest_pr_row(number) for number in range(100)]
+    monkeypatch.setattr(
+        scanner,
+        "fetch_draft_prs",
+        lambda *, repo, limit: ([_draft(number=7, body="Closes #42")], False),
+    )
+    monkeypatch.setattr(scanner, "fetch_pr_files", lambda *, repo, pr_number: [])
+    monkeypatch.setattr(scanner, "fetch_issue_state", lambda *, repo, number: "OPEN")
+    monkeypatch.setattr(
+        scanner,
+        "get_modified_files_on_main_since",
+        lambda *, repo, pr_number, branch="main": [],
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_gh_api_get",
+        lambda path, **_: subprocess.CompletedProcess(
+            ["gh", "api", path], 0, stdout=json.dumps(full_page)
+        ),
+    )
+    output_path = tmp_path / "truncated.json"
+
+    code = scanner.main(
+        ["--repo", "ll7/robot_sf_ll7", "--max-pr-pages", "1", "--output", str(output_path)]
+    )
+
+    assert code == 1
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["ok"] is False
+    assert payload["quota_degraded"] is True
+    assert payload["merged_pr_inventory"]["truncated"] is True
+    assert "truncated" in payload["degraded_reason"]
+
+
+def test_report_and_markdown_expose_quota_degraded() -> None:
+    """The degraded status is machine-readable and visible in the markdown summary."""
+    report = scanner.build_report(
+        repo="ll7/robot_sf_ll7",
+        candidates=[],
+        scanned_count=3,
+        quota_degraded=True,
+        degraded_reason="merged-PR REST inventory unavailable",
+    )
+
+    assert report["ok"] is False
+    assert report["quota_degraded"] is True
+    assert report["failure_summary"]["reason"] == "merged_pr_inventory_degraded"
+    assert "degraded" in scanner.build_markdown(report).lower()
+
+
+# ---------------------------------------------------------------------------
+# REST-first merged-PR inventory and index
+# ---------------------------------------------------------------------------
+
+
+def _rest_pr_row(
+    number: int,
+    *,
+    body: str = "",
+    title: str = "",
+    merged_at: str | None = "2026-01-01T00:00:00Z",
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": title or f"PR #{number}",
+        "body": body,
+        "html_url": f"https://github.com/ll7/robot_sf_ll7/pull/{number}",
+        "merged_at": merged_at,
+    }
+
+
+def test_build_merged_pr_index_matches_closes_patterns() -> None:
+    """The in-process index finds 'Closes #N' matches (case-insensitive, word boundary)."""
+    rows = [
+        _rest_pr_row(10, body="Closes #42. Some text."),
+        _rest_pr_row(11, body="Refs #42 no close."),
+        _rest_pr_row(12, body="closes #42 and more."),
+        _rest_pr_row(13, body="Closes #4200 not our issue."),
     ]
-    import re
 
-    pattern = re.compile(r"Closes\s+#42\b", re.IGNORECASE)
-    matches = [r for r in raw if pattern.search(str(r.get("body", "")))]
-    # PR 10 and PR 12 match; PR 11 (Refs) and PR 13 (#4200) do not
-    assert len(matches) == 2
-    assert matches[0]["number"] == 10
-    assert matches[1]["number"] == 12
+    index = scanner.build_merged_pr_index(rows, [42, 4200])
+
+    assert [row["number"] for row in index[42]] == [10, 12]
+    assert [row["number"] for row in index[4200]] == [13]
+    assert 99 not in index
 
 
-def test_fetch_merged_prs_queries_the_linked_issue(
+def test_build_merged_pr_index_rejects_malformed_closes_suffix() -> None:
+    """A word suffix is not part of a valid ``Closes #N`` reference."""
+    rows = [
+        _rest_pr_row(10, body="Closes #42foo"),
+        _rest_pr_row(11, body="Closes #42."),
+        _rest_pr_row(12, body="closes #42"),
+    ]
+
+    index = scanner.build_merged_pr_index(rows, [42])
+
+    assert [row["number"] for row in index[42]] == [11, 12]
+
+
+def test_build_merged_pr_index_is_deterministically_ordered() -> None:
+    """Index rows are ordered by PR number regardless of inventory order."""
+    rows = [
+        _rest_pr_row(30, body="Closes #7"),
+        _rest_pr_row(10, body="Closes #7"),
+        _rest_pr_row(20, body="Closes #7"),
+    ]
+
+    index = scanner.build_merged_pr_index(rows, [7])
+
+    assert [row["number"] for row in index[7]] == [10, 20, 30]
+
+
+def test_fetch_merged_pr_inventory_reads_rest_endpoint_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The merged-PR search is constrained to the linked issue reference."""
-    commands: list[list[str]] = []
-
-    def fake_run_json(command: list[str], *, default: Any = None) -> list[dict[str, Any]]:
-        commands.append(command)
-        return []
-
-    monkeypatch.setattr(scanner, "_run_json", fake_run_json)
-    scanner.fetch_merged_prs_for_issue(repo="ll7/robot_sf_ll7", issue_number=42)
-
-    assert commands == [
+    """The inventory is one bounded ``pulls?state=closed`` REST pass, never search."""
+    paths: list[str] = []
+    pages = [
         [
-            "gh",
-            "search",
-            "prs",
-            "#42",
-            "--repo",
-            "ll7/robot_sf_ll7",
-            "--state",
-            "closed",
-            "--merged",
-            "--json",
-            "number,title,url,body",
-            "--limit",
-            "30",
-        ]
+            _rest_pr_row(1, body="Closes #7"),
+            _rest_pr_row(2, body="Closes #7", merged_at=None),
+        ],
+        [_rest_pr_row(3, body="Closes #7")],
     ]
+
+    def fake_api_get(path: str, **_: Any) -> subprocess.CompletedProcess[str]:
+        paths.append(path)
+        payload = pages[len(paths) - 1] if len(paths) <= len(pages) else []
+        return subprocess.CompletedProcess(["gh", "api", path], 0, stdout=json.dumps(payload))
+
+    monkeypatch.setattr(scanner, "_gh_api_get", fake_api_get)
+
+    merged_rows, metadata = scanner.fetch_merged_pr_inventory(
+        repo="ll7/robot_sf_ll7",
+        max_pages=5,
+        per_page=2,
+    )
+
+    assert len(paths) == 2
+    assert all("pulls?state=closed" in path for path in paths)
+    assert all("search" not in path for path in paths)
+    assert [row["number"] for row in merged_rows] == [1, 3]
+    assert metadata["mode"] == "rest"
+    assert metadata["closed_rows"] == 3
+    assert metadata["merged_count"] == 2
+    assert metadata["truncated"] is False
+
+
+def test_fetch_merged_pr_inventory_flags_page_budget_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full page at the page budget marks the inventory as potentially truncated."""
+    full_page = [_rest_pr_row(number) for number in range(100)]
+
+    monkeypatch.setattr(
+        scanner,
+        "_gh_api_get",
+        lambda path, **_: subprocess.CompletedProcess(
+            ["gh", "api", path], 0, stdout=json.dumps(full_page)
+        ),
+    )
+
+    merged_rows, metadata = scanner.fetch_merged_pr_inventory(
+        repo="ll7/robot_sf_ll7",
+        max_pages=2,
+        per_page=100,
+    )
+
+    assert len(merged_rows) == 200
+    assert metadata["truncated"] is True
+    assert metadata["pages_read"] == 2
+
+
+def test_fetch_merged_pr_inventory_fails_closed_on_rest_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A REST 403 surfaces as a RuntimeError, never as an empty inventory."""
+    monkeypatch.setattr(
+        scanner,
+        "_gh_api_get",
+        lambda path, **_: subprocess.CompletedProcess(
+            ["gh", "api", path], 1, stderr="HTTP 403: API rate limit exceeded"
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        scanner.fetch_merged_pr_inventory(repo="ll7/robot_sf_ll7", max_pages=2)
 
 
 def test_fetch_issue_state_does_not_hide_api_failures(

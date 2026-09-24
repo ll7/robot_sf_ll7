@@ -28,6 +28,25 @@ def resolve_git_common_dir() -> Path | None:
     return None
 
 
+def resolve_repo_root() -> Path:
+    """Return the current Git repository root.
+
+    Raises
+    ------
+    RuntimeError
+        If the ``git rev-parse --show-toplevel`` call fails or returns no path.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError("Could not determine git repository root.")
+    return Path(result.stdout.strip())
+
+
 def resolve_agent_artifact_dir(subdir: str, *, mkdir: bool = True) -> Path:
     """Return the absolute path to a codex-agent-runs artifact subdirectory.
 

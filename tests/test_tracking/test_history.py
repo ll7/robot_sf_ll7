@@ -22,19 +22,19 @@ _FIXTURES = Path(__file__).parent / "fixtures" / "history_runs"
 
 
 def _copy_history_fixtures(target_root: Path) -> None:
-    """TODO docstring. Document this function.
+    """Copy pre-recorded run history test fixtures to the target directory.
 
     Args:
-        target_root: TODO docstring.
+        target_root: Filesystem path to receive fixture run directories.
     """
     shutil.copytree(_FIXTURES, target_root, dirs_exist_ok=True)
 
 
 def test_history_filters_runs(tmp_path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Verify that list_runs filters runs by status, timestamp cutoff, and limit.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated run history artifacts.
     """
     config = RunTrackerConfig(artifact_root=tmp_path)
     _copy_history_fixtures(config.run_tracker_root)
@@ -58,10 +58,10 @@ def test_history_filters_runs(tmp_path: Path) -> None:
 
 
 def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Verify that list_runs discovers runs in nested directory hierarchies and filters by scenario.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated run history artifacts.
     """
     config = RunTrackerConfig(artifact_root=tmp_path)
     _copy_history_fixtures(config.run_tracker_root)
@@ -91,10 +91,10 @@ def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> 
 
 
 def test_failure_guard_marks_failed_steps(run_tracker_config: RunTrackerConfig) -> None:
-    """TODO docstring. Document this function.
+    """Verify that progress tracker failure guard flushes failed status to disk on abort.
 
     Args:
-        run_tracker_config: TODO docstring.
+        run_tracker_config: Test fixture providing telemetry run tracker configuration.
     """
     writer = ManifestWriter(run_tracker_config, run_id="guard-demo")
     tracker = ProgressTracker(

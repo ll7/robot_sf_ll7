@@ -14,14 +14,14 @@ from robot_sf.gym_env.environment_factory import RecordingOptions, make_robot_en
 
 @contextmanager
 def capture_warnings():
-    """TODO docstring. Document this function."""
+    """Collect WARNING and INFO loguru messages emitted inside the with-block."""
     messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
-        """TODO docstring. Document this function.
+        """Append the record message when its level is WARNING or INFO.
 
         Args:
-            msg: TODO docstring.
+            msg: Loguru message record passed to the sink.
         """
         if msg.record["level"].name in {"WARNING", "INFO"}:
             messages.append(msg.record["message"])
@@ -34,10 +34,10 @@ def capture_warnings():
 
 
 def test_boolean_and_options_conflict_flipped(tmp_path):
-    """TODO docstring. Document this function.
+    """record_video=True flips RecordingOptions.record=False and logs a warning.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory supplying the video output path.
     """
     rec = RecordingOptions(record=False)
     with capture_warnings() as logs:

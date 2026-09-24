@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for Pareto front computation and Pareto curve plotting utilities."""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from robot_sf.benchmark.plots import (
 
 
 def _rec(g: str, x: float, y: float) -> dict:
-    """TODO docstring. Document this function.
+    """Construct a mock benchmark episode record.
 
     Args:
-        g: TODO docstring.
-        x: TODO docstring.
-        y: TODO docstring.
+        g: Algorithm/group identifier.
+        x: Collision metric value.
+        y: Comfort exposure metric value.
 
     Returns:
-        TODO docstring.
+        Dictionary representing a benchmark record with algorithm metadata and metrics.
     """
     return {
         "scenario_id": f"scn-{g}",
@@ -29,7 +29,7 @@ def _rec(g: str, x: float, y: float) -> dict:
 
 
 def test_compute_points_and_front():
-    """TODO docstring. Document this function."""
+    """Verify Pareto front points and dominant index calculation across algorithms."""
     records = [
         _rec("A", 1.0, 0.5),
         _rec("A", 1.0, 0.6),
@@ -44,10 +44,10 @@ def test_compute_points_and_front():
 
 
 def test_save_png_creates_file(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify save_pareto_png creates an output PNG and returns metadata.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture.
     """
     records = [
         _rec("A", 1.0, 0.5),
@@ -62,10 +62,10 @@ def test_save_png_creates_file(tmp_path):
 
 
 def test_save_vector_options(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify save_pareto_png creates requested PDF and SVG vector outputs.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture.
     """
     records = [
         _rec("A", 1.0, 0.5),

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Drift-detection test comparing freshly optimized SNQI weights against the canonical artifact."""
 
 import json
 from pathlib import Path
@@ -10,10 +10,10 @@ ARTIFACT = Path("model/snqi_canonical_weights_v1.json")
 
 
 def test_snqi_drift_minimal(tmp_path):
-    """TODO docstring. Document this function.
+    """Optimize weights from the small SNQI fixture and check the canonical artifact contract.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory for the optimization output JSON.
     """
     episodes = FIXTURE_DIR / "episodes_small.jsonl"
     baseline = FIXTURE_DIR / "baseline_stats.json"

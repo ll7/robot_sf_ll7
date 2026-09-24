@@ -21,14 +21,14 @@ BIN = ["uv", "run", "robot_sf_bench"]
 
 
 def _write_minimal_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
-    """TODO docstring. Document this function.
+    """Write synthetic episodes JSONL and baseline stats for SNQI runs.
 
     Args:
-        tmp_path: TODO docstring.
-        n: TODO docstring.
+        tmp_path: Directory where the episode and baseline fixtures are written.
+        n: Number of synthetic episode records to generate.
 
     Returns:
-        TODO docstring.
+        Tuple of the episodes JSONL path and the baseline JSON path.
     """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
@@ -63,13 +63,13 @@ def _write_minimal_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
-    """TODO docstring. Document this function.
+    """Run an argv command with the light-test env removed and no check.
 
     Args:
-        args: TODO docstring.
+        args: Command argv passed to ``subprocess.run``.
 
     Returns:
-        TODO docstring.
+        Completed process with captured text stdout and stderr.
     """
     env = os.environ.copy()
     # Ensure we do not trip any LIGHT_TEST fast path (want real code paths)
@@ -78,11 +78,11 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 
 
 def _load_schema() -> dict:
-    """TODO docstring. Document this function.
+    """Load the SNQI output JSON Schema from its repository path.
 
 
     Returns:
-        TODO docstring.
+        Parsed JSON Schema dictionary.
     """
     schema_path = Path("docs/snqi-weight-tools/snqi_output.schema.json")
     assert schema_path.exists(), f"Schema file missing: {schema_path}"
@@ -91,11 +91,14 @@ def _load_schema() -> dict:
 
 @pytest.mark.parametrize("cmd", ["optimize", "recompute"])  # keep runtime tiny
 def test_snqi_outputs_conform_to_jsonschema(tmp_path: Path, cmd: str):
-    """TODO docstring. Document this function.
+    """Assert SNQI optimize/recompute output conforms to the JSON Schema.
+
+    Runs the CLI on minimal fixtures, checks a zero exit code, and validates the
+    generated JSON against ``docs/snqi-weight-tools/snqi_output.schema.json``.
 
     Args:
-        tmp_path: TODO docstring.
-        cmd: TODO docstring.
+        tmp_path: Temporary directory for the generated input and output files.
+        cmd: Parametrized SNQI subcommand under test (``optimize`` or ``recompute``).
     """
     episodes, baseline = _write_minimal_inputs(tmp_path)
     out = tmp_path / f"snqi_{cmd}.json"

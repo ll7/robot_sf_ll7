@@ -18,20 +18,27 @@ from robot_sf.benchmark.snqi import compute_snqi
 # Legacy inline implementation copied (logic only) to assert parity.
 # NOTE: Keep this in sync only for parity testing; do NOT import elsewhere.
 def _legacy_compute_snqi(metrics, weight_map, baseline_map):  # type: ignore[missing-type-doc]
-    """TODO docstring. Document this function.
+    """Legacy inline SNQI formula kept as the parity reference implementation.
+
+    Normalizes collisions, near_misses, force_exceed_events, and jerk_mean to
+    baseline-relative values clamped to [0, 1], keeps time and comfort raw, and
+    applies the weight map with success as the only positive term.
 
     Args:
-        metrics: TODO docstring.
-        weight_map: TODO docstring.
-        baseline_map: TODO docstring.
+        metrics: Per-episode metric values; absent keys use formula defaults.
+        weight_map: SNQI weight mapping keyed by ``w_*`` names.
+        baseline_map: Normalization baseline mapping metric name -> med/p95.
     """
 
     def _normalize(name: str, value: float):
-        """TODO docstring. Document this function.
+        """Clamp a metric to its baseline-relative [0, 1] normalized range.
+
+        Missing baseline entries return 0.0; the spread ``p95 - med`` falls
+        back to 1.0 when it is at most 1e-6.
 
         Args:
-            name: TODO docstring.
-            value: TODO docstring.
+            name: Baseline metric name to look up.
+            value: Raw metric value to normalize.
         """
         if name not in baseline_map:
             return 0.0
@@ -69,7 +76,7 @@ def _legacy_compute_snqi(metrics, weight_map, baseline_map):  # type: ignore[mis
 
 @pytest.fixture
 def baseline_stats():  # Representative synthetic stats
-    """TODO docstring. Document this function."""
+    """Return representative med/p95 baselines for the four penalty metrics."""
     return {
         "collisions": {"med": 0.0, "p95": 3.0},
         "near_misses": {"med": 1.0, "p95": 6.0},
@@ -80,7 +87,7 @@ def baseline_stats():  # Representative synthetic stats
 
 @pytest.fixture
 def weights():
-    """TODO docstring. Document this function."""
+    """Return representative non-uniform SNQI weights keyed by ``w_*`` name."""
     return {
         "w_success": 2.0,
         "w_time": 1.2,

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=ppo_grid_403
-#SBATCH --output=slurm-%j.out
-#SBATCH --error=slurm-%j.err
+#SBATCH --output=output/slurm/%j-ppo_grid_403.out
+#SBATCH --error=output/slurm/%j-ppo_grid_403.err
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
@@ -31,7 +31,14 @@ export MKL_NUM_THREADS=1
 echo "Artifact root: $ROBOT_SF_ARTIFACT_ROOT"
 echo "W&B mode: $WANDB_MODE"
 
+mkdir -p output/slurm
+CONFIG_PATH="configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  echo "Preflight check failed: config file not found: $CONFIG_PATH" >&2
+  exit 2
+fi
+
 uv run python scripts/training/train_ppo.py \
-  --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml
+  --config "$CONFIG_PATH"
 
 echo "Job finished at $(date)"

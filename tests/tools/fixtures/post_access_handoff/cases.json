@@ -1,0 +1,15 @@
+{
+  "missing_next_command": {"verdict": "fail", "reasons": ["missing_next_action"]},
+  "contradictory_restore": {"verdict": "fail", "reasons": ["contradictory_status"]},
+  "contradictory_row_count": {"verdict": "fail", "reasons": ["contradictory_status"]},
+  "contradictory_not_submitted_job": {"verdict": "fail", "reasons": ["contradictory_status"]},
+  "orphan_job": {"verdict": "fail", "reasons": ["orphan_job"]},
+  "orphan_artifact": {"verdict": "fail", "reasons": ["orphan_artifact"]},
+  "duplicate_identity": {"verdict": "fail", "reasons": ["duplicate_identity"]},
+  "invalid_state": {"verdict": "fail", "reasons": ["invalid_state"]},
+  "missing_issue": {"verdict": "fail", "reasons": ["missing_public_issue"]},
+  "private_path_leak": {"verdict": "blocked", "reasons": ["private_path_leak"]},
+  "credential_leak": {"verdict": "blocked", "reasons": ["credential_leak"]},
+  "signed_url_leak": {"verdict": "blocked", "reasons": ["signed_url_leak"]},
+  "private_host_leak": {"verdict": "blocked", "reasons": ["private_host_leak"]}
+}

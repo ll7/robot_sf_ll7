@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""CLI tests for SNQI component ablation analysis and Markdown report generation."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ if TYPE_CHECKING:
 
 
 def _write_episodes(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write synthetic JSONL episode records for SNQI ablation testing.
 
     Args:
-        path: TODO docstring.
+        path: Output filesystem destination for the JSONL episode file.
     """
     recs = [
         {
@@ -41,11 +41,11 @@ def _write_episodes(path: Path) -> None:
 
 
 def test_cli_snqi_ablate_md(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
+    """Verify generating a Markdown ablation table across SNQI weight components via CLI.
 
     Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
+        tmp_path: Temporary directory fixture for episode, weight, and report files.
+        capsys: Pytest fixture capturing standard output and error streams.
     """
     episodes = tmp_path / "episodes.jsonl"
     _write_episodes(episodes)

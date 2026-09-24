@@ -20,6 +20,7 @@ Options:
   --minimum-free-bytes N   Override ROBOT_SF_WORKTREE_MIN_FREE_BYTES.
   --receipt PATH            Write a delegated-worker receipt after creation.
   --task-id ID              Acquire an active-worktree lease for this task.
+  --allowed-path GLOB       Path-scope glob enforced by the receipt (repeatable).
   --dry-run                Run the preflight without invoking Git.
   --exec COMMAND [ARG...]  Run an explicit command from inside the new worktree.
   -h, --help               Show this help and exit.
@@ -58,6 +59,7 @@ worktree_mode="implementation"
 minimum_free_bytes="${ROBOT_SF_WORKTREE_MIN_FREE_BYTES:-}"
 receipt_path=""
 task_id=""
+allowed_path_args=()
 dry_run=0
 command_args=()
 # Internal re-entry flag: the portable-lock fallback re-executes this script
@@ -103,6 +105,11 @@ while [[ $# -gt 0 ]]; do
     --task-id)
       [[ $# -ge 2 ]] || { echo "--task-id requires a value" >&2; exit 2; }
       task_id="$2"
+      shift 2
+      ;;
+    --allowed-path)
+      [[ $# -ge 2 ]] || { echo "--allowed-path requires a value" >&2; exit 2; }
+      allowed_path_args+=("$2")
       shift 2
       ;;
     --dry-run)
@@ -151,7 +158,9 @@ if [[ -n "$receipt_path" && -z "$task_id" ]]; then
 fi
 
 if [[ -n "$receipt_path" ]]; then
-  receipt_path="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$receipt_path")"
+  if ! receipt_path="$(python3 "$SCRIPT_DIR/worktree_receipt.py" resolve-path --receipt "$receipt_path")"; then
+    exit 2
+  fi
 fi
 
 validate_target_preflight() {
@@ -175,9 +184,16 @@ validate_target_preflight() {
   python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
 }
 
+if [[ "$dry_run" -eq 1 ]]; then
+  validate_target_preflight
+  echo "create_worktree: dry-run passed; git worktree add was not invoked."
+  exit 0
+fi
+
+git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
+
 if [[ "$locked_transaction" -eq 1 ]]; then
-  git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-  worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
   lock_fd="${ROBOT_SF_WORKTREE_LOCK_FD:-}"
   if ! [[ "$lock_fd" =~ ^[0-9]+$ ]]; then
     echo "create_worktree: --__locked-transaction is an internal mode" >&2
@@ -189,15 +205,6 @@ if [[ "$locked_transaction" -eq 1 ]]; then
     exit 2
   fi
 fi
-
-if [[ "$dry_run" -eq 1 ]]; then
-  validate_target_preflight
-  echo "create_worktree: dry-run passed; git worktree add was not invoked."
-  exit 0
-fi
-
-git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 
 # Git derives linked-worktree administrative directory names from the target
 # basename. Independent callers with distinct full paths but the same basename
@@ -285,6 +292,13 @@ cleanup_failed_creation() {
 
   if [[ "$created_worktree" -ne 1 ]]; then
     return "$failure_rc"
+  fi
+
+  if [[ -n "$receipt_path" && ( -f "$receipt_path" || -L "$receipt_path" ) ]]; then
+    if ! remove_file "$receipt_path"; then
+      echo "create_worktree: failed to remove receipt during rollback: $receipt_path" >&2
+      cleanup_failed=1
+    fi
   fi
 
   if ! release_task_lease; then
@@ -404,28 +418,10 @@ run_locked_transaction() {
     fi
     return "$worktree_add_rc"
   fi
-  if [[ "$worktree_mode" == "review" ]]; then
-    review_guard_args=(--worktree "$worktree_path" --mode review)
-    # A review candidate may be created from a base that predates this guard.
-    # Keep the target clean by using the invoking checkout's tracked helper and
-    # hook until the guard itself is present in the selected base.
-    if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
-          ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
-      review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
-    fi
-    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
-      :
-    else
-      local review_guard_rc=$?
-      if ! cleanup_failed_creation "$review_guard_rc"; then
-        :
-      fi
-      return "$review_guard_rc"
-    fi
-  fi
   if [[ -n "$task_id" ]]; then
     # The lease helper reuses the inherited repository lock. Creating the lease
-    # before this transaction releases the lock closes the add->claim cleanup gap.
+    # before this transaction releases the lock closes the add->claim cleanup gap,
+    # and it must exist before review mode so the guard can verify task ownership.
     if python3 "$SCRIPT_DIR/pr_gate_lease.py" create \
       --worktree "$worktree_path" --gate-id "$task_id" --owner "$task_id"; then
       :
@@ -448,9 +444,38 @@ run_locked_transaction() {
       return "$lease_observation_rc"
     fi
   fi
+  if [[ "$worktree_mode" == "review" ]]; then
+    review_guard_args=(--worktree "$worktree_path" --mode review)
+    # A review candidate may be created from a base that predates this guard.
+    # Keep the target clean by using the invoking checkout's tracked helper and
+    # hook until the guard itself is present in the selected base.
+    if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
+          ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
+      review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
+    fi
+    # Forward the task identity so the guard refuses to capture a worktree that
+    # a different live task already owns (issue #8950).
+    if [[ -n "$task_id" ]]; then
+      review_guard_args+=(--task-id "$task_id")
+    fi
+    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
+      :
+    else
+      local review_guard_rc=$?
+      if ! cleanup_failed_creation "$review_guard_rc"; then
+        :
+      fi
+      return "$review_guard_rc"
+    fi
+  fi
   if [[ -n "$receipt_path" ]]; then
-    if python3 "$SCRIPT_DIR/worktree_receipt.py" create \
-      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"; then
+    receipt_args=(--worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path")
+    if [[ "${#allowed_path_args[@]}" -gt 0 ]]; then
+      for scope_glob in "${allowed_path_args[@]}"; do
+        receipt_args+=(--allowed-path "$scope_glob")
+      done
+    fi
+    if python3 "$SCRIPT_DIR/worktree_receipt.py" create "${receipt_args[@]}"; then
       :
     else
       local receipt_rc=$?
@@ -505,6 +530,11 @@ else
   fi
   if [[ -n "$receipt_path" ]]; then
     locked_args+=(--receipt "$receipt_path")
+  fi
+  if [[ "${#allowed_path_args[@]}" -gt 0 ]]; then
+    for scope_glob in "${allowed_path_args[@]}"; do
+      locked_args+=(--allowed-path "$scope_glob")
+    done
   fi
   python_lock_rc=0
   python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \

@@ -479,11 +479,10 @@ class TestScenarioFamily:
         record = {"scenario_id": "t_junction_42"}
         assert _scenario_family(record) == "t"
 
-    def test_scenario_id_prefix_is_not_stripped_of_padding(self) -> None:
-        # The truthiness ``.strip()`` check only guards empty strings; the
-        # returned prefix keeps any surrounding whitespace from scenario_id.
+    def test_scenario_id_prefix_is_normalized_before_family_derivation(self) -> None:
+        # Scenario IDs are normalized once before the family prefix is derived.
         record = {"scenario_id": "  hallway_7  "}
-        assert _scenario_family(record) == "  hallway"
+        assert _scenario_family(record) == "hallway"
 
     def test_returns_unknown_when_nothing_resolvable(self) -> None:
         assert _scenario_family({}) == "unknown"

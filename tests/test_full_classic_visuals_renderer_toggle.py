@@ -18,7 +18,7 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Benchmark configuration helper for video renderer toggle testing."""
 
     def __init__(
         self,
@@ -27,13 +27,13 @@ class _Cfg:
         capture_replay: bool = True,
         scenario_path: Path | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize benchmark configuration with specific video renderer options.
 
         Args:
-            tmp_path: TODO docstring.
-            video_renderer: TODO docstring.
-            capture_replay: TODO docstring.
-            scenario_path: TODO docstring.
+            tmp_path: Directory path for benchmark output artifacts.
+            video_renderer: Target video renderer mode ('synthetic', 'sim-view', or 'auto').
+            capture_replay: Whether to enable replay trajectory recording during benchmark run.
+            scenario_path: Optional explicit scenario matrix path; creates minimal matrix if None.
         """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
@@ -57,19 +57,19 @@ class _Cfg:
 
 
 def _read(path: Path):
-    """TODO docstring. Document this function.
+    """Load and parse JSON artifact content from disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the JSON artifact file to read.
     """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_video_renderer_forced_synthetic(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify that forcing synthetic video renderer produces synthetic artifacts without reclassification.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated benchmark outputs.
     """
     cfg = _Cfg(tmp_path / "synthetic", video_renderer="synthetic", capture_replay=True)
     run_full_benchmark(cfg)
@@ -84,10 +84,10 @@ def test_video_renderer_forced_synthetic(tmp_path):
 
 def test_video_renderer_forced_sim_view_missing(tmp_path):
     # Force sim-view but disable replay capture so it cannot render; expect skipped simulation_view artifacts
-    """TODO docstring. Document this function.
+    """Verify that forced sim-view mode records skipped simulation_view artifacts when replay is absent.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated benchmark outputs.
     """
     cfg = _Cfg(tmp_path / "simview_missing", video_renderer="sim-view", capture_replay=False)
     run_full_benchmark(cfg)

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for episode failure detection and failure extraction filtering."""
 
 from __future__ import annotations
 
@@ -8,17 +8,20 @@ from robot_sf.benchmark.failure_extractor import _metric, extract_failures, is_f
 
 
 def _rec(ep: str, **metrics):
-    """TODO docstring. Document this function.
+    """Construct a minimal episode record dictionary with specified metrics.
 
     Args:
-        ep: TODO docstring.
-        metrics: TODO docstring.
+        ep: Episode identifier string.
+        **metrics: Metric key-value pairs stored in the record's metrics mapping.
+
+    Returns:
+        Constructed episode record dictionary.
     """
     return {"episode_id": ep, "scenario_id": "s", "seed": 0, "metrics": metrics}
 
 
 def test_is_failure_cases():
-    """TODO docstring. Document this function."""
+    """Verify failure classification across collision, comfort, near-miss, and SNQI criteria."""
     assert is_failure(_rec("a", collisions=1))
     assert is_failure(_rec("b", comfort_exposure=0.25))
     assert is_failure(_rec("c", near_misses=2), near_miss_threshold=1)
@@ -27,7 +30,7 @@ def test_is_failure_cases():
 
 
 def test_extract_failures_max_count():
-    """TODO docstring. Document this function."""
+    """Verify extract_failures respects the max_count limit on returned failure episodes."""
     recs = [
         _rec("e1", collisions=1),
         _rec("e2", comfort_exposure=0.3),

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Unit tests for training host hardware profile detection and redaction."""
 
 import platform
 import sys
@@ -12,11 +12,11 @@ from robot_sf.training.hardware_probe import collect_hardware_profile
 
 @pytest.mark.parametrize("worker_count", [1, 4])
 def test_collect_hardware_profile_cpu_only(monkeypatch, worker_count):
-    """TODO docstring. Document this function.
+    """Verify hardware profile collection on CPU-only hosts with varying worker counts.
 
     Args:
-        monkeypatch: TODO docstring.
-        worker_count: TODO docstring.
+        monkeypatch: Pytest monkeypatch fixture to mock GPU metadata absence.
+        worker_count: Number of worker processes configured in the profile.
     """
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", lambda: (None, None))
 
@@ -32,10 +32,10 @@ def test_collect_hardware_profile_cpu_only(monkeypatch, worker_count):
 
 
 def test_collect_hardware_profile_with_gpu(monkeypatch):
-    """TODO docstring. Document this function.
+    """Verify hardware profile capture correctly populates GPU and CUDA version fields.
 
     Args:
-        monkeypatch: TODO docstring.
+        monkeypatch: Pytest monkeypatch fixture to mock GPU probe results.
     """
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", lambda: ("Fake GPU", "12.3"))
 

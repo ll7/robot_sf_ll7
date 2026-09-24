@@ -4,6 +4,12 @@
 The manifest records route evidence only. A zero exit code, successful wrapper
 run, or complete artifact set is not task acceptance; the parent orchestrator
 still needs local diff review and validation.
+
+Each attempt may declare ``expected_output_root`` and ``artifact_references``.
+Declared artifact locations and referenced SHA-256 values are verified under
+``path_contract``; findings (missing artifact, unexpected nesting, missing,
+stale, or invalid reference) are route evidence and never change task
+aggregation.
 """
 
 from __future__ import annotations
@@ -11,10 +17,14 @@ from __future__ import annotations
 import argparse
 import enum
 import json
+import re
 import subprocess
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from robot_sf.evidence.writers import sha256_file
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -40,6 +50,17 @@ REQUIRED_ARTIFACTS = {
 RECOVERY_SCHEMA = "delegation_recovery.v1"
 DEFAULT_MAX_RECOVERY_ATTEMPTS = 2
 MAX_RECOVERY_ATTEMPTS = 3
+PATH_CONTRACT_SCHEMA = "routed_worker_path_contract.v1"
+PATH_FINDING_MISSING_ARTIFACT = "missing_artifact"
+PATH_FINDING_UNEXPECTED_NESTING = "unexpected_nesting"
+PATH_FINDING_MISSING_REFERENCE = "missing_reference"
+PATH_FINDING_STALE_REFERENCE = "stale_reference"
+PATH_FINDING_REFERENCE_OUTSIDE_RUN_DIR = "reference_outside_run_dir"
+PATH_FINDING_INVALID_REFERENCE = "invalid_reference"
+PATH_FINDING_INVALID_REFERENCE_COLLECTION = "invalid_reference_collection"
+PATH_FINDING_INVALID_SHA256 = "invalid_sha256"
+PATH_CONTRACT_NESTING_SEARCH_DEPTH = 2
+_SHA256_RE = re.compile(r"[0-9a-fA-F]{64}\Z")
 _STARTUP_BACKEND_404_FAILURE_CLASSES = frozenset(
     {
         "startup_backend_404",
@@ -137,6 +158,18 @@ class ScopeCheck:
     spill_detail: str | None
     authorized_root: str | None = None
     spill_paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PathContractFinding:
+    """One expected-path or referenced-hash finding for a routed worker run."""
+
+    kind: str
+    key: str
+    expected_path: str
+    actual_path: str | None = None
+    expected_sha256: str | None = None
+    actual_sha256: str | None = None
 
 
 def _http_status(attempt: dict[str, Any]) -> int | None:
@@ -596,6 +629,279 @@ def scan_artifact_presence(
     return presence
 
 
+def _display_path(path: Path, run_root: Path) -> str:
+    """Return a run-relative path when possible, otherwise the resolved path."""
+    resolved = path.resolve(strict=False)
+    try:
+        return str(resolved.relative_to(run_root))
+    except ValueError:
+        return str(resolved)
+
+
+def _resolve_expected_output_root(run_root: Path, expected_output_root: str | Path | None) -> Path:
+    """Resolve the declared output root and require it to stay inside the run."""
+    if expected_output_root in (None, ""):
+        return run_root
+    candidate = Path(expected_output_root)
+    resolved = candidate if candidate.is_absolute() else run_root / candidate
+    resolved = resolved.resolve(strict=False)
+    if not resolved.is_relative_to(run_root):
+        raise ValueError("expected_output_root must resolve inside run_dir")
+    return resolved
+
+
+def _find_nested_artifact_matches(run_root: Path, filename: str, *, max_depth: int) -> list[Path]:
+    """Return bounded descendant files with the expected name, without glob promotion."""
+    matches: list[Path] = []
+    pending: list[tuple[Path, int]] = [(run_root, 0)]
+    visited: set[Path] = set()
+    while pending:
+        directory, depth = pending.pop(0)
+        if depth >= max_depth:
+            continue
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_symlink() or not entry.is_dir():
+                continue
+            resolved = entry.resolve(strict=False)
+            if resolved in visited:
+                continue
+            visited.add(resolved)
+            candidate = entry / filename
+            if candidate.is_file() and not candidate.is_symlink():
+                matches.append(candidate)
+            pending.append((entry, depth + 1))
+    return matches
+
+
+def verify_output_path_contract(
+    run_dir: str | Path,
+    *,
+    expected_output_root: str | Path | None = None,
+    artifact_filenames: dict[str, str] | None = None,
+    target_repo: str | Path = ".",
+) -> list[dict[str, Any]]:
+    """Verify expected artifacts exist at the declared output root.
+
+    A file missing at the expected root but present under an unexpected
+    subdirectory is reported as ``unexpected_nesting`` with the actual path.
+    Nothing is relocated and no glob match is promoted to the expected artifact;
+    findings are route evidence only.
+
+    Returns:
+        JSON-ready path-contract findings in artifact order.
+    """
+    repo_root = Path(target_repo).resolve(strict=False)
+    run_root = _resolve_run_dir(run_dir, target_repo=repo_root)
+    expected_root = _resolve_expected_output_root(run_root, expected_output_root)
+    filenames = artifact_filenames or REQUIRED_ARTIFACTS
+    findings: list[PathContractFinding] = []
+    for key, filename in filenames.items():
+        expected_path = expected_root / filename
+        if expected_path.is_file() and not expected_path.is_symlink():
+            continue
+        nested = [
+            match
+            for match in _find_nested_artifact_matches(
+                run_root, filename, max_depth=PATH_CONTRACT_NESTING_SEARCH_DEPTH
+            )
+            if match.resolve(strict=False) != expected_path.resolve(strict=False)
+        ]
+        if nested:
+            findings.extend(
+                PathContractFinding(
+                    kind=PATH_FINDING_UNEXPECTED_NESTING,
+                    key=key,
+                    expected_path=_display_path(expected_path, run_root),
+                    actual_path=_display_path(match, run_root),
+                )
+                for match in nested
+            )
+            continue
+        findings.append(
+            PathContractFinding(
+                kind=PATH_FINDING_MISSING_ARTIFACT,
+                key=key,
+                expected_path=_display_path(expected_path, run_root),
+            )
+        )
+    return [asdict(finding) for finding in findings]
+
+
+def verify_referenced_hashes(  # noqa: C901 - malformed inputs stay explicit and fail closed.
+    run_dir: str | Path,
+    references: object,
+    *,
+    expected_output_root: str | Path | None = None,
+    target_repo: str | Path = ".",
+) -> list[dict[str, Any]]:
+    """Verify referenced files exist and, when declared, match their SHA-256.
+
+    Each reference is either a run-relative path string or a mapping with
+    ``path`` and an optional ``sha256``. A declared hash must be a 64-character
+    hexadecimal SHA-256 value; malformed declarations and reference collections
+    are reported as explicit findings. A valid declared hash that no longer
+    matches the referenced bytes is reported as ``stale_reference`` with both
+    hashes.
+
+    Relative references are rooted at ``run_dir``. ``expected_output_root``
+    only controls the expected compact-artifact location and must not change
+    the meaning of a reference path.
+
+    Returns:
+        JSON-ready reference findings ordered by reference key.
+    """
+    repo_root = Path(target_repo).resolve(strict=False)
+    run_root = _resolve_run_dir(run_dir, target_repo=repo_root)
+    _resolve_expected_output_root(run_root, expected_output_root)
+    findings: list[PathContractFinding] = []
+    if not isinstance(references, Mapping):
+        return [
+            asdict(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_REFERENCE_COLLECTION,
+                    key="artifact_references",
+                    expected_path="<mapping>",
+                    actual_path=type(references).__name__,
+                )
+            )
+        ]
+
+    for raw_key in sorted(references, key=str):
+        key = str(raw_key)
+        raw_reference = references[raw_key]
+        has_expected_sha256 = False
+        expected_sha256: object = None
+        if isinstance(raw_reference, Mapping):
+            path_text = raw_reference.get("path")
+            if isinstance(path_text, Path):
+                path_text = str(path_text)
+            has_expected_sha256 = "sha256" in raw_reference
+            expected_sha256 = raw_reference.get("sha256")
+        elif isinstance(raw_reference, (str, Path)):
+            path_text = str(raw_reference)
+        else:
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_REFERENCE,
+                    key=key,
+                    expected_path="<path string or mapping>",
+                    actual_path=type(raw_reference).__name__,
+                )
+            )
+            continue
+
+        invalid_sha256 = has_expected_sha256 and (
+            not isinstance(expected_sha256, str) or _SHA256_RE.fullmatch(expected_sha256) is None
+        )
+        if invalid_sha256:
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_SHA256,
+                    key=key,
+                    expected_path=(
+                        path_text
+                        if isinstance(path_text, str) and path_text
+                        else "<invalid reference>"
+                    ),
+                    expected_sha256=(expected_sha256 if isinstance(expected_sha256, str) else None),
+                )
+            )
+
+        if not isinstance(path_text, str) or not path_text:
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_REFERENCE,
+                    key=key,
+                    expected_path="<path string>",
+                    actual_path=type(path_text).__name__,
+                )
+            )
+            continue
+
+        candidate = Path(path_text)
+        resolved = (
+            candidate.resolve(strict=False)
+            if candidate.is_absolute()
+            else (run_root / candidate).resolve(strict=False)
+        )
+        if not resolved.is_relative_to(run_root):
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_REFERENCE_OUTSIDE_RUN_DIR,
+                    key=str(key),
+                    expected_path=path_text,
+                    actual_path=str(resolved),
+                )
+            )
+            continue
+        if not resolved.is_file() or resolved.is_symlink():
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_MISSING_REFERENCE,
+                    key=str(key),
+                    expected_path=_display_path(resolved, run_root),
+                )
+            )
+            continue
+        if has_expected_sha256 and not invalid_sha256:
+            actual_sha256 = sha256_file(resolved)
+            if actual_sha256.lower() != expected_sha256.lower():
+                findings.append(
+                    PathContractFinding(
+                        kind=PATH_FINDING_STALE_REFERENCE,
+                        key=str(key),
+                        expected_path=_display_path(resolved, run_root),
+                        expected_sha256=expected_sha256.lower(),
+                        actual_sha256=actual_sha256,
+                    )
+                )
+    return [asdict(finding) for finding in findings]
+
+
+def build_path_contract(
+    run_dir: str | Path,
+    *,
+    expected_output_root: str | Path | None = None,
+    references: object | None = None,
+    artifact_filenames: dict[str, str] | None = None,
+    target_repo: str | Path = ".",
+) -> dict[str, Any]:
+    """Build the route-evidence path contract for one worker run directory.
+
+    Returns:
+        JSON-ready contract with ``ok``, the declared output root, and findings.
+    """
+    repo_root = Path(target_repo).resolve(strict=False)
+    run_root = _resolve_run_dir(run_dir, target_repo=repo_root)
+    expected_root = _resolve_expected_output_root(run_root, expected_output_root)
+    findings = verify_output_path_contract(
+        run_dir,
+        expected_output_root=expected_output_root,
+        artifact_filenames=artifact_filenames,
+        target_repo=target_repo,
+    )
+    if references is not None:
+        findings.extend(
+            verify_referenced_hashes(
+                run_dir,
+                references,
+                expected_output_root=expected_output_root,
+                target_repo=target_repo,
+            )
+        )
+    return {
+        "schema": PATH_CONTRACT_SCHEMA,
+        "ok": not findings,
+        "route_evidence_only": True,
+        "expected_output_root": _display_path(expected_root, run_root),
+        "findings": findings,
+    }
+
+
 def _jsonable_presence(presence: dict[str, ArtifactPresence]) -> dict[str, dict[str, Any]]:
     """Return JSON-ready artifact presence entries."""
     return {key: asdict(entry) for key, entry in presence.items()}
@@ -717,6 +1023,7 @@ def build_routing_manifest(
     for index, attempt in enumerate(attempts):
         run_dir = attempt.get("run_dir")
         scope_check: ScopeCheck | None = None
+        path_contract: dict[str, Any] | None = None
         if run_dir:
             scope_check = validate_run_dir_scope(
                 run_dir,
@@ -748,6 +1055,12 @@ def build_routing_manifest(
                     failure_class=attempt.get("failure_class"),
                     artifact_presence=artifact_presence,
                     has_run_dir=True,
+                )
+                path_contract = build_path_contract(
+                    run_dir,
+                    expected_output_root=attempt.get("expected_output_root"),
+                    references=attempt.get("artifact_references"),
+                    target_repo=repo_root,
                 )
         else:
             compact_artifacts = _jsonable_presence(
@@ -784,6 +1097,7 @@ def build_routing_manifest(
                 "artifact_paths": attempt.get("artifact_paths"),
                 "compact_artifacts": compact_artifacts,
                 "scope_check": scope_dict,
+                "path_contract": path_contract,
                 "aggregation": output_contract["aggregation"],
                 "aggregation_reason": output_contract["reason"],
                 "output_contract": output_contract,
@@ -807,6 +1121,7 @@ def build_routing_manifest(
         "chosen_run_dir": chosen_attempt["run_dir"],
         "chosen_terminal_state": chosen_attempt["terminal_state"],
         "chosen_scope_check": chosen_attempt["scope_check"],
+        "chosen_path_contract": chosen_attempt["path_contract"],
         "compact_artifacts": chosen_attempt["compact_artifacts"],
         "aggregation_contract": AGGREGATION_CONTRACT,
         "aggregation": chosen_attempt["aggregation"],

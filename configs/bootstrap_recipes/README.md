@@ -1,0 +1,50 @@
+# Bootstrap Recipes
+
+Frozen, sanitized bootstrap recipes for the active execution classes. Each recipe records the exact
+safe sequence that created or activated one environment: prerequisites, source/lock identity,
+ordered argument-vector steps (`setup`, `probe`, `cleanup`), expected probes, outputs, private
+substitutions, and verification status.
+
+| Recipe | Execution class | Verification |
+| --- | --- | --- |
+| [cpu_batch.v1.json](cpu_batch.v1.json) | `cpu_batch` | verified |
+| [gpu_training.v1.json](gpu_training.v1.json) | `gpu_training` | verified |
+| [carla_platform.v1.json](carla_platform.v1.json) | `carla_platform` | verified |
+| [local_analysis.v1.json](local_analysis.v1.json) | `local_analysis` | verified |
+
+```bash
+uv run python scripts/tools/bootstrap_recipe_check.py --check \
+  --recipes configs/bootstrap_recipes --execute-safe-checks --require-verified --format markdown
+```
+
+Private host, account, path, module, and storage details never appear here. A recipe that needs them
+declares a `private_substitutions` placeholder with a capability class;
+[private_overlay.example.json](private_overlay.example.json) shows the overlay shape.
+
+The checker is report-only by default; `--execute-safe-checks` runs only `probe` steps marked
+`safe_check: true` inside an isolated temporary root and never mutates the host. Safe checks
+are restricted to repository-owned bounded discovery probes (`python/uv --version`, `nvidia-smi`
+query flags, `docker image inspect`), run within sanitized environments that strip host credentials
+and canaries, and enforce strict workdir containment within `$RECIPE_ROOT` by verifying all parent
+components before directory creation so missing descendants under symlinked parents never create outside
+the recipe root. Safe probes invoke only approved base program names resolved via trusted host PATH;
+arbitrary scripts (such as `python -c` or shell strings), mutating commands, paths with directory
+separators, escaping directories, and protected environment overrides (`PATH`, `HOME`, `PYTHON*`,
+`LD_*`, `DYLD_*`) are blocked as `unsafe_safe_check` and rejected at runtime. Skipped, unisolated,
+or uncertain probes propagate `host_mutation: null` to the enclosing report rather than asserting
+zero mutation; the report claims `host_mutation: false` only when all executed probes run in verified isolation.
+In executed mode (`--execute-safe-checks`), verification cannot be satisfied by skipped probes
+or absent executables: missing probe executables, unresolved required private substitutions across
+any executed field (`argv`, `workdir`, and `env` keys or values), or zero executed required probes
+yield `status: unavailable` with explicit reason tags rather than retaining unproven verification.
+Unresolved or malformed placeholders fail closed before probe execution. Recipes with
+`verification_status: unavailable` preserve their unavailable state during execution and never imply
+native availability. Declared lockfiles in `source_identity` require valid 64-character SHA-256 digests,
+must resolve to regular files strictly contained within `--project-root`, and reject directory traversal
+(`..`), absolute paths, and symlinks targeting outside the project root even with matching digests.
+Output is deterministic (recipes sorted by `recipe_id`, JSON keys sorted).
+Blocking findings include credential or private-path leaks, source-host access, stale absolute paths,
+unresolved placeholders, mutable container tags without a digest, unpinned module or package aliases,
+destructive cleanup targets, unsafe safe-check definitions, and shell-string steps that hide ordering.
+Recipes with `verification_status: unavailable` are valid but must name an `unavailable_reason`;
+`--require-verified` fails when an execution class has no verified recipe.

@@ -12,6 +12,7 @@ import pytest
 
 from scripts.dev.pr_loop_policy import (
     GATE_VERDICT_MIN_SHA_OVERLAP,
+    GATE_VERDICT_PROJECTION_SOURCE,
     VALID_ACTIONS,
     VALID_STATES,
     PolicyDecision,
@@ -25,6 +26,7 @@ from scripts.dev.pr_loop_policy import (
     _sha_matches_head,
     active_review_claim,
     classify_pr_state,
+    current_gate_verdict_status,
     evaluate_queue,
     extract_sha_carriers,
     format_text,
@@ -1611,6 +1613,132 @@ def test_has_current_accepted_gate_verdict_ignores_other_verdict_words() -> None
         },
     }
     assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_recomputes_and_rejects_forged_projection_without_carriers() -> (
+    None
+):
+    """A forged projection without carriers cannot manufacture acceptance."""
+    pr = {
+        "number": 3015,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "accepted",
+        "gate_verdict_status_head_sha": FULL_SHA,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "missing"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_recomputes_and_rejects_projection_overriding_newer_hold() -> (
+    None
+):
+    """A caller projection cannot override a newer trusted hold carrier."""
+    pr = {
+        "number": 3016,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "accepted",
+        "gate_verdict_status_head_sha": FULL_SHA,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
+        "reviews": [
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: hold @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "hold"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_recomputes_and_rejects_projection_overriding_malformed_carrier() -> (
+    None
+):
+    """A caller projection cannot bypass a malformed carrier."""
+    pr = {
+        "number": 3017,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "accepted",
+        "gate_verdict_status_head_sha": FULL_SHA,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
+        "reviews": [
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}_suffix",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:34:07Z",
+                "commit": {"oid": FULL_SHA},
+            }
+        ],
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_recomputes_and_rejects_mismatched_projection_head() -> None:
+    """A projection specifying a mismatched head SHA fails closed as malformed."""
+    pr = {
+        "number": 3018,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "accepted",
+        "gate_verdict_status_head_sha": "0" * 40,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_recomputes_and_rejects_untrusted_projection_source() -> None:
+    """A projection with an unrecognized source marker fails closed as malformed."""
+    pr = {
+        "number": 3019,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "accepted",
+        "gate_verdict_status_head_sha": FULL_SHA,
+        "gate_verdict_status_source": "untrusted-source",
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_mismatched_hold_projection_blocks_accepted_carrier() -> None:
+    """A projection stating hold fails closed even when carrier evidence is accepted."""
+    pr = {
+        "number": 3020,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "hold",
+        "gate_verdict_status_head_sha": FULL_SHA,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "hold"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_verdict_status_accepts_when_recomputed_and_projection_agree() -> None:
+    """When recomputed status and projection both agree on accepted, admission passes."""
+    pr = {
+        "number": 3021,
+        "head_sha": FULL_SHA,
+        "gate_verdict_status": "accepted",
+        "gate_verdict_status_head_sha": FULL_SHA,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+    }
+    assert current_gate_verdict_status(pr, FULL_SHA) == "accepted"
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is True
 
 
 def test_sha_matches_head_exact() -> None:

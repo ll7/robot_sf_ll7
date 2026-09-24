@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for multi-extractor vec-env config and record enrichment analysis."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from scripts.multi_extractor_training import (
 
 
 def _write_eval_history(path, timesteps, rewards):
-    """TODO docstring. Document this function.
+    """Write an SB3 evaluations.npz history of timesteps and rewards under path.
 
     Args:
-        path: TODO docstring.
-        timesteps: TODO docstring.
-        rewards: TODO docstring.
+        path: Run directory that will contain an evaluation history file.
+        timesteps: Evaluation timestep values stored in the archive.
+        rewards: Per-evaluation reward arrays stored in the archive.
     """
     eval_dir = path / "eval_logs"
     eval_dir.mkdir(parents=True, exist_ok=True)
@@ -46,10 +46,10 @@ def test_get_vec_env_config_uses_spawn_for_vectorized_workers() -> None:
 
 
 def test_enrich_records_computes_convergence_and_figures(tmp_path):
-    """TODO docstring. Document this function.
+    """_enrich_records_with_analysis computes convergence metrics and figure artifacts.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary run directory holding extractor histories and outputs.
     """
     run_dir = tmp_path / "run"
     run_dir.mkdir()

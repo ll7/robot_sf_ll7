@@ -656,6 +656,16 @@ was running. Use `scripts/dev/check_prepublication_state.py` around expensive pu
 3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
    evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
    rerun readiness and capture a new baseline.
+4. A `blocked` result with reason `undeclared_stack` is a distinct ancestry failure, not a
+   `sync --integrate` case. It means the branch's merge base is older than the live `origin/main`
+   tip, usually because `main` advanced after an earlier merge of `main` into the branch
+   (issue #8864). Reconstruct only the intended commits on current `origin/main`
+   (`git rebase --onto origin/main <merge-base> <branch>`, or recreate the branch from
+   `origin/main` and re-apply the intended changes), then regenerate generated files such as
+   `scripts/validation/docstring_todo_baseline.json`. A rebase or re-creation moves the head, so
+   the local readiness stamp must be refreshed before publication. A canonical
+   `## Stack Declaration` is the alternative only for a genuine stack over a declared parent PR;
+   an ordinary stale-`main` branch must be rebased.
 
 The gate records the exact before/after SHAs, any newly opened covering PR, and any merged PR that
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
@@ -727,7 +737,10 @@ before the queue auto-merges a PR:
   `gate-verdict: accepted @ <head_sha>` trailer, and a current
   `pr-metadata: reconciled @ <digest>` trailer binding the exact final PR title/body pair
   (the gate reuses
-  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict` and `current_gate_verdict_status`,
+  which always recompute the exact-head verdict from trusted carrier bodies and fields at every admission consumer;
+  compact snapshot projection fields provide head-bound diagnostic and routing context, but a projection alone
+  never manufactures acceptance, and forged or mismatched projections fail closed) authored by a repository owner,
   member, or collaborator; verdict-like text from an untrusted contributor is ignored. The metadata
   digest is computed from the live title/body through the REST-backed snapshot and stale or missing
   metadata evidence fails closed. The gate also requires no unresolved actionable review threads and no outstanding explicitly requested
@@ -826,11 +839,13 @@ Use the three explicit modes as follows:
   it performs no remote mutation.
 - `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
   receipt; a changed head, base, metadata, check, review, thread, requested reviewer, hold, or
-  ordinary-CAS proof blocks.
+  ordinary-CAS proof blocks. If `--output <path>` is also supplied, it must resolve to a different
+  file so the source receipt cannot be replaced by the validation payload.
 - `--mode apply --receipt-file <path>` repeats validation, rereads the live PR body/head and
   rechecks paginated commit metadata plus current issue metadata immediately before letting the
   receipt owner issue exactly one expected-head squash merge, then rereads the closed/merged PR
-  and records the returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
+  and records the returned SHA. When `--output` is supplied, it must resolve to a different file
+  than `--receipt-file`. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
   coordinator and delegates its root merge to the same owner; its stack receipt must carry the
   same explicit closing-discipline result.
 
@@ -912,6 +927,14 @@ head SHAs. It also returns the stable `next_action`
 live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
 retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
 successful reconciliation.
+
+Transport failures are reported separately from metadata conflicts. A non-zero REST result that
+contains an HTTP 5xx status is classified as `http_5xx`; an empty or malformed successful response
+is classified as `malformed_json`. Both remain unverified and include a safe `transport` diagnostic
+with no response payload. The helper does not retry PATCH requests automatically, because GitHub
+may have applied a write before returning an error. Refresh the live metadata first, and only retry
+after an exact read has established that the desired title/body pair is not already present; a
+successful reconciliation still requires the normal post-update exact read.
 
 ### Exact-head stability snapshot (issue #7523)
 
@@ -1048,6 +1071,12 @@ the payload instead records `checks.pending_reason: "runner_queue_starvation"`, 
 age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
 that diagnostic threshold for a known environment. This is an external queue blocker only:
 `checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
+For a pull request whose required CI identities are absent because the complete changed-file
+inventory matches the checked-in `.github/workflows/ci.yml` `paths-ignore` manifest, the monitor
+reports `checks.overall: "success"` with `checks.success_reason: "ci_not_required_docs_only"` and
+the same `monitor.success_reason`. The inventory is bounded and must end with a short page; mixed,
+malformed, truncated, or unavailable file evidence remains fail-closed as
+`required_checks_absent`/pending.
 For Actions lifecycle age warnings, queued and setup phases prefer the current job's
 `created_at`, then fall back to the workflow timestamp; this avoids aging a newly queued job from
 an older parent workflow. The human `actions_gate_age` summary counts the corresponding
@@ -1483,10 +1512,14 @@ uv run python scripts/dev/gh_pr_label_rest.py list <number> \
   --repo ll7/robot_sf_ll7
 
 # add/remove a PR label (verify-on-write, pure REST issues-labels endpoint)
+PR_HEAD_SHA=<full-40-character-head-sha>
+PR_BASE_SHA=<full-40-character-base-sha>
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
-  --label merge-ready --repo ll7/robot_sf_ll7
+  --target pr --label merge-ready --repo ll7/robot_sf_ll7 \
+  --expected-head-sha "$PR_HEAD_SHA" --expected-base-sha "$PR_BASE_SHA"
 uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
-    --label merge-ready --repo ll7/robot_sf_ll7
+  --target pr --label merge-ready --repo ll7/robot_sf_ll7 \
+  --expected-head-sha "$PR_HEAD_SHA" --expected-base-sha "$PR_BASE_SHA"
 
 # PR conversation comments, drop-in for `gh pr view <number> --comments`
 # (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
@@ -1498,9 +1531,11 @@ scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
 scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
 ```
 
-The label helper covers paginated reads plus `merge-ready` add/remove (and any
-PR or issue label) through `repos/{repo}/issues/{number}/labels`, which GitHub
-treats as the PR label endpoint. The comment helper reads the conversation thread through
+The label helper covers paginated reads plus guarded PR label mutations and compatibility
+issue-label mutations through `repos/{repo}/issues/{number}/labels`, which GitHub
+treats as the PR label endpoint. PR mutations require `--target pr` and the exact live
+head/base SHA pair; issue mutations retain the compatibility `--target issue` path. The
+comment helper reads the conversation thread through
 `repos/{repo}/issues/{number}/comments` (GitHub treats PR numbers as issue
 numbers), returning the PR header plus the same conversation-level comments
 `gh pr view --comments` would show. Inline review comments
@@ -1526,6 +1561,8 @@ uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json
 uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json \
   --capsule-dir "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
 uv run python -m scripts.dev.snapshot_issue_batch --claimable --json
+# Incomplete claimable scans exit non-zero: page/raise --limit, or pass --allow-incomplete for
+# bounded discovery. Conclude zero eligible work only when `zero_work_authoritative` is true.
 uv run python -m scripts.dev.snapshot_issue_batch --blocked-external-report \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/blocked-external-assets.md"
 uv run python -m scripts.dev.snapshot_issue_batch --active-portfolio \

@@ -10,6 +10,7 @@ from robot_sf.analysis_workbench.process_trace_receipt import (
     build_simulation_trace_receipt,
     simulation_trace_receipt_sha256,
 )
+from robot_sf.common.math_utils import wrap_angle_pi
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -488,7 +489,7 @@ def _distance(left: tuple[float, float], right: tuple[float, float]) -> float:
 
 
 def _wrapped_angle_delta(left: float, right: float) -> float:
-    return (left - right + math.pi) % (2.0 * math.pi) - math.pi
+    return wrap_angle_pi(left - right)
 
 
 def _nullable_delta(left: object, right: object) -> float | None:

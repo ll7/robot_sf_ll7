@@ -12,6 +12,10 @@ an automation whether an incident can be auto-closed:
   deciding failure -> the failure is superseded; the incident can be reconciled.
 - ``active`` : the latest decisive main run is still a failure -> the incident
   is live and must stay open.
+- ``superseded_pending_verdict``: the latest decisive run is a failure, but every
+  run NEWER than it was cancelled/superseded without a verdict (rapid merges).
+  The failure itself is no longer the live head verdict; verification is pending.
+  Fail closed: never auto-close, never report green.
 - ``pending``: no decisive verdict, or the incident's deciding failure cannot be
   resolved against the run window -> fail closed (do not auto-close).
 
@@ -51,6 +55,27 @@ from scripts.dev.main_ci_is_green import (
 INCIDENT_SCHEMA_VERSION = "main_ci_incident_reconcile.v1"
 
 
+def _newer_superseded_run_count(runs: list[Any], reference_id: int) -> int:
+    """Count completed non-decisive runs (cancelled/superseded) newer than ``reference_id``.
+
+    A cancelled run is never a verdict, but its presence proves that a newer head
+    was pushed and abandoned without verification (see issue #8998).
+    """
+    count = 0
+    for run in runs:
+        try:
+            run_id = int(run.get("databaseId"))
+        except (TypeError, ValueError):
+            continue
+        if run_id <= reference_id:
+            continue
+        if str(run.get("status") or "") != "completed":
+            continue
+        if classify(run.get("conclusion")) not in {"green", "red"}:
+            count += 1
+    return count
+
+
 def incident_reconcile_status(deciding_failure_run_id: int | None, runs: list[Any]) -> str:
     """Classify a red-main incident for auto-reconcile.
 
@@ -61,7 +86,8 @@ def incident_reconcile_status(deciding_failure_run_id: int | None, runs: list[An
             :func:`main_ci_is_green.fetch_run_window`).
 
     Returns:
-        ``stale``, ``active``, or ``pending`` (see module docstring).
+        ``stale``, ``active``, ``superseded_pending_verdict``, or ``pending``
+        (see module docstring).
     """
     if deciding_failure_run_id is None:
         return "pending"
@@ -70,6 +96,9 @@ def incident_reconcile_status(deciding_failure_run_id: int | None, runs: list[An
         return "pending"
     verdict = classify(latest.get("conclusion"))
     if verdict == "red":
+        latest_id = latest.get("databaseId")
+        if latest_id is not None and _newer_superseded_run_count(runs, int(latest_id)) > 0:
+            return "superseded_pending_verdict"
         return "active"
     if verdict != "green":
         return "pending"
@@ -95,6 +124,12 @@ def build_incident_signal(
     than being confusable with a genuine red (``active``) or a clean close.
     """
     is_green, current_run = decide(runs)
+    superseded_run_count = 0
+    if current_run is not None and current_run.get("databaseId") is not None:
+        try:
+            superseded_run_count = _newer_superseded_run_count(runs, int(current_run["databaseId"]))
+        except (TypeError, ValueError):
+            superseded_run_count = 0
     return {
         "schema_version": INCIDENT_SCHEMA_VERSION,
         "status": status,
@@ -102,6 +137,7 @@ def build_incident_signal(
         "can_auto_close": status == "stale",
         "decisive_run_found": current_run is not None,
         "window_exhausted": bool(window_exhausted),
+        "superseded_run_count": superseded_run_count,
         "deciding_failure_run_id": deciding_failure_run_id,
         "current_deciding_run": (
             {
@@ -210,9 +246,11 @@ def main() -> int:
             )
         )
     elif not args.quiet:
-        print(
-            f"incident {args.deciding_run}: {status} -> {'reconcilable' if status == 'stale' else 'do not close'}"
-        )
+        suffix = {
+            "stale": "reconcilable",
+            "superseded_pending_verdict": "do not close (superseded, verification pending)",
+        }.get(status, "do not close")
+        print(f"incident {args.deciding_run}: {status} -> {suffix}")
     return 0 if status == "stale" else 1
 
 

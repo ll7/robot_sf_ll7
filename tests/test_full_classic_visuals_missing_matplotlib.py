@@ -15,13 +15,13 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal benchmark configuration helper for missing matplotlib tests."""
 
     def __init__(self, tmp_path: Path):
-        """TODO docstring. Document this function.
+        """Initialize benchmark configuration for simulated matplotlib absence.
 
         Args:
-            tmp_path: TODO docstring.
+            tmp_path: Temporary directory root for benchmark outputs and minimal matrix.
         """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
@@ -42,21 +42,21 @@ class _Cfg:
 
 
 def _read_json(path: Path):
-    """TODO docstring. Document this function.
+    """Load and parse a JSON report file from disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the JSON artifact file to read.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_plots_skipped_when_matplotlib_missing(monkeypatch, tmp_path):
-    """TODO docstring. Document this function.
+    """Verify that plot artifact generation records skipped status when matplotlib is absent.
 
     Args:
-        monkeypatch: TODO docstring.
-        tmp_path: TODO docstring.
+        monkeypatch: Pytest monkeypatch fixture used to set plots.plt to None.
+        tmp_path: Pytest temporary directory fixture for isolated benchmark outputs.
     """
     plots_mod = importlib.import_module("robot_sf.benchmark.full_classic.plots")
     # Force simulated absence

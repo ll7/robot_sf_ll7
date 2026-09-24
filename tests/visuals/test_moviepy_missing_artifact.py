@@ -1,4 +1,10 @@
-"""TODO docstring. Document this module."""
+"""Assert encode-level moviepy absence keeps per-episode artifacts.
+
+SimulationView availability, replay extraction, frame generation, and encoding
+are stubbed so every episode reaches the encode skip path. Both episodes still
+produce SimulationView-classified artifacts with a non-null note, and the
+performance summary reports zero successful videos.
+"""
 
 from pathlib import Path
 
@@ -9,14 +15,14 @@ from robot_sf.benchmark.full_classic.visual_constants import NOTE_MOVIEPY_MISSIN
 
 
 class DummyEnc:
-    """TODO docstring. Document this class."""
+    """Encode-result stand-in exposing status, note, and optional metric fields."""
 
     def __init__(self, status: str, note: str | None):
-        """TODO docstring. Document this function.
+        """Store the encode status and note; leave metrics unset.
 
         Args:
-            status: TODO docstring.
-            note: TODO docstring.
+            status: Encode status string.
+            note: Optional note describing the status.
         """
         self.status = status
         self.note = note
@@ -26,27 +32,27 @@ class DummyEnc:
 
 def fake_generate_frames(_ep, *, fps: int = 10, max_frames=None, **_kwargs):
     # Yield minimal frames; encoder result will mark skipped/moviepy-missing.
-    """TODO docstring. Document this function.
+    """Yield two placeholder frames so the stubbed encoder is reached.
 
     Args:
-        _ep: TODO docstring.
-        fps: TODO docstring.
-        max_frames: TODO docstring.
-        _kwargs: TODO docstring.
+        _ep: Replay episode accepted and ignored.
+        fps: Frames-per-second option accepted and ignored.
+        max_frames: Optional frame cap accepted and ignored.
+        _kwargs: Additional keyword arguments accepted and ignored.
     """
     for _ in range(2):
         yield None
 
 
 def fake_encode_frames(_frame_iter, _path, *, fps: int = 10, sample_memory: bool = False, **_kw):
-    """TODO docstring. Document this function.
+    """Return a skipped encode result carrying the moviepy-missing note.
 
     Args:
-        _frame_iter: TODO docstring.
-        _path: TODO docstring.
-        fps: TODO docstring.
-        sample_memory: TODO docstring.
-        _kw: TODO docstring.
+        _frame_iter: Frame iterator accepted and ignored.
+        _path: Output path accepted and ignored.
+        fps: Frames-per-second option accepted and ignored.
+        sample_memory: Memory-sampling flag accepted and ignored.
+        _kw: Additional keyword arguments accepted and ignored.
     """
     return DummyEnc(status="skipped", note=NOTE_MOVIEPY_MISSING)
 
@@ -54,10 +60,13 @@ def fake_encode_frames(_frame_iter, _path, *, fps: int = 10, sample_memory: bool
 @pytest.fixture(autouse=True)
 def patch_dependencies(monkeypatch):
     # Force simulation view available and replay capture active
-    """TODO docstring. Document this function.
+    """Mark SimulationView available and stub frame, encode, and replay helpers.
+
+    Autouse fixture that routes every episode through the encode path and returns
+    a skipped/moviepy-missing encode result.
 
     Args:
-        monkeypatch: TODO docstring.
+        monkeypatch: Pytest fixture used to patch the visuals module helpers.
     """
     monkeypatch.setattr(visuals_mod, "_SIM_VIEW_AVAILABLE", True)
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
@@ -73,7 +82,7 @@ def patch_dependencies(monkeypatch):
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub forcing SimulationView rendering with two videos and no frame cap."""
 
     capture_replay = True
     video_fps = 5
@@ -86,11 +95,16 @@ class Cfg:
 
 def test_moviepy_missing_yields_skipped_artifact(tmp_path: Path, monkeypatch):
     # Provide replay episodes; we bypass validation by monkeypatching validate_replay_episode
-    """TODO docstring. Document this function.
+    """Assert skipped encodes still yield one artifact per episode.
+
+    Replay validation is forced true so the encode skip path is reached; both
+    episodes produce SimulationView-classified artifacts with skipped or failed
+    status and a note, and performance reports zero successful videos with a
+    no-successful-videos note.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to force replay validation to pass.
     """
     records = [
         {"episode_id": "ep1", "scenario_id": "sc1"},

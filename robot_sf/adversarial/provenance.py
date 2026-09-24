@@ -14,7 +14,6 @@ local repository state, not the scientific result.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import platform
@@ -22,6 +21,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from robot_sf.evidence.writers import sha256_file
 
 _EXECUTION_CONTEXT_SCHEMA = "adversarial_execution_context.v1"
 _RECEIPT_SCHEMA = "adversarial_receipt_manifest.v1"
@@ -146,13 +147,12 @@ def write_execution_context(
 
 
 def sha256_of_file(path: Path | str) -> str:
-    """Return the SHA-256 hex digest of a file, streaming to bound memory."""
-    path = Path(path)
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Return the SHA-256 hex digest of a file, streaming to bound memory.
+
+    Delegates to the canonical :func:`robot_sf.evidence.writers.sha256_file`;
+    additionally accepts ``str`` inputs (preserved public contract).
+    """
+    return sha256_file(Path(path))
 
 
 @dataclass(frozen=True)

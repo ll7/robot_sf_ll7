@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for batch scenario episode execution and JSONL serialization."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_run_batch_to_tmp(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify batch scenario execution produces valid serialized episode records.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory fixture for output episode logs.
     """
     scenarios = [
         {

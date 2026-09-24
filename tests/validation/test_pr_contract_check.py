@@ -10,6 +10,9 @@ import hashlib
 import json
 import re
 import subprocess
+import unicodedata
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -23,6 +26,378 @@ ROOT = Path(__file__).resolve().parents[2]
 # PR #8440 is the known pre-guard regression: its merge reference closed the
 # incident in #8414 before the two-green reconciler criterion was established.
 KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
+
+
+# Keep this mapping deliberately narrow: entries must identify one merged PR,
+# one linked issue, and the immutable GitHub file-stat totals that prove the
+# historical breach. The current last-20 inventory has no such breach: PR
+# #9122 is 631 additions/1 deletion against issue #8851's 800-line cap, and
+# PR #9118 is 750 additions/1 deletion against issue #8856's 750-line cap.
+@dataclass(frozen=True)
+class HistoricalPREvidence:
+    """File statistics bound to the immutable revisions of one merged PR."""
+
+    pr_number: int
+    base_sha: str
+    head_sha: str
+    merge_commit_sha: str
+    merge_parent_shas: tuple[str, ...]
+    merge_base_sha: str
+    changed_files: tuple[str, ...]
+    numstat: pr_contract_check.HistoricalNumstatEvidence
+
+    def __post_init__(self) -> None:
+        """Reject malformed or internally inconsistent compatibility evidence."""
+        if (
+            not isinstance(self.pr_number, int)
+            or isinstance(self.pr_number, bool)
+            or self.pr_number <= 0
+        ):
+            raise ValueError("historical evidence PR number must be positive")
+        if (
+            not isinstance(self.merge_parent_shas, tuple)
+            or not self.merge_parent_shas
+            or any(
+                not isinstance(parent_sha, str)
+                or re.fullmatch(r"[0-9a-fA-F]{40}", parent_sha) is None
+                for parent_sha in self.merge_parent_shas
+            )
+            or len(self.merge_parent_shas) != len(set(self.merge_parent_shas))
+        ):
+            raise ValueError("historical evidence merge parents must be unique full commit IDs")
+        sha_values = (
+            self.base_sha,
+            self.head_sha,
+            self.merge_commit_sha,
+            self.merge_base_sha,
+        )
+        if any(
+            not isinstance(sha, str) or re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None
+            for sha in sha_values
+        ):
+            raise ValueError("historical evidence revisions must be full commit IDs")
+        if self.merge_base_sha != self.base_sha:
+            raise ValueError("historical evidence merge base must equal the comparison base")
+        if not isinstance(self.changed_files, tuple):
+            raise ValueError("historical evidence changed files must be immutable")
+        if not isinstance(self.numstat, pr_contract_check.HistoricalNumstatEvidence):
+            raise ValueError("historical evidence must carry validated numstat")
+        if self.changed_files != self.numstat.changed_files:
+            raise ValueError("historical evidence files do not match validated numstat")
+
+
+# This is a test-only compatibility fixture. It deliberately cannot authorize a live
+# regression sweep; production exceptions remain empty until a real merged breach is
+# reviewed and recorded with its exact immutable identity and totals.
+HISTORICAL_BUDGET_EXCEPTION_FIXTURES: dict[int, dict[int, dict[str, object]]] = {
+    9000: {
+        8000: {
+            "identity": {
+                "base_sha": "a" * 40,
+                "head_sha": "b" * 40,
+                "merge_commit_sha": "c" * 40,
+                "merge_parent_shas": ["a" * 40],
+                "merge_base_sha": "a" * 40,
+            },
+            "stats": {"files": 3, "added": 825, "deleted": 0, "net": 825},
+        }
+    }
+}
+
+# No live compatibility exceptions are currently authorized.
+KNOWN_HISTORICAL_BUDGET_EXCEPTIONS: dict[int, dict[int, dict[str, object]]] = {}
+
+
+def _matches_historical_budget_exception(
+    evidence: HistoricalPREvidence, issue_number: int, record: dict[str, object]
+) -> bool:
+    """Match only when PR identity and every exact immutable statistic agree."""
+    identity = record.get("identity")
+    stats = record.get("stats")
+    if not isinstance(identity, dict) or not isinstance(stats, dict):
+        return False
+    expected_identity = {
+        "base_sha": evidence.base_sha,
+        "head_sha": evidence.head_sha,
+        "merge_commit_sha": evidence.merge_commit_sha,
+        "merge_parent_shas": list(evidence.merge_parent_shas),
+        "merge_base_sha": evidence.merge_base_sha,
+    }
+    if (
+        identity != expected_identity
+        or evidence.pr_number not in KNOWN_HISTORICAL_BUDGET_EXCEPTIONS
+    ):
+        return False
+    if set(stats) != {"files", "added", "deleted", "net"}:
+        return False
+    if (
+        evidence.merge_base_sha != evidence.base_sha
+        or not evidence.merge_parent_shas
+        or any(
+            not isinstance(parent_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", parent_sha)
+            for parent_sha in evidence.merge_parent_shas
+        )
+    ):
+        return False
+    expected = KNOWN_HISTORICAL_BUDGET_EXCEPTIONS[evidence.pr_number].get(issue_number)
+    measured = {
+        "files": evidence.numstat.files,
+        "added": evidence.numstat.added,
+        "deleted": evidence.numstat.deleted,
+        "net": evidence.numstat.net,
+    }
+    return expected == record and all(
+        isinstance(value, int) and not isinstance(value, bool) and measured.get(key) == value
+        for key, value in stats.items()
+    )
+
+
+def _is_expected_historical_budget_blocker(
+    evidence: HistoricalPREvidence, body: str, blocker: str
+) -> bool:
+    """Return whether a budget blocker is covered by an exact exception record."""
+    match = re.match(
+        r"^BLOCKER: PR exceeds the budget declared in issue #(?P<issue>[0-9]+)\b",
+        blocker,
+    )
+    if match is None:
+        return False
+    issue_number = int(match.group("issue"))
+    closed_issue_numbers = {
+        int(issue) for issue in pr_contract_check.find_closed_issues(body, "ll7/robot_sf_ll7")
+    }
+    if issue_number not in closed_issue_numbers:
+        return False
+    return _matches_historical_budget_exception(
+        evidence,
+        issue_number,
+        KNOWN_HISTORICAL_BUDGET_EXCEPTIONS.get(evidence.pr_number, {}).get(issue_number, {}),
+    )
+
+
+def _fetch_historical_pr_identity(number: int, repo: str) -> tuple[str, str, str] | None:
+    """Read and validate the immutable revision identity of a merged PR."""
+    try:
+        metadata_response = subprocess.run(
+            ["gh", "api", f"repos/{repo}/pulls/{number}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        metadata = json.loads(metadata_response.stdout)
+        if not isinstance(metadata, dict) or not _is_valid_github_merged_at(
+            metadata.get("merged_at")
+        ):
+            return None
+        if metadata.get("state") != "closed" or metadata.get("merged") is not True:
+            return None
+        base = metadata.get("base")
+        head = metadata.get("head")
+        base_sha = base.get("sha") if isinstance(base, dict) else None
+        head_sha = head.get("sha") if isinstance(head, dict) else None
+        merge_commit_sha = metadata.get("merge_commit_sha")
+        sha_values = (base_sha, head_sha, merge_commit_sha)
+        if any(
+            not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha)
+            for sha in sha_values
+        ):
+            return None
+        return tuple(sha.lower() for sha in sha_values)  # type: ignore[return-value]
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError):
+        return None
+
+
+_GITHUB_MERGED_AT_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
+
+
+def _is_valid_github_merged_at(value: object) -> bool:
+    """Return whether *value* has GitHub's UTC timestamp shape and valid date."""
+    if not isinstance(value, str) or _GITHUB_MERGED_AT_PATTERN.fullmatch(value) is None:
+        return False
+    try:
+        datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except ValueError:
+        return False
+    return True
+
+
+def _historical_compare_reaches_target(
+    comparison: object,
+    base_sha: str,
+    target_sha: str,
+    *,
+    expected_merge_base_sha: str | None = None,
+) -> bool:
+    """Validate immutable endpoint identities in a GitHub compare response."""
+    if not isinstance(comparison, dict):
+        return False
+    compare_base = comparison.get("base_commit")
+    compare_merge_base = comparison.get("merge_base_commit")
+    compare_commits = comparison.get("commits")
+    total_commits = comparison.get("total_commits")
+    if (
+        not isinstance(compare_base, dict)
+        or compare_base.get("sha") != base_sha
+        or not isinstance(compare_merge_base, dict)
+        or not isinstance(compare_merge_base.get("sha"), str)
+        or not re.fullmatch(r"[0-9a-fA-F]{40}", compare_merge_base["sha"])
+        or not isinstance(compare_commits, list)
+        or not compare_commits
+        or not isinstance(total_commits, int)
+        or isinstance(total_commits, bool)
+        or total_commits != len(compare_commits)
+    ):
+        return False
+    if expected_merge_base_sha is not None and compare_merge_base["sha"] != expected_merge_base_sha:
+        return False
+    commit_shas: set[str] = set()
+    for commit in compare_commits:
+        if (
+            not isinstance(commit, dict)
+            or not isinstance(commit.get("sha"), str)
+            or not re.fullmatch(r"[0-9a-fA-F]{40}", commit["sha"])
+            or commit["sha"] in commit_shas
+        ):
+            return False
+        commit_shas.add(commit["sha"])
+    last_compare_commit = compare_commits[-1]
+    return isinstance(last_compare_commit, dict) and last_compare_commit.get("sha") == target_sha
+
+
+def _fetch_historical_compare(
+    repo: str, base_sha: str, head_sha: str
+) -> tuple[tuple[str, ...], pr_contract_check.HistoricalNumstatEvidence] | None:
+    """Read file statistics from a compare addressed by full commit IDs."""
+    try:
+        compare_response = subprocess.run(
+            ["gh", "api", f"repos/{repo}/compare/{base_sha}...{head_sha}?per_page=100"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        comparison = json.loads(compare_response.stdout)
+        if not isinstance(comparison, dict):
+            return None
+        if not _historical_compare_reaches_target(comparison, base_sha, head_sha):
+            return None
+        files = comparison.get("files")
+        if not isinstance(files, list) or not files or len(files) >= 100:
+            return None
+        rows: list[tuple[str, int, int]] = []
+        seen_filenames: set[str] = set()
+        for item in files:
+            if not isinstance(item, dict):
+                return None
+            filename = item.get("filename")
+            additions = item.get("additions")
+            deletions = item.get("deletions")
+            if (
+                not isinstance(filename, str)
+                or not filename
+                or any(unicodedata.category(character) == "Cc" for character in filename)
+                or isinstance(additions, bool)
+                or not isinstance(additions, int)
+                or additions < 0
+                or isinstance(deletions, bool)
+                or not isinstance(deletions, int)
+                or deletions < 0
+                or filename in seen_filenames
+            ):
+                return None
+            seen_filenames.add(filename)
+            rows.append((filename, additions, deletions))
+        changed_files = tuple(filename for filename, _, _ in rows)
+        numstat = "".join(
+            f"{additions}\t{deletions}\t{filename}\n" for filename, additions, deletions in rows
+        )
+        validated_numstat = pr_contract_check.HistoricalNumstatEvidence.from_numstat(numstat)
+        if changed_files != validated_numstat.changed_files:
+            return None
+        return changed_files, validated_numstat
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError):
+        return None
+
+
+def _fetch_historical_merge_binding(
+    repo: str, base_sha: str, merge_commit_sha: str
+) -> tuple[tuple[str, ...], str] | None:
+    """Bind the exact merge commit to the immutable base revision."""
+    try:
+        merge_response = subprocess.run(
+            ["gh", "api", f"repos/{repo}/commits/{merge_commit_sha}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        merge_commit = json.loads(merge_response.stdout)
+        if not isinstance(merge_commit, dict):
+            return None
+        if merge_commit.get("sha") != merge_commit_sha:
+            return None
+        parents = merge_commit.get("parents")
+        if not isinstance(parents, list) or not parents:
+            return None
+        parent_shas: list[str] = []
+        for parent in parents:
+            parent_sha = parent.get("sha") if isinstance(parent, dict) else None
+            if not isinstance(parent_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", parent_sha):
+                return None
+            parent_shas.append(parent_sha.lower())
+        if len(parent_shas) != len(set(parent_shas)):
+            return None
+        # The PR diff compare binds base -> head; this second immutable compare
+        # binds the same base -> merge target. Squash/rebase merges may have a
+        # different direct parent, so the compare's merge-base is the relation
+        # checked here instead of assuming base is a direct merge parent.
+        merge_compare_response = subprocess.run(
+            ["gh", "api", f"repos/{repo}/compare/{base_sha}...{merge_commit_sha}?per_page=100"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        merge_comparison = json.loads(merge_compare_response.stdout)
+        if not _historical_compare_reaches_target(
+            merge_comparison,
+            base_sha,
+            merge_commit_sha,
+            expected_merge_base_sha=base_sha,
+        ):
+            return None
+        return tuple(parent_shas), base_sha
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError):
+        return None
+
+
+def _fetch_historical_pr_evidence(
+    number: int, repo: str = "ll7/robot_sf_ll7"
+) -> HistoricalPREvidence | None:
+    """Fetch file stats from a SHA-bound compare for one merged PR."""
+    identity = _fetch_historical_pr_identity(number, repo)
+    if identity is None:
+        return None
+    base_sha, head_sha, merge_commit_sha = identity
+    comparison = _fetch_historical_compare(repo, base_sha, head_sha)
+    if comparison is None:
+        return None
+    merge_binding = _fetch_historical_merge_binding(repo, base_sha, merge_commit_sha)
+    if merge_binding is None:
+        return None
+    merge_parent_shas, merge_base_sha = merge_binding
+    changed_files, numstat = comparison
+    return HistoricalPREvidence(
+        pr_number=number,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        merge_commit_sha=merge_commit_sha,
+        merge_parent_shas=merge_parent_shas,
+        merge_base_sha=merge_base_sha,
+        changed_files=tuple(changed_files),
+        numstat=numstat,
+    )
 
 
 def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, object]:
@@ -50,6 +425,7 @@ def test_find_closed_issues_keeps_cross_repository_references_parseable() -> Non
     """Qualified references are parsed so the discipline rule can ignore other repos."""
     body = "Closes other-org/other-repo#123 and closes ll7/robot_sf_ll7#456"
     assert pr_contract_check.find_closed_issues(body) == ["123", "456"]
+    assert pr_contract_check.find_closed_issues(body, "ll7/robot_sf_ll7") == ["456"]
 
 
 def test_find_title_issues() -> None:
@@ -158,6 +534,58 @@ def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> No
 
     mock_run.return_value = MagicMock(returncode=0, stdout='{"body": ""}')
     assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+
+
+@pytest.mark.parametrize(
+    "stdout, expected",
+    (
+        ('{"head_sha":"' + "a" * 40 + '","base_sha":"' + "b" * 40 + '"}', ("a" * 40, "b" * 40)),
+        ('{"head_sha":"short","base_sha":"' + "b" * 40 + '"}', None),
+        ('{"head_sha":"' + "a" * 40 + '","base_sha":null}', None),
+    ),
+)
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_label_guard_shas_validates_exact_pair(
+    mock_run: MagicMock, stdout: str, expected: tuple[str, str] | None
+) -> None:
+    """PR label callers require a complete full-SHA head/base pair."""
+    mock_run.return_value = MagicMock(returncode=0, stdout=stdout)
+
+    assert pr_contract_check.get_pr_label_guard_shas("8451", "ll7/robot_sf_ll7") == expected
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_label_guard_shas_uses_pull_request_rest_endpoint(mock_run: MagicMock) -> None:
+    """The guard pair comes from the exact PR REST object rather than a branch name."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"head_sha":"' + "a" * 40 + '","base_sha":"' + "b" * 40 + '"}',
+    )
+
+    assert pr_contract_check.get_pr_label_guard_shas("8451", "ll7/robot_sf_ll7") == (
+        "a" * 40,
+        "b" * 40,
+    )
+    mock_run.assert_called_once_with(
+        [
+            "gh",
+            "api",
+            "repos/ll7/robot_sf_ll7/pulls/8451",
+            "--jq",
+            "{head_sha: .head.sha, base_sha: .base.sha}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_label_guard_shas_rejects_non_ascii_number(mock_run: MagicMock) -> None:
+    """Only ASCII decimal PR numbers may reach the REST endpoint."""
+    assert pr_contract_check.get_pr_label_guard_shas("１２３", "ll7/robot_sf_ll7") is None
+    mock_run.assert_not_called()
 
 
 @patch("scripts.ci.pr_contract_check.subprocess.run")
@@ -272,6 +700,707 @@ def test_check_closes_discipline_fails_closed_when_commit_source_unavailable(
 def test_check_closes_discipline_allows_non_closing_reference() -> None:
     """``Refs`` keeps GitHub from closing an incident before reconciliation."""
     assert not pr_contract_check.check_closes_discipline("Refs #8414", "ll7/robot_sf_ll7")
+
+
+_OVERRIDE_NUMSTAT = "\n".join(f"300\t0\tscripts/dev/file_{index}.py" for index in range(5)) + "\n"
+_CAPPED_ISSUE_BODY = "Reviewability budget: Maximum 10 files and 800 net new lines.\n"
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_blocks_over_budget(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """An over-cap PR without an override is blocked with the issue number."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+    )
+
+    assert len(blockers) == 1
+    assert "#9094" in blockers[0]
+    assert "1500 net new lines > 800-line cap" in blockers[0]
+    mock_numstat.assert_called_once_with("origin/main")
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_honors_reasoned_override(
+    mock_metadata: MagicMock, _mock_numstat: MagicMock
+) -> None:
+    """A reasoned budget-override line clears the breach."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\nbudget-override: split agreed with review; follow-up filed\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+    )
+
+    assert blockers == []
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_is_inert_without_cap(
+    mock_metadata: MagicMock,
+) -> None:
+    """Issues without a declared cap never produce blockers."""
+    mock_metadata.return_value = (["technical-debt"], "No budget declared here.\n")
+
+    assert (
+        pr_contract_check.check_line_budget_discipline(
+            "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+        )
+        == []
+    )
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_ignores_other_repository(
+    mock_metadata: MagicMock,
+) -> None:
+    """A qualified close for another repository cannot select a local budget issue."""
+    assert (
+        pr_contract_check.check_line_budget_discipline(
+            "Closes other-org/other-repo#9094\n", "origin/main", "ll7/robot_sf_ll7"
+        )
+        == []
+    )
+    mock_metadata.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata", return_value=None)
+def test_check_line_budget_discipline_skips_unreadable_issue(
+    _mock_metadata: MagicMock,
+) -> None:
+    """An unreadable linked issue is left to the closes-discipline check."""
+    assert (
+        pr_contract_check.check_line_budget_discipline(
+            "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+        )
+        == []
+    )
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat", return_value=None)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """An unresolvable base cannot masquerade as an empty, within-budget diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n", "missing-base", "ll7/robot_sf_ll7"
+    )
+
+    assert len(blockers) == 1
+    assert "cannot measure the PR diff" in blockers[0]
+    assert "fail-closed" in blockers[0]
+    mock_numstat.assert_called_once_with("missing-base")
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat")
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_uses_supplied_historical_numstat(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """Historical evidence is selected per call and never reads the candidate HEAD diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text="10\t0\thistorical.py\n",
+    )
+
+    assert blockers == []
+    mock_numstat.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_run_all_checks_injects_historical_numstat_only_for_budget_check(
+    mock_metadata: MagicMock,
+) -> None:
+    """The regression harness can bind budget measurement to one historical PR."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "historical",
+        "Closes #9094\n",
+        [],
+        "ll7/robot_sf_ll7",
+        "missing-base",
+        None,
+        historical_numstat="10\t0\thistorical.py\n",
+    )
+
+    assert not any("cannot measure the PR diff" in blocker for blocker in blockers)
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_supplied_unavailable_historical_numstat_fails_closed(
+    mock_metadata: MagicMock,
+) -> None:
+    """An unavailable historical payload remains a blocker, not an empty diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text=None,
+    )
+
+    assert len(blockers) == 1
+    assert "fail-closed" in blockers[0]
+    assert "origin/main" in blockers[0]
+
+
+@pytest.mark.parametrize(
+    "numstat_text",
+    [
+        "",
+        "   \n",
+        "malformed payload\n",
+        "4\tbad\ta.py\n",
+        "4\t0\ta.py\textra\n",
+        "4\t0\ta.py\n5\t0\ta.py\n",
+    ],
+)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_supplied_historical_numstat_rejects_malformed_or_ambiguous_payload(
+    mock_metadata: MagicMock, numstat_text: str
+) -> None:
+    """Every malformed injected stats payload remains unavailable evidence."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text=numstat_text,
+    )
+
+    assert len(blockers) == 1
+    assert "fail-closed" in blockers[0]
+
+
+def test_historical_compare_requires_merge_base_and_unique_commits() -> None:
+    """Compare evidence must carry the exact base relation and unique commits."""
+    base_sha = "a" * 40
+    target_sha = "b" * 40
+    valid = {
+        "base_commit": {"sha": base_sha},
+        "merge_base_commit": {"sha": base_sha},
+        "total_commits": 1,
+        "commits": [{"sha": target_sha}],
+    }
+    missing_merge_base = {key: value for key, value in valid.items() if key != "merge_base_commit"}
+    wrong_merge_base = {**valid, "merge_base_commit": {"sha": "c" * 40}}
+    duplicate_commits = {
+        **valid,
+        "total_commits": 2,
+        "commits": [{"sha": target_sha}, {"sha": target_sha}],
+    }
+
+    assert _historical_compare_reaches_target(valid, base_sha, target_sha)
+    assert _historical_compare_reaches_target(
+        wrong_merge_base,
+        base_sha,
+        target_sha,
+    )
+    assert not _historical_compare_reaches_target(
+        wrong_merge_base,
+        base_sha,
+        target_sha,
+        expected_merge_base_sha=base_sha,
+    )
+    assert not _historical_compare_reaches_target(missing_merge_base, base_sha, target_sha)
+    assert not _historical_compare_reaches_target(duplicate_commits, base_sha, target_sha)
+
+
+@patch("subprocess.run")
+def test_fetch_historical_compare_rejects_duplicate_files(mock_run: MagicMock) -> None:
+    """Repeated filenames cannot become repeated numstat rows."""
+    base_sha = "a" * 40
+    head_sha = "b" * 40
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "base_commit": {"sha": base_sha},
+                "merge_base_commit": {"sha": base_sha},
+                "total_commits": 1,
+                "commits": [{"sha": head_sha}],
+                "files": [
+                    {"filename": "a.py", "additions": 4, "deletions": 1},
+                    {"filename": "a.py", "additions": 5, "deletions": 0},
+                ],
+            }
+        ),
+    )
+
+    assert _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha) is None
+
+
+@pytest.mark.parametrize(
+    "merged_at",
+    [None, {}, "", "not-a-timestamp", "2026-02-30T00:00:00Z"],
+)
+@patch("subprocess.run")
+def test_fetch_historical_pr_identity_rejects_malformed_merged_at(
+    mock_run: MagicMock, merged_at: object
+) -> None:
+    """Merged timestamps must remain a valid GitHub UTC timestamp string."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "state": "closed",
+                "merged": True,
+                "merged_at": merged_at,
+                "base": {"sha": "a" * 40},
+                "head": {"sha": "b" * 40},
+                "merge_commit_sha": "c" * 40,
+            }
+        ),
+    )
+
+    assert _fetch_historical_pr_identity(9122, "ll7/robot_sf_ll7") is None
+
+
+def test_historical_budget_exception_requires_exact_evidence() -> None:
+    """A bounded compatibility record cannot match another PR or changed stats."""
+    record = HISTORICAL_BUDGET_EXCEPTION_FIXTURES[9000][8000]
+    evidence = HistoricalPREvidence(
+        pr_number=9000,
+        base_sha="a" * 40,
+        head_sha="b" * 40,
+        merge_commit_sha="c" * 40,
+        merge_parent_shas=("a" * 40,),
+        merge_base_sha="a" * 40,
+        changed_files=("a.py", "b.py", "c.py"),
+        numstat=pr_contract_check.HistoricalNumstatEvidence.from_numstat(
+            "275\t0\ta.py\n275\t0\tb.py\n275\t0\tc.py\n"
+        ),
+    )
+    KNOWN_HISTORICAL_BUDGET_EXCEPTIONS[9000] = {80: record, 8000: record}
+    try:
+        assert _matches_historical_budget_exception(evidence, 8000, record)
+        mutated_stats = {**record, "stats": {**record["stats"], "net": 824}}
+        assert not _matches_historical_budget_exception(evidence, 8000, mutated_stats)
+        wrong_identity = {**record, "identity": {**record["identity"], "head_sha": "d" * 40}}
+        assert not _matches_historical_budget_exception(evidence, 8000, wrong_identity)
+        assert not _matches_historical_budget_exception(
+            HistoricalPREvidence(**{**evidence.__dict__, "pr_number": 9001}),
+            8000,
+            record,
+        )
+        assert not _matches_historical_budget_exception(evidence, 8000, {"stats": {}})
+        assert _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes #8000",
+            "BLOCKER: PR exceeds the budget declared in issue #8000 "
+            "(825 net new lines > 800-line cap).",
+        )
+        assert not _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes other-org/other-repo#8000",
+            "BLOCKER: PR exceeds the budget declared in issue #8000 "
+            "(825 net new lines > 800-line cap).",
+        )
+        assert _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes ll7/robot_sf_ll7#8000",
+            "BLOCKER: PR exceeds the budget declared in issue #8000 "
+            "(825 net new lines > 800-line cap).",
+        )
+        assert not _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes #8000",
+            "BLOCKER: independent incident issue #8000 requires review.",
+        )
+        assert not _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes #80",
+            "BLOCKER: PR exceeds the budget declared in issue #8000 "
+            "(825 net new lines > 800-line cap).",
+        )
+    finally:
+        KNOWN_HISTORICAL_BUDGET_EXCEPTIONS.clear()
+
+
+def test_historical_pr_evidence_rejects_malformed_identity_and_file_binding() -> None:
+    """Compatibility evidence cannot be constructed with forged identity or files."""
+    numstat = pr_contract_check.HistoricalNumstatEvidence.from_numstat("4\t1\ta.py\n")
+    valid = {
+        "pr_number": 9000,
+        "base_sha": "a" * 40,
+        "head_sha": "b" * 40,
+        "merge_commit_sha": "c" * 40,
+        "merge_parent_shas": ("a" * 40,),
+        "merge_base_sha": "a" * 40,
+        "changed_files": ("a.py",),
+        "numstat": numstat,
+    }
+
+    with pytest.raises(ValueError, match="full commit IDs"):
+        HistoricalPREvidence(**{**valid, "head_sha": "b"})
+    with pytest.raises(ValueError, match="unique full commit IDs"):
+        HistoricalPREvidence(**{**valid, "merge_parent_shas": ("a" * 40, "a" * 40)})
+    with pytest.raises(ValueError, match="files do not match"):
+        HistoricalPREvidence(**{**valid, "changed_files": ("forged.py",)})
+
+
+@pytest.mark.parametrize(
+    "filename", ["large.py\n0\t10000\tfake.py", "unsafe\x00.py", "unsafe\u0085.py"]
+)
+@patch("subprocess.run")
+def test_fetch_historical_compare_rejects_control_character_filenames(
+    mock_run: MagicMock, filename: str
+) -> None:
+    """GitHub filenames must not alter the row boundaries used for budget evidence."""
+    base_sha = "a" * 40
+    head_sha = "b" * 40
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "base_commit": {"sha": base_sha},
+                "merge_base_commit": {"sha": base_sha},
+                "total_commits": 1,
+                "commits": [{"sha": head_sha}],
+                "files": [{"filename": filename, "additions": 1000, "deletions": 0}],
+            }
+        ),
+    )
+
+    assert _fetch_historical_compare("ll7/robot_sf_ll7", base_sha, head_sha) is None
+
+
+@patch("subprocess.run")
+def test_fetch_historical_pr_evidence_renders_authoritative_numstat(
+    mock_run: MagicMock,
+) -> None:
+    """The historical adapter preserves GitHub additions/deletions per filename."""
+    mock_run.side_effect = [
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "state": "closed",
+                    "merged": True,
+                    "merged_at": "2026-09-01T00:00:00Z",
+                    "base": {"sha": "a" * 40},
+                    "head": {"sha": "b" * 40},
+                    "merge_commit_sha": "c" * 40,
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "base_commit": {"sha": "a" * 40},
+                    "merge_base_commit": {"sha": "a" * 40},
+                    "total_commits": 1,
+                    "commits": [{"sha": "b" * 40}],
+                    "files": [{"filename": "a.py", "additions": 4, "deletions": 1}],
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "sha": "c" * 40,
+                    "parents": [{"sha": "a" * 40}],
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "base_commit": {"sha": "a" * 40},
+                    "merge_base_commit": {"sha": "a" * 40},
+                    "total_commits": 1,
+                    "commits": [{"sha": "c" * 40}],
+                }
+            ),
+        ),
+    ]
+
+    evidence = _fetch_historical_pr_evidence(9122)
+    assert evidence is not None
+    assert evidence.changed_files == ("a.py",)
+    assert evidence.numstat.numstat == "4\t1\ta.py\n"
+    assert evidence.base_sha == "a" * 40
+    assert evidence.merge_parent_shas == ("a" * 40,)
+    assert evidence.merge_base_sha == "a" * 40
+    assert "pulls/9122" in mock_run.call_args_list[0].args[0][2]
+    assert "compare/" in mock_run.call_args_list[1].args[0][2]
+    assert f"commits/{'c' * 40}" in mock_run.call_args_list[2].args[0][2]
+    assert f"compare/{'a' * 40}...{'c' * 40}" in mock_run.call_args_list[3].args[0][2]
+
+
+@patch("subprocess.run")
+def test_fetch_historical_pr_evidence_returns_none_for_malformed_stats(
+    mock_run: MagicMock,
+) -> None:
+    """Malformed or unavailable historical stats cannot be treated as zero changes."""
+    mock_run.side_effect = [
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "state": "closed",
+                    "merged": True,
+                    "merged_at": "2026-09-01T00:00:00Z",
+                    "base": {"sha": "a" * 40},
+                    "head": {"sha": "b" * 40},
+                    "merge_commit_sha": "c" * 40,
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "base_commit": {"sha": "a" * 40},
+                    "merge_base_commit": {"sha": "a" * 40},
+                    "total_commits": 1,
+                    "commits": [{"sha": "b" * 40}],
+                    "files": [{"filename": "a.py", "additions": "4", "deletions": 1}],
+                }
+            ),
+        ),
+    ]
+
+    assert _fetch_historical_pr_evidence(9122) is None
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"state": "closed", "merged": True, "merged_at": "2026-09-01T00:00:00Z"},
+        {
+            "state": "closed",
+            "merged": True,
+            "merged_at": "2026-09-01T00:00:00Z",
+            "base": {"sha": "a" * 40},
+            "head": {"sha": "b" * 40},
+            "merge_commit_sha": "not-a-sha",
+        },
+    ],
+)
+@patch("subprocess.run")
+def test_fetch_historical_pr_evidence_rejects_unbound_revision_identity(
+    mock_run: MagicMock, metadata: dict[str, object]
+) -> None:
+    """A merged-PR record without a complete immutable identity is unavailable."""
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(metadata))
+
+    assert _fetch_historical_pr_evidence(9122) is None
+
+
+@patch("subprocess.run")
+def test_fetch_historical_pr_evidence_rejects_mutated_compare_identity(
+    mock_run: MagicMock,
+) -> None:
+    """Compare results must echo the requested immutable base revision."""
+    mock_run.side_effect = [
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "state": "closed",
+                    "merged": True,
+                    "merged_at": "2026-09-01T00:00:00Z",
+                    "base": {"sha": "a" * 40},
+                    "head": {"sha": "b" * 40},
+                    "merge_commit_sha": "c" * 40,
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "base_commit": {"sha": "d" * 40},
+                    "files": [{"filename": "a.py", "additions": 4, "deletions": 1}],
+                }
+            ),
+        ),
+    ]
+
+    assert _fetch_historical_pr_evidence(9122) is None
+
+
+@pytest.mark.parametrize(
+    "merge_payload",
+    [
+        {
+            "sha": "d" * 40,
+            "parents": [{"sha": "a" * 40}],
+        },
+        {
+            "sha": "c" * 40,
+            "parents": [],
+        },
+        {
+            "sha": "c" * 40,
+            "parents": [{"sha": "not-a-sha"}],
+        },
+        {
+            "sha": "c" * 40,
+            "parents": [{"sha": "a" * 40}, {"sha": "a" * 40}],
+        },
+    ],
+)
+@patch("subprocess.run")
+def test_fetch_historical_pr_evidence_rejects_unbound_merge_commit(
+    mock_run: MagicMock, merge_payload: dict[str, object]
+) -> None:
+    """Merge SHA and malformed parent identities remain unavailable evidence."""
+    mock_run.side_effect = [
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "state": "closed",
+                    "merged": True,
+                    "merged_at": "2026-09-01T00:00:00Z",
+                    "base": {"sha": "a" * 40},
+                    "head": {"sha": "b" * 40},
+                    "merge_commit_sha": "c" * 40,
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "base_commit": {"sha": "a" * 40},
+                    "merge_base_commit": {"sha": "a" * 40},
+                    "total_commits": 1,
+                    "commits": [{"sha": "b" * 40}],
+                    "files": [{"filename": "a.py", "additions": 4, "deletions": 1}],
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "sha": "c" * 40,
+                    "parents": [{"sha": "a" * 40}],
+                }
+            ),
+        ),
+        MagicMock(returncode=0, stdout=json.dumps(merge_payload)),
+    ]
+
+    assert _fetch_historical_pr_evidence(9122) is None
+
+
+@pytest.mark.parametrize(
+    "merge_comparison",
+    [
+        {
+            "base_commit": {"sha": "d" * 40},
+            "merge_base_commit": {"sha": "a" * 40},
+            "total_commits": 1,
+            "commits": [{"sha": "c" * 40}],
+        },
+        {
+            "base_commit": {"sha": "a" * 40},
+            "merge_base_commit": {"sha": "d" * 40},
+            "total_commits": 1,
+            "commits": [{"sha": "c" * 40}],
+        },
+        {
+            "base_commit": {"sha": "a" * 40},
+            "merge_base_commit": {"sha": "a" * 40},
+            "total_commits": 1,
+            "commits": [{"sha": "d" * 40}],
+        },
+    ],
+)
+@patch("subprocess.run")
+def test_fetch_historical_pr_evidence_rejects_mutated_merge_compare_identity(
+    mock_run: MagicMock, merge_comparison: dict[str, object]
+) -> None:
+    """The PR and merge compares must bind the immutable base/head/merge identity."""
+    mock_run.side_effect = [
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "state": "closed",
+                    "merged": True,
+                    "merged_at": "2026-09-01T00:00:00Z",
+                    "base": {"sha": "a" * 40},
+                    "head": {"sha": "b" * 40},
+                    "merge_commit_sha": "c" * 40,
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "base_commit": {"sha": "a" * 40},
+                    "merge_base_commit": {"sha": "a" * 40},
+                    "total_commits": 1,
+                    "commits": [{"sha": "b" * 40}],
+                    "files": [{"filename": "a.py", "additions": 4, "deletions": 1}],
+                }
+            ),
+        ),
+        MagicMock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "sha": "c" * 40,
+                    "parents": [{"sha": "a" * 40}],
+                }
+            ),
+        ),
+        MagicMock(returncode=0, stdout=json.dumps(merge_comparison)),
+    ]
+
+    assert _fetch_historical_pr_evidence(9122) is None
+
+
+@patch("subprocess.run")
+def test_diff_numstat_falls_back_to_two_dot_without_merge_base(
+    mock_run: MagicMock,
+) -> None:
+    """A shallow checkout without a merge base measures via the two-dot tree diff."""
+    mock_run.side_effect = [
+        MagicMock(returncode=1, stdout=""),
+        MagicMock(returncode=0, stdout="10\t2\tscripts/dev/a.py\n"),
+    ]
+
+    assert pr_contract_check._diff_numstat("origin/main") == "10\t2\tscripts/dev/a.py\n"
+    assert mock_run.call_count == 2
+    assert mock_run.call_args_list[0].args[0][-1] == "origin/main...HEAD"
+    assert mock_run.call_args_list[1].args[0][-1] == "origin/main..HEAD"
+
+
+@patch("subprocess.run")
+def test_diff_numstat_returns_none_when_both_forms_fail(mock_run: MagicMock) -> None:
+    """Unavailable measurement stays None so budget enforcement fails closed."""
+    mock_run.side_effect = [
+        MagicMock(returncode=1, stdout=""),
+        MagicMock(returncode=1, stdout=""),
+    ]
+
+    assert pr_contract_check._diff_numstat("origin/main") is None
 
 
 def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
@@ -690,8 +1819,10 @@ def test_check_successor_discipline(mock_run: MagicMock) -> None:
     body_no_stmt = "some description"
     body_ok = "This is a successor slice; does not duplicate PR #12"
 
-    # Merge exists
-    mock_run.return_value = MagicMock(returncode=0, stdout='[{"number": 12}]')
+    # Merge exists and canonically references the issue
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='[{"number": 12, "title": "Fix", "body": "Closes #123."}]'
+    )
 
     warnings = pr_contract_check.check_successor_discipline(title, body_no_stmt, "ll7/robot_sf_ll7")
     assert len(warnings) == 1
@@ -701,8 +1832,86 @@ def test_check_successor_discipline(mock_run: MagicMock) -> None:
     assert not warnings
 
 
+@patch("subprocess.run")
+def test_check_successor_discipline_requires_canonical_issue_reference(
+    mock_run: MagicMock,
+) -> None:
+    """A broad numeric search hit without a canonical reference is not a successor."""
+    title = "Issue #8818: title"
+
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout='[{"number": 3364, "title": "planner policy-builder refactor", "body": "unrelated"}]',
+    )
+
+    warnings = pr_contract_check.check_successor_discipline(
+        title, "some description", "ll7/robot_sf_ll7"
+    )
+
+    assert not warnings
+
+
+@pytest.mark.parametrize(
+    ("candidate_text", "expected"),
+    [
+        ("Closes #123.", True),
+        ("ll7/robot_sf_ll7#123", True),
+        ("https://github.com/ll7/robot_sf_ll7/issues/123", True),
+        ("issue 123 was discussed", False),
+        ("Fixes #123.5 rounding", False),
+        ("hash fragment #123abc", False),
+        ("other/repo#123", False),
+        ("cross-reference 18818", False),
+    ],
+)
+@patch("subprocess.run")
+def test_successor_discipline_reference_forms(
+    mock_run: MagicMock, candidate_text: str, expected: bool
+) -> None:
+    """Only canonical references to the specific repository issue count."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps([{"number": 42, "title": "candidate", "body": candidate_text}]),
+    )
+
+    warnings = pr_contract_check.check_successor_discipline(
+        "Issue #123: title", "some description", "ll7/robot_sf_ll7"
+    )
+
+    assert bool(warnings) is expected
+    if expected:
+        assert "referenced in 1 merged PR(s)" in warnings[0]
+
+
+@patch("subprocess.run")
+def test_successor_discipline_counts_only_confirmed_references(mock_run: MagicMock) -> None:
+    """The warning count reflects only canonically confirmed merged PRs."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            [
+                {"number": 1, "title": "Fix", "body": "Closes #123."},
+                {"number": 2, "title": "Other", "body": "plain 123 mention"},
+                {
+                    "number": 3,
+                    "title": "Again",
+                    "body": "https://github.com/ll7/robot_sf_ll7/issues/123",
+                },
+            ]
+        ),
+    )
+
+    warnings = pr_contract_check.check_successor_discipline(
+        "Issue #123: title", "some description", "ll7/robot_sf_ll7"
+    )
+
+    assert len(warnings) == 1
+    assert "referenced in 2 merged PR(s)" in warnings[0]
+
+
+@patch("scripts.ci.pr_contract_check.get_pr_label_guard_shas")
 @patch("scripts.ci.pr_contract_check.add_label")
-def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
+def test_check_worker_lane_provenance(mock_add_label: MagicMock, mock_get_shas: MagicMock) -> None:
     """Test check_worker_lane_provenance detects cheap lane and labels PR."""
     body_lane = "This PR was produced by the agy/Gemini-3.5-Flash cheap implementation lane"
     body_normal = "Some normal PR"
@@ -714,12 +1923,21 @@ def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
         "label": "cheap-lane",
         "action": "add",
     }
+    mock_get_shas.return_value = ("a" * 40, "b" * 40)
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_lane, "123", "ll7/robot_sf_ll7"
     )
     assert labeled is True
     assert "Automatically added" in info
-    mock_add_label.assert_called_once_with(123, "cheap-lane", repo="ll7/robot_sf_ll7")
+    mock_get_shas.assert_called_once_with("123", "ll7/robot_sf_ll7")
+    mock_add_label.assert_called_once_with(
+        123,
+        "cheap-lane",
+        repo="ll7/robot_sf_ll7",
+        target="pr",
+        expected_head_sha="a" * 40,
+        expected_base_sha="b" * 40,
+    )
 
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_normal, "123", "ll7/robot_sf_ll7"
@@ -727,69 +1945,205 @@ def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
     assert labeled is False
 
 
-def test_regression_last_20_merged_prs() -> None:
-    """Run regression test on the last 20 merged PRs to ensure zero false blockers."""
+@patch("scripts.ci.pr_contract_check.get_pr_label_guard_shas", return_value=None)
+@patch("scripts.ci.pr_contract_check.add_label")
+def test_check_worker_lane_provenance_skips_label_when_pr_shas_unavailable(
+    mock_add_label: MagicMock, mock_get_shas: MagicMock
+) -> None:
+    """A PR label write is withheld when the exact live head/base pair is unavailable."""
+    info, labeled = pr_contract_check.check_worker_lane_provenance(
+        "cheap implementation lane", "123", "ll7/robot_sf_ll7"
+    )
+
+    assert labeled is True
+    assert "exact PR head/base SHAs" in info
+    mock_get_shas.assert_called_once_with("123", "ll7/robot_sf_ll7")
+    mock_add_label.assert_not_called()
+
+
+_RECENT_MERGED_PR_LIMIT = 20
+
+
+def _validate_recent_merged_pr_inventory(
+    payload: object,
+) -> list[dict[str, object]]:
+    """Validate the exact, typed inventory required by the live regression sweep."""
+    if not isinstance(payload, list) or len(payload) != _RECENT_MERGED_PR_LIMIT:
+        raise ValueError(
+            f"recent merged PR inventory must contain exactly {_RECENT_MERGED_PR_LIMIT} rows"
+        )
+
+    normalized: list[dict[str, object]] = []
+    seen_numbers: set[int] = set()
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict) or set(item) != {"number", "title", "body"}:
+            raise ValueError(f"recent merged PR inventory row {index} has the wrong shape")
+        number = item["number"]
+        title = item["title"]
+        body = item["body"]
+        if (
+            not isinstance(number, int)
+            or isinstance(number, bool)
+            or number <= 0
+            or number in seen_numbers
+            or not isinstance(title, str)
+            or not title.strip()
+            or (body is not None and not isinstance(body, str))
+        ):
+            raise ValueError(f"recent merged PR inventory row {index} has invalid field types")
+        seen_numbers.add(number)
+        normalized.append({"number": number, "title": title, "body": body})
+    return normalized
+
+
+def _fetch_recent_merged_pr_inventory(repo: str) -> list[dict[str, object]]:
+    """Fetch and validate the complete recent merged-PR inventory, failing closed."""
     try:
-        res = subprocess.run(
+        response = subprocess.run(
             [
                 "gh",
                 "pr",
                 "list",
+                "--repo",
+                repo,
                 "--state",
                 "merged",
                 "--limit",
-                "20",
+                str(_RECENT_MERGED_PR_LIMIT),
                 "--json",
                 "number,title,body",
             ],
             capture_output=True,
             text=True,
+            timeout=15,
             check=True,
         )
-        prs = json.loads(res.stdout)
-    except (subprocess.SubprocessError, OSError, ValueError) as e:
-        # Narrow (not broad) except so the repo's except->skip policy is satisfied:
-        # OSError = gh not installed, SubprocessError = non-zero exit (check=True),
-        # ValueError = json.JSONDecodeError from unparseable stdout.
-        pytest.skip(f"Skipping regression test because gh CLI query failed: {e}")
-        return
+        return _validate_recent_merged_pr_inventory(json.loads(response.stdout))
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("recent merged PR inventory query timed out") from error
+    except (subprocess.SubprocessError, OSError, TypeError, ValueError) as error:
+        raise RuntimeError(f"recent merged PR inventory is unavailable: {error}") from error
+
+
+def _valid_recent_merged_pr_inventory() -> list[dict[str, object]]:
+    """Build a GitHub-compatible exact-size merged-PR inventory fixture."""
+    return [
+        {"number": number, "title": f"PR {number}", "body": None if number == 1 else ""}
+        for number in range(1, 21)
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload_factory",
+    [
+        lambda: None,
+        lambda: {},
+        lambda: [],
+        lambda: _valid_recent_merged_pr_inventory()[:19],
+        lambda: _valid_recent_merged_pr_inventory()[:-1] + [_valid_recent_merged_pr_inventory()[0]],
+        lambda: _valid_recent_merged_pr_inventory()[:-1] + [{}],
+        lambda: (
+            _valid_recent_merged_pr_inventory()[:-1]
+            + [{"number": "20", "title": "PR 20", "body": ""}]
+        ),
+        lambda: (
+            _valid_recent_merged_pr_inventory()[:-1] + [{"number": 20, "title": None, "body": ""}]
+        ),
+        lambda: (
+            _valid_recent_merged_pr_inventory()[:-1]
+            + [{"number": 20, "title": "PR 20", "body": 20}]
+        ),
+    ],
+)
+def test_recent_merged_pr_inventory_rejects_malformed_or_incomplete_payload(
+    payload_factory: object,
+) -> None:
+    """Inventory validation rejects every malformed, empty, or incomplete response."""
+    payload = payload_factory()  # type: ignore[operator]
+
+    with pytest.raises(ValueError):
+        _validate_recent_merged_pr_inventory(payload)
+
+
+@patch("subprocess.run")
+def test_fetch_recent_merged_pr_inventory_uses_explicit_repo_and_timeout(
+    mock_run: MagicMock,
+) -> None:
+    """The live inventory query is repository-bound and time-bounded."""
+    payload = _valid_recent_merged_pr_inventory()
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(payload))
+
+    assert _fetch_recent_merged_pr_inventory("ll7/robot_sf_ll7") == payload
+    mock_run.assert_called_once_with(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--state",
+            "merged",
+            "--limit",
+            "20",
+            "--json",
+            "number,title,body",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=True,
+    )
+
+
+@patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["gh", "pr", "list"], 15))
+def test_fetch_recent_merged_pr_inventory_fails_closed_on_timeout(
+    _mock_run: MagicMock,
+) -> None:
+    """A hung inventory query is an error, never a passing or skipped sweep."""
+    with pytest.raises(RuntimeError, match="timed out"):
+        _fetch_recent_merged_pr_inventory("ll7/robot_sf_ll7")
+
+
+def test_regression_last_20_merged_prs() -> None:
+    """Run regression test on the last 20 merged PRs to ensure zero false blockers."""
+    try:
+        prs = _fetch_recent_merged_pr_inventory("ll7/robot_sf_ll7")
+    except RuntimeError as error:
+        pytest.fail(f"Cannot prove the recent merged PR regression sweep: {error}")
 
     for pr in prs:
-        title = pr.get("title", "")
-        body = pr.get("body", "") or ""
-        number = pr.get("number")
-
-        try:
-            res_files = subprocess.run(
-                [
-                    "gh",
-                    "api",
-                    f"repos/ll7/robot_sf_ll7/pulls/{number}/files?per_page=100",
-                    "--jq",
-                    ".[].filename",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
+        title = pr["title"]
+        body = pr["body"] or ""
+        number = pr["number"]
+        assert isinstance(title, str)
+        assert isinstance(body, str)
+        assert isinstance(number, int)
+        historical_evidence = _fetch_historical_pr_evidence(number)
+        if historical_evidence is None:
+            pytest.fail(
+                "Cannot prove the live PR regression sweep: immutable diff evidence unavailable "
+                f"for PR #{number}"
             )
-            changed_files = [line.strip() for line in res_files.stdout.splitlines() if line.strip()]
-        except Exception:
-            changed_files = []
+        changed_files = list(historical_evidence.changed_files)
 
         # Pass pr_number=None: this regression test only asserts on blockers, and
         # supplying a real PR number would make Rule 6 (worker-lane provenance) run a
         # live `gh pr edit --add-label cheap-lane` against real merged PRs as a test
         # side-effect. None exercises the same blocker paths without mutating GitHub.
         blockers, _, _ = pr_contract_check.run_all_checks(
-            title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", None
+            title,
+            body,
+            changed_files,
+            "ll7/robot_sf_ll7",
+            "origin/main",
+            None,
+            historical_numstat=historical_evidence.numstat,
         )
         metadata_unavailable = next(
             (blocker for blocker in blockers if "Could not verify issue" in blocker), None
         )
         if metadata_unavailable is not None:
-            # The production rule intentionally fails closed. A local regression sweep must not
-            # turn a temporary GitHub/API rate limit into a false code failure.
-            pytest.skip(f"Skipping live PR regression sweep: {metadata_unavailable}")
+            pytest.fail(f"Cannot prove the live PR regression sweep: {metadata_unavailable}")
         expected_incident_issues = KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS.get(number, set())
         for issue in expected_incident_issues:
             assert any(f"incident issue #{issue}" in blocker for blocker in blockers), (
@@ -799,6 +2153,7 @@ def test_regression_last_20_merged_prs() -> None:
             blocker
             for blocker in blockers
             if not any(f"incident issue #{issue}" in blocker for issue in expected_incident_issues)
+            and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"

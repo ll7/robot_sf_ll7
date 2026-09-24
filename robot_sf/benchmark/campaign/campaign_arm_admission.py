@@ -425,7 +425,13 @@ def _iter_model_ids(algo_config: dict[str, Any]) -> list[str]:
     so a
     nested prior/predictive checkpoint is still admitted.
     """
-    id_keys = ("model_id", "sacadrl_model_id", "predictive_model_id")
+    id_keys = (
+        "model_id",
+        "sacadrl_model_id",
+        "predictive_model_id",
+        "checkpoint_id",
+        "learned_policy_model_id",
+    )
     found: list[str] = []
 
     def _walk(node: Any) -> None:

@@ -12,10 +12,10 @@ from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
 
 
 def test_aggregate_metrics_structure(synthetic_episode_record):
-    """TODO docstring. Document this function.
+    """Verify aggregate_metrics returns one group with bounded rate-metric CIs.
 
     Args:
-        synthetic_episode_record: TODO docstring.
+        synthetic_episode_record: Factory that builds the two same-group episodes.
     """
     records = [
         synthetic_episode_record(
@@ -35,7 +35,7 @@ def test_aggregate_metrics_structure(synthetic_episode_record):
     ]
 
     class _Cfg:  # minimal config stub
-        """TODO docstring. Document this class."""
+        """Minimal config stub supplying bootstrap parameters for aggregation."""
 
         bootstrap_samples = 50
         bootstrap_confidence = 0.95

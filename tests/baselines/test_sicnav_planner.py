@@ -43,27 +43,10 @@ from robot_sf.baselines.sicnav import (
     _CampcPolicyRunner,
     build_sicnav_config,
 )
-
-
-def _make_robot_observation() -> dict[str, object]:
-    """Return a minimal robot observation accepted by the SICNav wrapper."""
-    return {
-        "dt": 0.1,
-        "robot": {
-            "position": [0.0, 0.0],
-            "velocity": [0.0, 0.0],
-            "goal": [1.0, 0.0],
-            "radius": 0.3,
-        },
-        "agents": [],
-        "obstacles": [],
-    }
-
-
-def _write(path: Path, text: str) -> None:
-    """Write a fake upstream-package file, creating parent directories."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.baselines._helpers import (
+    make_robot_observation,
+    write_fake_module_file,
+)
 
 
 def _purge_sicnav_family() -> None:
@@ -322,11 +305,11 @@ def test_close_releases_cached_resources() -> None:
 def test_import_sicnav_module_caches_result(_clean_sicnav_modules, tmp_path: Path) -> None:
     """``_import_sicnav_module`` should cache and reuse the imported module."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         "VALUE = 123\n",
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False})
     module = planner._import_sicnav_module()
     assert module.VALUE == 123
@@ -344,7 +327,7 @@ def test_import_sicnav_module_caches_result(_clean_sicnav_modules, tmp_path: Pat
 def test_build_policy_uses_load_policy_factory(_clean_sicnav_modules, tmp_path: Path) -> None:
     """The wrapper should drive a module-level ``load_policy`` factory when present."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 def load_policy(checkpoint_path=None, device=None, solver=None):
@@ -354,7 +337,7 @@ def load_policy(checkpoint_path=None, device=None, solver=None):
     return Policy()
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner(
         {
             "repo_root": str(repo_root),
@@ -365,7 +348,7 @@ def load_policy(checkpoint_path=None, device=None, solver=None):
         },
         seed=1,
     )
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action == {"v": 0.7, "omega": -0.2}
 
 
@@ -374,11 +357,11 @@ def test_build_policy_raises_when_no_supported_constructor(
 ) -> None:
     """A module without ``SICNavPolicy``/``load_policy`` should raise ``RuntimeError``."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
     with pytest.raises(RuntimeError, match="does not expose a supported policy constructor"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_use_upstream_campc_false_skips_campc_probe(
@@ -386,7 +369,7 @@ def test_use_upstream_campc_false_skips_campc_probe(
 ) -> None:
     """``use_upstream_campc=False`` should never call ``_build_campc_runner``."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 class SICNavPolicy:
@@ -396,14 +379,14 @@ class SICNavPolicy:
         return {"v": 0.1, "omega": 0.0}
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
 
     def _fail_probe() -> None:
         raise AssertionError("campc probe must not run when use_upstream_campc is False")
 
     monkeypatch.setattr(planner, "_build_campc_runner", _fail_probe)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action == {"v": 0.1, "omega": 0.0}
 
 
@@ -415,7 +398,7 @@ class SICNavPolicy:
 def test_step_raises_value_error_on_non_dict_action(_clean_sicnav_modules, tmp_path: Path) -> None:
     """``step`` should reject a non-dict policy payload with ``ValueError``."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 class SICNavPolicy:
@@ -425,16 +408,16 @@ class SICNavPolicy:
         return [0.0, 0.0]
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
     with pytest.raises(ValueError, match="invalid action payload"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_step_caches_policy_across_calls(_clean_sicnav_modules, tmp_path: Path) -> None:
     """``step`` should build the policy once and reuse it on subsequent calls."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 class SICNavPolicy:
@@ -445,11 +428,11 @@ class SICNavPolicy:
         return {"v": float(self.calls), "omega": 0.0}
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
-    first = planner.step(_make_robot_observation())
+    first = planner.step(make_robot_observation())
     cached_policy = planner._policy
-    second = planner.step(_make_robot_observation())
+    second = planner.step(make_robot_observation())
     assert planner._policy is cached_policy
     # The cached policy instance increments; a fresh build would reset calls to 1.
     assert first == {"v": 1.0, "omega": 0.0}
@@ -481,14 +464,14 @@ def test_clamp_action_disabled_passes_through_unchanged() -> None:
         v_max=1.0,
         omega_max=0.5,
     )
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action == {"vx": 5.0, "vy": 5.0, "v": 9.0, "omega": 4.0}
 
 
 def test_clamp_action_scales_over_limit_vx_vy() -> None:
     """A vx/vy action exceeding ``v_max`` should be scaled down proportionally."""
     planner = _make_planner_with_action({"vx": 3.0, "vy": 4.0}, v_max=2.0)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action["vx"] == pytest.approx(1.2)
     assert action["vy"] == pytest.approx(1.6)
     assert math.hypot(action["vx"], action["vy"]) == pytest.approx(2.0)
@@ -497,7 +480,7 @@ def test_clamp_action_scales_over_limit_vx_vy() -> None:
 def test_clamp_action_leaves_under_limit_vx_vy() -> None:
     """A vx/vy action within ``v_max`` should pass through unchanged."""
     planner = _make_planner_with_action({"vx": 0.3, "vy": 0.4}, v_max=2.0)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action == {"vx": 0.3, "vy": 0.4}
 
 
@@ -505,20 +488,20 @@ def test_clamp_action_raises_on_non_finite_vx_vy() -> None:
     """A non-finite vx/vy action should raise ``RuntimeError``."""
     planner = _make_planner_with_action({"vx": float("nan"), "vy": 0.0}, v_max=2.0)
     with pytest.raises(RuntimeError, match="non-finite velocity action"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_clamp_action_clamps_v_to_v_max() -> None:
     """A unicycle ``v`` above ``v_max`` should be clamped down to ``v_max``."""
     planner = _make_planner_with_action({"v": 5.0, "omega": 0.0}, v_max=2.0)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action["v"] == pytest.approx(2.0)
 
 
 def test_clamp_action_clamps_negative_v_to_zero() -> None:
     """A negative unicycle ``v`` should be clamped up to zero."""
     planner = _make_planner_with_action({"v": -1.5, "omega": 0.0}, v_max=2.0)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action["v"] == pytest.approx(0.0)
 
 
@@ -526,20 +509,20 @@ def test_clamp_action_raises_on_non_finite_v() -> None:
     """A non-finite unicycle ``v`` should raise ``RuntimeError``."""
     planner = _make_planner_with_action({"v": float("inf"), "omega": 0.0}, v_max=2.0)
     with pytest.raises(RuntimeError, match="non-finite velocity action"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_clamp_action_clamps_omega_to_max() -> None:
     """An ``omega`` above ``omega_max`` should be clamped down."""
     planner = _make_planner_with_action({"v": 0.5, "omega": 3.0}, omega_max=1.0)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action["omega"] == pytest.approx(1.0)
 
 
 def test_clamp_action_clamps_omega_to_neg_max() -> None:
     """An ``omega`` below ``-omega_max`` should be clamped up."""
     planner = _make_planner_with_action({"v": 0.5, "omega": -3.0}, omega_max=1.0)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action["omega"] == pytest.approx(-1.0)
 
 
@@ -547,13 +530,13 @@ def test_clamp_action_raises_on_non_finite_omega() -> None:
     """A non-finite ``omega`` should raise ``RuntimeError``."""
     planner = _make_planner_with_action({"v": 0.5, "omega": float("nan")}, omega_max=1.0)
     with pytest.raises(RuntimeError, match="non-finite angular action"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_clamp_action_combined_v_and_omega() -> None:
     """Clamping should apply to ``v`` and ``omega`` independently in one pass."""
     planner = _make_planner_with_action({"v": 10.0, "omega": -10.0}, v_max=1.0, omega_max=0.5)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action["v"] == pytest.approx(1.0)
     assert action["omega"] == pytest.approx(-0.5)
 
@@ -983,9 +966,9 @@ def _make_campc_repo(repo_root: Path, *, campc_body: str | None = None) -> Path:
     ``sicnav/configs/{policy,env}.config`` files. ``campc_body`` overrides the campc
     module body so tests can force import failures or constructor exceptions.
     """
-    _write(repo_root / "sicnav" / "__init__.py", "")
-    _write(repo_root / "sicnav" / "policy" / "__init__.py", "")
-    _write(
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "policy" / "__init__.py", "")
+    write_fake_module_file(
         repo_root / "sicnav" / "policy" / "campc.py",
         campc_body
         if campc_body is not None
@@ -1013,10 +996,10 @@ class CollisionAvoidMPC:
         return _Action(0.5, 0.0)
 """,
     )
-    _write(repo_root / "crowd_sim_plus" / "__init__.py", "")
-    _write(repo_root / "crowd_sim_plus" / "envs" / "__init__.py", "")
-    _write(repo_root / "crowd_sim_plus" / "envs" / "utils" / "__init__.py", "")
-    _write(
+    write_fake_module_file(repo_root / "crowd_sim_plus" / "__init__.py", "")
+    write_fake_module_file(repo_root / "crowd_sim_plus" / "envs" / "__init__.py", "")
+    write_fake_module_file(repo_root / "crowd_sim_plus" / "envs" / "utils" / "__init__.py", "")
+    write_fake_module_file(
         repo_root / "crowd_sim_plus" / "envs" / "utils" / "state_plus.py",
         """
 class FullState:
@@ -1031,8 +1014,10 @@ class FullyObservableJointState:
         self.static_obs = static_obs
 """,
     )
-    _write(repo_root / "sicnav" / "configs" / "policy.config", "[policy]\nsolver = ipopt\n")
-    _write(
+    write_fake_module_file(
+        repo_root / "sicnav" / "configs" / "policy.config", "[policy]\nsolver = ipopt\n"
+    )
+    write_fake_module_file(
         repo_root / "sicnav" / "configs" / "env.config",
         "[env]\ntime_step = 0.25\ntime_limit = 25.0\n",
     )
@@ -1069,8 +1054,8 @@ def test_build_campc_runner_honors_explicit_config_paths(
     repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
     policy_cfg = tmp_path / "custom_policy.config"
     env_cfg = tmp_path / "custom_env.config"
-    _write(policy_cfg, "[policy]\nsolver = ipopt\n")
-    _write(env_cfg, "[env]\ntime_step = 0.5\ntime_limit = 50.0\n")
+    write_fake_module_file(policy_cfg, "[policy]\nsolver = ipopt\n")
+    write_fake_module_file(env_cfg, "[env]\ntime_step = 0.5\ntime_limit = 50.0\n")
     planner = SICNavPlanner(
         {
             "repo_root": str(repo_root),
@@ -1133,7 +1118,7 @@ def test_build_campc_runner_returns_none_when_default_configs_absent(
     """Missing default config files should cause ``_build_campc_runner`` to return None."""
     repo_root = tmp_path / "sicnav_repo"
     # Stage an importable sicnav package but no configs and no campc module.
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
     assert planner._build_campc_runner() is None
 
@@ -1181,7 +1166,9 @@ def test_build_campc_runner_returns_none_when_state_module_lacks_classes(
     """A state module missing ``FullState`` should yield None (AttributeError path)."""
     repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
     # Overwrite state_plus.py to drop the required classes.
-    _write(repo_root / "crowd_sim_plus" / "envs" / "utils" / "state_plus.py", "VALUE = 1\n")
+    write_fake_module_file(
+        repo_root / "crowd_sim_plus" / "envs" / "utils" / "state_plus.py", "VALUE = 1\n"
+    )
     planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
     assert planner._build_campc_runner() is None
 
@@ -1205,7 +1192,7 @@ def test_build_policy_uses_campc_runner_when_available(
 def test_build_policy_seeds_rng_when_seed_is_none(_clean_sicnav_modules, tmp_path: Path) -> None:
     """With ``seed=None`` the ``_build_policy`` seeding block should be skipped cleanly."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 def load_policy(checkpoint_path=None, device=None, solver=None):
@@ -1215,9 +1202,9 @@ def load_policy(checkpoint_path=None, device=None, solver=None):
     return Policy()
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=None)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action == {"v": 0.3, "omega": 0.0}
 
 
@@ -1252,7 +1239,7 @@ def test_step_accepts_observation_dataclass(_clean_sicnav_modules, tmp_path: Pat
     from robot_sf.baselines.interface import Observation
 
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 class SICNavPolicy:
@@ -1262,7 +1249,7 @@ class SICNavPolicy:
         return {"v": 0.4, "omega": 0.0}
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
     obs = Observation(
         dt=0.1,
@@ -1304,7 +1291,7 @@ def test_has_campc_capability_false_when_campc_absent(
 ) -> None:
     """``_has_campc_capability`` should return False when campc module is absent."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
     assert planner._has_campc_capability() is False
 
@@ -1319,8 +1306,8 @@ def test_get_metadata_missing_dependency_when_no_factory_and_campc_disabled(
 ) -> None:
     """A module without a factory and campc disabled should report ``missing_dependency``."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
     planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
     assert planner.get_metadata()["status"] == "missing_dependency"
 

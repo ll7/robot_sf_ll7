@@ -1,0 +1,7 @@
+{
+  "schema_version": "terminal_job_harvest.v1",
+  "receipt_id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "manifest_id": "manifest-8846-alpha",
+  "owner": "ops-compute-window",
+  "inventory": [{"path": "job_evidence.log", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "byte_size": 6, "retention_class": "durable-required", "status": "present"}]
+}

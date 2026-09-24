@@ -9,7 +9,7 @@ from robot_sf.benchmark.full_classic.videos import generate_videos
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal config stub with smoke mode and a two-video selection cap."""
 
     smoke = True
     disable_videos = False
@@ -17,7 +17,7 @@ class _Cfg:
 
 
 def test_video_selection_smoke_skip():
-    """TODO docstring. Document this function."""
+    """Verify smoke mode skips the first max_videos episodes in deterministic order."""
     records = []
     for i in range(5):
         records.append(

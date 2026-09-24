@@ -17,6 +17,8 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
+from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
 # Best-effort helpers below shell out to git/gh, parse JSON, and read files; these
@@ -42,6 +44,10 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
 from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
+from scripts.dev.check_issue_line_budget import (  # noqa: E402
+    evaluate_budget,
+    has_declared_cap,
+)
 from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
 
 # Match GitHub closing keywords followed by a local/cross-repository issue reference or URL.
@@ -63,6 +69,7 @@ EVIDENCE_PATH_PREFIX = "docs/context/evidence/"
 EVIDENCE_REVIEW_SIDECAR_SUFFIX = ".review.json"
 EVIDENCE_REVIEW_SCHEMA_VERSION = "evidence-review-marker.v1"
 LOWERCASE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+FULL_SHA_PATTERN = re.compile(r"[0-9a-fA-F]{40}")
 
 # Issue #5856: ratchet against NEW placeholder docstrings introduced in a PR diff.
 # Only ADDED lines count (pre-existing stubs are grandfathered), so unrelated PRs
@@ -112,9 +119,22 @@ def _find_closed_references(text: str) -> list[tuple[str | None, str]]:
     return references
 
 
-def find_closed_issues(body: str) -> list[str]:
-    """Extract issue numbers that this PR claims to close."""
-    return sorted({issue for _, issue in _find_closed_references(body)}, key=int)
+def find_closed_issues(body: str, repo: str | None = None) -> list[str]:
+    """Extract issue numbers that this PR claims to close.
+
+    When *repo* is supplied, unqualified references and references qualified for
+    that exact repository are retained; qualified references to other
+    repositories are ignored.
+    """
+    references = _find_closed_references(body)
+    if repo is not None:
+        normalized_repo = repo.casefold()
+        references = [
+            (target_repo, issue)
+            for target_repo, issue in references
+            if target_repo is None or target_repo.casefold() == normalized_repo
+        ]
+    return sorted({issue for _, issue in references}, key=int)
 
 
 def find_title_issues(title: str) -> list[str]:
@@ -180,6 +200,42 @@ def get_issue_labels(issue: str, repo: str) -> list[str]:
     """Query GitHub API to get labels for a specific issue."""
     metadata = get_issue_metadata(issue, repo)
     return metadata[0] if metadata is not None else []
+
+
+def get_pr_label_guard_shas(pr_number: str, repo: str) -> tuple[str, str] | None:
+    """Return the live PR head/base pair required for a guarded label write."""
+    if not isinstance(pr_number, str) or re.fullmatch(r"[0-9]+", pr_number) is None:
+        return None
+    try:
+        if int(pr_number) < 1:
+            return None
+        result = subprocess.run(
+            [
+                "gh",
+                "api",
+                f"repos/{repo}/pulls/{pr_number}",
+                "--jq",
+                "{head_sha: .head.sha, base_sha: .base.sha}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        payload = json.loads(result.stdout)
+        if not isinstance(payload, dict):
+            return None
+        head_sha = payload.get("head_sha")
+        base_sha = payload.get("base_sha")
+        if not isinstance(head_sha, str) or not FULL_SHA_PATTERN.fullmatch(head_sha):
+            return None
+        if not isinstance(base_sha, str) or not FULL_SHA_PATTERN.fullmatch(base_sha):
+            return None
+        return head_sha, base_sha
+    except _BEST_EFFORT_ERRORS:
+        return None
 
 
 def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
@@ -738,6 +794,24 @@ def _check_distance_convention_for_file(path: str, content: str) -> str | None:
     )
 
 
+def _canonical_issue_reference(text: str, issue: int, repo: str) -> bool:
+    """Return whether text canonically references one repository issue.
+
+    A broad ``gh pr list --search`` can return unrelated PRs whose text merely
+    contains the number, so the successor warning must confirm a real reference:
+    ``#123``, ``owner/repo#123``, or the canonical issue URL. Plain numbers,
+    decimals, hash fragments, and other-repository references do not count.
+    """
+    number = str(issue)
+    repo_pattern = re.escape(repo)
+    patterns = (
+        rf"(?<![\w/#])#{number}(?!\w)(?!\.\d)",
+        rf"(?<![\w/#]){repo_pattern}#{number}(?!\w)(?!\.\d)",
+        rf"https?://github\.com/{repo_pattern}/issues/{number}(?!\d)",
+    )
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
 def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
     """Rule 5: Successor statement warning for issues with merged PRs."""
     issues = find_title_issues(title)
@@ -756,7 +830,7 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                         "--search",
                         f"is:merged {issue}",
                         "--json",
-                        "number",
+                        "number,title,body",
                         "--repo",
                         repo,
                     ],
@@ -767,9 +841,16 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                 )
                 if res.returncode == 0:
                     prs = json.loads(res.stdout)
-                    if len(prs) >= 1:
+                    confirmed = [
+                        pr
+                        for pr in prs
+                        if _canonical_issue_reference(
+                            f"{pr.get('title') or ''}\n{pr.get('body') or ''}", issue, repo
+                        )
+                    ]
+                    if confirmed:
                         warnings.append(
-                            f"WARN: Issue #{issue} has already been referenced in {len(prs)} merged PR(s), "
+                            f"WARN: Issue #{issue} has already been referenced in {len(confirmed)} merged PR(s), "
                             f"but the PR body does not contain a successor statement ('successor slice' "
                             f"or 'does not duplicate')."
                         )
@@ -783,7 +864,21 @@ def check_worker_lane_provenance(body: str, pr_number: str | None, repo: str) ->
     if "cheap implementation lane" in body.lower():
         if pr_number:
             try:
-                result = add_label(int(pr_number), "cheap-lane", repo=repo)
+                shas = get_pr_label_guard_shas(pr_number, repo)
+                if shas is None:
+                    return (
+                        "INFO: Detected cheap-lane provenance, but exact PR head/base SHAs "
+                        "could not be read; label not added.",
+                        True,
+                    )
+                result = add_label(
+                    int(pr_number),
+                    "cheap-lane",
+                    repo=repo,
+                    target="pr",
+                    expected_head_sha=shas[0],
+                    expected_base_sha=shas[1],
+                )
                 if result["status"] == "ok":
                     return "INFO: Automatically added 'cheap-lane' label to the PR.", True
                 else:
@@ -912,6 +1007,167 @@ def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dic
     return added
 
 
+def _diff_numstat(base_ref: str) -> str | None:
+    """Return ``git diff --numstat`` output for the PR head against *base_ref*.
+
+    Prefers the merge-base form ``{base_ref}...HEAD``. CI fetches the base ref
+    with ``--depth=1`` (see ``pr-contract-check.yml``), so no merge base exists
+    and ``...`` fails; the two-dot tree diff ``{base_ref}..HEAD`` is then used,
+    which is exact for the merge-ref checkout. Returns None when neither form
+    can be computed; budget enforcement treats that as a blocker.
+    """
+    for diff_spec in (f"{base_ref}...HEAD", f"{base_ref}..HEAD"):
+        try:
+            res = subprocess.run(
+                ["git", "diff", "--numstat", diff_spec],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except _BEST_EFFORT_ERRORS:
+            return None
+        if res.returncode == 0:
+            return res.stdout
+    return None
+
+
+def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, int]:
+    """Parse complete, unambiguous Git numstat rows for budget evidence."""
+    if not isinstance(numstat_text, str) or not numstat_text.strip():
+        raise ValueError("historical numstat is empty or is not text")
+
+    lines = numstat_text.splitlines()
+    if not lines or any(not line.strip() for line in lines):
+        raise ValueError("historical numstat contains no complete rows")
+
+    filenames: list[str] = []
+    added = deleted = 0
+    for line_number, line in enumerate(lines, start=1):
+        fields = line.split("\t")
+        if len(fields) != 3:
+            raise ValueError(f"historical numstat row {line_number} is ambiguous")
+        added_text, deleted_text, filename = fields
+        if re.fullmatch(r"[0-9]+", added_text) is None:
+            raise ValueError(f"historical numstat row {line_number} has invalid additions")
+        if re.fullmatch(r"[0-9]+", deleted_text) is None:
+            raise ValueError(f"historical numstat row {line_number} has invalid deletions")
+        if not filename.strip() or any(
+            unicodedata.category(character) == "Cc" for character in filename
+        ):
+            raise ValueError(f"historical numstat row {line_number} has an invalid filename")
+        if filename in filenames:
+            raise ValueError(f"historical numstat repeats filename {filename!r}")
+        filenames.append(filename)
+        added += int(added_text)
+        deleted += int(deleted_text)
+    return tuple(filenames), added, deleted
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalNumstatEvidence:
+    """Immutable, fully validated file-stat evidence for budget evaluation."""
+
+    numstat: str
+    changed_files: tuple[str, ...]
+    added: int
+    deleted: int
+
+    def __post_init__(self) -> None:
+        """Reject any mismatch between the payload and its derived totals."""
+        filenames, added, deleted = _parse_strict_numstat(self.numstat)
+        if not isinstance(self.changed_files, tuple) or self.changed_files != filenames:
+            raise ValueError("historical numstat filenames do not match immutable evidence")
+        if (
+            not isinstance(self.added, int)
+            or isinstance(self.added, bool)
+            or self.added != added
+            or not isinstance(self.deleted, int)
+            or isinstance(self.deleted, bool)
+            or self.deleted != deleted
+        ):
+            raise ValueError("historical numstat totals do not match immutable evidence")
+
+    @classmethod
+    def from_numstat(cls, numstat: str) -> HistoricalNumstatEvidence:
+        """Construct immutable evidence from a complete numstat payload."""
+        filenames, added, deleted = _parse_strict_numstat(numstat)
+        return cls(numstat, filenames, added, deleted)
+
+    @property
+    def files(self) -> int:
+        """Return the number of unique changed files represented by the rows."""
+        return len(self.changed_files)
+
+    @property
+    def net(self) -> int:
+        """Return net new lines using the budget check's existing convention."""
+        return max(self.added - self.deleted, 0)
+
+
+_UNSET_NUMSTAT = object()
+
+
+def _coerce_historical_numstat(value: object) -> HistoricalNumstatEvidence | None:
+    """Return validated historical stats, rejecting malformed injected payloads."""
+    if isinstance(value, HistoricalNumstatEvidence):
+        return value
+    if isinstance(value, str):
+        try:
+            return HistoricalNumstatEvidence.from_numstat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def check_line_budget_discipline(
+    body: str,
+    base_ref: str,
+    repo: str,
+    *,
+    numstat_text: object = _UNSET_NUMSTAT,
+) -> list[str]:
+    """Fail when the linked issue's declared line/file budget is exceeded (issue #9094).
+
+    The issue body declares the cap; the PR body may carry an explicit
+    ``budget-override: <reason>`` line to record a reasoned exception. Issues
+    without a declared cap are inert, so the check only binds where the author
+    opted into a budget.
+    """
+    blockers: list[str] = []
+    resolved_numstat = numstat_text
+    for issue in find_closed_issues(body, repo):
+        metadata = get_issue_metadata(issue, repo)
+        if metadata is None:
+            continue
+        _labels, issue_body = metadata
+        if not has_declared_cap(issue_body):
+            continue
+        if resolved_numstat is _UNSET_NUMSTAT:
+            resolved_numstat = _diff_numstat(base_ref)
+        historical_evidence = _coerce_historical_numstat(resolved_numstat)
+        if historical_evidence is None:
+            blockers.append(
+                f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
+                f"budget enforcement for issue #{issue} is unavailable, malformed, or "
+                "ambiguous and remains fail-closed (issue #9094)."
+            )
+            break
+        resolved_numstat = historical_evidence
+        result = evaluate_budget(
+            issue_body=issue_body,
+            pr_body=body,
+            numstat_text=historical_evidence.numstat,
+        )
+        if not result.get("ok", True):
+            blockers.append(
+                f"BLOCKER: PR exceeds the budget declared in issue #{issue} "
+                f"({result['message']}). Split the change or add "
+                f"'budget-override: <reason>' to the PR body to record an explicit "
+                f"exception (issue #9094)."
+            )
+    return blockers
+
+
 def _parse_added_line_span(hunk_header: str) -> tuple[int, int] | None:
     """Parse the ``+c,d`` part of a ``git diff --unified=0`` hunk header.
 
@@ -987,8 +1243,9 @@ def run_all_checks(
     base_ref: str,
     pr_number: str | None,
     added_files: set[str] | None = None,
+    historical_numstat: object = _UNSET_NUMSTAT,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 7 contract checks."""
+    """Run all 9 contract checks."""
     blockers = []
     warnings = []
     infos = []
@@ -1033,6 +1290,12 @@ def run_all_checks(
     # 8. Placeholder docstring ratchet (issue #5856): reject NEW placeholder docstrings.
     blockers.extend(check_placeholder_docstrings(base_ref))
 
+    # 9. Issue line/file budget (issue #9094): enforce declared caps unless a
+    # reasoned `budget-override:` line records an explicit exception.
+    blockers.extend(
+        check_line_budget_discipline(body, base_ref, repo, numstat_text=historical_numstat)
+    )
+
     return blockers, warnings, infos
 
 
@@ -1074,6 +1337,11 @@ def build_comment_body(
         f"| 8. Placeholder docstring ratchet | "
         f"{get_status_str(any('placeholder docstring' in b.lower() for b in blockers))} | "
         f"Reject NEW TODO/empty docstrings in added diff lines |"
+    )
+    rows.append(
+        f"| 9. Issue line/file budget | "
+        f"{get_status_str(any('exceeds the budget declared' in b.lower() for b in blockers))} | "
+        f"Enforce declared caps unless 'budget-override: <reason>' is present |"
     )
 
     comment = [

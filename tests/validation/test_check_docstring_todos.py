@@ -305,7 +305,11 @@ def test_committed_baseline_matches_base_ref_no_phantom_keys():
     drift, reverse = check_docstring_todos.compare_baseline_drift(ref_report, baseline)
 
     assert drift == [], f"baseline is stale vs base ref: {drift}"
-    assert reverse == [], f"baseline exceeds base ref (phantom keys): {reverse}"
+    assert reverse == [], (
+        "baseline exceeds base ref (phantom keys): "
+        f"{reverse}; regenerate with: uv run python scripts/validation/check_docstring_todos.py "
+        "--mode write-baseline"
+    )
 
 
 def test_committed_baseline_matches_working_tree_backlog(monkeypatch):
@@ -330,7 +334,11 @@ def test_committed_baseline_matches_working_tree_backlog(monkeypatch):
     drift, reverse = check_docstring_todos.compare_baseline_drift(report, baseline)
 
     assert drift == []
-    assert reverse == []
+    assert reverse == [], (
+        "committed baseline exceeds the working tree; regenerate with: "
+        "uv run python scripts/validation/check_docstring_todos.py --mode write-baseline "
+        f"({reverse})"
+    )
 
 
 def test_detect_working_tree_drift_flags_stale_baseline_after_cleanup(tmp_path):
@@ -600,3 +608,158 @@ def test_run_backlog_mode_ratchet_passes_when_legacy_unchanged(tmp_path, capsys)
     assert rc == 0
     captured = capsys.readouterr().out
     assert "TODO-docstring backlog ratchet passed: 1 files, 1 occurrences." in captured
+
+
+def _classify_test_suite_path(path: str) -> int:
+    """Classify a test suite path into its owning child issue number."""
+    import fnmatch
+
+    if any(
+        fnmatch.fnmatch(path, pat)
+        for pat in ["tests/benchmark/**", "tests/benchmark_full/**", "tests/unit/benchmark/**"]
+    ):
+        return 8877
+    list_8878 = {
+        "tests/test_aggregate.py",
+        "tests/test_baseline_stats.py",
+        "tests/test_metrics.py",
+        "tests/test_metrics_success_rate.py",
+        "tests/test_plots_pareto.py",
+        "tests/test_ranking.py",
+        "tests/test_seed_variance.py",
+        "tests/test_summary.py",
+        "tests/test_generate_figures_summary_ci_missing_and_suffix.py",
+        "tests/test_generate_figures_table_tex.py",
+        "tests/unit/test_cli_logging_flags.py",
+        "tests/unit/test_metrics_edge_cases.py",
+    }
+    if "snqi" not in path and (fnmatch.fnmatch(path, "tests/test_cli*.py") or path in list_8878):
+        return 8878
+    if fnmatch.fnmatch(path, "tests/test_snqi/**") or fnmatch.fnmatch(path, "tests/test_snqi*.py"):
+        return 8879
+    list_8880 = {
+        "tests/lidar_sensor_obstacle_test.py",
+        "tests/lidar_sensor_pedestrian_test.py",
+        "tests/map_test.py",
+        "tests/navigation_test.py",
+        "tests/ped_grouping_test.py",
+        "tests/robot_env_simple_reward_test.py",
+        "tests/sim_config_test.py",
+        "tests/test_collision_sanity.py",
+        "tests/test_env.py",
+        "tests/test_eval_env_metrics.py",
+        "tests/test_fast_pysf_wrapper.py",
+        "tests/test_feature_extractors.py",
+        "tests/test_image_sensor_fusion.py",
+        "tests/test_multi_pedestrian.py",
+        "tests/test_reward_default_fallback.py",
+        "tests/test_scenario_generator.py",
+        "tests/test_seed_utils.py",
+        "tests/test_trajectory_feature.py",
+        "tests/test_types.py",
+        "tests/unicycle_drive_test.py",
+        "tests/zone_sampling_test.py",
+    }
+    if (
+        any(
+            fnmatch.fnmatch(path, pat)
+            for pat in ["tests/sim/**", "tests/sensor/**", "tests/maps/**"]
+        )
+        or path in list_8880
+    ):
+        return 8880
+    if fnmatch.fnmatch(path, "tests/visuals/**"):
+        return 8881
+    list_8882 = {
+        "tests/test_force_field_figure.py",
+        "tests/test_full_classic_visuals_edge_cases.py",
+        "tests/test_full_classic_visuals_missing_matplotlib.py",
+        "tests/test_full_classic_visuals_renderer_toggle.py",
+        "tests/test_full_classic_visuals_simview_fallback.py",
+        "tests/test_lidar_render.py",
+        "tests/test_render_error_message.py",
+        "tests/test_svg_classic_maps_format.py",
+        "tests/test_visualizablesimstate.py",
+        "tests/unit/test_runner_video.py",
+    }
+    if path in list_8882:
+        return 8882
+    list_8883 = {
+        "tests/test_benchmark_imitation_manifest.py",
+        "tests/test_manifest_resume.py",
+        "tests/test_runner_resume.py",
+        "tests/unit/test_resume_manifest.py",
+        "tests/factories/test_recording_integration.py",
+    }
+    basename = path.rsplit("/", 1)[-1]
+    if (
+        fnmatch.fnmatch(path, "tests/test_guard/**")
+        or fnmatch.fnmatch(path, "tests/test_tracking/**")
+        or path in list_8883
+        or (
+            ("artifact" in basename or "manifest" in basename)
+            and not path.startswith("tests/fixtures/minimal_manifests/")
+        )
+    ):
+        return 8883
+    if path != "tests/factories/test_recording_integration.py" and any(
+        fnmatch.fnmatch(path, pat)
+        for pat in [
+            "tests/classic_interactions/**",
+            "tests/contract/**",
+            "tests/examples/**",
+            "tests/factories/**",
+            "tests/integration/**",
+            "tests/training/**",
+        ]
+    ):
+        return 8884
+    return 8886
+
+
+def test_docstring_todo_test_suite_partition_exact_and_exhaustive() -> None:
+    """Every test path in the baseline must partition deterministically across child issues."""
+    residual_8886_paths = [
+        "tests/conftest.py",
+        "tests/fixtures/minimal_manifests/generator.py",
+        "tests/perf/test_factory_creation_perf.py",
+        "tests/perf_utils/guidance.py",
+        "tests/perf_utils/reporting.py",
+        "tests/perf_utils/test_guidance.py",
+        "tests/perf_utils/test_slow_report_fixture.py",
+        "tests/research/test_extractor_report.py",
+        "tests/test_baseline_ppo_smoke.py",
+        "tests/test_classic_interactions_matrix.py",
+        "tests/test_cli_run_snqi.py",
+        "tests/test_cli_run_snqi_from.py",
+        "tests/test_cli_snqi_ablation.py",
+        "tests/test_error_policy.py",
+        "tests/test_failure_extractor.py",
+        "tests/test_runner_batch.py",
+        "tests/tools/test_analyze_imitation_results.py",
+        "tests/tools/test_compare_training_runs.py",
+        "tests/unit/test_hardware_profile_capture.py",
+    ]
+
+    for p in residual_8886_paths:
+        assert _classify_test_suite_path(p) == 8886
+
+    baseline_file = (
+        Path(__file__).resolve().parent.parent.parent
+        / "scripts"
+        / "validation"
+        / "docstring_todo_baseline.json"
+    )
+    with baseline_file.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    live_test_paths = {p for p in data["files"] if p.startswith("tests/")}
+
+    # None of the 19 residual files remain in the live baseline
+    assert not live_test_paths.intersection(residual_8886_paths)
+
+    # All live test paths map to recognized sibling child issues
+    valid_child_issues = {8877, 8878, 8879, 8880, 8881, 8882, 8883, 8884}
+    for p in live_test_paths:
+        owner = _classify_test_suite_path(p)
+        assert owner in valid_child_issues, f"{p} unexpectedly mapped to {owner}"

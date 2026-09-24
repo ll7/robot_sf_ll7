@@ -325,8 +325,8 @@ commands:
     path: scripts/scale_svgs_to_50m.py
     domain: tooling
     status: debug-only
-    purpose: One-off SVG coordinate scaling utility.
-    invocation: uv run python scripts/scale_svgs_to_50m.py
+    purpose: One-off SVG coordinate scaling utility; inputs are always explicit.
+    invocation: uv run python scripts/scale_svgs_to_50m.py --help
     required_extras: []
   seed_variance:
     path: scripts/seed_variance.py

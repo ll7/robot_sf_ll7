@@ -50,7 +50,9 @@
     "third_party/socnavbench/LICENSES/Apache-2.0.txt",
     "third_party/socnavbench/LICENSING.yaml",
     "third_party/socnavbench/UPSTREAM.md",
-    "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
+    "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md",
+    "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+    "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
   ],
   "exclude": [
     "model/**",
@@ -92,7 +94,9 @@
     "scripts/validation/wheel_install_smoke.sh",
     "third_party/python-rvo2/LICENSE",
     "third_party/socnavbench/LICENSE",
-    "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
+    "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md",
+    "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+    "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
   ],
   "asset_rules": [
     {

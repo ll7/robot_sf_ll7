@@ -71,8 +71,16 @@ def _git_commit() -> str:
 def sha256_file(path: Path) -> str:
     """Compute a SHA-256 hex digest for ``path``.
 
+    Reads the file in bounded chunks; accepts a ``pathlib.Path`` (not ``str``),
+    matching the historical canonical contract.
+
+    Raises:
+        FileNotFoundError: If ``path`` does not exist.
+        IsADirectoryError: If ``path`` is a directory.
+        OSError: For other filesystem or permission failures.
+
     Returns:
-        Hex-encoded SHA-256 digest string.
+        Lowercase hex-encoded SHA-256 digest string.
     """
     hasher = hashlib.sha256()
     with path.open("rb") as handle:

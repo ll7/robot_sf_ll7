@@ -34,6 +34,7 @@ import argparse
 import ctypes
 import errno
 import hashlib
+import importlib
 import json
 import os
 import platform
@@ -48,6 +49,7 @@ WORKTREE_MODE_KEY = "robot-sf.worktree-mode"
 BACKUP_KEY = "robot-sf.review-push-guard-backup"
 BLOCKED_URL_KEY = "robot-sf.review-push-blocked-url"
 REVIEW_MODE = "review"
+PYTEST_ISOLATION_SCHEMA = "review_pytest_isolation.v1"
 IMPLEMENTATION_MODE = "implementation"
 HOOK_RELATIVE_PATH = Path("scripts/dev/git_hooks/pre-push")
 GUARD_RELATIVE_PATH = Path("scripts/dev/review_worktree_guard.py")
@@ -202,10 +204,19 @@ def _add_landlock_path_rule(
     path: Path,
     allowed_access: int,
 ) -> None:
-    try:
-        path_fd = os.open(path, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
-    except (AttributeError, OSError) as exc:
-        raise GuardError(f"review process isolation cannot open policy path {path}: {exc}") from exc
+    path_fd = -1
+    for flags in (os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC, os.O_PATH | os.O_CLOEXEC):
+        try:
+            path_fd = os.open(path, flags)
+            break
+        except NotADirectoryError:
+            continue
+        except (AttributeError, OSError) as exc:
+            raise GuardError(
+                f"review process isolation cannot open policy path {path}: {exc}"
+            ) from exc
+    if path_fd < 0:
+        raise GuardError(f"review process isolation cannot open policy path {path}")
     try:
         rule = _LandlockPathBeneathAttr(allowed_access=allowed_access, parent_fd=path_fd)
         result = libc.syscall(
@@ -226,8 +237,9 @@ def _install_os_isolation(identity: dict[str, Path]) -> None:
 
     The policy permits read/execute access throughout the host, permits all filesystem
     mutation rights only below the review worktree and its linked administrative directory,
-    and handles TCP bind/connect without adding any network rule (deny by default).  The
-    policy is intentionally Linux-specific and requires Landlock ABI 4 or newer.
+    permits writing to the null device so standard tooling can discard output, and handles TCP
+    bind/connect without adding any network rule (deny by default).  The policy is intentionally
+    Linux-specific and requires Landlock ABI 4 or newer.
     """
     libc = _isolation_libc()
     _landlock_abi(libc)
@@ -255,6 +267,16 @@ def _install_os_isolation(identity: dict[str, Path]) -> None:
                 writable_path,
                 LANDLOCK_ACCESS_FS_ALL,
             )
+        null_device = Path(os.devnull)
+        if null_device.exists():
+            _add_landlock_path_rule(
+                libc,
+                int(ruleset_fd),
+                null_device,
+                LANDLOCK_ACCESS_FS_READ_FILE
+                | LANDLOCK_ACCESS_FS_WRITE_FILE
+                | LANDLOCK_ACCESS_FS_TRUNCATE,
+            )
         if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
             _raise_isolation_errno("could not set no-new-privileges")
         result = libc.syscall(LANDLOCK_RESTRICT_SELF_SYSCALL, int(ruleset_fd), ctypes.c_uint(0))
@@ -277,6 +299,33 @@ def run_isolated(worktree: str | Path, command: list[str]) -> None:
         os.execvpe(command[0], command, os.environ.copy())  # noqa: S606 - intentional argv boundary
     except OSError as exc:
         raise GuardError(f"isolated command could not be executed: {exc}") from exc
+
+
+def pytest_isolation(worktree: str | Path) -> dict[str, object]:
+    """Print the guarded focused-pytest recipe for a review-mode worktree.
+
+    Inside the Landlock boundary only the review worktree and its linked Git directory
+    are writable, so a focused pytest run must keep its cache and log outputs inside
+    the worktree. Two observed tooling failures are avoided this way: numba aborts
+    collection with "no locator available" when its cache directory is not writable,
+    and pytest's logging file handler fails with a permission error when the
+    configured log file resolves outside the writable set (for example ``/dev/null``).
+    These are tooling-isolation failures, not test outcomes: the process exit status
+    stays authoritative for pass evidence.
+    """
+    identity = _identity(worktree)
+    if _configured_mode(identity) != REVIEW_MODE:
+        raise GuardError("pytest isolation guidance requires a review-mode worktree")
+    root = Path(identity["path"]).resolve()
+    log_file = root / "output" / "scratch" / "pytest-guarded.log"
+    return {
+        "schema": PYTEST_ISOLATION_SCHEMA,
+        "worktree": str(root),
+        "env": {"NUMBA_CACHE_DIR": str(root / "output" / "numba-cache")},
+        "pytest_arguments": ["-p", "no:cacheprovider", "-o", f"log_file={log_file}"],
+        "writable_paths": [str(root), str(Path(identity["git_dir"]).resolve())],
+        "process_exit_status_authoritative": True,
+    }
 
 
 def _run_git(
@@ -810,17 +859,116 @@ def _restore_implementation_mode(
     return _configure_result(identity, IMPLEMENTATION_MODE, None, 0)
 
 
+def _sibling_module(name: str) -> Any:
+    """Import a scripts/dev sibling in package and direct-execution modes."""
+    if __package__:
+        return importlib.import_module(f"scripts.dev.{name}")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    return importlib.import_module(name)
+
+
+def _check_receipt_identity(worktree: Path, receipt: str | Path) -> str:
+    """Validate a delegated-worker receipt against the selected worktree."""
+    receipt_script = Path(__file__).resolve().with_name("worktree_receipt.py")
+    if not receipt_script.is_file():
+        raise GuardError(f"review receipt checker is unavailable: {receipt_script}")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(receipt_script),
+            "check",
+            "--receipt",
+            str(Path(receipt).resolve(strict=False)),
+            "--worktree",
+            ".",
+            "--json",
+        ],
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+    )
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise GuardError("review receipt check did not return JSON evidence") from exc
+    if completed.returncode != 0 or not payload.get("ok"):
+        failure = payload.get("failure") or "receipt check failed"
+        raise GuardError(f"review receipt does not match the selected worktree: {failure}")
+    task_id = payload.get("task_id")
+    if not isinstance(task_id, str) or not task_id:
+        raise GuardError("review receipt is missing its task id")
+    return task_id
+
+
+def _check_review_task_ownership(
+    identity: dict[str, Path],
+    *,
+    task_id: str | None,
+    receipt: str | Path | None,
+) -> None:
+    """Refuse review setup on a worktree owned by another live task.
+
+    A live path-scoped lease identifies the task that owns the worktree.  Review
+    mode may only be configured when the caller proves the same task through
+    ``--task-id`` or a delegated-worker receipt, so a reviewer cannot capture a
+    live implementation/publication worktree.
+    """
+    receipt_task_id: str | None = None
+    if receipt is not None:
+        receipt_task_id = _check_receipt_identity(identity["path"], receipt)
+    if task_id is not None and receipt_task_id is not None and task_id != receipt_task_id:
+        raise GuardError(
+            "review task id does not match the supplied receipt: "
+            f"receipt identifies '{receipt_task_id}', got '{task_id}'"
+        )
+    effective_task_id = task_id or receipt_task_id
+    pr_gate_lease = _sibling_module("pr_gate_lease")
+    try:
+        lease = pr_gate_lease.load_lease(pr_gate_lease.lease_path(identity["path"]))
+    except RuntimeError as exc:
+        raise GuardError(f"review setup cannot read the worktree lease: {exc}") from exc
+    if lease is None or lease.is_expired():
+        if effective_task_id is not None and receipt_task_id is None:
+            raise GuardError(
+                "review setup requires the review task's active lease on the selected "
+                f"worktree; no live lease exists for task '{effective_task_id}'"
+            )
+        return
+    lease_owners = {value for value in (lease.owner, lease.gate_id) if value}
+    if effective_task_id is None:
+        owner = lease.owner or lease.gate_id or "unknown"
+        raise GuardError(
+            "review setup refused: selected worktree has a live lease owned by "
+            f"'{owner}' (expires {lease.expires_at}); pass the review task's --task-id "
+            "or --receipt to prove ownership"
+        )
+    if effective_task_id not in lease_owners:
+        owner = lease.owner or lease.gate_id or "unknown"
+        raise GuardError(
+            "review setup refused: selected worktree has a live lease owned by "
+            f"'{owner}' (expires {lease.expires_at}), not by review task "
+            f"'{effective_task_id}'"
+        )
+
+
 def configure_worktree(
     worktree: str | Path,
     *,
     mode: str,
     hook_source_root: str | Path | None = None,
+    task_id: str | None = None,
+    receipt: str | Path | None = None,
 ) -> dict[str, Any]:
     """Configure or restore one linked worktree's review protection."""
     if mode not in (REVIEW_MODE, IMPLEMENTATION_MODE):
         raise GuardError(f"unsupported worktree mode: {mode}")
+    if mode != REVIEW_MODE and (task_id is not None or receipt is not None):
+        raise GuardError("--task-id and --receipt are only valid with review mode")
     identity = _identity(worktree)
     if mode == REVIEW_MODE:
+        _check_review_task_ownership(identity, task_id=task_id, receipt=receipt)
         initial_mode = _configured_mode(identity)
         _reject_inherited_url_push_insteadof_values(
             identity,
@@ -1111,6 +1259,14 @@ def _parser() -> argparse.ArgumentParser:
         "--hook-source-root",
         help="use this scripts/dev directory when the target base lacks the guard files",
     )
+    configure.add_argument(
+        "--task-id",
+        help="review task/run id; review mode refuses a live lease owned by another task",
+    )
+    configure.add_argument(
+        "--receipt",
+        help="delegated-worker receipt proving the selected worktree belongs to this review task",
+    )
 
     pre_push = subparsers.add_parser("pre-push", help="run the review worktree push guard")
     pre_push.add_argument("--worktree", default=".")
@@ -1128,6 +1284,12 @@ def _parser() -> argparse.ArgumentParser:
     integrate.add_argument("--source-ref", default="origin/main")
     integrate.add_argument("--remote", default="origin")
     integrate.add_argument("--timeout", type=_positive_int, default=DEFAULT_TIMEOUT_SECONDS)
+
+    isolation = subparsers.add_parser(
+        "pytest-isolation",
+        help="print the guarded focused-pytest recipe for a review worktree",
+    )
+    isolation.add_argument("--worktree", default=".")
     return parser
 
 
@@ -1140,6 +1302,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.worktree,
                 mode=args.mode,
                 hook_source_root=args.hook_source_root,
+                task_id=args.task_id,
+                receipt=args.receipt,
             )
             return_code = 0
         elif args.command == "pre-push":
@@ -1149,6 +1313,9 @@ def main(argv: list[str] | None = None) -> int:
             if command and command[0] == "--":
                 command = command[1:]
             run_isolated(args.worktree, command)
+            return_code = 0
+        elif args.command == "pytest-isolation":
+            payload = pytest_isolation(args.worktree)
             return_code = 0
         else:
             payload, return_code = integrate_worktree(

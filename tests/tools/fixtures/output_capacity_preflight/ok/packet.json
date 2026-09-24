@@ -1,0 +1,16 @@
+{
+  "schema": "robot_sf.output_capacity_preflight_packet.v1",
+  "packet_id": "cap-preflight-ok-0001",
+  "expected_rows": 100,
+  "row_scaling": "bounded",
+  "components": [
+    {"component_id":"rows-task","storage_class":"task_output","output_kind":"rows","basis":"empirical","source_identity":"smoke-0001","compatibility":"compatible","uncertainty":"bounded","bytes":{"per_row":[900,1000,1200],"fixed":[0,0,0]},"files":{"per_row":[1,1,1],"fixed":[1,1,1]},"peak_bytes":{"per_row":[900,1000,1200],"fixed":[0,0,0]}},
+    {"component_id":"slurm-logs","storage_class":"scheduler_log","output_kind":"logs","basis":"declared","uncertainty":"bounded","bytes":{"per_row":[0,0,0],"fixed":[2000,2000,2000]},"files":{"per_row":[0,0,0],"fixed":[2,2,2]},"peak_bytes":{"per_row":[0,0,0],"fixed":[0,0,0]}},
+    {"component_id":"scratch-work","storage_class":"temporary_scratch","output_kind":"temporary_workspace","basis":"declared","uncertainty":"bounded","bytes":{"per_row":[100,200,300],"fixed":[1000,1000,1000]},"files":{"per_row":[0,0,0],"fixed":[10,10,10]},"peak_bytes":{"per_row":[100,200,300],"fixed":[1000,1000,1000]}},
+    {"component_id":"checkpoints-sparse","storage_class":"durable_required","output_kind":"checkpoints","basis":"empirical","source_identity":"smoke-0001","compatibility":"compatible","uncertainty":"bounded","bytes":{"per_row":[0,0,0],"fixed":[15000,15000,15000]},"files":{"per_row":[0,0,0],"fixed":[10,10,10]},"peak_bytes":{"per_row":[0,0,0],"fixed":[0,0,0]}},
+    {"component_id":"harvest-manifest","storage_class":"durable_required","output_kind":"harvest_manifest","basis":"declared","uncertainty":"bounded","bytes":{"per_row":[0,0,0],"fixed":[2000,2000,2000]},"files":{"per_row":[0,0,0],"fixed":[3,3,3]},"peak_bytes":{"per_row":[0,0,0],"fixed":[0,0,0]}},
+    {"component_id":"checksums","storage_class":"durable_required","output_kind":"checksums","basis":"declared","uncertainty":"bounded","bytes":{"per_row":[0,0,0],"fixed":[500,500,500]},"files":{"per_row":[0,0,0],"fixed":[2,2,2]},"peak_bytes":{"per_row":[0,0,0],"fixed":[0,0,0]}},
+    {"component_id":"compression-work","storage_class":"disposable_post_verification","output_kind":"compression_workspace","basis":"declared","uncertainty":"bounded","bytes":{"per_row":[0,0,0],"fixed":[4000,4000,4000]},"files":{"per_row":[0,0,0],"fixed":[4,4,4]},"peak_bytes":{"per_row":[0,0,0],"fixed":[8000,8000,8000]}}
+  ],
+  "transfer": {"task_completion_utc":"2026-09-20T00:00:00Z","task_completion_latest_utc":"2026-09-20T12:00:00Z"}
+}

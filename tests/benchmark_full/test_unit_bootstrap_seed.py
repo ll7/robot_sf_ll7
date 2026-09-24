@@ -11,13 +11,13 @@ from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal config stub with smoke aggregation and a configurable master seed."""
 
     def __init__(self, seed: int):
-        """TODO docstring. Document this function.
+        """Store bootstrap settings and the master seed under test.
 
         Args:
-            seed: TODO docstring.
+            seed: Master seed controlling bootstrap resampling.
         """
         self.bootstrap_samples = 200
         self.bootstrap_confidence = 0.90
@@ -26,7 +26,7 @@ class _Cfg:
 
 
 def _records():
-    """TODO docstring. Document this function."""
+    """Build 30 low-density crossing records with mildly varying time_to_goal."""
     base = []
     for i in range(30):
         base.append(
@@ -41,7 +41,7 @@ def _records():
 
 
 def test_bootstrap_same_seed_identical():
-    """TODO docstring. Document this function."""
+    """Verify identical master seeds reproduce the same bootstrap CI."""
     recs = _records()
     g1 = aggregate_metrics(deepcopy(recs), _Cfg(123))
     g2 = aggregate_metrics(deepcopy(recs), _Cfg(123))
@@ -49,7 +49,7 @@ def test_bootstrap_same_seed_identical():
 
 
 def test_bootstrap_different_seed_differs():
-    """TODO docstring. Document this function."""
+    """Verify different master seeds produce different bootstrap CIs."""
     recs = _records()
     g1 = aggregate_metrics(deepcopy(recs), _Cfg(123))
     g2 = aggregate_metrics(deepcopy(recs), _Cfg(456))

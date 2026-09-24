@@ -39,16 +39,16 @@ HIGH_DENSITY_ADVISORY = "high_density_stress"
 
 @pytest.mark.parametrize("path", [SCENARIO_FILE])
 def test_yaml_exists(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Verify that the classic interactions scenario matrix YAML file exists on disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the scenario configuration file under test.
     """
     assert path.exists(), f"Scenario file missing: {path}"
 
 
 def test_yaml_parses() -> None:
-    """TODO docstring. Document this function."""
+    """Verify that the scenario matrix YAML file successfully parses into scenario definitions."""
     scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     assert scenarios, "No scenarios defined"
 
@@ -111,7 +111,7 @@ def test_each_scenario_structure_and_files() -> None:
 
 
 def test_seed_lists_have_length() -> None:
-    """TODO docstring. Document this function."""
+    """Verify that each scenario definition configures at least three evaluation seeds."""
     scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     for scenario in scenarios:
         seeds = scenario.get("seeds")

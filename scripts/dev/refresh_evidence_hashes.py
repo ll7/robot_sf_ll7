@@ -30,6 +30,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from scripts.dev.git_common import resolve_repo_root
+
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 HASH_KEYS = ("sha256", "source_sha256")
 ARTIFACT_PATH_KEYS = (
@@ -45,19 +47,6 @@ DEFAULT_EXAMPLE = Path("docs/context/evidence/issue_4683_release_assurance_case_
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
-
-
-def _repo_root() -> Path:
-    """Return the repository root for the current checkout."""
-    proc = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError("could not resolve repository root via git")
-    return Path(proc.stdout.strip())
 
 
 def _is_tracked(repo_root: Path, rel: str) -> bool:
@@ -237,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Restrict to a repo-relative evidence file (repeatable).",
     )
     args = parser.parse_args(argv)
-    repo_root = _repo_root()
+    repo_root = resolve_repo_root()
     targets = [repo_root / p for p in args.path] if args.path else [repo_root / DEFAULT_EXAMPLE]
     for target in targets:
         rel = (

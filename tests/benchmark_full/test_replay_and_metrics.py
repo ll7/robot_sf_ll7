@@ -9,13 +9,13 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 def _read_first_record(path: Path) -> dict:
-    """TODO docstring. Document this function.
+    """Read and decode the first non-blank JSONL record from an episodes file.
 
     Args:
-        path: TODO docstring.
+        path: Episodes JSONL file to scan.
 
     Returns:
-        TODO docstring.
+        First decoded record, or an empty dict when the file has no records.
     """
     with path.open("r", encoding="utf-8") as fh:
         for line in fh:

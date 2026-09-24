@@ -8,7 +8,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 
 
 def test_single_robot_env_reward_fallback():
-    """TODO docstring. Document this function."""
+    """A robot env built with reward_func=None gets a callable reward and can step."""
     env = make_robot_env(reward_func=None)
     # Internally we should have substituted a callable reward (simple_reward)
     # Access concrete attribute (RobotEnv defines reward_func)

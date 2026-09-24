@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for backend registry contents and optional-backend import handling."""
 
 import importlib
 
@@ -15,7 +15,7 @@ def _restore_loaded_registry_after_test():
 
 
 def test_default_backend_registered():
-    """TODO docstring. Document this function."""
+    """The registry always exposes the dummy backend, and fast-pysf when available."""
     backends = loaded_registry.list_backends()
     assert "dummy" in backends
     assert callable(loaded_registry.get_backend("dummy"))

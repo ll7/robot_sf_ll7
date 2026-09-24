@@ -1,0 +1,26 @@
+{
+  "schema": "bootstrap_recipe.v1",
+  "recipe_id": "local-analysis-analytics-v1",
+  "execution_class": "local_analysis",
+  "title": "Surviving local analysis environment (CPU-only, read-only artifact access)",
+  "verification_status": "verified",
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "d01cbbf7fb7215d140b3c78f66202e0c48e449601f809036f5e02e9a9bfb79c7"},
+  "prerequisites": [
+    {"id": "uv", "kind": "binary", "identity": "uv>=0.11", "probe": {"argv": ["uv", "--version"], "expect_exit_code": 0}},
+    {"id": "python", "kind": "binary", "identity": "python3>=3.11", "probe": {"argv": ["python3", "--version"], "expect_exit_code": 0}}
+  ],
+  "identity_bindings": [
+    {"kind": "python-package", "name": "duckdb", "version": "1.5.5"},
+    {"kind": "python-package", "name": "pyarrow", "version": "25.0.1"}
+  ],
+  "steps": [
+    {"id": "sync-env", "phase": "setup", "argv": ["uv", "sync", "--all-extras"], "workdir": "$PROJECT_ROOT", "env": {"UV_PROJECT_ENVIRONMENT": "$PROJECT_ROOT/.venv"}},
+    {"id": "python-version", "phase": "probe", "argv": ["python3", "--version"], "workdir": "$RECIPE_ROOT", "safe_check": true},
+    {"id": "analytics-import-smoke", "phase": "probe", "argv": ["uv", "run", "python", "-c", "import duckdb, pyarrow"], "workdir": "$PROJECT_ROOT"},
+    {"id": "drop-scratch", "phase": "cleanup", "argv": ["rm", "-rf", "$RECIPE_ROOT/scratch"], "workdir": "$RECIPE_ROOT"}
+  ],
+  "environment_inputs": {"PATH": "toolchain resolving uv and python3"},
+  "outputs": ["$RECIPE_ROOT/analysis/"],
+  "private_substitutions": [],
+  "verification": {"mode": "structural+discovery-probe", "checked_at": "2026-09-12", "host_class": "linux-x86_64-cpu"}
+}

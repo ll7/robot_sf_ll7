@@ -371,3 +371,55 @@ def test_convert_map_contract_passthrough(tmp_path: Path):
     assert isinstance(corrected, MapDefinition)
     assert corrected.svg_geometry_contract == "corrected"
     assert _zone_bounds(corrected.ped_spawn_zones[0]) == pytest.approx((14.0, 16.0, 18.0, 20.0))
+
+
+@pytest.mark.parametrize(
+    ("transform", "offset"),
+    [
+        ("translate(1,2) translate(3,4)", (4.0, 6.0)),
+        ("translate(1 2) translate(3 4)", (4.0, 6.0)),
+        ("translate(1,2), translate(3,4)", (4.0, 6.0)),
+        ("translate(1,2),translate(3,4)", (4.0, 6.0)),
+        ("translate(1)\ttranslate(3)", (4.0, 0.0)),
+        ("translate(1.5,-2) translate(-0.5,0.25)", (1.0, -1.75)),
+    ],
+)
+def test_valid_translate_function_lists_sum_offsets(tmp_path: Path, transform: str, offset):
+    """Every valid translate-function list sums its offsets in corrected mode only."""
+    svg = _write_svg(
+        tmp_path,
+        "valid_list.svg",
+        f'<g transform="{transform}">'
+        '<rect inkscape:label="ped_spawn_zone" x="10" y="10" width="4" height="4" />'
+        "</g>",
+    )
+    dx, dy = offset
+    corrected = SvgMapConverter(svg, geometry_contract="corrected").get_map_definition()
+    assert _zone_bounds(corrected.ped_spawn_zones[0]) == pytest.approx(
+        (10 + dx, 10 + dy, 14 + dx, 14 + dy)
+    )
+    legacy = SvgMapConverter(svg, geometry_contract="legacy").get_map_definition()
+    assert _zone_bounds(legacy.ped_spawn_zones[0]) == pytest.approx((10.0, 10.0, 14.0, 14.0))
+
+
+def test_corrected_translate_list_shifts_route_waypoints(tmp_path: Path):
+    """Authored robot routes follow the same summed offset as zones."""
+    inner = (
+        '<g transform="translate(1,2) translate(3,4)">'
+        '<rect inkscape:label="robot_spawn_zone" x="1" y="4" width="1.5" height="1.5" />'
+        '<rect inkscape:label="robot_goal_zone" x="17" y="4" width="1.5" height="1.5" />'
+        '<path inkscape:label="robot_route_0_0" d="M 1 4.5 L 18 4.5" />'
+        "</g>"
+    )
+    path = tmp_path / "route_shift.svg"
+    path.write_text(SVG_HEADER + inner + SVG_FOOTER, encoding="utf-8")
+
+    corrected = SvgMapConverter(str(path), geometry_contract="corrected").get_map_definition()
+    legacy = SvgMapConverter(str(path), geometry_contract="legacy").get_map_definition()
+    corrected_waypoints = corrected.robot_routes[0].waypoints
+    legacy_waypoints = legacy.robot_routes[0].waypoints
+
+    assert len(corrected_waypoints) == len(legacy_waypoints)
+    for corrected_point, legacy_point in zip(corrected_waypoints, legacy_waypoints, strict=True):
+        assert corrected_point[0] - legacy_point[0] == pytest.approx(4.0)
+        assert corrected_point[1] - legacy_point[1] == pytest.approx(6.0)

@@ -341,3 +341,48 @@ def test_cli_fetch_failure_is_pending_and_exit_1(monkeypatch: pytest.MonkeyPatch
     assert payload["decisive_run_found"] is False
     assert payload["window_exhausted"] is False
     assert "error" in payload
+
+
+def test_superseded_pending_verdict_when_failure_followed_only_by_cancelled_runs() -> None:
+    """A failure followed only by cancelled newer runs is superseded but unverified (#8998)."""
+    runs = [
+        _run(504, "completed", "cancelled", "2026-09-11T06:32:00Z"),
+        _run(503, "completed", "cancelled", "2026-09-11T06:21:23Z"),
+        _run(502, "completed", "cancelled", "2026-09-11T06:14:04Z"),
+        _run(501, "completed", "failure", "2026-09-11T04:43:08Z"),
+        _run(400, "completed", "success", "2026-09-10T22:00:00Z"),
+    ]
+
+    status = incident_reconcile_status(500, runs)
+
+    assert status == "superseded_pending_verdict"
+    signal = build_incident_signal(status, 500, runs)
+    assert signal["is_green"] is False
+    assert signal["can_auto_close"] is False
+    assert signal["superseded_run_count"] == 3
+    assert signal["current_deciding_run"]["databaseId"] == 501
+
+
+def test_active_when_newer_run_is_only_in_progress() -> None:
+    """A newer in-progress run is not a supersession; the failure verdict stays live."""
+    runs = [
+        _run(601, "in_progress", None, "2026-09-11T08:00:03Z"),
+        _run(501, "completed", "failure", "2026-09-11T04:43:08Z"),
+    ]
+
+    assert incident_reconcile_status(500, runs) == "active"
+
+
+def test_superseded_count_excludes_decisive_and_in_progress_runs() -> None:
+    """Only completed non-decisive runs count toward the supersession evidence."""
+    runs = [
+        _run(703, "in_progress", None, "2026-09-11T08:30:00Z"),
+        _run(702, "completed", "cancelled", "2026-09-11T08:00:00Z"),
+        _run(701, "completed", "failure", "2026-09-11T04:43:08Z"),
+    ]
+
+    status = incident_reconcile_status(500, runs)
+    signal = build_incident_signal(status, 500, runs)
+
+    assert status == "superseded_pending_verdict"
+    assert signal["superseded_run_count"] == 1

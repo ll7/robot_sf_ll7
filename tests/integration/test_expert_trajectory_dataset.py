@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Integration tests for trajectory dataset validation and quality statuses."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ from robot_sf.benchmark.validation.trajectory_dataset import TrajectoryDatasetVa
 
 
 def _write_npz_dataset(path, episode_count: int) -> None:
-    """TODO docstring. Document this function.
+    """Write a small valid trajectory dataset to an NPZ file.
 
     Args:
-        path: TODO docstring.
-        episode_count: TODO docstring.
+        path: Destination path for the saved NPZ archive.
+        episode_count: Number of episodes synthesized for every dataset array.
     """
     positions = np.zeros((episode_count, 4, 2), dtype=float)
     actions = np.zeros((episode_count, 4, 2), dtype=float)
@@ -42,10 +42,10 @@ def _write_npz_dataset(path, episode_count: int) -> None:
 
 
 def test_validate_npz_dataset(tmp_path):
-    """TODO docstring. Document this function.
+    """A complete 8-episode dataset validates with clean integrity and coverage.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory holding the generated expert_dataset.npz.
     """
     dataset_path = tmp_path / "expert_dataset.npz"
     _write_npz_dataset(dataset_path, episode_count=8)
@@ -63,10 +63,10 @@ def test_validate_npz_dataset(tmp_path):
 
 
 def test_incomplete_dataset_quarantines(tmp_path):
-    """TODO docstring. Document this function.
+    """A dataset missing the actions array is quarantined and reported.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory holding the generated NPZ file.
     """
     dataset_path = tmp_path / "missing_actions.npz"
     positions = np.zeros((2, 3, 2), dtype=float)
@@ -188,10 +188,10 @@ def test_unlabeled_fallback_rows_quarantine_dataset(tmp_path):
 
 
 def test_jsonl_dataset_drafts_when_small(tmp_path):
-    """TODO docstring. Document this function.
+    """A two-frame JSONL dataset below the minimum is reported as a DRAFT.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory holding the generated JSONL frames file.
     """
     dataset_path = tmp_path / "todo.jsonl_frames"
     dataset_path.write_text("{}\n{}\n", encoding="utf-8")

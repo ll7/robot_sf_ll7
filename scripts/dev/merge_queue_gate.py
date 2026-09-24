@@ -8,8 +8,9 @@ fail-closed preflight as ``gh-pr-merger``:
 
   - non-draft state,
   - current ``merge-ready`` label,
-  - a current exact-head ``gate-verdict: accepted @ <head_sha>`` trailer
-    (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
+  - a uniquely latest trusted exact-head ``gate-verdict: accepted`` trailer,
+    with a current ``gate-verdict: hold`` taking precedence until a later
+    accepted carrier supersedes it,
   - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
     final PR title/body to the review evidence,
   - a successful ``changed-coverage-gate`` check on the exact live PR head, or
@@ -82,6 +83,11 @@ from scripts.ci.pr_contract_check import (  # noqa: E402
     check_closes_discipline,
     get_pr_commit_messages,
 )
+from scripts.dev.check_ci_needs import (  # noqa: E402
+    CI_PATHS_IGNORE_PATTERNS,
+    docs_only_changed_files,
+    is_ci_path_ignored,
+)
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _enrich_rest_check_runs,
     _latest_check_runs,
@@ -92,9 +98,10 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    GATE_VERDICT_PROJECTION_SOURCE,
     active_review_claim,
+    current_gate_verdict_status,
     has_any_pr_metadata_verdict,
-    has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
 from scripts.dev.pr_metadata import (  # noqa: E402
@@ -133,10 +140,6 @@ CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
 EVIDENCE_REGISTRY_WORKFLOW_NAME = "Evidence-registry ratchet"
 EVIDENCE_REGISTRY_CHECK_NAME = "evidence-registry-ratchet"
 SNAPSHOT_PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
-# Keep this list in lockstep with the top-level ``paths-ignore`` filters in
-# ``.github/workflows/ci.yml``.  The merge gate may need to explain why that
-# workflow did not create an exact-head changed-coverage check for a PR.
-CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
 CHANGED_COVERAGE_NOT_REQUIRED = "not_required"
 _CHANGED_FILES_PAGE_SIZE = 100
 _MAX_CHANGED_FILES_PAGES = 100
@@ -237,14 +240,14 @@ def _label_names(pr: dict[str, Any]) -> list[str]:
 def _gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     """Classify the exact-head gate-verdict trailer state.
 
-    Returns ``accepted`` when a current exact-head ``gate-verdict: accepted``
-    trailer exists, ``missing`` otherwise (including an empty head SHA, a missing
-    trailer, or a trailer whose SHA does not identify the exact head). Mirrors
-    the fail-closed contract in ``pr_loop_policy.has_current_accepted_gate_verdict``.
+    Always recomputes the canonical current verdict from trusted carrier bodies
+    and fields. Returns the canonical current verdict status, including
+    ``hold`` for a current trusted blocker and ``ambiguous``/``malformed`` for
+    evidence that cannot safely establish the latest verdict. Projection fields
+    provide head-bound diagnostic context only and never manufacture admission
+    authority.
     """
-    if not head_sha:
-        return "missing"
-    return "accepted" if has_current_accepted_gate_verdict(pr, head_sha) else "missing"
+    return current_gate_verdict_status(pr, head_sha)
 
 
 def _metadata_verdict_status(pr: dict[str, Any], digest: str) -> str:
@@ -374,7 +377,13 @@ def _core_preflight_reasons(
     if staleness_verdict == "stale":
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
-        reasons.append("missing_exact_head_gate_verdict")
+        reasons.append(
+            {
+                "hold": "exact_head_gate_hold",
+                "ambiguous": "ambiguous_exact_head_gate_verdict",
+                "malformed": "malformed_exact_head_gate_verdict",
+            }.get(gate_verdict_status, "missing_exact_head_gate_verdict")
+        )
     return reasons
 
 
@@ -457,36 +466,13 @@ def _fail_closed_reasons(  # noqa: C901, PLR0913
 
 
 def _is_ci_paths_ignored(path: str) -> bool:
-    """Return whether ``path`` matches the CI workflow's ignored path set.
-
-    GitHub's ``**/*.md`` filter covers Markdown at any repository depth,
-    including a root-level README or changelog.  The explicit checks below
-    mirror that contract without making the admission gate depend on a local
-    glob implementation with subtly different ``**`` semantics.
-    """
-    normalized = path.strip()
-    if (
-        not normalized
-        or normalized != path
-        or normalized.startswith(("/", "./", "../"))
-        or "\\" in normalized
-        or any(part in {"", ".", ".."} for part in normalized.split("/"))
-    ):
-        return False
-    markdown_pattern, docs_pattern = CI_PATHS_IGNORE_PATTERNS
-    return bool(normalized) and (
-        (markdown_pattern == "**/*.md" and normalized.endswith(".md"))
-        or (docs_pattern == "docs/**" and (normalized == "docs" or normalized.startswith("docs/")))
-    )
+    """Return whether ``path`` matches the canonical CI ignore manifest."""
+    return bool(CI_PATHS_IGNORE_PATTERNS) and is_ci_path_ignored(path)
 
 
 def _docs_only_changed_files(changed_files: Any, *, complete: bool) -> bool:
     """Prove that a complete, non-empty changed-file set is CI-ignored."""
-    if not complete or not isinstance(changed_files, list) or not changed_files:
-        return False
-    if any(not isinstance(path, str) or not path.strip() for path in changed_files):
-        return False
-    return all(_is_ci_paths_ignored(path) for path in changed_files)
+    return docs_only_changed_files(changed_files, complete=complete)
 
 
 def _proven_docs_only_scope(changed_coverage: Any) -> bool:
@@ -554,8 +540,10 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
         pass), ``labels``, ``draft``, ``base_sha``, ``checks.overall``,
         ``changed_coverage`` (which must bind a success result to ``head_sha``), plus any
         gate-verdict carrier fields understood by
-        ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
-        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
+        ``current_gate_verdict_status`` (``gate_verdict`` /
+        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts;
+        verdicts are always recomputed from carrier evidence and projection
+        fields never manufacture admission),
         ``metadata_digest`` and trusted ``metadata_verdicts``, and
         ``reviewers_requested`` when supplied by the live snapshot, plus the
         optional live ``closing_discipline`` and ``review_claim`` results.
@@ -1095,7 +1083,8 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
     """Convert raw ``gh`` comment/review objects into the compact snapshot shape.
 
     The compact excerpts are audit context only. ``fetch_pr_snapshot`` extracts
-    accepted gate-verdict trailers from the full raw bodies before truncation,
+    accepted/HOLD gate-verdict trailers from the full raw bodies before
+    truncation, and projects their validated current status.
     so a valid trailer after the excerpt limit cannot be discarded.
     """
     if not isinstance(items, list):
@@ -2122,6 +2111,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         payload.get("reviews"),
         head_sha=head_sha,
     )
+    gate_verdict_status = _gate_verdict_status(payload, head_sha)
 
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
@@ -2138,6 +2128,9 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         "changed_coverage": changed_coverage,
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
+        "gate_verdict_status": gate_verdict_status,
+        "gate_verdict_status_head_sha": head_sha,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
         "base_policy": _extract_base_policies(payload),
         "metadata_verdicts": _extract_metadata_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
@@ -2422,8 +2415,9 @@ def _format_summary(audit: MergeGateAudit) -> str:
         lines.append(f"- fail-closed reasons: `{', '.join(audit.reasons)}`")
     lines.append("")
     lines.append(
-        "Gate contract: non-draft + `merge-ready` + current exact-head "
-        "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
+        "Gate contract: non-draft + `merge-ready` + latest trusted exact-head "
+        "`gate-verdict: accepted` trailer (a current HOLD blocks until a later "
+        "accepted carrier) + current `pr-metadata: reconciled` "
         "trailer + exact-head `changed-coverage-gate` proof (or a complete CI-ignored docs-only "
         "file-set proof) + resolved threads + no outstanding reviewer requests + "
         "no active exact-head review claim + `ALLGREEN` queue strategy; fail-closed on any "
@@ -2558,7 +2552,7 @@ def _evaluate_live(
     return audit, evidence_error
 
 
-def _self_test() -> int:
+def _self_test() -> int:  # noqa: PLR0915 - comprehensive deterministic assertion suite
     """Run deterministic assertions covering the issue #6274 gate contract.
 
     Exercises the three validation scenarios plus the additional fail-closed
@@ -2735,6 +2729,40 @@ def _self_test() -> int:
     expect(
         not audit.passed and "unsafe_merge_queue_strategy:HEADGREEN" in audit.reasons,
         "queue-strategy: HEADGREEN must fail closed",
+    )
+
+    # Forged projection alone cannot manufacture acceptance.
+    forged_pr = _pr(labels=["merge-ready"], ci_overall="success")
+    forged_pr["gate_verdict_status"] = "accepted"
+    forged_pr["gate_verdict_status_head_sha"] = full_sha
+    forged_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
+    audit = evaluate_merge_gate(forged_pr, threads_resolved=True, reviewers_requested=False)
+    expect(
+        not audit.passed and audit.gate_verdict_status == "missing",
+        "forged-projection: projection alone cannot manufacture acceptance",
+    )
+
+    # Forged projection cannot override trusted HOLD carrier.
+    hold_pr = _pr(labels=["merge-ready"], ci_overall="success")
+    hold_pr["gate_verdict"] = {"verdict": "hold", "sha": full_sha}
+    hold_pr["gate_verdict_status"] = "accepted"
+    hold_pr["gate_verdict_status_head_sha"] = full_sha
+    hold_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
+    audit = evaluate_merge_gate(hold_pr, threads_resolved=True, reviewers_requested=False)
+    expect(
+        not audit.passed and audit.gate_verdict_status == "hold",
+        "projection-hold: projection cannot override trusted hold carrier",
+    )
+
+    # Mismatched projection head fails closed.
+    mismatched_pr = _pr(labels=["merge-ready"], gate_verdict_sha=full_sha, ci_overall="success")
+    mismatched_pr["gate_verdict_status"] = "accepted"
+    mismatched_pr["gate_verdict_status_head_sha"] = other_sha
+    mismatched_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
+    audit = evaluate_merge_gate(mismatched_pr, threads_resolved=True, reviewers_requested=False)
+    expect(
+        not audit.passed and audit.gate_verdict_status == "malformed",
+        "mismatched-projection: mismatched projection head fails closed",
     )
 
     # Full pass: all dimensions satisfied and explicitly authoritative.

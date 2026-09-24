@@ -13,9 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.agent_content_gate import CLASS_UNTRUSTED, classify_row, thread_flags
 from scripts.dev.check_pr_ci_status import (
     FAILURE_CONCLUSIONS,
     PENDING_STATUSES,
+    _is_graphql_quota_error,
     _latest_check_runs,
     _rollup_conclusion,
     _rollup_name,
@@ -25,8 +27,10 @@ from scripts.dev.github_graphql_retry import run_with_retry
 from scripts.dev.github_quota import quota_reset_handoff
 from scripts.dev.pr_loop_policy import (
     BASE_POLICY_RE,
+    GATE_VERDICT_PROJECTION_SOURCE,
     GATE_VERDICT_RE,
     authoritative_body_text,
+    current_gate_verdict_status,
 )
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
@@ -113,27 +117,70 @@ def _reviews(pr: dict[str, Any]) -> dict[str, int]:
     return states
 
 
+def _pr_label_names(pr: dict[str, Any]) -> list[str]:
+    """Return label names from REST or GraphQL PR label shapes."""
+    labels = pr.get("labels")
+    nodes: list[Any] = []
+    if isinstance(labels, dict):
+        nodes = list(labels.get("nodes") or [])
+    elif isinstance(labels, list):
+        nodes = labels
+    names: list[str] = []
+    for node in nodes:
+        if isinstance(node, dict):
+            name = node.get("name")
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+        elif isinstance(node, str) and node.strip():
+            names.append(node.strip())
+    return names
+
+
 def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
-    """Return a bounded review snapshot with author/time/body excerpts."""
+    """Return a bounded review snapshot with author/time/body excerpts.
+
+    Body excerpts are gated by the canonical author-trust policy: only own-user
+    or own-user-flagged reviews expose text; untrusted authors keep metadata but
+    an empty excerpt.
+    """
     reviews = [review for review in pr.get("reviews", []) or [] if isinstance(review, dict)]
     by_state: dict[str, int] = {}
     for review in reviews:
         state = str(review.get("state", "UNKNOWN"))
         by_state[state] = by_state.get(state, 0) + 1
-    latest = [
+    selected = sorted(
+        reviews,
+        key=lambda review: str(review.get("submittedAt", review.get("createdAt", ""))),
+        reverse=True,
+    )[:REVIEW_SUMMARY_LIMIT]
+    gate_rows = [
         {
-            "state": str(review.get("state", "UNKNOWN")),
+            "kind": "review_comment",
+            "id": str(review.get("id") or review.get("submittedAt", "")),
             "author": _author_login(review.get("author")),
-            "author_association": str(review.get("authorAssociation", "")),
-            "submitted_at": str(review.get("submittedAt", "")),
-            "body_excerpt": _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT),
+            "body": review.get("body"),
+            "url": str(review.get("url") or ""),
+            "created_at": str(review.get("submittedAt", review.get("createdAt", ""))),
         }
-        for review in sorted(
-            reviews,
-            key=lambda review: str(review.get("submittedAt", review.get("createdAt", ""))),
-            reverse=True,
-        )[:REVIEW_SUMMARY_LIMIT]
+        for review in selected
     ]
+    flags = thread_flags(gate_rows, labels=_pr_label_names(pr))
+    latest = []
+    for review, gate_row in zip(selected, gate_rows, strict=True):
+        receipt = classify_row(gate_row, flags=flags)
+        excerpt = _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT)
+        if receipt["classification"] == CLASS_UNTRUSTED:
+            excerpt = ""
+        latest.append(
+            {
+                "state": str(review.get("state", "UNKNOWN")),
+                "author": _author_login(review.get("author")),
+                "author_association": str(review.get("authorAssociation", "")),
+                "submitted_at": str(review.get("submittedAt", "")),
+                "body_excerpt": excerpt,
+                "author_trust": receipt["classification"],
+            }
+        )
     return {
         "total": len(reviews),
         "by_state": by_state,
@@ -143,21 +190,45 @@ def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
 
 
 def _comment_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
-    """Return a compact comment snapshot with bounded excerpts."""
+    """Return a compact comment snapshot with bounded excerpts.
+
+    Body excerpts are gated by the canonical author-trust policy: only own-user
+    or own-user-flagged comments expose text; untrusted authors keep metadata but
+    an empty excerpt.
+    """
     comments = [comment for comment in pr.get("comments", []) or [] if isinstance(comment, dict)]
-    latest = [
+    selected = sorted(
+        comments,
+        key=lambda comment: str(comment.get("createdAt", comment.get("updatedAt", ""))),
+        reverse=True,
+    )[:COMMENT_SUMMARY_LIMIT]
+    gate_rows = [
         {
+            "kind": "pr_comment",
+            "id": str(comment.get("id") or comment.get("createdAt", "")),
             "author": _author_login(comment.get("author")),
-            "author_association": str(comment.get("authorAssociation", "")),
-            "created_at": str(comment.get("createdAt", "")),
-            "body_excerpt": _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT),
+            "body": comment.get("body"),
+            "url": str(comment.get("url") or ""),
+            "created_at": str(comment.get("createdAt", comment.get("updatedAt", ""))),
         }
-        for comment in sorted(
-            comments,
-            key=lambda comment: str(comment.get("createdAt", comment.get("updatedAt", ""))),
-            reverse=True,
-        )[:COMMENT_SUMMARY_LIMIT]
+        for comment in selected
     ]
+    flags = thread_flags(gate_rows, labels=_pr_label_names(pr))
+    latest = []
+    for comment, gate_row in zip(selected, gate_rows, strict=True):
+        receipt = classify_row(gate_row, flags=flags)
+        excerpt = _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT)
+        if receipt["classification"] == CLASS_UNTRUSTED:
+            excerpt = ""
+        latest.append(
+            {
+                "author": _author_login(comment.get("author")),
+                "author_association": str(comment.get("authorAssociation", "")),
+                "created_at": str(comment.get("createdAt", "")),
+                "body_excerpt": excerpt,
+                "author_trust": receipt["classification"],
+            }
+        )
     return {
         "total": len(comments),
         "latest": latest,
@@ -171,14 +242,6 @@ def _repo_owner_name(repo: str) -> tuple[str, str]:
         return "", repo
     owner, name = repo.split("/", 1)
     return owner, name
-
-
-def _is_graphql_quota_error(message: str) -> bool:
-    """Return whether a gh error message indicates GraphQL API rate-limit/quota exhaustion."""
-    text = (message or "").lower()
-    if "rate limit" not in text:
-        return False
-    return "graphql" in text or "api rate limit" in text or "too many requests" in text
 
 
 def _rest_api_get(path: str, *, repo: str, timeout: int = 45) -> Any:
@@ -1361,8 +1424,12 @@ def _parse_explicit_verdict(item: Any) -> str | None:
         verdict = str(item.get("verdict", "")).lower()
         accepted_flag = item.get("accepted")
         sha = str(item.get("sha") or item.get("head_sha") or "")
-        if sha and (verdict == "accepted" or accepted_flag is True):
-            return f"gate-verdict: accepted @ {sha}"
+        if verdict == "hold" and accepted_flag is True:
+            return None
+        if sha and (verdict in {"accepted", "hold"} or accepted_flag is True):
+            normalized_verdict = "accepted" if accepted_flag is True else verdict
+            if normalized_verdict in {"accepted", "hold"}:
+                return f"gate-verdict: {normalized_verdict} @ {sha}"
     return None
 
 
@@ -1376,7 +1443,9 @@ def _extract_trailers_from_bodies(items: Any) -> list[str]:
             body = authoritative_body_text(entry)
             if body is not None:
                 for match in GATE_VERDICT_RE.finditer(body):
-                    trailers.append(f"gate-verdict: accepted @ {match.group(1)}")
+                    trailers.append(
+                        f"gate-verdict: {match.group('verdict').lower()} @ {match.group('sha')}"
+                    )
     return trailers
 
 
@@ -1494,6 +1563,7 @@ def _pr_payload_from_dict(
     )
     reviews = _reviews(pr)
     gate_verdicts = _extract_gate_verdicts(pr)
+    gate_verdict_status = current_gate_verdict_status(pr, head_sha)
     title = str(pr.get("title", "") or "")
     body = str(pr.get("body", "") or "")
     metadata_digest_value = metadata_digest(title, body)
@@ -1515,6 +1585,9 @@ def _pr_payload_from_dict(
         "checks": checks,
         "reviews": reviews,
         "gate_verdicts": gate_verdicts,
+        "gate_verdict_status": gate_verdict_status,
+        "gate_verdict_status_head_sha": head_sha,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
         "base_policy": _extract_base_policies(pr),
         "metadata_digest": metadata_digest_value,
         "metadata_verdicts": metadata_verdicts,
@@ -1767,7 +1840,9 @@ def _snapshot_active_rest_fallback(
     )
 
 
-def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
+def snapshot_active_prs(
+    *, repo: str, limit: int, include_review_threads: bool = False
+) -> dict[str, Any]:
     """Return a compact active PR queue snapshot."""
     current_main_sha = _fetch_current_main_sha(repo=repo)
     retry = run_with_retry(
@@ -1869,6 +1944,16 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
         for pr in listed
         if isinstance(pr, dict)
     ]
+    if include_review_threads:
+        for pr in prs:
+            if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
+                review_thread_snapshot = _review_thread_snapshot(
+                    int(pr["number"]),
+                    repo=repo,
+                )
+                pr["review_thread_snapshot"] = review_thread_snapshot
+                _project_review_thread_state(pr, review_thread_snapshot.get("status"))
+                _refresh_route_hint(pr)
     truncated = is_likely_truncated(len(listed), limit=limit)
     return _active_snapshot_envelope(
         repo=repo,
@@ -2018,7 +2103,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--review-threads",
         action="store_true",
-        help="Include bounded review-thread excerpts without diff hunks or full bodies.",
+        help=(
+            "Include bounded review-thread excerpts without diff hunks or full bodies; "
+            "valid with explicit PR numbers and with --active (bounded by --limit)."
+        ),
     )
     parser.add_argument(
         "--raw-review-comments-artifact",
@@ -2043,9 +2131,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.active and (args.prs_option is not None or args.prs):
         print("--active cannot be combined with explicit PR numbers", file=sys.stderr)
         return 1
-    if args.active and args.review_threads:
-        print("--review-threads is only supported with explicit PR numbers", file=sys.stderr)
-        return 1
     if args.active and args.raw_review_comments_artifact:
         print(
             "--raw-review-comments-artifact is only supported with explicit PR numbers",
@@ -2061,7 +2146,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         if args.active:
-            payload = snapshot_active_prs(repo=args.repo, limit=max(args.limit, 1))
+            payload = snapshot_active_prs(
+                repo=args.repo,
+                limit=max(args.limit, 1),
+                include_review_threads=args.review_threads,
+            )
         elif not numbers:
             print("at least one PR number is required", file=sys.stderr)
             return 1

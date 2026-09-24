@@ -15,10 +15,10 @@ from robot_sf.benchmark.snqi.compute import compute_snqi
 
 
 def _synthetic_eps(num: int = 12):
-    """TODO docstring. Document this function.
+    """Return ``num`` synthetic all-metric episodes from a fixed RNG seed (123).
 
     Args:
-        num: TODO docstring.
+        num: Number of episode records to generate.
     """
     rng = np.random.default_rng(123)
     episodes = []
@@ -41,10 +41,10 @@ def _synthetic_eps(num: int = 12):
 
 
 def _baseline(episodes):
-    """TODO docstring. Document this function.
+    """Compute median/p95 baselines for the four normalized penalty metrics.
 
     Args:
-        episodes: TODO docstring.
+        episodes: Episode records whose ``metrics`` mappings supply the values.
     """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for ep in episodes:
@@ -59,7 +59,12 @@ def _baseline(episodes):
 
 
 def test_collision_weight_monotonicity():
-    """TODO docstring. Document this function."""
+    """Raising the collision weight must not raise mean SNQI score.
+
+    Sweeps ``w_collisions`` over [0.5, 1.0, 1.5, 2.0, 2.5] on synthetic
+    episodes and asserts the mean score sequence is non-increasing within a
+    1e-9 tolerance.
+    """
     eps = _synthetic_eps()
     base = _baseline(eps)
 

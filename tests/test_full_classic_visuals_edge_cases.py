@@ -16,14 +16,14 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal benchmark configuration helper for visual artifact edge cases."""
 
     def __init__(self, tmp_path: Path, **over):
-        """TODO docstring. Document this function.
+        """Initialize benchmark configuration with output paths and parameter overrides.
 
         Args:
-            tmp_path: TODO docstring.
-            over: TODO docstring.
+            tmp_path: Directory path for benchmark outputs and scenario matrix storage.
+            over: Arbitrary keyword overrides for benchmark configuration fields.
         """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
@@ -44,20 +44,20 @@ class _Cfg:
 
 
 def _read(path: Path):
-    """TODO docstring. Document this function.
+    """Load and parse a JSON report file from disk.
 
     Args:
-        path: TODO docstring.
+        path: Filesystem path to the JSON artifact to read.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_deterministic_video_selection(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify that identical benchmark configurations select the same episode IDs for video.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated test benchmark runs.
     """
     cfg1 = _Cfg(tmp_path / "sel1")
     cfg2 = _Cfg(tmp_path / "sel2")
@@ -69,10 +69,10 @@ def test_deterministic_video_selection(tmp_path):
 
 
 def test_renderer_field_present(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify that all records in video_artifacts.json include the renderer metadata field.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated benchmark outputs.
     """
     cfg = _Cfg(tmp_path / "renderer")
     run_full_benchmark(cfg)
@@ -81,10 +81,10 @@ def test_renderer_field_present(tmp_path):
 
 
 def test_disable_vs_smoke_notes(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify that video notes distinguish disabled video generation from smoke mode omission.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated benchmark outputs.
     """
     cfg_disable = _Cfg(tmp_path / "disa", disable_videos=True)
     cfg_smoke = _Cfg(tmp_path / "smok", smoke=True)

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the plot-distributions CLI subcommand generating PNG and PDF distribution plots."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_matrix(path: Path, repeats: int = 3) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal scenario matrix YAML file for distribution plot tests.
 
     Args:
-        path: TODO docstring.
-        repeats: TODO docstring.
+        path: Destination filesystem path for the matrix YAML.
+        repeats: Number of episode repetitions per scenario.
     """
     scenarios = [
         {
@@ -39,12 +39,7 @@ def _write_matrix(path: Path, repeats: int = 3) -> None:
 
 
 def test_cli_plot_distributions_png_and_pdf(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify plot-distributions CLI generates distribution plots in both PNG and PDF formats."""
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=4)
     episodes = tmp_path / "episodes.jsonl"

@@ -18,10 +18,10 @@ from robot_sf.telemetry.run_registry import RunRegistry
 
 
 def test_manifest_writer_appends_and_reads_records(run_tracker_config: RunTrackerConfig) -> None:
-    """TODO docstring. Document this function.
+    """Verify that ManifestWriter correctly appends and reads back pipeline run records.
 
     Args:
-        run_tracker_config: TODO docstring.
+        run_tracker_config: Test fixture providing telemetry tracker configuration.
     """
     registry = RunRegistry(run_tracker_config)
     writer = ManifestWriter(run_tracker_config, run_id="demo-run", registry=registry)
@@ -49,10 +49,10 @@ def test_manifest_writer_appends_and_reads_records(run_tracker_config: RunTracke
 
 
 def test_run_registry_enforces_unique_ids(run_tracker_config: RunTrackerConfig) -> None:
-    """TODO docstring. Document this function.
+    """Verify that RunRegistry raises FileExistsError when attempting to create a duplicate run ID.
 
     Args:
-        run_tracker_config: TODO docstring.
+        run_tracker_config: Test fixture providing telemetry tracker configuration.
     """
     registry = RunRegistry(run_tracker_config)
     registry.create_run_directory("dupe-run")
@@ -61,10 +61,10 @@ def test_run_registry_enforces_unique_ids(run_tracker_config: RunTrackerConfig) 
 
 
 def test_run_registry_prunes_old_runs(tmp_path) -> None:
-    """TODO docstring. Document this function.
+    """Verify that RunRegistry prunes old run directories beyond the retention limit.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated run registry storage.
     """
     config = RunTrackerConfig(artifact_root=tmp_path / "artifacts", retain_runs=2)
     registry = RunRegistry(config)

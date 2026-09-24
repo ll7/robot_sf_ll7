@@ -42,10 +42,10 @@ INVALID_WEIGHTS_NON_NUMERIC = {
 
 @pytest.fixture
 def snqi_small_dataset(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Write a two-episode JSONL and a baseline stats JSON to tmp_path, returning both paths.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory where the synthetic episode and baseline files are written.
     """
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
@@ -90,11 +90,11 @@ def snqi_small_dataset(tmp_path: Path):
 
 
 def _write_weights(path: Path, weights: dict):
-    """TODO docstring. Document this function.
+    """Serialize a weights mapping to a JSON file at the given path.
 
     Args:
-        path: TODO docstring.
-        weights: TODO docstring.
+        path: Destination file path for the JSON weights.
+        weights: Mapping of SNQI weight names to numeric values.
     """
     path.write_text(json.dumps(weights), encoding="utf-8")
 
@@ -116,14 +116,14 @@ def test_cli_external_initial_weights_validation(
     expect_success,
     script_kind,
 ):
-    """TODO docstring. Document this function.
+    """Run the SNQI CLI with an external weights file and check accepted versus rejected input.
 
     Args:
-        tmp_path: TODO docstring.
-        snqi_small_dataset: TODO docstring.
-        weights: TODO docstring.
-        expect_success: TODO docstring.
-        script_kind: TODO docstring.
+        tmp_path: Temporary directory for the weights file and CLI output JSON.
+        snqi_small_dataset: Fixture returning the synthetic episodes and baseline file paths.
+        weights: Parametrized weights mapping written to a JSON file for the CLI.
+        expect_success: Whether the CLI invocation should succeed for these weights.
+        script_kind: Parametrized script to exercise, either "optimization" or "recompute".
     """
     episodes_path, baseline_path = snqi_small_dataset
     weights_file = tmp_path / "weights.json"

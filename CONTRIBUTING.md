@@ -4,6 +4,9 @@ Thank you for your interest in contributing. This document gives the public cont
 Robot SF. For deeper development details, use [`docs/dev_guide.md`](docs/dev_guide.md); for
 agent-assisted work, use [`AGENTS.md`](AGENTS.md).
 
+Before changing code, skim the [Architecture Tour](docs/architecture_tour.md) to locate the
+canonical owner for environment, planner, simulator, benchmark, evidence, and documentation work.
+
 ## What Kind of Contributions Are Welcome?
 
 ### 1. Bug Reports and Issue Tracking
@@ -197,6 +200,10 @@ uv run pytest tests/test_your_feature.py -v
 # Check coverage for a focused change when needed
 uv run pytest --cov=robot_sf tests/test_your_feature.py
 ```
+
+For the test-tree map, suite categories, and failure/rerun policy, see
+[`tests/README.md`](tests/README.md) and the canonical
+[`docs/qa_test_strategy.md`](docs/qa_test_strategy.md).
 
 New features should include:
 - Unit tests for core logic

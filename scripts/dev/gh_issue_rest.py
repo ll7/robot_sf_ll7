@@ -66,6 +66,7 @@ if __package__ in {None, ""}:
     # ahead of any competing checkout or editable installation on sys.path.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.dev import agent_content_gate as _content_gate
 from scripts.dev import github_transport_policy as _transport_policy
 from scripts.dev._gh_rest import as_str as _as_str
 from scripts.dev._gh_rest import parse_json as _parse_json
@@ -94,6 +95,9 @@ ISSUE_FIELDS = (
     "is_pull_request",
     "user",
     "author_association",
+    "author_trust",
+    "author_trust_reason",
+    "trust_receipt",
     "labels",
     "assignees",
     "created_at",
@@ -300,6 +304,59 @@ def _normalize_comment(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _trust_body_row(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the author-gate input row for a normalized issue or PR body."""
+    return {
+        "id": "body",
+        "kind": "pr_body" if payload.get("is_pull_request") else "issue_body",
+        "author": payload.get("user", ""),
+        "body": payload.get("body", ""),
+        "url": payload.get("url", ""),
+        "created_at": payload.get("created_at", ""),
+    }
+
+
+def _trust_comment_row(
+    payload: dict[str, Any], comment: dict[str, Any], *, index: int
+) -> dict[str, Any]:
+    """Return the author-gate input row for one normalized thread comment."""
+    comment_id = comment.get("id")
+    return {
+        "id": comment_id if comment_id not in (None, "") else f"comment:{index}",
+        "kind": "pr_comment" if payload.get("is_pull_request") else "issue_comment",
+        "author": comment.get("user", ""),
+        "body": comment.get("body", ""),
+        "url": comment.get("url", ""),
+        "created_at": comment.get("created_at", ""),
+    }
+
+
+def apply_author_trust_gate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach fail-closed author-gate classifications to a normalized thread.
+
+    Adds ``author_trust``/``author_trust_reason`` to the issue body and every
+    comment plus a top-level ``trust_receipt`` naming included and excluded rows.
+    Raw ``body`` fields are preserved for backward compatibility; callers that
+    build a prompt digest must use :func:`render_issue_plain` with
+    ``trusted_only=True`` so untrusted text is never ingested.
+    """
+    comments = [comment for comment in payload.get("comments") or [] if isinstance(comment, dict)]
+    rows = [_trust_body_row(payload)]
+    rows.extend(
+        _trust_comment_row(payload, comment, index=index) for index, comment in enumerate(comments)
+    )
+    receipt = _content_gate.receipt_for_rows(rows, labels=payload.get("labels") or [])
+    body_entry = _content_gate.receipt_entry(receipt, "body") or {}
+    payload["author_trust"] = body_entry.get("classification", _content_gate.CLASS_UNTRUSTED)
+    payload["author_trust_reason"] = body_entry.get("reason", _content_gate.REASON_MISSING_AUTHOR)
+    payload["trust_receipt"] = receipt
+    for index, comment in enumerate(comments):
+        entry = _content_gate.receipt_entry(receipt, rows[index + 1]["id"]) or {}
+        comment["author_trust"] = entry.get("classification", _content_gate.CLASS_UNTRUSTED)
+        comment["author_trust_reason"] = entry.get("reason", _content_gate.REASON_MISSING_AUTHOR)
+    return payload
+
+
 def fetch_issue(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Fetch a single issue via REST and return the normalized payload.
 
@@ -335,7 +392,7 @@ def fetch_issue(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
             ),
         }
     payload["status"] = "ok"
-    return payload
+    return apply_author_trust_gate(payload)
 
 
 def fetch_comments(
@@ -405,14 +462,22 @@ def fetch_issue_with_comments(
             "error": str(comment_result.get("error", "unknown comments error")),
         }
     issue["comments"] = comment_result["comments"]
-    return issue
+    return apply_author_trust_gate(issue)
 
 
-def render_issue_plain(payload: dict[str, Any]) -> str:
+def _excluded_body_text(reason: object) -> str:
+    """Return the visible placeholder for author-gate-excluded content."""
+    return f"[content excluded: {reason or _content_gate.REASON_UNTRUSTED_AUTHOR}]"
+
+
+def render_issue_plain(payload: dict[str, Any], *, trusted_only: bool = False) -> str:
     """Render a normalized issue-with-comments payload as a gh-like thread.
 
     Intended as a drop-in for ``gh issue view <number> --comments`` plain output
-    in shell pipelines that expect human-readable text rather than JSON.
+    in shell pipelines that expect human-readable text rather than JSON. With
+    ``trusted_only=True`` (used for agent prompt digests) untrusted foreign
+    bodies are replaced by an explicit exclusion marker instead of being
+    ingested.
     """
     title = payload.get("title", "")
     state = payload.get("state", "")
@@ -421,6 +486,10 @@ def render_issue_plain(payload: dict[str, Any]) -> str:
     association = payload.get("author_association", "")
     labels = payload.get("labels", []) or []
     body = payload.get("body", "") or ""
+    body_trusted = (
+        payload.get("author_trust", _content_gate.CLASS_UNTRUSTED)
+        in _content_gate.TRUSTED_CLASSIFICATIONS
+    )
     lines: list[str] = []
     lines.append(f"title:\t{title}")
     lines.append(f"state:\t{state}")
@@ -432,7 +501,10 @@ def render_issue_plain(payload: dict[str, Any]) -> str:
         lines.append("labels:\t" + ", ".join(labels))
     lines.append(f"url:\t{url}")
     lines.append("--")
-    lines.append(body.rstrip())
+    if trusted_only and not body_trusted:
+        lines.append(_excluded_body_text(payload.get("author_trust_reason")))
+    else:
+        lines.append(body.rstrip())
     for comment in payload.get("comments", []) or []:
         c_author = comment.get("user", "")
         c_assoc = comment.get("author_association", "")
@@ -446,7 +518,14 @@ def render_issue_plain(payload: dict[str, Any]) -> str:
         lines.append("--")
         lines.append(header)
         lines.append("--")
-        lines.append(c_body)
+        c_trusted = (
+            comment.get("author_trust", _content_gate.CLASS_UNTRUSTED)
+            in _content_gate.TRUSTED_CLASSIFICATIONS
+        )
+        if trusted_only and not c_trusted:
+            lines.append(_excluded_body_text(comment.get("author_trust_reason")))
+        else:
+            lines.append(c_body)
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -480,6 +559,13 @@ def read_complete_issue_thread(
             "status": "ok",
             "source": "gh_issue_view",
             "text": native.stdout,
+            # Native human output carries no structured author metadata, so the
+            # gate cannot classify it; mark the digest fail-closed for callers
+            # while keeping the text for humans and existing pipelines.
+            "auto_ingest_allowed": False,
+            "trust_receipt": _content_gate.unclassified_receipt(
+                reason="native_output_has_no_author_metadata"
+            ),
         }
 
     native_error = (
@@ -514,7 +600,14 @@ def read_complete_issue_thread(
         "number": number,
         "status": "ok",
         "source": "rest_fallback",
-        "text": render_issue_plain(payload),
+        # The REST payload is structured, so the digest excludes untrusted rows
+        # by default and carries the per-row receipt for callers.
+        "text": render_issue_plain(payload, trusted_only=True),
+        "auto_ingest_allowed": True,
+        "trust_receipt": payload.get(
+            "trust_receipt",
+            _content_gate.unclassified_receipt(reason="rest_payload_missing_trust_receipt"),
+        ),
     }
 
 
@@ -549,7 +642,9 @@ def _cmd_view(args: argparse.Namespace) -> int:
     if not args.comments and "comments" not in args.fields:
         payload.pop("comments", None)
     if args.plain:
-        sys.stdout.write(render_issue_plain(payload))
+        # Plain output is the agent-facing digest, so untrusted foreign bodies
+        # are excluded by default while JSON keeps the annotated raw fields.
+        sys.stdout.write(render_issue_plain(payload, trusted_only=True))
         return 0
     try:
         selected = _select_fields(payload, args.fields)
@@ -570,6 +665,12 @@ def _cmd_thread(args: argparse.Namespace) -> int:
     if result.get("status") != "ok":
         print(result.get("error", "unknown error"), file=sys.stderr)
         return 1
+    if result.get("auto_ingest_allowed") is False:
+        print(
+            "warning: thread text is not author-classified; use "
+            "`view --comments` or `view --json` for gated content",
+            file=sys.stderr,
+        )
     sys.stdout.write(str(result["text"]))
     return 0
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -574,3 +575,87 @@ def test_glob_matching_only_directories_is_missing(tmp_path: Path) -> None:
     report = check_example_prerequisites(manifest, "advanced/dir_glob")
 
     assert _missing_ok_checks(report, "configs/*.yaml").status == STATUS_MISSING_FILE
+
+
+@pytest.mark.parametrize("script", _SCRIPTS)
+def test_migrated_examples_report_missing_model_when_cache_empty(
+    tmp_path: Path, script: str
+) -> None:
+    """Migrated examples report missing_model with acquisition guidance when cache is unhydrated."""
+
+    for asset in (
+        "maps/svg_maps/debug_06.svg",
+        "maps/svg_maps/masterthesis/intersection.svg",
+        "model/pedestrian/ppo_ped_02.zip",
+        "model/pedestrian/ppo_intersection.zip",
+    ):
+        src = _REPO_ROOT / asset
+        if src.exists():
+            dst = tmp_path / asset
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(src, dst)
+
+    query = script.removesuffix(".py")
+    report = check_example_prerequisites(
+        _REAL_MANIFEST,
+        query,
+        repo_root=tmp_path,
+        registry_path=_REPO_ROOT / "model" / "registry.yaml",
+    )
+    assert report.status == STATUS_MISSING_MODEL
+    assert report.ready is False
+    missing_models = [c for c in report.checks if c.status == STATUS_MISSING_MODEL]
+    assert len(missing_models) >= 1
+    assert "robot-sf models download" in (missing_models[0].acquisition or "")
+
+
+@pytest.mark.parametrize("script", _SCRIPTS)
+def test_migrated_examples_report_ready_when_cache_hydrated(tmp_path: Path, script: str) -> None:
+    """Migrated examples report ready with verified SHA256 when cache is hydrated."""
+
+    for asset in (
+        "maps/svg_maps/debug_06.svg",
+        "maps/svg_maps/masterthesis/intersection.svg",
+        "model/pedestrian/ppo_ped_02.zip",
+        "model/pedestrian/ppo_intersection.zip",
+    ):
+        src = _REPO_ROOT / asset
+        if src.exists():
+            dst = tmp_path / asset
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(src, dst)
+
+    real_registry_data = yaml.safe_load(
+        (_REPO_ROOT / "model" / "registry.yaml").read_text(encoding="utf-8")
+    )
+    fake_bytes = b"fake-checkpoint-bytes-for-hydrated-test"
+    fake_sha = hashlib.sha256(fake_bytes).hexdigest()
+
+    for entry in real_registry_data.get("models", []):
+        if isinstance(entry, dict) and entry.get("model_id") in (
+            "legacy_ppo_run_043",
+            "legacy_ppo_run_023",
+        ):
+            local_path = entry.get("local_path")
+            if local_path:
+                target = tmp_path / local_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(fake_bytes)
+            if "github_release" in entry and isinstance(entry["github_release"], dict):
+                entry["github_release"]["sha256"] = fake_sha
+
+    test_reg_path = tmp_path / "model" / "registry.yaml"
+    test_reg_path.parent.mkdir(parents=True, exist_ok=True)
+    test_reg_path.write_text(yaml.safe_dump(real_registry_data), encoding="utf-8")
+
+    query = script.removesuffix(".py")
+    report = check_example_prerequisites(
+        _REAL_MANIFEST,
+        query,
+        repo_root=tmp_path,
+        registry_path=test_reg_path,
+    )
+    assert report.status == STATUS_READY
+    assert report.ready is True
+    for check in report.checks:
+        assert check.status == STATUS_READY

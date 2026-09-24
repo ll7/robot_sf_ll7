@@ -43,6 +43,12 @@ from urllib.parse import quote, urlsplit
 import yaml
 
 from scripts.dev import prepare_open_issue_contracts
+from scripts.dev.agent_content_gate import (
+    CLASS_UNTRUSTED,
+    classify_row,
+    extract_login,
+    thread_flags,
+)
 from scripts.dev.github_quota import (
     DEFAULT_CORE_SAFETY_THRESHOLD,
     RateLimitSnapshot,
@@ -737,7 +743,7 @@ def _issue_source_rows(issue: Mapping[str, Any]) -> list[dict[str, str]]:
             "id": "body",
             "kind": "body",
             "url": str(issue.get("url") or ""),
-            "author": str(issue.get("author") or ""),
+            "author": extract_login(issue.get("author")) or extract_login(issue.get("user")),
             "created_at": "",
             "text": str(issue.get("body") or ""),
         }
@@ -751,7 +757,8 @@ def _issue_source_rows(issue: Mapping[str, Any]) -> list[dict[str, str]]:
                         "id": f"comment:{index}",
                         "kind": "comment",
                         "url": str(comment.get("url") or ""),
-                        "author": str(comment.get("user") or comment.get("author") or ""),
+                        "author": extract_login(comment.get("user"))
+                        or extract_login(comment.get("author")),
                         "created_at": str(comment.get("created_at") or ""),
                         "text": str(comment.get("body") or ""),
                     }
@@ -767,6 +774,23 @@ def _issue_source_rows(issue: Mapping[str, Any]) -> list[dict[str, str]]:
                         "text": comment,
                     }
                 )
+    gate_rows = [
+        {
+            "kind": "issue_comment" if source["kind"] == "comment" else source["kind"],
+            "id": source["id"],
+            "author": source["author"],
+            "body": source["text"],
+            "url": source["url"],
+            "created_at": source["created_at"],
+        }
+        for source in sources
+    ]
+    flags = thread_flags(gate_rows, labels=_label_names(issue.get("labels")))
+    for source, gate_row in zip(sources, gate_rows, strict=True):
+        receipt = classify_row(gate_row, flags=flags)
+        source["author_trust"] = receipt["classification"]
+        if receipt["classification"] == CLASS_UNTRUSTED:
+            source["text"] = ""
     return sources
 
 

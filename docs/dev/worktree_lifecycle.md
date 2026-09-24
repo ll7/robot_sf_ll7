@@ -40,6 +40,13 @@ scripts/dev/create_worktree.sh \
 Implementation branches fetch the latest `origin/main` and merge it early:
 `git fetch origin main && git merge origin/main`.
 
+That early merge is for development only. The pre-publication ancestry gate requires the branch's
+merge base to equal the live `origin/main` tip at check time; if `origin/main` advances after that
+merge, the branch is classified `undeclared_stack` and publication stops. Rebase the intended
+commits onto the current tip before the final readiness run and publication, because the rebase
+moves the head and invalidates an existing readiness stamp. See the pre-publication ancestry note
+in `docs/dev_guide_reference.md` and issue #8864.
+
 Read-only review worktrees or passes record target/base/head SHAs and inspect or fetch as needed.
 Never merge `origin/main` into the implementation branch or push to it during review. Ordinary Git
 invocations use the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321); deliberate
@@ -102,6 +109,18 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_work
   --source-ref origin/main \
   --remote origin
 ```
+
+Focused test runs inside the Landlock boundary must keep their cache and log outputs inside the
+worktree; otherwise numba aborts collection and pytest's logging handler fails on an unwritable
+path, which are tooling-isolation failures and never pass evidence. Print the exact recipe with:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_worktree_guard.py \
+  pytest-isolation --worktree "$WORKTREE_PARENT/review-pr-123"
+```
+
+Apply its `env` and `pytest_arguments` to the guarded invocation; the process exit status remains
+authoritative over any printed test summary.
 
 The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and installs the
 tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations
@@ -261,11 +280,19 @@ scripts/dev/create_worktree.sh \
 ```
 
 `--task-id` creates the lifecycle lease regardless of whether `--receipt` is supplied. When a
-receipt is requested, creation writes it atomically after the linked worktree exists. The `--exec`
-command is guarded before it starts; the read-only receipt check exits nonzero with one JSON result
-when the current working directory, top-level, shared Git directory, branch/ref, or base ancestry
-differs. Workers started separately must run the equivalent check from inside the assigned worktree
-with `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
+receipt is requested, `create_worktree.sh` validates the receipt path before creating the worktree
+and writes it atomically after the linked worktree exists. Relative paths starting with `.git/` or
+`./.git/` resolve through the linked-worktree `.git` file indirection to the repository's shared
+common Git directory, matching primary-checkout behavior. Other relative paths resolve relative to
+the invoking working directory. Validation fails closed with exit code 2 before `git worktree add`
+if the receipt path contains symlink components, references an existing directory or file, has
+non-directory parent components, or target directories that are not writable. Paths can be verified
+independently with `python3 scripts/dev/worktree_receipt.py resolve-path --receipt PATH`.
+
+The `--exec` command is guarded before it starts; the read-only receipt check exits nonzero with one
+JSON result when the current working directory, top-level, shared Git directory, branch/ref, or base
+ancestry differs. Workers started separately must run the equivalent check from inside the assigned
+worktree with `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
 The receipt proves assignment identity; the lease protects the active path from repository-owned
 cleanup. They are deliberately separate contracts.
 

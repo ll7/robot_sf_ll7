@@ -4,22 +4,47 @@
 #
 # This helper never refreshes the owning checkout.  It only mutates the
 # current linked worktree's ignored .venv, after a repository-scoped lock and
-# capacity check, then verifies the installed package before returning. Every
-# non-interpreter symlink below .venv must remain inside that environment.
+# capacity check, then verifies the installed package and the requested
+# dependency profile before returning (issue #8811: recovery results must
+# satisfy the wrapper's own profile preflight). Every non-interpreter symlink
+# below .venv must remain inside that environment.
 
 set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-Usage: scripts/dev/recover_fast_pysf_worktree.sh
+Usage: scripts/dev/recover_fast_pysf_worktree.sh [--profile NAME] [--wait-timeout SECONDS]
 
 Create or refresh the current linked worktree's .venv with the pinned fast-pysf
 package and verify package freshness before a caller runs project code.
+
+After syncing, the helper also certifies that the requested dependency import
+profile is complete via scripts/dev/check_worktree_optional_deps.py. An
+existing environment is refreshed when either the installed fast-pysf package
+or the requested profile is incomplete, so a previous interrupted sync cannot
+be reported as a successful recovery.
 
 This is an explicit recovery operation. It refuses the main checkout, refuses
 dirty dependency inputs, serializes recovery per repository with a kernel-backed
 lock, and fails closed when the worktree filesystem is below the
 ROBOT_SF_WORKTREE_MIN_FREE_BYTES threshold (default: 2 GiB).
+
+Options:
+  --profile NAME         Dependency import profile the postcondition must certify
+                         after sync (default: core). Use all-extras or a named
+                         pyproject extra when the caller needs it.
+  --wait-timeout SECONDS Maximum seconds to wait for the repository recovery lock when another
+                         recovery is active (default: 0 or ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS).
+                         Alias: --timeout SECONDS.
+  --non-blocking         Fail immediately with exit code 75 if the recovery lock is held
+                         (equivalent to --wait-timeout 0).
+
+Environment:
+  ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS
+                         Default timeout in seconds to wait for the repository recovery lock
+                         (default: 0).
+  ROBOT_SF_WORKTREE_MIN_FREE_BYTES
+                         Minimum free bytes required for worktree recovery (default: 2 GiB).
 
 The helper is normally invoked through:
   scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>
@@ -31,23 +56,67 @@ The --frozen flag prevents this recovery path from changing dependency locks.
 EOF
 }
 
+dependency_profile="core"
 locked_recovery=0
+wait_timeout="${ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS:-0}"
 
-if [[ "$#" -gt 0 ]]; then
-  if [[ "$#" -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
-    show_help
-    exit 0
-  fi
-  # Internal re-entry flag: the portable-lock fallback re-executes this script
-  # under worktree_creation_lock.py --non-blocking so recovery runs while a
-  # Python fcntl holder owns the shared lock file. Never pass this directly.
-  if [[ "$#" -eq 1 && "$1" == "--__locked-recovery" ]]; then
-    locked_recovery=1
-  else
-    echo "recover_fast_pysf_worktree: this helper accepts no arguments" >&2
-    show_help >&2
-    exit 2
-  fi
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      if [[ "$#" -lt 2 || -z "${2:-}" ]]; then
+        echo "recover_fast_pysf_worktree: --profile requires a dependency profile name" >&2
+        exit 2
+      fi
+      dependency_profile="$2"
+      shift 2
+      ;;
+    --wait-timeout|--timeout)
+      if [[ "$#" -lt 2 || -z "${2:-}" ]]; then
+        echo "recover_fast_pysf_worktree: $1 requires a non-negative integer timeout in seconds" >&2
+        exit 2
+      fi
+      if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+        echo "recover_fast_pysf_worktree: $1 requires a non-negative integer timeout in seconds: $2" >&2
+        exit 2
+      fi
+      wait_timeout="$2"
+      shift 2
+      ;;
+    --wait-timeout=*|--timeout=*)
+      val="${1#*=}"
+      if ! [[ "$val" =~ ^[0-9]+$ ]]; then
+        echo "recover_fast_pysf_worktree: timeout requires a non-negative integer in seconds: $val" >&2
+        exit 2
+      fi
+      wait_timeout="$val"
+      shift
+      ;;
+    --non-blocking)
+      wait_timeout=0
+      shift
+      ;;
+    # Internal re-entry flag: the portable-lock fallback re-executes this script
+    # under worktree_creation_lock.py so recovery runs while a
+    # Python fcntl holder owns the shared lock file. Never pass this directly.
+    --__locked-recovery)
+      locked_recovery=1
+      shift
+      ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    *)
+      echo "recover_fast_pysf_worktree: unrecognized option: $1" >&2
+      show_help >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ! [[ "$wait_timeout" =~ ^[0-9]+$ ]]; then
+  echo "recover_fast_pysf_worktree: ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS must be a non-negative integer: $wait_timeout" >&2
+  exit 2
 fi
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -87,9 +156,10 @@ if [[ ! -f "$repo_root/.git" ]]; then
 fi
 
 checker="$repo_root/scripts/dev/check_fast_pysf_runtime.py"
+profile_checker="$repo_root/scripts/dev/check_worktree_optional_deps.py"
 capacity_checker="$repo_root/scripts/dev/check_worktree_capacity.py"
-if [[ ! -f "$checker" || ! -f "$capacity_checker" ]]; then
-  echo "recover_fast_pysf_worktree: required freshness or capacity checker is missing" >&2
+if [[ ! -f "$checker" || ! -f "$profile_checker" || ! -f "$capacity_checker" ]]; then
+  echo "recover_fast_pysf_worktree: required freshness, profile, or capacity checker is missing" >&2
   exit 2
 fi
 
@@ -273,6 +343,49 @@ if ! check_local_venv_layout; then
   exit 2
 fi
 
+format_lock_diagnostics() {
+  local target_lock="$1"
+  local owner_pid="" owner_started="" owner_worktree=""
+  if [[ -f "$target_lock" && -r "$target_lock" ]]; then
+    while IFS='=' read -r key val || [[ -n "$key" ]]; do
+      case "$key" in
+        pid) owner_pid="$val" ;;
+        started) owner_started="$val" ;;
+        worktree) owner_worktree="$val" ;;
+      esac
+    done < "$target_lock"
+  fi
+
+  local status="unknown"
+  if [[ -n "$owner_pid" && "$owner_pid" =~ ^[0-9]+$ ]]; then
+    if kill -0 "$owner_pid" 2>/dev/null; then
+      status="alive (PID $owner_pid running)"
+    else
+      status="stale (PID $owner_pid not running)"
+    fi
+  fi
+
+  local elapsed=""
+  if [[ -n "$owner_started" && "$owner_started" =~ ^[0-9]+$ ]]; then
+    local now
+    now="$(date +%s)"
+    if [[ "$now" -ge "$owner_started" ]]; then
+      elapsed=" ($(( now - owner_started ))s elapsed)"
+    fi
+  fi
+
+  echo "Lock: $target_lock" >&2
+  if [[ -z "$owner_pid" && -z "$owner_started" && -z "$owner_worktree" ]]; then
+    echo "Lock owner metadata: none recorded" >&2
+  else
+    echo "Lock owner metadata:" >&2
+    echo "  PID: ${owner_pid:-unknown}" >&2
+    echo "  Started: ${owner_started:-unknown}${elapsed}" >&2
+    echo "  Worktree: ${owner_worktree:-unknown}" >&2
+    echo "  Status: $status" >&2
+  fi
+}
+
 lock_path="$git_common_dir/robot-sf-fast-pysf-recovery.lock"
 if [[ -L "$lock_path" ]]; then
   echo "recover_fast_pysf_worktree: refusing a symlinked repository recovery lock: $lock_path" >&2
@@ -283,24 +396,46 @@ if [[ -e "$lock_path" && ! -f "$lock_path" ]]; then
   exit 2
 fi
 if [[ "$locked_recovery" -eq 1 ]]; then
-  # Re-entered under worktree_creation_lock.py --non-blocking holding the
-  # shared lock file; skip local acquisition and the EXIT-trap release.
-  :
+  # Re-entered under worktree_creation_lock.py holding the
+  # shared lock file; record lock owner metadata and clear on exit.
+  printf 'pid=%s\nstarted=%s\nworktree=%s\n' "$$" "$(date +%s)" "$repo_root" > "$lock_path" 2>/dev/null || true
+  release_locked_recovery() {
+    : > "$lock_path" 2>/dev/null || true
+  }
+  trap release_locked_recovery EXIT
 elif command -v flock >/dev/null 2>&1; then
   lock_fd=""
-  if ! exec {lock_fd}>"$lock_path"; then
+  if ! exec {lock_fd}<>"$lock_path"; then
     echo "recover_fast_pysf_worktree: could not open repository recovery lock: $lock_path" >&2
     exit 2
   fi
-  if ! flock -n "$lock_fd"; then
-    echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
-    echo "Wait for it to finish, then retry this explicit command." >&2
-    echo "Lock: $lock_path" >&2
-    exec {lock_fd}>&-
-    exit 75
+  if [[ "$wait_timeout" -gt 0 ]]; then
+    if ! flock -n "$lock_fd"; then
+      echo "recover_fast_pysf_worktree: another fast-pysf recovery is active; waiting up to ${wait_timeout}s for lock" >&2
+      format_lock_diagnostics "$lock_path"
+      if ! flock -w "$wait_timeout" "$lock_fd"; then
+        echo "recover_fast_pysf_worktree: timed out waiting for repository fast-pysf recovery lock after ${wait_timeout}s" >&2
+        echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
+        echo "Wait for it to finish, then retry this explicit command." >&2
+        format_lock_diagnostics "$lock_path"
+        exec {lock_fd}>&-
+        exit 75
+      fi
+    fi
+  else
+    if ! flock -n "$lock_fd"; then
+      echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
+      echo "Wait for it to finish, then retry this explicit command." >&2
+      format_lock_diagnostics "$lock_path"
+      exec {lock_fd}>&-
+      exit 75
+    fi
   fi
 
+  printf 'pid=%s\nstarted=%s\nworktree=%s\n' "$$" "$(date +%s)" "$repo_root" > "$lock_path" 2>/dev/null || true
+
   release_lock() {
+    : > "$lock_path" 2>/dev/null || true
     flock -u "$lock_fd" 2>/dev/null || true
     exec {lock_fd}>&-
   }
@@ -308,15 +443,24 @@ elif command -v flock >/dev/null 2>&1; then
 else
   # Portable fallback: fcntl.flock via the helper uses flock(2) on the same
   # lock file identity, so it serializes against flock-CLI holders.
-  # --non-blocking preserves the exit-75 contention contract.
   echo "recover_fast_pysf_worktree: flock CLI not used; holding portable lock on $lock_path" >&2
   python_lock_rc=0
-  python3 "$repo_root/scripts/dev/worktree_creation_lock.py" --non-blocking "$lock_path" -- \
-    "$repo_root/scripts/dev/recover_fast_pysf_worktree.sh" --__locked-recovery || python_lock_rc=$?
+  lock_args=()
+  if [[ "$wait_timeout" -gt 0 ]]; then
+    lock_args+=(--timeout "$wait_timeout")
+  else
+    lock_args+=(--non-blocking)
+  fi
+  python3 "$repo_root/scripts/dev/worktree_creation_lock.py" "${lock_args[@]}" "$lock_path" -- \
+    "$repo_root/scripts/dev/recover_fast_pysf_worktree.sh" --__locked-recovery \
+    --profile "$dependency_profile" || python_lock_rc=$?
   if [[ "$python_lock_rc" -eq 75 ]]; then
+    if [[ "$wait_timeout" -gt 0 ]]; then
+      echo "recover_fast_pysf_worktree: timed out waiting for repository fast-pysf recovery lock after ${wait_timeout}s" >&2
+    fi
     echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
     echo "Wait for it to finish, then retry this explicit command." >&2
-    echo "Lock: $lock_path" >&2
+    format_lock_diagnostics "$lock_path"
     exit 75
   fi
   exit "$python_lock_rc"
@@ -338,10 +482,27 @@ fi
 sync_needed=1
 if [[ -x "$local_venv/bin/python" ]]; then
   existing_report=""
+  fast_pysf_coherent=0
   if existing_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$checker" 2>&1)"; then
+    fast_pysf_coherent=1
+  fi
+
+  # Issue #8811: a profile-incomplete environment is repair-worthy even when
+  # fast-pysf is already coherent, so an interrupted sync cannot be certified.
+  profile_report=""
+  dependency_profile_complete=0
+  if profile_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
+    --profile "$dependency_profile" 2>&1)"; then
+    dependency_profile_complete=1
+  fi
+
+  if [[ "$fast_pysf_coherent" -eq 1 && "$dependency_profile_complete" -eq 1 ]]; then
     printf '%s\n' "$existing_report" >&2
-    echo "recover_fast_pysf_worktree: local environment is already fast-pysf coherent; sync skipped" >&2
+    echo "recover_fast_pysf_worktree: local environment is already fast-pysf coherent and dependency profile '$dependency_profile' is complete; sync skipped" >&2
     sync_needed=0
+  elif [[ "$fast_pysf_coherent" -eq 1 ]]; then
+    echo "recover_fast_pysf_worktree: existing local environment is missing dependency profile '$dependency_profile'; refreshing it" >&2
+    printf '%s\n' "$profile_report" >&2
   else
     echo "recover_fast_pysf_worktree: existing local environment is not coherent; refreshing it" >&2
     printf '%s\n' "$existing_report" >&2
@@ -381,6 +542,20 @@ if ! final_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$checker" 2>&1)
 fi
 printf '%s\n' "$final_report" >&2
 
+# Issue #8811: certify the requested dependency profile as part of the recovery
+# postcondition, so callers can rely on a successful recovery satisfying the
+# shared wrapper's own profile preflight.
+profile_final_report=""
+if ! profile_final_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
+  --profile "$dependency_profile" 2>&1)"; then
+  echo "recover_fast_pysf_worktree: post-sync dependency profile '$dependency_profile' is incomplete in $local_venv" >&2
+  printf '%s\n' "$profile_final_report" >&2
+  echo "No wrapped command was started because the requested dependency profile is incomplete." >&2
+  echo "Repair: run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then retry." >&2
+  exit 2
+fi
+printf '%s\n' "$profile_final_report" >&2
+
 remaining_dirty_inputs="$(git status --porcelain=v1 -- "${dependency_inputs[@]}")" || {
   echo "recover_fast_pysf_worktree: could not verify dependency inputs after recovery" >&2
   exit 2
@@ -393,3 +568,4 @@ if [[ -n "$remaining_dirty_inputs" ]]; then
 fi
 
 echo "recover_fast_pysf_worktree: verified worktree-owned fast-pysf environment: $local_venv" >&2
+echo "recover_fast_pysf_worktree: verified dependency profile '$dependency_profile': $local_venv" >&2

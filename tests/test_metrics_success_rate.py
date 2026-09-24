@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark success rate calculations and collision failure conditions."""
 
 import numpy as np
 
@@ -12,11 +12,14 @@ from robot_sf.benchmark.metrics import (
 
 
 def make_base_episode(T=5, with_peds=True):
-    """TODO docstring. Document this function.
+    """Create a default synthetic episode tuple for testing metrics.
 
     Args:
-        T: TODO docstring.
-        with_peds: TODO docstring.
+        T: Number of timesteps in the episode trajectory.
+        with_peds: Whether to include a pedestrian far from the robot path.
+
+    Returns:
+        Tuple of (robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt).
     """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
@@ -33,7 +36,7 @@ def make_base_episode(T=5, with_peds=True):
 
 
 def test_success_without_collisions_reaches_goal():
-    """TODO docstring. Document this function."""
+    """Verify success rate is 1.0 when robot reaches goal without collisions."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(T)
     # place robot at goal at step 3
@@ -55,7 +58,7 @@ def test_success_without_collisions_reaches_goal():
 
 
 def test_failure_on_wall_collision():
-    """TODO docstring. Document this function."""
+    """Verify success rate drops to 0.0 when wall collisions occur."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -82,7 +85,7 @@ def test_failure_on_wall_collision():
 
 
 def test_failure_on_agent_collision():
-    """TODO docstring. Document this function."""
+    """Verify success rate drops to 0.0 when other-agent collisions occur."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -109,7 +112,7 @@ def test_failure_on_agent_collision():
 
 
 def test_failure_on_human_collision():
-    """TODO docstring. Document this function."""
+    """Verify success rate drops to 0.0 when human collisions occur."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(T)
     robot_pos[:4, 0] = np.linspace(0.0, 10.0, 4)

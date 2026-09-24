@@ -39,15 +39,15 @@ def _episode(
     peds_pos: np.ndarray,
     ped_forces: np.ndarray | None = None,
 ) -> EpisodeData:
-    """TODO docstring. Document this function.
+    """Construct an EpisodeData instance for metric edge case tests.
 
     Args:
-        robot_pos: TODO docstring.
-        peds_pos: TODO docstring.
-        ped_forces: TODO docstring.
+        robot_pos: Array of robot positions of shape (T, 2).
+        peds_pos: Array of pedestrian positions of shape (T, K, 2).
+        ped_forces: Optional array of pedestrian social forces of shape (T, K, 2).
 
     Returns:
-        TODO docstring.
+        Populated EpisodeData instance with zero velocities, accelerations, and goal.
     """
     T = robot_pos.shape[0]
     K = peds_pos.shape[1]

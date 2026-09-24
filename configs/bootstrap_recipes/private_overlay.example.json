@@ -1,0 +1,10 @@
+{
+  "schema": "bootstrap_recipe_private_overlay.v1",
+  "note": "Example only. Real overlays live in private ops; never commit host names, accounts, credentials, or private paths.",
+  "placeholders": {
+    "PRIVATE_ARTIFACT_ROOT": {
+      "capability_class": "durable-storage",
+      "example": "<private-durable-storage-root>"
+    }
+  }
+}

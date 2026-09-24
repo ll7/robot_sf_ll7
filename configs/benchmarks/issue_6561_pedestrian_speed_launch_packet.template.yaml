@@ -1,0 +1,47 @@
+# Issue #6561 pedestrian desired-speed launch-packet template (check-only).
+#
+# Copy this template into a private operations packet, fill every placeholder, and
+# run the exact check-only commands before any registered submission. The protocol
+# PR and this template never execute rows; production submission stays gated on
+# #6102 bundle retrieval/integrity and a passing activation preflight.
+
+schema_version: robot_sf.issue_6561_pedestrian_speed_launch_packet.template.v1
+issue: 6561
+status: template
+protocol_config: configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml
+preflight_config: configs/benchmarks/issue_6561_pedestrian_speed_activation_preflight.yaml
+
+required_inputs:
+  robot_speed_bundle_reference: "<retrieved #6102 artifact reference>"
+  robot_speed_manifest_hash: "e32ce197149af62bf366f5ca95abbb42215b379fe7916d916ccdd544dce8666f"
+  integrity_validated_at: "<ISO-8601 timestamp>"
+  activation_preflight_diagnostics: "<path to disjoint-seed diagnostics JSON>"
+  private_submit_host: "<private; never tracked>"
+  private_worktree: "<private; never tracked>"
+
+check_only_commands:
+  - uv run python scripts/validation/check_issue_6561_pedestrian_speed_protocol.py
+  - >-
+    uv run python scripts/validation/check_issue_6561_activation_preflight.py
+    --check-only --format json
+  - >-
+    uv run python scripts/validation/check_issue_6561_activation_preflight.py
+    --diagnostics <diagnostics.json> --format json
+  - uv run pytest -q tests/validation/test_check_issue_6561_pedestrian_speed_protocol.py
+  - uv run pytest -q tests/validation/test_check_issue_6561_activation_preflight.py
+
+submission_gates:
+  - id: protocol_frozen
+    required: true
+  - id: robot_speed_bundle_integrity_validated
+    required: true
+  - id: activation_preflight_passed
+    required: true
+  - id: no_forbidden_row_status
+    required: true
+
+forbidden:
+  - registered_rows_before_all_gates
+  - fallback_or_degraded_success
+  - private_host_or_scratch_paths_in_tracked_files
+  - post_outcome_protocol_edits

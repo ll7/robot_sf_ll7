@@ -6,7 +6,11 @@ from robot_sf.benchmark.full_classic import visual_constants as vc  # type: igno
 
 
 def test_all_notes_membership():
-    """TODO docstring. Document this function."""
+    """Assert ALL_NOTES holds exactly the six skip and render fallback notes.
+
+    The expected set is smoke mode, disabled, SimulationView missing, moviepy
+    missing, insufficient replay, and fallback from SimulationView.
+    """
     expected = {
         vc.NOTE_SMOKE_MODE,
         vc.NOTE_DISABLED,
@@ -19,6 +23,6 @@ def test_all_notes_membership():
 
 
 def test_renderer_constants():
-    """TODO docstring. Document this function."""
+    """Assert renderer identifier constants pin the simulation-view and synthetic names."""
     assert vc.RENDERER_SIM_VIEW == "simulation_view"
     assert vc.RENDERER_SYNTHETIC == "synthetic"

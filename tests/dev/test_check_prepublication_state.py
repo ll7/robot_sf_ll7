@@ -1876,3 +1876,160 @@ def test_real_git_merge_conflict_aborts_cleanly(real_git_repo, monkeypatch, caps
         ["git", "status", "--porcelain"], cwd=worker, capture_output=True, text=True, check=True
     )
     assert status.stdout.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Unchanged-head main fast-forward refresh classification (issue #8864)
+# ---------------------------------------------------------------------------
+
+
+def _ancestry_block(*, state: str, merge_base: str, main_tip: str) -> dict[str, str]:
+    """Build a minimal recorded ancestry block for decision tests."""
+    return {"state": state, "merge_base_sha": merge_base, "main_tip_sha": main_tip}
+
+
+def _verified_baseline() -> dict[str, Any]:
+    return _snapshot(
+        base_sha="main-old",
+        local_head_sha="head-a",
+        remote_branch_sha="head-a",
+        ancestry=_ancestry_block(state="clean", merge_base="main-old", main_tip="main-old"),
+    )
+
+
+def _advanced_current(**overrides: Any) -> dict[str, Any]:
+    payload = _snapshot(
+        base_sha="main-new",
+        local_head_sha="head-a",
+        remote_branch_sha="head-a",
+        ancestry=_ancestry_block(
+            state="undeclared_stack", merge_base="main-old", main_tip="main-new"
+        ),
+    )
+    payload.update(overrides)
+    return payload
+
+
+def test_verified_baseline_unchanged_head_after_main_advance_requires_refresh() -> None:
+    """A clean captured baseline stays refreshable when only main advanced."""
+    result = gate.evaluate_state(_verified_baseline(), _advanced_current())
+
+    assert result["decision"] == "refresh-required"
+    assert result["reason"] == "base_changed"
+    assert result["drift"]["base_sha"] == {"baseline": "main-old", "current": "main-new"}
+
+
+@pytest.mark.parametrize(
+    ("baseline_overrides", "current_overrides"),
+    [
+        # Untrusted baseline: the capture was not verified clean.
+        (
+            {
+                "ancestry": _ancestry_block(
+                    state="unknown", merge_base="main-old", main_tip="main-old"
+                )
+            },
+            {},
+        ),
+        # The local head advanced after capture.
+        ({}, {"local_head_sha": "head-b"}),
+        # The remote branch tip advanced after capture.
+        ({}, {"remote_branch_sha": "head-b"}),
+        # Divergent/rewritten main: the merge base is not the baseline main tip.
+        (
+            {},
+            {
+                "ancestry": _ancestry_block(
+                    state="undeclared_stack", merge_base="main-other", main_tip="main-new"
+                )
+            },
+        ),
+        # The recorded live base does not match the current main tip.
+        ({}, {"base_sha": "main-stale"}),
+        # Main did not advance: not the justified-refresh case.
+        (
+            {},
+            {
+                "ancestry": _ancestry_block(
+                    state="undeclared_stack", merge_base="main-old", main_tip="main-old"
+                )
+            },
+        ),
+        # A different blocking ancestry state is never converted to refresh.
+        (
+            {},
+            {
+                "ancestry": _ancestry_block(
+                    state="parent_invalidated", merge_base="main-old", main_tip="main-new"
+                )
+            },
+        ),
+    ],
+)
+def test_refresh_requires_all_verified_conditions(
+    baseline_overrides: dict[str, Any], current_overrides: dict[str, Any]
+) -> None:
+    """Everything less certain than the exact verified case stays fail-closed."""
+    baseline = _verified_baseline()
+    baseline.update(baseline_overrides)
+
+    result = gate.evaluate_state(baseline, _advanced_current(**current_overrides))
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "undeclared_stack_ancestry"
+
+
+def test_real_git_main_fast_forward_keeps_unchanged_head_refresh_required(
+    real_git_repo, monkeypatch
+) -> None:
+    """Clean capture -> main fast-forward -> unchanged feature head returns refresh."""
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+    subprocess.run(["git", "checkout", "-b", "feature/verified"], cwd=worker, check=True)
+    (worker / "feature.txt").write_text("feature content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "feature.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "intended fix"], cwd=worker, check=True)
+    feature_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=worker, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    subprocess.run(["git", "push", "-u", "origin", "feature/verified"], cwd=worker, check=True)
+    subprocess.run(["git", "checkout", "main"], cwd=worker, check=True)
+
+    baseline = _snapshot(
+        base_sha=real_git_repo.initial_main_sha,
+        local_head_sha=feature_head,
+        remote_branch_sha=feature_head,
+        branch="feature/verified",
+        base_ref="main",
+        remote="origin",
+    )
+    gate._record_ancestry(baseline)
+    assert baseline["ancestry"]["state"] == "clean"
+
+    (worker / "base.txt").write_text("advanced main content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "base.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "sibling merge"], cwd=worker, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=worker, check=True)
+    new_main_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=worker, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+    current = _snapshot(
+        base_sha=new_main_sha,
+        local_head_sha=feature_head,
+        remote_branch_sha=feature_head,
+        branch="feature/verified",
+        base_ref="main",
+        remote="origin",
+    )
+    gate._record_ancestry(current)
+    assert current["ancestry"]["state"] == "undeclared_stack"
+
+    result = gate.evaluate_state(baseline, current)
+
+    assert result["decision"] == "refresh-required"
+    assert result["reason"] == "base_changed"
+    assert result["drift"]["base_sha"] == {
+        "baseline": real_git_repo.initial_main_sha,
+        "current": new_main_sha,
+    }

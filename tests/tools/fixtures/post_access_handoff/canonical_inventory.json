@@ -1,0 +1,57 @@
+{
+  "schema": "robot_sf.post_access_handoff_input.v1",
+  "as_of": "2026-09-12T12:00:00Z",
+  "workloads": [
+    {
+      "public_issue": 5416,
+      "purpose": "SIPP planner qualification smoke",
+      "identities": {"source_commit": "c3b83edd9bf95df7a82fadaedf2ac530d367bec7", "config_path": "configs/sipp.json", "seed": 42},
+      "resource_class": "slurm_gpu",
+      "current_state": "completed_validated",
+      "scheduler_job": {"job_id": 1001, "cluster": "slurm_prod"},
+      "expected_rows": 100,
+      "observed_rows": 100,
+      "artifact_manifest": "art-5416-001",
+      "durable_destination_class": "cloud_durable",
+      "restore_status": "verified",
+      "remaining_blocker": null,
+      "next_command": null
+    },
+    {
+      "public_issue": 1475,
+      "purpose": "ORCA residual lineage smoke",
+      "identities": {"source_commit": "c3b83edd9bf95df7a82fadaedf2ac530d367bec7", "config_path": "configs/orca.json", "seed": 101},
+      "resource_class": "slurm_cpu",
+      "current_state": "running",
+      "scheduler_job": {"job_id": 2002, "cluster": "slurm_prod"},
+      "expected_rows": 50,
+      "observed_rows": 10,
+      "artifact_manifest": null,
+      "durable_destination_class": "unassigned",
+      "restore_status": "not_applicable",
+      "remaining_blocker": "execution_in_progress",
+      "next_command": "squeue -j 2002"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "art-5416-001",
+      "retention_class": "cloud_durable",
+      "size_bytes": 1048576,
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "custody_state": "verified",
+      "consumer": "5416"
+    }
+  ],
+  "environments": [
+    {
+      "environment_id": "env-001",
+      "recreation_capability": "full",
+      "unavailable_fields": []
+    }
+  ],
+  "scheduler_receipts": [
+    {"job_id": 1001, "workload_ref": 5416},
+    {"job_id": 2002, "workload_ref": 1475}
+  ]
+}

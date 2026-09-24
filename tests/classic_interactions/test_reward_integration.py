@@ -18,7 +18,11 @@ import importlib
 
 
 def test_reward_integration_episode_present():
-    """TODO docstring. Document this function."""
+    """Check that a non-dry demo run returns at least one episode summary.
+
+    Forces DRY_RUN off and runs run_demo, asserting the environment completes episodes
+    through the reward fallback path, then restores the original DRY_RUN value.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     original_dry = getattr(mod, "DRY_RUN", None)
     mod.DRY_RUN = False  # type: ignore

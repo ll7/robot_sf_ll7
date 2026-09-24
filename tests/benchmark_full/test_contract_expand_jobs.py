@@ -17,16 +17,16 @@ from robot_sf.benchmark.full_classic import planning
 
 @dataclass
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal config stub exposing an episode horizon override."""
 
     horizon_override: int | None = 300
 
 
 def _scenario_descriptor(seed_count: int = 3):
-    """TODO docstring. Document this function.
+    """Build one scenario descriptor with a configurable number of planned seeds.
 
     Args:
-        seed_count: TODO docstring.
+        seed_count: Number of consecutive integer seeds planned for the scenario.
     """
     return planning.ScenarioDescriptor(
         scenario_id="scenario_a",
@@ -42,7 +42,7 @@ def _scenario_descriptor(seed_count: int = 3):
 
 
 def test_expand_jobs_count_and_horizon():
-    """TODO docstring. Document this function."""
+    """Verify one job per planned seed and that the horizon override is applied."""
     cfg = _Cfg(horizon_override=250)
     scenarios = [_scenario_descriptor(seed_count=4)]
     jobs = planning.expand_episode_jobs(scenarios, cfg)

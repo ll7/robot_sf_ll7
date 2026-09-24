@@ -54,6 +54,8 @@ _CHECKPOINT_REFERENCE_KEY_PAIRS: tuple[tuple[str, str], ...] = (
     ("model_id", "model_path"),
     ("sacadrl_model_id", "sacadrl_checkpoint_path"),
     ("predictive_model_id", "predictive_checkpoint_path"),
+    ("checkpoint_id", "checkpoint_path"),
+    ("learned_policy_model_id", "learned_policy_checkpoint"),
 )
 _DEFAULT_SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 # Registry-entry fields that declare a durable remote source ``resolve_model_path`` can stage.

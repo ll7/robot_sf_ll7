@@ -1,0 +1,48 @@
+{
+  "schema": "robot_sf.receipt_projection_policy.v1",
+  "note": "Per-field-path policies: 'keep', 'omit', 'reject', 'digest', or ['constant', value] / ['stable_alias', prefix]. Paths are dot-separated; '[*]' matches array elements and trailing '**' matches any subtree. 'keep' lists and 'fields' entries are both per-path; unknown fields, unknown classes, and rejected field names fail closed.",
+  "rejected_field_names": ["account", "api_key", "command", "command_line", "credential", "env", "host", "hostname", "node", "node_list", "nodes", "nodelist", "partition", "password", "private_path", "qos", "scheduler_account", "secret", "secrets", "slurm_account", "token", "user", "user_name", "username"],
+  "classes": [
+    {
+      "private_schema": "robot_sf.scheduler_allocation_receipt.private_input.v1",
+      "public_schema": "robot_sf.scheduler_allocation_receipt.v1",
+      "binding_path": "source_binding",
+      "keep": ["scheduler_state", "state_history", "state_history[*]", "submission", "submission.intent_digest", "submission.source_config_command_digest", "submission.acknowledgement", "submission.submitted_at", "execution", "execution.requested_resources", "execution.requested_resources.cpu_class", "execution.requested_resources.memory_class", "execution.requested_resources.accelerator_class", "execution.allocated_resources", "execution.allocated_resources.cpu_class", "execution.allocated_resources.memory_class", "execution.allocated_resources.accelerator_class", "execution.started_at", "execution.ended_at", "execution.elapsed_seconds", "execution.time_limit_seconds", "execution.exit_code", "execution.derived_exit_code", "execution.signal", "execution.termination_class", "execution.environment_receipt_digest", "artifacts", "artifacts.manifest_digest"],
+      "fields": {
+        "schema": ["constant", "robot_sf.scheduler_allocation_receipt.v1"],
+        "job_alias": ["stable_alias", "job"],
+        "campaign_id": ["stable_alias", "campaign"],
+        "claim_boundary": ["constant", "Scheduler and allocation custody only; scheduler state never implies artifact, benchmark, or scientific success, and statuses stay separate."],
+        "submission.campaign_id": "omit",
+        "execution.submission_intent_digest": "omit",
+        "artifacts.result_root_identity": ["stable_alias", "artifact-root"],
+        "redactions": "omit",
+        "private_context": "omit"
+      },
+      "required": {
+        "identity": ["schema", "job_alias", "campaign_id", "scheduler_state", "state_history", "claim_boundary"],
+        "patterns": {"job_alias": "^job-[0-9a-f]{16}$", "campaign_id": "^campaign-[0-9a-f]{16}$", "artifacts.result_root_identity": "^artifact-root-[0-9a-f]{16}$", "submission.intent_digest": "^[0-9a-f]{64}$", "submission.source_config_command_digest": "^[0-9a-f]{64}$", "execution.environment_receipt_digest": "^[0-9a-f]{64}$", "artifacts.manifest_digest": "^[0-9a-f]{64}$"},
+        "enums": {"scheduler_state": ["submission_unacknowledged", "pending", "running", "completed", "failed", "timeout", "cancelled"], "submission.acknowledgement": ["acknowledged", "lost"]}
+      }
+    },
+    {
+      "private_schema": "terminal_job_harvest_private.v1",
+      "public_schema": "terminal_job_harvest.v1",
+      "binding_path": "source_binding",
+      "keep": ["issue", "issue.number", "issue.url", "job", "job.state", "ownership", "source", "source.commit", "source.config_sha256", "scheduler", "scheduler.state", "scheduler.terminal", "scheduler.scientific_status", "environment", "environment.record", "environment.source_commit", "environment.config_sha256", "artifact_status", "row_reconciliation", "row_reconciliation.expected_count", "row_reconciliation.accounted_count", "row_reconciliation.disposition_counts", "row_reconciliation.disposition_counts.*", "row_reconciliation.mode_counts", "row_reconciliation.mode_counts.*", "row_reconciliation.rows", "row_reconciliation.rows[*].**", "inventory", "inventory[*].**", "byte_counts", "byte_counts.member_count", "byte_counts.total_bytes", "destination", "destination.capacity_bytes", "destination.required_bytes", "destination.fits", "destination.verification", "destination.missing_members", "destination.mismatched_members", "destination.unexpected_members", "cleanup_eligibility", "cleanup_eligibility.eligible", "cleanup_eligibility.reason_codes", "cleanup_eligibility.reason_codes[*]", "scientific_status", "claim_boundary", "problems", "problems[*].**", "problem_count", "reason_codes", "reason_codes[*]", "status", "harvest_state", "receipt_id"],
+      "fields": {
+        "schema_version": ["constant", "terminal_job_harvest.v1"],
+        "job.job_id": ["stable_alias", "job"],
+        "ownership.owner": ["stable_alias", "owner"],
+        "ownership.campaign_id": ["stable_alias", "campaign"],
+        "problems[*].message": "digest",
+        "public_receipt": "omit"
+      },
+      "required": {
+        "identity": ["schema_version", "issue.number", "issue.url", "job.job_id", "job.state", "ownership.owner", "ownership.campaign_id", "source.commit", "source.config_sha256", "scheduler.state", "scheduler.scientific_status", "artifact_status", "row_reconciliation.expected_count", "row_reconciliation.accounted_count", "status", "harvest_state", "claim_boundary"],
+        "patterns": {"job.job_id": "^job-[0-9a-f]{16}$", "ownership.owner": "^owner-[0-9a-f]{16}$", "ownership.campaign_id": "^campaign-[0-9a-f]{16}$", "source.commit": "^[0-9a-f]{40}$", "source.config_sha256": "^[0-9a-f]{64}$", "environment.source_commit": "^[0-9a-f]{40}$", "environment.config_sha256": "^[0-9a-f]{64}$", "receipt_id": "^[0-9a-f]{64}$"},
+        "enums": {"job.state": ["completed", "failed", "cancelled", "timeout"], "scheduler.state": ["completed", "failed", "cancelled", "timeout"], "scheduler.scientific_status": ["not_evaluated"], "artifact_status": ["complete", "partial", "unavailable"], "destination.verification": ["verified", "incomplete", "digest_mismatch", "unexpected_members", "unavailable", "not_attempted"], "status": ["ready", "blocked"], "harvest_state": ["harvested", "harvest_blocked"]}
+      }
+    }
+  ]
+}

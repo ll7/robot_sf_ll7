@@ -14,26 +14,26 @@ from robot_sf.telemetry.sampler import TelemetrySampler
 
 
 class _DummyWriter:
-    """TODO docstring. Document this class."""
+    """Mock telemetry snapshot writer for testing sampler output."""
 
     def __init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Initialize empty snapshot collection list."""
         self.snapshots: list[TelemetrySnapshot] = []
 
     def append_telemetry_snapshot(self, snapshot: TelemetrySnapshot) -> None:
-        """TODO docstring. Document this function.
+        """Append recorded telemetry snapshot to the internal list.
 
         Args:
-            snapshot: TODO docstring.
+            snapshot: Telemetry snapshot record to append.
         """
         self.snapshots.append(snapshot)
 
 
 def test_sampler_emits_fallback_notes_when_psutil_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """TODO docstring. Document this function.
+    """Verify that TelemetrySampler emits fallback notes and survives when psutil is missing.
 
     Args:
-        monkeypatch: TODO docstring.
+        monkeypatch: Pytest monkeypatch fixture for simulating missing psutil module.
     """
     writer = _DummyWriter()
     fake_resource = SimpleNamespace(
@@ -67,7 +67,7 @@ def test_sampler_emits_fallback_notes_when_psutil_missing(monkeypatch: pytest.Mo
 
 
 def test_recommendation_engine_triggers_all_rules() -> None:
-    """TODO docstring. Document this function."""
+    """Verify that RecommendationEngine triggers throughput, CPU, memory, and GPU rules."""
     engine = RecommendationEngine(
         rules=RecommendationRules(
             throughput_baseline=10.0,

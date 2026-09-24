@@ -11,17 +11,17 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 def test_compute_effect_sizes_structure():
-    """TODO docstring. Document this function."""
+    """Verify compute_effect_sizes emits one archetype report with comparison fields."""
 
     class _Metric:
-        """TODO docstring. Document this class."""
+        """Minimal aggregate-metric double carrying mean, percentile, and CI fields."""
 
         def __init__(self, name, mean):
-            """TODO docstring. Document this function.
+            """Store the metric name and mean used across percentile and CI fields.
 
             Args:
-                name: TODO docstring.
-                mean: TODO docstring.
+                name: Metric identifier reported in comparison entries.
+                mean: Central value mirrored into median, p95, and the mean CI.
             """
             self.name = name
             self.mean = mean
@@ -31,15 +31,15 @@ def test_compute_effect_sizes_structure():
             self.median_ci = None
 
     class _Group:
-        """TODO docstring. Document this class."""
+        """Minimal aggregate-group double with identity, count, and one metric."""
 
         def __init__(self, archetype, density, mean_collision):
-            """TODO docstring. Document this function.
+            """Store group identity and a single collision-rate metric.
 
             Args:
-                archetype: TODO docstring.
-                density: TODO docstring.
-                mean_collision: TODO docstring.
+                archetype: Interaction archetype label used to group reports.
+                density: Density label compared against the reference density.
+                mean_collision: Mean collision rate for this group.
             """
             self.archetype = archetype
             self.density = density
@@ -52,7 +52,7 @@ def test_compute_effect_sizes_structure():
     ]
 
     class _Cfg:
-        """TODO docstring. Document this class."""
+        """Minimal config stub selecting the low-density reference for comparisons."""
 
         effect_size_reference_density = "low"
 

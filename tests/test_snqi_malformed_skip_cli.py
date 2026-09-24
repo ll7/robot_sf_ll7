@@ -13,11 +13,12 @@ import pytest
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("script_kind", ["optimization", "recompute"])
 def test_snqi_cli_malformed_skip_count(tmp_path: Path, script_kind: str):
-    """TODO docstring. Document this function.
+    """Run each SNQI CLI on JSONL with two malformed lines and check that the reported
+    skipped-line count equals two.
 
     Args:
-        tmp_path: TODO docstring.
-        script_kind: TODO docstring.
+        tmp_path: Temporary directory for the malformed episodes, baseline, and output JSON.
+        script_kind: Parametrized script to exercise, either "optimization" or "recompute".
     """
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"

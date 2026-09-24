@@ -14,7 +14,10 @@ if TYPE_CHECKING:
 
 
 class DummyCfg:
-    """TODO docstring. Document this class."""
+    """Config stub with videos disabled and a maximum of three video entries.
+
+    Video writing is off, so the test observes selection and ordering only.
+    """
 
     smoke = False
     disable_videos = True
@@ -22,22 +25,25 @@ class DummyCfg:
 
 
 def _record(ep_id: int) -> dict:
-    """TODO docstring. Document this function.
+    """Build a minimal record with a zero-based episode identifier and a fixed scenario.
 
     Args:
-        ep_id: TODO docstring.
+        ep_id: Zero-based integer appended to the episode identifier.
 
     Returns:
-        TODO docstring.
+        Record mapping consumed by generate_visual_artifacts.
     """
     return {"episode_id": f"ep{ep_id}", "scenario_id": "scA"}
 
 
 def test_selection_order(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Assert selection preserves input order and stops at max_videos.
+
+    Ten records are passed with videos disabled; exactly the first three are
+    selected and their episode identifiers are ep0, ep1, ep2.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
     """
     records = [_record(i) for i in range(10)]
     out = generate_visual_artifacts(tmp_path, DummyCfg(), groups=[], records=records)

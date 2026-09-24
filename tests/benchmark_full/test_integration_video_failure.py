@@ -25,12 +25,12 @@ from robot_sf.benchmark.full_classic.videos import generate_videos
     reason="matplotlib not available; cannot test failure path",
 )
 def test_video_generation_error_path(temp_results_dir, synthetic_episode_record, monkeypatch):
-    """TODO docstring. Document this function.
+    """Verify a rendering exception becomes an error artifact instead of raising.
 
     Args:
-        temp_results_dir: TODO docstring.
-        synthetic_episode_record: TODO docstring.
-        monkeypatch: TODO docstring.
+        temp_results_dir: Temporary directory used as the videos output root.
+        synthetic_episode_record: Factory building the single episode record.
+        monkeypatch: Fixture injecting the failure into the video pipeline.
     """
     records = [
         synthetic_episode_record(
@@ -41,7 +41,7 @@ def test_video_generation_error_path(temp_results_dir, synthetic_episode_record,
     ]
 
     class _Cfg:
-        """TODO docstring. Document this class."""
+        """Minimal non-smoke config stub enabling one video render attempt."""
 
         smoke = False
         disable_videos = False
@@ -51,11 +51,11 @@ def test_video_generation_error_path(temp_results_dir, synthetic_episode_record,
     if videos_mod.ImageSequenceClip is not None:
 
         def _boom(*args, **kwargs):
-            """TODO docstring. Document this function.
+            """Raise to simulate an ImageSequenceClip construction failure.
 
             Args:
-                args: TODO docstring.
-                kwargs: TODO docstring.
+                args: Positional arguments forwarded by the caller (unused).
+                kwargs: Keyword arguments forwarded by the caller (unused).
             """
             raise RuntimeError("boom clip")
 
@@ -63,10 +63,10 @@ def test_video_generation_error_path(temp_results_dir, synthetic_episode_record,
     else:
         # Monkeypatch math.cos to raise to trigger the except block early
         def _cos_fail(x):
-            """TODO docstring. Document this function.
+            """Raise to simulate a failure inside the fallback frame loop.
 
             Args:
-                x: TODO docstring.
+                x: Angle argument passed by the plotting loop (unused).
             """
             raise RuntimeError("boom cos")
 

@@ -10,12 +10,16 @@ import importlib
 
 
 def _load():
-    """TODO docstring. Document this function."""
+    """Import and return the classic interactions Pygame demo module."""
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_seed_order_reproducible():
-    """TODO docstring. Document this function."""
+    """Verify two demo runs produce the same seed ordering.
+
+    Forces DRY_RUN off, runs run_demo twice, and asserts both episode lists are
+    non-empty and their per-episode 'seed' values match in the same order.
+    """
     mod = _load()
     # Force non-dry execution
     if hasattr(mod, "DRY_RUN"):

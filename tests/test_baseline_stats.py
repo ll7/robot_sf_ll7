@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for computing baseline benchmark summary statistics from records and runs."""
 
 from __future__ import annotations
 
@@ -19,11 +19,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 def test_compute_baseline_stats_from_records(tmp_path: Path):
     # Create a tiny JSONL with two records and known metrics
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify baseline statistic calculations from pre-generated episode records."""
     p = tmp_path / "episodes.jsonl"
     recs = [
         {
@@ -69,11 +65,7 @@ ess_min_matrix = [
 
 
 def test_run_and_compute_baseline(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify executing a minimal scenario matrix and computing baseline summary statistics."""
     out_json = tmp_path / "baseline_stats.json"
     out_jsonl = tmp_path / "episodes.jsonl"
     stats = run_and_compute_baseline(

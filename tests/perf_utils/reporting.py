@@ -70,7 +70,7 @@ def _diagnostic_note(test_identifier: str) -> str | None:
 
 @dataclass(slots=True)
 class SlowTestSample:
-    """TODO docstring. Document this class."""
+    """Container pairing a test item identifier with its observed execution duration."""
 
     test_identifier: str
     duration_seconds: float
@@ -86,11 +86,10 @@ class SlowTestRecord:
     guidance: list[str]
 
     def format_block(self) -> str:
-        """TODO docstring. Document this function.
-
+        """Format the test record and its optimization guidance for terminal output.
 
         Returns:
-            TODO docstring.
+            Formatted multi-line text block describing the test duration, breach, and guidance.
         """
         if not self.guidance:
             return f"{self.test_identifier}  {self.duration_seconds:.2f}s"
@@ -155,14 +154,14 @@ def generate_report(
 
 
 def format_report(records: Iterable[SlowTestRecord], policy: PerformanceBudgetPolicy) -> str:
-    """TODO docstring. Document this function.
+    """Format a collection of ranked slow test records into a readable summary report.
 
     Args:
-        records: TODO docstring.
-        policy: TODO docstring.
+        records: Ordered iterable of slow test records to format.
+        policy: Performance budget policy defining threshold context in the header.
 
     Returns:
-        TODO docstring.
+        Complete formatted multi-line slow test report string.
     """
     lines = [
         f"Slow Test Report (soft<{policy.soft_threshold_seconds:.0f}s hard={policy.hard_timeout_seconds:.0f}s, top {policy.report_count})",

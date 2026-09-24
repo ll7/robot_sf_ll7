@@ -1,0 +1,970 @@
+#!/usr/bin/env python3
+"""Validate frozen bootstrap recipes per execution class (#8853).
+
+Recipes freeze the ordered setup, probe, and cleanup sequence that activated one
+execution environment, with source/lock identity, immutable container and module
+identities, private substitutions, and verification status. The checker is
+report-only; ``--execute-safe-checks`` runs only ``safe_check`` probes in an
+isolated temporary root.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+RECIPE_SCHEMA = "bootstrap_recipe.v1"
+OVERLAY_SCHEMA = "bootstrap_recipe_private_overlay.v1"
+REPORT_SCHEMA = "bootstrap_recipe_report.v1"
+
+EXECUTION_CLASSES = ("cpu_batch", "gpu_training", "carla_platform", "local_analysis")
+PHASES = ("setup", "probe", "cleanup")
+PHASE_INDEX = {phase: index for index, phase in enumerate(PHASES)}
+PUBLIC_PLACEHOLDERS = frozenset({"RECIPE_ROOT", "PROJECT_ROOT"})
+
+CREDENTIAL_RE = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----|AWS_SECRET_ACCESS_KEY|bearer\s+[A-Za-z0-9_\-\.]+"
+    r"|['\"]?(?:password|passwd|api_key|secret_key)['\"]?\s*[:=]\s*['\"][^'\"]{8,}['\"]",
+    re.IGNORECASE,
+)
+PRIVATE_PATH_RE = re.compile(
+    r"(?:^|[\s\"'=])(/(?:private|root/\.ssh|etc/(?:shadow|passwd)|var/run/secrets|opt/secrets)/)"
+    r"|(?:[a-zA-Z]:[/\\]secrets)",
+    re.IGNORECASE,
+)
+STALE_PATH_RE = re.compile(r"^/(?:home|tmp|var/tmp|scratch|work)/", re.IGNORECASE)
+SOURCE_HOST_ACCESS_RE = re.compile(
+    r"\b(?:ssh|scp|rsync|sftp)://|\bgit@[a-zA-Z0-9_\-\.]+:", re.IGNORECASE
+)
+HIDDEN_ENV_RE = re.compile(
+    r"\bPYTHONPATH\b|\b--user\b|site-packages|sys\.path\.(?:insert|append)|\.pth\b", re.IGNORECASE
+)
+SHELL_METACHAR_RE = re.compile(r"&&|\|\||;|\||>|<|`|\$\(")
+PLACEHOLDER_RE = re.compile(r"\$\{?([A-Z][A-Z0-9_]*)\}?")
+VALID_PLACEHOLDER_SYNTAX_RE = re.compile(r"\$\{[A-Z][A-Z0-9_]*\}|\$[A-Z][A-Z0-9_]*(?![A-Za-z0-9_])")
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+HEX_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
+
+def _has_malformed_placeholder(text: str) -> bool:
+    """Return True if text contains a '$' that does not match valid placeholder syntax."""
+    return "$" in VALID_PLACEHOLDER_SYNTAX_RE.sub("", text)
+
+
+DESTRUCTIVE_PROGRAMS = frozenset({"dd", "mkfs", "shred", "wipefs", "fdisk", "parted"})
+SENSITIVE_ROOTS = frozenset({"/", "/home", "/root", "/etc", "/usr", "/var", "/boot", "/opt"})
+SAFE_PROBE_PROGRAMS = frozenset(
+    {"python", "python3", "uv", "nvidia-smi", "docker", "false", "true"}
+)
+SAFE_VERSION_FLAGS = frozenset({"--version", "-V", "-VV", "-v", "--help", "-h"})
+SAFE_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "VIRTUAL_ENV",
+        "PYTHONHOME",
+    }
+)
+PROTECTED_SAFE_CHECK_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONNOUSERSITE",
+        "PYTHONUSERBASE",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "DYLD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+    }
+)
+BLOCKING_REASONS = frozenset(
+    "credential_leak private_path_leak source_host_access_attempt stale_source_path "
+    "unresolved_placeholder mutable_container_alias unpinned_module_alias "
+    "destructive_cleanup unsafe_safe_check shell_string_step".split()
+)
+
+
+def _read_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+        return None, str(exc)
+    return (data, None) if isinstance(data, dict) else (None, "content is not a JSON object")
+
+
+def _strings(*values: Any) -> list[str]:
+    out: list[str] = []
+    for value in values:
+        if isinstance(value, (str, int, float)):
+            out.append(str(value))
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                out.append(str(key))
+                out.extend(_strings(item))
+        elif isinstance(value, list):
+            out.extend(_strings(*value))
+    return out
+
+
+def _scan_public_safety(recipe: dict[str, Any], disc: list[str], reasons: list[str]) -> None:
+    scans = (
+        (CREDENTIAL_RE, "credential_leak"),
+        (PRIVATE_PATH_RE, "private_path_leak"),
+        (SOURCE_HOST_ACCESS_RE, "source_host_access_attempt"),
+    )
+    for text in _strings(recipe):
+        for pattern, tag in scans:
+            if pattern.search(text) and tag not in reasons:
+                disc.append(f"{tag}: {text[:80]}")
+                reasons.append(tag)
+    for step in recipe.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        tokens = _strings(step.get("argv", []), step.get("workdir", ""))
+        for token in tokens:
+            if STALE_PATH_RE.search(token) and "stale_source_path" not in reasons:
+                disc.append(f"stale_source_path: {token[:80]}")
+                reasons.append("stale_source_path")
+
+
+def _check_identity_bindings(recipe: dict[str, Any], disc: list[str], reasons: list[str]) -> None:
+    def flag(reason: str, name: Any) -> None:
+        if reason not in reasons:
+            disc.append(f"{reason}: {name}")
+            reasons.append(reason)
+
+    raw_bindings = recipe.get("identity_bindings", [])
+    if not isinstance(raw_bindings, list):
+        flag("malformed_identity_bindings", "identity_bindings must be a list")
+        return
+    for binding in raw_bindings:
+        if not isinstance(binding, dict):
+            flag("malformed_identity_binding", str(binding))
+            continue
+        kind = binding.get("kind")
+        name = binding.get("name")
+        if not kind or not name:
+            flag("malformed_identity_binding", str(binding))
+            continue
+        identity = str(binding.get("identity", ""))
+        if kind == "container" and not DIGEST_RE.fullmatch(str(binding.get("digest", ""))):
+            flag("mutable_container_alias", name)
+        elif kind == "module" and (
+            not identity
+            or identity.lower() in {"latest", "default", "unversioned"}
+            or not re.search(r"\d", identity)
+        ):
+            flag("unpinned_module_alias", name)
+        elif kind == "python-package" and not binding.get("version"):
+            flag("unpinned_package", name)
+
+
+def _check_step_shape(
+    step: dict[str, Any], disc: list[str], reasons: list[str]
+) -> list[str] | None:
+    argv = step.get("argv")
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+        disc.append(f"malformed_argv: {step.get('id', '?')}")
+        reasons.append("malformed_step")
+        return None
+    is_shell = len(argv) == 1 and bool(SHELL_METACHAR_RE.search(argv[0]))
+    if is_shell or (argv[0] in {"bash", "sh", "zsh"} and "-c" in argv):
+        disc.append(f"shell_string_step: {step.get('id', '?')}")
+        reasons.append("shell_string_step")
+    return argv
+
+
+def _check_safe_workdir(workdir: str) -> tuple[bool, str]:
+    if not workdir or workdir == "$RECIPE_ROOT":
+        return True, ""
+    norm = workdir.replace("\\", "/")
+    parts = norm.split("/")
+    if ".." in parts or any(p == ".." for p in Path(norm).parts):
+        return False, "parent_traversal_in_safe_workdir"
+    if norm.startswith("/"):
+        return False, "absolute_workdir_outside_recipe_root"
+    if len(norm) >= 2 and norm[1] == ":" and norm[0].isalpha():
+        return False, "drive_workdir_outside_recipe_root"
+    if norm.startswith("$") and not (norm == "$RECIPE_ROOT" or norm.startswith("$RECIPE_ROOT/")):
+        return False, f"unsupported_workdir_root_in_safe_check: {norm}"
+    if _has_malformed_placeholder(norm):
+        return False, f"malformed_placeholder_in_safe_workdir: {workdir}"
+    return True, ""
+
+
+def _check_python_probe(argv: list[str]) -> tuple[bool, str]:
+    if len(argv) < 2:
+        return False, "python_interactive_mode_forbidden_in_safe_check"
+    for arg in argv[1:]:
+        if arg not in SAFE_VERSION_FLAGS:
+            return False, f"unsupported_python_argument_in_safe_check: {arg}"
+    return True, ""
+
+
+def _check_uv_probe(argv: list[str]) -> tuple[bool, str]:
+    if len(argv) < 2:
+        return False, "uv_interactive_mode_forbidden_in_safe_check"
+    for arg in argv[1:]:
+        if arg not in SAFE_VERSION_FLAGS:
+            return False, f"unsupported_uv_argument_in_safe_check: {arg}"
+    return True, ""
+
+
+def _check_nvidia_smi_probe(argv: list[str]) -> tuple[bool, str]:
+    safe_flags = {"-L", "--list-gpus", "-q", "--version", "-V", "-h", "--help"}
+    for arg in argv[1:]:
+        if arg.startswith(("--query-gpu=", "--format=")) or arg in safe_flags:
+            continue
+        return False, f"unsupported_nvidia_smi_flag_in_safe_check: {arg}"
+    return True, ""
+
+
+def _check_docker_probe(argv: list[str]) -> tuple[bool, str]:
+    if len(argv) < 2:
+        return False, "docker_missing_subcommand_in_safe_check"
+    sub = argv[1].lower()
+    if sub in {"version", "--version", "-v", "info"}:
+        return True, ""
+    if sub == "image" and len(argv) >= 4 and argv[2].lower() == "inspect":
+        for arg in argv[3:]:
+            if arg.startswith("-") and not (arg == "--format" or arg.startswith("--format=")):
+                return False, f"unsupported_docker_image_inspect_flag: {arg}"
+        return True, ""
+    if sub == "inspect" and len(argv) >= 3:
+        for arg in argv[2:]:
+            if arg.startswith("-") and not (arg == "--format" or arg.startswith("--format=")):
+                return False, f"unsupported_docker_inspect_flag: {arg}"
+        return True, ""
+    return False, f"unsupported_docker_subcommand_in_safe_check: {sub}"
+
+
+def _check_bounded_safe_probe(argv: list[str]) -> tuple[bool, str]:
+    if not argv:
+        return False, "empty_argv"
+    raw_prog = argv[0]
+    if Path(raw_prog).name != raw_prog or "/" in raw_prog or "\\" in raw_prog:
+        return False, f"path_in_safe_check_program: {raw_prog}"
+    prog = raw_prog.lower()
+    if prog in {"bash", "sh", "zsh", "dash", "ksh", "csh", "tcsh"}:
+        return False, "shell_not_permitted_in_safe_check"
+    if any(arg in {"-c", "--command", "-e"} for arg in argv):
+        return False, "arbitrary_inline_code_forbidden_in_safe_check"
+    if prog in {"python", "python3"} or (prog.startswith("python3.") and prog[8:].isdigit()):
+        return _check_python_probe(argv)
+    if prog == "uv":
+        return _check_uv_probe(argv)
+    if prog == "nvidia-smi":
+        return _check_nvidia_smi_probe(argv)
+    if prog == "docker":
+        return _check_docker_probe(argv)
+    if prog in {"false", "true"}:
+        return True, ""
+    return False, f"unrecognized_safe_check_program: {prog}"
+
+
+def _check_safe_step_env(step_env: Any, step_id: str, disc: list[str], reasons: list[str]) -> None:
+    if not isinstance(step_env, dict):
+        return
+    bad_keys = [k for k in step_env if str(k).upper() in PROTECTED_SAFE_CHECK_ENV_KEYS]
+    if bad_keys and "unsafe_safe_check" not in reasons:
+        disc.append(f"unsafe_safe_check: {step_id} (protected_env_override: {bad_keys[0]})")
+        reasons.append("unsafe_safe_check")
+    for k, v in step_env.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
+            if "unsafe_safe_check" not in reasons:
+                disc.append(f"unsafe_safe_check: {step_id} (invalid_env_key: {k})")
+                reasons.append("unsafe_safe_check")
+        if _has_malformed_placeholder(str(v)):
+            if "unsafe_safe_check" not in reasons:
+                disc.append(f"unsafe_safe_check: {step_id} (malformed_placeholder_in_env: {v})")
+                reasons.append("unsafe_safe_check")
+
+
+def _check_step_safe_check(
+    step: dict[str, Any], phase: str, argv: list[str], disc: list[str], reasons: list[str]
+) -> None:
+    step_id = str(step.get("id", "?"))
+    if phase != "probe" or step.get("expect_exit_code", 0) != 0:
+        if "unsafe_safe_check" not in reasons:
+            disc.append(f"unsafe_safe_check: {step_id} (phase {phase})")
+            reasons.append("unsafe_safe_check")
+    workdir_ok, workdir_err = _check_safe_workdir(step.get("workdir", "$RECIPE_ROOT"))
+    if not workdir_ok and "unsafe_safe_check" not in reasons:
+        disc.append(f"unsafe_safe_check: {step_id} ({workdir_err})")
+        reasons.append("unsafe_safe_check")
+    probe_ok, probe_err = _check_bounded_safe_probe(argv)
+    if not probe_ok and "unsafe_safe_check" not in reasons:
+        disc.append(f"unsafe_safe_check: {step_id} ({probe_err})")
+        reasons.append("unsafe_safe_check")
+    _check_safe_step_env(step.get("env", {}), step_id, disc, reasons)
+
+
+def _check_step_safety(
+    step: dict[str, Any], phase: str, argv: list[str], disc: list[str], reasons: list[str]
+) -> None:
+    if step.get("safe_check"):
+        _check_step_safe_check(step, phase, argv, disc, reasons)
+    text = " ".join(argv) + " " + " ".join(_strings(step.get("env", {})))
+    if HIDDEN_ENV_RE.search(text) and "hidden_environment_dependence" not in reasons:
+        disc.append(f"hidden_environment_dependence: {step.get('id', '?')}")
+        reasons.append("hidden_environment_dependence")
+    for token in argv:
+        destructive = token in SENSITIVE_ROOTS or Path(token).name in DESTRUCTIVE_PROGRAMS
+        if destructive and "destructive_cleanup" not in reasons:
+            disc.append(f"destructive_cleanup: {step.get('id', '?')} ({token})")
+            reasons.append("destructive_cleanup")
+
+
+def _check_steps(recipe: dict[str, Any], disc: list[str], reasons: list[str]) -> None:
+    raw = recipe.get("steps", [])
+    if not isinstance(raw, list):
+        disc.append("malformed_steps")
+        reasons.append("malformed_step")
+        return
+    steps = [step for step in raw if isinstance(step, dict)]
+    if len(steps) != len(raw):
+        disc.append("malformed_step_entry")
+        reasons.append("malformed_step")
+    order: list[int] = []
+    for step in steps:
+        argv = _check_step_shape(step, disc, reasons)
+        phase = step.get("phase")
+        if argv is None:
+            continue
+        if phase not in PHASE_INDEX:
+            disc.append(f"unknown_step_phase: {step.get('id', '?')}")
+            reasons.append("malformed_step")
+            continue
+        order.append(PHASE_INDEX[phase])
+        _check_step_safety(step, phase, argv, disc, reasons)
+    if order != sorted(order):
+        disc.append("steps_not_ordered: setup -> probe -> cleanup required")
+        reasons.append("wrong_step_order")
+    if recipe.get("verification_status") == "verified":
+        phases = {step.get("phase") for step in steps}
+        for phase in ("setup", "probe"):
+            if phase not in phases:
+                disc.append(f"missing_{phase}_step")
+                reasons.append("missing_step_contract")
+
+
+def _check_recipe_header(recipe: dict[str, Any], disc: list[str], reasons: list[str]) -> None:
+    if recipe.get("schema") != RECIPE_SCHEMA:
+        disc.append(f"unsupported_schema: {recipe.get('schema')}")
+        reasons.append("unsupported_schema")
+    if recipe.get("execution_class") not in EXECUTION_CLASSES:
+        disc.append(f"unknown_execution_class: {recipe.get('execution_class')}")
+        reasons.append("unknown_execution_class")
+    for field in ("recipe_id", "title", "source_identity"):
+        if not recipe.get(field):
+            disc.append(f"missing_field: {field}")
+            reasons.append("missing_field")
+
+
+def _check_lockfile_on_disk(
+    lockfile: str, checksum: str, project_root: Path, disc: list[str], reasons: list[str]
+) -> None:
+    norm = lockfile.replace("\\", "/")
+    parts = Path(norm).parts
+    is_abs = (
+        Path(lockfile).is_absolute()
+        or norm.startswith("/")
+        or (len(norm) >= 2 and norm[1] == ":" and norm[0].isalpha())
+    )
+    has_traversal = ".." in parts or any(p == ".." for p in parts)
+    if is_abs or has_traversal:
+        disc.append(f"lockfile_escape: {lockfile}")
+        reasons.append("lockfile_escape")
+        return
+
+    resolved_root = project_root.resolve()
+    candidate = project_root / lockfile
+    if not candidate.exists() and not candidate.is_symlink():
+        disc.append(f"missing_lockfile: {lockfile}")
+        reasons.append("missing_lockfile")
+        return
+
+    try:
+        resolved_lock = candidate.resolve()
+        resolved_lock.relative_to(resolved_root)
+    except (ValueError, OSError) as exc:
+        disc.append(f"lockfile_escape: {lockfile} ({exc})")
+        reasons.append("lockfile_escape")
+        return
+
+    if not resolved_lock.is_file():
+        disc.append(f"unreadable_lockfile: {lockfile}")
+        reasons.append("unreadable_lockfile")
+        return
+
+    try:
+        actual = hashlib.sha256(resolved_lock.read_bytes()).hexdigest()
+    except OSError as exc:
+        disc.append(f"unreadable_lockfile: {lockfile} ({exc})")
+        reasons.append("unreadable_lockfile")
+        return
+
+    if checksum and HEX_SHA256_RE.fullmatch(checksum) and actual.lower() != checksum.lower():
+        disc.append(f"lockfile_drift: {lockfile}")
+        reasons.append("lockfile_drift")
+
+
+def _check_source_identity(
+    recipe: dict[str, Any], project_root: Path | None, disc: list[str], reasons: list[str]
+) -> None:
+    source = recipe.get("source_identity")
+    if not isinstance(source, dict):
+        disc.append("malformed_source_identity")
+        reasons.append("malformed_source_identity")
+        return
+    commit = str(source.get("recorded_from_commit", ""))
+    if commit and not COMMIT_RE.fullmatch(commit):
+        disc.append(f"invalid_source_commit: {commit}")
+        reasons.append("invalid_source_commit")
+    lockfile = source.get("lockfile")
+    checksum = source.get("lockfile_sha256")
+    if recipe.get("verification_status") == "verified" and not lockfile:
+        disc.append("missing_lockfile")
+        reasons.append("missing_lockfile")
+        return
+    if lockfile is not None:
+        if not isinstance(lockfile, str) or not lockfile:
+            disc.append("malformed_lockfile_declaration")
+            reasons.append("malformed_source_identity")
+            return
+        norm = lockfile.replace("\\", "/")
+        parts = Path(norm).parts
+        is_abs = (
+            Path(lockfile).is_absolute()
+            or norm.startswith("/")
+            or (len(norm) >= 2 and norm[1] == ":" and norm[0].isalpha())
+        )
+        has_traversal = ".." in parts or any(p == ".." for p in parts)
+        if is_abs or has_traversal:
+            disc.append(f"lockfile_escape: {lockfile}")
+            reasons.append("lockfile_escape")
+            return
+        if not checksum:
+            disc.append(f"missing_lockfile_checksum: {lockfile}")
+            reasons.append("missing_lockfile_checksum")
+        elif not isinstance(checksum, str) or not HEX_SHA256_RE.fullmatch(checksum):
+            disc.append(f"malformed_lockfile_checksum: {checksum}")
+            reasons.append("malformed_lockfile_checksum")
+        if project_root is not None:
+            _check_lockfile_on_disk(lockfile, str(checksum or ""), project_root, disc, reasons)
+
+
+def _check_verification_status(recipe: dict[str, Any], disc: list[str], reasons: list[str]) -> None:
+    status = recipe.get("verification_status")
+    if status not in {"verified", "unavailable"}:
+        disc.append(f"invalid_verification_status: {status}")
+        reasons.append("invalid_verification_status")
+    elif status == "verified":
+        verification = recipe.get("verification")
+        if not isinstance(verification, dict) or not verification.get("mode"):
+            disc.append("verified_recipe_missing_verification_record")
+            reasons.append("missing_verification_record")
+    elif not recipe.get("unavailable_reason"):
+        disc.append("unavailable_recipe_missing_reason")
+        reasons.append("missing_unavailable_reason")
+
+
+def _declared_placeholders(
+    recipe: dict[str, Any], disc: list[str], reasons: list[str]
+) -> tuple[set[str], list[dict[str, Any]]]:
+    declared = set(PUBLIC_PLACEHOLDERS)
+    substitutions = recipe.get("private_substitutions", [])
+    if not isinstance(substitutions, list):
+        disc.append("malformed_private_substitutions")
+        reasons.append("malformed_step")
+        return declared, []
+    valid = [
+        entry
+        for entry in substitutions
+        if isinstance(entry, dict) and entry.get("placeholder") and entry.get("capability_class")
+    ]
+    if len(valid) != len(substitutions):
+        disc.append("malformed_private_substitution_entry")
+        reasons.append("malformed_step")
+    for entry in valid:
+        raw_ph = str(entry["placeholder"])
+        ph = raw_ph.lstrip("$")
+        if _has_malformed_placeholder(raw_ph if raw_ph.startswith("$") else f"${raw_ph}"):
+            disc.append(f"malformed_private_substitution_entry: {raw_ph}")
+            reasons.append("malformed_step")
+        else:
+            declared.add(ph)
+    return declared, valid
+
+
+def _recipe_tokens(recipe: dict[str, Any]) -> list[str]:
+    steps = [step for step in recipe.get("steps", []) if isinstance(step, dict)]
+    return _strings(
+        [step.get("argv", []) for step in steps],
+        [step.get("workdir", "") for step in steps],
+        [step.get("env", {}) for step in steps],
+        recipe.get("outputs", []),
+    )
+
+
+def _check_recipe(recipe: dict[str, Any], project_root: Path | None) -> dict[str, Any]:
+    disc: list[str] = []
+    reasons: list[str] = []
+    _check_recipe_header(recipe, disc, reasons)
+    _check_source_identity(recipe, project_root, disc, reasons)
+    _check_verification_status(recipe, disc, reasons)
+    declared, substitutions = _declared_placeholders(recipe, disc, reasons)
+    _scan_public_safety(recipe, disc, reasons)
+    _check_identity_bindings(recipe, disc, reasons)
+    _check_steps(recipe, disc, reasons)
+    tokens = _recipe_tokens(recipe)
+    for token in tokens:
+        if _has_malformed_placeholder(token) and "unresolved_placeholder" not in reasons:
+            disc.append(f"malformed_placeholder: {token[:80]}")
+            reasons.append("unresolved_placeholder")
+    found = {name for token in tokens for name in PLACEHOLDER_RE.findall(token)}
+    for name in sorted(found - declared):
+        disc.append(f"unresolved_placeholder: ${name}")
+        reasons.append("unresolved_placeholder")
+    status = recipe.get("verification_status")
+    if any(reason in BLOCKING_REASONS for reason in reasons):
+        entry_status = "blocked"
+    elif reasons:
+        entry_status = "invalid"
+    elif status == "unavailable":
+        entry_status = "unavailable"
+    else:
+        entry_status = "verified"
+    return {
+        "recipe_id": str(recipe.get("recipe_id", "unknown")),
+        "execution_class": recipe.get("execution_class"),
+        "verification_status": status,
+        "status": entry_status,
+        "reasons": sorted(set(reasons)),
+        "discrepancies": disc,
+        "private_substitutions": [entry["placeholder"] for entry in substitutions],
+    }
+
+
+def _substitution_values(
+    recipe: dict[str, Any], temp_root: Path, project_root: Path
+) -> dict[str, str]:
+    values = {"RECIPE_ROOT": str(temp_root), "PROJECT_ROOT": str(project_root)}
+    for entry in recipe.get("private_substitutions", []):
+        if isinstance(entry, dict):
+            value = entry.get("value") or entry.get("default") or ""
+            values[str(entry.get("placeholder", "")).lstrip("$")] = value
+    return values
+
+
+def _resolve_safe_workdir(
+    raw_workdir: str, temp_root: Path, resolved_temp_root: Path, values: dict[str, str]
+) -> tuple[Path | None, str | None]:
+    workdir_ok, workdir_err = _check_safe_workdir(raw_workdir)
+    if not workdir_ok:
+        return None, workdir_err
+
+    substituted = raw_workdir.replace("$RECIPE_ROOT", str(temp_root))
+    for name, value in values.items():
+        substituted = substituted.replace(f"${{{name}}}", value).replace(f"${name}", value)
+
+    if "$" in substituted:
+        return None, f"unresolved_placeholder_in_workdir: {substituted}"
+
+    target_cwd = Path(substituted)
+    if not target_cwd.is_absolute():
+        target_cwd = temp_root / target_cwd
+
+    try:
+        rel = target_cwd.relative_to(temp_root)
+        check_path = temp_root
+        for part in rel.parts:
+            check_path = check_path / part
+            if check_path.is_symlink() or check_path.exists():
+                check_path.resolve().relative_to(resolved_temp_root)
+        target_cwd.resolve().relative_to(resolved_temp_root)
+        target_cwd.mkdir(parents=True, exist_ok=True)
+        target_cwd.resolve().relative_to(resolved_temp_root)
+    except (ValueError, OSError) as exc:
+        return None, f"workdir escapes isolated root: {exc}"
+    return target_cwd, None
+
+
+def _check_safe_probe_prerequisites(
+    tokens: list[str], step_env: Any
+) -> tuple[str | None, str | None, str | None]:
+    raw_prog = tokens[0]
+    if Path(raw_prog).name != raw_prog or "/" in raw_prog or "\\" in raw_prog:
+        return f"path_in_safe_check_program: {raw_prog}", None, None
+    resolved_executable = shutil.which(raw_prog)
+    if not resolved_executable:
+        return None, "skipped_missing_program", None
+    if isinstance(step_env, dict):
+        bad_keys = [k for k in step_env if str(k).upper() in PROTECTED_SAFE_CHECK_ENV_KEYS]
+        if bad_keys:
+            return f"protected_env_override: {bad_keys[0]}", None, None
+    return None, None, resolved_executable
+
+
+def _build_safe_step_env(
+    step_env: Any, values: dict[str, str], resolved_temp_root: Path, trusted_path: str
+) -> dict[str, str]:
+    env: dict[str, str] = {k: os.environ[k] for k in SAFE_ENV_KEYS if k in os.environ}
+    env["HOME"] = str(resolved_temp_root)
+    env["TMPDIR"] = str(resolved_temp_root)
+    env["TEMP"] = str(resolved_temp_root)
+    env["TMP"] = str(resolved_temp_root)
+    env["PATH"] = trusted_path
+    for k, v in values.items():
+        if str(k).upper() not in PROTECTED_SAFE_CHECK_ENV_KEYS:
+            env[str(k)] = str(v)
+    if isinstance(step_env, dict):
+        for k, v in step_env.items():
+            if str(k).upper() not in PROTECTED_SAFE_CHECK_ENV_KEYS:
+                v_str = str(v)
+                for name, val in values.items():
+                    v_str = v_str.replace(f"${{{name}}}", val).replace(f"${name}", val)
+                env[str(k)] = v_str
+    return env
+
+
+def _execute_single_safe_step(
+    step: dict[str, Any],
+    temp_root: Path,
+    resolved_temp_root: Path,
+    values: dict[str, str],
+    timeout: int,
+) -> dict[str, Any]:
+    step_tokens = _strings(
+        step.get("argv", []),
+        step.get("workdir", "$RECIPE_ROOT"),
+        step.get("env", {}),
+    )
+
+    for token in step_tokens:
+        if _has_malformed_placeholder(token):
+            return {
+                "step_id": step.get("id"),
+                "status": "error",
+                "error": f"malformed_placeholder: {token}",
+                "isolated": False,
+                "host_mutation": None,
+            }
+
+    unresolved = [
+        n for token in step_tokens for n in PLACEHOLDER_RE.findall(token) if not values.get(n)
+    ]
+    if unresolved:
+        return {
+            "step_id": step.get("id"),
+            "status": "skipped_private_substitution",
+            "isolated": True,
+            "host_mutation": None,
+        }
+    tokens = _strings(step.get("argv", []))
+    for name, value in values.items():
+        tokens = [t.replace(f"${{{name}}}", value).replace(f"${name}", value) for t in tokens]
+
+    probe_ok, probe_err = _check_bounded_safe_probe(tokens)
+    if not probe_ok:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": probe_err,
+            "isolated": False,
+            "host_mutation": None,
+        }
+
+    step_env = step.get("env", {})
+    err, skip, resolved_executable = _check_safe_probe_prerequisites(tokens, step_env)
+    if err:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": err,
+            "isolated": False,
+            "host_mutation": None,
+        }
+    if skip:
+        return {
+            "step_id": step.get("id"),
+            "status": skip,
+            "isolated": True,
+            "host_mutation": None,
+        }
+
+    target_cwd, workdir_err = _resolve_safe_workdir(
+        str(step.get("workdir", "$RECIPE_ROOT")), temp_root, resolved_temp_root, values
+    )
+    if target_cwd is None:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": workdir_err or "workdir escapes isolated root",
+            "isolated": False,
+            "host_mutation": None,
+        }
+
+    trusted_path = os.environ.get("PATH", "")
+    env = _build_safe_step_env(step_env, values, resolved_temp_root, trusted_path)
+
+    cmd = [resolved_executable, *tokens[1:]]
+    expected = step.get("expect_exit_code", 0)
+    try:
+        completed = subprocess.run(
+            cmd, cwd=target_cwd, env=env, capture_output=True, timeout=timeout, check=False
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": str(exc)[:120],
+            "isolated": True,
+            "host_mutation": None,
+        }
+
+    passed = completed.returncode == expected
+    return {
+        "step_id": step.get("id"),
+        "status": "passed" if passed else "failed",
+        "exit_code": completed.returncode,
+        "expected_exit_code": expected,
+        "isolated": True,
+        "host_mutation": False,
+    }
+
+
+def _run_safe_checks(
+    recipe: dict[str, Any], temp_root: Path, project_root: Path, timeout: int
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    values = _substitution_values(recipe, temp_root, project_root)
+    resolved_temp_root = temp_root.resolve()
+    for step in recipe.get("steps", []):
+        if isinstance(step, dict) and step.get("phase") == "probe" and step.get("safe_check"):
+            res = _execute_single_safe_step(step, temp_root, resolved_temp_root, values, timeout)
+            res["required"] = bool(step.get("required", True))
+            results.append(res)
+    return results
+
+
+def _evaluate_safe_checks_status(entry: dict[str, Any], safe_checks: list[dict[str, Any]]) -> None:
+    entry["safe_checks"] = safe_checks
+    failed = [c for c in safe_checks if c.get("status") in {"failed", "error"}]
+    if failed:
+        entry["status"] = "invalid"
+        entry["reasons"] = sorted({*entry["reasons"], "safe_check_failed"})
+        return
+    if entry["verification_status"] == "unavailable":
+        entry["status"] = "unavailable"
+        return
+    if entry["verification_status"] == "verified":
+        required = [c for c in safe_checks if c.get("required", True)]
+        if not required:
+            entry["status"] = "unavailable"
+            entry["reasons"] = sorted({*entry["reasons"], "zero_executed_required_probes"})
+            return
+        missing_progs = [c for c in required if c.get("status") == "skipped_missing_program"]
+        skipped_subs = [c for c in required if c.get("status") == "skipped_private_substitution"]
+        if missing_progs or skipped_subs:
+            entry["status"] = "unavailable"
+            if missing_progs:
+                entry["reasons"] = sorted({*entry["reasons"], "probe_program_unavailable"})
+            if skipped_subs:
+                entry["reasons"] = sorted({*entry["reasons"], "unresolved_required_substitution"})
+            return
+        if all(c.get("status") == "passed" for c in required):
+            entry["status"] = "verified"
+            return
+        entry["status"] = "unavailable"
+        entry["reasons"] = sorted({*entry["reasons"], "safe_check_unverified"})
+
+
+def _load_recipes(path: Path) -> tuple[list[tuple[Path, dict[str, Any]]], list[str]]:
+    files = sorted(path.glob("*.json")) if path.is_dir() else [path]
+    recipes: list[tuple[Path, dict[str, Any]]] = []
+    errors: list[str] = []
+    for file in files:
+        data, err = _read_json(file)
+        if err or data is None:
+            errors.append(f"{file.name}: {err}")
+        elif data.get("schema") != OVERLAY_SCHEMA:
+            recipes.append((file, data))
+    return recipes, errors
+
+
+def _check_overlay(overlay_path: Path) -> dict[str, Any]:
+    overlay, err = _read_json(overlay_path)
+    if err or overlay is None or overlay.get("schema") != OVERLAY_SCHEMA:
+        return {
+            "path": str(overlay_path),
+            "ok": False,
+            "error": err or "unsupported overlay schema",
+        }
+    placeholders = overlay.get("placeholders", {})
+    missing = [
+        key
+        for key, value in placeholders.items()
+        if not isinstance(value, dict) or not value.get("capability_class")
+    ]
+    return {
+        "path": str(overlay_path),
+        "ok": not missing,
+        "placeholder_count": len(placeholders),
+        "missing_capability_class": sorted(missing),
+    }
+
+
+def check_recipes(
+    recipes_path: Path,
+    overlay_path: Path | None = None,
+    project_root: Path | None = None,
+    execute_safe_checks: bool = False,
+    require_verified: bool = False,
+    safe_check_timeout: int = 30,
+) -> dict[str, Any]:
+    """Validate bootstrap recipes and return a deterministic report dictionary."""
+    recipes, load_errors = _load_recipes(recipes_path)
+    entries: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory(prefix="bootstrap_recipe_") as tmp:
+        for file, recipe in recipes:
+            entry = _check_recipe(recipe, project_root)
+            entry["path"] = file.name
+            if execute_safe_checks and entry["status"] in {"verified", "unavailable"}:
+                checks = _run_safe_checks(
+                    recipe, Path(tmp), project_root or Path.cwd(), safe_check_timeout
+                )
+                _evaluate_safe_checks_status(entry, checks)
+            entries.append(entry)
+    entries.sort(key=lambda item: (str(item.get("recipe_id")), str(item.get("path"))))
+    class_status: dict[str, str] = {}
+    for entry in entries:
+        cls = entry.get("execution_class")
+        if isinstance(cls, str) and cls and class_status.get(cls) != "blocked":
+            class_status[cls] = entry["status"]
+    missing = sorted(cls for cls in EXECUTION_CLASSES if class_status.get(cls) != "verified")
+    blocked = any(entry["status"] == "blocked" for entry in entries) or bool(load_errors)
+    invalid = any(entry["status"] == "invalid" for entry in entries)
+    verdict = "blocked" if blocked else ("fail" if invalid else "pass")
+    if verdict == "pass" and require_verified and missing:
+        verdict = "fail"
+    has_unisolated = any(
+        c.get("isolated") is False for entry in entries for c in entry.get("safe_checks", [])
+    )
+    if execute_safe_checks:
+        all_checks = [c for entry in entries for c in entry.get("safe_checks", [])]
+        if (
+            not all_checks
+            or any(c.get("host_mutation") is not False for c in all_checks)
+            or has_unisolated
+        ):
+            report_host_mutation: bool | None = None
+        else:
+            report_host_mutation = False
+    else:
+        report_host_mutation = False
+    return {
+        "schema": REPORT_SCHEMA,
+        "verdict": verdict,
+        "mode": "structural+safe_checks" if execute_safe_checks else "structural",
+        "recipe_count": len(entries),
+        "require_verified": require_verified,
+        "execution_classes": class_status,
+        "missing_verified_classes": missing if require_verified else [],
+        "recipes": entries,
+        "load_errors": load_errors,
+        "private_overlay": _check_overlay(overlay_path) if overlay_path else None,
+        "host_mutation": report_host_mutation,
+    }
+
+
+def render_markdown(report: dict[str, Any]) -> str:
+    """Render a deterministic Markdown summary of a recipe check report."""
+    classes = ", ".join(
+        f"{cls}={report['execution_classes'].get(cls, 'missing')}" for cls in EXECUTION_CLASSES
+    )
+    lines = [
+        "# Bootstrap recipe check",
+        "",
+        f"Verdict: {report['verdict'].upper()}",
+        f"Mode: {report['mode']}",
+        "",
+        "| Recipe | Class | Status | Reasons |",
+        "| --- | --- | --- | --- |",
+        *(
+            f"| {entry['recipe_id']} | {entry['execution_class']} | {entry['status']} "
+            f"| {', '.join(entry['reasons']) or '-'} |"
+            for entry in report["recipes"]
+        ),
+        "",
+        f"Execution classes: {classes}",
+    ]
+    if report["missing_verified_classes"]:
+        lines.append("Missing verified classes: " + ", ".join(report["missing_verified_classes"]))
+    return "\n".join(lines) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint. Returns 0 for pass, 1 for fail, 2 for blocked."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true", help="Run the read-only structural check.")
+    parser.add_argument("--recipes", required=True, type=Path, help="Recipe file or directory.")
+    parser.add_argument("--overlay", type=Path, default=None, help="Private overlay example path.")
+    parser.add_argument(
+        "--project-root", type=Path, default=None, help="Checkout for lock identity."
+    )
+    parser.add_argument("--format", choices=["text", "json", "markdown"], default="text")
+    parser.add_argument("--safe-check-timeout", type=int, default=30)
+    parser.add_argument(
+        "--execute-safe-checks", action="store_true", help="Run safe_check probes in a temp root."
+    )
+    parser.add_argument(
+        "--require-verified", action="store_true", help="Fail without a verified class recipe."
+    )
+    args = parser.parse_args(argv)
+    report = check_recipes(
+        args.recipes,
+        args.overlay,
+        args.project_root,
+        args.execute_safe_checks,
+        args.require_verified,
+        args.safe_check_timeout,
+    )
+    if args.format == "json":
+        sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    elif args.format == "markdown":
+        sys.stdout.write(render_markdown(report))
+    else:
+        sys.stdout.write(f"Verdict: {report['verdict'].upper()} [{report['mode']}]\n")
+        for entry in report["recipes"]:
+            detail = ", ".join(entry["reasons"]) or "none"
+            sys.stdout.write(f"- {entry['recipe_id']}: {entry['status']} ({detail})\n")
+    return {"pass": 0, "fail": 1}.get(report["verdict"], 2)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

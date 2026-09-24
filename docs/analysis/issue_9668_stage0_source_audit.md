@@ -132,6 +132,11 @@ The source branch also stages `CITATION.cff` version `0.0.8` with
 `configs/releases/release_0_0_8_preparation.yaml` explicitly awaiting maintainer approval.
 The version-alignment guard and 41 focused tests passed in the untagged preparation state.
 This marker does not authorize a tag, DOI, or publication.
+The separate 0.0.8 Zenodo metadata template has SHA-256
+`ffe014475da4de5fe186ca9d940ed678c6cf59e033c091e5a95555fa0bb1a06a`;
+the generic template still describes the old SNQI calibration result and must
+not be reused. A 0.0.8 resolved-manifest template cannot be frozen until the
+SNQI-v2 anchors and all three specification-asset hashes are fixed.
 
 Issue #9431 remains open and a native blocker for #9668. Its existing 0.0.7 Zenodo deposition
 22814343 was published on 2026-09-24, and the public archive passed anonymous checksum readback

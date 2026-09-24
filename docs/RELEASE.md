@@ -133,6 +133,12 @@ The source candidate already carries `CITATION.cff` version `0.0.8` and
 `configs/releases/release_0_0_8_preparation.yaml` with
 `publication_authorized: false`. The alignment guard accepts this explicit
 untagged preparation state; it is not authorization to tag or publish.
+The 0.0.8 Zenodo metadata template is
+`configs/benchmarks/releases/benchmark_data_release_0_0_8_zenodo_metadata.template.json`.
+Do not reuse the generic template's historical SNQI-calibration wording. The
+0.0.8 resolved manifest must bind this metadata file, the 0.0.8 campaign
+template, and the frozen SNQI-v2 asset hashes after calibration; until then,
+the manifest and canonical campaign are not launch-ready.
 
 ## Preflight
 

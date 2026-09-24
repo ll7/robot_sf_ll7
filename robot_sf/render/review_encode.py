@@ -896,10 +896,11 @@ def _require_imageio() -> Any:
         ImportError: If the configured encoder dependency is unavailable.
     """
 
-    try:
-        import imageio.v2 as imageio  # noqa: PLC0415
-    except ImportError as error:
-        raise ImportError("review encode requires imageio") from error
+    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
+
+    imageio = try_import("imageio.v2")
+    if imageio is None:
+        raise ImportError("review encode requires imageio")
     return imageio
 
 

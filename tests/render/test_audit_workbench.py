@@ -2287,7 +2287,16 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
         return {
             "status": "complete",
             "reason": "",
-            "events_reason": "events are not persisted",
+            "events_reason": "provider conversation events are not persisted",
+            "activity_scope": "durable_lifecycle",
+            "events": [
+                {
+                    "message": "Codex start operation was admitted.",
+                    "operation_id": "codex-read-1",
+                    "timestamp": "2026-09-24T13:00:00Z",
+                    "source_digest": "private-event-digest",
+                }
+            ],
             "session": {
                 "codex_session_id": "private-codex-session",
                 "provider_session_id": "private-provider-session",
@@ -2311,8 +2320,11 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
 
     assert result["status"] == "complete"
     assert result["route_id"] == "route-read"
-    assert result["activity"][0]["message"] == "read activity"
-    assert result["events_reason"] == "events are not persisted"
+    assert result["activity"][0]["message"] == "Codex start operation was admitted."
+    assert result["activity_scope"] == "durable_lifecycle"
+    assert result["activity"][0]["operation_id"] == "codex-read-1"
+    assert result["activity"][0]["timestamp"] == "2026-09-24T13:00:00Z"
+    assert result["events_reason"] == "provider conversation events are not persisted"
     result_json = json.dumps(result, sort_keys=True)
     for forbidden in (
         "private-codex-session",
@@ -2320,6 +2332,7 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
         "private-provider",
         "/private/path",
         "source_path",
+        "private-event-digest",
     ):
         assert forbidden not in result_json
     read_call = next(call for call in service.calls if call[0] == "read_codex_activity")

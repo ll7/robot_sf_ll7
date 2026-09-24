@@ -91,7 +91,14 @@ FAILED_EXECUTION_STATUSES = frozenset(
     }
 )
 FALLBACK_MARKER_KEYS = frozenset(
-    {"degraded", "fallback_active", "fallback_or_degraded", "fallback_triggered", "fallback_used"}
+    {
+        "degraded",
+        "fallback",
+        "fallback_active",
+        "fallback_or_degraded",
+        "fallback_triggered",
+        "fallback_used",
+    }
 )
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -759,9 +766,6 @@ def _run_replay(
     matrix: Path,
     case_dir: Path,
     campaign: dict[str, Any],
-    replay_revision: str,
-    replay_checkout_clean: bool,
-    replay_checkout_status_sha256: str,
 ) -> dict[str, Any]:
     planner = _planner_entry(campaign, str(case["planner_key"]))
     profile = planner.get("benchmark_profile") or "baseline-safe"
@@ -779,15 +783,23 @@ def _run_replay(
     command = _replay_command(case, row, replay_matrix, episode_path, config_path, str(profile))
     stdout_path = replay_dir / "stdout.txt"
     stderr_path = replay_dir / "stderr.txt"
+    replay_checkout_before: dict[str, Any] = {"capture_status": "unavailable"}
+    replay_revision: Any = None
     try:
         with (
             stdout_path.open("w", encoding="utf-8") as stdout,
             stderr_path.open("w", encoding="utf-8") as stderr,
         ):
+            replay_checkout_before = _capture_replay_checkout_provenance()
+            replay_revision = replay_checkout_before.get("revision")
             completed = subprocess.run(
                 command, cwd=REPO_ROOT, stdout=stdout, stderr=stderr, check=False
             )
     except OSError as exc:
+        replay_checkout_after = _capture_replay_checkout_provenance()
+        checkout_fields = _replay_checkout_run_fields(
+            replay_checkout_before, replay_checkout_after, replay_revision
+        )
         return {
             "attempted": True,
             "status": "runner_unavailable",
@@ -796,9 +808,12 @@ def _run_replay(
             "error": str(exc),
             "source_revision": row.get("git_hash"),
             "replay_revision": replay_revision,
-            "replay_checkout_clean": replay_checkout_clean,
-            "replay_checkout_status_sha256": replay_checkout_status_sha256,
+            **checkout_fields,
         }
+    replay_checkout_after = _capture_replay_checkout_provenance()
+    checkout_fields = _replay_checkout_run_fields(
+        replay_checkout_before, replay_checkout_after, replay_revision
+    )
     result: dict[str, Any] = {
         "attempted": True,
         "command": command,
@@ -807,8 +822,7 @@ def _run_replay(
         "replay_revision": replay_revision,
         "source_revision": row.get("git_hash"),
         "same_repository_revision": row.get("git_hash") == replay_revision,
-        "replay_checkout_clean": replay_checkout_clean,
-        "replay_checkout_status_sha256": replay_checkout_status_sha256,
+        **checkout_fields,
         "source_matrix_sha256": _sha256(matrix),
         "replay_matrix_sha256": _sha256(replay_matrix),
         "replay_matrix_path": os.path.relpath(replay_matrix, REPO_ROOT),
@@ -839,7 +853,8 @@ def _run_replay(
             row,
             actual,
             replay_revision,
-            replay_checkout_clean=replay_checkout_clean,
+            replay_checkout_clean=checkout_fields["replay_checkout_clean"],
+            replay_checkout_stability_status=checkout_fields["replay_checkout_stability_status"],
         )
     )
     return result
@@ -952,9 +967,22 @@ def _runtime_status_marker_issue(key: str, value: Any) -> str | None:
 def _runtime_marker_issue(key: str, value: Any) -> str | None:
     """Classify one runtime status, availability, or fallback marker."""
     if key in FALLBACK_MARKER_KEYS:
-        return "fallback" if value not in (False, None) else None
+        if not isinstance(value, bool):
+            return "unavailable"
+        return "fallback" if value else None
+    if key == "fallback_count" or key.endswith("_fallback_count"):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or (isinstance(value, float) and not math.isfinite(value))
+            or value < 0
+        ):
+            return "unavailable"
+        return "fallback" if value > 0 else None
     if key == "fallback_reason":
-        return "fallback" if value not in (None, "") else None
+        if value is None or value == "":
+            return None
+        return "fallback" if isinstance(value, str) else "unavailable"
     if key == "benchmark_eligible" and value is not True:
         return "unavailable"
     return _availability_marker_issue(key, value) or _runtime_status_marker_issue(key, value)
@@ -1029,6 +1057,25 @@ def _replay_execution_evidence_status(
     return source_status, replay_status, rejection
 
 
+def _exact_match_checkout_status(
+    replay_checkout_clean: bool | None, stability_status: str | None
+) -> str:
+    """Gate a metric match on checkout evidence captured around the replay."""
+    if stability_status is None:
+        return (
+            "replay_checkout_dirty"
+            if replay_checkout_clean is False
+            else "replay_checkout_cleanliness_unavailable"
+        )
+    if stability_status == "clean_stable" and replay_checkout_clean is True:
+        return "exact_match"
+    return {
+        "dirty": "replay_checkout_dirty",
+        "head_changed": "replay_checkout_head_changed_during_run",
+        "working_tree_changed": "replay_checkout_changed_during_run",
+    }.get(stability_status, "replay_checkout_cleanliness_unavailable")
+
+
 def _classify_replay_row(
     case: dict[str, Any],
     source_row: dict[str, Any],
@@ -1036,6 +1083,7 @@ def _classify_replay_row(
     replay_revision: Any,
     *,
     replay_checkout_clean: bool | None,
+    replay_checkout_stability_status: str | None = None,
 ) -> dict[str, Any]:
     """Derive replay classification from the checksum-pinned source and replay rows."""
     source_revision = source_row.get("git_hash")
@@ -1051,6 +1099,7 @@ def _classify_replay_row(
         "replay_revision": replay_revision,
         "same_repository_revision": same_revision,
         "replay_checkout_clean": replay_checkout_clean,
+        "replay_checkout_stability_status": replay_checkout_stability_status,
         "identity": _replay_identity(case, replay_row),
         "episode_status": replay_row.get("status"),
         "config_hash_source": (
@@ -1111,11 +1160,9 @@ def _classify_replay_row(
         result["status"] = (
             "exact_match" if comparison["overall"] == "match" else "incomplete_same_revision"
         )
-        if result["status"] == "exact_match" and replay_checkout_clean is not True:
-            result["status"] = (
-                "replay_checkout_dirty"
-                if replay_checkout_clean is False
-                else "replay_checkout_cleanliness_unavailable"
+        if result["status"] == "exact_match":
+            result["status"] = _exact_match_checkout_status(
+                replay_checkout_clean, replay_checkout_stability_status
             )
     return result
 
@@ -1147,6 +1194,61 @@ def _replay_checkout_provenance() -> dict[str, Any]:
         "clean": not status_entries,
         "status_sha256": hashlib.sha256(status_output.encode("utf-8")).hexdigest(),
         "status_entries": status_entries,
+    }
+
+
+def _capture_replay_checkout_provenance() -> dict[str, Any]:
+    """Capture checkout state without losing an otherwise useful replay attempt."""
+    try:
+        return _replay_checkout_provenance()
+    except MaterializationError as exc:
+        return {"capture_status": "unavailable", "error": str(exc)}
+
+
+def _replay_checkout_stability_status(before: Any, after: Any, replay_revision: Any) -> str:
+    """Validate the replay's before/after checkout binding, failing closed on gaps."""
+
+    def valid_snapshot(snapshot: Any) -> bool:
+        return (
+            isinstance(snapshot, dict)
+            and isinstance(snapshot.get("revision"), str)
+            and bool(snapshot["revision"].strip())
+            and isinstance(snapshot.get("clean"), bool)
+            and isinstance(snapshot.get("status_sha256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", snapshot["status_sha256"]) is not None
+        )
+
+    if not valid_snapshot(before) or not valid_snapshot(after):
+        return "unavailable"
+    if not isinstance(replay_revision, str) or replay_revision != before["revision"]:
+        return "unavailable"
+    if before["revision"] != after["revision"]:
+        return "head_changed"
+    if before["clean"] is not True or after["clean"] is not True:
+        return "dirty"
+    if before["status_sha256"] != after["status_sha256"]:
+        return "working_tree_changed"
+    return "clean_stable"
+
+
+def _replay_checkout_run_fields(
+    before: dict[str, Any], after: dict[str, Any], replay_revision: Any
+) -> dict[str, Any]:
+    """Build JSON-safe replay provenance and its fail-closed exact-match gate."""
+    stability_status = _replay_checkout_stability_status(before, after, replay_revision)
+    if stability_status == "clean_stable":
+        checkout_clean: bool | None = True
+    elif stability_status in {"dirty", "head_changed", "working_tree_changed"}:
+        checkout_clean = False
+    else:
+        checkout_clean = None
+    return {
+        "replay_checkout_before": before,
+        "replay_checkout_after": after,
+        "replay_checkout_stability_status": stability_status,
+        "replay_checkout_clean": checkout_clean,
+        "replay_checkout_status_sha256": before.get("status_sha256"),
+        "replay_checkout_post_status_sha256": after.get("status_sha256"),
     }
 
 
@@ -1286,15 +1388,29 @@ def _annotate_reused_replay_classification(
         )
         return
 
-    replay_checkout_clean = replay.get("replay_checkout_clean")
-    if not isinstance(replay_checkout_clean, bool):
-        replay_checkout_clean = None
+    checkout_before = replay.get("replay_checkout_before")
+    checkout_after = replay.get("replay_checkout_after")
+    checkout_stability = _replay_checkout_stability_status(
+        checkout_before, checkout_after, replay.get("replay_revision")
+    )
+    replay_checkout_clean = (
+        True
+        if checkout_stability == "clean_stable"
+        else False
+        if checkout_stability in {"dirty", "head_changed", "working_tree_changed"}
+        else None
+    )
+    # Recompute these fields from the preserved snapshots. In particular, a legacy
+    # pre-run-only cleanliness flag is not evidence about the checkout after replay.
+    replay["replay_checkout_stability_status"] = checkout_stability
+    replay["replay_checkout_clean"] = replay_checkout_clean
     classification = _classify_replay_row(
         case,
         row,
         replay_rows[0],
         replay.get("replay_revision"),
         replay_checkout_clean=replay_checkout_clean,
+        replay_checkout_stability_status=checkout_stability,
     )
     replay.update(classification)
     if checksum_mismatch:
@@ -1475,9 +1591,6 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
             matrix,
             case_dir,
             campaign,
-            replay_revision,
-            replay_checkout_clean=replay_checkout["clean"],
-            replay_checkout_status_sha256=replay_checkout["status_sha256"],
         )
         _write_json(case_dir / "case.json", record)
     for case_record in case_records:

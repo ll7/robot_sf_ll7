@@ -1,0 +1,73 @@
+# Issue #9671 frozen-source diagnostic trace re-export for 0.0.7.
+#
+# This is a bounded diagnostic acquisition, not a replacement for the 14-arm
+# S30/H600 release campaign. It uses the successor goal-zone policy and the
+# worked-example seeds named by issue #9431 so the trace bundle can be
+# regenerated from one exact input.
+name: issue_9671_trace_doorway_v007
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
+scenario_candidates:
+  - classic_doorway_medium
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: fixed-list
+  seeds: [113, 114]
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+workers: 1
+horizon: 600
+dt: 0.1
+record_forces: true
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+checkpoint_provenance_enforcement: error
+resume: false
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix: [differential_drive]
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+# This tag identifies the accepted aggregate release campaign. The runtime
+# source commit and this config's hash are recorded separately for every rerun.
+release_tag: paper-matrix-v2-h600-s30-2026-09-07f7e8d43084de748915e1b1eb8b2a1603357c6e
+doi: null
+paper_interpretation_profile: diagnostic-trace-reexport-only
+
+planners:
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true

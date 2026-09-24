@@ -41,6 +41,13 @@ from robot_sf.benchmark.radius_sweep_manifest import (
     PRODUCTION_RADII,
     RELEASE_PLANNER_KEYS,
 )
+from robot_sf.benchmark.result_provenance import (
+    SCHEMA_VERSION as RESULT_PROVENANCE_SCHEMA,
+)
+from robot_sf.benchmark.result_provenance import (
+    ProvenanceValidationError,
+    validate_result_provenance_manifest,
+)
 from robot_sf.benchmark.utils import _config_hash
 
 CAMPAIGN_SCHEMA = "benchmark-camera-ready-campaign.v1"
@@ -78,6 +85,7 @@ class _PlannerIdentity:
 
     algorithm: str
     algo_config_hash: str
+    runner_algorithm: str
     planner_key_required: bool = False
 
 
@@ -107,6 +115,7 @@ class _Arm:
     family_feasibility: dict[str, str]
     family_feasibility_sha256: str
     episodes: tuple[_Episode, ...]
+    episode_artifacts: dict[str, dict[str, str]]
 
 
 def _read_object(path: Path, label: str) -> dict[str, Any]:
@@ -587,17 +596,176 @@ def _episode_from_record(
     )
 
 
-def _load_episodes(
+def _validate_runner_receipt(  # noqa: C901, PLR0912
+    episodes_path: Path,
+    *,
+    planner: str,
+    campaign_commit: str,
+    expected_runner_algorithm: str,
+    episode_bytes: bytes,
+) -> tuple[dict[str, Any], str, str]:
+    """Validate the frozen runner receipt against the exact episode bytes read.
+
+    The adjacent ``benchmark_result_provenance.v1`` receipt is the repository's
+    runner-produced digest record. It binds bytes to that receipt under the current
+    trust model; it is not a signature or durable-storage custody attestation.
+
+    Returns:
+        The validated payload, exact sidecar-byte digest, and stable relative sidecar path.
+    """
+    logical_episode_path = (
+        PurePosixPath("runs") / f"{planner}__{EXPECTED_KINEMATICS}" / "episodes.jsonl"
+    ).as_posix()
+    logical_receipt_path = f"{logical_episode_path}.provenance.json"
+    receipt_path = episodes_path.with_suffix(episodes_path.suffix + ".provenance.json")
+    if receipt_path.is_symlink() or not receipt_path.is_file():
+        raise RadiusSweepSummaryError(
+            f"missing runner provenance receipt for {logical_episode_path}: {receipt_path}"
+        )
+    try:
+        receipt_bytes = receipt_path.read_bytes()
+        receipt_payload = json.loads(receipt_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RadiusSweepSummaryError(
+            f"invalid runner provenance receipt for {logical_episode_path}: {exc}"
+        ) from exc
+    if not isinstance(receipt_payload, dict):
+        raise RadiusSweepSummaryError(
+            f"invalid runner provenance receipt for {logical_episode_path}: expected object"
+        )
+    try:
+        validate_result_provenance_manifest(receipt_payload)
+    except (ProvenanceValidationError, TypeError, ValueError) as exc:
+        raise RadiusSweepSummaryError(
+            f"invalid runner provenance receipt for {logical_episode_path}: {exc}"
+        ) from exc
+    if receipt_payload.get("schema_version") != RESULT_PROVENANCE_SCHEMA:
+        raise RadiusSweepSummaryError(
+            f"invalid runner provenance receipt schema for {logical_episode_path}"
+        )
+    run = _mapping(receipt_payload.get("run"), "runner receipt run")
+    if run.get("repo_commit") != campaign_commit:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt commit mismatch for {logical_episode_path}"
+        )
+    if run.get("runner") != "map_runner.run_map_batch":
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt runner mismatch for {logical_episode_path}"
+        )
+    completeness = _mapping(receipt_payload.get("completeness"), "runner receipt completeness")
+    if completeness.get("status") != "complete":
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt is not complete for {logical_episode_path}"
+        )
+
+    raw_artifacts = receipt_payload.get("raw_artifacts")
+    if not isinstance(raw_artifacts, list):
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt raw_artifacts is invalid for {logical_episode_path}"
+        )
+    episode_entries = [
+        artifact
+        for artifact in raw_artifacts
+        if isinstance(artifact, Mapping) and artifact.get("kind") == "episodes_jsonl"
+    ]
+    if len(episode_entries) != 1:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt must contain one episodes_jsonl artifact for "
+            f"{logical_episode_path}"
+        )
+    artifact = episode_entries[0]
+    artifact_path = artifact.get("path")
+    if not isinstance(artifact_path, str) or "\\" in artifact_path:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt artifact path is invalid for {logical_episode_path}"
+        )
+    parsed_artifact_path = PurePosixPath(artifact_path)
+    if (
+        ".." in parsed_artifact_path.parts
+        or tuple(parsed_artifact_path.parts[-3:])
+        != tuple(PurePosixPath(logical_episode_path).parts)
+        or artifact.get("artifact_status") != "available"
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt artifact path/status mismatch for {logical_episode_path}"
+        )
+    recorded_digest = _hex(artifact.get("sha256"), 64, "runner receipt episode SHA-256")
+    if recorded_digest != sha256(episode_bytes).hexdigest():
+        raise RadiusSweepSummaryError(
+            f"episode JSONL digest mismatch with runner receipt for {logical_episode_path}"
+        )
+
+    campaign = _mapping(
+        receipt_payload.get("campaign_identity"), "runner receipt campaign_identity"
+    )
+    if campaign.get("algorithm") != expected_runner_algorithm:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt algorithm mismatch for {logical_episode_path}"
+        )
+    written = campaign.get("written")
+    total_jobs = campaign.get("total_jobs")
+    if (
+        isinstance(written, bool)
+        or not isinstance(written, int)
+        or written <= 0
+        or isinstance(total_jobs, bool)
+        or not isinstance(total_jobs, int)
+        or written != total_jobs
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt job counts are incomplete for {logical_episode_path}"
+        )
+    receipt_rows = receipt_payload.get("rows")
+    if not isinstance(receipt_rows, list) or len(receipt_rows) != written:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt row count is invalid for {logical_episode_path}"
+        )
+    if any(
+        not isinstance(row, Mapping) or row.get("raw_artifact") != artifact_path
+        for row in receipt_rows
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt row artifact links mismatch for {logical_episode_path}"
+        )
+    return receipt_payload, sha256(receipt_bytes).hexdigest(), logical_receipt_path
+
+
+def _validate_runner_row_binding(
+    receipt_row: object,
+    episode_record: Mapping[str, Any],
+    *,
+    jsonl_line: int,
+    episodes_path: Path,
+) -> None:
+    """Require one runner receipt row to identify the parsed JSONL episode."""
+    row = _mapping(receipt_row, f"runner receipt row {jsonl_line}")
+    bindings = (
+        ("episode_id", episode_record.get("episode_id")),
+        ("scenario_id", episode_record.get("scenario_id")),
+        ("seed", episode_record.get("seed")),
+        ("config_hash", episode_record.get("config_hash")),
+        ("repo_commit", episode_record.get("git_hash")),
+    )
+    if row.get("jsonl_line") != jsonl_line or any(
+        row.get(field) != expected for field, expected in bindings
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance row identity mismatch at {episodes_path}:{jsonl_line + 1}"
+        )
+
+
+def _load_episodes(  # noqa: C901
     root: Path,
     radius: float,
     commit: str,
     planner_identities: Mapping[str, Mapping[str, _PlannerIdentity]],
-) -> tuple[_Episode, ...]:
+) -> tuple[tuple[_Episode, ...], dict[str, dict[str, str]]]:
     episodes: list[_Episode] = []
+    artifact_provenance: dict[str, dict[str, str]] = {}
     identities: set[tuple[str, str, int]] = set()
     runs_root = root / "runs"
-    if not runs_root.is_dir():
-        raise RadiusSweepSummaryError(f"missing runs directory: {runs_root}")
+    if runs_root.is_symlink() or not runs_root.is_dir():
+        raise RadiusSweepSummaryError(f"runs path must be a real directory: {runs_root}")
     expected_paths = {
         runs_root / f"{planner}__{EXPECTED_KINEMATICS}" / "episodes.jsonl"
         for planner in RELEASE_PLANNER_KEYS
@@ -610,11 +778,43 @@ def _load_episodes(
             f"radius {radius:g} run scope mismatch: missing={missing}, unexpected={unexpected}"
         )
     for planner in RELEASE_PLANNER_KEYS:
-        episodes_path = runs_root / f"{planner}__{EXPECTED_KINEMATICS}" / "episodes.jsonl"
+        run_directory = runs_root / f"{planner}__{EXPECTED_KINEMATICS}"
+        episodes_path = run_directory / "episodes.jsonl"
         try:
-            lines = episodes_path.read_text(encoding="utf-8").splitlines()
+            if run_directory.is_symlink() or not run_directory.is_dir():
+                raise OSError("planner run directory must be a real, non-symlink directory")
+            if episodes_path.is_symlink() or not episodes_path.is_file():
+                raise OSError("episode JSONL must be a regular, non-symlink file")
+            episode_bytes = episodes_path.read_bytes()
         except OSError as exc:
             raise RadiusSweepSummaryError(f"cannot read {episodes_path}: {exc}") from exc
+        _receipt_payload, receipt_sha256, receipt_logical_path = _validate_runner_receipt(
+            episodes_path,
+            planner=planner,
+            campaign_commit=commit,
+            expected_runner_algorithm=_expected_runner_algorithm(planner_identities[planner]),
+            episode_bytes=episode_bytes,
+        )
+        try:
+            lines = episode_bytes.decode("utf-8").splitlines()
+        except UnicodeDecodeError as exc:
+            raise RadiusSweepSummaryError(
+                f"episode JSONL is not valid UTF-8: {episodes_path}: {exc}"
+            ) from exc
+        receipt_rows = _receipt_payload.get("rows")
+        if not isinstance(receipt_rows, list) or len(lines) != len(receipt_rows):
+            raise RadiusSweepSummaryError(
+                f"runner provenance receipt row count does not match episode JSONL for "
+                f"{episodes_path}"
+            )
+        artifact_provenance[planner] = {
+            "episodes_path": (
+                PurePosixPath("runs") / f"{planner}__{EXPECTED_KINEMATICS}" / "episodes.jsonl"
+            ).as_posix(),
+            "episodes_sha256": sha256(episode_bytes).hexdigest(),
+            "receipt_path": receipt_logical_path,
+            "receipt_sha256": receipt_sha256,
+        }
         for line_number, line in enumerate(lines, start=1):
             try:
                 raw = json.loads(line)
@@ -623,6 +823,12 @@ def _load_episodes(
                     f"invalid JSON at {episodes_path}:{line_number}: {exc}"
                 ) from exc
             record = _mapping(raw, f"episode at {episodes_path}:{line_number}")
+            _validate_runner_row_binding(
+                receipt_rows[line_number - 1],
+                record,
+                jsonl_line=line_number - 1,
+                episodes_path=episodes_path,
+            )
             episode = _episode_from_record(
                 record,
                 planner=planner,
@@ -650,7 +856,19 @@ def _load_episodes(
             f"radius {radius:g} row identity mismatch: present={len(episodes)}, "
             f"missing={missing}, extra={extra}"
         )
-    return tuple(episodes)
+    return tuple(episodes), artifact_provenance
+
+
+def _expected_runner_algorithm(
+    planner_identities: Mapping[str, _PlannerIdentity],
+) -> str:
+    """Return the one commit-pinned input algorithm used to launch this planner."""
+    algorithms = {identity.runner_algorithm for identity in planner_identities.values()}
+    if len(algorithms) != 1 or not next(iter(algorithms), "").strip():
+        raise RadiusSweepSummaryError(
+            "committed planner roster does not define one runner algorithm per planner"
+        )
+    return next(iter(algorithms))
 
 
 def _committed_config_blob(commit: str, config_path: str) -> bytes:
@@ -799,6 +1017,7 @@ def _committed_planner_identities(  # noqa: C901
         )
 
     resolved: dict[str, dict[str, tuple[str, str]]] = {}
+    runner_algorithms: dict[str, str] = {}
     for index, raw_planner in enumerate(raw_planners):
         planner = _mapping(raw_planner, f"committed planner roster row {index}")
         key = planner.get("key")
@@ -809,6 +1028,7 @@ def _committed_planner_identities(  # noqa: C901
             )
         if not isinstance(algorithm, str) or not algorithm.strip():
             raise RadiusSweepSummaryError(f"committed planner {key!r} has no configured algorithm")
+        runner_algorithms[key] = algorithm
 
         algo_config_path = planner.get("algo_config")
         manifest_path: str | None
@@ -873,6 +1093,7 @@ def _committed_planner_identities(  # noqa: C901
             scenario: _PlannerIdentity(
                 algorithm=algorithm,
                 algo_config_hash=config_hash,
+                runner_algorithm=runner_algorithms[key],
                 planner_key_required=counts[(scenario, algorithm, config_hash)] > 1,
             )
             for scenario, (algorithm, config_hash) in planner_identities.items()
@@ -934,7 +1155,7 @@ def _load_arm(root: Path) -> _Arm:
     ):
         raise RadiusSweepSummaryError(f"radius {radius:g} campaign identity mismatch")
     planner_identities = _committed_planner_identities(commit, config_path)
-    episodes = _load_episodes(root, radius, commit, planner_identities)
+    episodes, episode_artifacts = _load_episodes(root, radius, commit, planner_identities)
     _validate_planner_aggregates(planner_rows, episodes, radius)
     (
         family_definition_id,
@@ -964,6 +1185,7 @@ def _load_arm(root: Path) -> _Arm:
         family_feasibility=family_feasibility,
         family_feasibility_sha256=family_sha256,
         episodes=episodes,
+        episode_artifacts=episode_artifacts,
     )
 
 
@@ -1076,6 +1298,11 @@ def compose_radius_sweep_summary(
             "config_path": arm.config_path,
             "config_sha256": arm.config_sha256,
             "gate1_canary_receipt_sha256": arm.gate1_receipt_sha256,
+            "episode_artifacts": arm.episode_artifacts,
+            "source_integrity_status": "runner_receipt_matched",
+            "artifact_custody_status": "unattested",
+            "promotion_allowed": False,
+            "promotion_blockers": ["artifact_custody_unattested"],
         }
     return {
         "schema_version": SWEEP_SUMMARY_SCHEMA,

@@ -120,7 +120,31 @@ uv run python scripts/benchmark/compose_radius_sweep_summary_issue_6643.py \
 
 Each root must contain its canonical `campaign_manifest.json`,
 `preflight/validate_config.json`, `reports/campaign_summary.json`, and one complete
-`runs/<planner>__differential_drive/episodes.jsonl` for every frozen planner. The composer verifies
+`runs/<planner>__differential_drive/episodes.jsonl` plus the adjacent
+`episodes.jsonl.provenance.json` for every frozen planner. Each sidecar must validate as
+`benchmark_result_provenance.v1`, name the frozen source commit and
+`map_runner.run_map_batch`, be complete, and contain exactly one available `episodes_jsonl`
+artifact whose path identifies that planner run. Its `campaign_identity.algorithm` must match that
+planner's commit-pinned launch algorithm (which may differ from scenario-resolved algorithms). The
+composer hashes the exact episode bytes that it parses and requires that digest to equal the runner
+receipt's artifact digest; receipt row links and counts must also match. Episode and receipt files
+cannot be reached through symlinked `runs` or planner-run directories. A missing, malformed,
+wrong-algorithm, wrong-runner, wrong-commit, wrong-path, incomplete, or stale receipt fails closed.
+Both the episode digest and exact sidecar-byte digest are carried per planner into
+`campaign_provenance` and Gate 3's evidence provenance.
+
+This is a runner-produced digest receipt under the repository's current trust model, not a
+signature or durable-storage custody attestation. The summary therefore records
+`source_integrity_status: runner_receipt_matched`, `artifact_custody_status: unattested`, and
+`promotion_allowed: false`. Gate 3 may not convert that state into promoted evidence: the evidence
+builder preserves both digests and the durable bundle writer refuses promotion unless a separately
+trusted custody attestation is added by a reviewed contract change. A digest or an attestation flag
+copied only into `campaign_summary.json` or the composed sweep summary is not independent custody
+proof. A raw analyzer `VerdictDecision` is computational output only and must not be propagated
+or published without the final evidence object's `promotion_allowed` guard. Synthetic receipts
+used by focused unit tests validate plumbing only and are never benchmark evidence.
+
+The composer verifies
 the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
 derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
 Each episode's algorithm fields (`algo`, `scenario_params.algo`, and any

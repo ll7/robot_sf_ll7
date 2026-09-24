@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 import robot_sf.benchmark.radius_sweep_summary as composer
+from robot_sf.benchmark import result_provenance
 from robot_sf.benchmark.radius_sweep_summary import (
     RadiusSweepSummaryError,
     compose_radius_sweep_summary,
@@ -174,6 +175,7 @@ def compact_scope(monkeypatch: pytest.MonkeyPatch, git_config_fixture: _GitConfi
     monkeypatch.setattr(composer, "EXPECTED_GATE1_RECEIPT_SHA256", _GATE1_RECEIPT_SHA256)
     monkeypatch.setattr(composer, "SOURCE_REPOSITORY_ROOT", git_config_fixture.root)
     monkeypatch.setattr(composer, "EXPECTED_CAMPAIGN_GIT_COMMIT", git_config_fixture.commit)
+    monkeypatch.setattr(result_provenance, "_git_hash_fallback", lambda: git_config_fixture.commit)
     monkeypatch.setattr(
         composer,
         "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID",
@@ -294,6 +296,8 @@ def _write_arm(
         for seed in composer.EXPECTED_SEEDS:
             rows.append(
                 {
+                    "episode_id": f"goal-{scenario}-{seed}",
+                    "config_hash": composer._config_hash({"fixture": "goal"}),
                     "algo": "goal",
                     "algorithm_metadata": {
                         "algorithm": "goal",
@@ -324,7 +328,42 @@ def _write_arm(
     (run / "episodes.jsonl").write_text(
         "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
     )
+    _write_runner_receipt(run / "episodes.jsonl", rows)
     return root
+
+
+def _write_runner_receipt(
+    episodes_path: Path,
+    rows: list[dict] | None = None,
+    *,
+    algorithm: str = "goal",
+) -> None:
+    """Write a synthetic receipt through the production v1 builder, for plumbing tests only."""
+    if rows is None:
+        rows = [json.loads(line) for line in episodes_path.read_text(encoding="utf-8").splitlines()]
+    schema_path = episodes_path.parents[2] / "episode-schema.json"
+    schema_path.write_text("{}\n", encoding="utf-8")
+    payload = result_provenance.build_result_provenance_manifest(
+        out_path=episodes_path,
+        episode_records=rows,
+        schema_path=schema_path,
+        scenario_path=episodes_path.parent / "inline-scenarios.json",
+        scenarios=[{"scenario_id": row["scenario_id"]} for row in rows],
+        algo=algorithm,
+        algo_config_path=None,
+        benchmark_profile="fixture",
+        suite_key="issue-6642-fixture",
+        total_jobs=len(rows),
+        written=len(rows),
+        horizon=None,
+        dt=None,
+        record_forces=False,
+        active_observation_mode=None,
+        active_observation_level=None,
+    )
+    result_provenance.write_result_provenance_manifest(
+        result_provenance.manifest_path_for_result_jsonl(episodes_path), payload
+    )
 
 
 def _write_gate1_receipt(parent: Path) -> Path:
@@ -367,10 +406,113 @@ def test_compose_summary_is_deterministic_and_preserves_per_arm_configs(
     }
     digests = {row["config_sha256"] for row in first["campaign_provenance"].values()}
     assert len(digests) == 3
+    arm_provenance = first["campaign_provenance"]["0.5"]
+    arm_root = next(root for root in roots if root.name == "r0p5")
+    episode_path = arm_root / "runs/goal__differential_drive/episodes.jsonl"
+    receipt_path = episode_path.with_suffix(".jsonl.provenance.json")
+    assert arm_provenance["episode_artifacts"]["goal"] == {
+        "episodes_path": "runs/goal__differential_drive/episodes.jsonl",
+        "episodes_sha256": sha256(episode_path.read_bytes()).hexdigest(),
+        "receipt_path": "runs/goal__differential_drive/episodes.jsonl.provenance.json",
+        "receipt_sha256": sha256(receipt_path.read_bytes()).hexdigest(),
+    }
+    assert arm_provenance["source_integrity_status"] == "runner_receipt_matched"
+    assert arm_provenance["artifact_custody_status"] == "unattested"
+    assert arm_provenance["promotion_allowed"] is False
+    assert arm_provenance["promotion_blockers"] == ["artifact_custody_unattested"]
 
     first_path = write_radius_sweep_summary(first, tmp_path / "first.json")
     second_path = write_radius_sweep_summary(second, tmp_path / "second.json")
     assert first_path.read_bytes() == second_path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing", "malformed", "wrong_schema", "wrong_runner", "wrong_commit", "wrong_path"),
+)
+def test_composer_rejects_missing_or_invalid_runner_receipt(
+    tmp_path: Path, compact_scope: None, mutation: str
+) -> None:
+    """Every planner's exact-byte receipt is required and checked against its frozen run."""
+    roots, receipt = _write_triplet(tmp_path)
+    episodes_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    receipt_path = episodes_path.with_suffix(".jsonl.provenance.json")
+    if mutation == "missing":
+        receipt_path.unlink()
+    elif mutation == "malformed":
+        receipt_path.write_bytes(b"not-json\n")
+    else:
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if mutation == "wrong_schema":
+            payload["schema_version"] = "untrusted.v0"
+        elif mutation == "wrong_runner":
+            payload["run"]["runner"] = "other.runner"
+        elif mutation == "wrong_commit":
+            payload["run"]["repo_commit"] = "b" * 40
+        else:
+            payload["raw_artifacts"][0]["path"] = "runs/orca__differential_drive/episodes.jsonl"
+        receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match="runner provenance receipt"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_rejects_runner_receipt_for_wrong_frozen_algorithm(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """A schema-valid runner receipt must still match the committed planner algorithm."""
+    roots, receipt = _write_triplet(tmp_path)
+    episodes_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    _write_runner_receipt(episodes_path, algorithm="orca")
+
+    with pytest.raises(
+        RadiusSweepSummaryError, match="runner provenance receipt algorithm mismatch"
+    ):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+@pytest.mark.parametrize("symlink_parent", ("runs", "planner"))
+def test_composer_rejects_symlinked_episode_path_ancestors(
+    tmp_path: Path, compact_scope: None, symlink_parent: str
+) -> None:
+    """The checked episode and sidecar cannot be reached through a symlinked parent."""
+    roots, receipt = _write_triplet(tmp_path)
+    root = roots[0]
+    runs_path = root / "runs"
+    if symlink_parent == "runs":
+        real_parent = root / "runs-target"
+        runs_path.rename(real_parent)
+        runs_path.symlink_to(real_parent, target_is_directory=True)
+    else:
+        run_path = runs_path / "goal__differential_drive"
+        real_parent = root / "goal-run-target"
+        run_path.rename(real_parent)
+        run_path.symlink_to(real_parent, target_is_directory=True)
+
+    with pytest.raises(RadiusSweepSummaryError, match="runs path|planner run directory"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_rejects_coordinated_episode_and_planner_aggregate_edit_with_stale_receipt(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """Changing source metrics and their serialized aggregate cannot bypass stale receipt SHA."""
+    roots, receipt = _write_triplet(tmp_path)
+    root = roots[0]
+    episodes_path = root / "runs/goal__differential_drive/episodes.jsonl"
+    episode_lines = episodes_path.read_text(encoding="utf-8").splitlines()
+    episode = json.loads(episode_lines[0])
+    episode["metrics"]["success"] = False
+    episode_lines[0] = json.dumps(episode)
+    episodes_path.write_text("\n".join(episode_lines) + "\n", encoding="utf-8")
+
+    campaign_summary_path = root / "reports/campaign_summary.json"
+    campaign_summary = json.loads(campaign_summary_path.read_text(encoding="utf-8"))
+    campaign_summary["planner_rows"][0]["success_mean"] = "0.2500"
+    campaign_summary_path.write_text(json.dumps(campaign_summary), encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match="episode JSONL digest mismatch"):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
 @pytest.mark.parametrize(
@@ -406,6 +548,7 @@ def test_composer_rejects_each_mismatched_episode_planner_carrier(
         episode["scenario_params"]["algo"] = "orca"
     lines[0] = json.dumps(episode)
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_runner_receipt(episode_path)
 
     with pytest.raises(RadiusSweepSummaryError, match="episode planner identity mismatch"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
@@ -422,6 +565,7 @@ def test_composer_rejects_conflicting_episode_planner_carriers(
     episode["algorithm_metadata"]["canonical_algorithm"] = "orca"
     lines[0] = json.dumps(episode)
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_runner_receipt(episode_path)
 
     with pytest.raises(RadiusSweepSummaryError, match="planner identity carriers conflict"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
@@ -442,6 +586,7 @@ def test_composer_rejects_episode_without_planner_identity_carriers(
     episode["scenario_params"].pop("algo")
     lines[0] = json.dumps(episode)
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_runner_receipt(episode_path)
 
     with pytest.raises(RadiusSweepSummaryError, match="no embedded planner identity carrier"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
@@ -458,6 +603,7 @@ def test_composer_accepts_canonical_alias_for_episode_algorithm(
     episode["algo"] = "simple_policy"
     lines[0] = json.dumps(episode)
     episode_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_runner_receipt(episode_path)
 
     compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
@@ -514,6 +660,7 @@ def test_frozen_hybrid_roster_algorithms_and_configs_bind_each_alias(
     shared_identity = composer._PlannerIdentity(
         algorithm=identities[first_key][scenario_id].algorithm,
         algo_config_hash=identities[first_key][scenario_id].algo_config_hash,
+        runner_algorithm=identities[first_key][scenario_id].runner_algorithm,
         planner_key_required=True,
     )
     no_key_row = episode_row(first_key)
@@ -873,6 +1020,7 @@ def test_composer_rejects_duplicate_episode_identity(tmp_path: Path, compact_sco
     lines = episodes.read_text(encoding="utf-8").splitlines()
     lines[-1] = lines[0]
     episodes.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_runner_receipt(episodes)
     with pytest.raises(RadiusSweepSummaryError, match="duplicate row identity"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 

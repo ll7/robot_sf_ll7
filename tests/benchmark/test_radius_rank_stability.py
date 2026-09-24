@@ -168,13 +168,32 @@ def _complete_paired_observations(tables: dict) -> dict:
 
 
 def _campaign_provenance() -> dict:
-    """Return frozen campaign, per-arm config, and Gate 1 receipt identities."""
+    """Return synthetic runner-receipt identities; never benchmark or custody evidence."""
     return {
         f"{radius:g}": {
             "campaign_commit": EXPECTED_CAMPAIGN_GIT_COMMIT,
             "config_path": EXPECTED_ARM_CAMPAIGN_CONFIGS[arm_key],
             "config_sha256": EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[arm_key],
             "gate1_canary_receipt_sha256": EXPECTED_GATE1_RECEIPT_SHA256,
+            "episode_artifacts": {
+                planner: {
+                    "episodes_path": (f"runs/{planner}__differential_drive/episodes.jsonl"),
+                    "episodes_sha256": hashlib.sha256(
+                        f"synthetic-episode:{radius}:{planner}".encode()
+                    ).hexdigest(),
+                    "receipt_path": (
+                        f"runs/{planner}__differential_drive/episodes.jsonl.provenance.json"
+                    ),
+                    "receipt_sha256": hashlib.sha256(
+                        f"synthetic-receipt:{radius}:{planner}".encode()
+                    ).hexdigest(),
+                }
+                for planner in EXPECTED_PLANNER_ROSTER
+            },
+            "source_integrity_status": "runner_receipt_matched",
+            "artifact_custody_status": "unattested",
+            "promotion_allowed": False,
+            "promotion_blockers": ["artifact_custody_unattested"],
         }
         for radius, arm_key in zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True)
     }
@@ -1180,7 +1199,7 @@ def test_analyze_radius_sensitivity_allows_distinct_arm_configs_but_rejects_mixe
     assert "radius_0.5_unfrozen_gate1_canary_receipt" in report.verdict.reasons
 
 
-def test_evidence_provenance_binds_supplied_config_to_baseline_arm() -> None:
+def test_evidence_provenance_binds_supplied_config_to_baseline_arm(tmp_path: Path) -> None:
     """Frozen source/config binding passes without claiming receipt verification."""
     from robot_sf.benchmark.radius_rank_stability import _campaign_provenance_blockers
 
@@ -1188,13 +1207,19 @@ def test_evidence_provenance_binds_supplied_config_to_baseline_arm() -> None:
     summary = _sweep_summary(_stable_tables())
     blockers, source_binding = _campaign_provenance_blockers(summary, PRODUCTION_RADII)
     assert blockers == []
-    assert source_binding == (
+    assert source_binding is not None
+    assert source_binding[:3] == (
         EXPECTED_CAMPAIGN_GIT_COMMIT,
         {
             radius: EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[arm_key]
             for radius, arm_key in zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True)
         },
         EXPECTED_GATE1_RECEIPT_SHA256,
+    )
+    assert source_binding[4:] == (
+        "runner_receipt_matched",
+        "unattested",
+        False,
     )
 
     provenance = build_evidence_provenance(
@@ -1209,6 +1234,109 @@ def test_evidence_provenance_binds_supplied_config_to_baseline_arm() -> None:
     assert provenance.gate1_canary_receipt_sha256 == EXPECTED_GATE1_RECEIPT_SHA256
     assert provenance.gate1_canary_receipt_verified is False
     assert provenance.campaign_provenance_verified is False
+    assert provenance.source_integrity_status == "runner_receipt_matched"
+    assert provenance.artifact_custody_status == "unattested"
+    assert provenance.promotion_allowed is False
+    expected_artifact_labels = {
+        f"gate2_{artifact}:{radius:g}:{planner}"
+        for radius in PRODUCTION_RADII
+        for planner in EXPECTED_PLANNER_ROSTER
+        for artifact in ("episode_jsonl", "episode_receipt")
+    }
+    assert expected_artifact_labels <= set(provenance.input_sha256)
+
+    # A diagnostic bundle from an otherwise valid source summary preserves the boundary.
+    diagnostic_summary = json.loads(json.dumps(summary))
+    diagnostic_summary["row_accounting"]["0.5"]["present"] = 0
+    diagnostic_report = analyze_radius_sensitivity(diagnostic_summary)
+    assert diagnostic_report.verdict.verdict == VERDICT_INVALID
+    diagnostic_provenance = build_evidence_provenance(
+        diagnostic_report,
+        config_path=str(config_path),
+        command="cmd",
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
+        sweep_summary=diagnostic_summary,
+    )
+    bundle_paths = write_evidence_bundle(
+        diagnostic_report, diagnostic_provenance, tmp_path / "diagnostic-bundle"
+    )
+    final_object = json.loads(bundle_paths["analysis_provenance.json"].read_text(encoding="utf-8"))
+    assert final_object["evidence_status"] == "diagnostic-only"
+    assert final_object["provenance"]["source_integrity_status"] == "runner_receipt_matched"
+    assert final_object["provenance"]["artifact_custody_status"] == "unattested"
+    assert final_object["provenance"]["promotion_allowed"] is False
+    final_artifact = final_object["provenance"]["gate2_source_artifacts"]["radius_0.5:orca"]
+    assert final_artifact["episodes_path"] == "runs/orca__differential_drive/episodes.jsonl"
+    assert len(final_artifact["episodes_sha256"]) == 64
+    assert final_artifact["receipt_path"].endswith("episodes.jsonl.provenance.json")
+    assert len(final_artifact["receipt_sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_blocker"),
+    (
+        ("missing_artifact", "radius_0.5_invalid_episode_artifact_roster"),
+        ("wrong_episode_path", "radius_0.5_invalid_episode_artifact_path:orca"),
+        ("invalid_episode_digest", "radius_0.5_invalid_episode_artifact_sha256:orca"),
+        ("invalid_receipt_digest", "radius_0.5_invalid_runner_receipt_sha256:orca"),
+        ("promotion_claim", "radius_0.5_invalid_promotion_allowed_state"),
+        ("custody_claim", "radius_0.5_unrecognized_artifact_custody_status"),
+    ),
+)
+def test_rank_analysis_rejects_unbound_or_overstated_artifact_provenance(
+    mutation: str, expected_blocker: str
+) -> None:
+    """Gate 3 requires both exact planner digests and the blocked custody state."""
+    summary = _sweep_summary(_stable_tables())
+    arm = summary["campaign_provenance"]["0.5"]
+    if mutation == "missing_artifact":
+        del arm["episode_artifacts"]
+    elif mutation == "wrong_episode_path":
+        arm["episode_artifacts"]["orca"]["episodes_path"] = (
+            "runs/goal__differential_drive/episodes.jsonl"
+        )
+    elif mutation == "invalid_episode_digest":
+        arm["episode_artifacts"]["orca"]["episodes_sha256"] = "not-a-digest"
+    elif mutation == "invalid_receipt_digest":
+        arm["episode_artifacts"]["orca"]["receipt_sha256"] = None
+    elif mutation == "promotion_claim":
+        arm["promotion_allowed"] = True
+    else:
+        arm["artifact_custody_status"] = "attested"
+
+    report = analyze_radius_sensitivity(summary)
+    assert report.verdict.verdict == VERDICT_INVALID
+    assert expected_blocker in report.verdict.reasons
+
+
+def test_promoted_bundle_is_blocked_without_artifact_custody_attestation(
+    tmp_path: Path,
+) -> None:
+    """A runner receipt match alone cannot authorize a Gate 3 evidence promotion."""
+    config_path = _FROZEN_BASELINE_CONFIG_PATH
+    summary = _bind_summary_to_frozen_campaign(_sweep_summary(_stable_tables()), config_path)
+    summary_path = tmp_path / "sweep-summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    gate1_path = tmp_path / "gate1-canary.json"
+    _write_gate1_receipt(gate1_path)
+    report = analyze_radius_sensitivity(summary)
+    provenance = build_evidence_provenance(
+        report,
+        config_path=str(config_path),
+        command="cmd",
+        campaign_commit=EXPECTED_CAMPAIGN_GIT_COMMIT,
+        input_paths={
+            "sweep_summary.json": summary_path,
+            "gate1_canary_receipt.json": gate1_path,
+        },
+        sweep_summary=summary,
+    )
+    assert report.verdict.interpretation_promoted is True
+    assert provenance.source_integrity_status == "runner_receipt_matched"
+    assert provenance.artifact_custody_status == "unattested"
+    assert provenance.promotion_allowed is False
+    with pytest.raises(ValueError, match="independent durable artifact custody attestation"):
+        write_evidence_bundle(report, provenance, tmp_path / "blocked-promotion")
 
 
 @pytest.mark.parametrize(

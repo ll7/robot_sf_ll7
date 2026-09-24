@@ -269,6 +269,43 @@ uv run robot-sf release zenodo verify \
   --metadata "$ZENODO_METADATA"
 ```
 
+If recovery finds that an existing, empty draft still names an earlier source
+candidate, use `repair-draft-metadata` only for that reviewed deposition. Run
+it from a tooling worktree with `--repository-root` pointing to the untouched
+exact-source checkout and its resolved identity and metadata paths. The first
+invocation is read-only and reports the current metadata digest and changed
+field names. The command refuses an already published draft, any existing
+files, a different concept or version DOI, unrelated metadata drift, or a
+changed digest before the update. Supply the reported digest on the second
+invocation to make the reversible draft update:
+
+```bash
+uv run robot-sf release zenodo repair-draft-metadata \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
+  --manifest "$FROZEN_SOURCE_ROOT/output/release_identity/release_identity.json" \
+  --metadata "$FROZEN_SOURCE_ROOT/output/release_identity/zenodo_metadata.resolved.json" \
+  --deposition-id <reviewed-existing-draft-id> \
+  --version <reviewed-version> \
+  --publication-date <reviewed-YYYY-MM-DD>
+
+# Repeat the command above with --expected-remote-metadata-sha256 <preview-digest>,
+# --expected-remote-source-tag <preview-old-source-tag>, and --apply only after
+# reviewing the exact preview. Then rerun recover.
+```
+
+The version and publication date are Zenodo record fields added after the
+source identity was frozen; they do not rewrite the metadata copy inside the
+immutable publication archive. For this route, pass the same
+`--expected-version` and `--expected-publication-date` values to both draft
+and published `zenodo verify` calls and to `zenodo publish`. A passing receipt
+then binds those fields, and publication repeats their check immediately
+before the irreversible request. Record the four-field draft metadata change
+in the release report.
+When running the subsequent `recover`, `upload`, `verify`, and `publish` from
+that tooling worktree, pass the same `--repository-root "$FROZEN_SOURCE_ROOT"`
+on each command so all operations validate the untouched exact-source identity.
+
 For the September 2026 derived-metadata successor, keep the generic v0.2
 manifest above out of the post-reservation commands and bind the reserved DOI
 through the checked-in erratum contract instead:

@@ -226,6 +226,168 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
     assert args.manifest is None
 
 
+def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The repair mode loads a bound metadata file and forwards the explicit preview guard."""
+    expected_binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
+    release_definition = SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64)
+    calls: list[tuple[str, object]] = []
+    args = argparse.Namespace(
+        release_cmd="zenodo",
+        zenodo_mode="repair-draft-metadata",
+        token_file=tmp_path / "token",
+        manifest=tmp_path / "manifest.yaml",
+        repository_root=tmp_path / "source-checkout",
+        metadata=tmp_path / "metadata.json",
+        deposition_id=22077448,
+        version="0.0.7",
+        publication_date="2026-09-24",
+        expected_remote_metadata_sha256="b" * 64,
+        expected_remote_source_tag=(
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+        ),
+        apply=True,
+        api_base="https://example.test/api",
+    )
+    monkeypatch.setattr(
+        release_cli,
+        "_load_release_binding",
+        lambda value: (
+            calls.append(("load-binding", value.repository_root))
+            or (release_definition, expected_binding)
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: calls.append(("build-session", path)) or "mock-session",
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_dataset_metadata",
+        lambda path, **kwargs: (
+            calls.append(("load-metadata", {"path": path, **kwargs})) or {"upload_type": "dataset"}
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "repair_draft_metadata",
+        lambda session, deposition_id, metadata, **kwargs: (
+            calls.append(
+                (
+                    "repair",
+                    {"session": session, "deposition_id": deposition_id, **kwargs},
+                )
+            )
+            or {"status": "repaired", "deposition_id": deposition_id}
+        ),
+    )
+
+    assert release_cli.handle(args) == 0
+    assert calls[0] == ("load-binding", args.repository_root)
+    assert calls[1] == ("build-session", args.token_file)
+    assert calls[2] == (
+        "load-metadata",
+        {
+            "path": args.metadata,
+            "expected_source_tag": "v1",
+            "expected_metadata_sha256": "a" * 64,
+        },
+    )
+    assert calls[3] == (
+        "repair",
+        {
+            "session": "mock-session",
+            "deposition_id": 22077448,
+            "version": "0.0.7",
+            "publication_date": "2026-09-24",
+            "release_binding": expected_binding,
+            "expected_remote_metadata_sha256": "b" * 64,
+            "expected_remote_source_tag": (
+                "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+            ),
+            "apply": True,
+            "api_base": "https://example.test/api",
+        },
+    )
+    assert json.loads(capsys.readouterr().out)["status"] == "repaired"
+
+
+def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
+    """The repair command exposes its repository, identity, preview, and apply arguments."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    release_cli.build_subparser(subparsers)
+
+    args = parser.parse_args(
+        [
+            "release",
+            "zenodo",
+            "repair-draft-metadata",
+            "--token-file",
+            "token",
+            "--manifest",
+            "manifest.yaml",
+            "--metadata",
+            "metadata.json",
+            "--repository-root",
+            "repo",
+            "--deposition-id",
+            "22077448",
+            "--version",
+            "0.0.7",
+            "--publication-date",
+            "2026-09-24",
+            "--expected-remote-metadata-sha256",
+            "c" * 64,
+            "--expected-remote-source-tag",
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate",
+            "--apply",
+        ]
+    )
+
+    assert args.zenodo_mode == "repair-draft-metadata"
+    assert args.repository_root == Path("repo")
+    assert args.deposition_id == 22077448
+    assert args.version == "0.0.7"
+    assert args.publication_date == "2026-09-24"
+    assert args.expected_remote_metadata_sha256 == "c" * 64
+    assert (
+        args.expected_remote_source_tag
+        == "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+    )
+    assert args.apply is True
+
+
+def test_release_cli_parser_accepts_optional_repository_root_for_verify() -> None:
+    """Manifest-bound modes can resolve identity against an explicit repository checkout."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    release_cli.build_subparser(subparsers)
+
+    common = [
+        "release",
+        "zenodo",
+        "verify",
+        "--token-file",
+        "token",
+        "--state",
+        "state.json",
+        "--manifest",
+        "manifest.yaml",
+        "--metadata",
+        "metadata.json",
+    ]
+    default_args = parser.parse_args(common)
+    explicit_args = parser.parse_args([*common, "--repository-root", "source-checkout"])
+
+    assert default_args.repository_root is None
+    assert explicit_args.repository_root == Path("source-checkout")
+
+
 @pytest.mark.parametrize("mode", ["upload", "verify", "publish"])
 def test_release_cli_parser_requires_manifest_after_reservation(mode: str) -> None:
     """Post-reservation modes cannot be invoked without a release manifest."""

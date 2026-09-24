@@ -662,27 +662,22 @@ def _validate_episode_planner_diagnostics(
                 "fallback/degraded runtime marker: "
                 "algorithm_metadata.planner_diagnostics.fallback_reasons=non-empty-or-invalid"
             )
-        diagnostic_status = {
-            key: value
-            for key, value in diagnostics.items()
-            if key
-            in {
-                "status",
-                "row_status",
-                "readiness_status",
-                "availability_status",
-                "execution_mode",
-                "fallback",
-                "degraded",
-                "fallback_triggered",
-                "fallback_or_degraded",
-                "fallback_used",
-                "fallback_count",
-            }
-            or ("fallback" in str(key) and isinstance(value, (int, float)))
-            or (key == "fallback_reason" and value not in (None, ""))
-        }
-        marker = runtime_fallback_or_degraded_marker(diagnostic_status)
+        # Inspect all diagnostics so unknown fallback-shaped fields fail closed. The
+        # empty fallback_reasons map was validated above; the shared runtime checker
+        # otherwise treats every key containing "fallback" as a numeric counter.
+        diagnostic_payload = dict(diagnostics)
+        diagnostic_payload.pop("fallback_reasons", None)
+        if (
+            "fallback_reason" in diagnostics
+            and diagnostics["fallback_reason"] in (None, "")
+            and diagnostics.get("fallback") is False
+            and "fallback_used" not in diagnostics
+            and "fallback_triggered" not in diagnostics
+        ):
+            # This producer's explicit ``fallback: false`` is equivalent to the
+            # shared checker's canonical false marker for an empty reason.
+            diagnostic_payload["fallback_used"] = False
+        marker = runtime_fallback_or_degraded_marker(diagnostic_payload)
         if marker is not None:
             marker_path, marker_value = marker
             raise RadiusSweepSummaryError(

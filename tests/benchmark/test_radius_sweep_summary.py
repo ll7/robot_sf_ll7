@@ -552,6 +552,39 @@ def test_composer_rejects_non_object_planner_diagnostics_even_with_matching_rece
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
+@pytest.mark.parametrize(
+    ("diagnostics", "expected_marker"),
+    (
+        pytest.param(
+            {"fallback_reason": None},
+            "algorithm_metadata.planner_diagnostics.fallback_reason=invalid",
+            id="reason-without-explicit-false-flag",
+        ),
+        pytest.param(
+            {"planner_fallback": "used"},
+            "algorithm_metadata.planner_diagnostics.planner_fallback=invalid",
+            id="unknown-fallback-status",
+        ),
+    ),
+)
+def test_composer_rejects_unvalidated_planner_diagnostic_markers(
+    tmp_path: Path,
+    compact_scope: None,
+    diagnostics: dict[str, object],
+    expected_marker: str,
+) -> None:
+    """Unrecognized fallback fields and ambiguous empty reasons cannot be silently dropped."""
+    roots, receipt = _write_triplet(tmp_path)
+    episodes_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"]["planner_diagnostics"] = diagnostics
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    _write_runner_receipt(episodes_path, rows)
+
+    with pytest.raises(RadiusSweepSummaryError, match=expected_marker):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
 def test_episode_status_allows_empty_social_force_diagnostics() -> None:
     """Empty planner diagnostic maps are not mistaken for runtime fallback markers."""
     composer._validate_episode_runtime_status(

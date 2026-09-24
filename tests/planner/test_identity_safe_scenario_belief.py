@@ -15,6 +15,7 @@ from robot_sf.planner.scenario_belief_adapter import (
     TRACK_EXISTENCE_PROBABILITY_SEMANTICS,
     BeliefAwarePlannerInput,
     project_identity_safe_scenario_belief,
+    project_scenario_belief_for_planner,
 )
 from robot_sf.representation import (
     BeliefSource,
@@ -462,3 +463,241 @@ def test_observation_rows_are_preserved_as_legacy_data_and_never_joined_by_index
         projection_b.legacy_observation["pedestrians"]["positions"],
         legacy_b["pedestrians"]["positions"],
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "planner_name",
+        "belief_step",
+        "tracking_result",
+        "belief",
+        "legacy_observation",
+        "status",
+        "reason",
+    ),
+    [
+        (" ", 0, "valid", "valid", None, "invalid", "invalid_planner_name"),
+        (_PLANNER, -1, "valid", "valid", None, "invalid", "invalid_belief_step"),
+        (_PLANNER, 0, "valid", "missing_radius", None, "invalid", "invalid_scenario_belief"),
+        (_PLANNER, 0, None, "valid", None, "missing", "missing_tracking_result"),
+        (_PLANNER, 0, object(), "valid", None, "invalid", "invalid_tracking_result"),
+        (_PLANNER, 0, "valid", "valid", [], "invalid", "invalid_legacy_observation"),
+    ],
+)
+def test_projection_input_contract_fails_closed_with_specific_diagnostics(
+    planner_name: str,
+    belief_step: int,
+    tracking_result: object,
+    belief: object,
+    legacy_observation: object,
+    status: str,
+    reason: str,
+) -> None:
+    """Malformed public inputs never produce keyed planner tracks."""
+    result = _tracker().update(_snapshot(0, [[1.0, 0.0]]))
+    selected_result = result if tracking_result == "valid" else tracking_result
+    selected_belief = _base_belief() if belief == "valid" else belief
+    if belief == "missing_radius":
+        selected_belief = SimpleNamespace(to_socnav_struct=lambda: {})
+
+    projection = project_identity_safe_scenario_belief(
+        selected_belief,
+        planner_name=planner_name,
+        belief_step=belief_step,
+        tracking_result=selected_result,
+        tracker_namespace="sensor-a",
+        legacy_observation=legacy_observation,
+    )
+
+    assert projection.diagnostics.status == status
+    assert projection.diagnostics.fallback_reason == reason
+    assert projection.tracks == {}
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"track_id": 0}, "track_id"),
+        ({"belief_step": -1}, "belief_step"),
+        ({"last_observed_step": 2}, "last_observed_step"),
+        ({"age_steps": -1}, "age_steps"),
+        ({"missed_steps": -1}, "missed_steps"),
+        ({"reset_epoch": -1}, "reset_epoch"),
+        ({"tracker_namespace": " "}, "tracker_namespace"),
+        ({"status": "retired"}, "status"),
+        ({"visibility": 1}, "visibility"),
+        ({"confidence": float("nan")}, "confidence"),
+        ({"existence_probability": 0.9}, "1.0 keep-alive"),
+        ({"existence_probability_calibrated": True}, "uncalibrated"),
+    ],
+)
+def test_projected_track_rejects_invalid_public_lifecycle_and_probability_fields(
+    changes: dict[str, object], message: str
+) -> None:
+    """A planner sidecar cannot represent invalid identity, timing, or existence semantics."""
+    result = _tracker().update(_snapshot(0, [[1.0, 0.0]]))
+    track = _project(result).tracks[1]
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        replace(track, **changes)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"mean_state": np.array([1.0, 0.0, 0.0, 0.0])}, "finite.*vector"),
+        ({"mean_state": np.array([1.0, 0.0, 0.0, 0.0, np.inf])}, "finite.*vector"),
+        ({"mean_state": np.array([1.0, 0.0, 0.0, 0.0, -0.1])}, "radius"),
+        ({"covariance": np.zeros((3, 3))}, "finite 4x4"),
+        ({"covariance": np.full((4, 4), np.inf)}, "finite 4x4"),
+        (
+            {
+                "covariance": np.array(
+                    [
+                        [1.0, 0.5, 0.0, 0.0],
+                        [0.0, 1.0, 0.0, 0.0],
+                        [0.0, 0.0, 1.0, 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                    ]
+                )
+            },
+            "symmetric",
+        ),
+    ],
+)
+def test_projected_track_rejects_invalid_state_and_covariance_arrays(
+    changes: dict[str, object], message: str
+) -> None:
+    """Projected state vectors and covariance matrices retain their finite symmetric contract."""
+    result = _tracker().update(_snapshot(0, [[1.0, 0.0]]))
+    track = _project(result).tracks[1]
+
+    with pytest.raises(ValueError, match=message):
+        replace(track, **changes)
+
+
+def test_wrapper_rejects_schema_order_key_and_legacy_observation_mismatches() -> None:
+    """The exported wrapper enforces stable schema, identity-key, and legacy mapping contracts."""
+    tracker = _tracker()
+    tracker.update(_snapshot(0, [[1.0, 0.0], [3.0, 0.0]]))
+    result = tracker.update(_snapshot(1, [[1.0, 0.0], [3.0, 0.0]]))
+    projection = _project(result)
+
+    with pytest.raises(ValueError, match="schema_version"):
+        replace(projection, schema_version="future-schema")
+    with pytest.raises(ValueError, match="ascending track_id"):
+        replace(projection, tracks=dict(reversed(tuple(projection.tracks.items()))))
+    with pytest.raises(ValueError, match="keys must match"):
+        replace(projection, tracks={99: projection.tracks[1]})
+    with pytest.raises(TypeError, match="mapping or None"):
+        replace(projection, legacy_observation=[])
+
+
+@pytest.mark.parametrize(
+    ("legacy_observation", "reason"),
+    [
+        ({"world": {}}, "malformed_legacy_observation"),
+        ({"pedestrians": []}, "malformed_legacy_observation"),
+        ({"pedestrians": {"count": []}}, "malformed_pedestrian_count"),
+        ({"pedestrians": {"count": [float("nan")]}}, "malformed_pedestrian_count"),
+        ({"pedestrians": {"count": ["not-a-count"]}}, "malformed_pedestrian_count"),
+        ({"pedestrians": {"count": [1]}}, "malformed_uncertainty_report"),
+    ],
+)
+def test_uncertainty_projection_reports_malformed_legacy_and_report_contracts(
+    legacy_observation: dict[str, object], reason: str
+) -> None:
+    """The legacy uncertainty adapter fails closed when its observation or report is malformed."""
+    belief = SimpleNamespace(
+        to_socnav_struct=lambda: legacy_observation,
+        to_uncertainty_report=lambda: {"agents": []},
+    )
+
+    projection = project_scenario_belief_for_planner(belief, planner_key="stream_gap")
+
+    assert projection.compatibility["status"] == "fail_closed"
+    assert projection.compatibility["reason"] == reason
+    assert projection.compatibility["uncertainty_consumed"] is False
+    assert "uncertainty" not in projection.observation.get("pedestrians", {})
+
+
+def test_uncertainty_projection_marks_unsupported_planners_without_adding_sidecar() -> None:
+    """Only a supported planner receives uncertainty rows; legacy rows remain available."""
+    belief = _base_belief()
+    projection = project_scenario_belief_for_planner(belief, planner_key="legacy_planner")
+
+    assert projection.compatibility["status"] == "fail_closed"
+    assert projection.compatibility["reason"] == "unsupported_uncertainty_planner"
+    assert projection.compatibility["uncertainty_consumed"] is False
+    assert "uncertainty" not in projection.observation["pedestrians"]
+    assert projection.observation["pedestrians"]["uncertainty_compatibility"] == (
+        projection.compatibility
+    )
+
+
+def test_uncertainty_projection_adds_only_report_rows_visible_in_legacy_observation() -> None:
+    """A supported planner receives a copied sidecar aligned to the active legacy count."""
+    legacy_observation = {"pedestrians": {"count": np.array([1.0]), "positions": [[2.0, 0.0]]}}
+    report_rows = [
+        {"entity_id": "pedestrian-a", "position_confidence": 0.8},
+        {"entity_id": "outside-active-count", "position_confidence": 0.4},
+    ]
+    belief = SimpleNamespace(
+        to_socnav_struct=lambda: legacy_observation,
+        to_uncertainty_report=lambda: {"agents": report_rows},
+    )
+
+    projection = project_scenario_belief_for_planner(belief, planner_key="stream_gap")
+
+    pedestrians = projection.observation["pedestrians"]
+    assert pedestrians["uncertainty"] == report_rows[:1]
+    assert pedestrians["uncertainty"][0] is not report_rows[0]
+    assert projection.compatibility == pedestrians["uncertainty_compatibility"]
+    assert projection.compatibility["status"] == "compatible"
+    assert projection.compatibility["uncertainty_consumed"] is True
+    assert projection.compatibility["consumed_agent_count"] == 1
+    assert projection.compatibility["claim_boundary"] == "diagnostic_interface_smoke"
+
+
+def test_json_export_normalizes_nested_numpy_values_and_rejects_unsupported_data() -> None:
+    """Full wrapper export normalizes nested values and rejects lossy or non-finite data."""
+    result = _tracker().update(_snapshot(0, [[1.0, 0.0]]))
+    projection = _project(
+        result,
+        legacy_observation={
+            "scalar": np.float32(0.25),
+            "tuple": (np.int64(3), True),
+            "integer_keys": {2: "second", 1: "first"},
+        },
+    )
+
+    exported = json.loads(projection.to_json())["legacy_observation"]
+    assert exported == {
+        "integer_keys": {"1": "first", "2": "second"},
+        "scalar": pytest.approx(0.25),
+        "tuple": [3, True],
+    }
+
+    bad_key = _project(result, legacy_observation={("tuple",): "unsupported key"})
+    unsupported_value = _project(result, legacy_observation={"value": object()})
+    non_finite_scalar = _project(result, legacy_observation={"value": float("nan")})
+    with pytest.raises(TypeError, match="mapping keys"):
+        bad_key.to_json()
+    with pytest.raises(TypeError, match="unsupported JSON-safe projection value"):
+        unsupported_value.to_json()
+    with pytest.raises(ValueError, match="NaN and Inf"):
+        non_finite_scalar.to_json()
+
+
+def test_unobserved_track_without_occlusion_marker_counts_as_stale_only() -> None:
+    """Staleness is reported independently when an active track has no occlusion marker."""
+    tracker = _tracker()
+    tracker.update(_snapshot(0, [[1.0, 0.0]]))
+    result = tracker.update(_snapshot(1, np.empty((0, 2))))
+    projection = _project(result)
+
+    assert projection.diagnostics.status == "supported"
+    assert projection.diagnostics.visible_track_count == 0
+    assert projection.diagnostics.occluded_track_count == 0
+    assert projection.diagnostics.stale_track_count == 1
+    assert projection.tracks[1].visibility is False

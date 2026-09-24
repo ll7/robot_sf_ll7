@@ -9,6 +9,8 @@
     "qualified_name": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
     "version": "v0",
     "artifact_digest": "e597ce1e53e697f904a11c49a406cb99",
+    "artifact_path": "wandb-artifact://ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0/synthesis.json.gz",
+    "location": "durable W&B artifact, retrieved using authenticated project access",
     "member": "synthesis.json.gz",
     "member_sha256": "81e63e584010c3d5340258e3307bf1a94ff297f4517843cd63756a96c4d7eac9",
     "source_member": "synthesis.json",
@@ -19,6 +21,8 @@
     "qualified_name": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
     "version": "v0",
     "artifact_digest": "e597ce1e53e697f904a11c49a406cb99",
+    "artifact_path": "wandb-artifact://ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0/synthesis.json.gz",
+    "location": "durable W&B source plus task-local ignored hydration verified against its manifest",
     "member": "synthesis.json.gz",
     "member_sha256": "81e63e584010c3d5340258e3307bf1a94ff297f4517843cd63756a96c4d7eac9",
     "source_member": "synthesis.json",
@@ -26,6 +30,7 @@
     "manifest_digest": "sha256:c7b3bff1f13f456c0f11e5af5de8624fc550ebfb48af31392513c513daa7ef0d",
     "status": "verified",
     "hydrated_member_path": "output/issue_7980/source/synthesis.json.gz",
+    "source_path": "output/issue_7980/source/synthesis.json",
     "manifest_member": "campaign_preservation_manifest.json",
     "preservation_manifest_path": "output/issue_7980/source/campaign_preservation_manifest.json"
   }

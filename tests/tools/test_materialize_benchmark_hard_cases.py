@@ -393,6 +393,47 @@ def test_exact_replay_requires_successful_available_nondegraded_evidence(
     assert classification["status"] == expected_status
 
 
+@pytest.mark.parametrize("side", ["source", "replay"])
+@pytest.mark.parametrize(
+    ("marker", "expected_status"),
+    [
+        (False, "exact_match"),
+        (True, "unavailable_execution_evidence"),
+        ("true", "unavailable_execution_evidence"),
+        (None, "unavailable_execution_evidence"),
+        (0, "unavailable_execution_evidence"),
+        ({}, "unavailable_execution_evidence"),
+    ],
+)
+def test_explicit_unavailable_marker_must_be_a_boolean_false_to_pass(
+    side: str, marker: Any, expected_status: str
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    observed = json.loads(json.dumps(source))
+    target = source if side == "source" else observed
+    target["unavailable"] = marker
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        observed,
+        "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == expected_status
+    assert classification[f"execution_evidence_{side}"] == (
+        "available" if marker is False else "unavailable_execution_availability"
+    )
+
+
 @pytest.mark.parametrize(
     ("side", "diagnostics", "expected_status"),
     [

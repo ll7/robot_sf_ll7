@@ -2683,10 +2683,12 @@ The deterministic main signal is:
 uv run python scripts/dev/main_ci_is_green.py   # exit 0 green, 1 not-green
 ```
 
-It decides from the most recent **completed** CI run on `main`; an in-progress,
-cancelled, or timed-out run is `stale`, not `red`. Reviewing a PR while main is
-red is fine, and only the suspected-file overlap or per-PR staleness check can
-hold an otherwise green PR.
+It decides from a **completed CI run on the exact current `main` commit**. The
+helper reads the main ref before selecting evidence and checks it again after
+any manual-matrix admission lookup; an in-progress, cancelled, timed-out, or
+older-head run is `stale`, not `red`. Reviewing a PR while main is red is fine,
+and only the suspected-file overlap or per-PR staleness check can hold an
+otherwise green PR.
 
 For automated gates, emit the machine-readable signal instead of parsing the
 human line (issue #5571). The `--json` flag prints the `main_ci_is_green.v1`
@@ -2707,13 +2709,15 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
-The gate's default fetch is deliberately one bounded `gh run list --limit`
-window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; it
-selects the default `CI` workflow by `.github/workflows/ci.yml` rather than the
-ambiguous display name, while keeping `CI` as the report label. When
-cancellation churn fills that window it fails closed to `stale` instead of
-reading further back. Callers that need the decisive verdict behind a
-cancelled-run flood use the paginated reader below.
+The gate's default fetch is deliberately one bounded exact-commit
+`gh run list --branch main --commit <SHA> --limit` window (default 20 runs,
+30s timeout) so merge-hold evaluation stays fast. It selects the default `CI`
+workflow by `.github/workflows/ci.yml` rather than the ambiguous display name,
+while keeping `CI` as the report label, and classifies status locally because
+server-side status-filtered queries have returned older windows. A moved main
+ref or a window without decisive evidence fails closed to `stale`; callers that
+need the decisive verdict behind a cancelled-run flood use the paginated reader
+below.
 
 Manual CI recovery dispatches use a separate ownership gate before any full
 matrix job starts. GitHub can replace a pending run in a shared concurrency
@@ -2725,8 +2729,15 @@ that branch, so dispatches on feature or release branches participate in the
 same election as dispatches on `main`; a missing or malformed branch fails
 closed. The gate does not coordinate runs on different branch names, even when
 those refs point to the same SHA. Followers wait for that owner: they mirror
-only a completed exact-head success/failure, or take ownership if the prior run
-becomes stale or cancelled. Set the `retry_failed` workflow input only for one justified retry;
+only a completed exact-head success/failure from a configured full-matrix event
+(`push`, `pull_request`, or `merge_group`). A completed `workflow_dispatch` is
+decisive only when the Actions jobs API proves that at least one `compat-matrix`
+job was admitted; an all-skipped matrix or missing/empty/unknown event is
+non-decisive, so a follower can take ownership and run full CI. Malformed run
+data or unreadable/missing `compat-matrix` job evidence fails the ownership
+gate closed: it cannot establish a verdict or authorize a new matrix.
+Otherwise a follower can take ownership if the prior run becomes stale or
+cancelled. Set the `retry_failed` workflow input only for one justified retry;
 the run title is its idempotent receipt. Repeated ordinary watcher dispatches
 therefore cannot cancel the owner or start duplicate full matrices. The job-level
 election concurrency key is shared only by manual runs for the same SHA; push,

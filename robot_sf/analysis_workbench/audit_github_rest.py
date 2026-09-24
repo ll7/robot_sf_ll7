@@ -700,7 +700,7 @@ class GitHubRESTProvider:
         """
 
         if not isinstance(finding_id, str) or _SAFE_MARKER_VALUE_RE.fullmatch(finding_id) is None:
-            raise GitHubRestValidationError("finding_id must be bounded marker-safe text")
+            raise GitHubRestValidationError("finding_id must be non-empty marker-safe text")
         if (
             isinstance(expected_finding_revision, bool)
             or not isinstance(expected_finding_revision, int)

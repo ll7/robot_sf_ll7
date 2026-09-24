@@ -5,7 +5,7 @@
     "run_id": "5415fb369b504814aceb92cbb44214c9",
     "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
     "python_version": "3.13.14",
-    "invocation": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-9645-bounded-falsification-20260924/.venv/bin/robot_sf_bench run --matrix output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/scenario.yaml --out output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/episode_records_replay.jsonl --algo goal --base-seed 123 --horizon 100 --dt 0.1 --record-forces --no-video --workers 1 --no-resume --benchmark-profile baseline-safe --fail-fast",
+    "invocation": "uv run robot_sf_bench run --matrix docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/scenario.yaml --out output/issue9645-portable-replay/representative_success_replay.jsonl --algo goal --base-seed 123 --horizon 100 --dt 0.1 --record-forces --no-video --workers 1 --no-resume --benchmark-profile baseline-safe --fail-fast",
     "benchmark_profile": "baseline-safe",
     "runner": "map_runner.run_map_batch",
     "protocol_version": "0.1.0",

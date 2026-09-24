@@ -440,6 +440,10 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
 
     source_artifact_sha256 = _file_sha256(source)
+    input_identities_before = {
+        scenario_id: scenario_input_identity(source, scenario_id=scenario_id)
+        for scenario_id in requested_ids
+    }
     scenarios = load_scenarios(source)
     by_id: dict[str, Mapping[str, Any]] = {}
     for scenario in scenarios:
@@ -451,10 +455,6 @@ def build_issue_5574_feasibility_report(  # noqa: C901
     if missing:
         raise ValueError("requested scenario ids are missing from manifest: " + ", ".join(missing))
 
-    input_identities_before = {
-        scenario_id: scenario_input_identity(source, scenario_id=scenario_id)
-        for scenario_id in requested_ids
-    }
     cells: list[dict[str, Any]] = []
     for scenario_id in requested_ids:
         scenario = by_id[scenario_id]

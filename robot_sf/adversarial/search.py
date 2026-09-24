@@ -34,7 +34,7 @@ from robot_sf.adversarial.config import (
     SearchConfig,
     SearchRunResult,
 )
-from robot_sf.adversarial.io import read_first_jsonl_record
+from robot_sf.adversarial.io import parse_first_jsonl_record, read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
 from robot_sf.adversarial.scenario_admissibility import (
@@ -52,6 +52,7 @@ from robot_sf.benchmark.termination_reason import (
     outcome_contradictions,
     status_from_termination_reason,
 )
+from robot_sf.benchmark.utils import _config_hash
 from robot_sf.scenario_certification.input_identity import scenario_input_identity
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
@@ -360,6 +361,7 @@ def _post_evaluation_admissibility(
         "reason_code": "target_planner_observation_unavailable",
     }
     target_outcome = "unavailable"
+    scenario_identity_snapshot: Mapping[str, Any] | None = None
     if evaluation_error is not None:
         observation["reason_code"] = "target_evaluation_failed"
         observation["evaluation_error"] = evaluation_error
@@ -393,6 +395,7 @@ def _post_evaluation_admissibility(
             should_read_record = False
         else:
             should_read_record = True
+            scenario_identity_snapshot = current_identity
             record = None
         try:
             if should_read_record:
@@ -400,13 +403,14 @@ def _post_evaluation_admissibility(
                 observation["episode_records_jsonl_sha256"] = hashlib.sha256(
                     episode_bytes
                 ).hexdigest()
-                record = read_first_jsonl_record(episode_path)
+                record = parse_first_jsonl_record(episode_bytes, source=episode_path.as_posix())
         except (OSError, RuntimeError, ValueError):
             record = None
             observation["reason_code"] = "target_episode_record_missing_or_malformed"
         if record is None:
             observation.setdefault("reason_code", "target_episode_record_missing_or_malformed")
         else:
+            record_metadata = record.get("algorithm_metadata")
             reason_code, route_complete = _target_episode_observation_reason(
                 record,
                 config=config,
@@ -421,6 +425,12 @@ def _post_evaluation_admissibility(
                     "planner_id": record.get("algo"),
                     "seed": record.get("seed"),
                     "source_commit": record.get("git_hash"),
+                    "scenario_config_hash": record.get("config_hash"),
+                    "planner_config_hash": (
+                        record_metadata.get("config_hash")
+                        if isinstance(record_metadata, Mapping)
+                        else None
+                    ),
                     "termination_reason": record.get("termination_reason"),
                     "route_complete": route_complete,
                 }
@@ -430,6 +440,12 @@ def _post_evaluation_admissibility(
                 observation.update(status="available", reason_code=None)
             else:
                 observation["reason_code"] = reason_code or "target_episode_outcome_unavailable"
+    target_outcome = _guard_target_observation_input_stability(
+        target_outcome,
+        scenario_identity_snapshot=scenario_identity_snapshot,
+        scenario_yaml_path=scenario_yaml_path,
+        observation=observation,
+    )
     evidence["target_planner_observation"] = observation
     updated["evidence"] = evidence
     updated["target_planner_outcome"] = target_outcome
@@ -490,6 +506,15 @@ def _target_episode_observation_reason(  # noqa: C901 - fail-closed evidence che
         or resolve_execution_mode(metadata) not in _NATIVE_EXECUTION_MODES
     ):
         return "target_episode_planner_provenance_not_native_or_unavailable", None
+    binding_reason = _target_episode_candidate_binding_reason(
+        record,
+        metadata=metadata,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_yaml_path,
+    )
+    if binding_reason is not None:
+        return binding_reason, None
     if (
         not isinstance(details, Mapping)
         or details.get("availability_status") != "available"
@@ -520,6 +545,120 @@ def _target_episode_observation_reason(  # noqa: C901 - fail-closed evidence che
     if not route_complete and termination in {"success", "error"}:
         return "target_episode_outcome_termination_conflict", None
     return None, route_complete
+
+
+def _guard_target_observation_input_stability(
+    target_outcome: str,
+    *,
+    scenario_identity_snapshot: Mapping[str, Any] | None,
+    scenario_yaml_path: Path,
+    observation: dict[str, Any],
+) -> str:
+    """Clear an observed planner outcome if scenario inputs changed during parsing."""
+    if (
+        target_outcome not in {"route_completed", "route_incomplete"}
+        or not scenario_identity_snapshot
+    ):
+        return target_outcome
+    try:
+        identity_after_observation = scenario_input_identity(
+            scenario_yaml_path,
+            scenario_id=_candidate_scenario_id(scenario_yaml_path),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        identity_after_observation = {"status": "unavailable"}
+    identity_stable = (
+        identity_after_observation.get("status") == "available"
+        and identity_after_observation.get("source_artifact_sha256")
+        == scenario_identity_snapshot.get("source_artifact_sha256")
+        and identity_after_observation.get("effective_input_sha256")
+        == scenario_identity_snapshot.get("effective_input_sha256")
+    )
+    if identity_stable:
+        return target_outcome
+    observation.update(
+        status="unavailable",
+        reason_code="target_scenario_runtime_input_changed_during_observation",
+        route_complete=None,
+    )
+    return "unavailable"
+
+
+def _target_episode_candidate_binding_reason(
+    record: Mapping[str, Any],
+    *,
+    metadata: Mapping[str, Any],
+    config: SearchConfig,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path,
+) -> str | None:
+    """Bind a native episode row to its materialized candidate and planner config."""
+    scenario_error, materialized_candidate = _materialized_candidate_provenance(scenario_yaml_path)
+    if scenario_error is not None:
+        return scenario_error
+    if materialized_candidate is None:
+        return "target_episode_candidate_provenance_missing"
+    expected_candidate = candidate.to_json()
+    if not _candidate_payload_matches(materialized_candidate, expected_candidate):
+        return "target_episode_candidate_parameters_mismatch"
+
+    scenario_params = record.get("scenario_params")
+    recorded_metadata = (
+        scenario_params.get("metadata") if isinstance(scenario_params, Mapping) else None
+    )
+    recorded_candidate = (
+        recorded_metadata.get("adversarial_candidate")
+        if isinstance(recorded_metadata, Mapping)
+        else None
+    )
+    if not isinstance(scenario_params, Mapping) or not isinstance(recorded_candidate, Mapping):
+        return "target_episode_scenario_parameters_missing"
+    if not _candidate_payload_matches(recorded_candidate, expected_candidate):
+        return "target_episode_record_candidate_parameters_mismatch"
+    scenario_id = _candidate_scenario_id(scenario_yaml_path)
+    if scenario_params.get("id") != scenario_id or scenario_params.get("algo") != config.policy:
+        return "target_episode_record_scenario_parameters_mismatch"
+    if record.get("config_hash") != _config_hash(dict(scenario_params)):
+        return "target_episode_scenario_config_hash_mismatch"
+
+    recorded_planner_config = metadata.get("config")
+    if not isinstance(recorded_planner_config, Mapping):
+        return "target_episode_recorded_planner_config_missing"
+    expected_planner_config_hash = _config_hash(dict(recorded_planner_config))
+    if (
+        scenario_params.get("algo_config_hash") != expected_planner_config_hash
+        or metadata.get("config_hash") != expected_planner_config_hash
+    ):
+        return "target_episode_planner_config_hash_mismatch"
+    return None
+
+
+def _materialized_candidate_provenance(
+    scenario_yaml_path: Path,
+) -> tuple[str | None, Mapping[str, Any] | None]:
+    """Read the candidate provenance block from one materialized scenario file."""
+    try:
+        scenario_payload = yaml.safe_load(scenario_yaml_path.read_bytes().decode("utf-8"))
+        scenarios = (
+            scenario_payload.get("scenarios") if isinstance(scenario_payload, Mapping) else None
+        )
+        if not isinstance(scenarios, list) or len(scenarios) != 1:
+            return "target_episode_candidate_scenario_missing_or_ambiguous", None
+        scenario = scenarios[0]
+        scenario_metadata = scenario.get("metadata") if isinstance(scenario, Mapping) else None
+        materialized_candidate = (
+            scenario_metadata.get("adversarial_candidate")
+            if isinstance(scenario_metadata, Mapping)
+            else None
+        )
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return "target_episode_candidate_scenario_unavailable", None
+    return None, materialized_candidate if isinstance(materialized_candidate, Mapping) else None
+
+
+def _candidate_payload_matches(actual: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    """Check every declared sampled-candidate field without rejecting added metadata."""
+    return all(actual.get(key) == value for key, value in expected.items())
 
 
 def _store_post_evaluation_admissibility(

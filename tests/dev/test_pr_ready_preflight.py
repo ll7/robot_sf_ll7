@@ -1153,17 +1153,20 @@ def _send_subreaper_report(
         if value and any(word in key.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "KEY"))
     )
 
-    def redact(value: str) -> str:
-        for secret in secrets:
-            value = value.replace(secret, "<redacted>")
-        return value[:4000]
+    def redact(value: object) -> object:
+        if isinstance(value, str):
+            for secret in secrets:
+                value = value.replace(secret, "<redacted>")
+            return value[:4000]
+        if isinstance(value, dict):
+            return {redact(key): redact(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [redact(item) for item in value]
+        return value
 
-    report["stdout"] = redact(stdout)
-    report["stderr"] = redact(stderr)
-    for field in ("error", "cleanup_error"):
-        if field in report:
-            report[field] = redact(str(report[field]))
-    os.write(pipe_w, json.dumps(report, sort_keys=True).encode() + b"\n")
+    report["stdout"] = stdout
+    report["stderr"] = stderr
+    os.write(pipe_w, json.dumps(redact(report), sort_keys=True).encode() + b"\n")
     os.close(pipe_w)
 
 
@@ -1286,7 +1289,11 @@ def test_subreaper_report_redacts_credentials() -> None:
     pipe_r, pipe_w = os.pipe()
     _send_subreaper_report(
         pipe_w,
-        {"error": "failure private-test-token"},
+        {
+            "error": "failure private-test-token",
+            "receipt_process": {"nested": {"detail": "process private-test-token"}},
+            "receipt_cleanup": {"details": ["cleanup private-test-token"]},
+        },
         {"PR_READY_TOKEN": "private-test-token"},
         "stdout private-test-token",
         "stderr private-test-token",
@@ -1297,6 +1304,8 @@ def test_subreaper_report_redacts_credentials() -> None:
     assert report["error"] == "failure <redacted>"
     assert report["stdout"] == "stdout <redacted>"
     assert report["stderr"] == "stderr <redacted>"
+    assert report["receipt_process"]["nested"]["detail"] == "process <redacted>"
+    assert report["receipt_cleanup"]["details"] == ["cleanup <redacted>"]
 
 
 @pytest.mark.skipif(

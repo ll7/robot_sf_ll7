@@ -44,6 +44,7 @@ EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION = "adversarial-planner-replay-receipt.v
 SLICE_SCHEMA_VERSION = "adversarial-counterexample-slice.v1"
 CASE_INPUT_IDENTITY_SCHEMA_VERSION = "adversarial-case-input-identity.v1"
 CASE_ADMISSION_REPLAY_SCHEMA_VERSION = "adversarial-case-admission-replay.v1"
+CASE_ADMISSIBILITY_EVIDENCE_SCHEMA_VERSION = "adversarial-case-admissibility-evidence.v1"
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v1"
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
 ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
@@ -225,7 +226,24 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
             raise CorpusError(
                 f"planner evaluation references absent case {evaluation['case_id']!r}"
             )
+    _validate_all_case_admissibility_evidence(
+        corpus["cases"], corpus["planner_evaluations"], corpus_root=root
+    )
     _validate_historical_candidate_registry(corpus)
+
+
+def _validate_all_case_admissibility_evidence(
+    cases: Sequence[Mapping[str, Any]],
+    evaluations: Sequence[Mapping[str, Any]],
+    *,
+    corpus_root: Path | None,
+) -> None:
+    for case in cases:
+        errors = _validate_case_admissibility_evidence(case, evaluations, corpus_root=corpus_root)
+        if errors:
+            raise CorpusError(
+                f"case {case['case_id']} has invalid admissibility evidence: " + "; ".join(errors)
+            )
 
 
 def _validate_historical_candidate_registry(corpus: Mapping[str, Any]) -> None:
@@ -2234,29 +2252,8 @@ def append_planner_evaluation(
             raise CorpusError(
                 "planner evaluation replay evidence rejected: " + "; ".join(replay_errors)
             )
-    identity = {
-        key: item.get(key)
-        for key in (
-            "case_id",
-            "effective_scenario_sha256",
-            "planner_id",
-            "planner_config_identity",
-            "source_revision",
-            "episode_sha256",
-            "outcome",
-            "termination_reason",
-            "metrics",
-            "execution_mode",
-            "readiness_status",
-            "availability_status",
-            "fallback_or_degraded",
-            "evidence_status",
-            "error",
-            "replay_receipt",
-        )
-    }
     item["schema_version"] = EVALUATION_SCHEMA_VERSION
-    item["evaluation_id"] = hashlib.sha256(_stable_json(identity).encode("utf-8")).hexdigest()
+    item["evaluation_id"] = _evaluation_digest(item)
     corpus["planner_evaluations"] = _append_unique(
         corpus, "planner_evaluations", item, key="evaluation_id"
     )["planner_evaluations"]
@@ -3854,6 +3851,148 @@ def _validate_case_structure_admissibility(case: Mapping[str, Any]) -> list[str]
     return errors
 
 
+def _validate_case_admissibility_evidence(
+    case: Mapping[str, Any],
+    evaluations: Sequence[Mapping[str, Any]],
+    *,
+    corpus_root: Path | None,
+) -> list[str]:
+    admissibility = case.get("admissibility")
+    if not isinstance(admissibility, Mapping):
+        return ["admissibility record is missing"]
+    verdict = admissibility.get("verdict")
+    evidence = admissibility.get("evidence_receipt")
+    if verdict == "admissible_feasibility_unknown":
+        return _validate_unknown_admissibility_evidence(evidence)
+    if verdict not in {"empirically_feasible", "planner_specific_failure"}:
+        return []
+    if not isinstance(evidence, Mapping):
+        return ["positive feasibility verdict requires an evidence receipt"]
+    return _validate_positive_admissibility_evidence(
+        case, evaluations, verdict, evidence, corpus_root=corpus_root
+    )
+
+
+def _validate_unknown_admissibility_evidence(evidence: Any) -> list[str]:
+    if evidence is not None and (
+        not isinstance(evidence, Mapping)
+        or evidence.get("verdict") != "admissible_feasibility_unknown"
+    ):
+        return ["admissibility evidence receipt conflicts with unknown verdict"]
+    return []
+
+
+def _validate_positive_admissibility_evidence(
+    case: Mapping[str, Any],
+    evaluations: Sequence[Mapping[str, Any]],
+    verdict: str,
+    evidence: Mapping[str, Any],
+    *,
+    corpus_root: Path | None,
+) -> list[str]:
+    errors = _admissibility_receipt_binding_errors(case, verdict, evidence)
+    evaluation, evaluation_errors = _resolve_admissibility_evaluation(case, evaluations, evidence)
+    errors.extend(evaluation_errors)
+    if evaluation is None:
+        return errors
+    errors.extend(
+        _validate_admissibility_evaluation(case, evaluation, verdict, corpus_root=corpus_root)
+    )
+    return errors
+
+
+def _admissibility_receipt_binding_errors(
+    case: Mapping[str, Any], verdict: str, evidence: Mapping[str, Any]
+) -> list[str]:
+    expected_fields = {
+        "schema_version": CASE_ADMISSIBILITY_EVIDENCE_SCHEMA_VERSION,
+        "case_id": case.get("case_id"),
+        "effective_scenario_sha256": case.get("effective_scenario_sha256"),
+        "verdict": verdict,
+    }
+    return [
+        f"admissibility evidence receipt {field} does not bind the case"
+        for field, expected in expected_fields.items()
+        if evidence.get(field) != expected
+    ]
+
+
+def _resolve_admissibility_evaluation(
+    case: Mapping[str, Any],
+    evaluations: Sequence[Mapping[str, Any]],
+    evidence: Mapping[str, Any],
+) -> tuple[Mapping[str, Any] | None, list[str]]:
+    evaluation_id = evidence.get("evaluation_id")
+    if not _is_sha256(evaluation_id):
+        return None, ["admissibility evidence receipt evaluation_id is invalid"]
+    matches = [item for item in evaluations if item.get("evaluation_id") == evaluation_id]
+    if len(matches) != 1:
+        return None, ["admissibility evidence receipt must identify exactly one evaluation"]
+    evaluation = matches[0]
+    errors = []
+    if evaluation.get("evaluation_id") != _evaluation_digest(evaluation):
+        errors.append("admissibility evidence evaluation digest is invalid")
+    if evaluation.get("case_id") != case.get("case_id") or evaluation.get(
+        "effective_scenario_sha256"
+    ) != case.get("effective_scenario_sha256"):
+        errors.append("admissibility evidence evaluation does not bind the case inputs")
+    replay_receipt = case.get("replay_receipt")
+    replay_revision = (
+        replay_receipt.get("replay_revision") if isinstance(replay_receipt, Mapping) else None
+    )
+    if evaluation.get("source_revision") != replay_revision:
+        errors.append("admissibility evidence evaluation is not from the admitted replay revision")
+    return evaluation, errors
+
+
+def _validate_admissibility_evaluation(
+    case: Mapping[str, Any],
+    evaluation: Mapping[str, Any],
+    verdict: str,
+    *,
+    corpus_root: Path | None,
+) -> list[str]:
+    errors = []
+    if corpus_root is None:
+        errors.append("positive feasibility verdict requires verified replay artifacts")
+    else:
+        state = _evaluation_state(evaluation, case=case, corpus_root=corpus_root)
+        if state.get("status") != "solved":
+            errors.append(
+                "admissibility evidence evaluation is not a valid successful replay"
+                + (
+                    f": {', '.join(state.get('reason_codes', []))}"
+                    if state.get("reason_codes")
+                    else ""
+                )
+            )
+    if verdict == "planner_specific_failure":
+        errors.extend(_planner_specific_failure_evidence_errors(case, evaluation))
+    return errors
+
+
+def _planner_specific_failure_evidence_errors(
+    case: Mapping[str, Any], evaluation: Mapping[str, Any]
+) -> list[str]:
+    target = case.get("target_planner")
+    target = target if isinstance(target, Mapping) else {}
+    replay_receipt = case.get("replay_receipt")
+    projection = (
+        replay_receipt.get("selected_projection") if isinstance(replay_receipt, Mapping) else None
+    )
+    outcome = projection.get("outcome") if isinstance(projection, Mapping) else None
+    errors = []
+    if evaluation.get("planner_id") == target.get("planner_id"):
+        errors.append("planner-specific failure evidence must use a reference planner")
+    if (
+        not isinstance(outcome, Mapping)
+        or outcome.get("route_complete") is not False
+        or not (outcome.get("collision_event") is True or outcome.get("timeout_event") is True)
+    ):
+        errors.append("planner-specific failure verdict lacks a target-planner failure")
+    return errors
+
+
 def _validate_case_replay_binding(case: Mapping[str, Any], receipt: Mapping[str, Any]) -> list[str]:
     errors = _validate_replay_revision_and_count(receipt)
     replay_revision = receipt.get("replay_revision")
@@ -4079,13 +4218,32 @@ def _validate_new_admission_replay(
     ):
         return ["admission replay artifact receipts are incomplete"]
     errors = []
+    selected_projection = receipt.get("selected_projection")
     for artifact_receipt in artifact_receipts:
         if not isinstance(artifact_receipt, Mapping):
             errors.append("admission replay artifact receipt is malformed")
             continue
         item = _admission_replay_observation(case, artifact_receipt)
         errors.extend(_validate_replay_artifact(item, case, artifact_receipt, corpus_root))
+        if not isinstance(selected_projection, Mapping) or (
+            _admission_projection_from_receipt(artifact_receipt) != selected_projection
+        ):
+            errors.append("selected projection differs from a verified replay artifact")
     return errors
+
+
+def _admission_projection_from_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "scenario_id": receipt.get("scenario_id"),
+        "seed": receipt.get("scenario_seed"),
+        "planner_id": receipt.get("planner_id"),
+        "planner_config_identity": receipt.get("planner_config_identity"),
+        "source_revision": receipt.get("source_revision"),
+        "outcome": receipt.get("outcome"),
+        "termination_reason": receipt.get("termination_reason"),
+        "metrics": receipt.get("metrics"),
+        "selected_event_identity": receipt.get("selected_event_identity"),
+    }
 
 
 def _validate_legacy_admission_replay(receipt: Mapping[str, Any], corpus_root: Path) -> list[str]:
@@ -4094,20 +4252,79 @@ def _validate_legacy_admission_replay(receipt: Mapping[str, Any], corpus_root: P
     replays = receipt.get("replay_artifacts")
     if not isinstance(replays, list) or len(replays) != receipt.get("replay_count"):
         return ["admission replay artifact inventory is incomplete"]
+    selected_projection = receipt.get("selected_projection")
+    if not isinstance(selected_projection, Mapping):
+        return ["legacy admission selected projection is missing"]
+    errors = []
     for replay in replays:
         if not isinstance(replay, Mapping):
-            return ["admission replay artifact row is malformed"]
-        for path_key, digest_key in (
-            ("path", "normalized_bundle_sha256"),
-            ("provenance_path", "provenance_sha256_normalized"),
-        ):
-            try:
-                artifact = _resolve_corpus_artifact(replay.get(path_key), corpus_root)
-            except CorpusError as exc:
-                return [f"admission replay artifact is unavailable: {exc}"]
-            if _sha256_file(artifact) != replay.get(digest_key):
-                return [f"admission replay artifact digest differs: {path_key}"]
+            errors.append("admission replay artifact row is malformed")
+            continue
+        errors.extend(_validate_legacy_replay_artifact(replay, selected_projection, corpus_root))
+    return errors
+
+
+def _validate_legacy_replay_artifact(
+    replay: Mapping[str, Any],
+    selected_projection: Mapping[str, Any],
+    corpus_root: Path,
+) -> list[str]:
+    errors = []
+    for path_key, digest_key in (
+        ("path", "normalized_bundle_sha256"),
+        ("provenance_path", "provenance_sha256_normalized"),
+    ):
+        try:
+            artifact = _resolve_corpus_artifact(replay.get(path_key), corpus_root)
+        except CorpusError as exc:
+            errors.append(f"admission replay artifact is unavailable: {exc}")
+            continue
+        if _sha256_file(artifact) != replay.get(digest_key):
+            errors.append(f"admission replay artifact digest differs: {path_key}")
+            continue
+        if path_key == "path":
+            errors.extend(_validate_legacy_artifact_projection(artifact, selected_projection))
+    return errors
+
+
+def _validate_legacy_artifact_projection(
+    artifact: Path, selected_projection: Mapping[str, Any]
+) -> list[str]:
+    try:
+        episode = _read_single_jsonl_record(artifact)
+        artifact_projection = _admission_projection_from_episode(episode, selected_projection)
+    except CorpusError as exc:
+        return [f"legacy admission replay artifact is invalid: {exc}"]
+    if artifact_projection != selected_projection:
+        return ["selected projection differs from a verified replay artifact"]
     return []
+
+
+def _admission_projection_from_episode(
+    episode: Mapping[str, Any], selected_projection: Mapping[str, Any]
+) -> dict[str, Any]:
+    outcome = episode.get("outcome")
+    metrics = episode.get("metrics")
+    metadata = episode.get("algorithm_metadata")
+    if not isinstance(outcome, Mapping) or not isinstance(metrics, Mapping):
+        raise CorpusError("episode outcome or metrics are missing")
+    if not isinstance(metadata, Mapping):
+        raise CorpusError("episode planner metadata is missing")
+    selected_outcome = selected_projection.get("outcome")
+    selected_metrics = selected_projection.get("metrics")
+    if not isinstance(selected_outcome, Mapping) or not isinstance(selected_metrics, Mapping):
+        raise CorpusError("selected projection outcome or metrics are malformed")
+    return {
+        "scenario_id": episode.get("scenario_id"),
+        "seed": episode.get("seed"),
+        "planner_id": episode.get("algo"),
+        "planner_config_identity": metadata.get("config_hash"),
+        "source_revision": episode.get("git_hash"),
+        "outcome": {key: outcome.get(key) for key in selected_outcome},
+        "termination_reason": episode.get("termination_reason"),
+        "metrics": {key: metrics.get(key) for key in selected_metrics},
+        "selected_event_identity": _selected_event_identity(episode),
+    }
 
 
 def _admission_replay_observation(
@@ -4141,6 +4358,31 @@ def _validate_evaluation(item: Mapping[str, Any]) -> list[str]:
     else:
         errors.extend(_validate_incomplete_evaluation(item))
     return errors
+
+
+def _evaluation_digest(item: Mapping[str, Any]) -> str:
+    identity = {
+        key: item.get(key)
+        for key in (
+            "case_id",
+            "effective_scenario_sha256",
+            "planner_id",
+            "planner_config_identity",
+            "source_revision",
+            "episode_sha256",
+            "outcome",
+            "termination_reason",
+            "metrics",
+            "execution_mode",
+            "readiness_status",
+            "availability_status",
+            "fallback_or_degraded",
+            "evidence_status",
+            "error",
+            "replay_receipt",
+        )
+    }
+    return hashlib.sha256(_stable_json(identity).encode("utf-8")).hexdigest()
 
 
 def _validate_evaluation_identity(item: Mapping[str, Any]) -> list[str]:
@@ -4217,6 +4459,7 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_planner_id_mismatch")
     if metadata.get("config_hash") != item.get("planner_config_identity"):
         errors.append("replay_artifact_planner_config_mismatch")
+    errors.extend(_target_config_snapshot_projection_errors(item, case, metadata))
     if record.get("git_hash") != item.get("source_revision"):
         errors.append("replay_artifact_source_revision_mismatch")
     if not _is_full_git_revision(item.get("source_revision")):
@@ -4238,6 +4481,20 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_selected_metrics_mismatch")
     errors.extend(_validate_replay_event_projection(item, case, receipt, event_identity))
     return errors
+
+
+def _target_config_snapshot_projection_errors(
+    item: Mapping[str, Any], case: Mapping[str, Any], metadata: Mapping[str, Any]
+) -> list[str]:
+    target = case.get("target_planner")
+    if (
+        isinstance(target, Mapping)
+        and item.get("planner_id") == target.get("planner_id")
+        and item.get("planner_config_identity") == target.get("config_identity")
+        and metadata.get("config") != target.get("configuration_snapshot")
+    ):
+        return ["replay_artifact_target_configuration_snapshot_mismatch"]
+    return []
 
 
 def _replay_episode_status_projection_errors(record: Mapping[str, Any]) -> list[str]:

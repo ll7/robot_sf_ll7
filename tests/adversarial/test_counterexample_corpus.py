@@ -603,6 +603,97 @@ def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibilit
     validate_corpus(corpus)
 
 
+def test_unknown_feasibility_cannot_be_promoted_without_successful_replay_evidence(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    case = corpus["cases"][0]
+    assert case["admissibility"]["static_certificate"]["claim_boundary"].startswith(
+        "static route certificate only"
+    )
+    unsupported_upgrade = copy.deepcopy(corpus)
+    unsupported_upgrade["cases"][0]["admissibility"]["verdict"] = "empirically_feasible"
+
+    with pytest.raises(
+        CorpusError, match="positive feasibility verdict requires an evidence receipt"
+    ):
+        validate_corpus(unsupported_upgrade, corpus_root=corpus_root)
+
+    evaluation = _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id="reference-planner",
+        config_identity=case["target_planner"]["config_identity"],
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
+    stored_evaluation = next(
+        row
+        for row in corpus["planner_evaluations"]
+        if row["planner_id"] == evaluation["planner_id"]
+    )
+    case["admissibility"]["verdict"] = "empirically_feasible"
+    case["admissibility"]["evidence_receipt"] = {
+        "schema_version": "adversarial-case-admissibility-evidence.v1",
+        "case_id": case["case_id"],
+        "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "verdict": "empirically_feasible",
+        "evaluation_id": stored_evaluation["evaluation_id"],
+    }
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+    stored_evaluation["outcome"] = {
+        "collision_event": True,
+        "route_complete": False,
+        "timeout_event": False,
+    }
+    with pytest.raises(CorpusError, match="evaluation digest is invalid"):
+        validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def test_selected_projection_must_match_every_verified_replay_artifact(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    replay = corpus["cases"][0]["replay_receipt"]
+    projection = replay["selected_projection"]
+    projection["outcome"] = {
+        "collision_event": False,
+        "route_complete": True,
+        "timeout_event": False,
+    }
+    projection["termination_reason"] = "success"
+    projection["metrics"].update({"success": 1.0, "collisions": 0.0, "total_collision_count": 0.0})
+    projection["selected_event_identity"]["exact_events"] = {
+        "collision": False,
+        "goal_reached": True,
+        "timeout": False,
+    }
+    replay["selected_projection_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(projection).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(
+        CorpusError, match="selected projection differs from a verified replay artifact"
+    ):
+        validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def test_target_planner_configuration_snapshot_must_match_replay_metadata(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    case = corpus["cases"][0]
+    case["target_planner"]["configuration_snapshot"] = {"review_injected": True}
+
+    with pytest.raises(CorpusError, match="replay_artifact_target_configuration_snapshot_mismatch"):
+        validate_corpus(corpus, corpus_root=corpus_root)
+    with pytest.raises(CorpusError, match="replay_artifact_target_configuration_snapshot_mismatch"):
+        export_regression_slice(
+            corpus,
+            corpus_root=corpus_root,
+            output_dir=tmp_path / "injected-config-slice",
+        )
+
+
 def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
     tmp_path: Path,
 ) -> None:

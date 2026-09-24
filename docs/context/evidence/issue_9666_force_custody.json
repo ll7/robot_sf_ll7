@@ -148,5 +148,16 @@
     "AI-GENERATED",
     "NEEDS-REVIEW"
   ],
-  "location": "wandb://ll7/robot_sf/campaign-issue9666_force_probe_71464357c_custody_r2_20260924:v0"
+  "location": "wandb://ll7/robot_sf/campaign-issue9666_force_probe_71464357c_custody_r2_20260924:v0",
+  "serialization_refactor_proof": {
+    "status": "passed",
+    "rows": 384,
+    "baseline_source": "71464357ca89e6578ee593a15167bd1eda612d99",
+    "baseline_metrics_py_digest": "4323a21cd7ae11deb81212840aa33f4bab2efb54271e4e0560a7414241e4f468",
+    "current_metrics_py_digest": "5d4d7246a6b1f0fec1fa0570677832a90936951edb3aeab5a49f65672095fe0a",
+    "comparison": "compact JSON bytes of post_process_metrics applied to each stored metric payload, same key order; not a re-simulation",
+    "concatenated_metric_json_digest": "6984422bf4b8df631ee41da75c16fbccc3f2e264be8645e78bb6d02342be33ae",
+    "synthetic_null_nested_case": "passed",
+    "identity_digest": "75499addbd593a82dfaa97ac0ef1233f6584858102339a9da465c716bcfbc24e"
+  }
 }

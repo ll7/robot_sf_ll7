@@ -13,7 +13,7 @@ Real force impulse versus near misses: ρ = 0.8169379191861208 (n = 384). Pedest
 ## Reproducibility and custody
 
 - Producer source: `71464357ca89e6578ee593a15167bd1eda612d99`.
-- Analysis revision: `97a50d1612d04375572433186998a09e21856155`; force recording, metric runtime and diagnostic config remain byte-identical to producer source. Fresh main was merged before final readiness.
+- Analysis revision: `97a50d1612d04375572433186998a09e21856155`; simulator, episode runner and diagnostic config remain byte-identical to producer source. A later serialization-only refactor replaces a loop with an equivalent dictionary transformation to satisfy the complexity gate. Both versions produce byte-identical compact JSON on all 384 stored metric payloads and a synthetic nested-null case (concatenated digest `6984422bf4b8df631ee41da75c16fbccc3f2e264be8645e78bb6d02342be33ae`). This is post-processing parity, not final-source re-execution. Fresh main was merged before final readiness.
 - Config: `configs/benchmarks/issue_9666_force_validation.yaml`, SHA-256 `a5e629e326da5a26ddf06af20d79ea30ec1e10ff7f9d3d75af53515d58b71c93`; effective hash `f96ecf5d754082e0`.
 - Scenario matrix SHA-256: `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`.
 - Scheduler: COMPLETED, exit 0:0, derived exit 0:0, elapsed 316 s. Producer campaign/sync exits: 0/0. Canonical retrieval verified all 60 producer entries; 384 row identities were checked independently.

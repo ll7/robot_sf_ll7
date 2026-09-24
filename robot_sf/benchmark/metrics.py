@@ -3552,10 +3552,12 @@ def post_process_metrics(
     _attach_group_space_block(metrics)
     _attach_social_mini_game_block(metrics)
     metrics.pop("_episode_metadata", None)
-    for key, value in metrics.items():
-        if key.startswith("robot_force_"):
-            metrics[key] = _robot_force_json_value(value)
-    return _sanitize_metrics(metrics)
+    return _sanitize_metrics(
+        {
+            key: _robot_force_json_value(value) if key.startswith("robot_force_") else value
+            for key, value in metrics.items()
+        }
+    )
 
 
 def _attach_pedestrian_impact_block(metrics: dict[str, Any]) -> None:

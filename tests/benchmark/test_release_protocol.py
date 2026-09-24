@@ -85,6 +85,10 @@ def test_snqi_v2_manifest_assets_are_complete_and_hash_bound(tmp_path: Path) -> 
     missing.pop("snqi_v2_family_sha256")
     with pytest.raises(ValueError, match="metrics.snqi_v2_family_sha256"):
         release_protocol._load_manifest_metrics_section(source.path, {"metrics": missing})
+    with pytest.raises(ValueError, match="metrics.snqi_v2_weights_path"):
+        release_protocol._load_manifest_metrics_section(
+            source.path, {"metrics": {"snqi_v2_weights_path": None}}
+        )
     corrupt = dict(metrics)
     corrupt["snqi_v2_weights_sha256"] = "0" * 64
     parsed_corrupt = release_protocol._load_manifest_metrics_section(

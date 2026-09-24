@@ -18,6 +18,7 @@ from scripts.validation.check_release_metric_equivalence import (
     _read_candidate,
     _read_candidate_manifest,
     compare,
+    scan_robot_force_metrics,
     scientific_manifest_differences,
 )
 
@@ -152,3 +153,50 @@ def test_resolved_manifest_source_must_match_episode_source(tmp_path: Path) -> N
     _write_archive(archive, [_row(OLD_SHA)])
     with pytest.raises(ValueError, match="manifest source mismatch"):
         _read_archive_manifest(archive, NEW_SHA)
+
+
+def _force_row(*, count: int) -> dict[str, object]:
+    row = _row(NEW_SHA)
+    row["metrics"].update(
+        {
+            "robot_force_impulse_total": float(count),
+            "robot_force_peak": float(count),
+            "robot_force_time_above_ref_s": 0.0,
+            "robot_force_exposed_ped_count": count,
+            "robot_force_impulse_per_exposed_ped": 1.0 if count else None,
+            "robot_force_mean_active": 1.0 if count else None,
+        }
+    )
+    return row
+
+
+def test_force_gate_accepts_zero_exposure_nulls_and_absent_pp_variant(tmp_path: Path) -> None:
+    zero = _force_row(count=0)
+    exposed = _force_row(count=1)
+    exposed["seed"] = 112
+    _write_candidate(tmp_path, [zero, exposed])
+
+    report = scan_robot_force_metrics(tmp_path, NEW_SHA)
+
+    assert report["status"] == "pass"
+    assert report["checked_rows"] == 2
+    assert report["zero_exposure_rows"] == 1
+    assert report["pp_equivalent_absent_rows"] == 2
+
+
+def test_force_gate_rejects_nonfinite_and_partial_variant(tmp_path: Path) -> None:
+    row = _force_row(count=0)
+    row["metrics"]["robot_force_peak"] = float("nan")
+    row["metrics"]["robot_force_mean_active"] = 0.0
+    row["metrics"]["robot_force_pp_equiv_peak"] = 1.0
+    _write_candidate(tmp_path, [row])
+
+    report = scan_robot_force_metrics(tmp_path, NEW_SHA)
+
+    assert report["status"] == "invalid_robot_force_metrics"
+    assert report["failed_rows"] == 1
+    assert report["examples"][0]["fields"] == [
+        "robot_force_mean_active",
+        "robot_force_peak",
+        "robot_force_pp_equiv_incomplete",
+    ]

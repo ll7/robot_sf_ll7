@@ -25,6 +25,13 @@ SCIENTIFIC_MANIFEST_FIELDS = (
     "kinematics",
     "metrics",
 )
+ROBOT_FORCE_UNCONDITIONAL = (
+    "impulse_total",
+    "peak",
+    "time_above_ref_s",
+    "exposed_ped_count",
+)
+ROBOT_FORCE_CONDITIONAL = ("impulse_per_exposed_ped", "mean_active")
 
 
 def _sha256(path: Path) -> str:
@@ -239,6 +246,91 @@ def compare(
     }
 
 
+def _robot_force_block_problems(metrics: dict[str, Any], prefix: str) -> list[str]:
+    """Check finite reductions and declared zero-exposure unavailable values."""
+    problems: list[str] = []
+    count = metrics.get(f"{prefix}_exposed_ped_count")
+    if type(count) is not int or count < 0:
+        problems.append(f"{prefix}_exposed_ped_count")
+    for suffix in ROBOT_FORCE_UNCONDITIONAL:
+        if suffix == "exposed_ped_count":
+            continue
+        value = metrics.get(f"{prefix}_{suffix}")
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            problems.append(f"{prefix}_{suffix}")
+    for suffix in ROBOT_FORCE_CONDITIONAL:
+        value = metrics.get(f"{prefix}_{suffix}")
+        if count == 0 and value is None:
+            continue
+        if count == 0 or type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            problems.append(f"{prefix}_{suffix}")
+    return problems
+
+
+def _robot_force_row_status(metrics: Any) -> tuple[list[str], bool, bool]:
+    """Classify force fields on one row, including an optional complete pp variant."""
+    if not isinstance(metrics, dict):
+        return ["metrics"], False, False
+    problems = _robot_force_block_problems(metrics, "robot_force")
+    zero_exposure = metrics.get("robot_force_exposed_ped_count") == 0
+    pp_keys = tuple(
+        f"robot_force_pp_equiv_{suffix}"
+        for suffix in (*ROBOT_FORCE_UNCONDITIONAL, *ROBOT_FORCE_CONDITIONAL)
+    )
+    present = [field in metrics for field in pp_keys]
+    if not any(present):
+        return problems, zero_exposure, True
+    if not all(present):
+        return [*problems, "robot_force_pp_equiv_incomplete"], zero_exposure, False
+    problems.extend(_robot_force_block_problems(metrics, "robot_force_pp_equiv"))
+    return problems, zero_exposure, False
+
+
+def scan_robot_force_metrics(root: Path, expected_source: str) -> dict[str, Any]:
+    """Verify release-row force reductions without treating missing exposure as zero."""
+    checked = 0
+    zero_exposure = 0
+    pp_equivalent_absent = 0
+    failed = 0
+    examples: list[dict[str, Any]] = []
+    paths = sorted((root / "runs").glob("*/episodes.jsonl"))
+    if not paths:
+        raise ValueError("candidate contains no runs/*/episodes.jsonl")
+    for path in paths:
+        arm = path.parent.name.removesuffix("__differential_drive")
+        with path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if _source(row) != expected_source:
+                    raise ValueError(f"candidate source mismatch at {path}:{line_number}")
+                key = _key(arm, row)
+                checked += 1
+                problems, zero, pp_absent = _robot_force_row_status(row.get("metrics"))
+                zero_exposure += zero
+                pp_equivalent_absent += pp_absent
+                if problems:
+                    failed += 1
+                    if len(examples) < 100:
+                        examples.append(
+                            {
+                                "arm": key[0],
+                                "scenario_id": key[1],
+                                "seed": key[2],
+                                "fields": sorted(set(problems)),
+                            }
+                        )
+    return {
+        "status": "pass" if failed == 0 else "invalid_robot_force_metrics",
+        "checked_rows": checked,
+        "failed_rows": failed,
+        "zero_exposure_rows": zero_exposure,
+        "pp_equivalent_absent_rows": pp_equivalent_absent,
+        "examples": examples,
+    }
+
+
 def main() -> int:
     """Verify a pinned archive against one exact-source successor campaign."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -248,6 +340,7 @@ def main() -> int:
     parser.add_argument("--candidate-root", type=Path, required=True)
     parser.add_argument("--candidate-source-sha", required=True)
     parser.add_argument("--expected-rows", type=int, default=20160)
+    parser.add_argument("--require-robot-force-metrics", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if _sha256(args.baseline_archive) != args.baseline_sha256:
@@ -267,6 +360,11 @@ def main() -> int:
             "scientific_manifest_differences": manifest_differences,
         }
     )
+    if args.require_robot_force_metrics:
+        force_report = scan_robot_force_metrics(args.candidate_root, args.candidate_source_sha)
+        report["robot_force_metrics"] = force_report
+        if force_report["status"] != "pass":
+            report["status"] = "invalid_robot_force_metrics"
     if len(baseline) != args.expected_rows or len(candidate) != args.expected_rows:
         report["status"] = "identity_count_mismatch"
     if manifest_differences:

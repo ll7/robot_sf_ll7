@@ -56,6 +56,15 @@ manifest at each source and compares the predecessor matrix, scenario, seed poli
 kinematics, and legacy Social Navigation Quality Index (SNQI) asset declarations; new v2
 declarations are permitted.
 
+For the 0.0.8 candidate, pass `--require-robot-force-metrics` to the same gate. It requires
+the four unconditional robot-force reductions on every row, finite and nonnegative; the
+per-exposed-pedestrian impulse and mean-active values must be `null` exactly when no pedestrian
+was exposed. The experimental pedestrian–pedestrian-equivalent variant may be absent when its
+prerequisites are unavailable, but a present variant must contain all six fields with the same
+denominator rule. The gate records counts of zero-exposure and absent-variant rows and up to 100
+invalid examples. This implements the denominator-aware correction recorded on issue #9668;
+`null` is a declared unavailable value, not a finite measurement.
+
 The gate's archive self-test on the actual 0.0.7 bundle paired all 20,160 rows with zero
 mismatches and zero scientific-manifest differences. It found the historical
 `min_separation_corrupted_m` field is NaN (not a number) on every row;

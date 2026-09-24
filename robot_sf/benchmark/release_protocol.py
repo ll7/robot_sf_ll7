@@ -673,12 +673,7 @@ def _load_manifest_metrics_section(
         "snqi_baseline_path": snqi_baseline_path,
         "snqi_baseline_sha256": snqi_baseline_sha256,
     }
-    v2_keys = tuple(
-        f"snqi_v2_{role}_{field}"
-        for role in ("weights", "anchors", "family")
-        for field in ("path", "sha256")
-    )
-    if any(metrics.get(key) is not None for key in v2_keys):
+    if any(str(key).startswith("snqi_v2_") for key in metrics):
         for role in ("weights", "anchors", "family"):
             path_key = f"snqi_v2_{role}_path"
             hash_key = f"snqi_v2_{role}_sha256"

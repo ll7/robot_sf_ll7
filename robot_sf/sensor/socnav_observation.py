@@ -320,6 +320,9 @@ class SocNavObservationFusion:
     _pedestrian_tracker: PedestrianTracker | None = field(init=False, default=None, repr=False)
     _tracking_step_index: int = field(init=False, default=0, repr=False)
     _buf_ped_track_ids: np.ndarray | None = field(init=False, default=None, repr=False)
+    _current_tracking_result: PedestrianTrackingResult | None = field(
+        init=False, default=None, repr=False
+    )
 
     def __post_init__(self) -> None:
         """Initialize optional predictive foresight encoder and reusable buffers."""
@@ -366,10 +369,21 @@ class SocNavObservationFusion:
         self._cache_position_cap_height = None
         self._lost_pedestrian_memory.clear()
         self._tracking_step_index = 0
+        self._current_tracking_result = None
         if self._pedestrian_tracker is not None:
             self._pedestrian_tracker.reset()
         if self._buf_ped_track_ids is not None:
             self._buf_ped_track_ids.fill(-1)
+
+    @property
+    def current_tracking_result(self) -> PedestrianTrackingResult | None:
+        """Return the immutable tracker result from the most recent observation update.
+
+        The result is an opt-in side channel for consumers that need maintained
+        tracks. It is separate from ``next_obs()`` and does not alter the public
+        ``SOCNAV_STRUCT`` schema.
+        """
+        return self._current_tracking_result
 
     def _position_cap(self) -> np.ndarray:
         """Return cached map position cap, refreshing when map_def identity or dimensions change.
@@ -612,6 +626,7 @@ class SocNavObservationFusion:
             Tuple of source-row track IDs and the immutable tracker result.  IDs
             are ``-1`` for rows without an accepted visible association.
         """
+        self._current_tracking_result = None
         source_track_ids = np.full((ped_positions.shape[0],), -1, dtype=np.int64)
         if self._pedestrian_tracker is None:
             return source_track_ids, None
@@ -637,6 +652,7 @@ class SocNavObservationFusion:
         )
         result = self._pedestrian_tracker.update(snapshot)
         self._tracking_step_index += 1
+        self._current_tracking_result = result
         for association in result.associations:
             if 0 <= association.observation_slot < source_track_ids.shape[0]:
                 source_track_ids[association.observation_slot] = association.track_id

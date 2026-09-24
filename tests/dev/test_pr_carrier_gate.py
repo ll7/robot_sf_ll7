@@ -7,7 +7,10 @@ import subprocess
 from unittest.mock import patch
 
 from scripts.dev.pr_carrier_gate import (
+    REVIEW_HEADING_VOCABULARY,
+    _review_carrier_error,
     check_merge_ready_carriers,
+    is_review_carrier_comment,
     review_comment_covers,
     stale_carrier_sentinels,
 )
@@ -98,6 +101,38 @@ def test_pure_review_carrier_accepts_exact_head_implementation_review() -> None:
     )
 
     assert review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_review_carrier_accepts_exact_head_independent_review() -> None:
+    """A truthful independent-review heading is equivalent to the canonical self-review (issue #9509)."""
+    comment = _review_comment().replace("Exact-head self-review", "Exact-head independent review")
+
+    assert review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_review_carrier_rejects_independent_review_prefixes() -> None:
+    """A longer unrelated phrase must not match the independent-review contract."""
+    comment = _review_comment().replace(
+        "Exact-head self-review", "Exact-head independent reviewability"
+    )
+
+    assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_no_carrier_error_names_recognized_vocabulary() -> None:
+    """A rejection names the accepted headings, not a bare no-carrier verdict (issue #9509)."""
+    error = _review_carrier_error([], live_head=HEAD_SHA, live_base=BASE_SHA)
+
+    assert error is not None
+    assert "no exact-head review carrier" in error
+    for heading in REVIEW_HEADING_VOCABULARY:
+        assert heading in error
+
+
+def test_heading_vocabulary_matches_header_patterns() -> None:
+    """Every documented vocabulary heading is recognized; patterns and vocabulary cannot drift."""
+    for heading in REVIEW_HEADING_VOCABULARY:
+        assert is_review_carrier_comment(f"## {heading}\n\nEvidence."), heading
 
 
 def test_pure_review_carrier_rejects_ambiguous_exact_head_review() -> None:
@@ -216,6 +251,31 @@ def test_gate_admits_implementation_review_compatibility_comment() -> None:
         side_effect=[
             _proc(stdout=_pr_payload(title=title, body=body)),
             _proc(stdout=_comments_payload(implementation_review)),
+            _proc(stdout=_reviews_payload()),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "ok"
+    assert result["carrier_source"] == "issue_comment"
+
+
+def test_gate_admits_independent_review_compatibility_comment() -> None:
+    """The independent-review wording passes the real gate path end to end (issue #9509)."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    independent_review = _review_comment().replace(
+        "Exact-head self-review", "Exact-head independent review"
+    )
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload(independent_review)),
             _proc(stdout=_reviews_payload()),
         ],
     ):

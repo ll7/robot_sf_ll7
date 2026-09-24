@@ -3,10 +3,9 @@
   "base_config_final_stage_reward_kwargs_sha256": "fc940972bcb0ec84f39d2752bfe1099f00c8ee1ecbb8886e0051f0e9837cb903",
   "baseline_preflight_config": "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml",
   "baseline_preflight_config_sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
-  "checkpoint_gamma_embedded": 0.99,
   "checkpoint_artifact": {
-    "asset_name": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
     "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+    "asset_name": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
     "location": "github_release",
     "metadata_asset": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json",
     "published_at_utc": "2026-05-24T05:32:03+00:00",
@@ -18,6 +17,7 @@
     "source": "github_release",
     "tag": "artifact/models-2026-05-registry-v1"
   },
+  "checkpoint_gamma_embedded": 0.99,
   "checkpoint_gamma_source": "SB3 data blob: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
   "checkpoint_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
   "checkpoint_sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
@@ -30,7 +30,7 @@
   "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
   "gamma_training_config_declared": null,
   "gamma_used_for_discounted_replay": 0.99,
-  "generated_at_utc": "2026-09-24T16:29:45.136395+00:00",
+  "generated_at_utc": "2026-09-24T17:25:21.901685+00:00",
   "observation_contract": {
     "fallback_or_degraded_execution": false,
     "occupancy_grid_preserved": true,
@@ -39,8 +39,8 @@
     "status": "canonical_raw_grid_socnav_with_predictive_foresight"
   },
   "predictive_checkpoint_artifact": {
-    "asset_name": "predictive_proxy_selected_v2_full-predictive_model.pt",
     "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt",
+    "asset_name": "predictive_proxy_selected_v2_full-predictive_model.pt",
     "location": "github_release",
     "metadata_asset": "predictive_proxy_selected_v2_full-metadata.json",
     "published_at_utc": "2026-05-24T05:32:03+00:00",
@@ -57,7 +57,7 @@
   "producer_script": "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py",
   "producer_script_sha256": "7cf38669c725117b885568f5db850f0651413e4cef1ae7793478def21cbf9b4f",
   "producer_source_blob_sha256": "7cf38669c725117b885568f5db850f0651413e4cef1ae7793478def21cbf9b4f",
-  "producer_source_commit": "89b2935301b26ae13a5d5618b0a76a2f5c0e96ec",
+  "producer_source_commit": "b8d66fcc46bfa91e56bf8677a0b8e74c33ad24ac",
   "producer_source_commit_note": "This is the source/code commit used to generate the evidence. Generated evidence is committed later in a separate artifact commit; this binding intentionally does not self-reference that later artifact commit.",
   "resolved_cli": {
     "hold_start_offset": 20,

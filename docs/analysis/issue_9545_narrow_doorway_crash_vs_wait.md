@@ -34,8 +34,12 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
   (git blob `73d9315ad48a0f9da55389088275c760f140b081` at diagnostic head).
 - Binding provenance: `binding.json` records `producer_source_commit` and the SHA-256 of the
   producer bytes stored at that commit. Generation fails closed unless that tracked blob matches
-  the current producer source. The generated evidence is committed later in a separate artifact
-  commit; the binding intentionally does not self-reference that later commit.
+  the current producer source. The repaired producer was frozen at commit
+  `b8d66fcc46bfa91e56bf8677a0b8e74c33ad24ac` (source blob SHA-256
+  `7cf38669c725117b885568f5db850f0651413e4cef1ae7793478def21cbf9b4f`); a fresh replay from
+  that exact source reproduced all 15 committed non-binding trace, table, and figure artifacts
+  byte-for-byte. The generated evidence is committed separately; the binding intentionally does
+  not self-reference that later artifact commit.
 - Resolved run parameters: `binding.json.resolved_cli` records the actual seed tuple and the
   `hold_start_offset`/`hold_steps` values passed to the producer. `scenario_seeds` remains the
   scenario-file declaration and is not a substitute for the resolved run subset.

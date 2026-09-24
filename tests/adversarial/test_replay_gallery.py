@@ -184,12 +184,44 @@ def test_gallery_materializes_replays_compares_and_renders(
     assert case["feasibility_verdict"]["status"] == "admissible_by_source_certificate"
     assert case["rendering"]["status"] == "rendered"
     assert case["rendering"]["artifacts"] == [f"cases/{case['case_id']}/figures/trajectory.png"]
+    assert case["video_status"] == {
+        "requested": False,
+        "renderer": "none",
+        "status": "disabled",
+        "reason": None,
+        "artifacts": [],
+    }
     assert calls[0]["record_simulation_step_trace"] is True
     assert calls[0]["video_enabled"] is False
     assert calls[0]["scenario_path"].is_file()
     assert (output_dir / case["case_manifest_path"]).is_file()
     assert (output_dir / "README.md").is_file()
     assert (output_dir / "gallery_manifest.json").is_file()
+
+
+def test_gallery_marks_requested_video_unavailable_when_runner_emits_none(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    calls = _install_fake_replay(monkeypatch)
+
+    result = replay_gallery.build_replay_gallery(
+        manifest,
+        tmp_path / "gallery",
+        video=True,
+        render=False,
+    )
+
+    case = result["cases"][0]
+    assert calls[0]["video_enabled"] is True
+    assert case["video_status"] == {
+        "requested": True,
+        "renderer": "synthetic",
+        "status": "unavailable",
+        "reason": "canonical_runner_did_not_emit_video_artifact",
+        "artifacts": [],
+    }
+    assert case["replay"]["video_status"] == case["video_status"]
 
 
 def test_gallery_preserves_non_finite_source_episode_bytes(

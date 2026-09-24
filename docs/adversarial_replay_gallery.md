@@ -49,8 +49,10 @@ case manifest.
   classification, copied scenario and file-backed runner configuration, effective runner settings,
   replay comparison, and available rendering outputs.
 - `cases/<case-id>/figures/` uses the existing still, filmstrip, and trajectory renderer on the
-  canonical replay trace. If requested, synthetic replay video is also captured; its current view
-  shows the robot path without pedestrian overlays.
+  canonical replay trace. Each case records video as `rendered`, `unavailable`, `not_attempted`,
+  or `disabled`; a request that produces no video file is never reported as successful. The
+  current map-backed batch runner does not emit synthetic video for these search scenarios, so
+  their case manifests mark requested video as unavailable.
 
 The original source episode JSONL is copied byte-for-byte into each case bundle, so diagnostic
 values such as non-finite sentinels are preserved without rewriting source evidence. The source

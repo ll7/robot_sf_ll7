@@ -26,6 +26,7 @@ from typing import Any
 
 SCHEMA = "issue_completion_receipt.v1"
 VERIFICATION_SCHEMA = "issue_completion_receipt_verification.v1"
+TERMINAL_OUTCOME_SCHEMA = "research_terminal_outcome.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 SHA_RE = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -52,6 +53,7 @@ CRITERION_DISPOSITIONS = frozenset(
     {"met", "not_met", "blocked", "skipped", "unavailable", "not_applicable", "deferred"}
 )
 VERIFIER_STATUSES = frozenset({"verified", "pending", "unavailable", "not_applicable"})
+TERMINAL_OUTCOME_CLASSIFICATIONS = frozenset({"success", "no_signal", "no_change"})
 REQUIRED_DRIFT_KEYS = frozenset({"head", "contract", "artifacts", "validation_inputs", "review"})
 DEFAULT_SUBPROCESS_TIMEOUT_SECONDS = 30
 
@@ -236,6 +238,69 @@ def _validate_criteria(criteria: object, *, errors: list[str]) -> None:
             errors.append(f"{prefix}.evidence must contain at least one non-empty string")
 
 
+def _validate_terminal_outcome(  # noqa: C901 - schema and exact-head binding gate
+    outcome: object,
+    *,
+    artifacts: object,
+    head_sha: str | None,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    """Validate an optional result classification against exact-head artifacts.
+
+    The result is descriptive metadata.  Admission still applies the existing
+    passing-validation, complete-criteria, independent-review, and Git-backed
+    checks; a null result cannot waive any of those gates.
+    """
+    row = _mapping(outcome, field="terminal_outcome", errors=errors)
+    if row is None:
+        return None
+    if row.get("schema") != TERMINAL_OUTCOME_SCHEMA:
+        errors.append(f"terminal_outcome.schema must be {TERMINAL_OUTCOME_SCHEMA!r}")
+    classification = row.get("classification")
+    if (
+        not isinstance(classification, str)
+        or classification not in TERMINAL_OUTCOME_CLASSIFICATIONS
+    ):
+        errors.append(
+            "terminal_outcome.classification must be one of "
+            f"{sorted(TERMINAL_OUTCOME_CLASSIFICATIONS)}"
+        )
+    _string(row.get("summary"), field="terminal_outcome.summary", errors=errors)
+    evidence = row.get("evidence_artifacts")
+    if (
+        not isinstance(evidence, list)
+        or not evidence
+        or any(not isinstance(path, str) or not path.strip() for path in evidence)
+    ):
+        errors.append("terminal_outcome.evidence_artifacts must contain non-empty artifact paths")
+        return dict(row)
+    if len(set(evidence)) != len(evidence):
+        errors.append("terminal_outcome.evidence_artifacts must not contain duplicates")
+
+    exact_head_paths: set[str] = set()
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if not isinstance(artifact, Mapping):
+                continue
+            path = artifact.get("path")
+            digest = artifact.get("digest")
+            if (
+                isinstance(path, str)
+                and not _path_error(path, field="artifacts.path")
+                and _is_sha256(digest)
+                and artifact.get("captured_head_sha") == head_sha
+            ):
+                exact_head_paths.add(path)
+    if head_sha is None:
+        errors.append("terminal_outcome requires a delivered head SHA")
+    for path in evidence:
+        if path not in exact_head_paths:
+            errors.append(
+                f"terminal_outcome evidence artifact {path!r} is not declared at the delivered head"
+            )
+    return dict(row)
+
+
 def _validate_string_lists(value: object, *, field: str, errors: list[str]) -> None:
     """Validate a required list of plain strings."""
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
@@ -367,6 +432,16 @@ def validate_receipt(  # noqa: C901, PLR0912, PLR0913, PLR0915 - schema gate
         head_sha=head_sha,
         errors=errors,
     )
+    terminal_outcome = (
+        _validate_terminal_outcome(
+            receipt.get("terminal_outcome"),
+            artifacts=receipt.get("artifacts"),
+            head_sha=head_sha,
+            errors=errors,
+        )
+        if "terminal_outcome" in receipt
+        else None
+    )
     _validate_criteria(receipt.get("acceptance_criteria"), errors=errors)
 
     residuals = _mapping(receipt.get("residuals"), field="residuals", errors=errors)
@@ -469,6 +544,7 @@ def validate_receipt(  # noqa: C901, PLR0912, PLR0913, PLR0915 - schema gate
         "issue": receipt.get("issue"),
         "base_sha": base_sha,
         "head_sha": head_sha,
+        "terminal_outcome": terminal_outcome,
         "independent_verifier_status": (
             verifier.get("status") if isinstance(verifier, Mapping) else None
         ),
@@ -579,6 +655,7 @@ def admit_completion_receipt(  # noqa: C901 - close/promotion admission is fail-
             if isinstance(receipt.get("delivery"), Mapping)
             else None
         ),
+        "terminal_outcome": basic.get("terminal_outcome"),
         "independent_verifier_status": basic.get("independent_verifier_status"),
     }
 

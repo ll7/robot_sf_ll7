@@ -26,7 +26,9 @@ Each certificate includes:
 - `benchmark_eligibility`: `eligible`, `stress_only`, or `excluded`.
 - `checks`: deterministic geometry, route, planner, kinodynamic, and dynamic checks.
 - `route_certificates`: per-route evidence for every applicable robot route.
-- `evidence`: optional scenario metadata and scenario-difficulty provenance.
+- `evidence`: optional scenario metadata and scenario-difficulty provenance. File-based
+  certificates also record `source_artifact_sha256`, captured when the certifier reads the
+  manifest; the adversarial adapter requires it to match the candidate's current bytes.
 
 Benchmark inclusion policy:
 
@@ -157,7 +159,13 @@ enough infrastructure policy data to verify outside-map, obstacle, or infrastruc
 those invalid certificates remain `admissible_feasibility_unknown`. An oracle exclusion is scoped to its recorded robot envelope;
 the envelope and certificate assumptions remain attached to the verdict. A
 `dynamically_overconstrained` certificate, a blocked or truncated oracle, missing provenance, or
-conflicting evidence remains `admissible_feasibility_unknown`. Since `scenario_cert.v1` reports the
+conflicting evidence remains `admissible_feasibility_unknown`. A positive actor-free oracle result
+requires a `passed` completion with route completion true, no blocker, explicit
+`fallback_or_degraded: false`, a successful termination reason, positive completion steps within
+the horizon, and a matching horizon margin. Missing fallback status, contradictory completion
+status/termination, or inconsistent steps remain blocked or unknown. A geometric oracle exclusion
+must carry the producer's no-path completion record; a contradictory positive completion cannot be
+overridden by the geometric label. Since `scenario_cert.v1` reports the
 highest-severity route at the scenario level, geometry or kinematic exclusion requires every
 applicable route certificate to support the same excluded classification; a different or usable
 route keeps the whole case unknown. Each route's reason must also match check data from the
@@ -197,6 +205,8 @@ configuration match. Incomplete records stay visible in `evidence` and do not es
 Artifact provenance is bound across evidence sources: the certificate `source` and oracle
 `scenario_manifest` references must resolve to bytes with the same SHA-256 as
 `scenario_artifact_path`, and each execution's `scenario_sha256` must equal that digest. A
+certificate's captured `evidence.source_artifact_sha256` must also equal that digest, so reusing a
+certificate after editing the source file at the same path leaves it unbound. A
 missing or unavailable canonical artifact, an unresolvable source reference, or any mismatch
 leaves that evidence unusable for rejection or feasibility classification while preserving the
 captured input and reason code. For multi-scenario manifests, callers should pass the exact

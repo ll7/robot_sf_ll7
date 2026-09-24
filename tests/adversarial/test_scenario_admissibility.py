@@ -32,9 +32,14 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     FEASIBILITY_ORACLE_SCHEMA,
     ISSUE_5574_REPORT_SCHEMA,
 )
-from robot_sf.scenario_certification.v1 import CERT_SCHEMA_VERSION
+from robot_sf.scenario_certification.v1 import (
+    CERT_SCHEMA_VERSION,
+    certificate_to_dict,
+    certify_scenario_file,
+)
 
 _SCENARIO_ARTIFACT = Path(__file__).resolve().parent / "fixtures/issue_9651/case_static.yaml"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_ARTIFACT_SHA256 = hashlib.sha256(_SCENARIO_ARTIFACT.read_bytes()).hexdigest()
 
 
@@ -96,7 +101,7 @@ def _certificate(
                 "evidence": {},
             }
         ],
-        "evidence": {},
+        "evidence": {"source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256},
     }
 
 
@@ -137,8 +142,24 @@ def _oracle(
             "benchmark_eligibility": "eligible" if geometric else "excluded",
         },
         "completion": {
-            "route_completion_feasible": complete,
-            "status": "passed" if complete else "failed",
+            "route_completion_feasible": (
+                True if complete else None if status == "blocked" else False
+            ),
+            "min_completion_steps": 20 if complete else None,
+            "horizon_steps": 100,
+            "completion_horizon_margin_steps": 80 if complete else None,
+            "termination_reason": "success" if complete else None,
+            "status": ("passed" if complete else "blocked" if status == "blocked" else "failed"),
+            "blocker": (
+                None
+                if complete
+                else "rollout_unavailable"
+                if status == "blocked"
+                else "route_geometrically_infeasible_no_traversal_path"
+                if status == "infeasible_by_construction"
+                else "rollout_incomplete"
+            ),
+            "fallback_or_degraded": False,
         },
     }
 
@@ -752,6 +773,95 @@ def test_actor_free_oracle_success_requires_a_static_named_report() -> None:
     )
     assert dynamic.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert unbound.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("mutation", "value"),
+    [
+        ("status", "blocked"),
+        ("blocker", "rollout_was_blocked"),
+        ("fallback_or_degraded", True),
+        ("termination_reason", "collision"),
+        ("min_completion_steps", 101),
+        ("completion_horizon_margin_steps", 81),
+    ],
+)
+def test_contradictory_actor_free_completion_cannot_prove_feasibility(
+    mutation: str, value: Any
+) -> None:
+    """Blocked, fallback, termination, and horizon conflicts retain the candidate as unknown."""
+    report = _oracle_report(_oracle())
+    completion = report["cells"][0]["nominal_verdict"]["completion"]
+    completion[mutation] = value
+
+    verdict = classify_scenario_admissibility(
+        "case-static", scenario_certificate=_certificate(), feasibility_evidence=report
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "oracle_success_not_bound_to_static_case_and_provenance" in verdict.reason_codes
+
+
+def test_contradictory_positive_completion_cannot_be_overridden_by_geometric_exclusion() -> None:
+    """A geometrically excluded cell with contradictory positive completion stays unknown."""
+    report = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    completion = report["completion"]
+    completion.update(
+        route_completion_feasible=True,
+        min_completion_steps=20,
+        completion_horizon_margin_steps=80,
+        termination_reason="success",
+        status="passed",
+        blocker=None,
+    )
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=_certificate(),
+        feasibility_evidence=report,
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+
+
+def test_producer_certificate_digest_is_bound_through_admissibility_adapter(
+    tmp_path: Path,
+) -> None:
+    """A source-file edit after certification invalidates the producer's captured digest."""
+    scenario_path = tmp_path / "case_static.yaml"
+    map_path = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
+    original_bytes = f"""scenarios:
+  - name: case-static
+    map_file: {map_path.as_posix()}
+    simulation_config:
+      max_episode_steps: 100
+      ped_density: 0.0
+    robot_config: {{}}
+    metadata:
+      archetype: head_on_corridor
+    seeds: [19]
+""".encode()
+    scenario_path.write_bytes(original_bytes)
+    certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    )
+    original_digest = hashlib.sha256(original_bytes).hexdigest()
+    assert certificate["evidence"]["source_artifact_sha256"] == original_digest
+
+    scenario_path.write_bytes(original_bytes + b"# revised after certification\n")
+    verdict = _classify_scenario_admissibility(
+        "case-static",
+        scenario_artifact_path=scenario_path,
+        scenario_id="case-static",
+        scenario_certificate=certificate,
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_producer_source_digest_missing_or_mismatch" in (
+        verdict.reason_codes
+    )
 
 
 def test_actor_free_oracle_success_does_not_resolve_unknown_invalid_certificate() -> None:

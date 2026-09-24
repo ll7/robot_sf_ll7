@@ -292,9 +292,10 @@ def _prepare_candidate(  # noqa: C901 - keep the ordered row-disposition gates t
             index, candidate_payload, "episode_record_invalid_or_ambiguous"
         )
     scenario_identity, scenario_error = _scenario_identity(scenario_path)
-    if scenario_error is not None:
-        return None, _accounting_row(index, candidate_payload, scenario_error)
-    assert scenario_identity is not None
+    if scenario_error is not None or scenario_identity is None:
+        return None, _accounting_row(
+            index, candidate_payload, scenario_error or "scenario_identity_unavailable"
+        )
     effective_hash, hash_error = _source_effective_scenario_hash(
         scenario_path, scenario_identity, source_root=source_root, root=root
     )
@@ -399,11 +400,10 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         source_root=selected["source_root"],
     )
     result["execution_config"] = execution_config
-    if config_error is not None:
+    if config_error is not None or runner_config is None:
         result["verification_status"] = "not_replayed_config_unavailable"
-        result["replay_error"] = config_error
+        result["replay_error"] = config_error or "runner_config_unavailable"
         return _complete_case(result, case_dir, context.output_dir)
-    assert runner_config is not None
 
     replay_summary, replay_error = _run_one_episode(
         case_dir / materialization["scenario_path"],
@@ -814,9 +814,11 @@ def _render_replay(
         frame_steps=frame_steps,
         episode_records=episode_records,
     )
-    if error is not None:
-        return {"status": "failed", "reason": f"figure_generation_failed: {error}", "artifacts": []}
-    assert rendered is not None
+    if error is not None or rendered is None:
+        reason = (
+            f"figure_generation_failed: {error}" if error else "figure_generation_missing_result"
+        )
+        return {"status": "failed", "reason": reason, "artifacts": []}
     artifacts: list[str] = []
     for raw_path in rendered.get("artifact_paths", []):
         try:

@@ -50,6 +50,7 @@ _CERTIFICATE_GEOMETRIC_REASONS = {
 }
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 _GIT_COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
+_CHECKPOINT_FREE_CLASSICAL_PLANNERS = frozenset({"goal", "social_force", "orca"})
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "benchmark/schemas/scenario_admissibility.v1.json"
 )
@@ -206,6 +207,7 @@ def _certificate(
         "benchmark_eligibility": eligibility,
         "settings": cert.get("checks", {}).get("settings", {}),
         "route_certificates": cert.get("route_certificates", []),
+        "route_inventory": _route_inventory_summary(cert),
     }
     if classification == "invalid" and eligibility == "excluded":
         invalidity = _invalid_certificate_category(cert)
@@ -241,7 +243,8 @@ def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: s
     """Require every applicable route to support a scenario-level exclusion."""
     routes = cert.get("route_certificates")
     return (
-        isinstance(routes, Sequence)
+        _route_inventory_complete(cert)
+        and isinstance(routes, Sequence)
         and not isinstance(routes, (str, bytes))
         and bool(routes)
         and all(
@@ -253,20 +256,90 @@ def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: s
     )
 
 
+def _route_inventory_complete(cert: Mapping[str, Any]) -> bool:
+    """Require the declared route count and unique route identities to match the rows."""
+    checks = cert.get("checks")
+    routes = cert.get("route_certificates")
+    if (
+        not isinstance(checks, Mapping)
+        or not isinstance(routes, Sequence)
+        or isinstance(routes, (str, bytes))
+    ):
+        return False
+    route_count = checks.get("route_count")
+    if (
+        isinstance(route_count, bool)
+        or not isinstance(route_count, int)
+        or route_count < 0
+        or route_count != len(routes)
+        or route_count == 0
+    ):
+        return False
+    route_ids: set[str] = set()
+    route_pairs: set[tuple[int, int]] = set()
+    for route in routes:
+        if not isinstance(route, Mapping):
+            return False
+        route_id, spawn_id, goal_id = (
+            route.get("route_id"),
+            route.get("spawn_id"),
+            route.get("goal_id"),
+        )
+        if (
+            not isinstance(route_id, str)
+            or not route_id.strip()
+            or isinstance(spawn_id, bool)
+            or not isinstance(spawn_id, int)
+            or isinstance(goal_id, bool)
+            or not isinstance(goal_id, int)
+        ):
+            return False
+        identity = (spawn_id, goal_id)
+        if route_id in route_ids or identity in route_pairs:
+            return False
+        route_ids.add(route_id)
+        route_pairs.add(identity)
+    return True
+
+
+def _route_inventory_summary(cert: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose route inventory completeness alongside the source certificate evidence."""
+    checks = cert.get("checks")
+    routes = cert.get("route_certificates")
+    route_count = checks.get("route_count") if isinstance(checks, Mapping) else None
+    observed_count = (
+        len(routes)
+        if isinstance(routes, Sequence) and not isinstance(routes, (str, bytes))
+        else None
+    )
+    return {
+        "declared_count": route_count,
+        "observed_count": observed_count,
+        "complete": _route_inventory_complete(cert),
+    }
+
+
 def _invalid_certificate_category(cert: Mapping[str, Any]) -> str | None:
     routes = cert.get("route_certificates")
     if not isinstance(routes, Sequence) or isinstance(routes, (str, bytes)):
         return None
     if not routes:
         reasons = cert.get("reasons")
+        checks = cert.get("checks")
+        route_count = checks.get("route_count") if isinstance(checks, Mapping) else None
         if (
-            isinstance(reasons, list)
+            isinstance(route_count, int)
+            and not isinstance(route_count, bool)
+            and route_count == 0
+            and isinstance(reasons, list)
             and reasons
             and all(
                 reason in {"map_pool_empty", "no_applicable_robot_routes"} for reason in reasons
             )
         ):
             return STRUCTURALLY_INVALID
+        return None
+    if not _route_inventory_complete(cert):
         return None
 
     categories: set[str] = set()
@@ -373,28 +446,8 @@ def _oracle(
         reasons.append("feasibility_oracle_claim_boundary_missing_or_unsupported")
         return None, assumptions
     if _oracle_excludes(nominal):
-        if cert_valid and _certificate_route_coverage_unresolved(cert):
-            reasons.append("oracle_geometric_exclusion_route_coverage_unresolved")
-            return None, assumptions
-        reasons.append("oracle_geometric_exclusion_under_named_envelope")
-        return GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY, assumptions
-    if (
-        nominal.get("status") == "feasible"
-        and nominal.get("feasible") is True
-        and isinstance(geo, Mapping)
-        and geo.get("route_geometrically_feasible") is True
-        and isinstance(completion, Mapping)
-        and completion.get("route_completion_feasible") is True
-        and cert_valid
-        and _certificate_supports_actor_free_rollout(cert)
-        and isinstance(report.get("rollout_algo"), str)
-        and bool(report["rollout_algo"].strip())
-        and isinstance(report.get("rollout_seed"), int)
-        and not isinstance(report["rollout_seed"], bool)
-        and report["rollout_seed"] >= 0
-        and isinstance(report.get("scenario_manifest"), str)
-        and bool(report["scenario_manifest"].strip())
-    ):
+        return _classify_oracle_exclusion(cert, cert_valid, reasons), assumptions
+    if _oracle_proves_actor_free_rollout(nominal, report, geo, completion, cert, cert_valid):
         assumptions["empirical_scope"] = "named_actor_free_rollout_of_original_static_case"
         reasons.append("actor_free_reference_completed_original_static_case")
         return EMPIRICALLY_FEASIBLE, assumptions
@@ -405,6 +458,51 @@ def _oracle(
         else "oracle_success_not_bound_to_static_case_and_provenance"
     )
     return None, assumptions
+
+
+def _classify_oracle_exclusion(cert: Any, cert_valid: bool, reasons: list[str]) -> str | None:
+    """Only accept a geometric exclusion when complete scenario route coverage agrees."""
+    if not cert_valid or _certificate_route_coverage_unresolved(cert):
+        reasons.append("oracle_geometric_exclusion_route_coverage_unresolved")
+        return None
+    if not _certificate_supports_oracle_exclusion(cert):
+        reasons.append("oracle_geometric_exclusion_certificate_conflict")
+        return None
+    reasons.append("oracle_geometric_exclusion_under_named_envelope")
+    return GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+
+
+def _oracle_proves_actor_free_rollout(
+    nominal: Mapping[str, Any],
+    report: Mapping[str, Any],
+    geo: Any,
+    completion: Any,
+    cert: Any,
+    cert_valid: bool,
+) -> bool:
+    """Check all bindings required for empirical actor-free rollout evidence."""
+    algo, seed, manifest = (
+        report.get("rollout_algo"),
+        report.get("rollout_seed"),
+        report.get("scenario_manifest"),
+    )
+    return (
+        nominal.get("status") == "feasible"
+        and nominal.get("feasible") is True
+        and isinstance(geo, Mapping)
+        and geo.get("route_geometrically_feasible") is True
+        and isinstance(completion, Mapping)
+        and completion.get("route_completion_feasible") is True
+        and cert_valid
+        and _certificate_supports_actor_free_rollout(cert)
+        and isinstance(algo, str)
+        and bool(algo.strip())
+        and isinstance(seed, int)
+        and not isinstance(seed, bool)
+        and seed >= 0
+        and isinstance(manifest, str)
+        and bool(manifest.strip())
+    )
 
 
 def _select_oracle_cell(
@@ -451,16 +549,33 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
     )
 
 
-def _certificate_route_coverage_unresolved(cert: Any) -> bool:
-    """Return whether a valid exclusion certificate leaves some routes unresolved."""
-    if not isinstance(cert, Mapping) or cert.get("benchmark_eligibility") != "excluded":
+def _certificate_supports_oracle_exclusion(cert: Any) -> bool:
+    """Require a complete matching certificate before using an oracle exclusion globally."""
+    if not isinstance(cert, Mapping) or not _route_inventory_complete(cert):
         return False
+    classification = cert.get("classification")
+    if classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
+        return cert.get(
+            "benchmark_eligibility"
+        ) == "excluded" and _all_routes_confirm_impossibility(cert, str(classification))
+    if classification == "invalid":
+        return (
+            cert.get("benchmark_eligibility") == "excluded"
+            and _invalid_certificate_category(cert) == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+        )
+    return False
+
+
+def _certificate_route_coverage_unresolved(cert: Any) -> bool:
+    """Return whether a certificate cannot establish complete route coverage."""
+    if not isinstance(cert, Mapping) or not _route_inventory_complete(cert):
+        return True
     classification = cert.get("classification")
     if classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
         return not _all_routes_confirm_impossibility(cert, str(classification))
     if classification == "invalid":
         return _invalid_certificate_category(cert) is None
-    return True
+    return False
 
 
 def _static_certificate(cert: Any) -> bool:
@@ -494,7 +609,7 @@ def _certificate_supports_actor_free_rollout(cert: Any) -> bool:
         for route in routes
     ):
         return False
-    return _static_certificate(cert)
+    return _route_inventory_complete(cert) and _static_certificate(cert)
 
 
 def _execution(
@@ -576,13 +691,26 @@ def _execution_digest_fields_valid(source: Mapping[str, Any]) -> bool:
 
 
 def _checkpoint_digest_is_valid(planner_id: str, checkpoint_hash: Any) -> bool:
-    """Accept the no-checkpoint sentinel only for a known classical planner."""
+    """Accept the no-checkpoint sentinel only for an explicit checkpoint-free planner."""
     if isinstance(checkpoint_hash, str) and _SHA256.fullmatch(checkpoint_hash):
         return True
     if checkpoint_hash != "not_applicable":
         return False
     metadata = enrich_algorithm_metadata(algo=planner_id, metadata={})
-    return metadata.get("baseline_category") == "classical"
+    if (
+        metadata.get("baseline_category") != "classical"
+        or metadata.get("canonical_algorithm") not in _CHECKPOINT_FREE_CLASSICAL_PLANNERS
+    ):
+        return False
+    semantics = metadata.get("policy_semantics")
+    upstream = metadata.get("upstream_reference")
+    if isinstance(semantics, str) and "checkpoint" in semantics.lower():
+        return False
+    return not (
+        isinstance(upstream, Mapping)
+        and isinstance(upstream.get("default_checkpoint"), str)
+        and bool(upstream["default_checkpoint"].strip())
+    )
 
 
 def _execution_outcome_valid(source: Mapping[str, Any]) -> bool:

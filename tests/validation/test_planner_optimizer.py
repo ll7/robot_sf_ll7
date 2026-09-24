@@ -260,3 +260,26 @@ def test_tiny_optimizer_smoke_persists_invalid_trials_and_export(tmp_path: Path)
     )
     with pytest.raises(FileExistsError):
         run_planner_optimization(config_path, output, evaluator=fake_evaluator)
+
+
+def test_unexpected_evaluator_bug_propagates_and_preserves_partial_run(tmp_path: Path) -> None:
+    config_path = tmp_path / "unexpected-error.yaml"
+    config = yaml.safe_load(
+        (_ROOT / "configs/policy_search/planner_optimizer_issue9650.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    config["run_id"] = "optimizer_unexpected_error"
+    config["candidate_registry"] = "docs/context/policy_search/candidate_registry.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    output = tmp_path / "partial-run"
+
+    def broken_evaluator(**kwargs: Any) -> dict[str, Any]:
+        raise AttributeError("unexpected evaluator programming error")
+
+    with pytest.raises(AttributeError, match="unexpected evaluator programming error"):
+        run_planner_optimization(config_path, output, evaluator=broken_evaluator)
+
+    manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "running"
+    assert (output / ".run.lock").is_file()

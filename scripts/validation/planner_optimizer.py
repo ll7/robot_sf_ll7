@@ -45,6 +45,14 @@ OBJECTIVE_NAMES = (
     "comfort_force_score",
 )
 _VALID_TERMINATIONS = {"success", "collision", "terminated", "truncated", "max_steps"}
+_RECOVERABLE_EVALUATION_ERRORS = (
+    AssertionError,
+    KeyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @dataclass(frozen=True)
@@ -823,7 +831,7 @@ def _candidate_evaluation(
             else None,
             "stage_summary_path": _display_path(summary_path),
         }
-    except Exception as exc:  # noqa: BLE001 - failed evaluations are preserved as invalid trials.
+    except _RECOVERABLE_EVALUATION_ERRORS as exc:
         return {
             "status": "invalid",
             "score": score_records([], expected_episodes, suite.identities(scenarios)),
@@ -889,7 +897,7 @@ def _run_method(
                 suite=config.train,
                 evaluator=context.evaluator,
             )
-        except Exception as exc:  # noqa: BLE001 - malformed trials remain visible in JSONL.
+        except _RECOVERABLE_EVALUATION_ERRORS as exc:
             trial_dir.mkdir(parents=True, exist_ok=True)
             candidate_path = trial_dir / "candidate.yaml"
             candidate_path.write_text(

@@ -13,9 +13,10 @@ For the software-package lane, first build the immutable candidate with
 TestPyPI → PyPI promotion. That workflow is separate from this benchmark-data checklist and
 requires a passed public-index cold-install gate before production publication.
 
-The current campaign contract is the 14-arm, differential-drive matrix in
+The S30/H600 campaign contract is the 14-arm, differential-drive matrix in
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
-Its publication-grade manifest is
+The earlier concrete v0.1 manifest and DOI pair are retained as historical
+compatibility references:
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`, with fresh
 concept DOI `10.5281/zenodo.22077447` and reserved version DOI
 `10.5281/zenodo.22077448`.
@@ -34,9 +35,10 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 ## Before Running
 
 - confirm the target branch/tag is the intended immutable code state
-- confirm the approved S30/H600 full-release manifest is
-  `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`; do not
-  substitute the historical v1 seven-planner/S3 manifest
+- for a new v0.2 release, complete the bootstrap/resolution sequence below and
+  use `output/release/release_identity.resolved.json` as the campaign manifest;
+  the tracked concrete v0.1 manifest is historical compatibility input only
+- do not substitute the historical v1 seven-planner/S3 manifest
 - confirm the bounded smoke manifest is correct:
   - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
 - confirm the fallback-prone hybrid stress manifest is correct:
@@ -233,9 +235,10 @@ runtime-smoke receipt, then stops before campaign allocation:
 
 ```bash
 REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
+RELEASE_IDENTITY=output/release/release_identity.resolved.json
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest "$RELEASE_IDENTITY" \
   --mode rehearsal \
   --source-commit "$REHEARSAL_SOURCE_COMMIT" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
@@ -244,11 +247,11 @@ uv run python scripts/tools/run_benchmark_release.py \
 
 The command pins and records the exact clean checkout being rehearsed; if a
 reviewed SHA was selected separately, set `REHEARSAL_SOURCE_COMMIT` to that
-exact 40-character value instead. Never substitute a planning/base SHA.
-The canonical benchmark-data manifest is retained as a historical compatibility
-manifest without `source_sha`, so this explicit pin is required. If a future
-manifest declares `source_sha`, that manifest value is authoritative and any
-explicit argument must match it.
+exact 40-character value instead. Never substitute a planning/base SHA. The
+v0.2 resolved identity declares `source_sha`; it is authoritative, and the
+explicit pin must match it and the clean checked-out `HEAD`. Only historical
+rehearsal of the concrete v0.1 manifest requires supplying the exact SHA
+directly because that legacy manifest omits `source_sha`.
 
 Successful rehearsal output is admission/preflight evidence only. It reports
 `campaign_execution_status: not_started` and must not be treated as benchmark
@@ -283,13 +286,16 @@ planner-outcome evidence and do not treat them as successful navigation.
 Guarded PPO's exact `fallback_safe` label is likewise its declared Risk-DWA
 shield intervention; best-effort, uncertainty, and generic fallback markers
 remain forbidden. A benign one-cell runtime smoke does not replace this stress
-gate. Then run:
+gate. For a new v0.2 campaign, after bootstrap reservation and cold identity
+verification above, use the resolved identity and a fresh campaign ID:
 
 ```bash
+RELEASE_IDENTITY=output/release/release_identity.resolved.json
+CAMPAIGN_ID=<fresh-unique-v0.2-campaign-id>
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest "$RELEASE_IDENTITY" \
   --label release \
-  --campaign-id issue7742_benchmark_data_release_s30_h600_20260822 \
+  --campaign-id "$CAMPAIGN_ID" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
 ```

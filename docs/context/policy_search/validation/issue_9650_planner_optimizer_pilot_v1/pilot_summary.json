@@ -1,0 +1,931 @@
+{
+  "actual_evaluation_episode_count": 18,
+  "budget": {
+    "actual_search_evaluation_episodes": 12,
+    "additional_train_baseline_evaluations": 2,
+    "episodes_per_trial": 2,
+    "evaluation_budget_per_method": 6,
+    "heldout_baseline_and_selected_evaluations_max": 4,
+    "methods": [
+      "random",
+      "tpe"
+    ],
+    "random_seed": 96501,
+    "search_evaluations": 12,
+    "tpe_seed": 96502,
+    "tpe_startup_trials": 1,
+    "trials_per_method": 3
+  },
+  "cli_exit_code": 0,
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/optimize_planner_config.py --config configs/policy_search/planner_optimizer_issue9650.yaml --output-dir docs/context/policy_search/validation/issue_9650_planner_optimizer_pilot_v1",
+  "config": {
+    "baseline_base_config_path": "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml",
+    "baseline_base_config_sha256": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374",
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "baseline_candidate_config_path": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress.yaml",
+    "baseline_candidate_config_sha256": "cff2c371eb971a0eb721e5b25b493550d8bf8d4c00d493f4001cf30f2eb09e5b",
+    "baseline_registry_path": "docs/context/policy_search/candidate_registry.yaml",
+    "baseline_registry_sha256": "92e1a1488b519a63ff8bb8dc362d9d58175dacae3e11e72a0fa3b4dbd8db78e3",
+    "config_path": "configs/policy_search/planner_optimizer_issue9650.yaml",
+    "config_sha256": "065ff22b29560dc6a2f64142d1ba4c8e5c975bcff803954ff3863f66917b57b6"
+  },
+  "environment": {
+    "optuna_version": "4.9.0",
+    "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",
+    "pyproject_sha256": "8158dcf2d83f61bcd93a4bae18aa3b32806f14b6b44254b05a868ce8c2c3df21",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "uv_lock_sha256": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+  },
+  "evaluation_validity": {
+    "both_methods_have_valid_trials": true,
+    "heldout_baseline_valid": true,
+    "heldout_selected_valid": true,
+    "train_baseline_valid": true,
+    "valid_optimizer_methods": 2
+  },
+  "evidence_status": "diagnostic_finite_budget_simulator_pilot",
+  "export_cli_smoke": {
+    "artifact_pointer_status": "local_jsonl_present",
+    "collision_rate": 0.0,
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_policy_search_candidate.py --candidate issue_9650_planner_optimizer_pilot_v1_best_random --candidate-registry docs/context/policy_search/validation/issue_9650_planner_optimizer_pilot_v1/candidate_registry.yaml --stage smoke --output-dir docs/context/policy_search/validation/issue_9650_planner_optimizer_pilot_v1/export_smoke --docs-root docs/context/policy_search/validation/issue_9650_planner_optimizer_pilot_v1/export_smoke/reports",
+    "decision": "pass",
+    "episode_count": 1,
+    "fallback_degraded_status": "clear",
+    "report_claim_boundary": "diagnostic-only; smoke decision pass does not mean successful task completion",
+    "stage": "smoke",
+    "success_rate": 0.0,
+    "termination_reason_counts": {
+      "max_steps": 1
+    }
+  },
+  "exports": {
+    "best_candidate_path": "best_candidate.yaml",
+    "best_candidate_sha256": "711247cd4798462977518e3bd1a0e1e7eb9a7c64cf88d3b326fc3d20cd12ba43",
+    "candidate_registry_path": "candidate_registry.yaml",
+    "candidate_registry_sha256": "1874500e7c00f46809e47c964f8fe355b55b5b470836a190ff45998af973708c"
+  },
+  "heldout_comparison": {
+    "baseline": {
+      "runtime_sec": 9.329495703801513,
+      "score": {
+        "colliding_valid_episode_count": 0,
+        "collision_free_fraction": 1.0,
+        "comfort_metric_missing_valid_episode_count": 0,
+        "comfort_ped_force_q95_mean": 0.6030521566868655,
+        "evaluation_complete": true,
+        "expected_episodes": 2,
+        "invalid_episode_count": 0,
+        "invalid_reason_counts": {},
+        "near_miss_free_fraction": 0.5,
+        "near_miss_metric_missing_episode_count": 0,
+        "observed_episodes": 2,
+        "sampler_objectives": [
+          1.0,
+          1.0,
+          0.5,
+          0.0,
+          -1000000000.0,
+          -0.6030521566868655
+        ],
+        "selection_tuple": [
+          1.0,
+          1.0,
+          0.5,
+          0.0,
+          null,
+          -0.6030521566868655
+        ],
+        "success_count": 0,
+        "success_fraction": 0.0,
+        "time_metric_missing_success_episode_count": 0,
+        "time_to_goal_ideal_ratio_mean_success_only": null,
+        "valid_episode_count": 2,
+        "valid_episode_fraction": 1.0
+      },
+      "status": "complete"
+    },
+    "same_configuration": false,
+    "selected": {
+      "runtime_sec": 9.366755383089185,
+      "score": {
+        "colliding_valid_episode_count": 0,
+        "collision_free_fraction": 1.0,
+        "comfort_metric_missing_valid_episode_count": 0,
+        "comfort_ped_force_q95_mean": 0.4706898948348184,
+        "evaluation_complete": true,
+        "expected_episodes": 2,
+        "invalid_episode_count": 0,
+        "invalid_reason_counts": {},
+        "near_miss_free_fraction": 1.0,
+        "near_miss_metric_missing_episode_count": 0,
+        "observed_episodes": 2,
+        "sampler_objectives": [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          -1000000000.0,
+          -0.4706898948348184
+        ],
+        "selection_tuple": [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          null,
+          -0.4706898948348184
+        ],
+        "success_count": 0,
+        "success_fraction": 0.0,
+        "time_metric_missing_success_episode_count": 0,
+        "time_to_goal_ideal_ratio_mean_success_only": null,
+        "valid_episode_count": 2,
+        "valid_episode_fraction": 1.0
+      },
+      "status": "complete"
+    },
+    "selected_improves_over_baseline": true,
+    "selection_was_frozen_before_heldout": true
+  },
+  "interpretation": {
+    "efficiency": "unknown because no episode succeeded",
+    "generalization_boundary": "only the two fixed scenario/seed identities in each suite; no global, feasibility, or real-world safety claim",
+    "heldout_successes": "0/2 for baseline and selected planner",
+    "observed_heldout_change": "near-miss-free fraction 0.5 to 1.0 and mean episode ped_force_q95 0.603 to 0.471",
+    "optimizer_comparison": "three trials per method are too few to infer relative optimizer performance",
+    "train_collisions": "1/2 for the baseline and both methods best trials; the same collision remains unsolved",
+    "train_successes": "0/2 for the baseline and both methods best trials"
+  },
+  "methods": {
+    "random": {
+      "best_trial_index": 2,
+      "best_trial_score": {
+        "colliding_valid_episode_count": 1,
+        "collision_free_fraction": 0.5,
+        "comfort_metric_missing_valid_episode_count": 0,
+        "comfort_ped_force_q95_mean": 1.4329363288945007,
+        "evaluation_complete": true,
+        "expected_episodes": 2,
+        "invalid_episode_count": 0,
+        "invalid_reason_counts": {},
+        "near_miss_free_fraction": 1.0,
+        "near_miss_metric_missing_episode_count": 0,
+        "observed_episodes": 2,
+        "sampler_objectives": [
+          1.0,
+          0.5,
+          1.0,
+          0.0,
+          -1000000000.0,
+          -1.4329363288945007
+        ],
+        "selection_tuple": [
+          1.0,
+          0.5,
+          1.0,
+          0.0,
+          null,
+          -1.4329363288945007
+        ],
+        "success_count": 0,
+        "success_fraction": 0.0,
+        "time_metric_missing_success_episode_count": 0,
+        "time_to_goal_ideal_ratio_mean_success_only": null,
+        "valid_episode_count": 2,
+        "valid_episode_fraction": 1.0
+      },
+      "invalid_trial_count": 0,
+      "runtime_sec": 19.18848885782063,
+      "trial_count": 3,
+      "trials": [
+        {
+          "error": null,
+          "parameters": {
+            "goal_progress_weight": 3.597258308868908,
+            "max_linear_speed": 2.2805228638190127
+          },
+          "runtime_sec": 6.246829153969884,
+          "score": {
+            "colliding_valid_episode_count": 1,
+            "collision_free_fraction": 0.5,
+            "comfort_metric_missing_valid_episode_count": 0,
+            "comfort_ped_force_q95_mean": 1.4847075662108038,
+            "evaluation_complete": true,
+            "expected_episodes": 2,
+            "invalid_episode_count": 0,
+            "invalid_reason_counts": {},
+            "near_miss_free_fraction": 0.5,
+            "near_miss_metric_missing_episode_count": 0,
+            "observed_episodes": 2,
+            "sampler_objectives": [
+              1.0,
+              0.5,
+              0.5,
+              0.0,
+              -1000000000.0,
+              -1.4847075662108038
+            ],
+            "selection_tuple": [
+              1.0,
+              0.5,
+              0.5,
+              0.0,
+              null,
+              -1.4847075662108038
+            ],
+            "success_count": 0,
+            "success_fraction": 0.0,
+            "time_metric_missing_success_episode_count": 0,
+            "time_to_goal_ideal_ratio_mean_success_only": null,
+            "valid_episode_count": 2,
+            "valid_episode_fraction": 1.0
+          },
+          "status": "complete",
+          "trial_index": 0
+        },
+        {
+          "error": null,
+          "parameters": {
+            "goal_progress_weight": 4.663061793832342,
+            "max_linear_speed": 2.8829437595617655
+          },
+          "runtime_sec": 6.395489612594247,
+          "score": {
+            "colliding_valid_episode_count": 1,
+            "collision_free_fraction": 0.5,
+            "comfort_metric_missing_valid_episode_count": 0,
+            "comfort_ped_force_q95_mean": 1.5191980603553,
+            "evaluation_complete": true,
+            "expected_episodes": 2,
+            "invalid_episode_count": 0,
+            "invalid_reason_counts": {},
+            "near_miss_free_fraction": 0.5,
+            "near_miss_metric_missing_episode_count": 0,
+            "observed_episodes": 2,
+            "sampler_objectives": [
+              1.0,
+              0.5,
+              0.5,
+              0.0,
+              -1000000000.0,
+              -1.5191980603553
+            ],
+            "selection_tuple": [
+              1.0,
+              0.5,
+              0.5,
+              0.0,
+              null,
+              -1.5191980603553
+            ],
+            "success_count": 0,
+            "success_fraction": 0.0,
+            "time_metric_missing_success_episode_count": 0,
+            "time_to_goal_ideal_ratio_mean_success_only": null,
+            "valid_episode_count": 2,
+            "valid_episode_fraction": 1.0
+          },
+          "status": "complete",
+          "trial_index": 1
+        },
+        {
+          "error": null,
+          "parameters": {
+            "goal_progress_weight": 5.975093803501739,
+            "max_linear_speed": 2.166092040005835
+          },
+          "runtime_sec": 6.546170091256499,
+          "score": {
+            "colliding_valid_episode_count": 1,
+            "collision_free_fraction": 0.5,
+            "comfort_metric_missing_valid_episode_count": 0,
+            "comfort_ped_force_q95_mean": 1.4329363288945007,
+            "evaluation_complete": true,
+            "expected_episodes": 2,
+            "invalid_episode_count": 0,
+            "invalid_reason_counts": {},
+            "near_miss_free_fraction": 1.0,
+            "near_miss_metric_missing_episode_count": 0,
+            "observed_episodes": 2,
+            "sampler_objectives": [
+              1.0,
+              0.5,
+              1.0,
+              0.0,
+              -1000000000.0,
+              -1.4329363288945007
+            ],
+            "selection_tuple": [
+              1.0,
+              0.5,
+              1.0,
+              0.0,
+              null,
+              -1.4329363288945007
+            ],
+            "success_count": 0,
+            "success_fraction": 0.0,
+            "time_metric_missing_success_episode_count": 0,
+            "time_to_goal_ideal_ratio_mean_success_only": null,
+            "valid_episode_count": 2,
+            "valid_episode_fraction": 1.0
+          },
+          "status": "complete",
+          "trial_index": 2
+        }
+      ]
+    },
+    "tpe": {
+      "best_trial_index": 0,
+      "best_trial_score": {
+        "colliding_valid_episode_count": 1,
+        "collision_free_fraction": 0.5,
+        "comfort_metric_missing_valid_episode_count": 0,
+        "comfort_ped_force_q95_mean": 1.4357967887106322,
+        "evaluation_complete": true,
+        "expected_episodes": 2,
+        "invalid_episode_count": 0,
+        "invalid_reason_counts": {},
+        "near_miss_free_fraction": 1.0,
+        "near_miss_metric_missing_episode_count": 0,
+        "observed_episodes": 2,
+        "sampler_objectives": [
+          1.0,
+          0.5,
+          1.0,
+          0.0,
+          -1000000000.0,
+          -1.4357967887106322
+        ],
+        "selection_tuple": [
+          1.0,
+          0.5,
+          1.0,
+          0.0,
+          null,
+          -1.4357967887106322
+        ],
+        "success_count": 0,
+        "success_fraction": 0.0,
+        "time_metric_missing_success_episode_count": 0,
+        "time_to_goal_ideal_ratio_mean_success_only": null,
+        "valid_episode_count": 2,
+        "valid_episode_fraction": 1.0
+      },
+      "invalid_trial_count": 0,
+      "runtime_sec": 18.578840690199286,
+      "trial_count": 3,
+      "trials": [
+        {
+          "error": null,
+          "parameters": {
+            "goal_progress_weight": 5.54963516349268,
+            "max_linear_speed": 2.7672097183575333
+          },
+          "runtime_sec": 6.230877625290304,
+          "score": {
+            "colliding_valid_episode_count": 1,
+            "collision_free_fraction": 0.5,
+            "comfort_metric_missing_valid_episode_count": 0,
+            "comfort_ped_force_q95_mean": 1.4357967887106322,
+            "evaluation_complete": true,
+            "expected_episodes": 2,
+            "invalid_episode_count": 0,
+            "invalid_reason_counts": {},
+            "near_miss_free_fraction": 1.0,
+            "near_miss_metric_missing_episode_count": 0,
+            "observed_episodes": 2,
+            "sampler_objectives": [
+              1.0,
+              0.5,
+              1.0,
+              0.0,
+              -1000000000.0,
+              -1.4357967887106322
+            ],
+            "selection_tuple": [
+              1.0,
+              0.5,
+              1.0,
+              0.0,
+              null,
+              -1.4357967887106322
+            ],
+            "success_count": 0,
+            "success_fraction": 0.0,
+            "time_metric_missing_success_episode_count": 0,
+            "time_to_goal_ideal_ratio_mean_success_only": null,
+            "valid_episode_count": 2,
+            "valid_episode_fraction": 1.0
+          },
+          "status": "complete",
+          "trial_index": 0
+        },
+        {
+          "error": null,
+          "parameters": {
+            "goal_progress_weight": 5.857374067080886,
+            "max_linear_speed": 2.8529470761737823
+          },
+          "runtime_sec": 6.094445439986885,
+          "score": {
+            "colliding_valid_episode_count": 1,
+            "collision_free_fraction": 0.5,
+            "comfort_metric_missing_valid_episode_count": 0,
+            "comfort_ped_force_q95_mean": 1.4370910969354342,
+            "evaluation_complete": true,
+            "expected_episodes": 2,
+            "invalid_episode_count": 0,
+            "invalid_reason_counts": {},
+            "near_miss_free_fraction": 1.0,
+            "near_miss_metric_missing_episode_count": 0,
+            "observed_episodes": 2,
+            "sampler_objectives": [
+              1.0,
+              0.5,
+              1.0,
+              0.0,
+              -1000000000.0,
+              -1.4370910969354342
+            ],
+            "selection_tuple": [
+              1.0,
+              0.5,
+              1.0,
+              0.0,
+              null,
+              -1.4370910969354342
+            ],
+            "success_count": 0,
+            "success_fraction": 0.0,
+            "time_metric_missing_success_episode_count": 0,
+            "time_to_goal_ideal_ratio_mean_success_only": null,
+            "valid_episode_count": 2,
+            "valid_episode_fraction": 1.0
+          },
+          "status": "complete",
+          "trial_index": 1
+        },
+        {
+          "error": null,
+          "parameters": {
+            "goal_progress_weight": 4.357251050253778,
+            "max_linear_speed": 2.4133826289198077
+          },
+          "runtime_sec": 6.253517624922097,
+          "score": {
+            "colliding_valid_episode_count": 1,
+            "collision_free_fraction": 0.5,
+            "comfort_metric_missing_valid_episode_count": 0,
+            "comfort_ped_force_q95_mean": 1.485964766734506,
+            "evaluation_complete": true,
+            "expected_episodes": 2,
+            "invalid_episode_count": 0,
+            "invalid_reason_counts": {},
+            "near_miss_free_fraction": 0.5,
+            "near_miss_metric_missing_episode_count": 0,
+            "observed_episodes": 2,
+            "sampler_objectives": [
+              1.0,
+              0.5,
+              0.5,
+              0.0,
+              -1000000000.0,
+              -1.485964766734506
+            ],
+            "selection_tuple": [
+              1.0,
+              0.5,
+              0.5,
+              0.0,
+              null,
+              -1.485964766734506
+            ],
+            "success_count": 0,
+            "success_fraction": 0.0,
+            "time_metric_missing_success_episode_count": 0,
+            "time_to_goal_ideal_ratio_mean_success_only": null,
+            "valid_episode_count": 2,
+            "valid_episode_fraction": 1.0
+          },
+          "status": "complete",
+          "trial_index": 2
+        }
+      ]
+    }
+  },
+  "objective": {
+    "kind": "lexicographic_components_v1",
+    "order": [
+      "valid_episode_fraction",
+      "collision_free_fraction",
+      "near_miss_free_fraction",
+      "success_fraction",
+      "time_to_goal_score",
+      "comfort_force_score"
+    ],
+    "selection_rule": "maximize validity, then collision-free, near-miss-free, completion, and minimize successful time-to-goal and comfort force in that order"
+  },
+  "parameter_space": [
+    {
+      "high": 3.0,
+      "low": 2.0,
+      "name": "max_linear_speed",
+      "type": "float"
+    },
+    {
+      "high": 8.0,
+      "low": 2.0,
+      "name": "goal_progress_weight",
+      "type": "float"
+    }
+  ],
+  "per_episode_outcomes": {
+    "export_cli_smoke": {
+      "bundle_relative_path": "export_smoke/smoke__issue_9650_planner_optimizer_pilot_v1_best_random.jsonl",
+      "episode_records_sha256": "6351c7d8a8ad62b3f37a391b1b4a8804f2e616e2a99edc544976fa173c6f77bb",
+      "episodes": [
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": null,
+            "near_misses": 0,
+            "ped_force_q95": null,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "planner_sanity_simple",
+          "seed": 111,
+          "termination_reason": "max_steps"
+        }
+      ]
+    },
+    "heldout_baseline": {
+      "bundle_relative_path": "heldout/baseline/heldout_baseline.jsonl",
+      "episode_records_sha256": "df99bba6c6516813c0f85a514c6568fea909f51a8eea1303551b6c8371676325",
+      "episodes": [
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 0.1655974005245182,
+            "near_misses": 31,
+            "ped_force_q95": 0.539385712770069,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_head_on_corridor_low",
+          "seed": 111,
+          "termination_reason": "max_steps"
+        },
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 1.338024289208482,
+            "near_misses": 0,
+            "ped_force_q95": 0.6667186006036621,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_head_on_corridor_low",
+          "seed": 112,
+          "termination_reason": "max_steps"
+        }
+      ]
+    },
+    "heldout_selected": {
+      "bundle_relative_path": "heldout/selected/heldout_selected.jsonl",
+      "episode_records_sha256": "f34ebd9ad10bf4c8ba8dfbd5194e03fbecdcfe2a54aeb1553f57d2221df2f9ef",
+      "episodes": [
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 1.109259516423501,
+            "near_misses": 0,
+            "ped_force_q95": 0.27466118906597475,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_head_on_corridor_low",
+          "seed": 111,
+          "termination_reason": "max_steps"
+        },
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 1.270542316066738,
+            "near_misses": 0,
+            "ped_force_q95": 0.6667186006036621,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_head_on_corridor_low",
+          "seed": 112,
+          "termination_reason": "max_steps"
+        }
+      ]
+    },
+    "random_best_trial": {
+      "bundle_relative_path": "trials/random/trial_002/random_trial_002.jsonl",
+      "episode_records_sha256": "6973036ddbf956fc8abf66e9be6da43adaaa83fd58a70434873fa585d15424ee",
+      "episodes": [
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 1.0539175886360685,
+            "near_misses": 0,
+            "ped_force_q95": 0.6413700264823181,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 101,
+          "termination_reason": "max_steps"
+        },
+        {
+          "metrics": {
+            "collisions": 1,
+            "min_clearance": -0.023159698669175777,
+            "near_misses": 0,
+            "ped_force_q95": 2.224502631306683,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 102,
+          "termination_reason": "collision"
+        }
+      ]
+    },
+    "tpe_best_trial": {
+      "bundle_relative_path": "trials/tpe/trial_000/tpe_trial_000.jsonl",
+      "episode_records_sha256": "f4913f48fc4b5ee467f025d1e079b9dfdbfcedfcec8acaf11224231dd3310ec2",
+      "episodes": [
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 0.6831191390737223,
+            "near_misses": 0,
+            "ped_force_q95": 0.6470909461145814,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 101,
+          "termination_reason": "max_steps"
+        },
+        {
+          "metrics": {
+            "collisions": 1,
+            "min_clearance": -0.023159698669175777,
+            "near_misses": 0,
+            "ped_force_q95": 2.224502631306683,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 102,
+          "termination_reason": "collision"
+        }
+      ]
+    },
+    "training_baseline": {
+      "bundle_relative_path": "train_baseline/train_baseline.jsonl",
+      "episode_records_sha256": "7382f0f8b0932ef95612a6fe81cfc3877036cb6fe5aaebe2958bc45b7577e329",
+      "episodes": [
+        {
+          "metrics": {
+            "collisions": 0,
+            "min_clearance": 0.19409356091413565,
+            "near_misses": 18,
+            "ped_force_q95": 0.7748112286645384,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": false,
+            "route_complete": false,
+            "timeout_event": true
+          },
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 101,
+          "termination_reason": "max_steps"
+        },
+        {
+          "metrics": {
+            "collisions": 1,
+            "min_clearance": -0.023159698669175777,
+            "near_misses": 0,
+            "ped_force_q95": 2.224502631306683,
+            "time_to_goal_ideal_ratio": null
+          },
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 102,
+          "termination_reason": "collision"
+        }
+      ]
+    }
+  },
+  "raw_run_bundle": {
+    "archive_name": "issue_9650_planner_optimizer_pilot_v1.tar.gz",
+    "archive_sha256": "1eec9bb8720105c00cd8d4b243a2bc024e19ba263423e8169758bfffc2bfaa59",
+    "archive_size_bytes": 162321,
+    "contains_all_trial_and_replay_episode_jsonl": true,
+    "contains_original_machine_paths": true,
+    "storage": "local_codex_agent_run_artifact; not included in repository PR"
+  },
+  "run_id": "issue_9650_planner_optimizer_pilot_v1",
+  "runtime_sec": 70.39807493472472,
+  "schema": "planner_optimizer_pilot_evidence.v1",
+  "selected": {
+    "candidate_config_path": "best_candidate.yaml",
+    "candidate_name": "issue_9650_planner_optimizer_pilot_v1_best_random",
+    "improves_over_baseline": true,
+    "method": "random",
+    "parameters": {
+      "goal_progress_weight": 5.975093803501739,
+      "max_linear_speed": 2.166092040005835
+    },
+    "score": {
+      "colliding_valid_episode_count": 1,
+      "collision_free_fraction": 0.5,
+      "comfort_metric_missing_valid_episode_count": 0,
+      "comfort_ped_force_q95_mean": 1.4329363288945007,
+      "evaluation_complete": true,
+      "expected_episodes": 2,
+      "invalid_episode_count": 0,
+      "invalid_reason_counts": {},
+      "near_miss_free_fraction": 1.0,
+      "near_miss_metric_missing_episode_count": 0,
+      "observed_episodes": 2,
+      "sampler_objectives": [
+        1.0,
+        0.5,
+        1.0,
+        0.0,
+        -1000000000.0,
+        -1.4329363288945007
+      ],
+      "selection_tuple": [
+        1.0,
+        0.5,
+        1.0,
+        0.0,
+        null,
+        -1.4329363288945007
+      ],
+      "success_count": 0,
+      "success_fraction": 0.0,
+      "time_metric_missing_success_episode_count": 0,
+      "time_to_goal_ideal_ratio_mean_success_only": null,
+      "valid_episode_count": 2,
+      "valid_episode_fraction": 1.0
+    }
+  },
+  "source_revision": "b461e7ad008596343eb789558fb85ed1f6a2fae4",
+  "source_tracked_changes_at_start": [],
+  "suite_split": {
+    "disjoint_scenario_seed_identity_count": 4,
+    "heldout_episode_count": 2,
+    "overlap": [],
+    "train_episode_count": 2
+  },
+  "suites": {
+    "heldout": {
+      "benchmark_profile": "experimental",
+      "dt": 0.1,
+      "episode_count": 2,
+      "episode_identities": [
+        {
+          "scenario_id": "classic_head_on_corridor_low",
+          "seed": 111
+        },
+        {
+          "scenario_id": "classic_head_on_corridor_low",
+          "seed": 112
+        }
+      ],
+      "horizon": 120,
+      "identity_sha256": "44fc675dab630c932f04fd21cef155ee752e27be8d38de31649a2f37f40d359d",
+      "materialized_scenario_sha256": "241625545ccca660d57f7290336d43d793646b3eb53325f095b3de1c8d9f2dc0",
+      "name": "heldout",
+      "scenario_filter": [
+        "classic_head_on_corridor_low"
+      ],
+      "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+      "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
+      "seeds": [
+        111,
+        112
+      ],
+      "workers": 1
+    },
+    "train": {
+      "benchmark_profile": "experimental",
+      "dt": 0.1,
+      "episode_count": 2,
+      "episode_identities": [
+        {
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 101
+        },
+        {
+          "scenario_id": "classic_cross_trap_high",
+          "seed": 102
+        }
+      ],
+      "horizon": 120,
+      "identity_sha256": "7bcc1b3732cba054ce32f3ce062e8a38f4230921f9d4b819c158124739d4189c",
+      "materialized_scenario_sha256": "f554d29573db3b776a7507f9d1b277ecd9510b090bca5205b46c6ca39be7c8af",
+      "name": "train",
+      "scenario_filter": [
+        "classic_cross_trap_high"
+      ],
+      "scenario_matrix": "configs/scenarios/sets/classic_cross_trap_subset.yaml",
+      "scenario_matrix_sha256": "fc5c2ccec86d2bf8eac069f04fb24ecb742705844adc11b59d34c0faad685726",
+      "seeds": [
+        101,
+        102
+      ],
+      "workers": 1
+    }
+  },
+  "training_baseline": {
+    "runtime_sec": 13.934494299814105,
+    "score": {
+      "colliding_valid_episode_count": 1,
+      "collision_free_fraction": 0.5,
+      "comfort_metric_missing_valid_episode_count": 0,
+      "comfort_ped_force_q95_mean": 1.4996569299856108,
+      "evaluation_complete": true,
+      "expected_episodes": 2,
+      "invalid_episode_count": 0,
+      "invalid_reason_counts": {},
+      "near_miss_free_fraction": 0.5,
+      "near_miss_metric_missing_episode_count": 0,
+      "observed_episodes": 2,
+      "sampler_objectives": [
+        1.0,
+        0.5,
+        0.5,
+        0.0,
+        -1000000000.0,
+        -1.4996569299856108
+      ],
+      "selection_tuple": [
+        1.0,
+        0.5,
+        0.5,
+        0.0,
+        null,
+        -1.4996569299856108
+      ],
+      "success_count": 0,
+      "success_fraction": 0.0,
+      "time_metric_missing_success_episode_count": 0,
+      "time_to_goal_ideal_ratio_mean_success_only": null,
+      "valid_episode_count": 2,
+      "valid_episode_fraction": 1.0
+    },
+    "status": "complete"
+  }
+}

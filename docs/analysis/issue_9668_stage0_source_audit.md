@@ -35,7 +35,7 @@ source diff from 0.0.7 exposed additional runtime paths outside the first audit'
 | Path | Change | Equivalence risk |
 | --- | --- | --- |
 | `robot_sf/nav/map_config.py` | Moves plotting imports inside `plot()`. | No intended simulation change; confirm with the executable gate. |
-| `robot_sf/sensor/pedestrian_tracking.py` | Adds track observation/lifecycle validation and reset epochs. | A tracking-enabled planner could now reject a track state or receive changed track provenance. No old-metric equivalence is inferred from the source diff. |
+| `robot_sf/sensor/pedestrian_tracking.py` | Adds track observation/lifecycle validation and reset epochs. | Tracking is opt-in through `observation_visibility.include_track_ids` (default false), and no release config override was found. A tracking-enabled path could still reject a track state; no equivalence is inferred without execution. |
 | `robot_sf/sensor/socnav_observation.py` | Retains the latest tracking result as a side channel. | The declared public observation schema is unchanged, but the runner path must still be exercised. |
 | `robot_sf/planner/scenario_belief_adapter.py` | Adds an identity-safe projection used by the scenario-belief gap-reference hook. | No gap-reference arm appears in the frozen 14-arm roster; confirm the new import is not selected by the release configs. |
 

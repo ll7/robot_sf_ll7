@@ -992,6 +992,15 @@ def test_frontier_report_binds_evaluation_metrics_and_ids_to_checksums(tmp_path:
     with pytest.raises(FrontierReportError, match="identity accounting unknown"):
         build_frontier_report(payload, evidence_root=tmp_path)
 
+
+def test_frontier_report_rejects_malformed_evaluation_record_id(tmp_path: Path) -> None:
+    """Malformed row identities must produce a report error, not a Python TypeError."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["evaluation_sets"]["held_out"]["episodes"][0]["record_id"] = {}
+
+    with pytest.raises(FrontierReportError, match=r"record_id must be non-empty text"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
     payload = _evidence(tmp_path)
     evaluation_ref = payload["rounds"][0]["evaluation_sets"]["held_out"]["artifact"]
     source_path = tmp_path / evaluation_ref["path"]

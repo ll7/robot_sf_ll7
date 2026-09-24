@@ -1511,7 +1511,11 @@ def _validate_evaluation_source_rows(
         if isinstance(expected_ids, list)
         else set()
     )
-    unexpected_ids = [record_id for record_id in observed_ids if record_id not in expected_id_set]
+    unexpected_ids = [
+        record_id
+        for record_id in observed_ids
+        if isinstance(record_id, str) and record_id not in expected_id_set
+    ]
     if unexpected_ids:
         errors.append(
             f"{prefix} identity accounting unknown: unexpected evaluation row IDs "

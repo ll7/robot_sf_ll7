@@ -17,6 +17,7 @@ from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.scenario_certification.feasibility_diagnostics import DIAGNOSTIC_CLAIM_BOUNDARY
+from robot_sf.scenario_certification.input_identity import scenario_input_identity
 
 SCENARIO_ADMISSIBILITY_SCHEMA = "scenario_admissibility.v1"
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
@@ -120,8 +121,26 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     reasons: list[str] = []
     evidence: dict[str, Any] = {}
     artifact_identity = _file_artifact_identity(scenario_artifact_path)
+    runtime_identity = (
+        scenario_input_identity(scenario_artifact_path, scenario_id=scenario_id)
+        if isinstance(scenario_artifact_path, (str, Path))
+        else {}
+    )
+    artifact_identity.update(
+        {
+            "effective_input_sha256": runtime_identity.get("effective_input_sha256"),
+            "requires_effective_input_binding": runtime_identity.get(
+                "requires_effective_input_binding", True
+            ),
+            "effective_input_files": runtime_identity.get("files", []),
+        }
+    )
     evidence["scenario_artifact_identity"] = artifact_identity
     artifact_sha256 = artifact_identity.get("sha256")
+    effective_input_sha256 = artifact_identity.get("effective_input_sha256")
+    requires_effective_input_binding = artifact_identity.get(
+        "requires_effective_input_binding", True
+    )
     if artifact_sha256 is None:
         reasons.append("scenario_artifact_identity_missing_or_unavailable")
     inputs = {
@@ -138,7 +157,12 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
 
     cert = inputs["scenario_certificate"]
     cert_state, cert_valid, cert_assumptions = _certificate(
-        cert, scenario_id, artifact_sha256, reasons
+        cert,
+        scenario_id,
+        artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
+        reasons,
     )
     predicate_state = _predicates(inputs["predicate_contract"], case_id, reasons)
     oracle_state, oracle_assumptions = _oracle(
@@ -146,6 +170,8 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         case_id,
         scenario_id,
         artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
         cert,
         cert_valid,
         reasons,
@@ -157,6 +183,8 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
             case_id,
             execution_scenario_id,
             artifact_sha256,
+            effective_input_sha256,
+            requires_effective_input_binding,
             reasons,
         )
         for role in ("reference", "target", "replay")
@@ -236,9 +264,21 @@ def _artifact_reference_matches(
 
 
 def _certificate(
-    cert: Any, scenario_id: str | None, artifact_sha256: str | None, reasons: list[str]
+    cert: Any,
+    scenario_id: str | None,
+    artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
+    reasons: list[str],
 ) -> tuple[str | None, bool, dict[str, Any]]:
-    if not _certificate_inputs_bound(cert, scenario_id, artifact_sha256, reasons):
+    if not _certificate_inputs_bound(
+        cert,
+        scenario_id,
+        artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
+        reasons,
+    ):
         return None, False, {}
     classification = cert["classification"]
     eligibility = cert["benchmark_eligibility"]
@@ -280,7 +320,12 @@ def _certificate(
 
 
 def _certificate_inputs_bound(
-    cert: Any, scenario_id: str | None, artifact_sha256: str | None, reasons: list[str]
+    cert: Any,
+    scenario_id: str | None,
+    artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
+    reasons: list[str],
 ) -> bool:
     """Validate certificate shape, named scenario, and selected candidate bytes."""
     if cert is None or list(
@@ -310,6 +355,23 @@ def _certificate_inputs_bound(
     ):
         reasons.append("scenario_certificate_producer_source_digest_missing_or_mismatch")
         return False
+    if requires_effective_input_binding:
+        effective_digest = (
+            cert_evidence.get("effective_input_sha256")
+            if isinstance(cert_evidence, Mapping)
+            else None
+        )
+        if (
+            effective_input_sha256 is None
+            or not isinstance(effective_digest, str)
+            or _SHA256.fullmatch(effective_digest) is None
+            or effective_digest.lower() != effective_input_sha256.lower()
+            or cert_evidence.get("effective_input_identity_stable") is not True
+        ):
+            reasons.append(
+                "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable"
+            )
+            return False
     return True
 
 
@@ -661,16 +723,25 @@ def _predicates(contract: Any, case_id: str, reasons: list[str]) -> str | None:
     return "all_valid" if parsed.feasible else "nonvalid"
 
 
-def _oracle(
+def _oracle(  # noqa: PLR0913 - oracle classification needs its bound source and certificate inputs.
     source: Any,
     case_id: str,
     scenario_id: str | None,
     artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
     cert: Any,
     cert_valid: bool,
     reasons: list[str],
 ) -> tuple[str | None, dict[str, Any]]:
-    report = _select_oracle_cell(source, scenario_id, artifact_sha256, reasons)
+    report = _select_oracle_cell(
+        source,
+        scenario_id,
+        artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
+        reasons,
+    )
     if report is None:
         return None, {}
     schema = report.get("schema_version")
@@ -812,6 +883,8 @@ def _select_oracle_cell(
     source: Any,
     scenario_id: str | None,
     artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
     reasons: list[str],
 ) -> Mapping[str, Any] | None:
     if not isinstance(source, Mapping):
@@ -821,18 +894,43 @@ def _select_oracle_cell(
         reasons.append("feasibility_oracle_scenario_identity_unbound")
         return None
     if source.get("schema_version") != ISSUE_5574_REPORT_SCHEMA:
-        return _select_single_oracle(source, artifact_sha256, reasons)
-    return _select_issue_5574_oracle_cell(source, scenario_id, artifact_sha256, reasons)
+        return _select_single_oracle(
+            source,
+            artifact_sha256,
+            effective_input_sha256,
+            requires_effective_input_binding,
+            reasons,
+        )
+    return _select_issue_5574_oracle_cell(
+        source,
+        scenario_id,
+        artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
+        reasons,
+    )
 
 
 def _select_single_oracle(
-    source: Mapping[str, Any], artifact_sha256: str | None, reasons: list[str]
+    source: Mapping[str, Any],
+    artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
+    reasons: list[str],
 ) -> Mapping[str, Any] | None:
     """Select a single-cell oracle only when its captured source identity matches."""
     if not _captured_oracle_digest_matches(source, artifact_sha256, "feasibility_oracle", reasons):
         return None
     if not _artifact_reference_matches(
         source.get("scenario_manifest"), artifact_sha256, "feasibility_oracle", reasons
+    ):
+        return None
+    if not _captured_effective_digest_matches(
+        source,
+        effective_input_sha256,
+        requires_effective_input_binding,
+        "feasibility_oracle",
+        reasons,
     ):
         return None
     return source
@@ -842,6 +940,8 @@ def _select_issue_5574_oracle_cell(
     source: Mapping[str, Any],
     scenario_id: str,
     artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
     reasons: list[str],
 ) -> Mapping[str, Any] | None:
     """Select one report cell after binding both report and cell source identity."""
@@ -862,6 +962,14 @@ def _select_issue_5574_oracle_cell(
         source, artifact_sha256, "feasibility_oracle_report", reasons
     ) or not _captured_oracle_digest_matches(
         matches[0], artifact_sha256, "feasibility_oracle_cell", reasons
+    ):
+        return None
+    if not _captured_effective_digest_matches(
+        matches[0],
+        effective_input_sha256,
+        requires_effective_input_binding,
+        "feasibility_oracle_cell",
+        reasons,
     ):
         return None
     cell_manifest = matches[0].get("scenario_manifest")
@@ -893,6 +1001,29 @@ def _captured_oracle_digest_matches(
         or source.get("source_artifact_identity_stable") is not True
     ):
         reasons.append(f"{evidence_name}_producer_source_digest_missing_mismatch_or_unstable")
+        return False
+    return True
+
+
+def _captured_effective_digest_matches(
+    source: Mapping[str, Any],
+    expected_sha256: str | None,
+    required: bool,
+    evidence_name: str,
+    reasons: list[str],
+) -> bool:
+    """Bind oracle evidence to referenced runtime inputs when the manifest depends on them."""
+    if not required:
+        return True
+    captured = source.get("effective_input_sha256")
+    if (
+        expected_sha256 is None
+        or not isinstance(captured, str)
+        or _SHA256.fullmatch(captured) is None
+        or captured.lower() != expected_sha256.lower()
+        or source.get("effective_input_identity_stable") is not True
+    ):
+        reasons.append(f"{evidence_name}_effective_input_identity_missing_mismatch_or_unstable")
         return False
     return True
 
@@ -1000,11 +1131,21 @@ def _execution(
     case_id: str,
     scenario_id: str | None,
     artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
     reasons: list[str],
 ) -> dict[str, Any] | None:
     if source is None:
         return None
-    reason = _execution_problem(source, role, case_id, scenario_id, artifact_sha256)
+    reason = _execution_problem(
+        source,
+        role,
+        case_id,
+        scenario_id,
+        artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
+    )
     if reason is not None:
         reasons.append(reason)
         return None
@@ -1017,6 +1158,8 @@ def _execution_problem(
     case_id: str,
     scenario_id: str | None,
     artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
 ) -> str | None:
     binding_problem = _execution_binding_problem(source, role, case_id, scenario_id)
     if binding_problem is not None:
@@ -1031,6 +1174,15 @@ def _execution_problem(
     artifact_problem = _execution_artifact_problem(source, role, artifact_sha256)
     if artifact_problem is not None:
         return artifact_problem
+    effective_digest = source.get("effective_input_sha256")
+    if requires_effective_input_binding and (
+        effective_input_sha256 is None
+        or not isinstance(effective_digest, str)
+        or _SHA256.fullmatch(effective_digest) is None
+        or effective_digest.lower() != effective_input_sha256.lower()
+        or source.get("effective_input_identity_stable") is not True
+    ):
+        return f"{role}_execution_effective_input_identity_missing_or_mismatch"
     if not _execution_outcome_valid(source):
         return f"{role}_execution_outcome_or_budget_invalid"
     if role == "replay":

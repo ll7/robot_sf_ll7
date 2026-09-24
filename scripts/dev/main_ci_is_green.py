@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report whether ``main`` CI is green, based on the latest COMPLETED run.
+"""Report whether ``main`` CI is green for the exact current main commit.
 
 Motivation (issue #5385). Three separate main-red incidents in 36h
 (2026-07-11/12) shared one mechanism: merges kept landing while main CI was
@@ -11,21 +11,26 @@ must not merge (except the unbreak-main fix itself) until main is green again.
 This helper is the deterministic green/red signal that hold consults. The one
 rule that matters — learned the hard way when the escalation guard stayed
 silent on 2026-07-11 — is that an IN-PROGRESS run must never count as evidence
-either way: only a completed run with an actual matrix verdict decides. The
-fetch uses ``--status completed`` so in-progress runs are excluded at the API;
+either way: only a completed run with an actual matrix verdict decides. A
+completed run for an older main SHA cannot certify the current head. The fetch
+keeps in-progress runs in its bounded window, classifies status locally, and
+requires the main branch head to remain stable while the window is read;
 manual dispatch candidates also require compatibility-matrix admission proof.
 
-Exit code: 0 == green (latest verified completed CI run on main concluded ``success``),
-1 == not green (red, or no completed run to judge from). Prints the run id and
-conclusion it decided from. The ``--json`` flag emits the machine-readable
+Exit code: 0 == green (a verified completed CI run on the current main SHA
+concluded ``success``), 1 == not green (red, stale, or no same-head run to
+judge from). Prints the run id and conclusion it decided from. The ``--json`` flag emits the machine-readable
 main-signal schema (``main_ci_is_green.v1``) with the same green/red/stale
 classification the gate contract consumes, so the gate need not parse the
 human line.
 
 The gate's default fetch is deliberately one small bounded window (a single
-``gh run list --limit`` call, default 5 runs, 30s timeout): the merge hold must
-stay cheap and quick, and a cancellation-saturated window fails closed to
-``stale`` rather than blocking on a slower search.  :func:`fetch_run_window`
+unfiltered ``gh run list --limit`` call, default 5 runs, 30s timeout): the merge
+hold must stay cheap and quick, and a cancellation-saturated window fails
+closed to ``stale`` rather than blocking on a slower search. Status and
+conclusion are classified locally because server-side completed-only queries
+have intermittently returned an older window than the unfiltered query.
+:func:`fetch_run_window`
 is the paginated REST reader for callers that need the decisive verdict behind
 a cancelled-run flood; :mod:`main_ci_incident_reconcile` uses it.  This module
 owns both fetch paths so there is exactly one pagination implementation.
@@ -137,6 +142,60 @@ def _rest_json(
     if error:
         raise MainCiRunFetchError(error)
     return data
+
+
+def fetch_main_head_sha(
+    repo: str = DEFAULT_REPO,
+    *,
+    runner: Callable[..., Any] | None = None,
+) -> str:
+    """Read the current ``main`` branch SHA, rejecting malformed ref evidence."""
+    endpoint = f"repos/{quote(repo, safe='/')}/git/ref/heads/main"
+    payload = _rest_json(
+        endpoint,
+        runner=runner or _default_rest_runner,
+        operation="main branch ref",
+    )
+    if not isinstance(payload, Mapping) or payload.get("ref") != "refs/heads/main":
+        raise MainCiRunFetchError("main branch ref returned malformed or mismatched evidence")
+    obj = payload.get("object")
+    if not isinstance(obj, Mapping):
+        raise MainCiRunFetchError("main branch ref has no commit object")
+    sha = obj.get("sha")
+    if (
+        not isinstance(sha, str)
+        or len(sha) != 40
+        or any(character not in "0123456789abcdefABCDEF" for character in sha)
+    ):
+        raise MainCiRunFetchError("main branch ref has no usable commit SHA")
+    return sha.lower()
+
+
+def _normalize_expected_head_sha(value: str | None) -> str | None:
+    if value is None:
+        return None
+    expected_head = value.strip().lower()
+    if len(expected_head) != 40 or any(
+        character not in "0123456789abcdef" for character in expected_head
+    ):
+        raise MainCiRunFetchError("expected main head is not a usable commit SHA")
+    return expected_head
+
+
+def _read_stable_main_ci_signal(
+    repo: str, workflow: str, limit: int
+) -> tuple[bool, dict[str, Any] | None]:
+    """Read a bounded run window bracketed by a stable main ref."""
+    main_head_before = fetch_main_head_sha(repo)
+    runs = fetch_runs(repo, workflow, limit)
+    main_head_after = fetch_main_head_sha(repo)
+    if main_head_after != main_head_before:
+        raise MainCiRunFetchError("main advanced while its CI signal was being read")
+    return decide_verified_main_ci_signal(
+        runs,
+        repo=repo,
+        expected_head_sha=main_head_before,
+    )
 
 
 def resolve_workflow_selector(
@@ -630,17 +689,20 @@ def decide_verified_main_ci_signal(
     *,
     repo: str = DEFAULT_REPO,
     matrix_admission_lookup: Callable[[int], bool] | None = None,
+    expected_head_sha: str | None = None,
 ) -> tuple[bool, dict[str, Any] | None]:
     """Select a decisive run, requiring matrix proof for manual dispatch runs.
 
-    The raw run history is supplied by the existing bounded ``gh run list``
-    query. A successful or failed ``workflow_dispatch`` is decisive only when
-    its compatibility matrix was admitted. Explicitly all-skipped gate-only
-    dispatches are ignored, but older evidence can decide only for that same
-    exact head; crossing to another SHA is stale rather than an unjustified
-    green or red. Unreadable or ambiguous job evidence raises so callers fail
-    closed.
+    The raw run history is supplied by the bounded ``gh run list`` query. When
+    ``expected_head_sha`` is supplied, only evidence for that exact current
+    main commit may decide. A successful or failed ``workflow_dispatch`` is
+    decisive only when its compatibility matrix was admitted. Explicitly
+    all-skipped gate-only dispatches are ignored, but older evidence can decide
+    only for that same exact head. Unreadable or ambiguous job evidence raises
+    so callers fail closed.
     """
+    expected_head = _normalize_expected_head_sha(expected_head_sha)
+
     if matrix_admission_lookup is None:
 
         def fetch_matrix_for_signal(run_id: int) -> bool:
@@ -663,6 +725,8 @@ def decide_verified_main_ci_signal(
             continue
         head_sha = run.get("headSha")
         normalized_head = head_sha.strip().lower() if isinstance(head_sha, str) else ""
+        if expected_head is not None and normalized_head != expected_head:
+            return False, None
         if gate_only_head is not None and normalized_head != gate_only_head:
             return False, None
 
@@ -910,14 +974,15 @@ def build_signal(
 def fetch_runs(
     repo: str = DEFAULT_REPO, workflow: str = DEFAULT_WORKFLOW, limit: int = 5
 ) -> list[dict[str, Any]]:
-    """Fetch recent completed main CI runs in one bounded ``gh run list`` call.
+    """Fetch recent main CI runs in one bounded, unfiltered ``gh run list`` call.
 
-    ``--status completed`` is load-bearing.  This is the fast merge-hold path:
-    a single window of ``limit`` runs (default 5) with the 30s CLI timeout, so
-    the gate cannot become slow or expensive.  A cancellation-saturated window
-    fails closed to ``stale``; use :func:`fetch_run_window` when the decisive
-    verdict behind such a flood is required.  The default ``CI`` display name
-    is mapped to its workflow file path to avoid ambiguous name matches.
+    This is the fast merge-hold path: a single window of ``limit`` runs
+    (default 5) with the 30s CLI timeout, so the gate cannot become slow or
+    expensive. Status and conclusion are filtered locally. A saturated window
+    without an admissible current-head verdict fails closed to ``stale``; use
+    :func:`fetch_run_window` when the decisive verdict behind such a flood is
+    required. The default ``CI`` display name is mapped to its workflow file
+    path to avoid ambiguous name matches.
     """
     workflow_selector = DEFAULT_WORKFLOW_FILE if workflow == DEFAULT_WORKFLOW else workflow
     proc = _gh(
@@ -930,8 +995,6 @@ def fetch_runs(
             "main",
             "--workflow",
             workflow_selector,
-            "--status",
-            "completed",
             "--limit",
             str(limit),
             "--json",
@@ -1032,8 +1095,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if decision["action"] in {"run_full_ci", "observe_success"} else 1
 
     try:
-        runs = fetch_runs(args.repo, args.workflow, args.limit)
-        is_green, run = decide_verified_main_ci_signal(runs, repo=args.repo)
+        is_green, run = _read_stable_main_ci_signal(args.repo, args.workflow, args.limit)
     except (RuntimeError, json.JSONDecodeError) as exc:
         # Fail closed: an unreadable signal is treated as NOT green so a merge
         # hold errs toward holding, never toward merging on unknown state.

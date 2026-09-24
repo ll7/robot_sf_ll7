@@ -101,6 +101,60 @@ def test_in_progress_newest_does_not_mask_a_red_completed() -> None:
     assert run["databaseId"] == 2
 
 
+def test_verified_signal_refuses_a_completed_run_for_an_older_main_head() -> None:
+    """A stale listing cannot reuse an old green run for today's main SHA."""
+    old_success = _run(
+        7,
+        "completed",
+        "success",
+        "2026-09-24T12:00:00Z",
+        head_sha="a" * 40,
+    )
+
+    is_green, run = decide_verified_main_ci_signal(
+        [old_success],
+        expected_head_sha="b" * 40,
+        matrix_admission_lookup=lambda _run_id: True,
+    )
+
+    assert is_green is False
+    assert run is None
+
+
+def test_fetch_main_head_sha_reads_and_validates_the_main_ref() -> None:
+    """The branch-tip reader binds signals to the exact live main commit."""
+    expected_sha = "a" * 40
+
+    def fake_runner(path: str, *_args: object, **_kwargs: object):
+        assert path == "repos/ll7/robot_sf_ll7/git/ref/heads/main"
+        return subprocess.CompletedProcess(
+            ["gh"],
+            0,
+            json.dumps({"ref": "refs/heads/main", "object": {"sha": expected_sha}}),
+            "",
+        )
+
+    assert main_ci_is_green.fetch_main_head_sha(runner=fake_runner) == expected_sha
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"ref": "refs/heads/other", "object": {"sha": "a" * 40}},
+        {"ref": "refs/heads/main", "object": {"sha": "bad-sha"}},
+        {"ref": "refs/heads/main", "object": None},
+    ],
+)
+def test_fetch_main_head_sha_fails_closed_on_malformed_ref(payload: dict) -> None:
+    """A malformed or mismatched branch ref cannot authorize green."""
+
+    def fake_runner(_path: str, *_args: object, **_kwargs: object):
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps(payload), "")
+
+    with pytest.raises(MainCiRunFetchError, match="main branch ref|commit SHA"):
+        main_ci_is_green.fetch_main_head_sha(runner=fake_runner)
+
+
 def test_stale_only_window_is_not_green_and_has_no_deciding_run() -> None:
     """A window of only stale completed runs yields no decisive verdict (fail closed)."""
     for stale in ("cancelled", "timed_out", "startup_failure", "skipped", "neutral", None):
@@ -234,6 +288,7 @@ def test_json_signal_does_not_count_all_skipped_dispatch_as_green(
         head_sha="b" * 40,
     )
     monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *a, **k: [manual_success])
+    monkeypatch.setattr(main_ci_is_green, "fetch_main_head_sha", lambda *_a, **_k: "b" * 40)
 
     def fake_rest_runner(path: str, *_args: object, **_kwargs: object):
         assert path == "repos/ll7/robot_sf_ll7/actions/runs/11/jobs?per_page=100&page=1"
@@ -290,6 +345,7 @@ def test_json_signal_matrix_admission_failure_is_stale(
         head_sha="b" * 40,
     )
     monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *a, **k: [manual_success])
+    monkeypatch.setattr(main_ci_is_green, "fetch_main_head_sha", lambda *_a, **_k: "b" * 40)
 
     def fake_rest_runner(path: str, *_args: object, **_kwargs: object):
         assert path == "repos/ll7/robot_sf_ll7/actions/runs/11/jobs?per_page=100&page=1"
@@ -1167,6 +1223,11 @@ def test_default_workflow_selector_keeps_json_report_label(
         "_gh",
         fake_gh,
     )
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "fetch_main_head_sha",
+        lambda *_a, **_k: f"{7:040x}",
+    )
     monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
 
     assert main_ci_is_green.main() == 0
@@ -1237,6 +1298,7 @@ def test_json_output_matches_schema_and_exit_code(monkeypatch: pytest.MonkeyPatc
 
     sample = [_run(7, "completed", "success", "2026-07-12T12:00:00Z")]
     monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *a, **k: sample)
+    monkeypatch.setattr(main_ci_is_green, "fetch_main_head_sha", lambda *_a, **_k: f"{7:040x}")
     monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
 
     rc = main_ci_is_green.main()
@@ -1250,6 +1312,36 @@ def test_json_output_matches_schema_and_exit_code(monkeypatch: pytest.MonkeyPatc
     assert payload["deciding_run"]["databaseId"] == 7
 
 
+def test_json_signal_is_stale_if_main_moves_during_read(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """A moving main ref cannot yield a green signal from a split snapshot."""
+    first_head = "a" * 40
+    second_head = "b" * 40
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "fetch_runs",
+        lambda *_a, **_k: [
+            _run(7, "completed", "success", "2026-09-24T12:00:00Z", head_sha=first_head)
+        ],
+    )
+    heads = iter([first_head, second_head])
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "fetch_main_head_sha",
+        lambda *_a, **_k: next(heads),
+    )
+    monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
+
+    rc = main_ci_is_green.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["status"] == "stale"
+    assert payload["deciding_run"] is None
+    assert "advanced while" in payload["error"]
+
+
 def test_json_fetch_failure_is_machine_readable_stale(
     monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
@@ -1261,6 +1353,7 @@ def test_json_fetch_failure_is_machine_readable_stale(
         "fetch_runs",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gh run list failed: boom")),
     )
+    monkeypatch.setattr(main_ci_is_green, "fetch_main_head_sha", lambda *_a, **_k: "a" * 40)
     monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
 
     rc = main_ci_is_green.main()
@@ -1383,25 +1476,27 @@ def test_fetch_run_window_malformed_page_fails_closed() -> None:
 def test_raw_fetch_runs_keeps_single_bounded_limit_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The legacy raw window still issues exactly one bounded gh run list call."""
+    """The raw window stays bounded without a potentially stale server filter."""
     captured: dict = {}
 
     def fake_gh(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         captured["args"] = args
-        payload = [_run(1, "completed", "success", "2026-09-01T00:00:00Z")]
+        payload = [
+            _run(2, "in_progress", None, "2026-09-02T00:00:00Z"),
+            _run(1, "completed", "success", "2026-09-01T00:00:00Z"),
+        ]
         return subprocess.CompletedProcess(["gh", *args], 0, json.dumps(payload), "")
 
     monkeypatch.setattr(main_ci_is_green, "_gh", fake_gh)
 
     runs = fetch_runs("owner/repo", "CI", 7)
 
-    assert [run["databaseId"] for run in runs] == [1]
+    assert [run["databaseId"] for run in runs] == [2, 1]
     assert "--limit" in captured["args"]
     assert captured["args"][captured["args"].index("--limit") + 1] == "7"
-    assert "--status" in captured["args"]
-    assert captured["args"][captured["args"].index("--status") + 1] == "completed"
+    assert "--status" not in captured["args"]
     json_fields = captured["args"][captured["args"].index("--json") + 1]
-    assert "event" in json_fields.split(",")
+    assert {"event", "status"} <= set(json_fields.split(","))
 
 
 def test_direct_file_execution_imports_without_installed_package() -> None:

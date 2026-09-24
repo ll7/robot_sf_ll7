@@ -37,6 +37,7 @@ def _producer(root: Path) -> dict:
     _write_json(
         root / "release" / "release_manifest.resolved.json",
         {
+            "source_sha": SOURCE_SHA,
             "release_tag": "benchmark-data-0.0.8",
             "provenance": {"source_sha": SOURCE_SHA, "version_doi": "10.5281/zenodo.123456"},
         },
@@ -61,6 +62,9 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
         source_sha=SOURCE_SHA,
         release_tag="benchmark-data-0.0.8",
         version_doi="10.5281/zenodo.123456",
+        resolved_manifest_payload=finalizer._read_mapping(
+            producer / "release" / "release_manifest.resolved.json"
+        ),
     )
     monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
     monkeypatch.setattr(finalizer, "load_release_campaign_config", lambda _: object())
@@ -121,6 +125,46 @@ def test_producer_rejects_changed_source_or_publication_identity(tmp_path: Path)
     _write_json(campaign, {"git_hash": "b" * 40})
     with pytest.raises(ValueError, match="exact-source"):
         finalizer._require_producer(root, SOURCE_SHA)
+    _write_json(campaign, {"git_hash": SOURCE_SHA})
+    resolved_path = root / "release" / "release_manifest.resolved.json"
+    resolved = finalizer._read_mapping(resolved_path)
+    resolved["source_sha"] = "b" * 40
+    _write_json(resolved_path, resolved)
+    with pytest.raises(ValueError, match="exact-source"):
+        finalizer._require_producer(root, SOURCE_SHA)
+
+
+def test_finalizer_rejects_scientific_manifest_drift_before_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"frozen predecessor fixture")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    expected = finalizer._read_mapping(producer / "release" / "release_manifest.resolved.json")
+    expected["canonical_campaign_config_sha256"] = "b" * 64
+    monkeypatch.setattr(
+        finalizer,
+        "verify_resolved_release_identity",
+        lambda _: SimpleNamespace(
+            source_sha=SOURCE_SHA,
+            release_tag="benchmark-data-0.0.8",
+            version_doi="10.5281/zenodo.123456",
+            resolved_manifest_payload=expected,
+        ),
+    )
+    candidate = tmp_path / "candidate"
+    with pytest.raises(ValueError, match="resolved manifest differs"):
+        finalizer.finalize(
+            producer_root=producer,
+            candidate_root=candidate,
+            resolved_identity=tmp_path / "identity.json",
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+        )
+    assert not candidate.exists()
 
 
 def test_postrun_gate_failure_invalidates_only_candidate(
@@ -139,6 +183,9 @@ def test_postrun_gate_failure_invalidates_only_candidate(
             source_sha=SOURCE_SHA,
             release_tag="benchmark-data-0.0.8",
             version_doi="10.5281/zenodo.123456",
+            resolved_manifest_payload=finalizer._read_mapping(
+                producer / "release" / "release_manifest.resolved.json"
+            ),
         ),
     )
     monkeypatch.setattr(

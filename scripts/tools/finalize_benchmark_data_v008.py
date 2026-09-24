@@ -68,6 +68,7 @@ def _require_producer(producer_root: Path, source_sha: str) -> dict[str, Any]:
         or result.get("publication_requested") is not False
         or result.get("publication_preflight_status") != "not_requested"
         or not isinstance(provenance, dict)
+        or resolved.get("source_sha") != source_sha
         or provenance.get("source_sha") != source_sha
         or not isinstance(release_provenance, dict)
         or release_provenance.get("source_commit") != source_sha
@@ -76,6 +77,23 @@ def _require_producer(producer_root: Path, source_sha: str) -> dict[str, Any]:
         or campaign.get("git_hash") != source_sha
     ):
         raise ValueError("producer is not an accepted, unpublished exact-source release campaign")
+    return result
+
+
+def _require_producer_identity(
+    producer_root: Path, source_sha: str, manifest: Any
+) -> dict[str, Any]:
+    """Match all producer science declarations to the verified resolved identity."""
+    result = _require_producer(producer_root, source_sha)
+    resolved = _read_mapping(producer_root / "release" / "release_manifest.resolved.json")
+    if resolved != manifest.resolved_manifest_payload:
+        raise ValueError("producer resolved manifest differs from the verified release identity")
+    provenance = result["benchmark_release"]
+    if (
+        provenance["release_tag"] != manifest.release_tag
+        or provenance["version_doi"] != manifest.version_doi
+    ):
+        raise ValueError("producer release identity differs from the verified candidate identity")
     return result
 
 
@@ -230,13 +248,7 @@ def finalize(
         raise ValueError("publication candidate must be inside the source checkout")
     if candidate_root == producer_root or producer_root in candidate_root.parents:
         raise ValueError("publication candidate must be separate from the producer")
-    producer_result = _require_producer(producer_root, expected_source_sha)
-    release_provenance = producer_result["benchmark_release"]
-    if (
-        release_provenance["release_tag"] != manifest.release_tag
-        or release_provenance["version_doi"] != manifest.version_doi
-    ):
-        raise ValueError("producer release identity differs from the verified candidate identity")
+    producer_result = _require_producer_identity(producer_root, expected_source_sha, manifest)
     _require_copyable_producer(producer_root)
     if candidate_root.exists():
         raise FileExistsError(f"publication candidate already exists: {candidate_root}")

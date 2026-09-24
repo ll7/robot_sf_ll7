@@ -123,8 +123,8 @@ Social Navigation Quality Index (SNQI) v2 bundle requires those reports. The 0.0
 template therefore defers publication export. The separate
 `scripts/tools/finalize_benchmark_data_v008.py` now copies the accepted producer, runs the
 two evidence gates, rechecks full release acceptance, and exports a publication candidate.
-Six focused finalizer tests passed on provisional source snapshot
-`40c18118cdbbc92ca6ab4bc498d80b394adf27df`. The actual full-campaign and cold-bundle
+Seven focused finalizer tests passed on the provisional release branch.
+The actual full-campaign and cold-bundle
 path remains untested until the metric and SNQI-v2 branches merge and the author approves DOI
 creation. A failed gate leaves the candidate invalid and the producer unchanged.
 

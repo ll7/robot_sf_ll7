@@ -119,9 +119,8 @@ Split broad ideas before writing.
    - record confidence (high if direct signal, medium if one-step derived, low if speculative).
 4. De-duplicate against open/closed issues before creation.
 5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
-   - Every created issue must carry the canonical `## Relationships` block. Use `none` for
-     unestablished edges; do not infer Parent, Blocked by, Blocking, or Relates to from discovery
-     mentions.
+   - After creation, set native Parent/Blocked by/Blocking links only when the reviewed issue
+     context establishes the hierarchy or prerequisite; an issue mention alone is insufficient.
    - Before any create request, run the zero-write body preflight
      `uv run python -m scripts.dev.issue_readiness_gate preflight --body-file <body.md>`;
      incomplete structure or invalid archetype metadata stops creation with exact missing

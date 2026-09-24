@@ -141,12 +141,24 @@ class GitHubConflictError(GitHubSyncError):
     """Raised when a remote or durable value changed outside the operation CAS."""
 
 
+class GitHubPreflightConflict(GitHubConflictError):
+    """A deterministic local conflict rejected before any provider mutation."""
+
+
+class GitHubPreflightValidationError(GitHubValidationError):
+    """A malformed local publication input rejected before provider mutation."""
+
+
 class GitHubPrivacyError(GitHubSyncError, ValueError):
     """Raised when evidence cannot be published safely."""
 
 
 class GitHubTransportError(GitHubSyncError):
     """Raised when a provider response is malformed or transport is unavailable."""
+
+
+class GitHubCapabilityUnavailable(GitHubTransportError):
+    """Provider cannot perform the requested operation before a mutation starts."""
 
 
 class GitHubOutboxError(GitHubSyncError):
@@ -1485,7 +1497,7 @@ class GitHubSync:
                 replayed=True,
             )
 
-        linked = _linked_issue_identity(finding, repository, rendered.marker)
+        linked = _preflight_link_identity(finding, repository, rendered.marker)
         search, search_error = self._search(repository, rendered.marker)
         if search_error is not None:
             entry = self._mark(entry, "failed", search_error)
@@ -1647,6 +1659,18 @@ class GitHubSync:
                                 entry,
                                 reason=reason,
                                 remote_write=remote_write,
+                            )
+                        except GitHubCapabilityUnavailable as exc:
+                            reason = f"issue create capability unavailable: {exc}"
+                            entry = self._mark(entry, "failed", reason)
+                            self._mark_claim(claim, "failed", reason)
+                            return self._result(
+                                "unavailable",
+                                repository,
+                                finding,
+                                entry,
+                                reason=reason,
+                                remote_write="none",
                             )
                         except Exception as exc:  # noqa: BLE001 - create outcome is inherently ambiguous.
                             reconciled, reconcile_error = self._search(repository, rendered.marker)
@@ -1944,6 +1968,19 @@ class GitHubSync:
                         reason=reason,
                         remote_write=remote_write,
                     )
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue update capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    if claim is not None:
+                        self._mark_claim(claim, "failed", reason)
+                    return self._result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        entry,
+                        reason=reason,
+                        remote_write="none",
+                    )
                 except Exception as exc:  # noqa: BLE001 - update may have applied remotely.
                     reason = f"update outcome is ambiguous: {type(exc).__name__}: {exc}"
                     remote_write = (
@@ -2047,7 +2084,7 @@ class GitHubSync:
             publication_digest=comment_digest,
         )
         comment_body = _render_publication_comment(finding, rendered, revision, comment_digest)
-        linked = _linked_issue_identity(finding, repository, rendered.marker)
+        linked = _preflight_link_identity(finding, repository, rendered.marker)
         linked_current_comment = (
             linked is not None
             and linked.get("publication_kind") == "revision_comment"
@@ -2123,7 +2160,12 @@ class GitHubSync:
                 raise GitHubOutboxError("initial publication entry has no expected revision")
             initial_block_digest = entry.auditor_block_digest or None
 
-        def _stale(reason: str, issue: GitHubIssue | None = None) -> GitHubSyncResult:
+        def _stale(
+            reason: str,
+            issue: GitHubIssue | None = None,
+            *,
+            remote_write: str = "none",
+        ) -> GitHubSyncResult:
             stale_entry = self._mark_publication_stale(entry, reason)
             return self._append_result(
                 "conflict",
@@ -2135,6 +2177,7 @@ class GitHubSync:
                 finding,
                 reason=reason,
                 replayed=True,
+                remote_write=remote_write,
             )
 
         def _ambiguous(reason: str, issue: GitHubIssue | None = None) -> GitHubSyncResult:
@@ -2533,6 +2576,21 @@ class GitHubSync:
                         exact_payload=True,
                     )
                     remote_write = "applied"
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue create capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    self._mark_claim(claim, "failed", reason)
+                    return self._append_result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        None,
+                        finding,
+                        reason=reason,
+                        remote_write="none",
+                    )
                 except Exception as exc:  # noqa: BLE001 - create outcome is ambiguous by definition.
                     reconciled, reconcile_error = self._search(repository, rendered.marker)
                     remote = (
@@ -2591,10 +2649,32 @@ class GitHubSync:
                             reason=reason,
                             remote_write="ambiguous",
                         )
+                    except GitHubTransportError as transport_error:
+                        reason = (
+                            "create outcome remains ambiguous after exact-marker recovery: "
+                            f"{type(transport_error).__name__}: {transport_error}"
+                        )
+                        entry = self._mark(entry, "ambiguous", reason)
+                        self._mark_claim(claim, "ambiguous", reason)
+                        return self._append_result(
+                            "ambiguous",
+                            repository,
+                            finding,
+                            operation_id,
+                            entry,
+                            remote,
+                            finding,
+                            reason=reason,
+                            remote_write="ambiguous",
+                        )
                     except GitHubSyncError as conflict:
-                        return _stale(str(conflict), remote)
+                        reason = str(conflict)
+                        self._mark_claim(claim, "conflict", reason, allow_terminalize=True)
+                        return _stale(reason, remote, remote_write="ambiguous")
                     status = "reconciled"
-                    remote_write = "none"
+                    # Complete exact-marker readback confirms that this create
+                    # was accepted despite the lost provider response.
+                    remote_write = "applied"
 
                 # Persist the local receipt before the post-create reread.  A
                 # missing/transport-failed reread must not erase evidence that
@@ -2994,7 +3074,12 @@ class GitHubSync:
                 publication_digest=comment_digest,
                 expected_body=comment_body,
             )
-            remote_write = "applied" if write_status == "created" else "none"
+            # A provider may return ``reconciled`` after a timeout when a
+            # complete marker readback confirms that this POST was accepted.
+            # The exact comment is durable evidence of a possible remote
+            # mutation, so retain the reserved issue-write charge.  Only the
+            # deterministic pre-POST ``unchanged`` result is a no-write path.
+            remote_write = "applied" if write_status in {"created", "reconciled"} else "none"
             status = "commented" if write_status == "created" else "reconciled"
         except Exception as exc:  # noqa: BLE001 - preserve unresolved comment ambiguity.
             try:
@@ -3370,22 +3455,24 @@ class GitHubSync:
             raise GitHubValidationError("expected_finding_revision must be non-negative")
         if self.finding_store is None:
             if expected_finding_revision is not None:
-                raise GitHubConflictError(
+                raise GitHubPreflightConflict(
                     "expected_finding_revision requires a canonical FindingStore adapter"
                 )
             return None
         store = getattr(self.finding_store, "store", None)
         if store is None:
-            raise GitHubConflictError("finding-store adapter does not expose canonical AuditStore")
+            raise GitHubPreflightConflict(
+                "finding-store adapter does not expose canonical AuditStore"
+            )
         stored = store.get(finding.finding_id)
         if stored is None or not isinstance(stored.record, Finding):
-            raise GitHubConflictError("durable finding is missing or has the wrong record type")
+            raise GitHubPreflightConflict("durable finding is missing or has the wrong record type")
         if expected_finding_revision is not None and stored.revision != expected_finding_revision:
-            raise GitHubConflictError(
+            raise GitHubPreflightConflict(
                 "finding revision does not match canonical revision before remote mutation"
             )
         if not _same_finding_content(stored.record, finding):
-            raise GitHubConflictError("caller finding is stale relative to canonical finding")
+            raise GitHubPreflightConflict("caller finding is stale relative to canonical finding")
         return stored.revision
 
     def _repair_succeeded_claim(
@@ -4718,6 +4805,21 @@ def _find_exact_publication_comment(
     return None if not matches else dict(matches[0])
 
 
+def _preflight_link_identity(
+    finding: Finding,
+    repository: str,
+    marker: str,
+) -> dict[str, Any] | None:
+    """Classify local link failures before the provider boundary."""
+
+    try:
+        return _linked_issue_identity(finding, repository, marker)
+    except GitHubValidationError as exc:
+        raise GitHubPreflightValidationError(str(exc)) from exc
+    except GitHubConflictError as exc:
+        raise GitHubPreflightConflict(str(exc)) from exc
+
+
 def _linked_issue_identity(
     finding: Finding,
     repository: str,
@@ -4895,6 +4997,7 @@ __all__ = [
     "GITHUB_SYNC_SCHEMA_VERSION",
     "FindingEvidence",
     "GitHubAmbiguousCreate",
+    "GitHubCapabilityUnavailable",
     "GitHubConflictError",
     "GitHubFindingClaim",
     "GitHubIssue",
@@ -4902,6 +5005,8 @@ __all__ = [
     "GitHubOutbox",
     "GitHubOutboxEntry",
     "GitHubOutboxError",
+    "GitHubPreflightConflict",
+    "GitHubPreflightValidationError",
     "GitHubPrivacyError",
     "GitHubProvider",
     "GitHubSync",

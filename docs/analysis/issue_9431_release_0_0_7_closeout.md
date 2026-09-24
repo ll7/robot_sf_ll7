@@ -16,10 +16,8 @@ post-run filesystem promotion error; it is retained below rather than hidden.
   `issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922`
 - canonical effective-configuration SHA-256:
   `095331329b06673dc165109c8523579549f769c98542b207a712f6e2bf9ed6ad`
-- scenario-matrix SHA-256:
-  `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`
-- versioned scenario-source manifest SHA-256:
-  `d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`
+- 0.0.7 scenario source: `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml`,
+  SHA-256 `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`
 - resolved release-identity SHA-256:
   `9256f2a92578319238b06b0873aa1232482347a47b781a93c05390e93b480a63`
 - release-metadata SHA-256:
@@ -67,6 +65,13 @@ source range by planner, scenario, and seed. They contain all 20,160 paired rows
 the 622 changed outcome identities, per-arm outcome counts, and deterministic
 seed-block bootstrap intervals. The execution audit admits native, adapter, and
 contract-valid mixed execution while rejecting fallback or degraded rows.
+The matched scenario IDs do not denote identical scenario conditions: 0.0.6
+uses `configs/scenarios/classic_interactions_francis2023.yaml` (SHA-256
+`d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5`), while
+0.0.7 uses `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml`
+(SHA-256 `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`).
+The report records and verifies these separate identities; the release comparison
+therefore includes the scenario-definition correction.
 
 The source range includes the versioned social-force goal-approach repair, the
 versioned goal-zone success-definition repair, and their runtime-admission
@@ -88,13 +93,14 @@ archive and successor publication bundle using
 The comparator verifies both archive checksums, the predecessor source identity
 inside its resolved manifest, and exact successor row-byte equality with the
 pinned bundle. It requires the exact canonical 14-arm × 48-scenario × 30-seed
-Cartesian identity (20,160 rows). A focused consistency test binds those frozen
-scenario IDs, planner arms, and seeds to the versioned scenario/release manifests
-and verifies the scenario-manifest SHA. At run time the comparator checks each
-successor row's source and execution metadata. Runtime fallback/degraded markers
-use the release-acceptance filter, so declarative config fields are not
-misclassified as runtime execution. The generated report binds its campaign ID
-to the pinned bundle's campaign manifest and records both matrix digests. After
+Cartesian identity (20,160 rows). A focused consistency test binds both frozen
+scenario source files, the successor campaign template, scenario IDs, planner
+arms, and seeds. At run time the comparator checks each successor row's source
+and execution metadata, and reads both release-specific scenario identities from
+the archives' resolved manifests. Runtime fallback/degraded markers use the
+release-acceptance filter, so declarative config fields are not misclassified as
+runtime execution. The generated report binds its campaign ID to the pinned
+bundle's campaign manifest and records both scenario-source identities. After
 retrieving the exact archives and extracting the successor bundle's `payload/`
 directory, rerun:
 

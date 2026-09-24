@@ -381,6 +381,61 @@ Interpretation rules:
 For the pilot method and current recommendation gate, see
 `docs/context/issue_692_scenario_difficulty_analysis.md` .
 
+## One-Command Persisted Benchmark Showcase
+
+Build a machine-readable summary and Markdown report from an existing camera-ready campaign or a
+checksum-pinned publication bundle. This consumes persisted results only; it does not start planner
+simulations. The report retains missing and malformed rows, operational fallback/degraded states,
+the existing camera-ready analyzer's diagnostics, and source-file digests. It selects representative
+cases by named events and individual metrics, without combining them into an opaque score.
+Only operationally eligible run rows contribute to planner-family outcome and metric aggregates.
+Fallback, degraded, unavailable, failed, and unknown runs remain visible in the accounting and may
+appear as diagnostic cases, but are labeled and excluded from those aggregates.
+
+For the public Benchmark Release 0.0.2 bundle:
+
+```bash
+uv run python scripts/tools/benchmark_showcase.py \
+  --bundle-url https://github.com/ll7/robot_sf_ll7/releases/download/0.0.2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz \
+  --sha256 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90 \
+  --out-dir output/benchmark_showcase/release-0.0.2
+```
+
+For an already extracted campaign, pass its root instead:
+
+```bash
+uv run python scripts/tools/benchmark_showcase.py \
+  --campaign-root output/benchmarks/camera_ready/<campaign_id> \
+  --out-dir output/benchmark_showcase/<campaign_id>
+```
+
+The output directory contains `showcase_summary.json`, `report.md`, and the existing analyzer's
+machine and Markdown reports under `analysis/`. A bundle input is cached only after its supplied
+SHA-256 matches, and embedded `checksums.sha256` entries are checked before analysis. The existing
+episode figure bridge is used only when a row contains recorded `replay_steps` that pass replay
+validation. Rows without those steps are marked `unavailable`; the bridge's `simple_policy`
+resimulation fallback is skipped because it would run a new simulation and would not reproduce the
+recorded planner. A replay visualization is not itself new benchmark evidence.
+
+Before invoking the bridge's episode-ID lookup, the showcase rechecks the selected source file
+digest, the selected JSONL line digest and content, and whether exactly one parsed row has the same
+episode ID. The existing renderer resolves the first matching ID, so any duplicate ID is reported
+as `mismatch` and the renderer is skipped; its sidecar's episode, scenario, seed, and whole-file
+digest alone cannot identify the selected row. Missing or changed row provenance also fails closed
+before rendering. `verified` therefore binds the visualization to the selected persisted record
+plus the renderer sidecar and artifact checks; it remains replay provenance, not new benchmark or
+safety evidence.
+
+The Release 0.0.2 records currently have no recorded `replay_steps`, so the showcase can identify and
+link critical source rows but cannot materialize a verified trajectory from this bundle. Findings
+from the existing analyzer remain visible and should be considered before interpreting the summary.
+The machine summary exposes persisted-row counts under
+`collision_event_metric_consistency`; the Markdown report places its diagnostic before the outcome
+matrix. It calls out canonical collision events with `termination_reason=collision` when both
+`metrics.collisions` and `metrics.total_collision_count` are at or below zero, without reconciling
+event flags or changing recorded metrics. The analyzer-integrity line refers only to the analyzer's
+campaign-integrity field.
+
 ## Campaign Summary Semantics
 
 Benchmark mode is fail-closed:

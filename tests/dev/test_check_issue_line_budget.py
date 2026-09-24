@@ -15,9 +15,13 @@ from scripts.dev.check_issue_line_budget import (
     DiffstatParseError,
     evaluate_budget,
     find_override_reason,
+    has_declared_cap,
     main,
     measure_diffstat,
+    parse_budget_dimensions,
+    parse_context_budget,
     parse_declared_caps,
+    split_budget_text,
 )
 
 if TYPE_CHECKING:
@@ -236,3 +240,136 @@ def test_evaluate_budget_rejects_malformed_numstat() -> None:
     assert result["status"] == STATUS_INVALID
     assert result["ok"] is False
     assert any("malformed numstat line" in breach for breach in result["breaches"])
+
+
+ISSUE_9279_CONTEXT_BUDGET = (
+    "## Bounded agent task packet\n"
+    "• Context budget: initially at most 12 files / 16,000 input tokens: this issue, "
+    "contract owner, listed canonical owners and focused tests; expand only for a "
+    "named unresolved symbol, not broad repository discovery.\n"
+)
+
+ISSUE_WITH_BOTH_BUDGETS = (
+    "## Reviewability budget\n"
+    "Maximum 10 files and 800 net new lines for this child.\n"
+    "\n"
+    "## Bounded agent task packet\n"
+    "• Context budget: initially at most 12 files / 16,000 input tokens: this issue, "
+    "contract owner, listed canonical owners and focused tests...\n"
+)
+
+NUMSTAT_38_FILES = "".join(f"5\t0\tscripts/dev/frame_{i:02d}.py\n" for i in range(38))
+NUMSTAT_11_FILES = "".join(f"10\t0\tscripts/dev/module_{i:02d}.py\n" for i in range(11))
+
+
+def test_context_budget_is_not_treated_as_pr_diff_cap() -> None:
+    """A reading-context budget in files/tokens is not treated as a PR diff cap (issue #9641)."""
+    caps = parse_declared_caps(ISSUE_9279_CONTEXT_BUDGET)
+    assert caps == {"files": None, "lines": None}
+    assert has_declared_cap(ISSUE_9279_CONTEXT_BUDGET) is False
+
+    context = parse_context_budget(ISSUE_9279_CONTEXT_BUDGET)
+    assert context == {"files": 12, "tokens": 16000}
+
+    dimensions = parse_budget_dimensions(ISSUE_9279_CONTEXT_BUDGET)
+    assert dimensions == {
+        "diff": {"files": None, "lines": None},
+        "context": {"files": 12, "tokens": 16000},
+    }
+
+    # A PR touching 38 files is within budget because no PR diff cap was declared.
+    result = evaluate_budget(
+        issue_body=ISSUE_9279_CONTEXT_BUDGET,
+        pr_body="Refs #9279\n",
+        numstat_text=NUMSTAT_38_FILES,
+    )
+    assert result["status"] == STATUS_NO_CAP
+    assert result["ok"] is True
+    assert result["breaches"] == []
+    assert result["context_budget"] == {"files": 12, "tokens": 16000}
+
+
+def test_issue_with_both_budgets_enforces_pr_diff_cap() -> None:
+    """An issue with both context budget and PR diff cap enforces the real diff cap (issue #9641)."""
+    caps = parse_declared_caps(ISSUE_WITH_BOTH_BUDGETS)
+    assert caps == {"files": 10, "lines": 800}
+    assert has_declared_cap(ISSUE_WITH_BOTH_BUDGETS) is True
+
+    context = parse_context_budget(ISSUE_WITH_BOTH_BUDGETS)
+    assert context == {"files": 12, "tokens": 16000}
+
+    dimensions = parse_budget_dimensions(ISSUE_WITH_BOTH_BUDGETS)
+    assert dimensions == {
+        "diff": {"files": 10, "lines": 800},
+        "context": {"files": 12, "tokens": 16000},
+    }
+
+    # 11 files exceeds the 10-file diff cap (even though it is within the 12-file context budget).
+    result = evaluate_budget(
+        issue_body=ISSUE_WITH_BOTH_BUDGETS,
+        pr_body="Refs #1\n",
+        numstat_text=NUMSTAT_11_FILES,
+    )
+    assert result["status"] == STATUS_OVER
+    assert result["ok"] is False
+    assert "11 files > 10-file cap" in result["breaches"]
+
+    # Reasoned override permits merge when real cap is exceeded.
+    overridden = evaluate_budget(
+        issue_body=ISSUE_WITH_BOTH_BUDGETS,
+        pr_body="Refs #1\nbudget-override: synthetic test frames required for coverage\n",
+        numstat_text=NUMSTAT_11_FILES,
+    )
+    assert overridden["status"] == STATUS_OVERRIDE
+    assert overridden["ok"] is True
+
+
+def test_context_budget_phrasings_and_markdown_sections() -> None:
+    """Various reading-context phrasings and section structures are recognized."""
+    reversed_wording = "Context budget: 16,000 input tokens / 12 files\n"
+    assert parse_declared_caps(reversed_wording) == {"files": None, "lines": None}
+    assert parse_context_budget(reversed_wording) == {"files": 12, "tokens": 16000}
+
+    review_context = "Review-context budget: 8 files and 10,000 tokens.\n"
+    assert parse_declared_caps(review_context) == {"files": None, "lines": None}
+    assert parse_context_budget(review_context) == {"files": 8, "tokens": 10000}
+
+    section_body = (
+        "## Context budget\n"
+        "Initially at most 6 files and 20,000 input tokens.\n"
+        "\n"
+        "## Reviewability budget\n"
+        "Maximum 4 files and 300 net new lines.\n"
+    )
+    assert parse_declared_caps(section_body) == {"files": 4, "lines": 300}
+    assert parse_context_budget(section_body) == {"files": 6, "tokens": 20000}
+
+    block_body = "• Context budget:\n  - at most 15 files\n  - 32,000 tokens\n"
+    assert parse_declared_caps(block_body) == {"files": None, "lines": None}
+    assert parse_context_budget(block_body) == {"files": 15, "tokens": 32000}
+
+
+def test_split_budget_text_partitions_correctly() -> None:
+    """split_budget_text isolates context budget from general diff cap text."""
+    body = (
+        "Intro text\n"
+        "• Context budget: initially at most 12 files / 16,000 input tokens\n"
+        "Reviewability budget: Maximum 10 files and 800 net new lines\n"
+    )
+    diff_text, context_text = split_budget_text(body)
+    assert "Context budget" not in diff_text
+    assert "Reviewability budget" in diff_text
+    assert "Context budget" in context_text
+    assert "Reviewability budget" not in context_text
+
+
+def test_evaluate_budget_rejects_unrepresentable_context_cap() -> None:
+    """An unrepresentable numeric cap in context budget raises a fail-closed STATUS_INVALID."""
+    result = evaluate_budget(
+        issue_body=f"Context budget: at most {'9' * 5000} files\n",
+        pr_body="Refs #1\n",
+        numstat_text=WITHIN_NUMSTAT,
+    )
+    assert result["status"] == STATUS_INVALID
+    assert result["ok"] is False
+    assert result["breaches"] == ["declared budget cap is not a valid integer"]

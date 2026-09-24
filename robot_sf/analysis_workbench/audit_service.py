@@ -7266,6 +7266,13 @@ class AuditService:
             # outcome and must consume the reserved issue-write unit.
             return 1
         outcome = getattr(result, "remote_write", None)
+        # A synchronizer may complete its read-only preflight and return an
+        # explicit unavailable result when a callable provider seam is only an
+        # unsupported stub.  The send lease was acquired before that result
+        # was known, so settle the reservation from the explicit no-write
+        # outcome rather than from the terminal status or callable presence.
+        if getattr(result, "status", None) == "unavailable" and outcome == "none":
+            return 0
         if outcome in {"applied", "ambiguous"}:
             return 1
         if outcome == "none":
@@ -7414,6 +7421,11 @@ class AuditService:
                     self._assert_source(target, expected_source_revision=operation_source_revision)
                     self._bind_context(target, operation_context)
                     provider_started = True
+                    from robot_sf.analysis_workbench.audit_github import (  # noqa: PLC0415
+                        GitHubPreflightConflict,
+                        GitHubPreflightValidationError,
+                    )
+
                     try:
                         provider_result = syncer.sync(
                             checked_repository,
@@ -7424,6 +7436,13 @@ class AuditService:
                             retry_ambiguous=retry_ambiguous,
                             worker_id=checked_worker_id,
                         )
+                    except (GitHubPreflightConflict, GitHubPreflightValidationError) as exc:
+                        # Canonical finding preflight runs after the service
+                        # reservation/lease but before any provider request.
+                        # Release the reserved unit through normal settlement
+                        # and retain the conflict as the durable service receipt.
+                        provider_started = False
+                        raise AuditContextConflict(str(exc)) from exc
                     except BaseException as exc:
                         post_send_reason = self._github_post_send_conflict(
                             target,

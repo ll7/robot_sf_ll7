@@ -16,6 +16,7 @@ from robot_sf.analysis_workbench.audit_findings import (
 )
 from robot_sf.analysis_workbench.audit_github import (
     GITHUB_PUBLICATION_SCHEMA_VERSION,
+    GitHubCapabilityUnavailable,
     GitHubConflictError,
     GitHubFindingClaim,
     GitHubIssue,
@@ -72,6 +73,7 @@ class AppendOnlyProvider:
         self.comment_error: Exception | None = None
         self.comment_error_after_success = False
         self.tamper_comment_after_success = False
+        self.reconciled_comment_result = False
         self.next_number = 10
 
     def search_issues(self, repository: str, *, marker: str) -> SearchResult:
@@ -150,11 +152,21 @@ class AppendOnlyProvider:
             )
         if self.timeout_after_comment:
             raise TimeoutError("comment response lost after GitHub accepted POST")
+        if self.reconciled_comment_result:
+            self.reconciled_comment_result = False
+            return {"status": "reconciled", "comment": comment}
         return {"status": "created", "comment": comment}
 
     def update_issue(self, *_args: Any, **_kwargs: Any) -> None:
         self.update_calls += 1
         raise AssertionError("BA05 append-only path attempted an issue-body update")
+
+
+class UnsupportedCanonicalCreateProvider(AppendOnlyProvider):
+    """Append-only provider whose canonical create seam is explicitly unavailable."""
+
+    def create_issue_with_finding_revision(self, *_args: Any, **_kwargs: Any) -> GitHubIssue:
+        raise GitHubCapabilityUnavailable("canonical reservation is not implemented")
 
 
 def test_initial_issue_is_immutable_and_revision_is_a_comment(tmp_path: Path) -> None:
@@ -224,6 +236,24 @@ def test_timeout_after_comment_is_reconciled_without_duplicate(tmp_path: Path) -
     assert replay.status == "unchanged"
     assert len(provider.comment_calls) == 1
     assert provider.update_calls == 0
+
+
+def test_reconciled_comment_write_is_counted_as_a_possible_remote_write(
+    tmp_path: Path,
+) -> None:
+    provider = AppendOnlyProvider()
+    finding = _finding("comment-reconciled-write")
+    revised = replace(finding, observations=("reconciled revision",))
+    with GitHubOutbox(tmp_path) as outbox:
+        sync = GitHubSync(provider, outbox)
+        initial = sync.sync(REPOSITORY, finding, operation_id="reconciled-initial")
+        provider.reconciled_comment_result = True
+        result = sync.sync(REPOSITORY, revised, operation_id="reconciled-comment")
+
+    assert initial.status == "created"
+    assert result.status == "reconciled"
+    assert result.remote_write == "applied"
+    assert len(provider.comment_calls) == 1
 
 
 def test_append_only_conflicting_comment_readback_is_retained_not_raised(
@@ -329,7 +359,7 @@ def test_append_only_create_timeout_reconciles_or_preserves_ambiguity(tmp_path: 
             operation_id="create-timeout-reconciled",
         )
     assert reconciled.status == "reconciled"
-    assert reconciled.remote_write == "none"
+    assert reconciled.remote_write == "applied"
     assert len(accepted.create_calls) == 1
 
     class LostCreateProvider(AppendOnlyProvider):
@@ -544,6 +574,52 @@ def test_append_only_finding_store_requires_create_reservation_before_mutation(
     assert "reservation" in result.reason
     assert provider.create_calls == []
     assert provider.comment_calls == []
+
+
+def test_append_only_unavailable_create_does_not_disable_linked_comments(
+    tmp_path: Path,
+) -> None:
+    finding = _finding("append-linked-comment-capability")
+    seed_provider = AppendOnlyProvider()
+    with AuditStore(tmp_path) as store:
+        finding_store = FindingStore(store)
+        created = finding_store.create(finding, operation_id="create-linked-capability")
+        with GitHubOutbox(store) as outbox:
+            seeded = GitHubSync(seed_provider, outbox).sync(
+                REPOSITORY,
+                finding,
+                operation_id="seed-linked-capability",
+            )
+            assert seeded.finding is not None and seeded.finding.github_issue is not None
+            linked = finding_store.update(
+                seeded.finding,
+                operation_id="link-seeded-capability",
+                expected_revision=created.revision,
+            )
+            linked_record = finding_store.get(finding.finding_id)
+            assert linked_record is not None
+            revised = replace(linked_record, observations=("linked comment remains available",))
+            revised_commit = finding_store.update(
+                revised,
+                operation_id="revise-linked-capability",
+                expected_revision=linked.revision,
+            )
+            revised_record = finding_store.get(finding.finding_id)
+            assert revised_record is not None
+
+            provider = UnsupportedCanonicalCreateProvider()
+            provider.issues = list(seed_provider.issues)
+            result = GitHubSync(provider, outbox, finding_store=finding_store).sync(
+                REPOSITORY,
+                revised_record,
+                operation_id="append-linked-capability",
+                expected_finding_revision=revised_commit.revision,
+            )
+
+    assert result.status == "commented"
+    assert provider.create_calls == []
+    assert len(provider.comment_calls) == 1
+    assert provider.update_calls == 0
 
 
 def test_append_only_changed_finding_does_not_reuse_ambiguous_initial_payload(

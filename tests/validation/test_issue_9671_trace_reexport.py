@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
+from robot_sf.benchmark.utils import _config_hash
 from scripts.validation import check_issue_9671_trace_reexport as checker
 from scripts.validation.check_issue_9671_trace_reexport import SOURCE_SHA, check
 
@@ -35,7 +36,11 @@ def _row(seed: int, status: str, *, trace: bool) -> dict:
             record_planner_decision_trace=True,
             record_simulation_step_trace=True,
         )
+    config_hash = _config_hash(params)
     return {
+        "episode_id": f"classic_doorway_medium--{seed}--{config_hash}",
+        "config_hash": config_hash,
+        "result_provenance": {"config_hash": config_hash},
         "algo": "ppo",
         "scenario_id": "classic_doorway_medium",
         "seed": seed,
@@ -93,6 +98,8 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
                     "git": {"commit": SOURCE_SHA},
                     "config_hash": effective[name],
                     "scenario_matrix": "test-matrix.yaml",
+                    "campaign_id": tmp_path.name,
+                    "scenario_matrix_hash": "test-matrix-hash",
                     "seed_policy": {"resolved_seeds": selected},
                 }
             )
@@ -101,8 +108,48 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
     return configs, manifests, digests, effective
 
 
+def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
+    path = tmp_path / "runs" / "ppo__differential_drive" / "episodes.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for row in rows:
+        config_hash = _config_hash(row["scenario_params"])
+        row["config_hash"] = config_hash
+        row["result_provenance"]["config_hash"] = config_hash
+        row["episode_id"] = f"classic_doorway_medium--{row['seed']}--{config_hash}"
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    sidecar = {
+        "run": {"repo_commit": SOURCE_SHA},
+        "campaign_identity": {
+            "scenario_matrix_hash": "test-matrix-hash",
+            "algorithm": "ppo",
+        },
+        "raw_artifacts": [
+            {
+                "kind": "episodes_jsonl",
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        ],
+        "rows": [
+            {
+                "jsonl_line": index,
+                "episode_id": row["episode_id"],
+                "scenario_id": row["scenario_id"],
+                "seed": row["seed"],
+                "repo_commit": SOURCE_SHA,
+                "config_hash": row["config_hash"],
+            }
+            for index, row in enumerate(rows)
+        ],
+    }
+    path.with_name(path.name + ".provenance.json").write_text(json.dumps(sidecar))
+    return path
+
+
 def _check(archive: Path, traces: Path, tmp_path: Path, seeds: list[int]) -> dict:
     configs, manifests, digests, effective = _bindings(tmp_path, seeds)
+    traces = _producer_trace(
+        tmp_path, [json.loads(line) for line in traces.read_text().splitlines()]
+    )
     return check(
         archive,
         [traces],
@@ -177,6 +224,7 @@ def test_rejects_unbound_config_bytes(tmp_path: Path) -> None:
     traces = tmp_path / "episodes.jsonl"
     traces.write_text(json.dumps(_row(113, "collision", trace=True)) + "\n")
     configs, manifests, digests, effective = _bindings(tmp_path, [113])
+    traces = _producer_trace(tmp_path, [json.loads(traces.read_text())])
     configs["doorway"].write_text(configs["doorway"].read_text() + "# drift\n")
     with pytest.raises(ValueError, match="diagnostic config SHA-256 mismatch"):
         check(
@@ -185,6 +233,26 @@ def test_rejects_unbound_config_bytes(tmp_path: Path) -> None:
             configs,
             manifests,
             expected={("ppo", "classic_doorway_medium", 113)},
+            expected_archive_sha256=None,
+            expected_config_sha256=digests,
+            expected_effective_hash=effective,
+        )
+
+
+def test_rejects_mixed_trace_bytes_without_matching_producer_manifest(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    configs, manifests, digests, effective = _bindings(tmp_path, [113, 22])
+    traces = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
+    with traces.open("a") as stream:
+        stream.write(json.dumps(_row(22, "collision", trace=True)) + "\n")
+    with pytest.raises(ValueError, match="does not bind JSONL bytes"):
+        check(
+            archive,
+            [traces],
+            configs,
+            manifests,
+            expected={("ppo", "classic_doorway_medium", seed) for seed in (113, 22)},
             expected_archive_sha256=None,
             expected_config_sha256=digests,
             expected_effective_hash=effective,

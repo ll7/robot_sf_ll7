@@ -43,7 +43,11 @@ and logs in durable artifact storage outside Git.
 
 After collection, run `scripts/validation/check_issue_9671_trace_reexport.py` with the exact
 archive, both episode JSONL files, both diagnostic config files, and both produced
-`campaign_manifest.json` files. The comparator requires the frozen source SHA, the separately
+`campaign_manifest.json` files. Retain each runner-produced
+`episodes.jsonl.provenance.json` beside its JSONL: the comparator checks its whole-file checksum,
+every row's line, episode, scenario, seed, source, and scenario-parameter hash, then binds the
+producer file to the matching diagnostic campaign directory and scenario-matrix hash. A mixed
+or unmanifested JSONL fails admission. The comparator requires the frozen source SHA, the separately
 pinned config SHA-256 values and effective hashes, per-step finite robot/pedestrian states and
 total pedestrian force vectors, and release-equivalent scientific parameters apart from the
 three recording flags. For seeds 22–24, the parameters are compared to the same release

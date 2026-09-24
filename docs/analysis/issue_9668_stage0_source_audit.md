@@ -87,11 +87,14 @@ been submitted, so the actual 0.0.7-to-0.0.8 equivalence result is unavailable.
 
 The tracked 0.0.8 campaign draft is
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml`
-(SHA-256 `bf3139e6b2d127e897a26f94bdcba6783c2fecaa59980f526963d0c25775ccb0`). Parsed YAML
-comparison with the predecessor campaign template found every existing field identical after
-removing the new `snqi_v2_spec` block. That block names the weights, anchors, and family files; the
-anchors and their checksum remain unfrozen until the 1,344-row development-seed calibration is
-accepted. This template comparison establishes configuration scope only, not episode equivalence.
+(SHA-256 `cd749189831cc6cd940aed695687b52a476f02e0c11f4afeb792e84861ee2774`). Parsed YAML
+comparison with the predecessor campaign template found every scientific field identical after
+removing the new `snqi_v2_spec` block and resetting the publication-export flag to `true`.
+The block names the weights, anchors, and family files; the anchors and their checksum remain
+unfrozen until the 1,344-row development-seed calibration is accepted. The export flag is an
+execution-stage change: the required force-validation report is produced after the predecessor
+equivalence check. This template comparison establishes configuration scope only, not episode
+equivalence.
 
 The predecessor is `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`,
 as named by `payload/release/release_manifest.resolved.json` inside the checksum-verified 0.0.7
@@ -109,6 +112,16 @@ error; the accepted 20,160 episode rows and independently preserved publication 
 the benchmark evidence. The 0.0.8 evaluation therefore needs a similar resource budget plus
 the separate 1,344-episode calibration split and doorway slice; these are estimates, not run
 results.
+
+## Publication sequencing still to close
+
+The release runner normally exports after benchmark acceptance, before the separate
+predecessor-metric equivalence and robot-force validation reports can be produced. A complete
+Social Navigation Quality Index (SNQI) v2 bundle requires those reports. The 0.0.8 campaign
+template therefore defers publication export. A tested finalization path must run the equivalence
+gate, write the validation reports, export the complete bundle, and record a passing publication
+preflight without changing episode evidence. The current template is not launch-ready until that
+path exists.
 
 Issue #9431 remains open and a native blocker for #9668. Its existing 0.0.7 Zenodo deposition
 22814343 was published on 2026-09-24, and the public archive passed anonymous checksum readback

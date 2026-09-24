@@ -62,7 +62,9 @@ bootstrap_seed: 123
 kinematics_matrix:
   - differential_drive
 
-export_publication_bundle: true
+# The force-validation report requires a full predecessor-equivalence check after
+# execution. Export the complete bundle only after those reports are written.
+export_publication_bundle: false
 include_videos_in_publication: false
 overwrite_publication_bundle: true
 repository_url: https://github.com/ll7/robot_sf_ll7

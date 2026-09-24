@@ -52,6 +52,8 @@ FIXTURE = (
     / "campaign.json"
 )
 
+THREAD_SYNC_TIMEOUT = 30.0
+
 
 def _context(*, episode_id: str = "") -> AuditSelectionContext:
     return AuditSelectionContext(campaign_id="audit-fixture-campaign", episode_id=episode_id)
@@ -2047,53 +2049,67 @@ def test_materialization_cancellation_between_admission_and_adapter_is_diagnosti
 
         def hold_adapter(*args: Any, **kwargs: Any) -> Any:
             adapter_entered.set()
-            assert release_adapter.wait(timeout=5)
+            assert release_adapter.wait(timeout=THREAD_SYNC_TIMEOUT), (
+                "adapter release event timed out"
+            )
             return real_materialize(*args, **kwargs)
 
         monkeypatch.setattr(audit_materialize_module, "materialize_episode", hold_adapter)
         output = tmp_path / "allowed" / "cancelled-derived"
         worker_result: dict[str, Any] = {}
+        worker_error: list[BaseException] = []
 
         def run_materialization() -> None:
-            worker_result["result"] = service.materialize_selected(
-                session,
-                output_root=output,
-                output_directory="render",
-                operation_id="materialize-cancelled-admission-race",
-            )
+            try:
+                worker_result["result"] = service.materialize_selected(
+                    session,
+                    output_root=output,
+                    output_directory="render",
+                    operation_id="materialize-cancelled-admission-race",
+                )
+            except BaseException as exc:
+                worker_error.append(exc)
 
         worker = threading.Thread(target=run_materialization)
         worker.start()
-        assert adapter_entered.wait(timeout=5)
-        killed = service.kill_switch(
-            session,
-            reason="cancel while adapter admission is held",
-            operation_id="cancelled-admission-race-stop",
-        )
-        assert killed.status == "cancelled"
-        release_adapter.set()
-        worker.join(timeout=10)
-        assert not worker.is_alive()
+        try:
+            assert adapter_entered.wait(timeout=THREAD_SYNC_TIMEOUT), (
+                "adapter was not entered within timeout"
+            )
+            killed = service.kill_switch(
+                session,
+                reason="cancel while adapter admission is held",
+                operation_id="cancelled-admission-race-stop",
+            )
+            assert killed.status == "cancelled"
+            release_adapter.set()
+            worker.join(timeout=THREAD_SYNC_TIMEOUT)
+            assert not worker.is_alive(), "worker thread timed out"
+            assert not worker_error, f"worker raised unexpected exception: {worker_error[0]}"
 
-        result = worker_result["result"]
-        assert result.status == "cancelled"
-        assert result.value is None
-        assert result.reason == "cancel while adapter admission is held"
-        assert service.get_session(session).usage.compute == 1.0
-        manifest = output / "render" / "audit-materialization.v1.json"
-        assert manifest.is_file()
-        assert json.loads(manifest.read_text(encoding="utf-8"))["materialization_kind"] == (
-            "derived_render"
-        )
+            result = worker_result["result"]
+            assert result.status == "cancelled"
+            assert result.value is None
+            assert result.reason == "cancel while adapter admission is held"
+            assert service.get_session(session).usage.compute == 1.0
+            manifest = output / "render" / "audit-materialization.v1.json"
+            assert manifest.is_file()
+            assert json.loads(manifest.read_text(encoding="utf-8"))["materialization_kind"] == (
+                "derived_render"
+            )
 
-        later = service.materialize_selected(
-            session,
-            output_root=tmp_path / "allowed" / "cancelled-later",
-            operation_id="materialize-after-cancellation",
-        )
-        assert later.status == "cancelled"
-        assert not (tmp_path / "allowed" / "cancelled-later").exists()
-        assert service.get_session(session).usage.compute == 1.0
+            later = service.materialize_selected(
+                session,
+                output_root=tmp_path / "allowed" / "cancelled-later",
+                operation_id="materialize-after-cancellation",
+            )
+            assert later.status == "cancelled"
+            assert not (tmp_path / "allowed" / "cancelled-later").exists()
+            assert service.get_session(session).usage.compute == 1.0
+        finally:
+            release_adapter.set()
+            if worker.is_alive():
+                worker.join(timeout=THREAD_SYNC_TIMEOUT)
     finally:
         service.close()
 
@@ -2199,7 +2215,7 @@ def test_nested_annotation_reference_and_budget_replays_fail_closed(tmp_path: Pa
 
         def slow_charge(target, **kwargs):
             entered.set()
-            assert release.wait(timeout=5)
+            assert release.wait(timeout=THREAD_SYNC_TIMEOUT)
             return original_charge(target, **kwargs)
 
         service._charge = slow_charge
@@ -2215,13 +2231,20 @@ def test_nested_annotation_reference_and_budget_replays_fail_closed(tmp_path: Pa
             )
         )
         first_thread.start()
-        assert entered.wait(timeout=5)
-        second_thread.start()
-        second_thread.join(timeout=5)
-        release.set()
-        first_thread.join(timeout=5)
-        statuses = sorted(result.status for result in results)
-        assert statuses == ["committed", "conflict"]
+        try:
+            assert entered.wait(timeout=THREAD_SYNC_TIMEOUT)
+            second_thread.start()
+            second_thread.join(timeout=THREAD_SYNC_TIMEOUT)
+            release.set()
+            first_thread.join(timeout=THREAD_SYNC_TIMEOUT)
+            statuses = sorted(result.status for result in results)
+            assert statuses == ["committed", "conflict"]
+        finally:
+            release.set()
+            if first_thread.is_alive():
+                first_thread.join(timeout=THREAD_SYNC_TIMEOUT)
+            if second_thread.is_alive():
+                second_thread.join(timeout=THREAD_SYNC_TIMEOUT)
     finally:
         service.close()
 
@@ -3021,7 +3044,7 @@ def test_cross_instance_inflight_operation_replay_never_runs_second_callback(  #
             value = _original(*args, **kwargs)
             if _first[0]:
                 _first[0] = False
-                prebegin.wait(timeout=5)
+                prebegin.wait(timeout=THREAD_SYNC_TIMEOUT)
             return value
 
         current._existing_receipt = gate_existing  # type: ignore[method-assign]
@@ -3033,7 +3056,7 @@ def test_cross_instance_inflight_operation_replay_never_runs_second_callback(  #
             if isinstance(transaction_id, str) and transaction_id.startswith(
                 "authority.operation.begin:"
             ):
-                begin_return.wait(timeout=5)
+                begin_return.wait(timeout=THREAD_SYNC_TIMEOUT)
             return mutation
 
         current.authority.mutate = gate_begin  # type: ignore[method-assign]
@@ -3055,7 +3078,7 @@ def test_cross_instance_inflight_operation_replay_never_runs_second_callback(  #
             callback_number = len(writes)
         if callback_number == 1:
             first_callback.set()
-            assert release_callback.wait(timeout=5)
+            assert release_callback.wait(timeout=THREAD_SYNC_TIMEOUT)
         else:
             # The old admission bug reaches this branch while the first
             # callback is deliberately held in-flight.
@@ -3079,21 +3102,28 @@ def test_cross_instance_inflight_operation_replay_never_runs_second_callback(  #
     two = threading.Thread(target=invoke, args=(right, right_session))
     one.start()
     two.start()
-    assert first_callback.wait(timeout=5)
-    assert replay_checked.wait(timeout=5)
-    # The event is set by the replay branch, not by a second callback.  A
-    # second external write would set it from ``external_write`` as well, but
-    # only after the first callback has been held above.
-    with writes_lock:
-        assert writes == ["write"]
-    release_callback.set()
-    one.join(timeout=5)
-    two.join(timeout=5)
-    assert not one.is_alive() and not two.is_alive()
-    assert errors == []
-    assert sorted(results) == ["committed", "conflict"]
-    left.close()
-    right.close()
+    try:
+        assert first_callback.wait(timeout=THREAD_SYNC_TIMEOUT)
+        assert replay_checked.wait(timeout=THREAD_SYNC_TIMEOUT)
+        # The event is set by the replay branch, not by a second callback.  A
+        # second external write would set it from ``external_write`` as well, but
+        # only after the first callback has been held above.
+        with writes_lock:
+            assert writes == ["write"]
+        release_callback.set()
+        one.join(timeout=THREAD_SYNC_TIMEOUT)
+        two.join(timeout=THREAD_SYNC_TIMEOUT)
+        assert not one.is_alive() and not two.is_alive()
+        assert errors == []
+        assert sorted(results) == ["committed", "conflict"]
+    finally:
+        release_callback.set()
+        if one.is_alive():
+            one.join(timeout=THREAD_SYNC_TIMEOUT)
+        if two.is_alive():
+            two.join(timeout=THREAD_SYNC_TIMEOUT)
+        left.close()
+        right.close()
 
 
 def test_cross_session_global_operation_id_rejects_second_callback(  # noqa: C901, PLR0915
@@ -3154,7 +3184,7 @@ def test_cross_session_global_operation_id_rejects_second_callback(  # noqa: C90
             value = _original(*args, **kwargs)
             if _first[0]:
                 _first[0] = False
-                after_existing.wait(timeout=5)
+                after_existing.wait(timeout=THREAD_SYNC_TIMEOUT)
             return value
 
         current._existing_receipt = gate_existing  # type: ignore[method-assign]
@@ -3179,7 +3209,7 @@ def test_cross_session_global_operation_id_rejects_second_callback(  # noqa: C90
             callback_number = len(writes)
         if callback_number == 1:
             first_callback.set()
-            assert release_callback.wait(timeout=5)
+            assert release_callback.wait(timeout=THREAD_SYNC_TIMEOUT)
         else:
             # The pre-fix cross-session admission bug reaches this branch.
             admission_checked.set()
@@ -3203,14 +3233,14 @@ def test_cross_session_global_operation_id_rejects_second_callback(  # noqa: C90
     one.start()
     two.start()
     try:
-        assert first_callback.wait(timeout=5)
-        assert admission_checked.wait(timeout=5)
+        assert first_callback.wait(timeout=THREAD_SYNC_TIMEOUT)
+        assert admission_checked.wait(timeout=THREAD_SYNC_TIMEOUT)
         with writes_lock:
             assert writes == ["write"]
     finally:
         release_callback.set()
-    one.join(timeout=5)
-    two.join(timeout=5)
+        one.join(timeout=THREAD_SYNC_TIMEOUT)
+        two.join(timeout=THREAD_SYNC_TIMEOUT)
     assert not one.is_alive() and not two.is_alive()
     assert errors == []
     assert sorted(results) == ["committed", "conflict"]
@@ -3242,7 +3272,7 @@ def test_cancel_race_cannot_charge_a_reservation_after_authority_cancel(tmp_path
 
     def delayed_mutate(*args, **kwargs):
         entered.set()
-        assert release.wait(timeout=5)
+        assert release.wait(timeout=THREAD_SYNC_TIMEOUT)
         return original_mutate(*args, **kwargs)
 
     left._mutate_session_authority = delayed_mutate  # type: ignore[method-assign]
@@ -3253,19 +3283,24 @@ def test_cancel_race_cannot_charge_a_reservation_after_authority_cancel(tmp_path
         )
     )
     reserve_thread.start()
-    assert entered.wait(timeout=5)
-    cancelled = right.kill_switch(right_session, reason="race stop", operation_id="race-cancel")
-    release.set()
-    reserve_thread.join(timeout=5)
-    assert cancelled.status == "cancelled"
-    assert not reserve_thread.is_alive()
-    assert reservation_result[0].status == "cancelled"
-    recovered = left.reconnect_session("cancel-race", token)
-    assert recovered.cancelled
-    assert recovered.usage.to_dict() == {"tokens": 0, "compute": 0.0, "issue_writes": 0}
-    assert not left._reservations
-    left.close()
-    right.close()
+    try:
+        assert entered.wait(timeout=THREAD_SYNC_TIMEOUT)
+        cancelled = right.kill_switch(right_session, reason="race stop", operation_id="race-cancel")
+        release.set()
+        reserve_thread.join(timeout=THREAD_SYNC_TIMEOUT)
+        assert cancelled.status == "cancelled"
+        assert not reserve_thread.is_alive()
+        assert reservation_result[0].status == "cancelled"
+        recovered = left.reconnect_session("cancel-race", token)
+        assert recovered.cancelled
+        assert recovered.usage.to_dict() == {"tokens": 0, "compute": 0.0, "issue_writes": 0}
+        assert not left._reservations
+    finally:
+        release.set()
+        if reserve_thread.is_alive():
+            reserve_thread.join(timeout=THREAD_SYNC_TIMEOUT)
+        left.close()
+        right.close()
 
 
 def test_cancel_reconnect_and_replay_cannot_resurrect_session(tmp_path: Path) -> None:

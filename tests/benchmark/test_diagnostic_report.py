@@ -72,6 +72,14 @@ def test_cost_scale_present_reports_demonstrable_order_change() -> None:
     assert report["hypotheses"] == []
 
 
+def test_malformed_cost_scale_fails_closed_with_domain_error() -> None:
+    """Malformed non-mapping cost_scale must raise DiagnosticReportError, not AssertionError."""
+    rows = copy.deepcopy(_load_fixture("cost_scaling", "present.json"))
+    rows[0]["cost_scale"] = "not-a-mapping"
+    with pytest.raises(DiagnosticReportError, match="malformed cost_scale"):
+        diagnose_diagnostic_rows(rows)
+
+
 def test_saturation_present_localizes_gap_with_recorded_flag() -> None:
     """Saturation fixture must localize the command gap with the recorded flag."""
     report = diagnose_diagnostic_rows(_load_fixture("controller_saturation", "present.json"))

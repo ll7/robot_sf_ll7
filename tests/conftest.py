@@ -413,6 +413,12 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Force-residual predictor tests are deterministic synthetic contracts and
+    # must cover the changed planner-visible prediction module in PR shards.
+    "test_force_residual_intent_predictor.py",
+    # ScenarioBelief projection tests are deterministic identity and data-contract
+    # checks; keep them in PR shards so changed-line coverage sees the adapter.
+    "test_identity_safe_scenario_belief.py",
     # Benchmark Auditor record and journal tests are deterministic schema,
     # provenance, and persistence contracts for BA-03 (issue #9484).
     # Benchmark Auditor release-bound coverage tests are deterministic
@@ -840,6 +846,9 @@ _FAST_FILES = {
     # Pedestrian-population tests are deterministic sampler contracts for the
     # spawn-capture owners; keep them in the exact-head fast lane (issue #9312).
     "test_ped_population.py",
+    # Pedestrian tracker reset-epoch tests are deterministic producer-contract
+    # coverage required by the exact-head changed-line gate (issue #9598).
+    "test_pedestrian_tracking.py",
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
@@ -897,6 +906,10 @@ _FAST_FILES = {
     # The shared DWA diagnostic harness tests are deterministic contract tests;
     # keep their changed-module coverage in pull-request fast shards.
     "test_dwa_diagnostic_harness.py",
+    # Diagnostic-report tests are deterministic fail-closed domain-error
+    # contracts for malformed cost inputs (issue #9587); keep their
+    # changed-module coverage in pull-request fast shards.
+    "test_diagnostic_report.py",
     # Research orchestration tests are deterministic manifest/report contracts;
     # keep coverage for the benchmark orchestrator basename match in fast shards.
     "test_orchestrator.py",
@@ -925,6 +938,11 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Maneuver-candidate portfolio and adversarial boundary tests are
+    # deterministic planner-contract coverage for the changed producer; keep
+    # both focused files in the exact-head fast lane.
+    "test_maneuver_candidates.py",
+    "test_maneuver_candidates_counterexamples.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as
@@ -1040,6 +1058,9 @@ _FAST_FILES = {
     # SREV-09 review-scene tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9278).
     "test_review_scene.py",
+    # SREV-10 review-encode tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9279).
+    "test_review_encode.py",
     # SREV-29 registry tests are deterministic discovery/invocation coverage
     # for the component registry leaf; keep changed coverage in fast shards
     # (issue #9290).

@@ -136,7 +136,8 @@ Programmatic tests can call `certify_map_definition(...)` directly with a `MapDe
 
 Falsification callers can combine the serialized certificate with the existing feasibility
 oracle, predicate contract, and named execution/replay records through
-`robot_sf.adversarial.classify_scenario_admissibility(...)`. The output contract is
+`robot_sf.adversarial.classify_scenario_admissibility(...)`. Pass the candidate's canonical
+`scenario_artifact_path` with the evidence. The output contract is
 [`scenario_admissibility.v1`](../robot_sf/benchmark/schemas/scenario_admissibility.v1.json),
 and `partition_candidates_by_admissibility(...)` retains cases by verdict for search
 stratification.
@@ -168,6 +169,15 @@ records can establish an outcome. Replay records additionally require
 the existing replay provenance sidecar into this input shape. Incomplete records stay visible in
 `evidence` and do not establish feasibility.
 
+Artifact provenance is bound across evidence sources: the certificate `source` and oracle
+`scenario_manifest` references must resolve to bytes with the same SHA-256 as
+`scenario_artifact_path`, and each execution's `scenario_sha256` must equal that digest. A
+missing or unavailable canonical artifact, an unresolvable source reference, or any mismatch
+leaves that evidence unusable for rejection or feasibility classification while preserving the
+captured input and reason code. For multi-scenario manifests, callers should pass the exact
+scenario artifact used for the named case and adapt evidence hashes to those same bytes; a shared
+scenario ID alone does not establish artifact identity.
+
 An observed reference or replay completion is empirical evidence for that named case and run, not
 a proof that every planner can solve it. Replay counts only after simulator resimulation with a
 passing determinism check. A target-planner failure alone does not establish scenario
@@ -175,9 +185,10 @@ infeasibility; `planner_specific_failure` requires a completed reference run and
 target run bound to the same scenario, seed, horizon, source revision, and configuration hashes,
 plus a deterministic replay by the target planner that reproduces the incomplete route under the
 same scenario bindings and matching planner-config and checkpoint hashes as the target run. Missing,
-mismatched, or successful replay remains unknown. The target outcome is a separate field from
-scenario admissibility. This helper does not change benchmark denominators or establish real-world
-safety.
+mismatched, or successful replay leaves planner-specific failure attribution unconfirmed. A valid
+completed reference run still establishes empirical feasibility for that same named scenario, and
+the target's `route_incomplete` outcome remains separate from that feasibility verdict. This helper
+does not change benchmark denominators or establish real-world safety.
 
 ## Limits
 

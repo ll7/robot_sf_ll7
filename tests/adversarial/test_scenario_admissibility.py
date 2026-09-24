@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -14,9 +15,11 @@ from robot_sf.adversarial import (
     GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY,
     PLANNER_SPECIFIC_FAILURE,
     STRUCTURALLY_INVALID,
-    classify_scenario_admissibility,
     partition_candidates_by_admissibility,
     validate_scenario_admissibility,
+)
+from robot_sf.adversarial import (
+    classify_scenario_admissibility as _classify_scenario_admissibility,
 )
 from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_CONTRACT_VERSION,
@@ -27,6 +30,15 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     ISSUE_5574_REPORT_SCHEMA,
 )
 from robot_sf.scenario_certification.v1 import CERT_SCHEMA_VERSION
+
+_SCENARIO_ARTIFACT = Path(__file__).resolve().parent / "fixtures/issue_9651/case_static.yaml"
+_SCENARIO_ARTIFACT_SHA256 = hashlib.sha256(_SCENARIO_ARTIFACT.read_bytes()).hexdigest()
+
+
+def classify_scenario_admissibility(case_id: str, **kwargs: Any) -> Any:
+    """Use one explicit artifact identity for the normalized test evidence by default."""
+    kwargs.setdefault("scenario_artifact_path", _SCENARIO_ARTIFACT)
+    return _classify_scenario_admissibility(case_id, **kwargs)
 
 
 def _certificate(
@@ -45,7 +57,7 @@ def _certificate(
     return {
         "schema_version": CERT_SCHEMA_VERSION,
         "scenario_id": scenario_id,
-        "source": "test-fixture",
+        "source": _SCENARIO_ARTIFACT.as_posix(),
         "classification": classification,
         "benchmark_eligibility": eligibility,
         "reasons": reasons,
@@ -92,6 +104,7 @@ def _oracle(
     return {
         "schema_version": FEASIBILITY_ORACLE_SCHEMA,
         "scenario_id": scenario_id,
+        "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
         "envelope_radius_m": 0.4,
         "feasible": status == "feasible",
         "status": status,
@@ -112,7 +125,7 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
     return {
         "schema_version": ISSUE_5574_REPORT_SCHEMA,
         "scenario_ids": [scenario_id],
-        "scenario_manifest": "configs/fixture.yaml",
+        "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
         "rollout_algo": "goal",
         "cells": [
             {
@@ -122,7 +135,7 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
                 "nominal_envelope_radius_m": oracle["envelope_radius_m"],
                 "nominal_verdict": oracle,
                 "reduced_verdicts": [],
-                "scenario_manifest": "configs/fixture.yaml",
+                "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
                 "rollout_algo": "goal",
                 "rollout_seed": 19,
                 "claim_boundary": "diagnostic_only_not_benchmark_evidence",
@@ -150,7 +163,7 @@ def _execution(
         "route_complete": route_complete,
         "seed": seed,
         "horizon_steps": 100,
-        "scenario_sha256": "a" * 64,
+        "scenario_sha256": _SCENARIO_ARTIFACT_SHA256,
         "robot_model_sha256": "b" * 64,
         "simulator_config_sha256": "c" * 64,
         "planner_config_sha256": "d" * 64 if planner_id == "target" else "c" * 64,
@@ -452,11 +465,13 @@ def test_committed_issue_5574_report_maps_excluded_and_unresolved_cells() -> Non
     report = json.loads(report_path.read_text(encoding="utf-8"))
     excluded = classify_scenario_admissibility(
         "francis2023_narrow_doorway",
+        scenario_artifact_path=report["scenario_manifest"],
         scenario_id="francis2023_narrow_doorway",
         feasibility_evidence=report,
     )
     unresolved = classify_scenario_admissibility(
         "francis2023_blind_corner",
+        scenario_artifact_path=report["scenario_manifest"],
         scenario_id="francis2023_blind_corner",
         feasibility_evidence=report,
     )
@@ -545,6 +560,73 @@ def test_certificate_identity_mismatch_cannot_reject_a_candidate() -> None:
     assert "scenario_certificate_identity_mismatch" in verdict.reason_codes
 
 
+def test_rejection_and_execution_evidence_must_share_candidate_artifact_bytes(
+    tmp_path: Path,
+) -> None:
+    other_artifact = tmp_path / "same-id-different-artifact.yaml"
+    other_artifact.write_text("id: case-static\nchanged: true\n", encoding="utf-8")
+    other_digest = hashlib.sha256(other_artifact.read_bytes()).hexdigest()
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    certificate["source"] = other_artifact.as_posix()
+    oracle = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    oracle["scenario_manifest"] = other_artifact.as_posix()
+    execution = _execution("reference", route_complete=True)
+    execution["scenario_sha256"] = other_digest
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=certificate,
+        feasibility_evidence=oracle,
+        reference_execution=execution,
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert verdict.evidence["scenario_artifact_identity"]["sha256"] == (_SCENARIO_ARTIFACT_SHA256)
+    assert "scenario_certificate_scenario_artifact_identity_mismatch" in verdict.reason_codes
+    assert "feasibility_oracle_scenario_artifact_identity_mismatch" in verdict.reason_codes
+    assert "reference_execution_scenario_artifact_identity_mismatch" in verdict.reason_codes
+
+
+def test_oracle_report_and_selected_cell_cannot_disagree_on_artifact(
+    tmp_path: Path,
+) -> None:
+    other_artifact = tmp_path / "other.yaml"
+    other_artifact.write_text("id: case-static\nrevision: other\n", encoding="utf-8")
+    report = _oracle_report(_oracle())
+    report["cells"][0]["scenario_manifest"] = other_artifact.as_posix()
+
+    verdict = classify_scenario_admissibility(
+        "case-static", scenario_certificate=_certificate(), feasibility_evidence=report
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "feasibility_oracle_cell_scenario_artifact_identity_mismatch" in verdict.reason_codes
+
+
+def test_missing_canonical_candidate_artifact_cannot_support_a_certificate_exclusion() -> None:
+    verdict = _classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=_certificate("invalid", eligibility="excluded"),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_artifact_identity_missing_or_unavailable" in verdict.reason_codes
+    assert "scenario_certificate_scenario_artifact_identity_unavailable" in verdict.reason_codes
+
+
+def test_execution_scenario_hash_must_match_canonical_candidate_artifact() -> None:
+    run = _execution("reference", route_complete=True)
+    run["scenario_sha256"] = "f" * 64
+
+    verdict = classify_scenario_admissibility("case-static", reference_execution=run)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_scenario_artifact_identity_mismatch" in verdict.reason_codes
+
+
 def test_reference_success_is_empirical_but_target_failure_alone_is_unknown() -> None:
     reference = classify_scenario_admissibility(
         "case-static",
@@ -598,14 +680,19 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
     assert verdict.verdict == PLANNER_SPECIFIC_FAILURE
     assert verdict.search_disposition == "retain"
     assert "matched_reference_target_failure_reproduced_by_replay" in verdict.reason_codes
-    assert absent_replay.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert absent_replay.verdict == EMPIRICALLY_FEASIBLE
+    assert absent_replay.target_planner_outcome == "route_incomplete"
     assert "planner_specific_failure_replay_missing_or_invalid" in absent_replay.reason_codes
-    assert replay_success.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "planner_specific_failure_attribution_unconfirmed" in absent_replay.reason_codes
+    assert replay_success.verdict == EMPIRICALLY_FEASIBLE
+    assert replay_success.target_planner_outcome == "route_incomplete"
     assert (
         "planner_specific_failure_replay_did_not_reproduce_failure" in replay_success.reason_codes
     )
-    assert wrong_planner.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert wrong_planner.verdict == EMPIRICALLY_FEASIBLE
+    assert wrong_planner.target_planner_outcome == "route_incomplete"
     assert "planner_specific_failure_replay_wrong_planner" in wrong_planner.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in wrong_planner.reason_codes
     assert unmatched.verdict == EMPIRICALLY_FEASIBLE
     assert "matched_reference_success_target_planner_failure" not in unmatched.reason_codes
 
@@ -615,7 +702,11 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
     [
         ("case_id", "other-case", "replay_execution_identity_mismatch"),
         ("scenario_id", "other-scenario", "planner_specific_failure_replay_case_mismatch"),
-        ("scenario_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
+        (
+            "scenario_sha256",
+            "f" * 64,
+            "replay_execution_scenario_artifact_identity_mismatch",
+        ),
         ("robot_model_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
         ("simulator_config_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
         ("environment_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
@@ -646,8 +737,10 @@ def test_replay_must_match_target_case_and_execution_bindings(
         replay_execution=replay,
     )
 
-    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert verdict.target_planner_outcome == "route_incomplete"
     assert reason in verdict.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
 
 
 @pytest.mark.parametrize(

@@ -140,11 +140,28 @@ def test_frozen_manifest_contract_allows_new_v2_assets_but_rejects_roster_change
     _write_candidate(candidate_root, [_row(NEW_SHA)])
     baseline = _read_archive_manifest(archive, OLD_SHA)
     candidate = _read_candidate_manifest(candidate_root, NEW_SHA)
-    candidate["metrics"]["snqi_v2_spec_sha256"] = "v2-sha"
+    for role in ("weights", "anchors", "family"):
+        candidate["metrics"][f"snqi_v2_{role}_path"] = f"configs/{role}.json"
+        candidate["metrics"][f"snqi_v2_{role}_sha256"] = "b" * 64
     assert scientific_manifest_differences(baseline, candidate) == []
     candidate["planners"]["config_identities"][0]["key"] = "orca"
     assert scientific_manifest_differences(baseline, candidate) == [
         "planners.config_identities[0].key"
+    ]
+
+
+def test_successor_manifest_rejects_unrelated_additions() -> None:
+    """Only v2 asset declarations may extend the predecessor's scientific manifest."""
+    baseline = _manifest(OLD_SHA)
+    candidate = _manifest(NEW_SHA)
+    candidate["matrix"]["extra_policy"] = "unreviewed"
+    candidate["planners"]["config_identities"][0]["fallback_allowed"] = True
+    candidate["metrics"]["snqi_v2_spec_sha256"] = "invented"
+
+    assert scientific_manifest_differences(baseline, candidate) == [
+        "matrix.extra_policy",
+        "metrics.snqi_v2_spec_sha256",
+        "planners.config_identities[0].fallback_allowed",
     ]
 
 

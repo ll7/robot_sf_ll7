@@ -172,14 +172,43 @@ def scientific_manifest_differences(
 ) -> list[str]:
     """Compare the frozen matrix, roster, seeds, and legacy metric assets.
 
-    Additional v2 metric declarations are allowed; predecessor declarations may
-    not disappear or change. The separate release identity gate checks each
-    campaign config checksum, which necessarily changes when v2 keys are added.
+    Exactly the six v2 asset declarations may be added. The separate release
+    identity gate checks the changed campaign-config checksum.
     """
     result: list[str] = []
     for field in SCIENTIFIC_MANIFEST_FIELDS:
         result.extend(_differences(baseline[field], candidate[field], field, tolerance=0))
-    return sorted(result)
+        result.extend(_unexpected_additions(baseline[field], candidate[field], field))
+    return sorted(set(result))
+
+
+def _unexpected_additions(old: Any, new: Any, path: str) -> list[str]:
+    """Reject successor-only scientific keys, except the six declared v2 assets.
+
+    Returns:
+        Paths of added keys that change the predecessor's scientific contract.
+    """
+    if isinstance(old, dict) and isinstance(new, dict):
+        allowed_v2 = {
+            f"snqi_v2_{role}_{field}"
+            for role in ("weights", "anchors", "family")
+            for field in ("path", "sha256")
+        }
+        additions = [
+            f"{path}.{key}"
+            for key in new.keys() - old.keys()
+            if path != "metrics" or key not in allowed_v2
+        ]
+        for key in old.keys() & new.keys():
+            additions.extend(_unexpected_additions(old[key], new[key], f"{path}.{key}"))
+        return additions
+    if isinstance(old, list) and isinstance(new, list) and len(old) == len(new):
+        return [
+            added
+            for index, (left, right) in enumerate(zip(old, new, strict=True))
+            for added in _unexpected_additions(left, right, f"{path}[{index}]")
+        ]
+    return []
 
 
 def _numbers_equal(old: int | float, new: int | float, *, tolerance: float) -> bool:

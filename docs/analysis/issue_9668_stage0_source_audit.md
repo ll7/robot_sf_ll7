@@ -54,7 +54,8 @@ absolute tolerance `1e-12` fail the gate. Existing nonfinite unavailable sentine
 their class exactly; they are never counted as finite measurements. It also requires a resolved
 manifest at each source and compares the predecessor matrix, scenario, seed policy, planner roster,
 kinematics, and legacy Social Navigation Quality Index (SNQI) asset declarations; new v2
-declarations are permitted.
+weights, anchors, and family path/checksum declarations are the only permitted additions.
+Unexpected additions inside the scientific manifest also fail the gate.
 
 For the 0.0.8 candidate, pass `--require-robot-force-metrics` to the same gate. It requires
 the four unconditional robot-force reductions on every row, finite and nonnegative; the
@@ -78,7 +79,8 @@ The gate's archive self-test on the actual 0.0.7 bundle paired all 20,160 rows w
 mismatches and zero scientific-manifest differences. It found the historical
 `min_separation_corrupted_m` field is NaN (not a number) on every row;
 420 rows also use NaN in `min_predicted_separation_m`. These are predecessor sentinels, not new
-0.0.8 results. Seven focused comparator tests and Ruff passed. A successor campaign has not yet
+0.0.8 results. Eleven focused comparator tests, the actual-archive manifest extension check,
+and Ruff passed. A successor campaign has not yet
 been submitted, so the actual 0.0.7-to-0.0.8 equivalence result is unavailable.
 
 ## Compute and release boundaries

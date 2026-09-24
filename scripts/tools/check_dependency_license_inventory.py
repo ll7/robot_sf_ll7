@@ -4442,6 +4442,36 @@ _COMPARISON_SUMMARY_FIELDS = frozenset(
         "unresolved_count",
     }
 )
+_COMPARISON_SUMMARY_COUNT_FIELDS = frozenset(
+    {
+        "installed_distribution_count",
+        "installed_not_locked_count",
+        "locked_package_count",
+        "outside_selected_package_count",
+        "policy_exact_disposition_count",
+        "policy_exact_match_count",
+        "policy_pending_component_count",
+        "policy_pending_package_count",
+        "profile_count",
+        "profile_membership_edge_count",
+        "selected_package_count",
+        "selected_profile_count",
+        "structural_issue_count",
+        "unrepresented_lock_package_count",
+        "unrepresented_reviewed_exclusion_count",
+        "unrepresented_unresolved_count",
+        "unresolved_count",
+    }
+)
+_COMPARISON_SUMMARY_MAP_FIELDS = frozenset({"license_status_counts", "unrepresented_reason_counts"})
+_COMPARISON_ENVIRONMENT_FIELDS = frozenset(
+    {"implementation", "machine", "platform", "python", "python_version"}
+)
+_COMPARISON_STRING_LIST_FIELDS = (
+    "installed_not_locked",
+    "structural_issues",
+    "unrepresented_lock_packages",
+)
 _COMPARISON_DYNAMIC_PROFILE_FIELDS = frozenset(
     {
         "package_ids",
@@ -4651,14 +4681,81 @@ def _comparison_report_schema_issues(
     return []
 
 
-def _comparison_summary_schema_issues(report: Any, *, report_name: str) -> list[str]:
-    """Require the canonical summary field set for one inventory report."""
+def _comparison_summary_schema_issues(  # noqa: C901 - fail-closed canonical type checks
+    report: Any, *, report_name: str
+) -> list[str]:
+    """Require canonical summary keys and value types for one inventory report."""
     summary = report.get("summary") if isinstance(report, dict) else None
     if not isinstance(summary, dict):
         return [f"{report_name} has no summary object"]
+    issues: list[str] = []
     if set(summary) != _COMPARISON_SUMMARY_FIELDS:
-        return [f"{report_name} summary has missing or unclassified fields"]
-    return []
+        issues.append(f"{report_name} summary has missing or unclassified fields")
+    for field in _COMPARISON_SUMMARY_COUNT_FIELDS:
+        value = summary.get(field)
+        if type(value) is not int or value < 0:
+            issues.append(f"{report_name} summary {field} must be a nonnegative integer")
+    for field in _COMPARISON_SUMMARY_MAP_FIELDS:
+        value = summary.get(field)
+        if not isinstance(value, dict):
+            issues.append(f"{report_name} summary {field} must be a string-to-count map")
+            continue
+        if any(
+            not isinstance(key, str) or type(count) is not int or count < 0
+            for key, count in value.items()
+        ):
+            issues.append(f"{report_name} summary {field} must be a string-to-count map")
+    candidate_bound = summary.get("candidate_bound")
+    if type(candidate_bound) is not bool:
+        issues.append(f"{report_name} summary candidate_bound must be a boolean")
+    summary_contract_version = summary.get("summary_contract_version")
+    if (
+        not isinstance(summary_contract_version, str)
+        or summary_contract_version != SUMMARY_CONTRACT_VERSION
+    ):
+        issues.append(f"{report_name} summary summary_contract_version is invalid")
+    status = summary.get("status")
+    if not isinstance(status, str) or status not in _COMPARISON_FINAL_STATUSES:
+        issues.append(f"{report_name} summary status is invalid")
+    return sorted(set(issues))
+
+
+def _comparison_environment_issues(report: Any, *, report_name: str) -> list[str]:
+    """Require the exact five string fields emitted by build_inventory."""
+    environment = report.get("environment") if isinstance(report, dict) else None
+    if not isinstance(environment, dict):
+        return [f"{report_name} has no environment object"]
+    issues: list[str] = []
+    if set(environment) != _COMPARISON_ENVIRONMENT_FIELDS:
+        issues.append(f"{report_name} environment has missing or unclassified fields")
+    if any(not isinstance(value, str) for value in environment.values()):
+        issues.append(f"{report_name} environment fields must be strings")
+    return sorted(set(issues))
+
+
+def _comparison_string_list_issues(report: Any, *, report_name: str) -> list[str]:
+    """Require the report's string-list containers to retain their schema."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    issues: list[str] = []
+    for field in _COMPARISON_STRING_LIST_FIELDS:
+        value = report.get(field)
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            issues.append(f"{report_name} {field} must be a list of strings")
+    return issues
+
+
+def _comparison_ordinary_surface_issues(report: Any, *, report_name: str) -> list[str]:
+    """Reject candidate provenance when comparing ordinary inventories."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    issues: list[str] = []
+    if report.get("candidate_binding") is not None:
+        issues.append(f"{report_name} candidate_binding is not allowed for comparison")
+    summary = report.get("summary")
+    if isinstance(summary, dict) and summary.get("candidate_bound") is True:
+        issues.append(f"{report_name} summary candidate_bound is not allowed for comparison")
+    return issues
 
 
 def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shape validation
@@ -4674,6 +4771,8 @@ def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shap
         )
     )
     issues.extend(_comparison_summary_schema_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_environment_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_string_list_issues(baseline, report_name="comparison baseline"))
     if baseline.get("schema_version") != SCHEMA_VERSION:
         issues.append("comparison baseline schema_version is not current")
     recorded = baseline.get(_REPORT_CONTENT_DIGEST_FIELD)
@@ -4729,6 +4828,12 @@ def _comparison_source_binding_issues(
     issues.extend(
         _comparison_summary_schema_issues(current, report_name="comparison current report")
     )
+    issues.extend(_comparison_environment_issues(current, report_name="comparison current report"))
+    issues.extend(_comparison_string_list_issues(current, report_name="comparison current report"))
+    issues.extend(_comparison_ordinary_surface_issues(baseline, report_name="comparison baseline"))
+    issues.extend(
+        _comparison_ordinary_surface_issues(current, report_name="comparison current report")
+    )
     baseline_inputs, baseline_input_issues = _comparison_input_rows(
         baseline, report_name="comparison baseline"
     )
@@ -4755,6 +4860,14 @@ def _comparison_source_binding_issues(
         issues.append("comparison baseline generator differs from the current generator")
     if current_inputs.get(CANONICAL_GENERATOR) != current_generator_sha256:
         issues.append("comparison current report generator differs from the current generator")
+    baseline_environment = baseline.get("environment")
+    current_environment = current.get("environment")
+    if (
+        isinstance(baseline_environment, dict)
+        and isinstance(current_environment, dict)
+        and baseline_environment != current_environment
+    ):
+        issues.append("comparison baseline environment differs from current report")
     issues.extend(_comparison_policy_surface_issues(baseline, current))
     return sorted(set(issues))
 
@@ -4899,11 +5012,41 @@ def compare_license_inventories(
     }
 
 
-def _validate_compare_args(args: argparse.Namespace) -> int:
+def _comparison_paths_alias(first: Path, second: Path) -> bool | None:
+    """Return whether two paths alias, or None when identity is unknowable."""
+    try:
+        first_resolved = first.resolve()
+        second_resolved = second.resolve()
+    except (OSError, RuntimeError):
+        return None
+    if first_resolved == second_resolved:
+        return True
+    try:
+        first_stat = first.stat()
+    except FileNotFoundError:
+        return False
+    except (OSError, RuntimeError):
+        return None
+    try:
+        second_stat = second.stat()
+    except FileNotFoundError:
+        return False
+    except (OSError, RuntimeError):
+        return None
+    return first_stat.st_dev == second_stat.st_dev and first_stat.st_ino == second_stat.st_ino
+
+
+def _validate_compare_args(args: argparse.Namespace, repo_root: Path) -> int:
     """Fail closed when comparison flags combine with incompatible modes."""
     if args.compare_baseline and (args.check_receipt or args.check_freshness):
         print(
             "FAIL: --compare-baseline applies to generated inventories, not check modes",
+            file=sys.stderr,
+        )
+        return 1
+    if args.compare_baseline and args.candidate_bundle:
+        print(
+            "FAIL: --compare-baseline cannot be combined with --candidate-bundle",
             file=sys.stderr,
         )
         return 1
@@ -4914,6 +5057,23 @@ def _validate_compare_args(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.compare_baseline:
+        output_alias = _comparison_paths_alias(
+            _resolve_path(repo_root, args.compare_baseline),
+            args.output,
+        )
+        if output_alias is None:
+            print(
+                "FAIL: could not establish whether --output aliases --compare-baseline",
+                file=sys.stderr,
+            )
+            return 1
+        if output_alias:
+            print(
+                "FAIL: --output must not alias --compare-baseline",
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 
@@ -5015,7 +5175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
-    compare_error = _validate_compare_args(args)
+    compare_error = _validate_compare_args(args, repo_root)
     if compare_error:
         return compare_error
     candidate_bundle_path = (

@@ -22,7 +22,9 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _write_campaign(root: Path) -> None:
+def _write_campaign(
+    root: Path, *, goal_eligible: bool = False, nonpositive_collision_metrics: bool = False
+) -> None:
     """Write a tiny persisted campaign with one missing and one malformed row."""
     planners = [
         {"key": "goal", "enabled": True},
@@ -86,7 +88,10 @@ def _write_campaign(root: Path) -> None:
                 },
                 "metrics": {
                     "success": not collision,
-                    "collisions": int(collision),
+                    "collisions": 0 if nonpositive_collision_metrics else int(collision),
+                    "total_collision_count": (
+                        0 if nonpositive_collision_metrics else int(collision)
+                    ),
                     "clearing_distance_min": 0.05 if collision else 0.8,
                     "near_misses": int(collision),
                     "force_exceed_events": 0,
@@ -117,7 +122,9 @@ def _write_campaign(root: Path) -> None:
                     "kinematics": "holonomic",
                     "written": len(rows),
                     "failed_jobs": 1 if planner == "orca" else 0,
-                    "preflight": {"status": "fallback" if planner == "goal" else "ok"},
+                    "preflight": {
+                        "status": "fallback" if planner == "goal" and not goal_eligible else "ok"
+                    },
                     "benchmark_availability": {
                         "availability_status": "unavailable" if planner == "orca" else "available"
                     },
@@ -203,6 +210,73 @@ def test_showcase_cli_builds_machine_and_human_reports_for_tiny_fixture(
         summary_case["case_id"]: summary_case["planner_key"] for summary_case in summary["cases"]
     }
     assert {selected[case_id] for case_id in metric_group["selected_case_ids"]} == {"goal", "orca"}
+
+
+def test_canonical_collision_event_is_reported_when_both_count_metrics_are_zero(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    campaign_root = tmp_path / "campaign"
+    _write_campaign(campaign_root, goal_eligible=True, nonpositive_collision_metrics=True)
+
+    def analyzer(_campaign_root: Path, output_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        analysis_dir = output_dir / "analysis"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        (analysis_dir / "campaign_analysis.json").write_text("{}\n", encoding="utf-8")
+        return (
+            {
+                "findings": ["collision metric contradiction fixture finding"],
+                "campaign_integrity": {"status": "valid", "claim_boundary": "campaign only"},
+            },
+            {"status": "passed", "summary_path": "analysis/campaign_analysis.json"},
+        )
+
+    monkeypatch.setattr(showcase, "_run_existing_analyzer", analyzer)
+    output_dir = tmp_path / "output"
+    exit_code = showcase.main(
+        [
+            "--campaign-root",
+            str(campaign_root),
+            "--out-dir",
+            str(output_dir),
+            "--top-k",
+            "2",
+            "--render-limit",
+            "0",
+        ]
+    )
+    assert exit_code == 0
+    capsys.readouterr()
+    summary = json.loads((output_dir / "showcase_summary.json").read_text())
+    consistency = summary["collision_event_metric_consistency"]
+    assert consistency["canonical_collision_event_count"] == 1
+    assert consistency["collision_event_and_collision_termination_count"] == 1
+    assert consistency["both_count_metrics_nonpositive_count"] == 1
+
+    crossing = next(
+        row
+        for row in summary["planner_family_matrix"]
+        if row["planner_key"] == "goal" and row["scenario_family"] == "crossing"
+    )
+    assert crossing["outcomes"]["collision_event"]["count"] == 1
+    assert crossing["metric_summaries"]["collisions_metric"]["mean"] == 0
+    assert crossing["metric_summaries"]["total_collision_count"]["mean"] == 0
+    collision_group = next(
+        group for group in summary["critical_case_groups"] if group["name"] == "collision_event"
+    )
+    assert collision_group["candidate_count"] == 1
+    collision_case = next(case for case in summary["cases"] if case["outcome"]["collision_event"])
+    assert collision_case["metrics"]["collisions_metric"] == 0
+    assert collision_case["metrics"]["total_collision_count"] == 0
+
+    report = (output_dir / "report.md").read_text()
+    assert "Camera-ready analyzer campaign-integrity status: `valid`" in report
+    assert "Analyzer campaign-integrity claim boundary: `campaign only`" in report
+    assert "Total collision count" in report
+    assert "**Data-quality warning:** 1 of the collision-terminated rows" in report
+    assert (
+        "both `metrics.collisions` and `metrics.total_collision_count` at or below zero" in report
+    )
+    assert "collision metric contradiction fixture finding" in report
 
 
 def test_missing_replay_steps_never_invokes_renderer(

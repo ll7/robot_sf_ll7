@@ -1451,6 +1451,7 @@ def _summary_payload(
         "tool_provenance": _tool_provenance(),
         "accounting": accounting,
         "planner_family_matrix": matrix,
+        "collision_event_metric_consistency": _collision_event_metric_consistency(rows),
         "critical_case_groups": groups,
         "cases": [case_index[key] for key in sorted(case_index)],
         "replay_status_counts": dict(sorted(replay_counts.items())),
@@ -1489,6 +1490,7 @@ def _render_markdown(summary: dict[str, Any]) -> str:
     """Render a repository-standard report with source, coverage, and replay boundaries."""
     source = summary["source"]
     accounting = summary["accounting"]
+    collision_consistency = summary["collision_event_metric_consistency"]
     lines = [
         f"# Benchmark showcase: `{source['campaign_id']}`",
         "",
@@ -1501,23 +1503,82 @@ def _render_markdown(summary: dict[str, Any]) -> str:
         f"- Source bundle SHA-256: `{source.get('bundle_sha256') or 'not supplied (campaign-root input)'}`",
         f"- Embedded payload checksums: `{source['embedded_checksums']['status']}` ({source['embedded_checksums']['checked_files']} files)",
         f"- Campaign summary declared `benchmark_success`: `{source.get('campaign_declared_benchmark_success')}`",
-        f"- Camera-ready analyzer integrity: `{source.get('campaign_integrity_status') or 'not reported'}`",
+        f"- Camera-ready analyzer campaign-integrity status: `{source.get('campaign_integrity_status') or 'not reported'}`",
+        f"- Analyzer campaign-integrity claim boundary: `{source.get('campaign_integrity_claim_boundary') or 'not reported'}`",
         f"- Expected episode identities: {accounting['expected_identity_count']}; present rows: {accounting['present_episode_rows']}; missing identities: {accounting['missing_identity_count']}; duplicates: {accounting['duplicate_identity_count']}; malformed lines: {accounting['malformed_line_count']}",
         "",
         _denominator_claim_text(accounting),
+        "",
+        "## Collision-event and metric consistency",
+        "",
+        _collision_event_metric_consistency_text(collision_consistency),
         "",
         "## Planner-by-family outcomes",
         "",
         "Canonical outcome flags and named metrics are reported in separate columns. Only rows from operationally eligible runs contribute to these summaries. Fallback, degraded, unavailable, failed, and unknown run outputs remain visible in row accounting and selected cases, but are excluded from planner outcome and metric aggregates.",
         "",
-        "| Planner | Kinematics | Family | Expected | Present | Eligible | Excluded | Missing | Route complete | Collision event | Timeout event | Minimum clearance (m) | Near misses | Force events | Comfort exposure | Normalized time | Path efficiency | SNQI | Success metric | Collision metric |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Planner | Kinematics | Family | Expected | Present | Eligible | Excluded | Missing | Route complete | Collision event | Timeout event | Minimum clearance (m) | Near misses | Force events | Comfort exposure | Normalized time | Path efficiency | SNQI | Success metric | Collision metric | Total collision count |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     lines.extend(_render_matrix_rows(summary["planner_family_matrix"]))
     lines.extend(_render_run_rows(accounting["run_statuses"]))
     lines.extend(_render_case_groups(summary))
     lines.extend(_render_diagnostics(summary))
     return "\n".join(lines)
+
+
+def _collision_event_metric_consistency(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Count persisted canonical collision events alongside their named count metrics."""
+    collision_events = [row for row in rows if row["outcome"].get("collision_event") is True]
+    collision_terminations = [
+        row for row in collision_events if row["termination_reason"] == "collision"
+    ]
+    both_metrics = [
+        (row["metrics"].get("collisions_metric"), row["metrics"].get("total_collision_count"))
+        for row in collision_terminations
+    ]
+    both_available = [
+        values for values in both_metrics if values[0] is not None and values[1] is not None
+    ]
+    both_nonpositive = [values for values in both_available if values[0] <= 0 and values[1] <= 0]
+    return {
+        "scope": "all_persisted_episode_rows",
+        "metric_fields": ["metrics.collisions", "metrics.total_collision_count"],
+        "canonical_collision_event_count": len(collision_events),
+        "collision_event_and_collision_termination_count": len(collision_terminations),
+        "both_count_metrics_available_count": len(both_available),
+        "both_count_metrics_nonpositive_count": len(both_nonpositive),
+        "missing_at_least_one_count_metric_count": len(collision_terminations)
+        - len(both_available),
+    }
+
+
+def _collision_event_metric_consistency_text(diagnostics: dict[str, Any]) -> str:
+    """Explain canonical collision events and count metrics without reconciling either."""
+    event_count = diagnostics["canonical_collision_event_count"]
+    collision_termination_count = diagnostics["collision_event_and_collision_termination_count"]
+    nonpositive_count = diagnostics["both_count_metrics_nonpositive_count"]
+    missing_count = diagnostics["missing_at_least_one_count_metric_count"]
+    text = (
+        f"Across all persisted episode rows, {event_count} have canonical "
+        "`outcome.collision_event=true`; "
+        f"{collision_termination_count} of those also have `termination_reason=collision`. "
+    )
+    if nonpositive_count:
+        text += (
+            f"**Data-quality warning:** {nonpositive_count} of the collision-terminated rows "
+            "have both `metrics.collisions` and `metrics.total_collision_count` at or below "
+            "zero. The matrix keeps the canonical event and source metrics separate; it does "
+            "not infer or correct one from the other."
+        )
+    else:
+        text += (
+            f"{nonpositive_count} collision-terminated rows have both named count metrics at "
+            "or below zero. The matrix keeps canonical events and source metrics separate."
+        )
+    if missing_count:
+        text += f" {missing_count} collision-terminated rows lack one or both count metrics."
+    return text
 
 
 def _denominator_claim_text(accounting: dict[str, Any]) -> str:
@@ -1564,6 +1625,7 @@ def _render_matrix_rows(rows: list[dict[str, Any]]) -> list[str]:
                     _fmt(metric["snqi"]["mean"]),
                     _fmt(metric["success_metric"]["mean"]),
                     _fmt(metric["collisions_metric"]["mean"]),
+                    _fmt(metric["total_collision_count"]["mean"]),
                 ]
             )
             + " |"

@@ -420,6 +420,12 @@ recorded planner. A replay visualization is not itself new benchmark evidence.
 The Release 0.0.2 records currently have no recorded `replay_steps`, so the showcase can identify and
 link critical source rows but cannot materialize a verified trajectory from this bundle. Findings
 from the existing analyzer remain visible and should be considered before interpreting the summary.
+The machine summary exposes persisted-row counts under
+`collision_event_metric_consistency`; the Markdown report places its diagnostic before the outcome
+matrix. It calls out canonical collision events with `termination_reason=collision` when both
+`metrics.collisions` and `metrics.total_collision_count` are at or below zero, without reconciling
+event flags or changing recorded metrics. The analyzer-integrity line refers only to the analyzer's
+campaign-integrity field.
 
 ## Campaign Summary Semantics
 

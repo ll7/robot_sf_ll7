@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +14,10 @@ import numpy as np
 import pytest
 import yaml
 
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
+from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
     DoorwayPairingSession,
     _validate_application_execution,
@@ -26,9 +31,15 @@ from robot_sf.benchmark.three_width_doorway_application import (
     run_three_width_preflight,
     write_preflight_report,
 )
+from robot_sf.evidence.writers import write_json
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.scenario_certification.v1 import RouteCertificate, ScenarioCertificate
 from robot_sf.training.scenario_loader import load_scenarios
+from scripts.validation.run_issue_9348_three_width_campaign import (
+    _write_checksums,
+    analyze_rows,
+    verify_campaign_bundle,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MANIFEST = _REPO_ROOT / "configs/benchmarks/issue_9348_three_width_doorway_v1.yaml"
@@ -296,6 +307,179 @@ def test_portable_reset_matches_three_widths_and_distinct_maps(tmp_path: Path) -
     assert sum(len(pair["cells"]) for pair in completed["pairs"]) == 18
     assert completed["realization_hash_status"] == "verified_pre_command"
     assert check_pair_receipts(completed) == []
+
+
+def test_h1_runner_pair_receipt_survives_episode_schema(tmp_path: Path) -> None:
+    """The real runner serializes its opt-in receipt through the episode schema."""
+    manifest = load_three_width_manifest(_MANIFEST)
+    asset = generate_application_assets(manifest, tmp_path / "variants")[0]
+    scenario_path = Path(asset["scenario_path"])
+    scenario = dict(load_scenarios(scenario_path)[0])
+    session = DoorwayPairingSession()
+    row = _run_map_episode(
+        scenario,
+        225,
+        horizon=1,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=scenario_path,
+        record_planner_decision_trace=True,
+        record_simulation_step_trace=True,
+        pair_reset_hook=session.hook(
+            planner="goal",
+            seed=225,
+            map_sha256=asset["map_sha256"],
+            non_width_config_sha256=non_width_config_sha256(scenario, planner="goal"),
+        ),
+    )
+    stream = io.StringIO()
+    schema = load_schema(_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json")
+    write_validated_to_handle(stream, schema, row)
+    assert '"doorway_pair_receipt"' in stream.getvalue()
+
+
+def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None:
+    """Paired intervals use whole seeds and censor failure arrival times."""
+    assets = []
+    for i, width in enumerate((2.2, 2.8, 3.6)):
+        variant_id = f"gap_{i}"
+        variant_dir = tmp_path / "assets" / variant_id
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "variant.svg").write_text(f"map {width}\n", encoding="utf-8")
+        (variant_dir / "scenario.yaml").write_text(f"scenario {width}\n", encoding="utf-8")
+        assets.append(
+            {
+                "variant_id": variant_id,
+                "gap_width_m": width,
+                "scenario_sha256": _sha256(variant_dir / "scenario.yaml"),
+                "map_sha256": _sha256(variant_dir / "variant.svg"),
+            }
+        )
+    pairs = build_pair_manifest(assets, (225, 226, 227), "manifest")
+    rows = []
+    cells = []
+    for planner in ("goal", "social_force"):
+        for seed in (225, 226, 227):
+            for asset in assets:
+                width = asset["gap_width_m"]
+                receipt = {
+                    "map_sha256": asset["map_sha256"],
+                    "initial_actor_state_sha256": "a" * 64,
+                    "external_rng_state_sha256": "b" * 64,
+                    "non_width_config_sha256": "c" * 64,
+                }
+                scenario_id = f"door_{width}"
+                success = not (planner == "goal" and seed == 225 and width == 2.2)
+                rows.append(
+                    {
+                        "git_hash": "d" * 40,
+                        "algo": planner,
+                        "seed": seed,
+                        "scenario_id": scenario_id,
+                        "horizon": 400,
+                        "status": "success" if success else "failure",
+                        "episode_id": f"{planner}-{seed}-{width}",
+                        "steps": 100,
+                        "outcome": {
+                            "route_complete": success,
+                            "collision_event": False,
+                            "timeout_event": not success,
+                        },
+                        "termination_reason": "success" if success else "max_steps",
+                        "metrics": {
+                            "success": success,
+                            "total_collision_count": 0,
+                            "time_to_goal_norm_success_only": 0.25 if success else None,
+                        },
+                        "algorithm_metadata": {
+                            "status": "ok",
+                            "doorway_pair_receipt": receipt,
+                            "simulation_step_trace": {"steps": [{}]},
+                            "planner_decision_trace": {"steps": []},
+                        },
+                        "integrity": {"contradictions": []},
+                    }
+                )
+                cells.append(
+                    {
+                        "planner": planner,
+                        "seed": seed,
+                        "gap_width_m": width,
+                        "variant_id": asset["variant_id"],
+                        "map_sha256": asset["map_sha256"],
+                        "scenario_sha256": asset["scenario_sha256"],
+                        "scenario_id": scenario_id,
+                        "line_number": len(rows),
+                    }
+                )
+                pair = next(
+                    p for p in pairs["pairs"] if (p["planner"], p["seed"]) == (planner, seed)
+                )
+                cell = next(c for c in pair["cells"] if c["gap_width_m"] == width)
+                cell.update(receipt)
+    report = analyze_rows(rows, cells, pairs)
+    goal_22_28 = next(
+        c
+        for c in report["contrasts"]
+        if c["planner"] == "goal" and c["low_width_m"] == 2.2 and c["high_width_m"] == 2.8
+    )
+    assert report["native_rows"] == 18
+    assert goal_22_28["endpoints"]["success"]["denominator_pairs"] == 3
+    assert goal_22_28["endpoints"]["arrival_time_success_only_s"]["denominator_pairs"] == 2
+    assert goal_22_28["endpoints"]["arrival_time_success_only_s"]["excluded_seed_ids"] == [225]
+    assert report["pedestrian_delay_or_impairment"]["value"] is None
+    rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{"fallback_used": True}]
+    degraded = analyze_rows(rows, cells, pairs)
+    assert degraded["native_rows"] == 17
+    assert degraded["excluded_pair_ids"] == ["goal_pair_00225"]
+    rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = []
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    for name in ("application_manifest.yaml", "social_force.yaml", "episode.schema.v1.json"):
+        (inputs / name).write_text("frozen input\n", encoding="utf-8")
+    lines = [json.dumps(row, sort_keys=True) + "\n" for row in rows]
+    (tmp_path / "episodes.jsonl").write_text("".join(lines), encoding="utf-8")
+    for cell, line in zip(cells, lines, strict=True):
+        cell["line_sha256"] = hashlib.sha256(line.encode()).hexdigest()
+    write_json(tmp_path / "pair_manifest.json", pairs)
+    write_json(tmp_path / "report.json", report)
+    write_json(
+        tmp_path / "preflight.json",
+        {
+            "variants": [
+                {
+                    "variant_id": asset["variant_id"],
+                    "assets": {
+                        "map_sha256": asset["map_sha256"],
+                        "scenario_sha256": asset["scenario_sha256"],
+                    },
+                }
+                for asset in assets
+            ],
+        },
+    )
+    write_json(
+        tmp_path / "run_manifest.json",
+        {
+            "source_commit": "d" * 40,
+            "application_manifest_sha256": _sha256(inputs / "application_manifest.yaml"),
+            "planner_config_sha256": {"social_force": _sha256(inputs / "social_force.yaml")},
+            "episode_schema_sha256": _sha256(inputs / "episode.schema.v1.json"),
+            "episodes_jsonl_sha256": _sha256(tmp_path / "episodes.jsonl"),
+            "cells": cells,
+        },
+    )
+    _write_checksums(tmp_path)
+    assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
+    (tmp_path / "episodes.jsonl").write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="checksum"):
+        verify_campaign_bundle(tmp_path)
+    rows[0]["algorithm_metadata"]["doorway_pair_receipt"]["map_sha256"] = "tampered"
+    with pytest.raises(ValueError, match="custody mismatch"):
+        analyze_rows(rows, cells, pairs)
 
 
 def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) -> None:

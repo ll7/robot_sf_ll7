@@ -361,6 +361,27 @@ def test_gallery_does_not_treat_unavailable_diagnostic_metrics_as_runtime_fallba
     assert result["cases"][0]["replay_match"] == "match"
 
 
+def test_gallery_still_rejects_explicit_fallback_inside_diagnostic_metadata(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    episode_path = Path(payload["candidates"][0]["episode_record_path"])
+    episode = _episode()
+    episode["algorithm_metadata"]["simulation_step_trace"] = {
+        "status": "unavailable",
+        "fallback_used": True,
+    }
+    episode_path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_runtime_fallback_or_degraded"] == 1
+
+
 def test_gallery_does_not_verify_replay_from_a_dirty_checkout(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

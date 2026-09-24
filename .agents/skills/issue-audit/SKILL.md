@@ -71,8 +71,9 @@ evidence rules in this prompt. For relationship decisions, also read
   scripts/dev/gh_comment.sh or a body file.
 - If the queue or inventory is partial, preserve the issue and report the
   missing evidence instead of asking a question that depends on it.
-- Never infer a relationship from a mention, label, Project field, or PR title;
-  legacy relationship prose remains review-only.
+- Never create a relationship from an incidental mention, label, Project field, or PR title alone.
+  A contextual prerequisite may support a link when the discussion clearly shows that work cannot
+  proceed until the target issue is resolved; record the evidence and read back the native state.
 - Never fabricate an option list when the issue body and comments do not
   document the available choices.
 

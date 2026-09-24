@@ -25,6 +25,7 @@ QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
+    "dispatch-ownership": 55,
     "fast-feedback": 45,
     "coverage-gate": 20,
     "changed-coverage-gate": 30,
@@ -114,35 +115,113 @@ def _workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_workflows_preserve_push_supersession_but_not_manual_dispatches() -> None:
-    """Manual CI recovery runs cannot cancel a decisive same-head run (#9340).
+def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> None:
+    """Manual CI recovery runs cannot cancel or duplicate decisive same-head work (#9340).
 
     A bounded merge burst can push several main SHAs in quick succession.  The
     intermediate runs are superseded by the final aggregate SHA, which contains
     every earlier commit, so retaining them only adds queue latency without
     adding coverage. Pushes and pull-request updates retain this policy, while
-    ``workflow_dispatch`` is a non-cancelling monitor/recovery path.
+    ``workflow_dispatch`` gets a unique pending identity, then the ownership
+    gate admits only one expensive exact-head matrix for the selected branch.
 
-    The existing ``${{ github.workflow }}-${{ github.ref }}`` group keeps each
-    ref isolated, so this is safe for pull requests too: a new pull-request push
-    shares a group only with its own ref and still cancels only its own
-    superseded run, never a main run or another PR's run.
+    The non-dispatch branch of the group keeps each ref isolated, so a new
+    pull-request push still cancels only its own superseded run.
     """
 
-    expected_group = "${{ github.workflow }}-${{ github.ref }}"
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")) or {}
     concurrency = workflow.get("concurrency", {})
     assert isinstance(concurrency, dict)
-    assert concurrency.get("group") == expected_group
-    assert concurrency.get("cancel-in-progress") == (
-        "${{ github.event_name != 'workflow_dispatch' }}"
+    assert concurrency.get("group") == (
+        "${{ github.event_name == 'workflow_dispatch' && "
+        "format('{0}-{1}-dispatch-{2}', github.workflow, github.ref, github.run_id) || "
+        "format('{0}-{1}', github.workflow, github.ref) }}"
     )
+    assert concurrency.get("cancel-in-progress") is True
+
+    jobs = workflow["jobs"]
+    gate = jobs["dispatch-ownership"]
+    assert gate["concurrency"] == {
+        "group": (
+            "ci-dispatch-owner-${{ github.event_name == 'workflow_dispatch' && "
+            "github.sha || github.run_id }}"
+        ),
+        "cancel-in-progress": False,
+    }
+    assert gate["outputs"]["run_full_ci"] == "${{ steps.decision.outputs.run_full_ci }}"
+    dispatch_command = "\n".join(step.get("run", "") for step in gate["steps"])
+    assert '--target-branch "${GITHUB_REF_NAME}"' in dispatch_command
+    assert '--target-ref-type "${GITHUB_REF_TYPE}"' in dispatch_command
+    assert "compat-matrix" in jobs
+    for job_name in (
+        "fast-feedback",
+        "compat-matrix",
+        "fast-pysf-compat",
+        "smoke-artifacts",
+        "scenario-validation",
+        "reproducibility-check",
+        "xdist-scratch-isolation",
+        "wheel-smoke-install",
+        "examples-smoke",
+        "notebooks-smoke",
+        "exact-repeat-model-preflight",
+    ):
+        needs = jobs[job_name]["needs"]
+        assert needs == "dispatch-ownership", job_name
+        assert "needs.dispatch-ownership.outputs.run_full_ci == 'true'" in jobs[job_name]["if"]
+    assert "dispatch-ownership" in jobs["ci"]["needs"]
 
     codeql = yaml.safe_load(CODEQL_WORKFLOW.read_text(encoding="utf-8")) or {}
     codeql_concurrency = codeql.get("concurrency", {})
     assert isinstance(codeql_concurrency, dict)
     # CodeQL is not the main-CI watcher path and retains its existing policy.
     assert codeql_concurrency.get("cancel-in-progress") is True
+
+
+def test_aggregate_ci_checks_dispatch_failure_only_after_source_checkout() -> None:
+    """The aggregate can report dispatch-gate failures without masking them (#9340)."""
+    workflow = yaml.safe_load(_workflow_text()) or {}
+    steps = workflow["jobs"]["ci"]["steps"]
+    checkout = next(step for step in steps if step.get("id") == "checkout_ci_source")
+    checker = next(step for step in steps if step.get("name") == "Check split job results")
+    observed = next(
+        step for step in steps if step.get("name") == "Record observed exact-head verdict"
+    )
+
+    checkout_if = " ".join(checkout["if"].split())
+    checker_if = " ".join(checker["if"].split())
+    assert checkout_if == (
+        "${{ always() && (needs.dispatch-ownership.result != 'success' || "
+        "needs.dispatch-ownership.outputs.run_full_ci == 'true') }}"
+    )
+    assert checkout.get("continue-on-error", False) is False
+    assert checker_if == (
+        "${{ always() && steps.checkout_ci_source.outcome == 'success' && "
+        "(needs.dispatch-ownership.result != 'success' || "
+        "needs.dispatch-ownership.outputs.run_full_ci == 'true') }}"
+    )
+
+    # Failure and normal full-matrix paths both need checked-out source before
+    # invoking the aggregate checker. A successful observation with no matrix
+    # keeps the lightweight, no-checkout path and records the observed verdict.
+    def checkout_required(owner_result: str, run_full_ci: str) -> bool:
+        return owner_result != "success" or run_full_ci == "true"
+
+    def checker_required(owner_result: str, run_full_ci: str, checkout_outcome: str) -> bool:
+        return checkout_outcome == "success" and checkout_required(owner_result, run_full_ci)
+
+    assert checkout_required("failure", "false")
+    assert checker_required("failure", "false", "success")
+    assert not checker_required("failure", "false", "failure")
+    assert checkout_required("success", "true")
+    assert checker_required("success", "true", "success")
+    assert not checkout_required("success", "false")
+    assert not checker_required("success", "false", "skipped")
+
+    observed_if = " ".join(observed["if"].split())
+    assert "needs.dispatch-ownership.result == 'success'" in observed_if
+    assert "needs.dispatch-ownership.outputs.run_full_ci == 'false'" in observed_if
+    assert all("checkout_duration_cache" not in str(step.get("if", "")) for step in steps)
 
 
 def _workflow_files() -> list[Path]:
@@ -318,7 +397,7 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert {"fast-feedback", "smoke-artifacts"} <= set(workflow["jobs"])
     assert _workflow_job_phases("fast-feedback") == {"lint", "typecheck", "test"}
     assert _workflow_job_phases("smoke-artifacts") == {"smoke", "artifact-policy"}
-    assert "needs" not in workflow["jobs"]["fast-feedback"]
+    assert workflow["jobs"]["fast-feedback"]["needs"] == "dispatch-ownership"
 
 
 def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
@@ -555,7 +634,7 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
 
     assert "examples-smoke" in workflow["jobs"]
     assert _workflow_job_phases("examples-smoke") == {"examples-smoke"}
-    assert "needs" not in workflow["jobs"]["examples-smoke"]
+    assert workflow["jobs"]["examples-smoke"]["needs"] == "dispatch-ownership"
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -645,7 +724,7 @@ def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() 
 
     assert "notebooks-smoke" in workflow["jobs"]
     assert _workflow_job_phases("notebooks-smoke") == {"notebooks-smoke"}
-    assert "needs" not in workflow["jobs"]["notebooks-smoke"]
+    assert workflow["jobs"]["notebooks-smoke"]["needs"] == "dispatch-ownership"
     assert "notebooks-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -658,7 +737,7 @@ def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> N
     assert "wheel-smoke-install" in workflow["jobs"]
     assert any("uv build" in run_block for run_block in wheel_smoke_run_blocks)
     assert any("wheel_install_smoke.sh" in run_block for run_block in wheel_smoke_run_blocks)
-    assert "needs" not in workflow["jobs"]["wheel-smoke-install"]
+    assert workflow["jobs"]["wheel-smoke-install"]["needs"] == "dispatch-ownership"
     assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
 
 
@@ -1024,7 +1103,8 @@ def test_reproducibility_check_job_contract() -> None:
     # Trigger is exclusively pull_request OR workflow_dispatch. Equality is
     # intentional: containment would allow an undocumented third event.
     assert repro_job["if"] == (
-        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+        "needs.dispatch-ownership.outputs.run_full_ci == 'true' && "
+        "(github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')"
     )
 
     # No continue-on-error on the job or any step

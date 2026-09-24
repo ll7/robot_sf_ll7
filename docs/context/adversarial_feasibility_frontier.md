@@ -27,7 +27,9 @@ The command writes:
   failed, unknown, and replay-unavailable search rows;
 - `frontier.png` and `frontier.pdf` — eligible complete success fractions by evaluation set and the
   cumulative known counterexample, solved-case, and unknown-feasibility counts;
-- `frontier.provenance.json` — source-artifact digests and the claim boundary for the figure.
+- `frontier.provenance.json` — source-artifact digests, evidence kind, visible figure title, and the
+  claim boundary for the figure. The evidence kind is printed in the figure so a detached fixture
+  image remains visibly synthetic.
 
 Use a new or empty output directory for each generation. The command refuses to overwrite any of
 its expected report files, preserving prior report bundles.
@@ -37,15 +39,23 @@ its expected report files, preserving prior report bundles.
 The bundle identifies `experiment_id`, `evidence_kind` (`synthetic_fixture`, `simulator_run`, or
 `historical_artifact`), source revision, simulator identity, and scenario-space identity. It contains
 at least two contiguous rounds. Each round records planner/configuration identity, optimization
-method and explicit objective definition/seeds/budget/selection rule, fixed/regression/held-out episode rows, and
-falsification method/objective/search-space/failure predicate/seeds/budget/stop reason.
+method and explicit objective definition/seeds/budget/selection rule, fixed/regression/held-out
+episode rows, and falsification method/objective/search-space/failure predicate/seeds/budget/stop
+reason.
 
-Optimizer, search, evaluation, corpus, and replay artifacts use relative paths inside the evidence
-bundle and carry a full source revision, schema label, role, and SHA-256. Escaping paths, absent
-files, changed bytes, missing budgets, abbreviated source revisions, duplicate identities, and
-candidate-ledger/budget count mismatches fail closed. Candidate rows retain status, admissibility
-verdict, target-failure observation, replay result, corpus disposition, and stable case ID. Case
-observations link the discovery round and candidate to corpus and replay artifacts.
+Optimizer, search, evaluation, corpus, replay, and later admissibility-evidence artifacts use
+relative paths inside the evidence bundle and carry a full source revision, schema label, role, and
+SHA-256. Escaping paths, absent files, changed bytes, missing budgets, abbreviated source revisions,
+duplicate identities, and candidate-ledger/budget count mismatches fail closed. Candidate rows retain
+evaluation status, admissibility verdict, target-failure observation, replay result, corpus
+disposition, and stable case ID. Case
+observations link the discovery round and candidate to corpus and replay artifacts. A same-round
+observation must agree with its origin candidate's admissibility and replay status; it cannot mark a
+case solved when the search recorded its target failure. Later planner-status changes such as
+`unsolved` to `solved` are allowed. Later feasibility updates are limited to
+`admissible_feasibility_unknown` → `empirically_feasible` or `planner_specific_failure`, and require
+complete evidence plus a checksummed artifact whose role is `admissibility-evidence`. The report
+does not infer stronger feasibility from a replay alone.
 
 The v1 schema uses the current #9651 admissibility verdicts and #9652 planner statuses:
 `solved`, `unsolved`, `mixed`, and `unknown`. The report preserves those upstream values; it does
@@ -55,10 +65,15 @@ not infer dynamic feasibility from a planner failure. `structurally_invalid`,
 replay-verified target failure with `empirically_feasible` or `planner_specific_failure` status is
 counted as a confirmed counterexample. Admitted unknown-feasibility cases are tracked separately.
 
-Evaluation rates use records marked complete, eligible, and normal-mode with a recorded outcome.
-Fallback/degraded, failed, partial, missing, unknown, and ineligible rows remain in status counts
-and excluded-record lists; they never enter the success or collision denominator. Missing expected
-rows are reported as missing accounting and are not synthesized as successful or failed episodes.
+Evaluation rows keep three canonical runtime axes separate: `execution_mode` is `native`, `adapter`,
+`mixed`, or `unknown`; `readiness_status` is `native`, `adapter`, `fallback`, or `degraded`; and
+`availability_status` is `available`, `partial-failure`, `failed`, or `not_available`. A row enters
+the benchmark-eligible set only when its evidence is complete, it is explicitly eligible, readiness
+is `native` or `adapter`, availability is `available`, and execution mode is resolved as `native`,
+`adapter`, or `mixed`. Success and collision rates then use separate denominators, each based only on
+eligible rows with that outcome recorded. Fallback/degraded, failed, partial, missing, unknown, and
+ineligible rows remain in status counts and excluded-record lists. Missing expected rows and missing
+outcomes are reported separately; neither is synthesized as a success or failure.
 
 ## Evidence limits and integration
 
@@ -77,5 +92,5 @@ links.
 
 The focused fixture contract is exercised in
 `tests/adversarial/test_feasibility_frontier_report.py`. The tests create synthetic source artifacts
-in temporary directories, check digests and fail-closed cases, and render the figure without
-starting a simulator.
+in temporary directories, check digests and fail-closed cases, cover a flat campaign with no
+verified discovery, and render the figure without starting a simulator.

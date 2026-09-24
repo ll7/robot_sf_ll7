@@ -35,7 +35,11 @@ _ADMISSIBILITY_VERDICTS = {
 }
 _PLANNER_STATUSES = {"solved", "unsolved", "mixed", "unknown"}
 _EVIDENCE_STATUSES = {"complete", "failed", "partial", "missing", "unknown"}
-_EXECUTION_MODES = {"normal", "fallback", "degraded", "unknown"}
+_EXECUTION_MODES = {"native", "adapter", "mixed", "unknown"}
+_READINESS_STATUSES = {"native", "adapter", "fallback", "degraded"}
+_AVAILABILITY_STATUSES = {"available", "partial-failure", "failed", "not_available"}
+_BENCHMARK_READY_STATUSES = {"native", "adapter"}
+_CONFIRMED_FEASIBILITY_VERDICTS = {"empirically_feasible", "planner_specific_failure"}
 _CANDIDATE_STATUSES = {
     "complete",
     "invalid",
@@ -106,6 +110,14 @@ def build_frontier_report(
                     admitted_unknown_cases.setdefault(case_id, number)
 
         observations = round_data["case_observations"]
+        feasibility_upgrades = [
+            observation["case_id"]
+            for observation in observations
+            if _is_followup_feasibility_upgrade(evidence["rounds"], number, observation)
+        ]
+        verified_case_ids.extend(feasibility_upgrades)
+        for case_id in feasibility_upgrades:
+            discovered_counterexamples.setdefault(case_id, number)
         state_counts = Counter(item["planner_status"] for item in observations)
         verdict_counts = Counter(item["admissibility_verdict"] for item in observations)
         replay_counts = Counter(item["replay_status"] for item in observations)
@@ -145,6 +157,9 @@ def build_frontier_report(
                     "admitted_case_ids": sorted(set(admitted_case_ids)),
                     "admitted_unknown_feasibility_case_ids": sorted(set(unknown_case_ids)),
                     "verified_counterexample_case_ids": sorted(set(verified_case_ids)),
+                    "feasibility_upgrades_from_follow_up_case_ids": sorted(
+                        set(feasibility_upgrades)
+                    ),
                     "candidate_records": candidates,
                     "no_verified_counterexample_statement": no_discovery_statement,
                     "artifact": falsification["artifact"],
@@ -217,9 +232,10 @@ def render_frontier_markdown(
         "",
         report["claim_boundary"],
         "",
-        "Success and collision rates use only complete, normal-mode, explicitly eligible "
-        "episode rows with the relevant outcome recorded. Excluded and missing rows remain "
-        "visible in the accounting below.",
+        "Rates use complete, explicitly eligible rows with benchmark-ready availability and "
+        "the relevant outcome recorded. Success and collision use separate denominators. "
+        "Execution mode, runtime readiness, availability, excluded rows, and missing outcomes "
+        "remain visible in the accounting below.",
         "",
         "| Round | Planner/config | Optimization method and budget | Search method and budget | Held-out success | Regression success | Verified counterexamples (cumulative) |",
         "|---:|---|---|---|---:|---:|---:|",
@@ -276,10 +292,17 @@ def render_frontier_markdown(
             summary = item["evaluation_sets"][set_name]
             lines.append(
                 f"  - `{set_name}`: {summary['eligible_episode_count']}/"
-                f"{summary['expected_episode_count']} expected rows eligible; "
+                f"{summary['expected_episode_count']} expected rows benchmark-eligible; "
+                f"{summary['reported_episode_count']} reported, "
+                f"{summary['missing_record_count']} expected rows missing, "
+                f"{summary['unexpected_record_count']} unexpected; "
                 f"{_format_rate(summary)} success; {_format_collision_rate(summary)} collision; "
                 f"evidence statuses `{summary['evidence_status_counts']}`, execution modes "
-                f"`{summary['execution_mode_counts']}`; excluded records "
+                f"`{summary['execution_mode_counts']}`, readiness "
+                f"`{summary['readiness_status_counts']}`, availability "
+                f"`{summary['availability_status_counts']}`; missing success outcomes "
+                f"`{summary['missing_success_record_ids']}`, missing collision outcomes "
+                f"`{summary['missing_collision_record_ids']}`; excluded records "
                 f"`{summary['excluded_record_ids']}`."
             )
         lines.extend(
@@ -381,7 +404,7 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
                 value = summary["success_rate"]
                 if value is not None:
                     performance_axis.annotate(
-                        f"{summary['successes']}/{summary['eligible_episode_count']}",
+                        f"{summary['successes']}/{summary['success_denominator']}",
                         (x, value),
                         xytext=(0, 5),
                         textcoords="offset points",
@@ -437,7 +460,11 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
         cases_axis.set_title("Counterexample memory and current planner status")
         cases_axis.grid(axis="y", alpha=0.25)
         cases_axis.legend(frameon=False, loc="best", fontsize=8)
-        figure.suptitle("Finite-budget planner–falsifier frontier")
+        figure_title = (
+            f"{report['evidence_kind'].replace('_', ' ').title()} evidence — "
+            "Finite-budget planner–falsifier frontier"
+        )
+        figure.suptitle(figure_title)
 
         provenance = {
             "source_artifacts": [
@@ -450,6 +477,8 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
             ],
             "repo_commit": report["source_revision"],
             "generator_command": "build_adversarial_feasibility_frontier_report",
+            "evidence_kind": report["evidence_kind"],
+            "figure_title": figure_title,
             "claim_boundary": report["claim_boundary"],
             "figure_formats": ["png", "pdf"],
         }
@@ -545,7 +574,7 @@ def _validate_evidence(  # noqa: C901, PLR0912 - collect independent provenance 
     if actual_numbers != expected_numbers:
         errors.append("round_number values must be contiguous and start at 1")
 
-    round_candidates: dict[int, dict[str, str | None]] = {}
+    round_candidates: dict[int, dict[str, dict[str, Any]]] = {}
     for round_data in rounds:
         if not isinstance(round_data, dict):
             errors.append("each round must be an object")
@@ -558,7 +587,7 @@ def _validate_evidence(  # noqa: C901, PLR0912 - collect independent provenance 
         falsification = round_data.get("falsification")
         candidates = falsification.get("candidates", []) if isinstance(falsification, dict) else []
         round_candidates[number] = {
-            item.get("case_id"): item.get("candidate_id")
+            item.get("case_id"): item
             for item in candidates
             if isinstance(item, dict)
             and item.get("corpus_disposition") == "admitted"
@@ -576,21 +605,78 @@ def _validate_evidence(  # noqa: C901, PLR0912 - collect independent provenance 
             case_id = observation.get("case_id")
             candidate_id = observation.get("origin_candidate_id")
             if isinstance(origin_round, int) and origin_round > 0 and origin_round <= current_round:
-                known_candidate_id = round_candidates.get(origin_round, {}).get(case_id)
-                if known_candidate_id is None:
+                origin_candidate = round_candidates.get(origin_round, {}).get(case_id)
+                if origin_candidate is None:
                     errors.append(
                         f"round {current_round} case {case_id!r} refers to no admitted discovery "
                         f"in origin round {origin_round}"
                     )
-                elif candidate_id != known_candidate_id:
+                elif candidate_id != origin_candidate.get("candidate_id"):
                     errors.append(
                         f"round {current_round} case {case_id!r} origin candidate does not match "
                         "its discovery record"
                     )
+                elif current_round == origin_round:
+                    if observation.get("admissibility_verdict") != origin_candidate.get(
+                        "admissibility_verdict"
+                    ):
+                        errors.append(
+                            f"round {current_round} case {case_id!r} conflicts with its "
+                            "same-round discovery admissibility verdict"
+                        )
+                    if observation.get("replay_status") != origin_candidate.get("replay_status"):
+                        errors.append(
+                            f"round {current_round} case {case_id!r} conflicts with its "
+                            "same-round discovery replay status"
+                        )
+                    if (
+                        origin_candidate.get("target_failure_observed") is True
+                        and observation.get("planner_status") == "solved"
+                    ):
+                        errors.append(
+                            f"round {current_round} case {case_id!r} is marked solved despite "
+                            "the same-round observed target failure"
+                        )
+                else:
+                    original_verdict = origin_candidate.get("admissibility_verdict")
+                    observed_verdict = observation.get("admissibility_verdict")
+                    if observed_verdict != original_verdict:
+                        evidence = observation.get("admissibility_evidence_artifact")
+                        valid_upgrade = (
+                            original_verdict == "admissible_feasibility_unknown"
+                            and observed_verdict in _CONFIRMED_FEASIBILITY_VERDICTS
+                            and observation.get("evidence_status") == "complete"
+                            and isinstance(evidence, dict)
+                            and evidence.get("role") == "admissibility-evidence"
+                        )
+                        if not valid_upgrade:
+                            errors.append(
+                                f"round {current_round} case {case_id!r} has an unsupported "
+                                "admissibility-verdict transition"
+                            )
             elif origin_round != 0:
                 errors.append(f"round {current_round} case {case_id!r} has invalid origin_round")
     if errors:
         raise FrontierReportError("invalid frontier evidence:\n- " + "\n- ".join(errors))
+
+
+def _is_followup_feasibility_upgrade(
+    rounds: list[dict[str, Any]], number: int, observation: dict[str, Any]
+) -> bool:
+    """Return whether a later observation upgrades an origin candidate's unknown feasibility."""
+    origin_round = observation["origin_round"]
+    if origin_round >= number:
+        return False
+    if observation["admissibility_verdict"] not in _CONFIRMED_FEASIBILITY_VERDICTS:
+        return False
+    origin_candidates = rounds[origin_round - 1]["falsification"]["candidates"]
+    origin_candidate = next(
+        candidate
+        for candidate in origin_candidates
+        if candidate.get("case_id") == observation["case_id"]
+        and candidate.get("candidate_id") == observation["origin_candidate_id"]
+    )
+    return origin_candidate["admissibility_verdict"] == "admissible_feasibility_unknown"
 
 
 def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local blocker for diagnosis.
@@ -816,9 +902,18 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 artifacts,
                 errors,
             )
+        admissibility_evidence = observation.get("admissibility_evidence_artifact")
+        if admissibility_evidence is not None:
+            _validate_artifact(
+                admissibility_evidence,
+                f"{obs_prefix}.admissibility_evidence_artifact",
+                evidence_root,
+                artifacts,
+                errors,
+            )
 
 
-def _validate_evaluation_set(  # noqa: C901 - preserve independent row-level evidence findings.
+def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-level evidence findings.
     value: Any,
     prefix: str,
     evidence_root: Path,
@@ -854,6 +949,10 @@ def _validate_evaluation_set(  # noqa: C901 - preserve independent row-level evi
             errors.append(f"{row_prefix}.evidence_status is unsupported")
         if episode.get("execution_mode") not in _EXECUTION_MODES:
             errors.append(f"{row_prefix}.execution_mode is unsupported")
+        if episode.get("readiness_status") not in _READINESS_STATUSES:
+            errors.append(f"{row_prefix}.readiness_status is unsupported")
+        if episode.get("availability_status") not in _AVAILABILITY_STATUSES:
+            errors.append(f"{row_prefix}.availability_status is unsupported")
         if episode.get("eligible") not in (True, False, None):
             errors.append(f"{row_prefix}.eligible must be boolean or null")
         for field in ("success", "collision"):
@@ -962,16 +1061,19 @@ def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:
         row
         for row in data["episodes"]
         if row["evidence_status"] == "complete"
-        and row["execution_mode"] == "normal"
+        and row["execution_mode"] in {"native", "adapter", "mixed"}
+        and row["readiness_status"] in _BENCHMARK_READY_STATUSES
+        and row["availability_status"] == "available"
         and row["eligible"] is True
-        and isinstance(row["success"], bool)
-        and isinstance(row["collision"], bool)
     ]
+    success_rows = [row for row in eligible_rows if isinstance(row["success"], bool)]
+    collision_rows = [row for row in eligible_rows if isinstance(row["collision"], bool)]
     statuses = Counter(row["evidence_status"] for row in data["episodes"])
     execution_modes = Counter(row["execution_mode"] for row in data["episodes"])
-    success_count = sum(row["success"] for row in eligible_rows)
-    collision_count = sum(row["collision"] for row in eligible_rows)
-    denominator = len(eligible_rows)
+    readiness_statuses = Counter(row["readiness_status"] for row in data["episodes"])
+    availability_statuses = Counter(row["availability_status"] for row in data["episodes"])
+    success_count = sum(row["success"] for row in success_rows)
+    collision_count = sum(row["collision"] for row in collision_rows)
     reported_count = len(data["episodes"])
     expected_count = data["expected_episode_count"]
     return {
@@ -979,22 +1081,38 @@ def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:
         "reported_episode_count": reported_count,
         "missing_record_count": max(0, expected_count - reported_count),
         "unexpected_record_count": max(0, reported_count - expected_count),
-        "eligible_episode_count": denominator,
-        "excluded_episode_count": reported_count - denominator,
+        "eligible_episode_count": len(eligible_rows),
+        "success_denominator": len(success_rows),
+        "collision_denominator": len(collision_rows),
+        "excluded_episode_count": reported_count - len(eligible_rows),
         "accounting_complete": reported_count == expected_count,
         "evidence_status_counts": dict(sorted(statuses.items())),
         "execution_mode_counts": dict(sorted(execution_modes.items())),
+        "readiness_status_counts": dict(sorted(readiness_statuses.items())),
+        "availability_status_counts": dict(sorted(availability_statuses.items())),
         "eligibility_conflict_count": sum(
-            row["eligible"] is True and row["execution_mode"] != "normal"
+            row["eligible"] is True
+            and (
+                row["evidence_status"] != "complete"
+                or row["execution_mode"] not in {"native", "adapter", "mixed"}
+                or row["readiness_status"] not in _BENCHMARK_READY_STATUSES
+                or row["availability_status"] != "available"
+            )
             for row in data["episodes"]
         ),
         "excluded_record_ids": [
             row["record_id"] for row in data["episodes"] if row not in eligible_rows
         ],
+        "missing_success_record_ids": [
+            row["record_id"] for row in eligible_rows if not isinstance(row["success"], bool)
+        ],
+        "missing_collision_record_ids": [
+            row["record_id"] for row in eligible_rows if not isinstance(row["collision"], bool)
+        ],
         "successes": success_count,
         "collisions": collision_count,
-        "success_rate": success_count / denominator if denominator else None,
-        "collision_rate": collision_count / denominator if denominator else None,
+        "success_rate": success_count / len(success_rows) if success_rows else None,
+        "collision_rate": collision_count / len(collision_rows) if collision_rows else None,
         "minimum_clearance_min": min(
             (
                 row["minimum_clearance"]
@@ -1038,8 +1156,8 @@ def _current_counterexample_status(
 def _format_rate(summary: dict[str, Any]) -> str:
     rate = summary["success_rate"]
     if rate is None:
-        return "unknown (0 eligible episodes)"
-    return f"{rate:.3f} ({summary['successes']}/{summary['eligible_episode_count']})"
+        return "unknown (0 success outcomes recorded)"
+    return f"{rate:.3f} ({summary['successes']}/{summary['success_denominator']})"
 
 
 def _artifact_link(path: Any, evidence_root_relative_to_report: str) -> str:
@@ -1053,8 +1171,8 @@ def _artifact_link(path: Any, evidence_root_relative_to_report: str) -> str:
 def _format_collision_rate(summary: dict[str, Any]) -> str:
     rate = summary["collision_rate"]
     if rate is None:
-        return "unknown (0 eligible episodes)"
-    return f"{rate:.3f} ({summary['collisions']}/{summary['eligible_episode_count']})"
+        return "unknown (0 collision outcomes recorded)"
+    return f"{rate:.3f} ({summary['collisions']}/{summary['collision_denominator']})"
 
 
 def _require_text(data: dict[str, Any], key: str, errors: list[str], prefix: str) -> None:

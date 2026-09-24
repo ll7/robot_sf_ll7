@@ -37,12 +37,23 @@ def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:
     }
 
 
-def _episode(record_id: str, *, success: bool, collision: bool = False) -> dict[str, Any]:
+def _episode(
+    record_id: str,
+    *,
+    success: bool | None,
+    collision: bool | None = False,
+    execution_mode: str = "native",
+    readiness_status: str = "native",
+    availability_status: str = "available",
+    eligible: bool = True,
+) -> dict[str, Any]:
     return {
         "record_id": record_id,
         "evidence_status": "complete",
-        "execution_mode": "normal",
-        "eligible": True,
+        "execution_mode": execution_mode,
+        "readiness_status": readiness_status,
+        "availability_status": availability_status,
+        "eligible": eligible,
         "success": success,
         "collision": collision,
         "minimum_clearance": 0.2 if not collision else 0.0,
@@ -61,7 +72,9 @@ def _evaluation_set(
         {
             "record_id": f"{name}-{round_number}-fallback",
             "evidence_status": "complete",
-            "execution_mode": "fallback",
+            "execution_mode": "native",
+            "readiness_status": "fallback",
+            "availability_status": "not_available",
             "eligible": False,
             "success": False,
             "collision": True,
@@ -317,7 +330,7 @@ def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
     assert report["evidence_kind"] == "synthetic_fixture"
     assert first["evaluation_sets"]["held_out"]["success_rate"] == 0.5
     assert first["evaluation_sets"]["held_out"]["eligible_episode_count"] == 2
-    assert first["evaluation_sets"]["held_out"]["execution_mode_counts"]["fallback"] == 1
+    assert first["evaluation_sets"]["held_out"]["readiness_status_counts"]["fallback"] == 1
     assert second["evaluation_sets"]["held_out"]["success_rate"] == 1.0
     assert second["evaluation_sets"]["held_out"]["minimum_clearance_min"] == 0.2
     assert first["falsification"]["verified_counterexample_case_ids"] == ["case-001"]
@@ -418,6 +431,8 @@ def test_frontier_report_writer_emits_deterministic_json_markdown_and_figure(
         for name, expected_sha256 in provenance["output_hashes"].items():
             assert hashlib.sha256((report_dir / name).read_bytes()).hexdigest() == expected_sha256
     assert sidecar["repo_commit"] == _REVISION
+    assert sidecar["evidence_kind"] == "synthetic_fixture"
+    assert sidecar["figure_title"].startswith("Synthetic Fixture evidence")
     assert sidecar["claim_boundary"] == first["claim_boundary"]
     assert sidecar["source_artifacts"][-1]["path"] == input_path.name
 
@@ -462,3 +477,198 @@ def test_frontier_report_rejects_case_observation_from_nonadmitted_candidate(
 
     with pytest.raises(FrontierReportError, match="no admitted discovery"):
         build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_uses_canonical_execution_readiness_and_availability_axes(
+    tmp_path: Path,
+) -> None:
+    """Native, adapter, and mixed modes stay distinct from fallback/degraded availability."""
+    payload = _evidence(tmp_path)
+    evaluation = payload["rounds"][0]["evaluation_sets"]["held_out"]
+    rows = evaluation["episodes"]
+    rows[1]["execution_mode"] = "adapter"
+    rows[1]["readiness_status"] = "adapter"
+    rows[2]["execution_mode"] = "mixed"
+    rows[2]["eligible"] = True
+    rows.append(
+        _episode(
+            "held_out-1-degraded",
+            success=False,
+            collision=True,
+            execution_mode="mixed",
+            readiness_status="degraded",
+            availability_status="failed",
+            eligible=True,
+        )
+    )
+    rows.append(
+        _episode(
+            "held_out-1-partial",
+            success=True,
+            collision=False,
+            execution_mode="adapter",
+            readiness_status="adapter",
+            availability_status="partial-failure",
+            eligible=True,
+        )
+    )
+    evaluation["expected_episode_count"] = len(rows)
+
+    summary = build_frontier_report(payload, evidence_root=tmp_path)["rounds"][0][
+        "evaluation_sets"
+    ]["held_out"]
+
+    assert summary["execution_mode_counts"] == {"adapter": 2, "mixed": 2, "native": 1}
+    assert summary["eligible_episode_count"] == 2
+    assert summary["readiness_status_counts"]["fallback"] == 1
+    assert summary["readiness_status_counts"]["degraded"] == 1
+    assert summary["availability_status_counts"]["failed"] == 1
+    assert summary["availability_status_counts"]["partial-failure"] == 1
+    assert summary["excluded_record_ids"] == [
+        "held_out-1-fallback",
+        "held_out-1-degraded",
+        "held_out-1-partial",
+    ]
+
+
+def test_frontier_report_uses_separate_outcome_denominators(tmp_path: Path) -> None:
+    """A missing collision result does not erase success evidence, or vice versa."""
+    payload = _evidence(tmp_path)
+    rows = payload["rounds"][0]["evaluation_sets"]["held_out"]["episodes"]
+    rows[0]["success"] = True
+    rows[0]["collision"] = None
+    rows[1]["success"] = None
+    rows[1]["collision"] = True
+
+    summary = build_frontier_report(payload, evidence_root=tmp_path)["rounds"][0][
+        "evaluation_sets"
+    ]["held_out"]
+
+    assert summary["eligible_episode_count"] == 2
+    assert summary["success_denominator"] == 1
+    assert summary["collision_denominator"] == 1
+    assert summary["success_rate"] == 1.0
+    assert summary["collision_rate"] == 1.0
+    assert summary["missing_success_record_ids"] == ["held_out-1-2"]
+    assert summary["missing_collision_record_ids"] == ["held_out-1-1"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("admissibility_verdict", "structurally_invalid", "same-round discovery admissibility"),
+        ("replay_status", "mismatch", "same-round discovery replay status"),
+        ("planner_status", "solved", "despite the same-round observed target failure"),
+    ],
+)
+def test_frontier_report_rejects_same_round_discovery_observation_conflicts(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    """A candidate cannot be verified while its origin observation contradicts it."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"][0][field] = value
+
+    with pytest.raises(FrontierReportError, match=message):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize("include_evidence", [False, True])
+def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
+    tmp_path: Path, include_evidence: bool
+) -> None:
+    """A later solved planner state is allowed; a feasibility upgrade needs its own artifact."""
+    payload = _evidence(tmp_path)
+    first = payload["rounds"][0]
+    origin_replay = _artifact(tmp_path, "round-1-unknown-origin-replay.json", role="replay")
+    first["falsification"]["candidates"].append(
+        _candidate(
+            candidate_id="c-unknown-origin",
+            evaluation_status="complete",
+            verdict="admissible_feasibility_unknown",
+            failure=True,
+            replay_status="verified",
+            disposition="admitted",
+            case_id="case-origin-unknown",
+            replay_artifact=origin_replay,
+        )
+    )
+    first["falsification"]["budget"]["candidates_completed"] = 4
+    first["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id="case-origin-unknown",
+            origin_round=1,
+            origin_candidate_id="c-unknown-origin",
+            planner_status="unsolved",
+            verdict="admissible_feasibility_unknown",
+            replay_status="verified",
+        )
+    )
+    later_observation = _observation(
+        tmp_path,
+        round_number=2,
+        case_id="case-origin-unknown",
+        origin_round=1,
+        origin_candidate_id="c-unknown-origin",
+        planner_status="solved",
+        verdict="empirically_feasible",
+        replay_status="verified",
+    )
+    if include_evidence:
+        later_observation["admissibility_evidence_artifact"] = _artifact(
+            tmp_path,
+            "round-2-case-origin-unknown-feasibility.json",
+            role="admissibility-evidence",
+        )
+    payload["rounds"][1]["case_observations"].append(later_observation)
+
+    if include_evidence:
+        report = build_frontier_report(payload, evidence_root=tmp_path)
+        second = report["rounds"][1]
+        assert second["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == [
+            "case-origin-unknown"
+        ]
+        assert second["case_frontier"]["verified_counterexamples_cumulative"] == 2
+        assert second["case_frontier"]["verified_counterexample_status"]["solved"] == 2
+    else:
+        with pytest.raises(FrontierReportError, match="unsupported admissibility-verdict"):
+            build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified_null(
+    tmp_path: Path,
+) -> None:
+    """A flat, no-discovery campaign remains a useful result without implying absence."""
+    payload = _evidence(tmp_path)
+    for round_data in payload["rounds"]:
+        for candidate in round_data["falsification"]["candidates"]:
+            if candidate["corpus_disposition"] == "admitted":
+                candidate["corpus_disposition"] = "pending"
+                candidate["case_id"] = None
+        round_data["case_observations"] = []
+        for evaluation in round_data["evaluation_sets"].values():
+            evaluation["episodes"][0]["success"] = True
+            evaluation["episodes"][1]["success"] = False
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    assert [
+        item["case_frontier"]["verified_counterexamples_cumulative"] for item in report["rounds"]
+    ] == [0, 0]
+    assert [item["evaluation_sets"]["held_out"]["success_rate"] for item in report["rounds"]] == [
+        0.5,
+        0.5,
+    ]
+    assert all(
+        item["falsification"]["no_verified_counterexample_statement"] for item in report["rounds"]
+    )
+
+    input_path = tmp_path / "flat-no-discovery.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    output_dir = tmp_path / "flat-no-discovery-report"
+    write_frontier_report(input_path, output_dir)
+    markdown = (output_dir / "frontier_report.md").read_text(encoding="utf-8")
+    assert "This does not establish that no counterexample exists." in markdown
+    assert "finite search budget" in markdown
+    assert (output_dir / "frontier.png").is_file()
+    assert (output_dir / "frontier.pdf").is_file()

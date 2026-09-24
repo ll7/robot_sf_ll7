@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -36,6 +37,7 @@ SLICE_SCHEMA_VERSION = "adversarial-counterexample-slice.v1"
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v1"
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
 ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
+ISSUE_9656_SUMMARY_SCHEMA = "benchmark-hard-case-slice.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
@@ -55,6 +57,8 @@ def new_corpus() -> dict[str, Any]:
         ),
         "search_runs": [],
         "cases": [],
+        "historical_candidates": [],
+        "historical_candidate_imports": [],
         "admission_attempts": [],
         "planner_evaluations": [],
     }
@@ -87,6 +91,50 @@ def validate_corpus(corpus: Mapping[str, Any]) -> None:
         if evaluation["case_id"] not in case_id_set:
             raise CorpusError(
                 f"planner evaluation references absent case {evaluation['case_id']!r}"
+            )
+    _validate_historical_candidate_registry(corpus)
+
+
+def _validate_historical_candidate_registry(corpus: Mapping[str, Any]) -> None:
+    candidates = corpus.get("historical_candidates", [])
+    imports = corpus.get("historical_candidate_imports", [])
+    candidate_ids = [candidate["candidate_id"] for candidate in candidates]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise CorpusError("historical candidate_id values must be unique")
+    import_ids = [receipt["import_id"] for receipt in imports]
+    if len(import_ids) != len(set(import_ids)):
+        raise CorpusError("historical candidate import_id values must be unique")
+    imports_by_id = {receipt["import_id"]: set(receipt["candidate_ids"]) for receipt in imports}
+    known_candidate_ids = set(candidate_ids)
+    source_identity_by_import: dict[str, Mapping[str, Any]] = {}
+    for receipt in imports:
+        source_identity = receipt["source_identity"]
+        expected_import_id = hashlib.sha256(
+            _stable_json(source_identity).encode("utf-8")
+        ).hexdigest()
+        if receipt["import_id"] != expected_import_id:
+            raise CorpusError("historical candidate import ID does not bind its source identity")
+        source_identity_by_import[receipt["import_id"]] = source_identity
+        if receipt["candidate_count"] != len(receipt["candidate_ids"]) or not imports_by_id[
+            receipt["import_id"]
+        ].issubset(known_candidate_ids):
+            raise CorpusError("historical candidate import receipt has absent candidate rows")
+    for candidate in candidates:
+        import_id = candidate["source_provenance"]["import_id"]
+        if (
+            import_id not in imports_by_id
+            or candidate["candidate_id"] not in imports_by_id[import_id]
+        ):
+            raise CorpusError("historical candidate references an absent import receipt")
+        identity = {
+            **source_identity_by_import[import_id],
+            "source_case_id": candidate["source_case_id"],
+            "source_record_sha256": candidate["source_record_sha256"],
+        }
+        expected_candidate_id = hashlib.sha256(_stable_json(identity).encode("utf-8")).hexdigest()
+        if candidate["candidate_id"] != expected_candidate_id:
+            raise CorpusError(
+                "historical candidate ID does not bind its source alias and row digest"
             )
 
 
@@ -251,6 +299,832 @@ def import_issue9645_packet(
     receipt["pilot_new_discoveries"] = 0
     receipt["pilot_run_id"] = pilot["run_id"]
     return corpus, receipt
+
+
+def import_issue9656_candidates(
+    summary_path: str | Path,
+    materialized_root: str | Path,
+    evidence_bundle_root: str | Path,
+    campaign_root: str | Path,
+    corpus: dict[str, Any],
+    *,
+    corpus_root: str | Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Append #9656 historical rows as pending candidates, never admitted cases.
+
+    The evidence bundle is verified before any corpus or artifact mutation. Each source
+    alias is retained verbatim while the corpus candidate receives its own content-derived
+    ID. Imported replay matrices are path-normalized into candidate custody with the
+    original input digests retained separately.
+    """
+    validate_corpus(corpus)
+    summary_file = Path(summary_path).resolve()
+    materialized = Path(materialized_root).resolve()
+    bundle_root = Path(evidence_bundle_root).resolve()
+    campaign = Path(campaign_root).resolve()
+    root = Path(corpus_root).resolve()
+    summary, summary_receipts = _verify_issue9656_source_summary(summary_file, bundle_root)
+    materialized_manifest_path = materialized / "manifest.json"
+    materialized_manifest = _read_json_object(materialized_manifest_path)
+    source_rows = _validate_issue9656_materialization(
+        summary, materialized, materialized_manifest, campaign
+    )
+    materialized_manifest_sha = _sha256_file(materialized_manifest_path)
+
+    import_identity = {
+        "source_issue": 9656,
+        "source_row_binding": "verified_episode_file_and_line_sha256",
+        "summary_sha256": summary_receipts["summary_sha256"],
+        "evidence_bundle_manifest_sha256": summary_receipts["manifest_sha256"],
+        "evidence_checksums_sha256": summary_receipts["checksums_sha256"],
+        "materialized_manifest_sha256": materialized_manifest_sha,
+    }
+    import_id = hashlib.sha256(_stable_json(import_identity).encode("utf-8")).hexdigest()
+    existing_import = next(
+        (
+            item
+            for item in corpus.get("historical_candidate_imports", [])
+            if item.get("import_id") == import_id
+        ),
+        None,
+    )
+    if existing_import is not None:
+        if existing_import.get("source_identity") != import_identity:
+            raise CorpusError("historical candidate import ID conflicts with stored provenance")
+        expected_candidate_ids = sorted(
+            hashlib.sha256(
+                _stable_json(
+                    {
+                        **import_identity,
+                        "source_case_id": source_case["case_id"],
+                        "source_record_sha256": source_case["source_record"]["record_sha256"],
+                    }
+                ).encode("utf-8")
+            ).hexdigest()
+            for source_case, _materialized_case, *_artifacts in source_rows
+        )
+        if existing_import.get("candidate_ids") != expected_candidate_ids:
+            raise CorpusError("duplicate #9656 import does not contain every source alias")
+        expected_candidate_set = set(expected_candidate_ids)
+        _verify_existing_issue9656_candidate_artifacts(
+            root,
+            existing_import,
+            [
+                item
+                for item in corpus.get("historical_candidates", [])
+                if item["candidate_id"] in expected_candidate_set
+            ],
+        )
+        return corpus, {**existing_import, "decision": "duplicate"}
+
+    candidates: list[dict[str, Any]] = []
+    staging_root = root / ".historical_candidate_import_staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{import_id}.", dir=staging_root))
+    promoted_dirs: list[Path] = []
+    try:
+        import_artifacts = staging / "historical_candidate_imports" / import_id
+        import_artifacts.mkdir(parents=True)
+        for payload_receipt in summary_receipts["payload_files"]:
+            relative = payload_receipt["path"]
+            source_payload_file = _safe_materialized_path(
+                bundle_root / "payload", relative, label="evidence payload file"
+            )
+            _copy_verified_source_file(
+                source_payload_file,
+                import_artifacts / "payload" / Path(*PurePosixPath(relative).parts),
+                expected_sha256=payload_receipt["sha256"],
+            )
+        _copy_verified_source_file(
+            bundle_root / "evidence_bundle_manifest.json",
+            import_artifacts / "evidence_bundle_manifest.json",
+            expected_sha256=summary_receipts["manifest_sha256"],
+        )
+        _copy_verified_source_file(
+            bundle_root / "checksums.sha256",
+            import_artifacts / "checksums.sha256",
+            expected_sha256=summary_receipts["checksums_sha256"],
+        )
+        _copy_verified_source_file(
+            materialized_manifest_path,
+            import_artifacts / "materialized_manifest.json",
+            expected_sha256=materialized_manifest_sha,
+        )
+
+        candidates = [
+            _stage_issue9656_candidate(
+                source_row,
+                staging=staging,
+                import_id=import_id,
+                import_identity=import_identity,
+                summary_receipts=summary_receipts,
+                materialized_manifest_sha256=materialized_manifest_sha,
+            )
+            for source_row in source_rows
+        ]
+
+        import_record = _issue9656_candidate_import_record(
+            summary,
+            import_id=import_id,
+            source_identity=import_identity,
+            summary_receipts=summary_receipts,
+            materialized_manifest_sha256=materialized_manifest_sha,
+            candidates=candidates,
+        )
+        import_record["artifact_paths"] = {
+            "payload_root": f"historical_candidate_imports/{import_id}/payload",
+            "evidence_bundle_manifest": f"historical_candidate_imports/{import_id}/evidence_bundle_manifest.json",
+            "checksums": f"historical_candidate_imports/{import_id}/checksums.sha256",
+            "materialized_manifest": f"historical_candidate_imports/{import_id}/materialized_manifest.json",
+        }
+
+        prospective = dict(corpus)
+        prospective["historical_candidates"] = sorted(
+            [*corpus.get("historical_candidates", []), *candidates],
+            key=lambda item: item["candidate_id"],
+        )
+        prospective["historical_candidate_imports"] = sorted(
+            [*corpus.get("historical_candidate_imports", []), import_record],
+            key=lambda item: item["import_id"],
+        )
+        validate_corpus(prospective)
+        _promote_issue9656_candidate_artifacts(
+            staging,
+            root,
+            import_id=import_id,
+            candidate_ids=[candidate["candidate_id"] for candidate in candidates],
+            promoted_dirs=promoted_dirs,
+        )
+        corpus["historical_candidates"] = prospective["historical_candidates"]
+        corpus["historical_candidate_imports"] = prospective["historical_candidate_imports"]
+        return corpus, {**import_record, "decision": "imported"}
+    except BaseException:
+        for promoted in reversed(promoted_dirs):
+            shutil.rmtree(promoted, ignore_errors=True)
+        raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _stage_issue9656_candidate(
+    source_row: tuple[dict[str, Any], dict[str, Any], Path, Path, Path, dict[str, Any]],
+    *,
+    staging: Path,
+    import_id: str,
+    import_identity: Mapping[str, Any],
+    summary_receipts: Mapping[str, Any],
+    materialized_manifest_sha256: str,
+) -> dict[str, Any]:
+    source_case, materialized_case, source_case_path, source_matrix, source_config, source_map = (
+        source_row
+    )
+    source_record = source_case["source_record"]
+    candidate_identity = {
+        **import_identity,
+        "source_case_id": source_case["case_id"],
+        "source_record_sha256": source_record["record_sha256"],
+    }
+    candidate_id = hashlib.sha256(_stable_json(candidate_identity).encode("utf-8")).hexdigest()
+    candidate_dir = staging / "historical_candidates" / candidate_id
+    (candidate_dir / "source").mkdir(parents=True)
+    (candidate_dir / "replay_input").mkdir()
+    (candidate_dir / "maps").mkdir()
+
+    source_case_sha = _sha256_file(source_case_path)
+    source_matrix_sha = _sha256_file(source_matrix)
+    source_config_sha = _sha256_file(source_config)
+    _copy_verified_source_file(
+        source_case_path, candidate_dir / "source_case.json", expected_sha256=source_case_sha
+    )
+    _copy_verified_source_file(
+        source_matrix,
+        candidate_dir / "source" / "replay_matrix.yaml",
+        expected_sha256=source_case["replay_input"]["scenario_matrix_sha256"],
+    )
+    _copy_verified_source_file(
+        source_config,
+        candidate_dir / "source" / "planner_config.yaml",
+        expected_sha256=source_case["replay_input"]["planner_config_sha256"],
+    )
+    normalized_matrix, map_receipt = _normalize_issue9656_replay_matrix(
+        source_matrix, candidate_dir, source_map
+    )
+    matrix_path = candidate_dir / "replay_input" / "replay_matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(normalized_matrix, sort_keys=True, allow_unicode=True), encoding="utf-8"
+    )
+    config_path = candidate_dir / "replay_input" / "planner_config.yaml"
+    _copy_verified_source_file(
+        source_config,
+        config_path,
+        expected_sha256=source_case["replay_input"]["planner_config_sha256"],
+    )
+    return _issue9656_candidate_record(
+        source_case,
+        materialized_case,
+        {
+            "candidate_id": candidate_id,
+            "import_id": import_id,
+            "summary_receipts": summary_receipts,
+            "materialized_manifest_sha256": materialized_manifest_sha256,
+            "source_case_sha256": source_case_sha,
+            "source_matrix_sha256": source_matrix_sha,
+            "source_config_sha256": source_config_sha,
+            "normalized_matrix_sha256": _sha256_file(matrix_path),
+            "normalized_config_sha256": _sha256_file(config_path),
+            "map_receipt": map_receipt,
+        },
+    )
+
+
+def _issue9656_candidate_record(
+    source_case: Mapping[str, Any],
+    materialized_case: Mapping[str, Any],
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    source_record = source_case["source_record"]
+    source = materialized_case.get("source", {})
+    summary_receipts = context["summary_receipts"]
+    replay_status = source_case["replay"]["status"]
+    candidate_status = {
+        "not_attempted": "pending_exact_replay",
+        "unavailable_model_artifact": "blocked_unavailable_model_artifact",
+        "mismatch_different_revision": "blocked_replay_revision_mismatch",
+    }[replay_status]
+    return {
+        "schema_version": "adversarial-historical-candidate.v1",
+        "candidate_id": context["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": source_case["case_id"],
+        "source_record_sha256": source_record["record_sha256"],
+        "source_provenance": {
+            "import_id": context["import_id"],
+            "source_row_binding": "verified_episode_file_and_line_sha256",
+            "summary_sha256": summary_receipts["summary_sha256"],
+            "materialized_manifest_sha256": context["materialized_manifest_sha256"],
+            "source_bundle_sha256": source.get("bundle_sha256"),
+            "campaign_id": source.get("campaign_id"),
+            "campaign_source_revision": source.get("campaign_source_revision"),
+            "row_git_hash": source.get("row_git_hash"),
+            "episode_file": source_record["episode_file"],
+            "episode_file_sha256": source_record["episode_file_sha256"],
+            "line_number": source_record["line_number"],
+            "planner_config_hash": source.get("planner_config_hash"),
+            "source_case_file_sha256": context["source_case_sha256"],
+            "source_replay_matrix_sha256": context["source_matrix_sha256"],
+            "source_planner_config_sha256": context["source_config_sha256"],
+        },
+        "candidate_status": candidate_status,
+        "source_replay_status": replay_status,
+        "source_replay": dict(source_case["replay"]),
+        "scenario_id": source_case["scenario_id"],
+        "scenario_family": source_case["scenario_family"],
+        "scenario_seed": source_case["seed"],
+        "benchmark_eligible": source_case["benchmark_eligible"],
+        "target_planner": {
+            "planner_id": source_case["planner_key"],
+            "config_hash": source.get("planner_config_hash"),
+        },
+        "criticality": dict(source_case["criticality"]),
+        "replay_inputs": {
+            "source_matrix_sha256": context["source_matrix_sha256"],
+            "normalized_matrix_sha256": context["normalized_matrix_sha256"],
+            "source_planner_config_sha256": context["source_config_sha256"],
+            "normalized_planner_config_sha256": context["normalized_config_sha256"],
+            "map_assets": context["map_receipt"],
+        },
+        "artifact_paths": {
+            "source_case": f"historical_candidates/{context['candidate_id']}/source_case.json",
+            "source_matrix": f"historical_candidates/{context['candidate_id']}/source/replay_matrix.yaml",
+            "source_planner_config": f"historical_candidates/{context['candidate_id']}/source/planner_config.yaml",
+            "replay_matrix": f"historical_candidates/{context['candidate_id']}/replay_input/replay_matrix.yaml",
+            "planner_config": f"historical_candidates/{context['candidate_id']}/replay_input/planner_config.yaml",
+            "import_summary": f"historical_candidate_imports/{context['import_id']}/payload/summary.json",
+            "import_materialized_manifest": f"historical_candidate_imports/{context['import_id']}/materialized_manifest.json",
+        },
+    }
+
+
+def _verify_issue9656_source_summary(
+    summary_file: Path, bundle_root: Path
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    expected_summary = (bundle_root / "payload" / "summary.json").resolve()
+    if summary_file != expected_summary:
+        raise CorpusError("#9656 summary must be the payload/summary.json in its evidence bundle")
+    manifest_path = bundle_root / "evidence_bundle_manifest.json"
+    checksum_path = bundle_root / "checksums.sha256"
+    bundle_manifest = _read_json_object(manifest_path)
+    if bundle_manifest.get("schema_version") != ISSUE_9645_BUNDLE_SCHEMA:
+        raise CorpusError("#9656 evidence bundle manifest schema is invalid")
+    entries = bundle_manifest.get("files")
+    totals = bundle_manifest.get("totals")
+    if not isinstance(entries, list) or not isinstance(totals, dict):
+        raise CorpusError("#9656 evidence bundle inventory is incomplete")
+    files_by_path = _validated_bundle_file_map(entries)
+    total_bytes = sum(item["size_bytes"] for item in files_by_path.values())
+    if totals.get("file_count") != len(files_by_path) or totals.get("total_bytes") != total_bytes:
+        raise CorpusError("#9656 evidence bundle totals disagree with its file inventory")
+    checksums = _parse_sha256_receipt(checksum_path, label="#9656 bundle checksums")
+    expected_checksums = {
+        f"payload/{relative}": record["sha256"] for relative, record in files_by_path.items()
+    }
+    if checksums != expected_checksums:
+        raise CorpusError("#9656 checksum sidecar disagrees with the evidence manifest")
+    for relative, record in files_by_path.items():
+        _verify_bundle_payload_file(bundle_root / "payload", relative, record)
+    summary = _read_json_object(summary_file)
+    if summary.get("schema_version") != ISSUE_9656_SUMMARY_SCHEMA:
+        raise CorpusError("unsupported #9656 hard-case summary schema")
+    summary_entry = files_by_path.get("summary.json")
+    if summary_entry is None:
+        raise CorpusError("#9656 evidence bundle does not bind summary.json")
+    return summary, {
+        "summary_sha256": summary_entry["sha256"],
+        "manifest_sha256": _sha256_file(manifest_path),
+        "checksums_sha256": _sha256_file(checksum_path),
+        "payload_files": [
+            {"path": relative, "sha256": item["sha256"]}
+            for relative, item in sorted(files_by_path.items())
+        ],
+    }
+
+
+def _validate_issue9656_materialization(
+    summary: Mapping[str, Any],
+    materialized: Path,
+    manifest: Mapping[str, Any],
+    campaign_root: Path,
+) -> list[tuple[dict[str, Any], dict[str, Any], Path, Path, Path, dict[str, Any]]]:
+    if manifest.get("schema_version") != ISSUE_9656_SUMMARY_SCHEMA:
+        raise CorpusError("#9656 materialized manifest schema differs from the source summary")
+    summary_cases = summary.get("cases")
+    manifest_cases = manifest.get("cases")
+    selection = summary.get("selection")
+    if not isinstance(summary_cases, list) or not isinstance(manifest_cases, list):
+        raise CorpusError("#9656 summary or materialized manifest has no case rows")
+    if not isinstance(selection, dict) or selection.get("case_count") != len(summary_cases):
+        raise CorpusError("#9656 selection count does not match its candidate rows")
+    rows_by_id, manifest_by_id = _issue9656_rows_by_alias(summary_cases, manifest_cases, selection)
+    replay = _issue9656_replay_summary(summary)
+    status_counts: Counter[str] = Counter()
+    anomalies: Counter[str] = Counter()
+    rows = []
+    for case_id, summary_case in rows_by_id.items():
+        manifest_case = manifest_by_id[case_id]
+        status = _validate_issue9656_summary_manifest_row(summary_case, manifest_case)
+        status_counts[status] += 1
+        anomalies.update(summary_case["criticality"]["anomalies"])
+        rows.append(
+            _validate_issue9656_materialized_case(
+                summary_case, manifest_case, materialized, campaign_root
+            )
+        )
+    if dict(status_counts) != replay["status_counts"]:
+        raise CorpusError("#9656 row replay statuses do not reconcile with the summary totals")
+    if dict(anomalies) != summary.get("criticality_anomaly_counts"):
+        raise CorpusError("#9656 row criticality anomalies do not reconcile with summary totals")
+    _validate_issue9656_setup_accounting(summary)
+    return rows
+
+
+def _issue9656_rows_by_alias(
+    summary_cases: list[Any], manifest_cases: list[Any], selection: Mapping[str, Any]
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    if any(not isinstance(case, dict) for case in summary_cases + manifest_cases):
+        raise CorpusError("#9656 case lists contain a malformed row")
+    summary_ids = [case["case_id"] for case in summary_cases]
+    manifest_ids = [case["case_id"] for case in manifest_cases]
+    if (
+        any(not isinstance(case_id, str) for case_id in summary_ids + manifest_ids)
+        or len(summary_ids) != len(set(summary_ids))
+        or summary_ids != selection.get("case_ids")
+        or set(summary_ids) != set(manifest_ids)
+        or len(manifest_ids) != len(set(manifest_ids))
+    ):
+        raise CorpusError("#9656 stable source case aliases disagree across the manifests")
+    if not all(_is_issue9656_source_alias(case_id) for case_id in summary_ids):
+        raise CorpusError("#9656 source aliases must retain their case- plus 16-hex form")
+    return (
+        {case["case_id"]: case for case in summary_cases},
+        {case["case_id"]: case for case in manifest_cases},
+    )
+
+
+def _issue9656_replay_summary(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    replay = summary.get("replay")
+    if not isinstance(replay, dict) or not isinstance(replay.get("status_counts"), dict):
+        raise CorpusError("#9656 replay status accounting is absent")
+    return replay
+
+
+def _is_issue9656_source_alias(value: str) -> bool:
+    return (
+        len(value) == 21
+        and value.startswith("case-")
+        and all(character in "0123456789abcdef" for character in value[5:])
+    )
+
+
+def _validate_issue9656_summary_manifest_row(
+    summary_case: Mapping[str, Any], manifest_case: Mapping[str, Any]
+) -> str:
+    projected_manifest_case = {
+        key: value for key, value in manifest_case.items() if key not in {"case_file", "replay"}
+    }
+    projected_summary_case = {key: value for key, value in summary_case.items() if key != "replay"}
+    replay_row = summary_case.get("replay")
+    manifest_replay = manifest_case.get("replay")
+    binding_keys = ("attempted", "status", "source_revision", "replay_revision", "comparison")
+    if (
+        projected_manifest_case != projected_summary_case
+        or not isinstance(replay_row, dict)
+        or not isinstance(manifest_replay, dict)
+        or any(manifest_replay.get(key) != replay_row.get(key) for key in binding_keys)
+    ):
+        raise CorpusError("#9656 materializer changed source summary row")
+    status = replay_row.get("status")
+    supported_statuses = {
+        "not_attempted",
+        "unavailable_model_artifact",
+        "mismatch_different_revision",
+    }
+    if (
+        not isinstance(status, str)
+        or status not in supported_statuses
+        or replay_row.get("attempted") is not (status == "mismatch_different_revision")
+    ):
+        raise CorpusError("#9656 replay status or attempt flag is unsupported")
+    criticality = summary_case.get("criticality")
+    source_record = summary_case.get("source_record")
+    replay_input = summary_case.get("replay_input")
+    if (
+        not isinstance(criticality, dict)
+        or not isinstance(criticality.get("anomalies"), list)
+        or not isinstance(source_record, dict)
+        or not _is_sha256(source_record.get("record_sha256"))
+        or not isinstance(replay_input, dict)
+        or replay_input.get("status") != "materialized"
+    ):
+        raise CorpusError("#9656 candidate row lacks required source evidence")
+    return status
+
+
+def _validate_issue9656_materialized_case(
+    summary_case: dict[str, Any],
+    manifest_case: dict[str, Any],
+    materialized: Path,
+    campaign_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any], Path, Path, Path, dict[str, Any]]:
+    case_id = summary_case["case_id"]
+    replay_input = summary_case["replay_input"]
+    case_file = _safe_materialized_path(
+        materialized, manifest_case.get("case_file"), label="case file"
+    )
+    materialized_case = _read_json_object(case_file)
+    if not _issue9656_case_document_matches(summary_case, manifest_case, materialized_case):
+        raise CorpusError(f"#9656 materialized case does not bind summary row {case_id}")
+    _verify_issue9656_source_row(campaign_root, summary_case, materialized_case)
+    matrix_path = _safe_materialized_path(
+        case_file.parent, replay_input.get("scenario_matrix_path"), label="scenario matrix"
+    )
+    config_path = _safe_materialized_path(
+        case_file.parent, replay_input.get("planner_config_path"), label="planner config"
+    )
+    matrix_sha = replay_input.get("scenario_matrix_sha256")
+    config_sha = replay_input.get("planner_config_sha256")
+    if _sha256_file(matrix_path) != matrix_sha or _sha256_file(config_path) != config_sha:
+        raise CorpusError(f"#9656 materialized replay input digest differs for {case_id}")
+    map_info = _issue9656_map_asset(matrix_path, summary_case)
+    return summary_case, materialized_case, case_file, matrix_path, config_path, map_info
+
+
+def _issue9656_case_document_matches(
+    summary_case: Mapping[str, Any],
+    manifest_case: Mapping[str, Any],
+    materialized_case: Mapping[str, Any],
+) -> bool:
+    source_record = summary_case["source_record"]
+    source = materialized_case.get("source")
+    planner = materialized_case.get("planner")
+    scenario = materialized_case.get("scenario")
+    if not all(isinstance(item, dict) for item in (source, planner, scenario)):
+        return False
+    return (
+        materialized_case.get("schema_version") == "benchmark-hard-case.v1"
+        and materialized_case.get("case_id") == summary_case.get("case_id")
+        and all(source.get(key) == value for key, value in source_record.items())
+        and materialized_case.get("criticality") == summary_case.get("criticality")
+        and materialized_case.get("replay") == manifest_case.get("replay")
+        and materialized_case.get("replay_input") == summary_case.get("replay_input")
+        and planner.get("key") == summary_case.get("planner_key")
+        and scenario.get("scenario_id") == summary_case.get("scenario_id")
+        and scenario.get("seed") == summary_case.get("seed")
+    )
+
+
+def _verify_issue9656_source_row(
+    campaign_root: Path,
+    summary_case: Mapping[str, Any],
+    materialized_case: Mapping[str, Any],
+) -> None:
+    source_ref = summary_case["source_record"]
+    episode_path = _safe_materialized_path(
+        campaign_root, source_ref.get("episode_file"), label="source episode file"
+    )
+    if _sha256_file(episode_path) != source_ref.get("episode_file_sha256"):
+        raise CorpusError(f"#9656 source episode file digest differs for {summary_case['case_id']}")
+    line_number = source_ref.get("line_number")
+    if not isinstance(line_number, int) or isinstance(line_number, bool) or line_number < 1:
+        raise CorpusError(
+            f"#9656 source episode line number is invalid for {summary_case['case_id']}"
+        )
+    lines = episode_path.read_bytes().splitlines(keepends=True)
+    if line_number > len(lines):
+        raise CorpusError(f"#9656 source episode row is absent for {summary_case['case_id']}")
+    raw_line = lines[line_number - 1]
+    if hashlib.sha256(raw_line).hexdigest() != source_ref.get("record_sha256"):
+        raise CorpusError(f"#9656 source episode row digest differs for {summary_case['case_id']}")
+    try:
+        row = json.loads(raw_line)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise CorpusError(
+            f"#9656 source episode row is malformed for {summary_case['case_id']}"
+        ) from exc
+    if (
+        not isinstance(row, dict)
+        or row != materialized_case.get("source_record")
+        or row.get("scenario_id") != summary_case.get("scenario_id")
+        or row.get("seed") != summary_case.get("seed")
+        or row.get("algo") != summary_case.get("planner_key")
+    ):
+        raise CorpusError("#9656 materialized source row differs from campaign evidence")
+
+
+def _validate_issue9656_setup_accounting(summary: Mapping[str, Any]) -> None:
+    replay_budget = summary.get("replay_budget_accounting")
+    failed_attempts = summary.get("failed_replay_attempts")
+    if (
+        not isinstance(replay_budget, dict)
+        or not isinstance(failed_attempts, dict)
+        or not isinstance(failed_attempts.get("attempts"), list)
+        or not isinstance(replay_budget.get("failed_setup_jobs"), int)
+        or isinstance(replay_budget.get("failed_setup_jobs"), bool)
+        or replay_budget["failed_setup_jobs"] < 0
+    ):
+        raise CorpusError("#9656 failed replay setup accounting is absent or malformed")
+    if any(
+        not isinstance(attempt, dict)
+        or not isinstance(attempt.get("return_code"), int)
+        or isinstance(attempt.get("return_code"), bool)
+        or attempt.get("return_code") == 0
+        or attempt.get("replay_row_count") != 0
+        for attempt in failed_attempts["attempts"]
+    ):
+        raise CorpusError("#9656 setup failures must remain explicit zero-row failed attempts")
+
+
+def _safe_materialized_path(root: Path, relative: Any, *, label: str) -> Path:
+    if not _safe_bundle_relative_path(relative):
+        raise CorpusError(f"#9656 {label} path is unsafe")
+    resolved = (root / Path(*PurePosixPath(relative).parts)).resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise CorpusError(f"#9656 {label} path escapes materialized root") from exc
+    if not resolved.is_file():
+        raise CorpusError(f"#9656 {label} is missing: {relative}")
+    return resolved
+
+
+def _issue9656_map_asset(matrix_path: Path, summary_case: Mapping[str, Any]) -> dict[str, Any]:
+    try:
+        matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise CorpusError(f"#9656 replay matrix could not be parsed: {exc}") from exc
+    scenarios = matrix.get("scenarios") if isinstance(matrix, dict) else None
+    if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
+        raise CorpusError(
+            f"#9656 replay matrix must contain one scenario for {summary_case['case_id']}"
+        )
+    scenario = scenarios[0]
+    if (
+        scenario.get("id") != summary_case.get("scenario_id")
+        or scenario.get("seeds") != [summary_case.get("seed")]
+        or scenario.get("algo") != summary_case.get("planner_key")
+    ):
+        raise CorpusError(f"#9656 replay matrix identity differs for {summary_case['case_id']}")
+    map_value = scenario.get("map_file")
+    if not isinstance(map_value, str) or not map_value.strip():
+        raise CorpusError(f"#9656 replay matrix has no map file for {summary_case['case_id']}")
+    map_path = (matrix_path.parent / map_value).resolve()
+    repo_root = next(
+        (ancestor for ancestor in map_path.parents if (ancestor / "maps" / "svg_maps").is_dir()),
+        None,
+    )
+    if repo_root is None:
+        raise CorpusError("#9656 materialized input is not below a repository containing maps")
+    try:
+        relative = map_path.relative_to(repo_root)
+    except ValueError as exc:
+        raise CorpusError(
+            "#9656 candidate map path must resolve inside its source repository"
+        ) from exc
+    if (
+        not relative.parts
+        or relative.parts[0] != "maps"
+        or not map_path.is_file()
+        or not relative.as_posix().startswith("maps/svg_maps/")
+    ):
+        raise CorpusError("#9656 candidate map path must resolve to a repository map file")
+    return {
+        "source_path": relative.as_posix(),
+        "source_sha256": _sha256_file(map_path),
+        "_source_path": map_path,
+        "_repo_relative": relative.as_posix(),
+    }
+
+
+def _normalize_issue9656_replay_matrix(
+    source_matrix: Path, candidate_dir: Path, map_info: Mapping[str, Any]
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    try:
+        matrix = yaml.safe_load(source_matrix.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise CorpusError(f"#9656 source replay matrix could not be parsed: {exc}") from exc
+    if not isinstance(matrix, dict) or not isinstance(matrix.get("scenarios"), list):
+        raise CorpusError("#9656 source replay matrix must be an object with scenarios")
+    scenario = matrix["scenarios"][0]
+    repo_relative = str(map_info["_repo_relative"])
+    source_map = map_info["_source_path"]
+    if not isinstance(source_map, Path):
+        raise CorpusError("#9656 map provenance path is malformed")
+    map_output = candidate_dir / Path(*PurePosixPath(repo_relative).parts)
+    _copy_verified_source_file(
+        source_map,
+        map_output,
+        expected_sha256=map_info["source_sha256"],
+    )
+    scenario["map_file"] = (Path("..") / Path(*PurePosixPath(repo_relative).parts)).as_posix()
+    matrix["map_search_paths"] = ["../maps/svg_maps"]
+    map_receipt = [
+        {
+            "source_path": map_info["source_path"],
+            "source_sha256": map_info["source_sha256"],
+            "stored_path": f"historical_candidates/{candidate_dir.name}/{repo_relative}",
+            "stored_sha256": _sha256_file(map_output),
+        }
+    ]
+    return matrix, map_receipt
+
+
+def _issue9656_candidate_import_record(
+    summary: Mapping[str, Any],
+    *,
+    import_id: str,
+    source_identity: Mapping[str, Any],
+    summary_receipts: Mapping[str, Any],
+    materialized_manifest_sha256: str,
+    candidates: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    replay_counts = Counter(candidate["source_replay_status"] for candidate in candidates)
+    candidate_status_counts = Counter(candidate["candidate_status"] for candidate in candidates)
+    return {
+        "schema_version": "adversarial-historical-candidate-import.v1",
+        "import_id": import_id,
+        "source_issue": 9656,
+        "source_identity": dict(source_identity),
+        "source_files": [
+            *[
+                {
+                    "path": f"payload/{item['path']}",
+                    "stored_path": f"historical_candidate_imports/{import_id}/payload/{item['path']}",
+                    "sha256": item["sha256"],
+                }
+                for item in summary_receipts["payload_files"]
+            ],
+            {
+                "path": "evidence_bundle_manifest.json",
+                "stored_path": f"historical_candidate_imports/{import_id}/evidence_bundle_manifest.json",
+                "sha256": summary_receipts["manifest_sha256"],
+            },
+            {
+                "path": "checksums.sha256",
+                "stored_path": f"historical_candidate_imports/{import_id}/checksums.sha256",
+                "sha256": summary_receipts["checksums_sha256"],
+            },
+            {
+                "path": "materialized_manifest.json",
+                "stored_path": f"historical_candidate_imports/{import_id}/materialized_manifest.json",
+                "sha256": materialized_manifest_sha256,
+            },
+        ],
+        "candidate_ids": sorted(candidate["candidate_id"] for candidate in candidates),
+        "candidate_count": len(candidates),
+        "source_rows_verified": len(candidates),
+        "candidate_status_counts": dict(sorted(candidate_status_counts.items())),
+        "source_replay_status_counts": dict(sorted(replay_counts.items())),
+        "criticality_anomaly_counts": dict(
+            sorted((summary.get("criticality_anomaly_counts") or {}).items())
+        ),
+        "failed_replay_attempts": summary["failed_replay_attempts"],
+        "failed_setup_jobs": summary["replay_budget_accounting"]["failed_setup_jobs"],
+        "evidence_tier": summary.get("evidence_tier"),
+        "claim_boundary": summary.get("claim_boundary"),
+    }
+
+
+def _copy_verified_source_file(source: Path, destination: Path, *, expected_sha256: str) -> None:
+    if (
+        not source.is_file()
+        or not _is_sha256(expected_sha256)
+        or _sha256_file(source) != expected_sha256
+    ):
+        raise CorpusError(f"source artifact digest differs: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    if _sha256_file(destination) != expected_sha256:
+        raise CorpusError(f"copied artifact digest differs: {destination}")
+
+
+def _verify_existing_issue9656_candidate_artifacts(
+    corpus_root: Path,
+    import_record: Mapping[str, Any],
+    candidates: Sequence[Mapping[str, Any]],
+) -> None:
+    if len(candidates) != import_record.get("candidate_count"):
+        raise CorpusError("duplicate #9656 import is missing candidate registry rows")
+    for source_file in import_record.get("source_files", []):
+        if not isinstance(source_file, dict):
+            raise CorpusError("duplicate #9656 import contains a malformed source receipt")
+        _verify_corpus_artifact(
+            corpus_root, source_file.get("stored_path"), source_file.get("sha256")
+        )
+    for candidate in candidates:
+        paths = candidate.get("artifact_paths", {})
+        provenance = candidate.get("source_provenance", {})
+        inputs = candidate.get("replay_inputs", {})
+        for field, digest in (
+            ("source_case", provenance.get("source_case_file_sha256")),
+            ("source_matrix", inputs.get("source_matrix_sha256")),
+            ("source_planner_config", inputs.get("source_planner_config_sha256")),
+            ("replay_matrix", inputs.get("normalized_matrix_sha256")),
+            ("planner_config", inputs.get("normalized_planner_config_sha256")),
+        ):
+            _verify_corpus_artifact(corpus_root, paths.get(field), digest)
+        for map_asset in inputs.get("map_assets", []):
+            if not isinstance(map_asset, dict):
+                raise CorpusError("duplicate #9656 import contains a malformed map receipt")
+            _verify_corpus_artifact(
+                corpus_root,
+                map_asset.get("stored_path"),
+                map_asset.get("stored_sha256"),
+            )
+
+
+def _verify_corpus_artifact(root: Path, relative: Any, expected_sha256: Any) -> None:
+    if not _safe_bundle_relative_path(relative) or not _is_sha256(expected_sha256):
+        raise CorpusError("stored #9656 artifact receipt contains an unsafe path or digest")
+    source = (root / Path(*PurePosixPath(relative).parts)).resolve()
+    try:
+        source.relative_to(root.resolve())
+    except ValueError as exc:
+        raise CorpusError("stored #9656 artifact path escapes corpus root") from exc
+    if not source.is_file() or _sha256_file(source) != expected_sha256:
+        raise CorpusError(f"stored #9656 artifact digest differs: {relative}")
+
+
+def _promote_issue9656_candidate_artifacts(
+    staging: Path,
+    root: Path,
+    *,
+    import_id: str,
+    candidate_ids: Sequence[str],
+    promoted_dirs: list[Path],
+) -> None:
+    source_import = staging / "historical_candidate_imports" / import_id
+    source_candidates = staging / "historical_candidates"
+    final_import = root / "historical_candidate_imports" / import_id
+    final_candidates_root = root / "historical_candidates"
+    final_import.parent.mkdir(parents=True, exist_ok=True)
+    final_candidates_root.mkdir(parents=True, exist_ok=True)
+    destinations = [
+        (source_candidates / candidate_id, final_candidates_root / candidate_id)
+        for candidate_id in candidate_ids
+    ]
+    destinations.append((source_import, final_import))
+    if any(destination.exists() for _source, destination in destinations):
+        raise CorpusError(
+            "#9656 candidate artifact destination already exists without its import receipt"
+        )
+    try:
+        for source, destination in destinations:
+            source.replace(destination)
+            promoted_dirs.append(destination)
+    except BaseException:
+        for promoted in reversed(promoted_dirs):
+            shutil.rmtree(promoted, ignore_errors=True)
+        promoted_dirs.clear()
+        raise
 
 
 def append_planner_evaluation(

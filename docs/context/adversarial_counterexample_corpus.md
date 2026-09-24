@@ -51,10 +51,45 @@ receipt pins the allowed local-path rewrites.
 
 Dynamic feasibility for this case remains `admissible_feasibility_unknown`.
 The current `scenario_cert.v1` result is a static route certificate, not proof
-that the dynamic task is feasible. The #9656 mined receipts are not admitted by
-this importer: their replay revision differs from the source campaign revision
-and they remain candidates until exact replay evidence satisfies the same
-revision and input checks.
+that the dynamic task is feasible. The #9656 mined rows are not admitted by the
+#9645 importer. Use the historical candidate importer below to retain their
+source aliases and provenance without treating mismatched, unavailable, or
+unattempted replays as verified cases.
+
+## Import historical #9656 candidates
+
+The #9656 evidence bundle stores the digest-bound hard-case summary. Its
+materialized candidate directory is produced by the materializer command
+recorded in the #9656 report; pass that directory separately because its replay
+inputs are local generated artifacts. Set `ISSUE9656_CAMPAIGN_ROOT` to the
+extracted release bundle's `payload` directory. The importer rechecks each
+episode-file and raw-row digest before accepting its source binding, then verifies
+the evidence bundle, all 36 source aliases, materialized case and input digests,
+replay-status accounting, and criticality anomaly totals. It copies the summary,
+source manifests, source case records, original input bytes, normalized replay
+inputs, referenced map files, and the complete evidence payload into corpus custody.
+
+```bash
+ISSUE9656_MATERIALIZED_ROOT=output/issue9656_hard_case_mining/materialized_final_provenance_fix
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9656-candidates \
+  --summary docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json \
+  --evidence-root docs/context/evidence/issue_9656_hard_case_mining_2026-09-24 \
+  --campaign-root "$ISSUE9656_CAMPAIGN_ROOT" \
+  --materialized-root "$ISSUE9656_MATERIALIZED_ROOT" \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus
+```
+
+Each candidate keeps its original `case-<16 hex>` source alias and receives a
+separate content-derived candidate ID. The 27 `not_attempted` rows stay
+`pending_exact_replay`, the five `unavailable_model_artifact` rows stay blocked
+on the missing model, and the four `mismatch_different_revision` rows stay
+blocked on replay parity. Their source outcomes, 17 collision-event metric
+anomalies, and the 12 failed replay setup jobs remain visible in the candidate
+records and import receipt. These rows do not enter `cases`, planner status,
+admission attempts, or exported regression slices. They become admitted cases
+only after the existing exact-replay, input-binding, admissibility, and duplicate
+checks pass.
 
 ## Record an evaluation and recompute status
 

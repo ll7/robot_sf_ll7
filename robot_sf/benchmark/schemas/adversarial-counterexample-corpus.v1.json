@@ -109,6 +109,110 @@
         "additionalProperties": true
       }
     },
+    "historical_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "candidate_id",
+          "source_issue",
+          "source_case_id",
+          "source_record_sha256",
+          "source_provenance",
+          "candidate_status",
+          "source_replay_status",
+          "source_replay",
+          "scenario_id",
+          "scenario_family",
+          "scenario_seed",
+          "benchmark_eligible",
+          "target_planner",
+          "criticality",
+          "replay_inputs",
+          "artifact_paths"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-historical-candidate.v1"},
+          "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_issue": {"const": 9656},
+          "source_case_id": {"type": "string", "pattern": "^case-[0-9a-f]{16}$"},
+          "source_record_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_provenance": {"type": "object"},
+          "candidate_status": {
+            "enum": [
+              "pending_exact_replay",
+              "blocked_unavailable_model_artifact",
+              "blocked_replay_revision_mismatch"
+            ]
+          },
+          "source_replay_status": {
+            "enum": [
+              "not_attempted",
+              "unavailable_model_artifact",
+              "mismatch_different_revision"
+            ]
+          },
+          "source_replay": {"type": "object"},
+          "scenario_id": {"type": "string", "minLength": 1},
+          "scenario_family": {"type": "string", "minLength": 1},
+          "scenario_seed": {"type": "integer"},
+          "benchmark_eligible": {"type": "boolean"},
+          "target_planner": {"type": "object"},
+          "criticality": {"type": "object"},
+          "replay_inputs": {"type": "object"},
+          "artifact_paths": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "historical_candidate_imports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "import_id",
+          "source_issue",
+          "source_identity",
+          "source_files",
+          "candidate_ids",
+          "candidate_count",
+          "source_rows_verified",
+          "candidate_status_counts",
+          "source_replay_status_counts",
+          "criticality_anomaly_counts",
+          "failed_replay_attempts",
+          "failed_setup_jobs",
+          "evidence_tier",
+          "claim_boundary",
+          "artifact_paths"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-historical-candidate-import.v1"},
+          "import_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_issue": {"const": 9656},
+          "source_identity": {"type": "object"},
+          "source_files": {"type": "array", "items": {"type": "object"}},
+          "candidate_ids": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "uniqueItems": true
+          },
+          "candidate_count": {"type": "integer", "minimum": 0},
+          "source_rows_verified": {"type": "integer", "minimum": 0},
+          "candidate_status_counts": {"type": "object"},
+          "source_replay_status_counts": {"type": "object"},
+          "criticality_anomaly_counts": {"type": "object"},
+          "failed_replay_attempts": {"type": "object"},
+          "failed_setup_jobs": {"type": "integer", "minimum": 0},
+          "evidence_tier": {"type": "string", "minLength": 1},
+          "claim_boundary": {"type": "string", "minLength": 1},
+          "artifact_paths": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
     "admission_attempts": {
       "type": "array",
       "items": {

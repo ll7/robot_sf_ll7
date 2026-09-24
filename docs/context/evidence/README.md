@@ -64,7 +64,8 @@ Each bundle writes:
 - `payload/`: exactly the selected compact files;
 - `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
   claim boundary, source root, file index, sizes, SHA-256 hash checksums, and policy caveats;
-- `checksums.sha256`: checksum lines for every payload file.
+- `checksums.sha256`: bundle-root-relative checksum lines for every payload file, so
+  `sha256sum -c checksums.sha256` works from the bundle root.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 
@@ -167,6 +168,13 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4`, before strict certificate, map-registry, and
   actor-track checks. It cannot establish current selector acceptance and is retained only as
   historical audit context; the strict-gate gallery demo above is the current smoke reference.
+- `issue_9645_bounded_falsification_2026-09-24/`: diagnostic-only bounded falsification
+  receipt for the 64-run Random/TPE pilot. All four 16-candidate runs used the native `goal`
+  planner and stayed at objective 0.0, so the packet records **NO-GO for scaling #9648 under
+  the tested fixed-seed search domain**. It also preserves a separately replay-verified
+  historical #1501 collision, the #9646 convergence report, candidate accounting, provenance,
+  selected replay traces, and explicit unknown-feasibility and claim-boundary caveats. This is
+  not a planner ranking, paper-facing benchmark result, or safety result.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

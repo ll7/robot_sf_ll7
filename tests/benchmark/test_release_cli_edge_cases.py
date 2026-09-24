@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -235,6 +236,9 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
     expected_binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
     release_definition = SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64)
     calls: list[tuple[str, object]] = []
+    bootstrap_path = tmp_path / "bootstrap.json"
+    bootstrap_path.write_bytes(b"bootstrap metadata input\n")
+    bootstrap_digest = hashlib.sha256(bootstrap_path.read_bytes()).hexdigest()
     args = argparse.Namespace(
         release_cmd="zenodo",
         zenodo_mode="repair-draft-metadata",
@@ -242,6 +246,8 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
         manifest=tmp_path / "manifest.yaml",
         repository_root=tmp_path / "source-checkout",
         metadata=tmp_path / "metadata.json",
+        bootstrap_metadata=bootstrap_path,
+        expected_bootstrap_metadata_sha256=bootstrap_digest,
         deposition_id=22077448,
         version="0.0.7",
         publication_date="2026-09-24",
@@ -300,6 +306,14 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
         },
     )
     assert calls[3] == (
+        "load-metadata",
+        {
+            "path": bootstrap_path,
+            "expected_source_tag": "v1",
+            "expected_metadata_sha256": bootstrap_digest,
+        },
+    )
+    assert calls[4] == (
         "repair",
         {
             "session": "mock-session",
@@ -307,6 +321,9 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
             "version": "0.0.7",
             "publication_date": "2026-09-24",
             "release_binding": expected_binding,
+            "bootstrap_metadata": {"upload_type": "dataset"},
+            "bootstrap_metadata_sha256": bootstrap_digest,
+            "expected_bootstrap_metadata_sha256": bootstrap_digest,
             "expected_remote_metadata_sha256": "b" * 64,
             "expected_remote_source_tag": (
                 "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
@@ -345,6 +362,10 @@ def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
             "0.0.7",
             "--publication-date",
             "2026-09-24",
+            "--bootstrap-metadata",
+            "bootstrap.json",
+            "--expected-bootstrap-metadata-sha256",
+            "d" * 64,
             "--expected-remote-metadata-sha256",
             "c" * 64,
             "--expected-remote-source-tag",
@@ -362,6 +383,8 @@ def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
     assert args.deposition_id == 22077448
     assert args.version == "0.0.7"
     assert args.publication_date == "2026-09-24"
+    assert args.bootstrap_metadata == Path("bootstrap.json")
+    assert args.expected_bootstrap_metadata_sha256 == "d" * 64
     assert args.expected_remote_metadata_sha256 == "c" * 64
     assert (
         args.expected_remote_source_tag

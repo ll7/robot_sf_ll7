@@ -1,0 +1,32 @@
+{
+  "schema_version": "issue_7980_source_ingestion_receipt.v1",
+  "source_ingestion_status": "authenticated_immutable_source_hydrated",
+  "independent_of_packet": true,
+  "synthesis_sha256": "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0",
+  "source_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/source_row_crosswalk.issue_7980.authenticated.json",
+  "source_sha256": "306a1f4f949e37af03ce1f8071c4833a1087f65aad13267b61b02eb7aff09341",
+  "source_artifact": {
+    "qualified_name": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
+    "version": "v0",
+    "artifact_digest": "e597ce1e53e697f904a11c49a406cb99",
+    "member": "synthesis.json.gz",
+    "member_sha256": "81e63e584010c3d5340258e3307bf1a94ff297f4517843cd63756a96c4d7eac9",
+    "source_member": "synthesis.json",
+    "source_sha256": "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0",
+    "manifest_digest": "sha256:c7b3bff1f13f456c0f11e5af5de8624fc550ebfb48af31392513c513daa7ef0d"
+  },
+  "immutable_hydration_receipt": {
+    "qualified_name": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
+    "version": "v0",
+    "artifact_digest": "e597ce1e53e697f904a11c49a406cb99",
+    "member": "synthesis.json.gz",
+    "member_sha256": "81e63e584010c3d5340258e3307bf1a94ff297f4517843cd63756a96c4d7eac9",
+    "source_member": "synthesis.json",
+    "source_sha256": "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0",
+    "manifest_digest": "sha256:c7b3bff1f13f456c0f11e5af5de8624fc550ebfb48af31392513c513daa7ef0d",
+    "status": "verified",
+    "hydrated_member_path": "output/issue_7980/source/synthesis.json.gz",
+    "manifest_member": "campaign_preservation_manifest.json",
+    "preservation_manifest_path": "output/issue_7980/source/campaign_preservation_manifest.json"
+  }
+}

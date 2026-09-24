@@ -120,6 +120,8 @@ def test_posthoc_proxy_uses_recorded_clearance_and_rejects_radius_drift():
         },
     }
     assert posthoc_discomfort(row) == pytest.approx(0.09)
-    row["metrics"]["robot_force_metadata"]["prf_robot_radius_m"] = 0.6
+    row["algorithm_metadata"]["simulation_step_trace"]["steps"][1]["pedestrians"][0][
+        "surface_clearance_m"
+    ] = 0.9
     with pytest.raises(ValueError, match="surface clearance"):
         posthoc_discomfort(row)

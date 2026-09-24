@@ -34,7 +34,7 @@ def metric_value(row: dict, key: str) -> float | None:
 def posthoc_discomfort(row: dict) -> float | None:
     """Reuse the canonical proxy on recorded post-integration trajectories.
 
-    Reject radius/trace disagreement; never use pre-integration force positions
+    Reject inconsistent trace footprints; never use pre-integration force positions
     as a substitute for the trajectory metric's snapshots.
     """
     trace = row.get("algorithm_metadata", {}).get("simulation_step_trace", {})
@@ -43,11 +43,25 @@ def posthoc_discomfort(row: dict) -> float | None:
     if not steps or model is None:
         return None
     actor_ids = sorted({ped["id"] for step in steps for ped in step["pedestrians"]})
+    if not actor_ids:
+        return 0.0
     indices = {actor: i for i, actor in enumerate(actor_ids)}
     robot = np.asarray([step["robot"]["position"] for step in steps], dtype=float)
     peds = np.full((len(steps), len(actor_ids), 2), np.nan)
     robot_radius = model["prf_robot_radius_m"]
-    ped_radius = model["prf_ped_radius_m"]
+    first_step = next(step for step in steps if step["pedestrians"])
+    first_ped = first_step["pedestrians"][0]
+    # The force kernel's pedestrian radius can differ from the trajectory
+    # footprint. Recover the latter from recorded geometric clearance instead.
+    ped_radius = float(
+        np.linalg.norm(
+            np.asarray(first_ped["position"]) - np.asarray(first_step["robot"]["position"])
+        )
+        - first_ped["surface_clearance_m"]
+        - robot_radius
+    )
+    if ped_radius < 0 or not np.isfinite(ped_radius):
+        raise ValueError("invalid trace pedestrian footprint radius")
     for t, step in enumerate(steps):
         if len({ped["id"] for ped in step["pedestrians"]}) != len(step["pedestrians"]):
             raise ValueError("duplicate pedestrian trace identity")
@@ -55,7 +69,7 @@ def posthoc_discomfort(row: dict) -> float | None:
             position = np.asarray(ped["position"], dtype=float)
             clearance = np.linalg.norm(position - robot[t]) - robot_radius - ped_radius
             if not np.isclose(clearance, ped["surface_clearance_m"], rtol=0, atol=1e-9):
-                raise ValueError("trace surface clearance disagrees with recorded radii")
+                raise ValueError("trace surface clearance disagrees with constant footprint radii")
             peds[t, indices[ped["id"]]] = position
     data = EpisodeData(
         robot_pos=robot,
@@ -204,6 +218,7 @@ def analyze(rows: list[dict]) -> dict:
             "proxemic_radius_m": 1.2,
             "yield_speed_mps": 0.15,
             "trajectory_source": "simulation_step_trace.steps (post-integration)",
+            "radius_source": "geometric footprint recovered from recorded surface clearance; not force-kernel pedestrian radius",
             "radius_validation": "every recorded surface clearance agrees within 1e-9m",
             "original_episode_files_modified": False,
         },

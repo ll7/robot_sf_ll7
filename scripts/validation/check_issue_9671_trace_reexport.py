@@ -369,12 +369,20 @@ def _compare_row(
     if frozen_params != rerun_params:
         raise ValueError(f"trace tuple {key} changes release scenario/planner parameters")
     _validate_steps(key, row, trace)
+    trace_exposure = (row.get("interaction_exposure") or {}).get("interaction_exposure_steps")
+    release_exposure = (
+        (frozen.get("interaction_exposure") or {}).get("interaction_exposure_steps")
+        if frozen
+        else None
+    )
     return {
         "planner": key[0],
         "scenario": key[1],
         "seed": key[2],
         "trace_status": row.get("status"),
         "release_status": frozen.get("status") if frozen else None,
+        "trace_interaction_exposure_steps": trace_exposure,
+        "release_interaction_exposure_steps": release_exposure,
         "comparison": (
             "no_release_row"
             if frozen is None

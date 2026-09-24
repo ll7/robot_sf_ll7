@@ -89,11 +89,24 @@ is still pending.
 | 15760 | `3f8fb73ae92431a46ab0dd5e45d72051d35f06d2ec1a3a06483c71d2bb8c1791` | `wandb://ll7/robot_sf/campaign-issue9671_trace_doorway_v007_07f7e8d_20260924:v0` | `sha256:73b264d8fb8910d0f2ddfffc074005c31eaadd6db9b72d8f23db8d32ffa3c5a9` |
 
 The comparator admitted 20 exact raw rows and wrote `release_007_trace_outcomes.json`, SHA-256
-`38fe7aa1321294c551aeaedd6af8e44871ee4e2c74a59de88063bd0a097fe2c5`: **2 matches,
+`e1637fa907d87f8a5456ee0f3367524e8e335b480c1d2bd5162215f08a3f7ffd`: **2 matches,
 0 mismatches, 18 `no_release_row`**. Doorway PPO seeds 113 and 114 both ended in `collision`,
 matching their frozen release rows. The 18 head-on/group seeds 22–24 have no release row and are
 diagnostic observations only. These outcomes do not establish trajectory parity because the
 trace-only configs and one-worker context differ from the release campaign.
+
+The frozen archive and job 15760 both record doorway PPO seed 114 with 16 exposure steps in 176
+retained steps at a 2.0 m radius; seed 113 has zero exposure steps in 49. The comparator report
+includes both release and trace numerators. A SHA-pinned direct archive readback receipt,
+`release_007_doorway_seed113_114_archive_readback.json` (SHA-256
+`7c18e5061f69a471d60e6d990741d80feca0fddf8a6f2b1c25c21c6149897475`), records the exact
+episode IDs and metric definition. The dissertation source at ll7/diss commit `b7ce8289`,
+`diss/chapters/05_discussion.tex:540`, instead says the current-release seed 114 had four exposure
+steps. That statement conflicts with the frozen archive; it must be corrected before citing a
+current-release exposure number. The 62/78/37 exposure steps in Table 8.3 are predecessor-release
+execution contexts and remain separate. This re-export supplies the current-release campaign and
+one-worker cluster contexts for seed 114; it does not yet provide a login-node context or a
+fixed-context repeated trace, so Table 8.3 cannot be regenerated from these two jobs alone.
 
 The 0.0.7 archive SHA above was rechecked locally. The legacy three-context Table 8.3
 numbers concern the earlier 0.0.3 source and must be re-measured or relabelled before being

@@ -47,6 +47,7 @@ def _row(seed: int, status: str, *, trace: bool) -> dict:
         "seed": seed,
         "status": status,
         "steps": 1,
+        "interaction_exposure": {"interaction_exposure_steps": 0},
         "git_hash": SOURCE_SHA,
         "scenario_params": params,
         "algorithm_metadata": {
@@ -214,6 +215,8 @@ def test_reports_mismatch_and_absent_release_row(tmp_path: Path) -> None:
         "no_release_row",
         "mismatch",
     ]
+    assert report["comparisons"][1]["release_interaction_exposure_steps"] == 0
+    assert report["comparisons"][1]["trace_interaction_exposure_steps"] == 0
 
 
 def test_rejects_parameter_drift(tmp_path: Path) -> None:

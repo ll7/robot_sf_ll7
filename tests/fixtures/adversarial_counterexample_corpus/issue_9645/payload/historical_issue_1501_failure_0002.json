@@ -1,0 +1,66 @@
+{
+  "archived_entry": {
+    "archive_id": "failure_0002",
+    "bundle_path": "crossing_ttc/goal/optuna/candidate_0008",
+    "candidate": {
+      "goal": {
+        "theta": 0.0,
+        "x": 7.288956756845657,
+        "y": 2.807913333960939
+      },
+      "pedestrian_delay_s": 1.1762080853167522,
+      "pedestrian_speed_mps": 0.9460388097685773,
+      "scenario_seed": 320,
+      "spawn_time_s": 0.6205390536891795,
+      "start": {
+        "theta": 0.0,
+        "x": 2.3119256556477077,
+        "y": 2.5992335516140495
+      }
+    },
+    "cluster_key": {
+      "policy": "goal",
+      "primary_failure": "collision",
+      "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+      "termination_reason": "collision"
+    },
+    "episode_record_path": "crossing_ttc/goal/optuna/candidate_0008/episode_records.jsonl",
+    "failure_attribution": {
+      "details": {
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        },
+        "status": "collision",
+        "termination_reason": "collision"
+      },
+      "primary_failure": "collision",
+      "reasons": [
+        "episode outcome reports a collision"
+      ],
+      "status": "attributed"
+    },
+    "normalized_perturbation": 1.342348,
+    "objective_value": 10.0,
+    "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/optuna/candidate_0008/scenario.yaml --out crossing_ttc/goal/optuna/candidate_0008/episode_records_replay.jsonl --algo goal --no-video",
+    "scenario_yaml_path": "crossing_ttc/goal/optuna/candidate_0008/scenario.yaml",
+    "source_candidate_index": 8,
+    "source_manifest": "crossing_ttc/goal/optuna/manifest.json",
+    "trajectory_csv_path": "crossing_ttc/goal/optuna/candidate_0008/trajectory.csv"
+  },
+  "archived_run_context": {
+    "budget_per_sampler": 32,
+    "commit": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
+    "historical_invalid_candidates": 66,
+    "historical_issue_report": "docs/context/issue_1501_adversarial_smoke_run.md",
+    "historical_source_candidate_count": 128,
+    "historical_valid_failures": 15,
+    "historical_valid_non_failures": 47,
+    "original_report_says_replay_was_not_run_as_a_separate_verification_sweep": true,
+    "seed": 42
+  },
+  "schema_version": "issue_1501_archived_failure_replay.v1",
+  "source_archive": "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
+  "source_archive_sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393"
+}

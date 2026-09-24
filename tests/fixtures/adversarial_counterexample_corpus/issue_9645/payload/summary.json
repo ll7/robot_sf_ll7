@@ -1,0 +1,350 @@
+{
+  "all_candidate_objective_values": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "best_so_far_file": "best_so_far.csv",
+  "candidate_outcomes": {
+    "distinct_candidate_specs": 64,
+    "distinct_effective_scenarios": 64,
+    "duplicate_candidate_specs": 0,
+    "historical_counterexamples_in_archive": 15,
+    "historical_counterexamples_replayed_current_code": 1,
+    "historical_counterexamples_solved_after_optimization": 0,
+    "new_counterexamples_admitted_to_regression_corpus": 0,
+    "new_counterexamples_discovered": 0
+  },
+  "candidate_rows_file": "candidate_evaluations.csv",
+  "claim_boundary": "diagnostic_only_finite_search_budget_not_paper_facing_benchmark_evidence_and_not_real_world_safety",
+  "decision_reasons": [
+    "The complete evaluator chain ran without repair after a separate one-candidate smoke.",
+    "All 64 pilot candidates were statically cert-valid and dynamically completed successfully; no candidate produced collision, timeout, route failure, or near-miss.",
+    "All four run scores remained 0.0 at every evaluation; Random and TPE were tied under the tested budget.",
+    "Observed closest human-distance metric was >11 m and no near misses were recorded, indicating the tested fixed-seed domain did not challenge the goal planner.",
+    "A tracked #1501 failure at scenario seed 320, start_x≈2.312, lies outside this pilot’s clipped start_x≥2.5 domain; it reproduces as a native goal-planner collision under current source."
+  ],
+  "evaluation_budget_consumed": {
+    "corrected_smoke_candidate": 1,
+    "historical_failure_replay_repetitions": 2,
+    "initial_invalid_smoke_planner_evaluations": 0,
+    "pilot_search_candidates": 64,
+    "representative_pilot_success_replay": 1,
+    "static_corner_certificates": 16,
+    "total_simulator_episodes": 68
+  },
+  "feasibility": {
+    "historical_replayed_case_dynamic_task_feasibility": "unknown_without_reference_planner_success",
+    "historical_replayed_case_static_classification": "hard_but_solvable",
+    "pilot_empirical_goal_successes": 64,
+    "pilot_scenario_certification": {
+      "passed:hard_but_solvable": 5,
+      "passed:valid": 59
+    },
+    "pilot_unknown_execution_or_feasibility_rows": 0
+  },
+  "issue": 9645,
+  "pilot_budget": {
+    "attempted": 64,
+    "completed": 64,
+    "failed": 0,
+    "invalid": 0,
+    "planned": 64,
+    "unknown_or_scoreless": 0
+  },
+  "pilot_metrics": {
+    "collision_events": 0,
+    "distance_to_human_min_m_range": [
+      11.11753529396692,
+      12.569427156764498
+    ],
+    "min_clearance_m_range": [
+      9.71753529396692,
+      11.169427156764497
+    ],
+    "near_miss_count_total": 0,
+    "objective": "constraints_first_lexicographic_v1",
+    "objective_direction": "maximize",
+    "route_completions": 64,
+    "score_set": [
+      0.0
+    ],
+    "timeouts": 0
+  },
+  "provenance_file": "run_metadata.json",
+  "replay_validation_file": "replay_validation.json",
+  "row_status_file": "row_status.json",
+  "runs": [
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 1,
+        "passed:valid": 15
+      },
+      "distance_to_human_min_m_range": [
+        11.11753529396692,
+        12.569427156764498
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 6.576,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "manifest_sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0",
+      "min_clearance_m_range": [
+        9.71753529396692,
+        11.169427156764497
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "optuna_1101",
+      "sampler": "optuna",
+      "sampler_seed": 1101,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    },
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 2,
+        "passed:valid": 14
+      },
+      "distance_to_human_min_m_range": [
+        11.20875014374547,
+        12.145761530549791
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 12.091,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "manifest_sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13",
+      "min_clearance_m_range": [
+        9.80875014374547,
+        10.74576153054979
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "random_1101",
+      "sampler": "random",
+      "sampler_seed": 1101,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    },
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 1,
+        "passed:valid": 15
+      },
+      "distance_to_human_min_m_range": [
+        11.230956104409898,
+        12.452438485192879
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 6.586,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "manifest_sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b",
+      "min_clearance_m_range": [
+        9.830956104409898,
+        11.052438485192878
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "optuna_2202",
+      "sampler": "optuna",
+      "sampler_seed": 2202,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    },
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 1,
+        "passed:valid": 15
+      },
+      "distance_to_human_min_m_range": [
+        11.213896951428524,
+        12.448344487361496
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 6.569,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "manifest_sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c",
+      "min_clearance_m_range": [
+        9.813896951428523,
+        11.048344487361495
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "random_2202",
+      "sampler": "random",
+      "sampler_seed": 2202,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    }
+  ],
+  "sampler_comparison": {
+    "all_runs_equal": true,
+    "best_objective_by_run": {
+      "optuna_1101": 0.0,
+      "optuna_2202": 0.0,
+      "random_1101": 0.0,
+      "random_2202": 0.0
+    },
+    "budget_per_run": 16,
+    "inference": "descriptive only; two proposal seeds and one fixed environment seed do not support broad comparison claims",
+    "methods": [
+      "random",
+      "optuna_tpe"
+    ],
+    "seeds": [
+      1101,
+      2202
+    ]
+  },
+  "schema_version": "issue_9645_bounded_pilot_summary.v1",
+  "separate_attempts": {
+    "corrected_bounds_smoke": {
+      "attempts": 1,
+      "completed_evaluations": 1,
+      "failed": 0,
+      "invalid": 0,
+      "objective": 0.0,
+      "seed": 910
+    },
+    "historical_failure_replay": {
+      "current_replays_identical": true,
+      "replayed_counterexamples": 1,
+      "replays": 2
+    },
+    "initial_bounds_smoke": {
+      "attempts": 1,
+      "certification": "geometrically_infeasible",
+      "planner_evaluations": 0,
+      "reason": "start_inside_static_obstacle",
+      "source_revision": "a01119a5c1c2ae02a5401ae57930175ec21f65c3"
+    },
+    "representative_pilot_success_replay": {
+      "episodes": 1,
+      "exact_signature_match": true
+    }
+  },
+  "smoke_attempts_file": "smoke_attempts.csv",
+  "source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+  "terminal_decision": "NO_GO_FOR_SCALING_ISSUE_9648_UNDER_THIS_SEARCH_SPACE_AND_FIXED_ENVIRONMENT",
+  "total_empirical_simulator_evaluations": 68
+}

@@ -1,0 +1,266 @@
+{
+  "actual_driver_command": "time -p env LOGURU_LEVEL=ERROR uv run python scripts/tools/compare_adversarial_samplers.py --scenario-template configs/scenarios/templates/crossing_ttc.yaml --search-space configs/adversarial/issue_9645_pilot_space.v1.yaml --policy goal --objective constraints_first_lexicographic_v1 --budget 16 --seed 1101 --seed 2202 --sampler random --sampler optuna --require-certification --empirical --execution-context-label issue-9645-local-cpu-python3.12.3 --output-dir output/issue9645-pilot/results --out-json output/issue9645-pilot/comparison.json --out-md output/issue9645-pilot/comparison.md",
+  "artifact_retrieval_boundary": "Compact results, all 64 candidate rows, source/replay examples, and checksums are included in this tracked evidence bundle; full candidate directories remain worktree-local.",
+  "benchmark_profile": "baseline-safe",
+  "certification_required": true,
+  "comparison_json": {
+    "path": "output/issue9645-pilot/comparison.json",
+    "sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
+  },
+  "comparison_markdown": {
+    "path": "output/issue9645-pilot/comparison.md",
+    "sha256": "b92217b4eb625a5e70cfadc0de555b84dacb6eca4c1f971ca34c6ea58ded3d2a"
+  },
+  "effective_search_space_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+  "effective_search_space_sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+  "environment_label_discrepancy": {
+    "actual_runner_provenance_python_version": "3.13.14",
+    "declared_execution_context_label": "issue-9645-local-cpu-python3.12.3",
+    "resolution": "retain machine-generated runner provenance (Python 3.13.14); command label was inaccurate and did not set the interpreter"
+  },
+  "environment_provenance": {
+    "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "execution_context_sha256": "6dc34a26c637cb84a21fd1414db605253bb550465504b5d3da40cf90de4ae244",
+    "hostname": "auxme-imech039",
+    "numba_version": "0.67.0",
+    "numpy_version": "2.4.6",
+    "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",
+    "python_version": "3.13.14",
+    "thread_env": {
+      "MKL_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null
+    }
+  },
+  "evidence_tier": "diagnostic_local_nominal_not_paper_facing",
+  "experiment_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "experiment_source_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "issue": 9645,
+  "manifest_files": [
+    {
+      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "run_id": "optuna_1101",
+      "sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0"
+    },
+    {
+      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "run_id": "random_1101",
+      "sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13"
+    },
+    {
+      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "run_id": "optuna_2202",
+      "sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b"
+    },
+    {
+      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "run_id": "random_2202",
+      "sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c"
+    }
+  ],
+  "objective": {
+    "direction": "maximize",
+    "name": "constraints_first_lexicographic_v1",
+    "semantics": "collision/severe intrusion > liveness/goal-completion failure > bounded comfort/efficiency"
+  },
+  "overall_driver_wall_time_seconds": 39.1,
+  "per_run_summary": [
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 1,
+        "passed:valid": 15
+      },
+      "distance_to_human_min_m_range": [
+        11.11753529396692,
+        12.569427156764498
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 6.576,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "manifest_sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0",
+      "min_clearance_m_range": [
+        9.71753529396692,
+        11.169427156764497
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "optuna_1101",
+      "sampler": "optuna",
+      "sampler_seed": 1101,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    },
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 2,
+        "passed:valid": 14
+      },
+      "distance_to_human_min_m_range": [
+        11.20875014374547,
+        12.145761530549791
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 12.091,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "manifest_sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13",
+      "min_clearance_m_range": [
+        9.80875014374547,
+        10.74576153054979
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "random_1101",
+      "sampler": "random",
+      "sampler_seed": 1101,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    },
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 1,
+        "passed:valid": 15
+      },
+      "distance_to_human_min_m_range": [
+        11.230956104409898,
+        12.452438485192879
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 6.586,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "manifest_sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b",
+      "min_clearance_m_range": [
+        9.830956104409898,
+        11.052438485192878
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "optuna_2202",
+      "sampler": "optuna",
+      "sampler_seed": 2202,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    },
+    {
+      "attempted_evaluations": 16,
+      "best_objective": 0.0,
+      "candidate_rows": 16,
+      "certificate_status_class_counts": {
+        "passed:hard_but_solvable": 1,
+        "passed:valid": 15
+      },
+      "distance_to_human_min_m_range": [
+        11.213896951428524,
+        12.448344487361496
+      ],
+      "duplicate_candidate_specs": 0,
+      "episode_timestamp_span_interpretation": "observed first-episode start to last-episode end; excludes search setup/certification overhead",
+      "episode_timestamp_span_seconds": 6.569,
+      "failed_evaluations": 0,
+      "invalid_candidates": 0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "manifest_sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c",
+      "min_clearance_m_range": [
+        9.813896951428523,
+        11.048344487361495
+      ],
+      "near_miss_count_total": 0,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "objective_values": {
+        "0.0": 16
+      },
+      "planned_evaluations": 16,
+      "row_status_counts": {
+        "successful_evidence": 16
+      },
+      "run_id": "random_2202",
+      "sampler": "random",
+      "sampler_seed": 2202,
+      "scoreless_valid_candidates": 0,
+      "successful_execution_rows": 16,
+      "unique_candidate_specs": 16
+    }
+  ],
+  "per_run_wall_time_note": "Exact per-search-run driver durations were not emitted. The report includes observed first-episode-start to last-episode-end spans per run, which exclude setup/certification overhead.",
+  "pilot_design": {
+    "candidate_evaluations_per_seed_method": 16,
+    "fixed_scenario_seed": 123,
+    "planned_candidate_evaluations": 64,
+    "sampler_methods": [
+      "random",
+      "optuna_tpe"
+    ],
+    "sampler_rng_seeds": [
+      1101,
+      2202
+    ]
+  },
+  "planner": "goal",
+  "raw_artifact_class": "ignored-cache/reproducible-from-tracked-config-command-seeds-and-commit",
+  "raw_artifact_root": "output/issue9645-pilot",
+  "scenario_template_path": "configs/scenarios/templates/crossing_ttc.yaml",
+  "scenario_template_sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+  "schema_version": "issue_9645_execution_provenance.v1",
+  "source_configuration_sha256": {
+    "pyproject.toml": "8158dcf2d83f61bcd93a4bae18aa3b32806f14b6b44254b05a868ce8c2c3df21",
+    "uv.lock": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+  },
+  "source_file_sha256": {
+    "configs/adversarial/issue_9645_pilot_space.v1.yaml": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+    "configs/scenarios/templates/crossing_ttc.yaml": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+    "pyproject.toml": "8158dcf2d83f61bcd93a4bae18aa3b32806f14b6b44254b05a868ce8c2c3df21",
+    "robot_sf/adversarial/bundle.py": "9d8372b7bb8a6bf2fcf79529ca502d4ce9046e59fa003d542360b6120db5b65e",
+    "robot_sf/adversarial/certification.py": "075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8",
+    "robot_sf/adversarial/objectives.py": "19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8",
+    "robot_sf/adversarial/samplers.py": "238526f91a7d94adaf3247245ae3958edc315ccec0bb2981513d35accebf168f",
+    "robot_sf/adversarial/search.py": "c4636e29f4769a7f69649b2c7301d4a24e70cb203eef6c13af179501ff13c89c",
+    "robot_sf/scenario_certification/v1.py": "f8f1a24487b9609ed4670d0ef0fe8b71c7983fbfe8e52b11c0a3823971d43941",
+    "scripts/tools/compare_adversarial_samplers.py": "e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd",
+    "uv.lock": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+  }
+}

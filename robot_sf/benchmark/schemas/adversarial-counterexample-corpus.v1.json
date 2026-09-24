@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/adversarial-counterexample-corpus.v1.json",
+  "title": "Robot SF Adversarial Counterexample Corpus (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_boundary",
+    "search_runs",
+    "cases",
+    "admission_attempts",
+    "planner_evaluations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adversarial-counterexample-corpus.v1"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "search_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "run_id",
+          "source_issue",
+          "source_revision",
+          "objective",
+          "search_space",
+          "attempted_candidates",
+          "completed_candidates",
+          "failed_candidates",
+          "invalid_candidates",
+          "new_counterexamples_discovered",
+          "new_counterexamples_admitted",
+          "evidence_tier",
+          "source_files",
+          "manifest_files"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample-search-run.v1"},
+          "run_id": {"type": "string", "minLength": 1},
+          "source_issue": {"type": "integer", "minimum": 1},
+          "source_revision": {"type": "string", "minLength": 1},
+          "objective": {"type": "object"},
+          "search_space": {"type": "object"},
+          "attempted_candidates": {"type": "integer", "minimum": 0},
+          "completed_candidates": {"type": "integer", "minimum": 0},
+          "failed_candidates": {"type": "integer", "minimum": 0},
+          "invalid_candidates": {"type": "integer", "minimum": 0},
+          "new_counterexamples_discovered": {"type": "integer", "minimum": 0},
+          "new_counterexamples_admitted": {"type": "integer", "minimum": 0},
+          "evidence_tier": {"type": "string", "minLength": 1},
+          "source_files": {"type": "array", "items": {"type": "object"}},
+          "manifest_files": {"type": "array", "items": {"type": "object"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "case_id",
+          "effective_scenario_sha256",
+          "scenario_id",
+          "scenario_seed",
+          "inputs",
+          "structural_validation",
+          "discovery",
+          "admissibility",
+          "target_planner",
+          "replay_receipt",
+          "source_evidence"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample.v1"},
+          "case_id": {"type": "string", "minLength": 1},
+          "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "scenario_id": {"type": "string", "minLength": 1},
+          "scenario_seed": {"type": "integer"},
+          "inputs": {"type": "object"},
+          "structural_validation": {"type": "object"},
+          "discovery": {"type": "object"},
+          "admissibility": {"type": "object"},
+          "target_planner": {"type": "object"},
+          "replay_receipt": {"type": "object"},
+          "source_evidence": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "admission_attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "attempt_id",
+          "source_kind",
+          "source_id",
+          "decision",
+          "blockers",
+          "candidate_identity",
+          "duplicate_case_id",
+          "near_duplicate_report"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample-admission-attempt.v1"},
+          "attempt_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_kind": {"type": "string", "minLength": 1},
+          "source_id": {"type": "string", "minLength": 1},
+          "decision": {"enum": ["admitted", "duplicate", "rejected"]},
+          "blockers": {"type": "array", "items": {"type": "string"}},
+          "candidate_identity": {"type": ["string", "null"]},
+          "duplicate_case_id": {"type": ["string", "null"]},
+          "near_duplicate_report": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "planner_evaluations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "evaluation_id",
+          "case_id",
+          "effective_scenario_sha256",
+          "planner_id",
+          "planner_config_identity",
+          "source_revision",
+          "episode_sha256",
+          "execution_mode",
+          "readiness_status",
+          "availability_status",
+          "fallback_or_degraded",
+          "evidence_status",
+          "error",
+          "outcome",
+          "termination_reason",
+          "metrics"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample-planner-evaluation.v1"},
+          "evaluation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "case_id": {"type": "string", "minLength": 1},
+          "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "planner_id": {"type": "string", "minLength": 1},
+          "planner_config_identity": {"type": "string", "minLength": 1},
+          "source_revision": {"type": "string", "minLength": 1},
+          "episode_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "execution_mode": {"type": "string", "minLength": 1},
+          "readiness_status": {"type": "string", "minLength": 1},
+          "availability_status": {"type": "string", "minLength": 1},
+          "fallback_or_degraded": {"type": ["boolean", "null"]},
+          "evidence_status": {"enum": ["complete", "failed", "partial", "missing", "unknown"]},
+          "error": {"type": ["string", "null"]},
+          "outcome": {
+            "type": ["object", "null"],
+            "properties": {
+              "collision_event": {"type": ["boolean", "null"]},
+              "route_complete": {"type": ["boolean", "null"]},
+              "timeout_event": {"type": ["boolean", "null"]}
+            }
+          },
+          "termination_reason": {"type": ["string", "null"], "minLength": 1},
+          "metrics": {"type": "object"}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"evidence_status": {"const": "complete"}},
+              "required": ["evidence_status"]
+            },
+            "then": {
+              "properties": {
+                "episode_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "fallback_or_degraded": {"type": "boolean"},
+                "outcome": {
+                  "type": "object",
+                  "required": ["collision_event", "route_complete", "timeout_event"],
+                  "properties": {
+                    "collision_event": {"type": "boolean"},
+                    "route_complete": {"type": "boolean"},
+                    "timeout_event": {"type": "boolean"}
+                  }
+                },
+                "termination_reason": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    }
+  }
+}

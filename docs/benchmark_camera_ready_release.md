@@ -469,6 +469,8 @@ prose, relation inventory, deposition identity, unpublished state, and empty
 file inventory must match exactly before any PUT. The update response and a
 fresh GET must then match the resolved metadata and overlay exactly. It does not
 edit the resolved metadata file or its copy inside the immutable archive.
+Keep draft editing exclusive to this operator through the apply/readback step;
+the fresh pre-write read and PUT are separate remote requests.
 
 For a compatible draft that predates bootstrap reservation, omit
 `--bootstrap-metadata`; that existing repair path allows only reviewed source

@@ -53,15 +53,15 @@ Benchmark release versioning is independent from `pyproject.toml`.
 While the release process is still evolving, benchmark releases remain in the
 `0.x.y` line.
 
-## Current Canonical Release Unit
+## S30/H600 Release Contract
 
 The approved S30/H600 benchmark-data campaign is:
 
 - campaign config:
   - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
-- publication-grade manifest:
+- historical concrete v0.1 manifest (compatibility only):
   - `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
-- fresh Zenodo reservation:
+- historical DOI coordinates for that concrete manifest:
   - concept DOI `10.5281/zenodo.22077447`
   - version DOI `10.5281/zenodo.22077448`
 - source contract:
@@ -257,10 +257,13 @@ uv run python scripts/tools/run_benchmark_release.py \
   --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
 
-This command is the bounded smoke path. Use
-`configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml` for the
-full publication campaign; do not replace it with the historical
-seven-planner/S3 manifest.
+This command is the bounded smoke path. The tracked
+`benchmark_data_release_s30_h600.yaml` is a concrete historical v0.1
+compatibility manifest, not the input for a new v0.2 campaign. For a new v0.2
+release, complete the bootstrap/resolution sequence above and use
+`output/release/release_identity.resolved.json` for the full publication
+campaign. Do not replace either path with the historical seven-planner/S3
+manifest.
 
 The release entrypoint:
 
@@ -286,9 +289,10 @@ smoke receipt:
 
 ```bash
 REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
+RELEASE_IDENTITY=output/release/release_identity.resolved.json
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest "$RELEASE_IDENTITY" \
   --mode rehearsal \
   --source-commit "$REHEARSAL_SOURCE_COMMIT" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
@@ -306,11 +310,10 @@ receipts are validated independently; their wrapper hashes may differ because
 their campaign-config bindings differ, but their checkpoint arm identities and
 model-byte SHA-256 values must match. Allocation and resume options, including
 `--resume-receipt-max-age-hours`, are rejected in this mode.
-The canonical benchmark-data manifest is a historical compatibility manifest
-without `source_sha`, so `--source-commit` is required and must be an exact
-40-character SHA equal to the clean checked-out `HEAD`. A manifest-declared
-`source_sha`, when present, remains authoritative; an explicit argument that
-disagrees with it is rejected.
+The v0.2 resolved identity declares `source_sha`; it is authoritative, and the
+explicit `--source-commit` must match it and the clean checked-out `HEAD`. The
+older concrete v0.1 manifest omits `source_sha`, so only historical rehearsal
+of that frozen contract requires supplying the exact checked-out SHA directly.
 
 `release/release_result.json` preserves the wrapped campaign semantics in the
 top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,

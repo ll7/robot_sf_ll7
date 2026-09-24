@@ -2236,6 +2236,61 @@ def test_compare_baseline_generator_mismatch_fails_closed(
     assert "generator" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("input_path", "needle"),
+    (
+        (
+            "scripts/validation/dependency_license_profiles.v1.json",
+            "dependency_license_profiles.v1.json",
+        ),
+        (
+            "scripts/validation/dependency_license_policy.v1.json",
+            "dependency_license_policy.v1.json",
+        ),
+    ),
+)
+def test_compare_baseline_canonical_input_hash_mismatch_fails_closed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    input_path: str,
+    needle: str,
+) -> None:
+    """A refreshed baseline must bind the canonical manifest and policy bytes."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        for item in payload["repository_inputs"]:
+            if item.get("path") == input_path:
+                item["sha256"] = "0" * 64
+                break
+        else:
+            pytest.fail(f"fixture did not record {input_path}")
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert needle in capsys.readouterr().err
+
+
 def test_compare_baseline_policy_mismatch_fails_closed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2266,6 +2321,201 @@ def test_compare_baseline_policy_mismatch_fails_closed(
         == 1
     )
     assert "policy" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("shape", "needle"),
+    (
+        ("schema", "schema"),
+        ("failures", "failures"),
+        ("packages", "package"),
+        ("unrepresented_dispositions", "disposition"),
+        ("unrepresented_status", "disposition status"),
+        ("policy_dispositions", "policy disposition"),
+    ),
+)
+def test_compare_baseline_digest_refreshed_malformed_shapes_fail_before_write(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    shape: str,
+    needle: str,
+) -> None:
+    """Refreshing a forged baseline digest cannot bypass structural validation."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        if shape == "schema":
+            payload["schema_version"] = "forged.inventory.v0"
+        elif shape == "failures":
+            payload["failures"] = "not-a-list"
+        elif shape == "packages":
+            payload["packages"] = ["not-a-package-record"]
+        elif shape == "unrepresented_dispositions":
+            payload["unrepresented_lock_package_dispositions"] = "not-a-list"
+        elif shape == "unrepresented_status":
+            payload["unrepresented_lock_package_dispositions"][0]["status"] = []
+        else:
+            payload["policy"]["package_dispositions"] = "not-a-list"
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert needle in capsys.readouterr().err
+
+
+def test_compare_baseline_accepts_dependency_change_and_reports_added_package(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Lock and project dependency changes remain the comparison signal."""
+    baseline = _generate_baseline(tmp_path)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            'dependencies = ["demo-package>=1"]',
+            'dependencies = ["demo-package>=1", "new-package>=1"]',
+        ),
+        encoding="utf-8",
+    )
+    lockfile = tmp_path / "uv.lock"
+    lockfile.write_text(
+        lockfile.read_text(encoding="utf-8")
+        .replace(
+            'dependencies = [{ name = "demo-package" }]',
+            'dependencies = [{ name = "demo-package" }, { name = "new-package" }]',
+        )
+        .replace(
+            '{ name = "dev-tool" },',
+            '{ name = "dev-tool" }, { name = "new-dev-tool" },',
+        )
+        + """
+[[package]]
+name = "new-package"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "new-dev-tool"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+""",
+        encoding="utf-8",
+    )
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--fail-on-unresolved",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 2
+    )
+    comparison = _read_comparison(capsys)
+    current_report = json.loads(current.read_text(encoding="utf-8"))
+    assert "new-package" in comparison["packages"]["added"]
+    assert any("new-package" in failure for failure in comparison["failures"]["new"])
+    new_dev_disposition = next(
+        row
+        for row in current_report["unrepresented_lock_package_dispositions"]
+        if row["name"] == "new-dev-tool"
+    )
+    assert new_dev_disposition["status"] == "reviewed_exclusion"
+    assert new_dev_disposition["package_id"] in comparison["reviewed_exclusions"]["new"]
+    assert "new-dev-tool" in comparison["packages"]["added"]
+    assert comparison["global_status_preserved"] == "blocked"
+    assert current_report["summary"]["status"] == "blocked"
+
+
+@pytest.mark.parametrize(
+    ("drift", "needle"),
+    (
+        ("policy_rules", "policy rules"),
+        ("policy_components", "policy components"),
+        ("policy_claim_boundary", "policy claim_boundary"),
+        ("target_resolver", "target resolver"),
+        ("profile_resolver", "profile core resolver"),
+        ("surface_selection", "profile surface selection"),
+    ),
+)
+def test_compare_baseline_reported_policy_and_surface_drift_fails_closed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    drift: str,
+    needle: str,
+) -> None:
+    """A refreshed baseline must retain the same reported audit semantics."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        if drift == "policy_rules":
+            payload["policy"]["rules"].append(
+                {
+                    "id": "forged-rule",
+                    "distribution_mode": "user_installed",
+                    "disposition": "excluded",
+                }
+            )
+        elif drift == "policy_components":
+            payload["policy"]["components"].append({"id": "forged-component"})
+        elif drift == "policy_claim_boundary":
+            payload["policy"]["claim_boundary"] = "forged claim boundary"
+        elif drift == "target_resolver":
+            payload["target"]["resolver"]["version"] = "forged-resolver"
+        elif drift == "profile_resolver":
+            payload["profiles"][0]["resolver"] = {"name": "uv", "version": "forged"}
+        else:
+            payload["surface"]["selection"] = "forged-selection"
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert needle in capsys.readouterr().err
 
 
 def test_compare_baseline_tampered_content_fails_closed(

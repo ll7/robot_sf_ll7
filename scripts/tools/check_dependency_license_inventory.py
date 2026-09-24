@@ -4394,6 +4394,16 @@ def _reported_unresolved_count(report_path: Path) -> int:
 
 COMPARISON_SCHEMA_VERSION = "dependency_license_comparison.v1"
 _COMPARISON_FINAL_STATUSES = ("blocked", "complete")
+_COMPARISON_DYNAMIC_PROFILE_FIELDS = frozenset(
+    {
+        "package_ids",
+        "direct_requirements",
+        "missing_dependencies",
+        "conflicting_dependencies",
+        "relationships",
+        "status",
+    }
+)
 
 
 def _comparison_string_set(value: Any) -> set[str]:
@@ -4451,11 +4461,143 @@ def _comparison_reviewed_exclusion_ids(report: dict[str, Any]) -> tuple[set[str]
     return ids, issues
 
 
-def _comparison_baseline_shape_issues(baseline: Any, baseline_path: Path) -> list[str]:
+def _comparison_input_rows(
+    report: dict[str, Any], *, report_name: str
+) -> tuple[dict[str, str], list[str]]:
+    """Return validated repository input digests for one comparison report."""
+    inputs = report.get("repository_inputs")
+    if not isinstance(inputs, list) or not inputs:
+        return {}, [f"{report_name} has no repository_inputs digest list"]
+    rows: dict[str, str] = {}
+    issues: list[str] = []
+    for item in inputs:
+        if not isinstance(item, dict):
+            issues.append(f"{report_name} contains a non-object repository input row")
+            continue
+        path = item.get("path")
+        digest = item.get("sha256")
+        if not isinstance(path, str) or not path:
+            issues.append(f"{report_name} contains a repository input without a path")
+            continue
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            issues.append(f"{report_name} contains an invalid repository input digest: {path}")
+            continue
+        if path in rows:
+            issues.append(f"{report_name} contains duplicate repository input: {path}")
+            continue
+        rows[path] = digest
+    if len(rows) != len(inputs):
+        # Keep the detailed row errors above while making a malformed list
+        # visible even when two invalid rows happen to share no path.
+        issues.append(f"{report_name} repository_inputs list is malformed")
+    return rows, issues
+
+
+def _comparison_package_shape_issues(report: dict[str, Any], *, report_name: str) -> list[str]:
+    """Validate package records before comparison reduces them to identities."""
+    packages = report.get("packages")
+    if not isinstance(packages, list):
+        return [f"{report_name} has no packages list"]
+    issues: list[str] = []
+    identities: set[str] = set()
+    for record in packages:
+        if not isinstance(record, dict):
+            issues.append(f"{report_name} contains a non-object package record")
+            continue
+        package_id = record.get("package_id")
+        normalized_name = record.get("normalized_name")
+        if not isinstance(package_id, str) or not package_id:
+            issues.append(f"{report_name} contains a package record without identity")
+        elif package_id in identities:
+            issues.append(f"{report_name} contains duplicate package identity: {package_id}")
+        else:
+            identities.add(package_id)
+        if not isinstance(normalized_name, str) or not normalized_name:
+            issues.append(f"{report_name} contains a package record without normalized_name")
+    return issues
+
+
+def _comparison_disposition_shape_issues(  # noqa: C901 - fail-closed shape validation branches
+    report: dict[str, Any], *, report_name: str
+) -> list[str]:
+    """Validate both disposition collections used by the comparison."""
+    issues: list[str] = []
+    rows = report.get("unrepresented_lock_package_dispositions")
+    if not isinstance(rows, list):
+        issues.append(f"{report_name} has no unrepresented disposition list")
+    else:
+        identities: set[str] = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                issues.append(f"{report_name} contains a non-object disposition row")
+                continue
+            package_id = row.get("package_id")
+            status = row.get("status")
+            if not isinstance(package_id, str) or not package_id:
+                issues.append(f"{report_name} contains a disposition without package identity")
+            elif package_id in identities:
+                issues.append(f"{report_name} contains duplicate disposition: {package_id}")
+            else:
+                identities.add(package_id)
+            if not isinstance(status, str) or status not in {
+                "reviewed_exclusion",
+                "unresolved",
+            }:
+                issues.append(f"{report_name} contains an invalid disposition status")
+
+    policy = report.get("policy")
+    policy_rows = policy.get("package_dispositions") if isinstance(policy, dict) else None
+    if not isinstance(policy_rows, list):
+        issues.append(f"{report_name} has no policy disposition list")
+    else:
+        for row in policy_rows:
+            if not isinstance(row, dict):
+                issues.append(f"{report_name} contains a non-object policy disposition row")
+                continue
+            if not isinstance(row.get("id"), str) or not row["id"]:
+                issues.append(f"{report_name} contains a policy disposition without id")
+            if not isinstance(row.get("package"), str) or not row["package"]:
+                issues.append(f"{report_name} contains a policy disposition without package")
+    return issues
+
+
+def _comparison_profile_semantics(
+    report: dict[str, Any], *, report_name: str
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Return stable profile semantics while excluding lock-derived membership."""
+    profiles = report.get("profiles")
+    if not isinstance(profiles, list):
+        return {}, [f"{report_name} has no profiles list"]
+    by_id: dict[str, dict[str, Any]] = {}
+    issues: list[str] = []
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            issues.append(f"{report_name} contains a non-object profile record")
+            continue
+        profile_id = profile.get("id")
+        if not isinstance(profile_id, str) or not profile_id:
+            issues.append(f"{report_name} contains a profile without id")
+            continue
+        if profile_id in by_id:
+            issues.append(f"{report_name} contains duplicate profile id: {profile_id}")
+            continue
+        by_id[profile_id] = {
+            key: _normalise_json(value)
+            for key, value in profile.items()
+            if key not in _COMPARISON_DYNAMIC_PROFILE_FIELDS
+        }
+    return by_id, issues
+
+
+def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shape validation
+    baseline: Any, baseline_path: Path
+) -> list[str]:
     """Fail closed when the baseline report itself is malformed."""
     issues: list[str] = []
     if not isinstance(baseline, dict):
         return [f"comparison baseline is not a JSON object: {baseline_path}"]
+    if baseline.get("schema_version") != SCHEMA_VERSION:
+        issues.append("comparison baseline schema_version is not current")
     recorded = baseline.get(_REPORT_CONTENT_DIGEST_FIELD)
     if not isinstance(recorded, str) or not _SHA256_RE.fullmatch(recorded):
         issues.append("comparison baseline has no valid report_content_sha256")
@@ -4471,6 +4613,20 @@ def _comparison_baseline_shape_issues(baseline: Any, baseline_path: Path) -> lis
         issues.append("comparison baseline has no integer summary unresolved_count")
     if summary.get("status") not in _COMPARISON_FINAL_STATUSES:
         issues.append("comparison baseline has no final summary status")
+    failures = baseline.get("failures")
+    if not isinstance(failures, list) or not all(isinstance(failure, str) for failure in failures):
+        issues.append("comparison baseline has no string failures list")
+    _input_rows, input_issues = _comparison_input_rows(baseline, report_name="comparison baseline")
+    issues.extend(input_issues)
+    issues.extend(_comparison_package_shape_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_disposition_shape_issues(baseline, report_name="comparison baseline"))
+    _profile_semantics, profile_issues = _comparison_profile_semantics(
+        baseline, report_name="comparison baseline"
+    )
+    issues.extend(profile_issues)
+    for field in ("target", "surface", "profile_manifest", "policy"):
+        if not isinstance(baseline.get(field), dict):
+            issues.append(f"comparison baseline has no {field} object")
     return sorted(set(issues))
 
 
@@ -4481,62 +4637,87 @@ def _comparison_source_binding_issues(
 ) -> list[str]:
     """Fail closed when the baseline is not source-bound to the current run."""
     issues: list[str] = []
-    inputs = baseline.get("repository_inputs")
-    if not isinstance(inputs, list) or not inputs:
-        return ["comparison baseline has no repository_inputs digest list"]
-    recorded_paths = {item.get("path") for item in inputs if isinstance(item, dict)}
+    baseline_inputs, baseline_input_issues = _comparison_input_rows(
+        baseline, report_name="comparison baseline"
+    )
+    current_inputs, current_input_issues = _comparison_input_rows(
+        current, report_name="comparison current report"
+    )
+    issues.extend(baseline_input_issues)
+    issues.extend(current_input_issues)
     for canonical in (CANONICAL_PROFILE_MANIFEST, CANONICAL_POLICY):
-        if canonical not in recorded_paths:
+        if canonical not in baseline_inputs:
             issues.append(
                 f"comparison baseline was not generated from the canonical input: {canonical}"
             )
-    generator_rows = [
-        item
-        for item in inputs
-        if isinstance(item, dict) and item.get("path") == CANONICAL_GENERATOR
-    ]
-    if not generator_rows:
+        if canonical not in current_inputs:
+            issues.append(f"comparison current report has no canonical input: {canonical}")
+        elif baseline_inputs.get(canonical) != current_inputs.get(canonical):
+            issues.append(f"comparison baseline {canonical} hash differs from current report")
+    generator_sha256 = baseline_inputs.get(CANONICAL_GENERATOR)
+    if generator_sha256 is None:
         issues.append("comparison baseline records no generator input")
     elif current_generator_sha256 is None:
         issues.append("comparison generator identity is unavailable")
-    elif generator_rows[0].get("sha256") != current_generator_sha256:
+    elif generator_sha256 != current_generator_sha256:
         issues.append("comparison baseline generator differs from the current generator")
+    if current_inputs.get(CANONICAL_GENERATOR) != current_generator_sha256:
+        issues.append("comparison current report generator differs from the current generator")
     issues.extend(_comparison_policy_surface_issues(baseline, current))
     return sorted(set(issues))
 
 
-def _comparison_policy_surface_issues(
+def _comparison_policy_surface_issues(  # noqa: C901 - compare each reported semantic surface
     baseline: dict[str, Any],
     current: dict[str, Any],
 ) -> list[str]:
     """Fail closed when baseline policy content or profile surface differs."""
     issues: list[str] = []
-    baseline_policy = baseline.get("policy")
-    current_policy = current.get("policy")
-    baseline_records = (
-        baseline_policy.get("normalized_records_sha256")
-        if isinstance(baseline_policy, dict)
-        else None
+    for field, label in (
+        ("policy", "policy"),
+        ("profile_manifest", "profile manifest"),
+        ("target", "target"),
+        ("surface", "profile surface"),
+    ):
+        baseline_value = baseline.get(field)
+        current_value = current.get(field)
+        if not isinstance(baseline_value, dict) or not isinstance(current_value, dict):
+            issues.append(f"comparison baseline or current report has no {label} object")
+            continue
+        baseline_value = _normalise_json(baseline_value)
+        current_value = _normalise_json(current_value)
+        if baseline_value == current_value:
+            continue
+        baseline_keys = set(baseline_value)
+        current_keys = set(current_value)
+        for key in sorted(baseline_keys | current_keys):
+            if baseline_value.get(key) != current_value.get(key):
+                issues.append(f"comparison baseline {label} {key} differs from current report")
+
+    baseline_profiles, baseline_profile_issues = _comparison_profile_semantics(
+        baseline, report_name="comparison baseline"
     )
-    current_records = (
-        current_policy.get("normalized_records_sha256")
-        if isinstance(current_policy, dict)
-        else None
+    current_profiles, current_profile_issues = _comparison_profile_semantics(
+        current, report_name="comparison current report"
     )
-    if not isinstance(baseline_records, str) or not isinstance(current_records, str):
-        issues.append("comparison baseline or current report has no policy record digest")
-    elif baseline_records != current_records:
-        issues.append("comparison baseline policy differs from the current policy")
-    baseline_surface = baseline.get("surface")
-    current_surface = current.get("surface")
-    baseline_ids = (
-        baseline_surface.get("profile_ids") if isinstance(baseline_surface, dict) else None
-    )
-    current_ids = current_surface.get("profile_ids") if isinstance(current_surface, dict) else None
-    if not isinstance(baseline_ids, list) or not isinstance(current_ids, list):
-        issues.append("comparison baseline or current report has no profile surface")
-    elif sorted(str(item) for item in baseline_ids) != sorted(str(item) for item in current_ids):
-        issues.append("comparison baseline profile surface differs from the current surface")
+    issues.extend(baseline_profile_issues)
+    issues.extend(current_profile_issues)
+    for profile_id in sorted(set(baseline_profiles) | set(current_profiles)):
+        if profile_id not in baseline_profiles:
+            issues.append(f"comparison baseline is missing profile: {profile_id}")
+            continue
+        if profile_id not in current_profiles:
+            issues.append(f"comparison current report is missing profile: {profile_id}")
+            continue
+        baseline_profile = baseline_profiles[profile_id]
+        current_profile = current_profiles[profile_id]
+        if baseline_profile == current_profile:
+            continue
+        for key in sorted(set(baseline_profile) | set(current_profile)):
+            if baseline_profile.get(key) != current_profile.get(key):
+                issues.append(
+                    f"comparison baseline profile {profile_id} {key} differs from current report"
+                )
     return sorted(set(issues))
 
 

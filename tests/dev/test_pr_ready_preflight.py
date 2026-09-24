@@ -1909,6 +1909,7 @@ def test_pr_ready_coverage_database_parent_survives_lanes_and_reporting(
     assert [record.split(":", maxsplit=1)[0] for record in records] == [
         "lane",
         "lane",
+        "lane",
         "report",
     ]
     coverage_paths = [Path(record.split(":", maxsplit=1)[1]) for record in records]

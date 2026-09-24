@@ -41,13 +41,19 @@ ORCA dependency. Submit through the private operations queue and retain the pack
 receipt, producer checksums, result-root path, and cold-readback receipt. Preserve the raw JSONL
 and logs in durable artifact storage outside Git.
 
-After collection, run `scripts/validation/check_issue_9671_trace_reexport.py` against the exact
-archive and both episode JSONL files. It requires the frozen source SHA, per-step robot and
-pedestrian state, total pedestrian force vectors, and release-equivalent scientific parameters
-apart from the three recording flags. It writes every row's `match`, `mismatch`, or
-`no_release_row` classification with input checksums. A mismatch remains in the report; it is
-never silently corrected. The frozen simulator has no #9666 robot-attributable force split, so
-these traces cannot claim that component unless it is derived separately with documented proof.
+After collection, run `scripts/validation/check_issue_9671_trace_reexport.py` with the exact
+archive, both episode JSONL files, both diagnostic config files, and both produced
+`campaign_manifest.json` files. The comparator requires the frozen source SHA, the separately
+pinned config SHA-256 values and effective hashes, per-step finite robot/pedestrian states and
+total pedestrian force vectors, and release-equivalent scientific parameters apart from the
+three recording flags. For seeds 22–24, the parameters are compared to the same release
+scenario/planner at a release seed with only `route_spawn_seed` substituted; their outcomes remain
+`no_release_row`. It writes every row's `match`, `mismatch`, or `no_release_row` classification
+with input checksums. A doorway outcome mismatch remains in the report and makes the CLI exit 2;
+it is never silently corrected. The frozen simulator has no #9666 robot-attributable force split,
+so these traces **do not contain that component**, even if #9666 lands before acquisition. A
+separate #9666 diagnostic may establish the component on a later source; it cannot retroactively
+change this frozen-source trace record.
 
 ## Status
 

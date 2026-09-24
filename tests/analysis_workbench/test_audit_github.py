@@ -21,6 +21,7 @@ from robot_sf.analysis_workbench.audit_github import (
     AUDITOR_BLOCK_END,
     AUDITOR_BLOCK_START,
     FindingEvidence,
+    GitHubCapabilityUnavailable,
     GitHubConflictError,
     GitHubFindingClaim,
     GitHubIssue,
@@ -254,6 +255,40 @@ def test_success_then_timeout_reconciles_without_duplicate_create(tmp_path: Path
         assert second.replayed
         assert len(provider.create_calls) == 1
         assert outbox.get(REPOSITORY, finding.finding_id, "sync-timeout").state == "succeeded"
+
+
+def test_unsupported_issue_create_returns_unavailable_without_remote_write(
+    tmp_path: Path,
+) -> None:
+    class UnsupportedCreateProvider(FakeProvider):
+        def create_issue(
+            self,
+            repository: str,
+            *,
+            title: str,
+            body: str,
+            labels: tuple[str, ...],
+        ) -> GitHubIssue:
+            del repository, title, body, labels
+            raise GitHubCapabilityUnavailable("direct issue creation is unsupported")
+
+    provider = UnsupportedCreateProvider()
+    finding = _finding("unavailable-direct-create")
+    with GitHubOutbox(tmp_path) as outbox:
+        result = GitHubSync(provider, outbox).sync(
+            REPOSITORY,
+            finding,
+            operation_id="unavailable-direct-create",
+        )
+        entry = outbox.get(REPOSITORY, finding.finding_id, "unavailable-direct-create")
+        claim = outbox.get_claim(REPOSITORY, finding.finding_id)
+
+    assert result.status == "unavailable"
+    assert result.remote_write == "none"
+    assert result.outbox is not None and result.outbox.state == "failed"
+    assert entry is not None and entry.state == "failed"
+    assert claim is not None and claim.state == "failed"
+    assert provider.create_calls == []
 
 
 def test_replay_repairs_claim_after_crash_between_outbox_and_claim_success(

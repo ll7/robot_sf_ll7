@@ -276,6 +276,26 @@ entries:
   status: evidence
   freshness: dated
   area: benchmark_evidence
+- path: docs/context/issue_9656_hard_case_mining.md
+  status: current
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/report.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/evidence_bundle_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/checksums.sha256
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/issue_6272_risk_tiered_stale_base_policy.md
   status: current
   freshness: policy

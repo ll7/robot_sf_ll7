@@ -495,6 +495,7 @@ function normalizeCodexResult(result, fallback = "Codex activity unavailable") {
   const source = result && typeof result === "object" ? result : {};
   const candidates = codexCandidates(source);
   const status = boundedCodexText(firstCodexValue(candidates, ["status"]), 64, "unavailable");
+  const activityScope = firstCodexValue(candidates, ["activity_scope"]);
   const normalized = {
     status: status || "unavailable",
     reason: boundedCodexText(firstCodexValue(candidates, ["reason", "message"]), 512, fallback),
@@ -506,7 +507,7 @@ function normalizeCodexResult(result, fallback = "Codex activity unavailable") {
     evidence_ids: normalizeCodexEvidence(candidates),
     usage: normalizeCodexUsage(candidates),
     activity: normalizeCodexActivity(candidates),
-    activity_scope: firstCodexValue(candidates, ["activity_scope"]) === "process" ? "process" : "unavailable",
+    activity_scope: ["process", "lifecycle"].includes(activityScope) ? activityScope : "unavailable",
   };
   return normalized;
 }
@@ -1387,15 +1388,22 @@ function appendCodexDisplay(documentRef, body, codex) {
   body.appendChild(text(
     documentRef,
     "p",
-    codex.activity_scope === "process"
-      ? "Activity is process-scoped; no durable transcript is exposed."
-      : "No durable transcript is exposed; bounded activity may be unavailable.",
+    codex.activity_scope === "lifecycle"
+      ? "Durable operation summaries only; provider conversation events and transcripts are unavailable."
+      : codex.activity_scope === "process"
+        ? "Activity is process-scoped; no durable transcript is exposed."
+        : "No durable transcript is exposed; bounded activity may be unavailable.",
     "audit-boundary",
   ));
   const activity = documentRef.createElement("ul");
   for (const event of codex.activity) {
     const evidence = event.evidence_ids.length ? ` [${event.evidence_ids.join(", ")}]` : "";
-    activity.appendChild(text(documentRef, "li", `${event.message}${evidence}`));
+    const metadata = [event.timestamp, event.operation_id].filter(Boolean).join(" · ");
+    activity.appendChild(text(
+      documentRef,
+      "li",
+      `${event.message}${metadata ? ` (${metadata})` : ""}${evidence}`,
+    ));
   }
   if (codex.activity.length) body.appendChild(activity);
   else body.appendChild(text(documentRef, "p", "No bounded activity is available."));

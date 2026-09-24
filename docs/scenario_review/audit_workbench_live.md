@@ -167,7 +167,11 @@ media availability or full BA-06 acceptance.
 
 The native trace had no retained video or synchronized metrics, and the tracked
 summary-only fixture cannot supply them; the workbench does not recreate
-missing media from summary data. Embedded Codex activity, browser-side visual
+missing media from summary data. The local Codex panel can show bounded
+operation-lifecycle summaries from authenticated durable records (admission,
+terminal status, operation ID, and timestamp). These are not provider
+conversation events or a transcript, and fixture restart/replay tests do not
+prove a live Codex turn. Provider conversation events, browser-side visual
 inspection, and complete recovery proof remain unvalidated for the full epic.
 
 ## Server-held GitHub publication (BA-06 bounded slice)

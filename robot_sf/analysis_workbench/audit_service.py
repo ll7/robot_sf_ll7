@@ -925,9 +925,9 @@ class CodexActivitySnapshot:
 
     ``session`` is the validated durable :class:`CodexSessionSnapshot` when
     one exists.  The public ``to_dict`` projection deliberately omits its
-    provider-session and source-reference internals.  Activity events are not
-    persisted by the current authority schema, so a fresh process returns an
-    explicit unavailable scope instead of fabricating history.
+    provider-session and source-reference internals.  Activity events are
+    fixed lifecycle summaries derived from durable operation snapshots;
+    provider conversation messages and transcripts remain unavailable.
     """
 
     session: CodexSessionSnapshot | None
@@ -8558,6 +8558,72 @@ class AuditService:
             finished_at=operation.finished_at,
         )
 
+    @staticmethod
+    def _codex_activity_events(
+        operations: Sequence[CodexOperationSnapshot], *, limit: int
+    ) -> tuple[Mapping[str, str], ...]:
+        """Build a bounded timeline from durable operation lifecycle fields only."""
+
+        action_names = {
+            "start": "start",
+            "resume": "resume",
+            "reconnect": "reconnect",
+            "cancel": "cancellation",
+        }
+        event_rows: list[tuple[str, int, Mapping[str, str]]] = []
+        sequence = 0
+        for operation in sorted(operations, key=lambda item: (item.created_at, item.operation_id)):
+            action = action_names.get(operation.action, "operation")
+            if operation.status == "inflight":
+                event_rows.append(
+                    (
+                        operation.created_at,
+                        sequence,
+                        {
+                            "message": (
+                                f"Codex {action} operation was admitted; its provider outcome "
+                                "remains unresolved."
+                            ),
+                            "operation_id": operation.operation_id,
+                            "timestamp": operation.created_at,
+                        },
+                    )
+                )
+                sequence += 1
+                continue
+
+            event_rows.append(
+                (
+                    operation.created_at,
+                    sequence,
+                    {
+                        "message": f"Codex {action} operation was admitted.",
+                        "operation_id": operation.operation_id,
+                        "timestamp": operation.created_at,
+                    },
+                )
+            )
+            sequence += 1
+            if operation.finished_at:
+                event_rows.append(
+                    (
+                        operation.finished_at,
+                        sequence,
+                        {
+                            "message": (
+                                f"Codex {action} operation finished with status "
+                                f"{operation.result_status}."
+                            ),
+                            "operation_id": operation.operation_id,
+                            "timestamp": operation.finished_at,
+                        },
+                    )
+                )
+                sequence += 1
+
+        event_rows.sort(key=lambda row: (row[0], row[1]))
+        return tuple(row[2] for row in event_rows[-limit:])
+
     def _codex_activity_session(
         self,
         raw: Any,
@@ -8618,6 +8684,101 @@ class AuditService:
                 raise AuditContextConflict("Codex operation route binding changed")
         return operation, session
 
+    @staticmethod
+    def _codex_activity_history_selector(
+        session: CodexSessionSnapshot | None,
+        operation: CodexOperationSnapshot | None,
+    ) -> tuple[str | None, str | None]:
+        """Select one durable session history or a single pre-session operation."""
+
+        session_id = None
+        if session is not None:
+            session_id = session.codex_session_id
+        elif operation is not None:
+            session_id = operation.codex_session_id
+        operation_id = None
+        if session_id is None and operation is not None:
+            operation_id = operation.operation_id
+        return session_id, operation_id
+
+    @staticmethod
+    def _codex_activity_history_candidates(
+        operations: Mapping[str, Any],
+        *,
+        target: AuditSession,
+        context: AuditSelectionContext,
+        codex_session_id: str | None,
+        operation_id: str | None,
+    ) -> list[Mapping[str, Any]]:
+        """Select recent operations bound to the exact current source and context."""
+
+        binding = (
+            target.session_id,
+            context.context_revision,
+            target.source_revision,
+            target.source_digest,
+        )
+        candidates: list[Mapping[str, Any]] = []
+        for raw in operations.values():
+            if not isinstance(raw, Mapping):
+                continue
+            raw_binding = (
+                raw.get("audit_session_id"),
+                raw.get("context_revision"),
+                raw.get("source_revision"),
+                raw.get("source_digest"),
+            )
+            if raw_binding != binding:
+                continue
+            if codex_session_id is not None:
+                if raw.get("codex_session_id") != codex_session_id:
+                    continue
+            elif raw.get("operation_id") != operation_id:
+                continue
+            candidates.append(raw)
+        candidates.sort(
+            key=lambda raw: (str(raw.get("created_at", "")), str(raw.get("operation_id", ""))),
+            reverse=True,
+        )
+        return candidates
+
+    def _codex_activity_history_events(
+        self,
+        operations: Mapping[str, Any],
+        *,
+        target: AuditSession,
+        context: AuditSelectionContext,
+        policy_digest: str,
+        sessions: Mapping[str, Any],
+        codex_session_id: str | None,
+        operation_id: str | None,
+        limit: int,
+    ) -> tuple[Mapping[str, str], ...]:
+        """Validate recent same-context operations before projecting their lifecycle."""
+
+        candidates = self._codex_activity_history_candidates(
+            operations,
+            target=target,
+            context=context,
+            codex_session_id=codex_session_id,
+            operation_id=operation_id,
+        )
+        validated: list[CodexOperationSnapshot] = []
+        for raw in candidates[:limit]:
+            operation, session = self._codex_activity_operation(
+                raw,
+                target=target,
+                context=context,
+                policy_digest=policy_digest,
+                sessions=sessions,
+            )
+            if codex_session_id is not None and (
+                session is None or session.codex_session_id != codex_session_id
+            ):
+                continue
+            validated.append(operation)
+        return self._codex_activity_events(validated, limit=limit)
+
     def read_codex_activity(  # noqa: C901
         self,
         audit_session: AuditSession | str,
@@ -8627,15 +8788,16 @@ class AuditService:
         context: AuditSelectionContext | Mapping[str, Any] | None = None,
         audit_token: str | None = None,
         token: str | None = None,
+        limit: int = 24,
     ) -> CodexActivitySnapshot:
         """Read source-bound Codex status without exposing authority internals.
 
         The caller must authenticate the owning audit session.  A supplied
         Codex session or operation ID is filtered to that audit session and
         revalidated against its current source and exact selection context.
-        The authority persists status, usage, route, and evidence references,
-        but not the client event stream; reads therefore report events as
-        unavailable unless a future schema adds a bounded durable event index.
+        The authority persists operation lifecycle state, but not provider
+        conversation events. The response derives bounded lifecycle summaries
+        from those snapshots and never fabricates a transcript.
         ``token`` is accepted as the service-wide spelling used by ordinary
         reads; ``audit_token`` remains the Codex lifecycle spelling.
         """
@@ -8662,6 +8824,9 @@ class AuditService:
             (requested_session_id, requested_operation_id), target.session_token
         ):
             raise AuditPolicyError("Codex activity selector contains a sensitive value")
+        history_limit = _nonnegative_int(limit, name="limit")
+        if not 1 <= history_limit <= 64:
+            raise AuditValidationError("Codex activity limit must be between 1 and 64")
 
         state = self.authority.snapshot()
         extension = self._codex_extension(state)
@@ -8761,6 +8926,19 @@ class AuditService:
             if operation_snapshot is not None
             else None
         )
+        history_session_id, history_operation_id = self._codex_activity_history_selector(
+            session_snapshot, operation_snapshot
+        )
+        events = self._codex_activity_history_events(
+            operations,
+            target=target,
+            context=selected,
+            policy_digest=policy_digest,
+            sessions=sessions,
+            codex_session_id=history_session_id,
+            operation_id=history_operation_id,
+            limit=history_limit,
+        )
         status = (
             projected_operation.result_status or projected_operation.status
             if projected_operation is not None
@@ -8776,6 +8954,12 @@ class AuditService:
             status=status,
             reason=reason,
             evidence=evidence,
+            events=events,
+            activity_scope="lifecycle",
+            events_reason=(
+                "Only durable Codex operation lifecycle summaries are shown; "
+                "provider conversation events are not persisted."
+            ),
         )
 
     @staticmethod

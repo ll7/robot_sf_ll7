@@ -17,6 +17,15 @@ import tarfile
 from pathlib import Path
 from typing import Any
 
+SCIENTIFIC_MANIFEST_FIELDS = (
+    "matrix",
+    "scenario",
+    "seed_policy",
+    "planners",
+    "kinematics",
+    "metrics",
+)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -115,6 +124,57 @@ def _read_candidate(root: Path, expected_source: str) -> dict[tuple[str, str, in
     return rows
 
 
+def _read_archive_manifest(archive: Path, expected_source: str) -> dict[str, Any]:
+    with tarfile.open(archive, "r:gz") as handle:
+        members = [
+            member
+            for member in handle.getmembers()
+            if member.isfile()
+            and member.name.endswith("/payload/release/release_manifest.resolved.json")
+        ]
+        if len(members) != 1:
+            raise ValueError("archive must contain exactly one resolved release manifest")
+        stream = handle.extractfile(members[0])
+        if stream is None:
+            raise ValueError("cannot read archive release manifest")
+        payload = json.load(stream)
+    return _validate_manifest(payload, expected_source)
+
+
+def _read_candidate_manifest(root: Path, expected_source: str) -> dict[str, Any]:
+    path = root / "release" / "release_manifest.resolved.json"
+    if not path.is_file():
+        raise ValueError("candidate has no resolved release manifest")
+    return _validate_manifest(json.loads(path.read_text(encoding="utf-8")), expected_source)
+
+
+def _validate_manifest(payload: Any, expected_source: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("resolved release manifest must be an object")
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, dict) or provenance.get("source_sha") != expected_source:
+        raise ValueError("resolved release manifest source mismatch")
+    for field in SCIENTIFIC_MANIFEST_FIELDS:
+        if not isinstance(payload.get(field), dict):
+            raise ValueError(f"resolved release manifest has no {field} object")
+    return payload
+
+
+def scientific_manifest_differences(
+    baseline: dict[str, Any], candidate: dict[str, Any]
+) -> list[str]:
+    """Compare the frozen matrix, roster, seeds, and legacy metric assets.
+
+    Additional v2 metric declarations are allowed; predecessor declarations may
+    not disappear or change. The separate release identity gate checks each
+    campaign config checksum, which necessarily changes when v2 keys are added.
+    """
+    result: list[str] = []
+    for field in SCIENTIFIC_MANIFEST_FIELDS:
+        result.extend(_differences(baseline[field], candidate[field], field, tolerance=0))
+    return sorted(result)
+
+
 def _numbers_equal(old: int | float, new: int | float, *, tolerance: float) -> bool:
     """Compare finite numbers by tolerance and legacy unavailable sentinels by class."""
     if math.isnan(old) or math.isnan(new):
@@ -194,17 +254,23 @@ def main() -> int:
         raise ValueError("baseline archive SHA-256 mismatch")
     baseline = _read_archive(args.baseline_archive, args.baseline_source_sha)
     candidate = _read_candidate(args.candidate_root, args.candidate_source_sha)
+    baseline_manifest = _read_archive_manifest(args.baseline_archive, args.baseline_source_sha)
+    candidate_manifest = _read_candidate_manifest(args.candidate_root, args.candidate_source_sha)
     report = compare(baseline, candidate)
+    manifest_differences = scientific_manifest_differences(baseline_manifest, candidate_manifest)
     report.update(
         {
             "baseline_archive_sha256": args.baseline_sha256,
             "baseline_source_sha": args.baseline_source_sha,
             "candidate_source_sha": args.candidate_source_sha,
             "expected_rows": args.expected_rows,
+            "scientific_manifest_differences": manifest_differences,
         }
     )
     if len(baseline) != args.expected_rows or len(candidate) != args.expected_rows:
         report["status"] = "identity_count_mismatch"
+    if manifest_differences:
+        report["status"] = "scientific_manifest_mismatch"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(

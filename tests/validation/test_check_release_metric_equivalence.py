@@ -14,13 +14,28 @@ if TYPE_CHECKING:
 
 from scripts.validation.check_release_metric_equivalence import (
     _read_archive,
+    _read_archive_manifest,
     _read_candidate,
+    _read_candidate_manifest,
     compare,
+    scientific_manifest_differences,
 )
 
 OLD_SHA = "a" * 40
 NEW_SHA = "b" * 40
 KEY = ("goal", "doorway", 111)
+
+
+def _manifest(source: str) -> dict[str, object]:
+    return {
+        "provenance": {"source_sha": source},
+        "matrix": {"expected_episode_cells": 1, "horizon_steps": 600},
+        "scenario": {"matrix_sha256": "scenario-sha"},
+        "seed_policy": {"resolved_seeds": [111]},
+        "planners": {"config_identities": [{"key": "goal", "sha256": None}]},
+        "kinematics": {"matrix": ["differential_drive"]},
+        "metrics": {"snqi_weights_sha256": "v1-sha"},
+    }
 
 
 def _row(source: str, *, metric: float = 0.25) -> dict[str, object]:
@@ -41,14 +56,21 @@ def _write_archive(path: Path, rows: list[dict[str, object]]) -> None:
     data = "".join(json.dumps(row) + "\n" for row in rows).encode()
     info = tarfile.TarInfo("bundle/payload/runs/goal__differential_drive/episodes.jsonl")
     info.size = len(data)
+    manifest_data = json.dumps(_manifest(OLD_SHA)).encode()
+    manifest_info = tarfile.TarInfo("bundle/payload/release/release_manifest.resolved.json")
+    manifest_info.size = len(manifest_data)
     with tarfile.open(path, "w:gz") as handle:
         handle.addfile(info, BytesIO(data))
+        handle.addfile(manifest_info, BytesIO(manifest_data))
 
 
 def _write_candidate(root: Path, rows: list[dict[str, object]]) -> None:
     path = root / "runs/goal__differential_drive/episodes.jsonl"
     path.parent.mkdir(parents=True)
     path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    manifest_path = root / "release/release_manifest.resolved.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps(_manifest(NEW_SHA)), encoding="utf-8")
 
 
 def test_added_metric_preserves_every_old_field(tmp_path: Path) -> None:
@@ -106,3 +128,27 @@ def test_archive_source_or_duplicate_identity_fails_closed(tmp_path: Path) -> No
         _read_archive(archive, OLD_SHA)
     with pytest.raises(ValueError, match="archive source mismatch"):
         _read_archive(archive, NEW_SHA)
+
+
+def test_frozen_manifest_contract_allows_new_v2_assets_but_rejects_roster_change(
+    tmp_path: Path,
+) -> None:
+    archive = tmp_path / "baseline.tar.gz"
+    _write_archive(archive, [_row(OLD_SHA)])
+    candidate_root = tmp_path / "candidate"
+    _write_candidate(candidate_root, [_row(NEW_SHA)])
+    baseline = _read_archive_manifest(archive, OLD_SHA)
+    candidate = _read_candidate_manifest(candidate_root, NEW_SHA)
+    candidate["metrics"]["snqi_v2_spec_sha256"] = "v2-sha"
+    assert scientific_manifest_differences(baseline, candidate) == []
+    candidate["planners"]["config_identities"][0]["key"] = "orca"
+    assert scientific_manifest_differences(baseline, candidate) == [
+        "planners.config_identities[0].key"
+    ]
+
+
+def test_resolved_manifest_source_must_match_episode_source(tmp_path: Path) -> None:
+    archive = tmp_path / "baseline.tar.gz"
+    _write_archive(archive, [_row(OLD_SHA)])
+    with pytest.raises(ValueError, match="manifest source mismatch"):
+        _read_archive_manifest(archive, NEW_SHA)

@@ -417,6 +417,15 @@ validation. Rows without those steps are marked `unavailable`; the bridge's `sim
 resimulation fallback is skipped because it would run a new simulation and would not reproduce the
 recorded planner. A replay visualization is not itself new benchmark evidence.
 
+Before invoking the bridge's episode-ID lookup, the showcase rechecks the selected source file
+digest, the selected JSONL line digest and content, and whether exactly one parsed row has the same
+episode ID. The existing renderer resolves the first matching ID, so any duplicate ID is reported
+as `mismatch` and the renderer is skipped; its sidecar's episode, scenario, seed, and whole-file
+digest alone cannot identify the selected row. Missing or changed row provenance also fails closed
+before rendering. `verified` therefore binds the visualization to the selected persisted record
+plus the renderer sidecar and artifact checks; it remains replay provenance, not new benchmark or
+safety evidence.
+
 The Release 0.0.2 records currently have no recorded `replay_steps`, so the showcase can identify and
 link critical source rows but cannot materialize a verified trajectory from this bundle. Findings
 from the existing analyzer remain visible and should be considered before interpreting the summary.

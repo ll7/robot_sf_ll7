@@ -41,6 +41,7 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
     )
     from robot_sf.scenario_certification.v1 import (
         CERT_SCHEMA_VERSION,
+        UNKNOWN,
         CertificationSettings,
         ScenarioCertificate,
         certificate_to_dict,
@@ -77,6 +78,7 @@ _LAZY: dict[str, str] = {
     "CERT_SCHEMA_VERSION": "v1",
     "CertificationSettings": "v1",
     "ScenarioCertificate": "v1",
+    "UNKNOWN": "v1",
     "certificate_to_dict": "v1",
     "certify_map_definition": "v1",
     "certify_scenario": "v1",
@@ -89,6 +91,7 @@ __all__ = [
     "PERTURBATION_MANIFEST_SCHEMA_VERSION",
     "PILOT_MATRIX_SCHEMA_VERSION",
     "PREFLIGHT_SCHEMA_VERSION",
+    "UNKNOWN",
     "CertificationSettings",
     "CriticalitySummaryV1",
     "PerturbationFamily",

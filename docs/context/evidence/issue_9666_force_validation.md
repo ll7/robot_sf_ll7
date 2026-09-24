@@ -8,7 +8,7 @@ Job 15754 produced 384 unique episodes: four planners × 48 scenarios × seeds 1
 
 The force is a simulated acceleration before speed capping, not measured human discomfort. The peak closely tracks sign-flipped minimum distance (Spearman ρ = 0.976526, n = 376), whereas integrated force additionally depends on interaction duration and pedestrian count. The actual kernel reference is approximately 3.7030154332523164 m/s², not the issue’s approximate 2.6: the SocialForce lateral component contributes at zero bearing.
 
-Real force impulse versus near misses: ρ = 0.8169379191861208 (n = 384). Pedestrian-equivalent impulse versus near misses: ρ = 0.7374736892291968 (n = 380). The #9667 switch uses normalized `N = near_misses / executed steps` on a separate 1,344-row calibration split. Here, diagnostic impulse versus N gives ρ = 0.7553665091251708 (n = 384), and pedestrian-equivalent impulse versus N gives ρ = 0.7239784500448517 (n = 380). This 384-row diagnostic does not select the calibration variant; none of these coefficients is a causal finding. No uncertainty interval is estimated; scenarios and seeds are correlated, so the descriptive coefficients should not be generalized beyond this slice.
+Real force impulse versus near misses: ρ = 0.8169379191861208 (n = 384). Pedestrian-equivalent impulse versus near misses: ρ = 0.7374736892291968 (n = 380). The #9667 switch uses `N = clip((near_misses / executed steps) / 0.25, 0, 1)` on a separate 1,344-row calibration split. Here, diagnostic impulse versus the **raw near-miss fraction** (before division by 0.25 and clipping) gives ρ = 0.7553665091251708 (n = 384), and pedestrian-equivalent impulse versus the raw fraction gives ρ = 0.7239784500448517 (n = 380). This 384-row diagnostic does not select the calibration variant; none of these coefficients is a causal finding. No uncertainty interval is estimated; scenarios and seeds are correlated, so the descriptive coefficients should not be generalized beyond this slice.
 
 ## Reproducibility and custody
 
@@ -79,7 +79,7 @@ Distance is sign-flipped so larger values mean more exposure. Pairwise finite co
 
 ## Planner and scenario-family redundancy
 
-The full JSON contains all six force reductions × four comparators (including normalized near misses) for every cohort. This table shows the near-miss decision quantities. Family is the recorded `scenario_params.metadata.archetype` (35 distinct families), not an inferred name grouping. The hybrid’s serialized algorithm name is `hybrid_rule_local_planner`; its configured arm is `hybrid_rule_v3_fast_progress_static_escape`.
+The full JSON contains all six force reductions × four comparators (including the raw near-miss fraction) for every cohort. This table shows diagnostic correlations with raw near-miss counts. Family is the recorded `scenario_params.metadata.archetype` (35 distinct families), not an inferred name grouping. The hybrid’s serialized algorithm name is `hybrid_rule_local_planner`; its configured arm is `hybrid_rule_v3_fast_progress_static_escape`.
 
 | Cohort | Real impulse ρ (n) | Pedestrian-equivalent impulse ρ (n) |
 |---|---:|---:|

@@ -1463,3 +1463,243 @@ def test_nested_output_parents_are_created(tmp_path: Path) -> None:
     result = run(request, base=tmp_path)
     assert result.status == "complete"
     assert (tmp_path / "nested" / "deep" / "out" / "edit.mp4").is_file()
+
+
+def test_require_imageio_uses_canonical_guard_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing imageio backend raises ImportError through the canonical guard."""
+
+    monkeypatch.setattr("robot_sf.common.optional_import.try_import", lambda name: None)
+    with pytest.raises(ImportError, match="review encode requires imageio"):
+        review_encode._require_imageio()
+
+
+def test_decode_clip_reports_missing_backend_without_import_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing decoder backend fails closed instead of leaking ModuleNotFoundError."""
+
+    monkeypatch.setattr("robot_sf.common.optional_import.try_import", lambda name: None)
+    with pytest.raises(review_encode._SourceLoadError, match="missing_decoder_backend"):
+        review_encode._decode_clip_frames(tmp_path / "clip.mp4")
+
+
+def test_load_request_rejects_deeply_nested_json(tmp_path: Path) -> None:
+    """Adversarial nesting fails with a stable error, never RecursionError."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    payload_path = tmp_path / "request.json"
+    nested: object = {}
+    for _ in range(200):
+        nested = [nested]
+    payload_path.write_text(json.dumps({"request": nested}), encoding="utf-8")
+    with pytest.raises(ReviewContractsValidationError, match="request_nesting_too_deep"):
+        review_encode._load_request(payload_path)
+
+
+def test_load_request_normalizes_oversized_integer_token(tmp_path: Path) -> None:
+    """An integer beyond the JSON decoder digit limit becomes a contract error."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    payload_path = tmp_path / "request.json"
+    payload_path.write_text('{"value": ' + "9" * 5000 + "}", encoding="utf-8")
+    with pytest.raises(ReviewContractsValidationError, match="cannot read request: ValueError"):
+        review_encode._load_request(payload_path)
+
+
+def test_load_request_enforces_byte_limit_during_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Request reads stop at the configured byte limit plus one detection byte."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    payload_path = tmp_path / "request.json"
+    payload_path.write_text('{"value": 123456789}', encoding="utf-8")
+    monkeypatch.setattr(review_encode, "MAX_REQUEST_BYTES", 8)
+    with pytest.raises(ReviewContractsValidationError, match="request exceeds 8 bytes"):
+        review_encode._load_request(payload_path)
+
+
+def test_load_config_rejects_deeply_nested_json(tmp_path: Path) -> None:
+    """Adversarial config nesting fails with a stable error."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    config_path = tmp_path / "config.json"
+    nested: object = {}
+    for _ in range(200):
+        nested = {"level": nested}
+    config_path.write_text(json.dumps(nested), encoding="utf-8")
+    with pytest.raises(ReviewContractsValidationError, match="config_nesting_too_deep"):
+        review_encode._load_config(config_path)
+
+
+def test_load_config_normalizes_oversized_integer_token(tmp_path: Path) -> None:
+    """An oversized config integer becomes a stable validation error."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text('{"value": ' + "9" * 5000 + "}", encoding="utf-8")
+    with pytest.raises(ReviewContractsValidationError, match="cannot read config: ValueError"):
+        review_encode._load_config(config_path)
+
+
+def test_load_config_enforces_byte_limit_during_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Config reads stop at the configured byte limit plus one detection byte."""
+
+    from robot_sf.analysis_workbench.review_contracts import (
+        ReviewContractsValidationError,
+    )
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text('{"value": 123456789}', encoding="utf-8")
+    monkeypatch.setattr(review_encode, "MAX_CONFIG_BYTES", 8)
+    with pytest.raises(ReviewContractsValidationError, match="config exceeds 8 bytes"):
+        review_encode._load_config(config_path)
+
+
+def test_read_json_rejects_oversized_manifest(tmp_path: Path) -> None:
+    """A manifest beyond the byte bound fails before parsing."""
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(b'{"frames": [' + b"0," * 1024 + b"0]}")
+    with pytest.raises(review_encode._SourceLoadError, match="source_exceeds"):
+        review_encode._read_json(manifest_path, max_bytes=64)
+
+
+def test_read_json_normalizes_oversized_integer_token(tmp_path: Path) -> None:
+    """An oversized manifest integer becomes a stable source error."""
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text('{"value": ' + "9" * 5000 + "}", encoding="utf-8")
+    with pytest.raises(review_encode._SourceLoadError, match="source_unreadable"):
+        review_encode._read_json(manifest_path, max_bytes=review_encode.MAX_MANIFEST_BYTES)
+
+
+def test_manifest_byte_limit_is_applied_before_snapshot_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An oversized manifest is rejected before copying or hashing its bytes."""
+
+    from types import SimpleNamespace
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(b"x" * 17)
+    monkeypatch.setattr(review_encode, "MAX_MANIFEST_BYTES", 16)
+
+    def fail_if_copied(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("oversized manifest reached snapshot copying")
+
+    monkeypatch.setattr(review_encode, "_copy_to_snapshot", fail_if_copied)
+    source_ref = SimpleNamespace(uri="manifest.json", sha256="0" * 64, artifact_id="manifest")
+    with pytest.raises(review_encode._SourceLoadError, match="source_bytes>16"):
+        review_encode._load_manifest_source(source_ref, tmp_path)
+
+
+def test_run_honors_cancellation_before_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancellation stops before the source-preparation path is entered."""
+
+    def fail_if_prepared(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("cancelled request reached source preparation")
+
+    monkeypatch.setattr(review_encode, "_prepare", fail_if_prepared)
+
+    result = run(_request(tmp_path), base=tmp_path, cancelled=lambda: True)
+    assert result.status == review_encode.STATUS_CANCELLED
+    assert (
+        component_result_from_dict(result_payload(result)).status == review_encode.STATUS_CANCELLED
+    )
+    assert "cancelled_before_read" in result.reason
+
+
+def test_run_checks_cancellation_after_encoder_probe_before_source_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancellation arriving during backend probing prevents source loading."""
+
+    monkeypatch.setattr(review_encode, "_encoder_probe", lambda: (object(), None))
+
+    def fail_if_source_loaded(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("cancelled request reached source loading")
+
+    monkeypatch.setattr(review_encode, "_prepare_source", fail_if_source_loaded)
+    cancellation_checks = 0
+
+    def cancel_during_probe() -> bool:
+        nonlocal cancellation_checks
+        cancellation_checks += 1
+        return cancellation_checks == 2
+
+    result = run(_request(tmp_path), base=tmp_path, cancelled=cancel_during_probe)
+
+    assert result.status == review_encode.STATUS_CANCELLED
+    assert "cancelled_before_read" in result.reason
+    assert cancellation_checks == 2
+
+
+def test_run_honors_cancellation_before_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cancellation after planning prevents output publication."""
+
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(review_encode, "_prepare", lambda *_args, **_kwargs: (object(), None))
+    monkeypatch.setattr(
+        review_encode,
+        "_plan_order",
+        lambda _prepared: (SimpleNamespace(diagnostics=()), None),
+    )
+
+    def fail_if_published(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("cancelled request reached output publication")
+
+    monkeypatch.setattr(review_encode, "_publish_outputs", fail_if_published)
+    cancellation_checks = 0
+
+    def cancel_before_publish() -> bool:
+        nonlocal cancellation_checks
+        cancellation_checks += 1
+        return cancellation_checks == 2
+
+    result = run(_request(tmp_path), base=tmp_path, cancelled=cancel_before_publish)
+
+    assert result.status == review_encode.STATUS_CANCELLED
+    assert "cancelled_before_publish" in result.reason
+    assert cancellation_checks == 2
+
+
+def test_cancellation_callback_error_propagates_before_read(tmp_path: Path) -> None:
+    """A broken cancellation probe cannot silently allow source work to proceed."""
+
+    def broken_probe() -> bool:
+        raise RuntimeError("probe failed")
+
+    with pytest.raises(RuntimeError, match="probe failed"):
+        run(_request(tmp_path), base=tmp_path, cancelled=broken_probe)
+
+
+def test_run_without_cancellation_hook_is_unchanged(tmp_path: Path) -> None:
+    """The default run path still reaches backend probing without a hook."""
+
+    result = run(_request(tmp_path), base=tmp_path)
+    assert "cancelled" not in result.reason

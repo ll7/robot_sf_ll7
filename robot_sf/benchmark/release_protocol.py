@@ -446,6 +446,12 @@ class BenchmarkReleaseManifest:
     doi: str
     citation_path: Path
     release_checklist_path: Path
+    snqi_v2_weights_path: Path | None = None
+    snqi_v2_weights_sha256: str | None = None
+    snqi_v2_anchors_path: Path | None = None
+    snqi_v2_anchors_sha256: str | None = None
+    snqi_v2_family_path: Path | None = None
+    snqi_v2_family_sha256: str | None = None
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
     expected_horizon_steps: int | None = None
@@ -661,12 +667,32 @@ def _load_manifest_metrics_section(
         raise ValueError("metrics.snqi_weights_sha256 must be set when snqi_weights_path is set")
     if snqi_baseline_path is not None and not snqi_baseline_sha256:
         raise ValueError("metrics.snqi_baseline_sha256 must be set when snqi_baseline_path is set")
-    return {
+    result: dict[str, Path | str | None] = {
         "snqi_weights_path": snqi_weights_path,
         "snqi_weights_sha256": snqi_weights_sha256,
         "snqi_baseline_path": snqi_baseline_path,
         "snqi_baseline_sha256": snqi_baseline_sha256,
     }
+    v2_keys = tuple(
+        f"snqi_v2_{role}_{field}"
+        for role in ("weights", "anchors", "family")
+        for field in ("path", "sha256")
+    )
+    if any(metrics.get(key) is not None for key in v2_keys):
+        for role in ("weights", "anchors", "family"):
+            path_key = f"snqi_v2_{role}_path"
+            hash_key = f"snqi_v2_{role}_sha256"
+            result[path_key] = _resolve_required_file(
+                manifest_path,
+                metrics.get(path_key),
+                f"metrics.{path_key}",
+                repository_root=repository_root,
+            )
+            digest = metrics.get(hash_key)
+            if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+                raise ValueError(f"metrics.{hash_key} must be a lowercase SHA-256 digest")
+            result[hash_key] = digest
+    return result
 
 
 def _load_manifest_planner_section(
@@ -1494,6 +1520,12 @@ def load_release_manifest(
         snqi_weights_sha256=metrics["snqi_weights_sha256"],
         snqi_baseline_path=metrics["snqi_baseline_path"],
         snqi_baseline_sha256=metrics["snqi_baseline_sha256"],
+        snqi_v2_weights_path=metrics.get("snqi_v2_weights_path"),
+        snqi_v2_weights_sha256=metrics.get("snqi_v2_weights_sha256"),
+        snqi_v2_anchors_path=metrics.get("snqi_v2_anchors_path"),
+        snqi_v2_anchors_sha256=metrics.get("snqi_v2_anchors_sha256"),
+        snqi_v2_family_path=metrics.get("snqi_v2_family_path"),
+        snqi_v2_family_sha256=metrics.get("snqi_v2_family_sha256"),
         planner_keys=planner_keys,
         planner_groups=planner_groups,
         required_artifact_paths=required_artifact_paths,
@@ -1859,6 +1891,24 @@ def _validate_release_hashes_and_assets(
         digest_problem="metrics.snqi_baseline_sha256 does not match snqi_baseline_path",
         problems=problems,
     )
+    v2_spec = getattr(cfg, "snqi_v2_spec", None)
+    for role in ("weights", "anchors", "family"):
+        path = getattr(manifest, f"snqi_v2_{role}_path")
+        digest = getattr(manifest, f"snqi_v2_{role}_sha256")
+        config_path = v2_spec.paths[role] if v2_spec is not None else None
+        config_digest = v2_spec.hashes[role] if v2_spec is not None else None
+        if path is None:
+            if config_path is not None:
+                problems.append(
+                    f"metrics.snqi_v2_{role}_path presence does not match campaign config"
+                )
+            continue
+        if config_path is None or path.resolve() != Path(config_path).resolve():
+            problems.append(f"metrics.snqi_v2_{role}_path does not match campaign config")
+        if digest != config_digest:
+            problems.append(f"metrics.snqi_v2_{role}_sha256 does not match campaign config")
+        if _sha256_file(path) != digest:
+            problems.append(f"metrics.snqi_v2_{role}_sha256 does not match asset bytes")
 
 
 def _validate_optional_metric_asset(
@@ -2506,6 +2556,13 @@ def build_resolved_release_manifest(
         },
         "release_kind": manifest.release_kind,
     }
+    if manifest.snqi_v2_weights_path is not None:
+        for role in ("weights", "anchors", "family"):
+            path = getattr(manifest, f"snqi_v2_{role}_path")
+            payload["metrics"][f"snqi_v2_{role}_path"] = _repo_relative(path)
+            payload["metrics"][f"snqi_v2_{role}_sha256"] = getattr(
+                manifest, f"snqi_v2_{role}_sha256"
+            )
     source_sha = _resolve_release_source_sha(manifest, source_commit)
     if source_sha is not None:
         # Keep the final source identity at the resolved-manifest root as well
@@ -2740,7 +2797,13 @@ def _materialize_release_template_payload(  # noqa: PLR0913
     path_fields = {
         "scenario": ("matrix_path", "suite_policy_path", "route_certification_path"),
         "seed_policy": ("seed_sets_path",),
-        "metrics": ("snqi_weights_path", "snqi_baseline_path"),
+        "metrics": (
+            "snqi_weights_path",
+            "snqi_baseline_path",
+            "snqi_v2_weights_path",
+            "snqi_v2_anchors_path",
+            "snqi_v2_family_path",
+        ),
     }
     for section_name, fields in path_fields.items():
         raw_section = template_payload.get(section_name)
@@ -2886,6 +2949,9 @@ def _build_resolved_release_identity(
         (cfg.seed_policy.seed_sets_path, "seed sets"),
         (manifest.snqi_weights_path, "SNQI weights"),
         (manifest.snqi_baseline_path, "SNQI baseline"),
+        (manifest.snqi_v2_weights_path, "SNQI v2 weights"),
+        (manifest.snqi_v2_anchors_path, "SNQI v2 anchors"),
+        (manifest.snqi_v2_family_path, "SNQI v2 family"),
         (manifest.citation_path, "citation"),
         (manifest.release_checklist_path, "release checklist"),
     )

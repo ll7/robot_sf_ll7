@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -43,6 +45,61 @@ def test_smoke_release_manifest_validates_against_campaign_config() -> None:
     assert resolved["benchmark_protocol_version"] == BENCHMARK_PROTOCOL_VERSION
     assert resolved["canonical_campaign_name"] == "paper_experiment_matrix_v1_release_smoke"
     assert resolved["planners"]["keys"][0] == "prediction_planner"
+    assert not any(key.startswith("snqi_v2_") for key in resolved["metrics"])
+
+
+def test_snqi_v2_manifest_assets_are_complete_and_hash_bound(tmp_path: Path) -> None:
+    """A v2 release binds all three declared source files to the campaign config."""
+    source = load_release_manifest(
+        Path("configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml")
+    )
+    cfg = release_protocol.load_campaign_config(source.canonical_campaign_config_path)
+    asset = source.snqi_weights_path
+    assert asset is not None
+    digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+    metrics = {
+        f"snqi_v2_{role}_{field}": str(asset) if field == "path" else digest
+        for role in ("weights", "anchors", "family")
+        for field in ("path", "sha256")
+    }
+    parsed = release_protocol._load_manifest_metrics_section(source.path, {"metrics": metrics})
+    assert parsed["snqi_v2_family_sha256"] == digest
+    manifest = release_protocol.BenchmarkReleaseManifest(
+        **{
+            **source.__dict__,
+            **{key: asset if key.endswith("_path") else digest for key in metrics},
+        }
+    )
+    spec = SimpleNamespace(
+        paths={role: str(asset) for role in ("weights", "anchors", "family")},
+        hashes=dict.fromkeys(("weights", "anchors", "family"), digest),
+    )
+    bound_cfg = SimpleNamespace(**cfg.__dict__, snqi_v2_spec=spec)
+    report = validate_release_manifest(manifest, campaign_config=bound_cfg)
+    assert report["status"] == "valid", report["problems"]
+    resolved = build_resolved_release_manifest(manifest, campaign_config=bound_cfg)
+    assert resolved["metrics"]["snqi_v2_anchors_sha256"] == digest
+    assert resolved["metrics"]["snqi_v2_family_path"] == release_protocol._repo_relative(asset)
+
+    missing = dict(metrics)
+    missing.pop("snqi_v2_family_sha256")
+    with pytest.raises(ValueError, match="metrics.snqi_v2_family_sha256"):
+        release_protocol._load_manifest_metrics_section(source.path, {"metrics": missing})
+    corrupt = dict(metrics)
+    corrupt["snqi_v2_weights_sha256"] = "0" * 64
+    parsed_corrupt = release_protocol._load_manifest_metrics_section(
+        source.path, {"metrics": corrupt}
+    )
+    assert parsed_corrupt["snqi_v2_weights_sha256"] != digest
+    corrupt_manifest = release_protocol.BenchmarkReleaseManifest(
+        **{**manifest.__dict__, "snqi_v2_weights_sha256": "0" * 64}
+    )
+    corrupt_report = validate_release_manifest(corrupt_manifest, campaign_config=bound_cfg)
+    assert "metrics.snqi_v2_weights_sha256 does not match asset bytes" in corrupt_report["problems"]
+    unbound_report = validate_release_manifest(manifest, campaign_config=cfg)
+    assert (
+        "metrics.snqi_v2_weights_path does not match campaign config" in unbound_report["problems"]
+    )
 
 
 def test_release_campaign_config_runs_single_worker() -> None:

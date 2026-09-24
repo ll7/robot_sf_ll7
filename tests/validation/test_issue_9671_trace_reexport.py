@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
@@ -45,17 +46,23 @@ def _row(seed: int, status: str, *, trace: bool) -> dict:
         "scenario_id": "classic_doorway_medium",
         "seed": seed,
         "status": status,
+        "steps": 1,
         "git_hash": SOURCE_SHA,
         "scenario_params": params,
         "algorithm_metadata": {
+            "planner_kinematics": {"execution_mode": "native"},
             "simulation_step_trace": {
+                "schema_version": "simulation-step-trace.v1",
+                "dt": 0.1,
                 "steps": [
                     {
+                        "step": 0,
+                        "time_s": 0.1,
                         "robot": {"position": [0.0, 0.0], "velocity": [0.0, 0.0], "heading": 0.0},
                         "pedestrians": [],
                     }
-                ]
-            }
+                ],
+            },
         },
     }
 
@@ -98,12 +105,12 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
                     "git": {"commit": SOURCE_SHA},
                     "config_hash": effective[name],
                     "scenario_matrix": config["scenario_matrix"],
-                    "campaign_id": tmp_path.name,
+                    "campaign_id": checker.CAMPAIGN_ID[name],
                     "scenario_matrix_hash": "test-matrix-hash",
                     "invoked_command": (
                         "python scripts/tools/run_camera_ready_benchmark.py "
-                        f"--config {checker.DIAGNOSTIC_CONFIG[name]} --mode run "
-                        f"--campaign-id {tmp_path.name}"
+                        f"--config {checker.FROZEN_PUBLIC_ROOT / checker.DIAGNOSTIC_CONFIG[name]} "
+                        f"--mode run --campaign-id {checker.CAMPAIGN_ID[name]}"
                     ),
                     "seed_policy": {"resolved_seeds": selected},
                 }
@@ -127,8 +134,8 @@ def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
             "repo_commit": SOURCE_SHA,
             "invocation": (
                 "scripts/tools/run_camera_ready_benchmark.py "
-                f"--config {checker.DIAGNOSTIC_CONFIG['headon_group']} --mode run "
-                f"--campaign-id {tmp_path.name}"
+                f"--config {checker.FROZEN_PUBLIC_ROOT / checker.DIAGNOSTIC_CONFIG['headon_group']} "
+                f"--mode run --campaign-id {checker.CAMPAIGN_ID['headon_group']}"
             ),
         },
         "inputs": {
@@ -149,7 +156,7 @@ def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
             "algo_config": {"path": None, "sha256": None, "artifact_status": "not_provided"},
         },
         "campaign_identity": {
-            "scenario_matrix_hash": "test-matrix-hash",
+            "scenario_matrix_hash": "test-arm-hash",
             "algorithm": "ppo",
         },
         "raw_artifacts": [
@@ -236,6 +243,48 @@ def test_rejects_missing_per_pedestrian_force(tmp_path: Path) -> None:
         _check(archive, traces, tmp_path, [22])
 
 
+@pytest.mark.parametrize(
+    ("metadata_key", "metadata_value"),
+    [
+        ("execution_mode", "fallback"),
+        ("planner_runtime", {"fallback_used": True}),
+    ],
+)
+def test_rejects_fallback_runtime(
+    tmp_path: Path, metadata_key: str, metadata_value: object
+) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    trace["algorithm_metadata"][metadata_key] = metadata_value
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+    with pytest.raises(ValueError, match="inadmissible runtime mode"):
+        _check(archive, traces, tmp_path, [113])
+
+
+@pytest.mark.parametrize("defect", ["short", "noncontiguous"])
+def test_rejects_incomplete_step_trace(tmp_path: Path, defect: str) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    if defect == "short":
+        trace["steps"] = 600
+        trace["truncated"] = True
+        match = "step count does not match episode"
+    else:
+        trace["steps"] = 2
+        second = copy.deepcopy(trace["algorithm_metadata"]["simulation_step_trace"]["steps"][0])
+        second["step"] = 2
+        second["time_s"] = 0.3
+        trace["algorithm_metadata"]["simulation_step_trace"]["steps"].append(second)
+        match = "noncontiguous index/time"
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+    with pytest.raises(ValueError, match=match):
+        _check(archive, traces, tmp_path, [113])
+
+
 def test_rejects_unpaired_scientific_parameter_drift(tmp_path: Path) -> None:
     archive = tmp_path / "release.tar.gz"
     _archive(archive, [_row(113, "collision", trace=False)])
@@ -275,7 +324,7 @@ def test_rejects_unstaged_config_invocation(tmp_path: Path) -> None:
     traces = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
     manifest = json.loads(manifests["headon_group"].read_text())
     manifest["invoked_command"] = manifest["invoked_command"].replace(
-        checker.DIAGNOSTIC_CONFIG["headon_group"],
+        str(checker.FROZEN_PUBLIC_ROOT / checker.DIAGNOSTIC_CONFIG["headon_group"]),
         "configs/benchmarks/issue_9671_trace_headon_group_v007.yaml",
     )
     manifests["headon_group"].write_text(json.dumps(manifest))

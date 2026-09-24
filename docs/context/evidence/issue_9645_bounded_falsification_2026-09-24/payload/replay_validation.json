@@ -1,0 +1,92 @@
+{
+  "current_pilot_success": {
+    "case_id": "issue_9645_pilot/seed_1101/optuna/candidate_0010",
+    "classification": "representative successful evaluation replayed exactly; no counterexample was discovered by the pilot",
+    "metrics": {
+      "distance_to_human_min": 11.11753529396692,
+      "energy": 8.763139606758514,
+      "min_clearance": 9.71753529396692,
+      "near_misses": 0,
+      "path_efficiency": 1.0,
+      "ped_collision_count": 0,
+      "success": true,
+      "time_to_goal_norm": 0.24,
+      "total_collision_count": 0
+    },
+    "replay_seed": 123,
+    "replay_sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b",
+    "replay_status": "success",
+    "replay_steps": 25,
+    "replay_termination": "success",
+    "route_overrides_sha256": "99638cb936aa17f91eb6a7b6b6d1a830d20b356077df74bb41f1aa204e44f5c5",
+    "scenario_sha256": "aa462c23d2f38c42477cdf2ed6fc6e3a797acbd6abbfc2e8044c60ccd48442e4",
+    "source_episode_sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
+    "source_replay_signature_match": true,
+    "source_seed": 123,
+    "source_status": "success",
+    "source_steps": 25,
+    "source_termination": "success"
+  },
+  "historical_issue_1501_case": {
+    "archived_failure_type": "collision",
+    "benchmark_profile": "baseline-safe",
+    "current_replay_metrics": {
+      "agent_collision_count": 0,
+      "distance_to_human_min": 1.3843135971638074,
+      "min_clearance": -0.015686402836192492,
+      "near_misses": 5,
+      "ped_collision_count": 1,
+      "success": false,
+      "total_collision_count": 1,
+      "wall_collisions": 0.0
+    },
+    "current_replay_outcome": {
+      "exact_events": {
+        "collision": true,
+        "goal_reached": false,
+        "invalid_run": false,
+        "timeout": false
+      },
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "status": "collision",
+      "steps": 10,
+      "termination_reason": "collision"
+    },
+    "current_scenario_certification": {
+      "benchmark_eligibility": "eligible",
+      "classification": "hard_but_solvable",
+      "reasons": [
+        "low_static_clearance_margin"
+      ],
+      "schema_version": "scenario_cert.v1"
+    },
+    "dynamic_task_feasibility": "unknown_without_reference_planner_success; scenario_cert.v1 demonstrates only a static route certificate",
+    "historical_case_id": "issue_1501/failure_0002",
+    "limitations": [
+      "Regenerated from the tracked archived candidate payload under current source revision, not from the absent historical raw episode file.",
+      "Two current-code runs match each other; the historical raw metrics were not tracked, so this is not a bitwise comparison to the 2026-05-28 execution."
+    ],
+    "planner": "goal",
+    "planner_execution_mode": "native",
+    "regenerated_with": "robot_sf.adversarial.bundle.write_candidate_inputs",
+    "regeneration_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+    "regression_status": "not yet admitted to versioned counterexample corpus; candidate is available to #9652",
+    "replay_count": 2,
+    "replay_files_sha256": [
+      "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
+      "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592"
+    ],
+    "replay_signature_sha256": "6e34dc5d810fecaea9921934fd6b386e4c21319a3e59d225538fb8b0cb818c00",
+    "replays_identical": true,
+    "scenario_seed": 320,
+    "schema_version": "issue_9645_replay_validation.v1",
+    "source_archive": "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
+    "source_archive_sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393",
+    "source_commit_for_archive": "4bd5fb412d2bf023d26f674833dd379aedf8c17e"
+  },
+  "schema_version": "issue_9645_replay_validation_collection.v1"
+}

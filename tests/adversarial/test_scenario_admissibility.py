@@ -1061,28 +1061,29 @@ def test_certificate_producer_marks_referenced_input_change_unstable(
     assert certificate["evidence"]["effective_input_identity_stable"] is False
 
 
-def test_certificate_producer_brackets_scenario_loader_with_input_identity(
+def test_certificate_producer_rejects_aba_include_replacement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A loader that returns old include bytes cannot bind a later include snapshot."""
+    """An ABA include replacement cannot bind identity to bytes it did not parse."""
     scenario_path = tmp_path / "root.yaml"
     included_path = tmp_path / "included.yaml"
     scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
-    included_path.write_text(
-        "scenarios:\n  - name: case-static\n    marker: loaded-before-snapshot\n    seeds: [19]\n",
-        encoding="utf-8",
-    )
-    original_load = scenario_certification_v1.load_scenarios
+    original_bytes = b"scenarios:\n  - name: case-static\n    marker: restored-A\n    seeds: [19]\n"
+    consumed_bytes = b"scenarios:\n  - name: case-static\n    marker: consumed-B\n    seeds: [19]\n"
+    included_path.write_bytes(original_bytes)
+    original_read_bytes = Path.read_bytes
     loaded_markers: list[str] = []
+    swapped = False
 
-    def load_then_mutate(path: Path) -> list[dict[str, Any]]:
-        scenarios = original_load(path)
-        loaded_markers.append(str(scenarios[0].get("marker")))
-        included_path.write_text(
-            "scenarios:\n  - name: case-static\n    marker: snapshot-after-load\n    seeds: [19]\n",
-            encoding="utf-8",
-        )
-        return scenarios
+    def read_with_aba(path: Path) -> bytes:
+        nonlocal swapped
+        if path == included_path and not swapped:
+            swapped = True
+            included_path.write_bytes(consumed_bytes)
+            consumed = original_read_bytes(path)
+            included_path.write_bytes(original_bytes)
+            return consumed
+        return original_read_bytes(path)
 
     def certify_fixture(scenario: dict[str, Any], *, scenario_path: Path, **_kwargs: Any):
         return ScenarioCertificate(
@@ -1096,17 +1097,87 @@ def test_certificate_producer_brackets_scenario_loader_with_input_identity(
             route_certificates=[],
         )
 
-    monkeypatch.setattr(scenario_certification_v1, "load_scenarios", load_then_mutate)
-    monkeypatch.setattr(scenario_certification_v1, "certify_scenario", certify_fixture)
+    monkeypatch.setattr(Path, "read_bytes", read_with_aba)
+
+    def inspect_loaded_scenario(
+        scenario: dict[str, Any], *, scenario_path: Path, **kwargs: Any
+    ) -> ScenarioCertificate:
+        loaded_markers.append(str(scenario.get("marker")))
+        return certify_fixture(scenario, scenario_path=scenario_path, **kwargs)
+
+    monkeypatch.setattr(scenario_certification_v1, "certify_scenario", inspect_loaded_scenario)
 
     certificate = certificate_to_dict(
         certify_scenario_file(scenario_path, scenario_id="case-static")[0]
     )
 
-    assert loaded_markers == ["loaded-before-snapshot"]
-    assert certificate["checks"]["loaded_marker"] == "loaded-before-snapshot"
+    assert loaded_markers == ["consumed-B"]
+    assert certificate["checks"]["loaded_marker"] == "consumed-B"
+    assert included_path.read_bytes() == original_bytes
     assert certificate["evidence"]["effective_input_sha256"] is None
     assert certificate["evidence"]["effective_input_identity_stable"] is False
+
+
+@pytest.mark.parametrize(
+    "external_reference",
+    (
+        "map_id: fixture-map",
+        "map_file: map.svg",
+        "route_overrides_file: routes.yaml",
+        "include: [included.yaml]",
+        "includes: [included.yaml]",
+        "scenario_files: [included.yaml]",
+        "map_search_paths: [maps]",
+    ),
+)
+def test_legacy_root_only_identity_rejects_external_references(
+    tmp_path: Path, external_reference: str
+) -> None:
+    """Incomplete expansion cannot fall back to a root-only identity with references."""
+    path = tmp_path / "legacy.yaml"
+    path.write_text(f"name: legacy\n{external_reference}\n", encoding="utf-8")
+
+    identity = scenario_input_identity(path, scenario_id="legacy")
+
+    assert identity["status"] == "unavailable"
+    assert identity["effective_input_sha256"] is None
+
+
+def test_map_parser_cache_key_tracks_exact_source_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Changing map bytes at one path parses the new immutable source snapshot."""
+    from robot_sf.nav import svg_map_parser
+    from robot_sf.training import scenario_loader
+
+    source_path = tmp_path / "map.svg"
+    initial_bytes = (_REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg").read_bytes()
+    updated_bytes = initial_bytes + b"\n<!-- cache-key-change -->\n"
+    source_path.write_bytes(initial_bytes)
+    parsed_sources: list[bytes] = []
+    original_convert = svg_map_parser.convert_map
+
+    def capture_source(
+        path: str, *, geometry_contract: str = "legacy", source_bytes: bytes | None = None
+    ) -> Any:
+        assert source_bytes is not None
+        parsed_sources.append(source_bytes)
+        return original_convert(
+            path, geometry_contract=geometry_contract, source_bytes=source_bytes
+        )
+
+    scenario_loader._load_map_definition.cache_clear()
+    monkeypatch.setattr(svg_map_parser, "convert_map", capture_source)
+    try:
+        first = scenario_loader._load_map_definition(str(source_path))
+        source_path.write_bytes(updated_bytes)
+        second = scenario_loader._load_map_definition(str(source_path))
+    finally:
+        scenario_loader._load_map_definition.cache_clear()
+
+    assert first is not None and second is not None
+    assert parsed_sources == [initial_bytes, updated_bytes]
+    assert first is not second
 
 
 def test_map_registry_remap_changes_effective_identity(

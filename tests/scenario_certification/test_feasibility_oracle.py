@@ -788,34 +788,35 @@ def test_issue_5574_report_marks_source_manifest_changed_during_run(tmp_path: Pa
     assert report["cells"][0]["source_artifact_identity_stable"] is False
 
 
-def test_issue_5574_report_brackets_scenario_loader_with_input_identity(
+def test_issue_5574_report_rejects_aba_include_replacement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An oracle sweep over stale loaded rows cannot bind a later include snapshot."""
+    """An oracle sweep cannot bind an include snapshot restored after its parse."""
     scenario_path = tmp_path / "root.yaml"
     included_path = tmp_path / "included.yaml"
     scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
-    included_path.write_text(
-        "scenarios:\n  - name: case-static\n    marker: loaded-before-snapshot\n    seeds: [13]\n",
-        encoding="utf-8",
-    )
-    original_load = feasibility_oracle.load_scenarios
+    original_bytes = b"scenarios:\n  - name: case-static\n    marker: restored-A\n    seeds: [13]\n"
+    consumed_bytes = b"scenarios:\n  - name: case-static\n    marker: consumed-B\n    seeds: [13]\n"
+    included_path.write_bytes(original_bytes)
+    original_read_bytes = Path.read_bytes
+    swapped = False
     loaded_markers: list[str] = []
 
-    def load_then_mutate(path: Path) -> list[dict[str, Any]]:
-        scenarios = original_load(path)
-        loaded_markers.append(str(scenarios[0].get("marker")))
-        included_path.write_text(
-            "scenarios:\n  - name: case-static\n    marker: snapshot-after-load\n    seeds: [13]\n",
-            encoding="utf-8",
-        )
-        return scenarios
+    def read_with_aba(path: Path) -> bytes:
+        nonlocal swapped
+        if path == included_path and not swapped:
+            swapped = True
+            included_path.write_bytes(consumed_bytes)
+            consumed = original_read_bytes(path)
+            included_path.write_bytes(original_bytes)
+            return consumed
+        return original_read_bytes(path)
 
     def sweep(scenario: Any, **_kwargs: Any) -> EnvelopeSensitivityVerdict:
-        assert scenario["marker"] == "loaded-before-snapshot"
+        loaded_markers.append(str(scenario["marker"]))
         return _envelope_verdict("case-static", category=FEASIBLE)
 
-    monkeypatch.setattr(feasibility_oracle, "load_scenarios", load_then_mutate)
+    monkeypatch.setattr(Path, "read_bytes", read_with_aba)
     monkeypatch.setattr(feasibility_oracle, "run_envelope_sensitivity_sweep", sweep)
 
     report = build_issue_5574_feasibility_report(
@@ -824,7 +825,8 @@ def test_issue_5574_report_brackets_scenario_loader_with_input_identity(
         envelope_radii_m=(1.0, 0.5),
     )
 
-    assert loaded_markers == ["loaded-before-snapshot"]
+    assert loaded_markers == ["consumed-B"]
+    assert included_path.read_bytes() == original_bytes
     assert report["source_artifact_identity_stable"] is True
     assert report["cells"][0]["effective_input_identity_stable"] is False
     assert report["cells"][0]["effective_input_sha256"] is None

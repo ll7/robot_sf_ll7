@@ -321,6 +321,8 @@ class CandidateEvaluation:
     error: str | None = None
     effective_scenario_hash: str | None = None
     scenario_admissibility: dict[str, Any] | None = None
+    effective_planner_config: dict[str, Any] | None = None
+    planner_config_source_sha256: str | None = None
 
     def with_objective(self, objective_value: float | None) -> CandidateEvaluation:
         """Return a copy with an objective score attached."""

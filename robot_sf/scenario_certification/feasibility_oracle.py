@@ -69,7 +69,11 @@ from robot_sf.scenario_certification.v1 import (
     certify_scenario,
     measure_planned_path_clearance,
 )
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    load_scenarios_for_validation,
+)
 
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
 ENVELOPE_SENSITIVITY_SCHEMA = "envelope_sensitivity_axis.v1"
@@ -439,12 +443,28 @@ def build_issue_5574_feasibility_report(  # noqa: C901
     if any(radius >= radii[0] for radius in radii[1:]):
         raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
 
-    source_artifact_sha256 = _file_sha256(source)
+    validation_report = load_scenarios_for_validation(source)
+    if validation_report.load_error is not None:
+        raise ValueError(f"Scenario config could not be loaded: {validation_report.load_error}")
+    load_issues = [*validation_report.entry_issues, *validation_report.load_issues]
+    if load_issues:
+        issue = load_issues[0]
+        raise ValueError(
+            "Scenario config expansion was incomplete: "
+            f"{issue.source}:{issue.index}: {issue.message}"
+        )
+    root_source = next(
+        (item for item in validation_report.manifest_sources if item.path.resolve() == source),
+        None,
+    )
+    source_artifact_sha256 = root_source.content_sha256 if root_source is not None else None
     input_identities_before = {
-        scenario_id: scenario_input_identity(source, scenario_id=scenario_id)
+        scenario_id: scenario_input_identity(
+            source, scenario_id=scenario_id, validation_report=validation_report
+        )
         for scenario_id in requested_ids
     }
-    scenarios = load_scenarios(source)
+    scenarios = validation_report.scenarios
     by_id: dict[str, Mapping[str, Any]] = {}
     for scenario in scenarios:
         scenario_id = _scenario_id(scenario)
@@ -482,7 +502,9 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         source_artifact_sha256 is not None and source_artifact_sha256 == _file_sha256(source)
     )
     input_identities_after = {
-        scenario_id: scenario_input_identity(source, scenario_id=scenario_id)
+        scenario_id: scenario_input_identity(
+            source, scenario_id=scenario_id, validation_report=validation_report
+        )
         for scenario_id in requested_ids
     }
     for cell in cells:

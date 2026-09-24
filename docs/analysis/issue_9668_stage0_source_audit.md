@@ -133,7 +133,7 @@ The source branch also stages `CITATION.cff` version `0.0.8` with
 The version-alignment guard and 41 focused tests passed in the untagged preparation state.
 This marker does not authorize a tag, DOI, or publication.
 The separate 0.0.8 Zenodo metadata template has SHA-256
-`8db72126df6d65f55c9d077329cc794dc32ee6fe74985bae39c576ecf46a5797`;
+`7d63af6137b6c22142fbbe52bac91b5da9014899209f1e8522e317c50ee9c48a`;
 the generic template still describes the old SNQI calibration result and must
 not be reused. A 0.0.8 resolved-manifest template cannot be frozen until the
 SNQI-v2 anchors and all three specification-asset hashes are fixed.

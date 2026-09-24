@@ -40,8 +40,13 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import quote, urlencode
+
+if __package__ in {None, ""}:
+    # Direct execution must prefer this checkout over ambient source roots.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.dev._gh_rest import parse_json, run_gh_api
 

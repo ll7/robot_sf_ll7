@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -1134,3 +1136,23 @@ def test_raw_fetch_runs_keeps_single_bounded_limit_call(
     assert captured["args"][captured["args"].index("--limit") + 1] == "7"
     assert "--status" in captured["args"]
     assert captured["args"][captured["args"].index("--status") + 1] == "completed"
+
+
+def test_direct_file_execution_imports_without_installed_package() -> None:
+    """The CI dispatch step runs `python scripts/dev/main_ci_is_green.py` as a
+    file path (issue #9676): sys.path[0] is scripts/dev, so the module must
+    bootstrap the repo root itself instead of relying on ambient sys.path."""
+    repo_root = main_ci_is_green.__file__
+    assert repo_root is not None
+    root = Path(repo_root).resolve().parents[2]
+    script = root / "scripts" / "dev" / "main_ci_is_green.py"
+    proc = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert "Is main CI green" in proc.stdout

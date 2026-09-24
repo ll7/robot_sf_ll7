@@ -34,7 +34,7 @@ from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
@@ -69,6 +69,7 @@ STATUS_COMPLETE = "complete"
 STATUS_PARTIAL = "partial"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_FAILED = "failed"
+STATUS_CANCELLED = "cancelled"
 
 SOURCE_FPS = "source_fps"
 SOURCE_FRAMES = "source_frames"
@@ -969,11 +970,13 @@ def _read_json(source: Path | Any, *, name: str | None = None, max_bytes: int | 
 
     source_name = name or (source.name if isinstance(source, Path) else "source")
     try:
+        read_size = max_bytes + 1 if max_bytes is not None else -1
         if isinstance(source, Path):
-            payload = source.read_bytes()
+            with source.open("rb") as stream:
+                payload = stream.read(read_size)
         else:
             source.seek(0)
-            payload = source.read()
+            payload = source.read(read_size)
         if isinstance(payload, str):
             payload = payload.encode("utf-8")
         if max_bytes is not None and len(payload) > max_bytes:
@@ -981,7 +984,7 @@ def _read_json(source: Path | Any, *, name: str | None = None, max_bytes: int | 
         document = json.loads(payload.decode("utf-8"))
     except FileNotFoundError as error:
         raise _SourceLoadError(f"{source_name}: source_missing") from error
-    except (OSError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, TypeError, ValueError) as error:
         raise _SourceLoadError(f"{source_name}: source_unreadable") from error
     except RecursionError as error:
         raise _SourceLoadError(f"{source_name}: source_nesting_too_deep") from error
@@ -1329,7 +1332,7 @@ def _load_manifest_source(ref: SourceRef, root: Path) -> _Source:
         raise _SourceLoadError(f"source_digest_missing: {ref.artifact_id}")
     with _verified_file_snapshot(
         manifest_path,
-        max_bytes=MAX_SOURCE_FILE_BYTES,
+        max_bytes=MAX_MANIFEST_BYTES,
     ) as (snapshot, manifest_digest, manifest_bytes):
         if manifest_digest.lower() != ref.sha256.lower():
             raise _SourceLoadError(
@@ -1720,6 +1723,8 @@ def _prepare(
     request: ComponentRequest,
     root: Path,
     out_dir: Path,
+    *,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[_Prepared | None, ComponentResult | None]:
     """Validate configuration, capabilities, source bytes, and output preset.
 
@@ -1744,6 +1749,10 @@ def _prepare(
     env, encoder_error = _encoder_probe()
     if env is None or encoder_error is not None:
         return None, _unavailable(request, encoder_error or "missing_encoder_backend")
+
+    cancellation_result = _cancellation_result(request, cancelled, "before_read")
+    if cancellation_result is not None:
+        return None, cancellation_result
 
     source, early = _prepare_source(request, root)
     if source is None or early is not None:
@@ -3001,42 +3010,34 @@ def _run_admission(
     return out_dir, None
 
 
-def run(
+def _cancellation_result(
     request: ComponentRequest,
-    base: Path | str = Path("."),
-    *,
-    cancelled: Any | None = None,
-) -> ComponentResult:
-    """Execute one bounded source-backed review encode request.
+    cancelled: Callable[[], bool] | None,
+    phase: str,
+) -> ComponentResult | None:
+    """Return the stable cancellation result when the caller's probe is set."""
 
-    The optional ``cancelled`` hook is cooperative and pre-read only: when it
-    returns true before source reads or publication, the run stops with a
-    stable cancelled result instead of starting new backend work.  Active
-    decode/encode calls are still bounded by their own deadlines rather than
-    interrupted.
+    if cancelled is not None and cancelled():
+        return _build_result(request, STATUS_CANCELLED, f"cancelled_{phase}")
+    return None
+
+
+def _run_after_admission(
+    request: ComponentRequest,
+    root: Path,
+    out_dir: Path,
+    cancelled: Callable[[], bool] | None,
+) -> ComponentResult:
+    """Prepare, plan, and publish after request admission succeeds.
 
     Returns:
-        Complete, partial, unavailable, or failed component result.
+        Terminal component result for cancellation, validation, planning, or publication.
     """
 
-    def _is_cancelled() -> bool:
-        try:
-            return bool(cancelled()) if cancelled is not None else False
-        except Exception:
-            return False
-
-    safe_request = _fallback_request(request)
-    root, root_error = _resolve_root(base)
-    if root is None or root_error is not None:
-        return _failure(safe_request, root_error or "unsafe_output_path: invalid base")
-    if not isinstance(request, ComponentRequest):
-        return _failure(safe_request, "request_invalid: expected ComponentRequest")
-    out_dir, admission_result = _run_admission(request, root)
-    if out_dir is None or admission_result is not None:
-        return admission_result or _failure(request, "request_admission_failed")
-    if _is_cancelled():
-        return _failure(request, "cancelled_before_read")
-    prepared, early = _prepare(request, root, out_dir)
+    cancellation_result = _cancellation_result(request, cancelled, "before_read")
+    if cancellation_result is not None:
+        return cancellation_result
+    prepared, early = _prepare(request, root, out_dir, cancelled=cancelled)
     if prepared is None or early is not None:
         return early if early is not None else _failure(request, "prepare_failed")
     plan, plan_error = _plan_order(prepared)
@@ -3051,9 +3052,74 @@ def run(
             diagnostics=tuple({"code": diagnostic} for diagnostic in diagnostics),
             provenance={"source_kind": prepared.source.source_kind},
         )
-    if _is_cancelled():
-        return _failure(request, "cancelled_before_publish")
+    cancellation_result = _cancellation_result(request, cancelled, "before_publish")
+    if cancellation_result is not None:
+        return cancellation_result
     return _publish_outputs(request, prepared, plan)
+
+
+def run(
+    request: ComponentRequest,
+    base: Path | str = Path("."),
+    *,
+    cancelled: Callable[[], bool] | None = None,
+) -> ComponentResult:
+    """Execute one bounded source-backed review encode request.
+
+    The optional ``cancelled`` hook is cooperative and pre-read only: when it
+    returns true before source reads or publication, the run stops with a
+    stable cancelled result instead of starting new backend work.  Active
+    decode/encode calls are still bounded by their own deadlines rather than
+    interrupted. The hook must not raise; exceptions propagate to the caller.
+
+    Returns:
+        Complete, partial, unavailable, failed, or cancelled component result.
+    """
+
+    safe_request = _fallback_request(request)
+    root, root_error = _resolve_root(base)
+    if root is None or root_error is not None:
+        return _failure(safe_request, root_error or "unsafe_output_path: invalid base")
+    if not isinstance(request, ComponentRequest):
+        return _failure(safe_request, "request_invalid: expected ComponentRequest")
+    out_dir, admission_result = _run_admission(request, root)
+    if out_dir is None or admission_result is not None:
+        return admission_result or _failure(request, "request_admission_failed")
+    return _run_after_admission(request, root, out_dir, cancelled)
+
+
+def _read_bounded_json(input_path: Path, *, name: str, max_bytes: int) -> Any:
+    """Parse one bounded JSON file and normalize untrusted-input failures.
+
+    Returns:
+        Parsed JSON value.
+    """
+
+    try:
+        with input_path.open("rb") as stream:
+            raw_payload = stream.read(max_bytes + 1)
+        if len(raw_payload) > max_bytes:
+            raise ReviewContractsValidationError(
+                [f"{name} exceeds {max_bytes} bytes"], source=input_path
+            )
+        payload = json.loads(raw_payload.decode("utf-8"))
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, TypeError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"cannot read {name}: {type(error).__name__}"],
+            source=input_path,
+        ) from error
+    except RecursionError as error:
+        raise ReviewContractsValidationError(
+            [f"cannot read {name}: {name}_nesting_too_deep"],
+            source=input_path,
+        ) from error
+    if _json_depth_exceeded(payload):
+        raise ReviewContractsValidationError(
+            [f"cannot read {name}: {name}_nesting_too_deep"], source=input_path
+        )
+    return payload
 
 
 def _load_request(input_path: Path) -> ComponentRequest:
@@ -3063,26 +3129,7 @@ def _load_request(input_path: Path) -> ComponentRequest:
         Validated component request.
     """
 
-    try:
-        if input_path.stat().st_size > MAX_REQUEST_BYTES:
-            raise ReviewContractsValidationError(
-                [f"request exceeds {MAX_REQUEST_BYTES} bytes"], source=input_path
-            )
-        payload = json.loads(input_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError(
-            [f"cannot read request: {type(error).__name__}"],
-            source=input_path,
-        ) from error
-    except RecursionError as error:
-        raise ReviewContractsValidationError(
-            ["cannot read request: request_nesting_too_deep"],
-            source=input_path,
-        ) from error
-    if _json_depth_exceeded(payload):
-        raise ReviewContractsValidationError(
-            ["cannot read request: request_nesting_too_deep"], source=input_path
-        )
+    payload = _read_bounded_json(input_path, name="request", max_bytes=MAX_REQUEST_BYTES)
     if not isinstance(payload, dict):
         raise ReviewContractsValidationError(["request must be an object"], source=input_path)
     return component_request_from_dict(payload, source=str(input_path))
@@ -3097,26 +3144,7 @@ def _load_config(config_path: Path | None) -> dict[str, Any]:
 
     if config_path is None:
         return {}
-    try:
-        if config_path.stat().st_size > MAX_CONFIG_BYTES:
-            raise ReviewContractsValidationError(
-                [f"config exceeds {MAX_CONFIG_BYTES} bytes"], source=config_path
-            )
-        payload = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError(
-            [f"cannot read config: {type(error).__name__}"],
-            source=config_path,
-        ) from error
-    except RecursionError as error:
-        raise ReviewContractsValidationError(
-            ["cannot read config: config_nesting_too_deep"],
-            source=config_path,
-        ) from error
-    if _json_depth_exceeded(payload):
-        raise ReviewContractsValidationError(
-            ["cannot read config: config_nesting_too_deep"], source=config_path
-        )
+    payload = _read_bounded_json(config_path, name="config", max_bytes=MAX_CONFIG_BYTES)
     if not isinstance(payload, dict):
         raise ReviewContractsValidationError(["config must be an object"], source=config_path)
     return payload

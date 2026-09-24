@@ -2610,9 +2610,10 @@ def _check_robot_force_report_consistency(payload_dir: Path) -> dict[str, Any]:
         source = resolved.get("source_sha")
         if not isinstance(source, str) or not source:
             raise ValueError("resolved manifest has no source_sha")
-        rows = report.get("episodes")
-        if type(rows) is not int or rows <= 0:
-            raise ValueError("robot-force report has no valid episode count")
+        matrix = resolved.get("matrix")
+        rows = matrix.get("expected_episode_cells") if isinstance(matrix, Mapping) else None
+        if type(rows) is not int or rows <= 0 or report.get("episodes") != rows:
+            raise ValueError("robot-force episode count disagrees with resolved release matrix")
         expected = build_report(
             payload_dir,
             expected_source=source,

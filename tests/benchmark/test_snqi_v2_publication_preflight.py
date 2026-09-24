@@ -158,7 +158,11 @@ def test_robot_force_report_cold_check_rejects_resigned_semantic_drift(
     payload = tmp_path / "payload"
     _write_json(
         payload / "release" / "release_manifest.resolved.json",
-        {"source_sha": "a" * 40, "metrics": {"snqi_v2_weights_path": "weights.json"}},
+        {
+            "source_sha": "a" * 40,
+            "matrix": {"expected_episode_cells": 1},
+            "metrics": {"snqi_v2_weights_path": "weights.json"},
+        },
     )
     report_path = payload / "reports" / "robot_force_validation.json"
     expected = {"episodes": 1, "correlations": [{"spearman_rho": 0.5}]}
@@ -176,5 +180,18 @@ def test_robot_force_report_cold_check_rejects_resigned_semantic_drift(
     _write_json(report_path, {"episodes": 1, "correlations": [{"spearman_rho": 0.9}]})
     assert any(
         "deterministic regeneration" in violation
+        for violation in _check_robot_force_report_consistency(payload)["violations"]
+    )
+    _write_json(report_path, expected)
+    _write_json(
+        payload / "release" / "release_manifest.resolved.json",
+        {
+            "source_sha": "a" * 40,
+            "matrix": {"expected_episode_cells": 2},
+            "metrics": {"snqi_v2_weights_path": "weights.json"},
+        },
+    )
+    assert any(
+        "disagrees with resolved release matrix" in violation
         for violation in _check_robot_force_report_consistency(payload)["violations"]
     )

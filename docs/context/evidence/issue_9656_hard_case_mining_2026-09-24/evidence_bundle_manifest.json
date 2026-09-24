@@ -20,13 +20,15 @@
       "path": "report.md",
       "size_bytes": 7075,
       "sha256": "30b14d63ec8dca5ab1c0c0d1514456254c44bb32e279918585c934044ef3ef2b",
-      "kind": "reports"
+      "kind": "reports",
+      "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/report.md"
     },
     {
       "path": "summary.json",
       "size_bytes": 122646,
       "sha256": "755e78f5d13bbd0668988a82ee6ae333a551ec046de47f77faa04b1750fa62d5",
-      "kind": "aggregates"
+      "kind": "aggregates",
+      "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json"
     }
   ]
 }

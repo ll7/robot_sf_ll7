@@ -24,12 +24,12 @@ main-signal schema (``main_ci_is_green.v1``) with the same green/red/stale
 classification the gate contract consumes, so the gate need not parse the
 human line.
 
-The gate's default fetch is deliberately one small bounded window (a single
-unfiltered ``gh run list --limit`` call, default 5 runs, 30s timeout): the merge
-hold must stay cheap and quick, and a cancellation-saturated window fails
-closed to ``stale`` rather than blocking on a slower search. Status and
-conclusion are classified locally because server-side completed-only queries
-have intermittently returned an older window than the unfiltered query.
+The gate's default fetch is deliberately one bounded exact-commit window (a
+single ``gh run list --commit ... --limit`` call, default 20 runs, 30s timeout):
+the merge hold must stay cheap and quick, and a saturated window fails closed
+to ``stale`` rather than blocking on a slower search. Status and conclusion
+are classified locally because server-side status-filtered queries have
+intermittently returned an older window than the exact-commit query.
 :func:`fetch_run_window`
 is the paginated REST reader for callers that need the decisive verdict behind
 a cancelled-run flood; :mod:`main_ci_incident_reconcile` uses it.  This module
@@ -58,6 +58,7 @@ from scripts.dev._gh_rest import parse_json, run_gh_api
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
 DEFAULT_WORKFLOW_FILE = ".github/workflows/ci.yml"
+DEFAULT_MAIN_CI_RUN_LIMIT = 20
 
 # Bounded pagination budget for the decisive-run REST search.  GitHub's
 # latest-main-wins concurrency can fill whole raw pages with ``cancelled``
@@ -185,17 +186,18 @@ def _normalize_expected_head_sha(value: str | None) -> str | None:
 def _read_stable_main_ci_signal(
     repo: str, workflow: str, limit: int
 ) -> tuple[bool, dict[str, Any] | None]:
-    """Read a bounded run window bracketed by a stable main ref."""
+    """Read an exact-head run window and recheck main after all proof lookups."""
     main_head_before = fetch_main_head_sha(repo)
-    runs = fetch_runs(repo, workflow, limit)
-    main_head_after = fetch_main_head_sha(repo)
-    if main_head_after != main_head_before:
-        raise MainCiRunFetchError("main advanced while its CI signal was being read")
-    return decide_verified_main_ci_signal(
+    runs = fetch_runs(repo, workflow, limit, head_sha=main_head_before)
+    signal = decide_verified_main_ci_signal(
         runs,
         repo=repo,
         expected_head_sha=main_head_before,
     )
+    main_head_after = fetch_main_head_sha(repo)
+    if main_head_after != main_head_before:
+        raise MainCiRunFetchError("main advanced while its CI signal was being read")
+    return signal
 
 
 def resolve_workflow_selector(
@@ -344,7 +346,7 @@ def _is_older_active_exact_head(
     )
 
 
-def _attach_retry_matrix_admission(
+def _attach_dispatch_matrix_admission(
     runs: list[dict[str, Any]],
     *,
     repo: str,
@@ -352,20 +354,19 @@ def _attach_retry_matrix_admission(
     runner: Callable[..., Any],
     max_pages: int,
 ) -> None:
-    """Attach job-API admission evidence to exact-head explicit retry failures."""
+    """Attach job-API admission evidence to exact-head terminal dispatch runs."""
     for run in runs:
-        is_retry_failure = (
+        is_decisive_dispatch = (
             str(run.get("headSha") or "").lower() == target_sha
             and str(run.get("status") or "").lower() == "completed"
             and str(run.get("event") or "") == "workflow_dispatch"
-            and str(run.get("displayTitle") or "").endswith("retry_failed=true")
-            and classify(run.get("conclusion")) == "red"
+            and classify(run.get("conclusion")) in {"green", "red"}
         )
-        if not is_retry_failure:
+        if not is_decisive_dispatch:
             continue
         run["fullMatrixAdmitted"] = fetch_dispatch_retry_matrix_admitted(
             repo=repo,
-            run_id=_positive_int(run.get("databaseId"), field="retry workflow run id"),
+            run_id=_positive_int(run.get("databaseId"), field="workflow run id"),
             runner=runner,
             max_pages=max_pages,
         )
@@ -436,7 +437,7 @@ def fetch_dispatch_run_window(
         )
 
     if target and current_id is not None:
-        _attach_retry_matrix_admission(
+        _attach_dispatch_matrix_admission(
             runs,
             repo=repo,
             target_sha=target,
@@ -754,10 +755,12 @@ def dispatch_decision(
     """Choose an idempotent watcher action for one main commit.
 
     A same-head queued or in-progress run is observed, never replaced. A
-    completed success is also observed. A completed failure may be retried at
-    most once when the caller explicitly supplies the retry intent and no
-    durable retry receipt exists. The function is deliberately side-effect
-    free so scheduled watchers can record the decision before dispatching.
+    completed push/full-matrix success is also observed. A workflow-dispatch
+    result is decisive only when its compatibility matrix was admitted. A
+    completed full-matrix failure may be retried at most once when the caller
+    explicitly supplies the retry intent and no durable retry receipt exists.
+    The function is deliberately side-effect free so scheduled watchers can
+    record the decision before dispatching.
     """
     target = target_sha.strip().lower()
     if not target:
@@ -779,6 +782,7 @@ def dispatch_decision(
         for run in exact
         if str(run.get("status") or "").lower() == "completed"
         and classify(run.get("conclusion")) == "green"
+        and _has_decisive_matrix_verdict(run)
     ]
     if successful:
         return {"action": "observe", "reason": "same_head_success", "head_sha": target}
@@ -787,12 +791,20 @@ def dispatch_decision(
         for run in exact
         if str(run.get("status") or "").lower() == "completed"
         and classify(run.get("conclusion")) == "red"
+        and _has_decisive_matrix_verdict(run)
     ]
     if failed and retry_failed and not retry_receipt_seen:
         return {"action": "dispatch", "reason": "explicit_failed_retry", "head_sha": target}
     if failed:
         return {"action": "observe", "reason": "same_head_failure", "head_sha": target}
     return {"action": "dispatch", "reason": "no_same_head_decisive_run", "head_sha": target}
+
+
+def _has_decisive_matrix_verdict(run: Mapping[str, Any]) -> bool:
+    """Manual aggregate status is not CI evidence unless compat-matrix ran."""
+    return (
+        str(run.get("event") or "") != "workflow_dispatch" or run.get("fullMatrixAdmitted") is True
+    )
 
 
 def dispatch_gate_decision(
@@ -971,18 +983,31 @@ def build_signal(
     }
 
 
+def _commit_filter_args(head_sha: str | None) -> list[str]:
+    """Build a fail-closed exact-commit selector for the current-main query."""
+    normalized = _normalize_expected_head_sha(head_sha)
+    if normalized is None:
+        return []
+    return ["--commit", normalized]
+
+
 def fetch_runs(
-    repo: str = DEFAULT_REPO, workflow: str = DEFAULT_WORKFLOW, limit: int = 5
+    repo: str = DEFAULT_REPO,
+    workflow: str = DEFAULT_WORKFLOW,
+    limit: int = DEFAULT_MAIN_CI_RUN_LIMIT,
+    *,
+    head_sha: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch recent main CI runs in one bounded, unfiltered ``gh run list`` call.
+    """Fetch a bounded run window, optionally filtered to an exact commit.
 
     This is the fast merge-hold path: a single window of ``limit`` runs
-    (default 5) with the 30s CLI timeout, so the gate cannot become slow or
-    expensive. Status and conclusion are filtered locally. A saturated window
-    without an admissible current-head verdict fails closed to ``stale``; use
-    :func:`fetch_run_window` when the decisive verdict behind such a flood is
-    required. The default ``CI`` display name is mapped to its workflow file
-    path to avoid ambiguous name matches.
+    (default 20) with the 30s CLI timeout, so the gate cannot become slow or
+    expensive. The current-main caller supplies ``head_sha`` so the service
+    selects that commit directly instead of returning stale branch history.
+    Status and conclusion are classified locally, without a server status
+    filter. A window without an admissible current-head verdict fails closed
+    to ``stale``. The default ``CI`` display name is mapped to its workflow
+    file path to avoid ambiguous name matches.
     """
     workflow_selector = DEFAULT_WORKFLOW_FILE if workflow == DEFAULT_WORKFLOW else workflow
     proc = _gh(
@@ -995,6 +1020,7 @@ def fetch_runs(
             "main",
             "--workflow",
             workflow_selector,
+            *_commit_filter_args(head_sha),
             "--limit",
             str(limit),
             "--json",
@@ -1029,7 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Is main CI green (latest verified completed run)?")
     ap.add_argument("--repo", default=DEFAULT_REPO)
     ap.add_argument("--workflow", default=DEFAULT_WORKFLOW)
-    ap.add_argument("--limit", type=int, default=5)
+    ap.add_argument("--limit", type=int, default=DEFAULT_MAIN_CI_RUN_LIMIT)
     ap.add_argument("--quiet", action="store_true", help="suppress the human line")
     ap.add_argument(
         "--dispatch-gate",

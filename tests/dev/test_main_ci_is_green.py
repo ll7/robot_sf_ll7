@@ -523,6 +523,7 @@ def test_dispatch_gate_observes_decisive_result_without_unlocking_matrix() -> No
             {
                 "databaseId": 10,
                 "headSha": sha,
+                "event": "push",
                 "status": "completed",
                 "conclusion": "success",
             }
@@ -535,6 +536,7 @@ def test_dispatch_gate_observes_decisive_result_without_unlocking_matrix() -> No
             {
                 "databaseId": 10,
                 "headSha": sha,
+                "event": "push",
                 "status": "completed",
                 "conclusion": "failure",
             }
@@ -543,6 +545,31 @@ def test_dispatch_gate_observes_decisive_result_without_unlocking_matrix() -> No
 
     assert success["action"] == "observe_success"
     assert failure["action"] == "observe_failure"
+
+
+@pytest.mark.parametrize("conclusion", ["success", "failure"])
+def test_dispatch_gate_does_not_treat_unadmitted_manual_result_as_decisive(
+    conclusion: str,
+) -> None:
+    """An aggregate-only manual conclusion cannot own or suppress the matrix."""
+    sha = "b" * 40
+    decision = dispatch_gate_decision(
+        sha,
+        20,
+        [
+            {
+                "databaseId": 10,
+                "headSha": sha,
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": conclusion,
+                "fullMatrixAdmitted": False,
+            }
+        ],
+    )
+
+    assert decision["action"] == "run_full_ci"
+    assert decision["reason"] == "no_same_head_decisive_run"
 
 
 def test_dispatch_gate_failed_retry_receipt_is_idempotent() -> None:
@@ -580,7 +607,7 @@ def test_dispatch_gate_keeps_retry_eligible_when_prior_retry_matrix_was_skipped(
     decision = dispatch_gate_decision(sha, 20, [failed_retry], retry_failed=True)
 
     assert decision["action"] == "run_full_ci"
-    assert decision["reason"] == "explicit_failed_retry"
+    assert decision["reason"] == "no_same_head_decisive_run"
     assert decision["retry_receipt_seen"] is False
 
 
@@ -799,13 +826,21 @@ def test_fetch_dispatch_window_fails_closed_when_page_budget_is_exhausted() -> N
 
 
 @pytest.mark.parametrize(
-    ("job_conclusion", "expected_admission", "expected_action"),
-    [("skipped", False, "run_full_ci"), ("failure", True, "observe_failure")],
+    ("run_conclusion", "job_conclusion", "expected_admission", "expected_action"),
+    [
+        ("failure", "skipped", False, "run_full_ci"),
+        ("failure", "failure", True, "observe_failure"),
+        ("success", "skipped", False, "run_full_ci"),
+        ("success", "success", True, "observe_success"),
+    ],
 )
 def test_retry_receipt_requires_non_skipped_compatibility_job(
-    job_conclusion: str, expected_admission: bool, expected_action: str
+    run_conclusion: str,
+    job_conclusion: str,
+    expected_admission: bool,
+    expected_action: str,
 ) -> None:
-    """The REST receipt requires compat-matrix admission and permits a retry otherwise."""
+    """The dispatch gate requires compat-matrix admission for manual verdicts."""
     sha = "a" * 40
 
     def fake_runner(path: str, payload: object = None, **_kwargs: object):
@@ -818,7 +853,7 @@ def test_retry_receipt_requires_non_skipped_compatibility_job(
                     {
                         "id": 11,
                         "status": "completed",
-                        "conclusion": "failure",
+                        "conclusion": run_conclusion,
                         "head_sha": sha,
                         "created_at": "2026-09-22T12:50:16Z",
                         "event": "workflow_dispatch",
@@ -1201,6 +1236,8 @@ def test_fetch_runs_uses_stable_default_workflow_selector(
     args = observed["args"]
     selector_index = args.index("--workflow") + 1
     assert args[selector_index] == expected_selector
+    limit_index = args.index("--limit") + 1
+    assert args[limit_index] == str(main_ci_is_green.DEFAULT_MAIN_CI_RUN_LIMIT)
 
 
 def test_default_workflow_selector_keeps_json_report_label(
@@ -1340,6 +1377,54 @@ def test_json_signal_is_stale_if_main_moves_during_read(
     assert payload["status"] == "stale"
     assert payload["deciding_run"] is None
     assert "advanced while" in payload["error"]
+
+
+def test_signal_rechecks_main_after_manual_matrix_admission_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A branch advance during job-proof lookup invalidates the signal."""
+    first_head = "a" * 40
+    second_head = "b" * 40
+    head_reads = iter([first_head, second_head])
+    matrix_lookups: list[int] = []
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "fetch_main_head_sha",
+        lambda *_a, **_k: next(head_reads),
+    )
+
+    def fake_fetch_runs(*_args: object, **kwargs: object) -> list[dict]:
+        assert kwargs["head_sha"] == first_head
+        return [
+            _run(
+                7,
+                "completed",
+                "success",
+                "2026-09-24T12:00:00Z",
+                event="workflow_dispatch",
+                head_sha=first_head,
+            )
+        ]
+
+    def fake_matrix_admission(**kwargs: object) -> bool:
+        matrix_lookups.append(int(kwargs["run_id"]))
+        return True
+
+    monkeypatch.setattr(main_ci_is_green, "fetch_runs", fake_fetch_runs)
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "fetch_dispatch_retry_matrix_admitted",
+        fake_matrix_admission,
+    )
+
+    with pytest.raises(MainCiRunFetchError, match="main advanced while"):
+        main_ci_is_green._read_stable_main_ci_signal(
+            main_ci_is_green.DEFAULT_REPO,
+            main_ci_is_green.DEFAULT_WORKFLOW,
+            5,
+        )
+
+    assert matrix_lookups == [7]
 
 
 def test_json_fetch_failure_is_machine_readable_stale(
@@ -1489,11 +1574,14 @@ def test_raw_fetch_runs_keeps_single_bounded_limit_call(
 
     monkeypatch.setattr(main_ci_is_green, "_gh", fake_gh)
 
-    runs = fetch_runs("owner/repo", "CI", 7)
+    expected_head = "f" * 40
+    runs = fetch_runs("owner/repo", "CI", 7, head_sha=expected_head)
 
     assert [run["databaseId"] for run in runs] == [2, 1]
     assert "--limit" in captured["args"]
     assert captured["args"][captured["args"].index("--limit") + 1] == "7"
+    assert "--commit" in captured["args"]
+    assert captured["args"][captured["args"].index("--commit") + 1] == expected_head
     assert "--status" not in captured["args"]
     json_fields = captured["args"][captured["args"].index("--json") + 1]
     assert {"event", "status"} <= set(json_fields.split(","))

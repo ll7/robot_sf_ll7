@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from robot_sf.analysis_workbench.audit_contracts import Annotation, EpisodeRef
@@ -36,6 +37,18 @@ def _assert_same_scenario_and_planner(failure: EpisodeRef, control: EpisodeRef) 
     assert failure.planner_id
     assert failure.scenario_id == control.scenario_id
     assert failure.planner_id == control.planner_id
+
+
+def _assert_retained_source_identity(
+    source_path: Path,
+    source_sha256: str,
+    session_digest: str,
+    context_identity: str,
+) -> None:
+    expected_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    assert source_sha256 == expected_digest
+    assert session_digest == expected_digest
+    assert context_identity == expected_digest
 
 
 def test_retained_real_campaign_reaches_queue_and_fails_closed_without_native_bundle(
@@ -112,8 +125,16 @@ def test_retained_real_campaign_reaches_queue_and_fails_closed_without_native_bu
         facade = ServiceAuditWorkbenchFacade(service, session, token=session.session_token)
         selected = facade.next(operation_id="retained-real-next")
         assert selected["status"] == "complete", selected.get("reason")
-        assert selected["episode"]["episode_id"] == FAILURE_ID
-        assert selected["packet"]["primary"]["execution_id"] == FAILURE_ID
+        assert (
+            selected["episode"]["episode_id"],
+            selected["packet"]["primary"]["execution_id"],
+        ) == (FAILURE_ID, FAILURE_ID)
+        _assert_retained_source_identity(
+            RETAINED_CAMPAIGN,
+            report.audit.source.sha256,
+            session.source_digest,
+            selected["context"]["source_identity"],
+        )
         assert len(dataset.candidates) == 2
 
         artifact_status = facade.read_selected_artifact_status()

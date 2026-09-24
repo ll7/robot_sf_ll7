@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from robot_sf.adversarial import replay_gallery
+from robot_sf.benchmark.fallback_policy import availability_payload
 
 
 def _candidate() -> dict[str, Any]:
@@ -129,8 +130,33 @@ def _replay_episode(*, revision: str | None = "a" * 40) -> dict[str, Any]:
     return record
 
 
+def _runner_summary(
+    *, preflight_status: str = "ok", failures: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """Build a canonical map-runner summary with its matching availability receipt."""
+    failures = failures or []
+    summary = {
+        "total_jobs": 1,
+        "written": 1,
+        "failed_jobs": len(failures),
+        "skipped_jobs": 0,
+        "failures": failures,
+        "preflight": {"status": preflight_status},
+        "algorithm_metadata_contract": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "native"},
+        },
+    }
+    summary["benchmark_availability"] = availability_payload(summary)
+    return summary
+
+
 def _install_fake_replay(
-    monkeypatch: Any, *, revision: str | None = "a" * 40, mismatch: bool = False
+    monkeypatch: Any,
+    *,
+    revision: str | None = "a" * 40,
+    mismatch: bool = False,
+    runner_summary: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
 
@@ -143,7 +169,7 @@ def _install_fake_replay(
             record["outcome"]["collision_event"] = False
             record["metrics"]["collisions"] = 0
         kwargs["out_path"].write_text(json.dumps(record) + "\n", encoding="utf-8")
-        return {"total_jobs": 1, "failures": []}
+        return runner_summary or _runner_summary()
 
     def fake_render(
         episode_row: Any, outputs: list[str], out_dir: Path, **kwargs: Any
@@ -396,6 +422,76 @@ def test_gallery_reports_outcome_mismatch_without_verified_status(
     assert case["replay_match"] == "mismatch"
     assert case["verification_status"] == "replay_mismatch"
     assert case["replay"]["outcome_matches"] is False
+
+
+@pytest.mark.parametrize(
+    ("preflight_status", "failures", "expected_error"),
+    [
+        ("fallback", [], "replay_preflight_not_successful"),
+        ("skipped", [], "replay_preflight_not_successful"),
+        ("ok", [{"error": "planner worker failed"}], "replay_runner_reported_failures"),
+    ],
+)
+def test_gallery_preserves_comparison_but_rejects_unavailable_replay(
+    tmp_path: Path,
+    monkeypatch: Any,
+    preflight_status: str,
+    failures: list[dict[str, str]],
+    expected_error: str,
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    summary = _runner_summary(preflight_status=preflight_status, failures=failures)
+    _install_fake_replay(monkeypatch, runner_summary=summary)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "replay_execution_unavailable"
+    assert case["replay"]["availability_error"] == expected_error
+    assert case["replay"]["summary"] == summary
+    assert case["replay"]["identity_matches"] is True
+    assert case["replay"]["outcome_matches"] is True
+    assert case["replay"]["objective_matches"] is True
+
+
+def test_gallery_fails_closed_when_canonical_availability_is_missing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    summary = _runner_summary()
+    summary.pop("benchmark_availability")
+    _install_fake_replay(monkeypatch, runner_summary=summary)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "replay_execution_unavailable"
+    assert case["replay"]["availability_error"] == (
+        "replay_benchmark_availability_missing_or_malformed"
+    )
+    assert case["replay"]["outcome_matches"] is True
+
+
+def test_gallery_rejects_runtime_fallback_marker_even_when_row_matches(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    summary = _runner_summary()
+    summary["algorithm_metadata_contract"]["planner_runtime"] = {"fallback_used": True}
+    summary["benchmark_availability"] = availability_payload(summary)
+    _install_fake_replay(monkeypatch, runner_summary=summary)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "replay_execution_unavailable"
+    assert case["replay"]["availability_error"] == "replay_benchmark_unavailable"
+    assert case["replay"]["summary"]["benchmark_availability"]["benchmark_success"] is False
+    assert case["replay"]["identity_matches"] is True
+    assert case["replay"]["outcome_matches"] is True
 
 
 def test_gallery_deduplicates_identical_effective_scenarios(tmp_path: Path) -> None:

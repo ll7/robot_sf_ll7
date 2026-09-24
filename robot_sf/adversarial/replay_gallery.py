@@ -30,6 +30,10 @@ from robot_sf.benchmark.episode_replay_figure import (
     EpisodeRow,
     replay_episode_and_generate_figures,
 )
+from robot_sf.benchmark.fallback_policy import (
+    availability_payload,
+    resolve_execution_mode,
+)
 from robot_sf.benchmark.runner import run_batch
 
 GALLERY_SCHEMA_VERSION = "adversarial-replay-gallery.v1"
@@ -418,11 +422,18 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         return _complete_case(result, case_dir, context.output_dir)
 
     replay_record = _read_single_episode(episode_records)
+    replay_availability, replay_availability_error = _replay_availability(replay_summary)
     if replay_record is None:
-        result["verification_status"] = "replay_record_missing_or_ambiguous"
+        result["verification_status"] = (
+            "replay_execution_unavailable"
+            if replay_availability_error is not None
+            else "replay_record_missing_or_ambiguous"
+        )
         result["replay"] = {
             "summary": replay_summary,
             "episode_record_path": "replay/episode_records.jsonl",
+            "benchmark_availability": replay_availability,
+            "availability_error": replay_availability_error,
         }
         return _complete_case(result, case_dir, context.output_dir)
 
@@ -435,6 +446,8 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         episode_records=episode_records,
         case_dir=case_dir,
         replay_summary=replay_summary or {},
+        replay_availability=replay_availability,
+        replay_availability_error=replay_availability_error,
     )
     return _complete_case(result, case_dir, context.output_dir)
 
@@ -522,7 +535,7 @@ def _run_one_episode(
     return replay_summary, None
 
 
-def _record_replay_comparison(
+def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagnostics
     selected: dict[str, Any],
     context: _ReplayContext,
     result: dict[str, Any],
@@ -532,6 +545,8 @@ def _record_replay_comparison(
     episode_records: Path,
     case_dir: Path,
     replay_summary: dict[str, Any],
+    replay_availability: dict[str, Any] | None,
+    replay_availability_error: str | None,
 ) -> None:
     """Compare one replay to its source and add available diagnostic artifacts."""
     objective_name = context.objective_name
@@ -557,7 +572,10 @@ def _record_replay_comparison(
         selected["objective_value"], replay_objective, rel_tol=0.0, abs_tol=tolerance
     )
     source_revision_for_case = selected["source_revision"] or context.source_revision
-    if identity_match and outcome_match and objective_match:
+    if replay_availability_error is not None:
+        result["replay_match"] = "unavailable"
+        result["verification_status"] = "replay_execution_unavailable"
+    elif identity_match and outcome_match and objective_match:
         result["replay_match"] = "match"
         if result["source"]["revision_conflict"]:
             result["verification_status"] = "source_revision_conflict"
@@ -584,6 +602,8 @@ def _record_replay_comparison(
         "scenario_id": replay_record.get("scenario_id"),
         "seed": replay_record.get("seed"),
         "revision": replay_revision,
+        "benchmark_availability": replay_availability,
+        "availability_error": replay_availability_error,
         "revision_matches_source": (
             source_revision_for_case is not None and replay_revision == source_revision_for_case
         ),
@@ -605,6 +625,45 @@ def _record_replay_comparison(
             case_dir / "figures",
             output_dir,
         )
+
+
+def _replay_availability(  # noqa: C901 - keep independent runner evidence gates explicit
+    summary: Any,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Require a successful canonical runner receipt before treating a replay as evidence."""
+    if not isinstance(summary, dict):
+        return None, "replay_summary_missing_or_malformed"
+
+    failures = summary.get("failures")
+    if not isinstance(failures, list):
+        return None, "replay_failures_missing_or_malformed"
+    if failures:
+        return None, "replay_runner_reported_failures"
+
+    preflight = summary.get("preflight")
+    if not isinstance(preflight, dict) or preflight.get("status") != "ok":
+        return None, "replay_preflight_not_successful"
+
+    algorithm_contract = summary.get("algorithm_metadata_contract")
+    if not isinstance(algorithm_contract, dict) or algorithm_contract.get("status") != "ok":
+        return None, "replay_algorithm_metadata_unavailable"
+    if resolve_execution_mode(algorithm_contract) == "unknown":
+        return None, "replay_execution_mode_unknown"
+
+    try:
+        expected = availability_payload(summary)
+    except (TypeError, ValueError, OverflowError):
+        return None, "replay_benchmark_availability_unavailable"
+    reported = summary.get("benchmark_availability")
+    if not isinstance(reported, dict):
+        return None, "replay_benchmark_availability_missing_or_malformed"
+    if any(reported.get(key) != value for key, value in expected.items()):
+        return expected, "replay_benchmark_availability_mismatch"
+    if expected["benchmark_success"] is not True or expected["availability_status"] != "available":
+        return expected, "replay_benchmark_unavailable"
+    if expected["readiness_status"] in {"fallback", "degraded"}:
+        return expected, "replay_benchmark_degraded"
+    return expected, None
 
 
 def _materialize_scenario(

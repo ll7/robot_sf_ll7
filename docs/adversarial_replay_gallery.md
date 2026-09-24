@@ -35,11 +35,14 @@ search configuration. It records a step trace for visualization. The replay is c
 the source episode's identity, canonical outcomes, registered objective value, and the configured
 absolute tolerance.
 
-`replay_match: match` means those values agree. `verification_status: verified` additionally
-requires matching known source and replay revisions. A matching replay at a different revision is
-reported as `outcome_reproduced_revision_changed`; missing revision provenance stays explicit.
-Mismatches, missing inputs, failed execution, and missing replay records remain visible in the
-case manifest.
+`replay_match: match` means those values agree and the canonical runner reports an available,
+successful replay. Fallback, skipped, failed, missing, or inconsistent runner availability keeps
+the case `unavailable`, even when raw identity, outcome, and objective comparisons agree; those
+diagnostics and the runner summary remain in the case manifest. `verification_status: verified`
+additionally requires matching known source and replay revisions. A matching replay at a different
+revision is reported as `outcome_reproduced_revision_changed`; missing revision provenance stays
+explicit. Mismatches, missing inputs, failed execution, and missing replay records remain visible in
+the case manifest.
 
 ## Reading the bundle
 

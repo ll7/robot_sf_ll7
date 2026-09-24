@@ -446,6 +446,199 @@ def test_service_rest_initial_create_uses_append_only_provider_without_patch(
         assert service.get_session(session).usage.issue_writes == 1
         assert not service.authority.snapshot()["reservations"]
         assert not service._reservations
+
+    finally:
+        service.close()
+
+
+def test_service_rest_accepts_canonical_long_finding_id(tmp_path: Path) -> None:
+    class LongFindingHTTP:
+        """Transport proving canonical marker-safe IDs reach the REST POST."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, timeout
+            path = urlparse(url).path
+            self.calls.append((method, path))
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                number = 24
+                self.issue = {
+                    "repository": REPOSITORY,
+                    "number": number,
+                    "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                    "title": payload["title"],
+                    "body": payload["body"],
+                    "labels": [{"name": label} for label in payload["labels"]],
+                    "state": "open",
+                    "comments": 0,
+                    "updated_at": "2026-09-23T00:00:00Z",
+                }
+                return HttpResponse(201, self.issue)
+            assert method == "GET"
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return HttpResponse(200, self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
+
+    http = LongFindingHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, _finding, _revision, _provider = _setup(tmp_path, provider=provider)
+    long_finding = add_candidate(new_finding("f" * 129, "long finding"), "episode-long")
+    commit = service.finding_store.create(
+        long_finding,
+        operation_id="create-long-finding",
+        actor="human",
+    )
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=long_finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=commit.revision,
+            operation_id="rest-long-finding-id",
+        )
+
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "created"
+        assert result.value.remote_write == "applied"
+        assert http.issue is not None and ("finding_id=" + "f" * 129) in http.issue["body"]
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert [method for method, _path in http.calls].count("PATCH") == 0
+        assert service.get_session(session).usage.issue_writes == 1
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+
+    finally:
+        service.close()
+
+
+def test_service_rest_create_payload_conflict_charges_post_and_stops_retry(
+    tmp_path: Path,
+) -> None:
+    class MismatchedCreateHTTP:
+        """Transport returning a marker-compatible but immutable-mismatched issue."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, timeout
+            path = urlparse(url).path
+            self.calls.append((method, path))
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                number = 23
+                self.issue = {
+                    "repository": REPOSITORY,
+                    "number": number,
+                    "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                    "title": f"{payload['title']} (provider mismatch)",
+                    "body": payload["body"],
+                    "labels": [{"name": label} for label in payload["labels"]],
+                    "state": "open",
+                    "comments": 0,
+                    "updated_at": "2026-09-23T00:00:00Z",
+                }
+                return HttpResponse(201, self.issue)
+            assert method == "GET"
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return HttpResponse(200, self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
+
+    http = MismatchedCreateHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, finding, revision, _provider = _setup(tmp_path, provider=provider)
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-create-payload-conflict",
+        )
+
+        assert result.status == "conflict"
+        assert result.value is not None and result.value.status == "conflict"
+        assert result.value.remote_write == "ambiguous"
+        assert result.value.outbox is not None and result.value.outbox.state == "conflict"
+        assert service._github_outbox is not None
+        claim = service._github_outbox.get_claim(REPOSITORY, finding.finding_id)
+        assert claim is not None and claim.state == "conflict"
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert [method for method, _path in http.calls].count("PATCH") == 0
+        assert service.get_session(session).usage.issue_writes == 1
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+
+        replay = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-create-payload-conflict",
+        )
+        assert replay.status == "conflict"
+        assert replay.operation is not None and replay.operation.replayed
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert service.get_session(session).usage.issue_writes == 1
+        replay_claim = service._github_outbox.get_claim(REPOSITORY, finding.finding_id)
+        assert replay_claim is not None and replay_claim.state == "conflict"
+        replay_entry = service._github_outbox.find_publication_kind(
+            REPOSITORY,
+            finding.finding_id,
+            "initial_issue",
+        )
+        assert replay_entry is not None and replay_entry.state == "conflict"
     finally:
         service.close()
 

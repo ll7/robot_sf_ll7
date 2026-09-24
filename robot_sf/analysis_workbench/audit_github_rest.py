@@ -51,7 +51,8 @@ AUDITOR_REQUEST_MARKER_PREFIX = "<!-- robot_sf_audit_request:v1 "
 AUDITOR_REQUEST_MARKER_SUFFIX = " -->"
 
 _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-_SAFE_MARKER_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+_SAFE_MARKER_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+_SAFE_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _REQUEST_MARKER_RE = re.compile(
     r"^<!-- robot_sf_audit_request:v1 "
@@ -194,7 +195,7 @@ def auditor_request_marker(request_digest_or_id: str) -> str:
         raise GitHubRestValidationError("request marker identity must be text")
     if _DIGEST_RE.fullmatch(request_digest_or_id):
         field = f"request_digest={request_digest_or_id}"
-    elif _SAFE_MARKER_VALUE_RE.fullmatch(request_digest_or_id):
+    elif _SAFE_REQUEST_ID_RE.fullmatch(request_digest_or_id):
         field = f"request_id={request_digest_or_id}"
     else:
         raise GitHubRestValidationError("request marker identity is malformed")

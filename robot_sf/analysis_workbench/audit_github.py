@@ -2160,7 +2160,12 @@ class GitHubSync:
                 raise GitHubOutboxError("initial publication entry has no expected revision")
             initial_block_digest = entry.auditor_block_digest or None
 
-        def _stale(reason: str, issue: GitHubIssue | None = None) -> GitHubSyncResult:
+        def _stale(
+            reason: str,
+            issue: GitHubIssue | None = None,
+            *,
+            remote_write: str = "none",
+        ) -> GitHubSyncResult:
             stale_entry = self._mark_publication_stale(entry, reason)
             return self._append_result(
                 "conflict",
@@ -2172,6 +2177,7 @@ class GitHubSync:
                 finding,
                 reason=reason,
                 replayed=True,
+                remote_write=remote_write,
             )
 
         def _ambiguous(reason: str, issue: GitHubIssue | None = None) -> GitHubSyncResult:
@@ -2662,7 +2668,9 @@ class GitHubSync:
                             remote_write="ambiguous",
                         )
                     except GitHubSyncError as conflict:
-                        return _stale(str(conflict), remote)
+                        reason = str(conflict)
+                        self._mark_claim(claim, "conflict", reason, allow_terminalize=True)
+                        return _stale(reason, remote, remote_write="ambiguous")
                     status = "reconciled"
                     # Complete exact-marker readback confirms that this create
                     # was accepted despite the lost provider response.

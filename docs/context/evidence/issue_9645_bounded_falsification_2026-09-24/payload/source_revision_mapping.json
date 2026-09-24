@@ -1,0 +1,67 @@
+{
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "classification": "tracked-compact-evidence",
+  "experiment_source_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "experiment_source_commit_remote_retrievability": "local-only; reconstructable from base commit and tracked patch",
+  "raw_artifact_class": "ignored-cache/reproducible-from-tracked-config-command-seeds-and-commit",
+  "reconstruction": {
+    "base_commit": "5cccee50be333adceee4c978b54bf63d32454cc9",
+    "commands": [
+      "git switch --detach 5cccee50be333adceee4c978b54bf63d32454cc9",
+      "git apply docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_revision_58e.patch",
+      "sha256sum -c docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_hashes.sha256"
+    ],
+    "patch_path": "source_revision_58e.patch",
+    "patch_sha256": "44922462767140c89453fca8bbe01128cc73c384d62321459c858d336089ea31",
+    "public_equivalent_commit": "0ed1f06b5a24892e7409e653579ae35733b5d79d",
+    "verified_scope": "the 11 files listed below; this is not a full-tree equivalence claim"
+  },
+  "recorded_at_utc": "2026-09-24T21:25:10.016667Z",
+  "schema_version": "artifact_provenance_summary.v1",
+  "verified_source_files": [
+    {
+      "path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+      "sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392"
+    },
+    {
+      "path": "configs/scenarios/templates/crossing_ttc.yaml",
+      "sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "8158dcf2d83f61bcd93a4bae18aa3b32806f14b6b44254b05a868ce8c2c3df21"
+    },
+    {
+      "path": "robot_sf/adversarial/bundle.py",
+      "sha256": "9d8372b7bb8a6bf2fcf79529ca502d4ce9046e59fa003d542360b6120db5b65e"
+    },
+    {
+      "path": "robot_sf/adversarial/certification.py",
+      "sha256": "075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8"
+    },
+    {
+      "path": "robot_sf/adversarial/objectives.py",
+      "sha256": "19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8"
+    },
+    {
+      "path": "robot_sf/adversarial/samplers.py",
+      "sha256": "238526f91a7d94adaf3247245ae3958edc315ccec0bb2981513d35accebf168f"
+    },
+    {
+      "path": "robot_sf/adversarial/search.py",
+      "sha256": "c4636e29f4769a7f69649b2c7301d4a24e70cb203eef6c13af179501ff13c89c"
+    },
+    {
+      "path": "robot_sf/scenario_certification/v1.py",
+      "sha256": "f8f1a24487b9609ed4670d0ef0fe8b71c7983fbfe8e52b11c0a3823971d43941"
+    },
+    {
+      "path": "scripts/tools/compare_adversarial_samplers.py",
+      "sha256": "e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+    }
+  ]
+}

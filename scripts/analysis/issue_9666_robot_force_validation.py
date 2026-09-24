@@ -20,12 +20,20 @@ FORCES = (
     "robot_force_pp_equiv_peak",
     "robot_force_pp_equiv_time_above_ref_s",
 )
-COMPARATORS = ("min_distance", "near_misses", "human_discomfort_exposure_m_s")
+COMPARATORS = (
+    "min_distance",
+    "near_misses",
+    "human_discomfort_exposure_m_s",
+    "near_misses_per_step",
+)
 
 
 def metric_value(row: dict, key: str) -> float | None:
     """Resolve the serializer's canonical nested human-proxy reduction."""
     metrics = row["metrics"]
+    if key == "near_misses_per_step":
+        count, steps = metrics.get("near_misses"), row.get("steps", 0)
+        return count / steps if count is not None and steps > 0 else None
     if key == "human_discomfort_exposure_m_s" and key not in metrics:
         return metrics.get("human_interaction_proxy", {}).get("canonical_reductions", {}).get(key)
     return metrics.get(key)
@@ -232,6 +240,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--episodes", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--artifact-location", help="Durable artifact URI containing the input files"
+    )
     parser.add_argument("--expected-episodes", type=int, default=384)
     args = parser.parse_args()
     rows = []
@@ -242,7 +253,8 @@ def main() -> None:
         rows.extend(file_rows)
         sources.append(
             {
-                "name": f"{path.parent.name}/{path.name}",
+                "artifact_path": f"runs/{path.parent.name}/{path.name}",
+                "location": args.artifact_location or str(path.resolve()),
                 "sha256": hashlib.sha256(raw).hexdigest(),
                 "rows": len(file_rows),
                 "algorithms": sorted({row["algo"] for row in file_rows}),

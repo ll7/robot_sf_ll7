@@ -4,6 +4,7 @@ import pytest
 
 from scripts.analysis.issue_9666_robot_force_validation import (
     analyze,
+    metric_value,
     posthoc_discomfort,
     trace_evidence,
 )
@@ -31,6 +32,13 @@ def test_signed_distance_correlation_and_disagreements():
     assert report["correlations"][2]["spearman_rho"] is None
     with pytest.raises(ValueError, match="duplicate"):
         analyze(rows + rows[:1])
+
+
+def test_near_miss_rate_uses_executed_steps_without_imputing_missing_support():
+    row = {"steps": 10, "metrics": {"near_misses": 3}}
+    assert metric_value(row, "near_misses_per_step") == 0.3
+    row["steps"] = 0
+    assert metric_value(row, "near_misses_per_step") is None
 
 
 def test_null_metrics_and_zero_exposure_are_not_invented():

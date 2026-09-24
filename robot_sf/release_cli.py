@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -181,6 +182,12 @@ def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
         if mode == "repair-draft-metadata":
             parser.add_argument("--version", required=True)
             parser.add_argument("--publication-date", required=True)
+            parser.add_argument(
+                "--bootstrap-metadata",
+                type=Path,
+                help="Exact DOI-pending metadata used for the original fresh reservation.",
+            )
+            parser.add_argument("--expected-bootstrap-metadata-sha256")
             parser.add_argument("--expected-remote-metadata-sha256")
             parser.add_argument("--expected-remote-source-tag")
             parser.add_argument("--expected-remote-source-sha")
@@ -399,6 +406,23 @@ def _handle_repair_draft_metadata(
     metadata = zenodo_publisher.load_dataset_metadata(
         args.metadata, **_release_metadata_kwargs(release_binding)
     )
+    bootstrap_metadata = None
+    bootstrap_metadata_sha256 = None
+    bootstrap_path = getattr(args, "bootstrap_metadata", None)
+    if bootstrap_path is not None:
+        try:
+            bootstrap_metadata_sha256 = hashlib.sha256(
+                Path(bootstrap_path).read_bytes()
+            ).hexdigest()
+        except OSError as exc:
+            raise zenodo_publisher.ZenodoPublisherError(
+                "Zenodo bootstrap metadata file could not be read"
+            ) from exc
+        bootstrap_metadata = zenodo_publisher.load_dataset_metadata(
+            bootstrap_path,
+            expected_source_tag=str(release_binding["release_tag"]),
+            expected_metadata_sha256=bootstrap_metadata_sha256,
+        )
     report = zenodo_publisher.repair_draft_metadata(
         session,
         args.deposition_id,
@@ -406,6 +430,11 @@ def _handle_repair_draft_metadata(
         version=args.version,
         publication_date=args.publication_date,
         release_binding=release_binding,
+        bootstrap_metadata=bootstrap_metadata,
+        bootstrap_metadata_sha256=bootstrap_metadata_sha256,
+        expected_bootstrap_metadata_sha256=getattr(
+            args, "expected_bootstrap_metadata_sha256", None
+        ),
         expected_remote_metadata_sha256=args.expected_remote_metadata_sha256,
         expected_remote_source_tag=args.expected_remote_source_tag,
         expected_remote_source_sha=args.expected_remote_source_sha,

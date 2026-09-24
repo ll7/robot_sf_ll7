@@ -14,6 +14,7 @@ plus one real end-to-end rollout for integration coverage.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -756,6 +757,34 @@ scenarios:
     assert [cell["rollout_seed"] for cell in report["cells"]] == [17, 13]
     assert all(cell["issue"] == "5574" for cell in report["cells"])
     assert all(cell["nominal_verdict"]["issue"] == "5574" for cell in report["cells"])
+    expected_source_digest = hashlib.sha256(scenario_path.read_bytes()).hexdigest()
+    assert report["source_artifact_sha256"] == expected_source_digest
+    assert report["source_artifact_identity_stable"] is True
+    assert all(cell["source_artifact_sha256"] == expected_source_digest for cell in report["cells"])
+    assert all(cell["source_artifact_identity_stable"] is True for cell in report["cells"])
+
+
+def test_issue_5574_report_marks_source_manifest_changed_during_run(tmp_path: Path) -> None:
+    """A concurrent manifest edit makes the producer report unusable as bound evidence."""
+    scenario_path = tmp_path / "candidates.yaml"
+    source = "scenarios:\n  - name: cell_a\n    seeds: [13]\n"
+    scenario_path.write_text(source, encoding="utf-8")
+
+    def runner(_scenario, _seed, _horizon, _algo):
+        scenario_path.write_text(source + "# changed during oracle run\n", encoding="utf-8")
+        return _successful_rollout(2)
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("cell_a",),
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=runner,
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["source_artifact_sha256"] == hashlib.sha256(source.encode()).hexdigest()
+    assert report["source_artifact_identity_stable"] is False
+    assert report["cells"][0]["source_artifact_identity_stable"] is False
 
 
 def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> None:

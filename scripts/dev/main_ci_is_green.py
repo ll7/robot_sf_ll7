@@ -71,6 +71,7 @@ REST_RUN_TIMEOUT = 90
 DISPATCH_GATE_SCHEMA_VERSION = "main_ci_dispatch_gate.v1"
 DISPATCH_ACTIVE_STATUSES = frozenset({"queued", "in_progress", "requested", "pending", "waiting"})
 DISPATCH_MATRIX_JOB_NAME = "compat-matrix"
+FULL_MATRIX_EVENTS = frozenset({"push", "pull_request", "merge_group"})
 
 
 def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -801,10 +802,11 @@ def dispatch_decision(
 
 
 def _has_decisive_matrix_verdict(run: Mapping[str, Any]) -> bool:
-    """Manual aggregate status is not CI evidence unless compat-matrix ran."""
-    return (
-        str(run.get("event") or "") != "workflow_dispatch" or run.get("fullMatrixAdmitted") is True
-    )
+    """Require an explicit full-matrix trigger and manual-matrix admission proof."""
+    event = run.get("event")
+    if event == "workflow_dispatch":
+        return run.get("fullMatrixAdmitted") is True
+    return isinstance(event, str) and event in FULL_MATRIX_EVENTS
 
 
 def dispatch_gate_decision(

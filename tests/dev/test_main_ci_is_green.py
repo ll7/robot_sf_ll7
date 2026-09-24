@@ -427,18 +427,39 @@ def test_dispatch_policy_handles_success_failure_and_moved_head() -> None:
     """Success/failure/moved-head fixtures are deterministic and idempotent."""
     success = dispatch_decision(
         "a" * 40,
-        [{"headSha": "a" * 40, "status": "completed", "conclusion": "success"}],
+        [
+            {
+                "headSha": "a" * 40,
+                "event": "push",
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
     )
     assert success["action"] == "observe"
     failed = dispatch_decision(
         "a" * 40,
-        [{"headSha": "a" * 40, "status": "completed", "conclusion": "failure"}],
+        [
+            {
+                "headSha": "a" * 40,
+                "event": "push",
+                "status": "completed",
+                "conclusion": "failure",
+            }
+        ],
         retry_failed=True,
     )
     assert failed["action"] == "dispatch"
     deduped = dispatch_decision(
         "a" * 40,
-        [{"headSha": "a" * 40, "status": "completed", "conclusion": "failure"}],
+        [
+            {
+                "headSha": "a" * 40,
+                "event": "push",
+                "status": "completed",
+                "conclusion": "failure",
+            }
+        ],
         retry_failed=True,
         retry_receipt_seen=True,
     )
@@ -545,6 +566,64 @@ def test_dispatch_gate_observes_decisive_result_without_unlocking_matrix() -> No
 
     assert success["action"] == "observe_success"
     assert failure["action"] == "observe_failure"
+
+
+@pytest.mark.parametrize("event", ["push", "pull_request", "merge_group"])
+def test_dispatch_gate_accepts_only_explicit_full_matrix_events(event: str) -> None:
+    """Configured non-manual triggers carry full-matrix evidence."""
+    sha = "b" * 40
+    decision = dispatch_gate_decision(
+        sha,
+        20,
+        [
+            {
+                "databaseId": 10,
+                "headSha": sha,
+                "event": event,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+    )
+
+    assert decision["action"] == "observe_success"
+
+
+@pytest.mark.parametrize("event", [None, "", "schedule", "unknown-event"])
+def test_dispatch_gate_does_not_trust_missing_or_unknown_trigger(event: str | None) -> None:
+    """An incomplete REST event cannot suppress the full compatibility matrix."""
+    sha = "b" * 40
+    run = {
+        "databaseId": 10,
+        "headSha": sha,
+        "status": "completed",
+        "conclusion": "success",
+    }
+    run["event"] = event
+    decision = dispatch_gate_decision(sha, 20, [run])
+
+    assert decision["action"] == "run_full_ci"
+    assert decision["reason"] == "no_same_head_decisive_run"
+
+
+def test_dispatch_gate_does_not_trust_missing_trigger() -> None:
+    """A missing REST event is not equivalent to a full-matrix trigger."""
+    sha = "b" * 40
+    decision = dispatch_gate_decision(
+        sha,
+        20,
+        [
+            {
+                "databaseId": 10,
+                "headSha": sha,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+    )
+
+    assert decision["action"] == "run_full_ci"
+    assert decision["reason"] == "no_same_head_decisive_run"
 
 
 @pytest.mark.parametrize("conclusion", ["success", "failure"])

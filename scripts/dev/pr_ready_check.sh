@@ -1069,8 +1069,21 @@ if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   if [[ " $optional_pytest_addopts " != *" --cov-append "* ]]; then
     optional_pytest_addopts="${optional_pytest_addopts:+$optional_pytest_addopts }--cov-append"
   fi
-  run_pr_ready_lane optional env \
+  # The live launch smoke performs durable queue selection, episode reads, and
+  # loopback HTTP dispatch in one request. Under the full optional xdist lane,
+  # unrelated CPU-heavy tests can starve that request beyond its fixed client
+  # deadline. Keep the same smoke and assertions in readiness, but run it alone
+  # before the parallel lane (issue #9615).
+  optional_audit_launch_smoke="tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp"
+  run_pr_ready_lane optional_launch_smoke env \
     "PYTEST_ADDOPTS=$optional_pytest_addopts" \
+    ROBOT_SF_PYTEST_COVERAGE=1 \
+    ROBOT_SF_TEST_LANE=optional \
+    PYTEST_NUM_WORKERS=1 \
+    "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional "$optional_audit_launch_smoke"
+  optional_parallel_pytest_addopts="${optional_pytest_addopts} --deselect=$optional_audit_launch_smoke"
+  run_pr_ready_lane optional env \
+    "PYTEST_ADDOPTS=$optional_parallel_pytest_addopts" \
     ROBOT_SF_PYTEST_COVERAGE=1 \
     ROBOT_SF_TEST_LANE=optional \
     "PYTEST_XDIST_DIST=${PYTEST_XDIST_DIST:-worksteal}" \

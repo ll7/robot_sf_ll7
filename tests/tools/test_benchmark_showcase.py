@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 import scripts.tools.benchmark_showcase as showcase
+from robot_sf.benchmark.episode_replay_figure import load_episode_row
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -315,23 +317,28 @@ def test_direct_replay_uses_renderer_sidecar_and_verifies_artifact_hashes(
             {"t": 1.0, "x": 1.0, "y": 0.0, "heading": 0.0},
         ],
     }
-    episode_file.write_text(json.dumps(raw) + "\n", encoding="utf-8")
+    raw_line = (json.dumps(raw) + "\n").encode("utf-8")
+    episode_file.write_bytes(raw_line)
+    source = {
+        "episode_file": "runs/goal/episodes.jsonl",
+        "episode_file_sha256": showcase.sha256_file(episode_file),
+        "line_number": 1,
+        "record_sha256": hashlib.sha256(raw_line).hexdigest(),
+    }
     row = {
         "case_id": "case-1",
         "episode_id": "ep-1",
         "scenario_id": "scenario-1",
         "seed": 11,
         "raw": raw,
+        "source": source,
     }
     case = {
         "case_id": "case-1",
         "episode_id": "ep-1",
         "scenario_id": "scenario-1",
         "seed": 11,
-        "source": {
-            "episode_file": "runs/goal/episodes.jsonl",
-            "episode_file_sha256": showcase.sha256_file(episode_file),
-        },
+        "source": source,
     }
     replay = showcase._render_direct_replay(
         case,
@@ -349,6 +356,133 @@ def test_direct_replay_uses_renderer_sidecar_and_verifies_artifact_hashes(
         "filmstrip",
         "trajectory",
     }
+
+
+def test_direct_replay_rejects_selected_second_duplicate_episode_row(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    campaign_root = tmp_path / "campaign"
+    episode_file = campaign_root / "runs" / "goal" / "episodes.jsonl"
+    episode_file.parent.mkdir(parents=True)
+    first = {
+        "episode_id": "duplicate-ep",
+        "scenario_id": "same-scenario",
+        "seed": 7,
+        "final_robot_position": [1.0, 0.0],
+        "replay_steps": [
+            {"t": 0.0, "x": 0.0, "y": 0.0, "heading": 0.0},
+            {"t": 1.0, "x": 1.0, "y": 0.0, "heading": 0.0},
+        ],
+    }
+    second = {
+        **first,
+        "final_robot_position": [2.0, 0.0],
+        "replay_steps": [
+            {"t": 0.0, "x": 0.0, "y": 0.0, "heading": 0.0},
+            {"t": 1.0, "x": 2.0, "y": 0.0, "heading": 0.0},
+        ],
+    }
+    first_line = (json.dumps(first, sort_keys=True) + "\n").encode("utf-8")
+    second_line = (json.dumps(second, sort_keys=True) + "\n").encode("utf-8")
+    episode_file.write_bytes(first_line + second_line)
+    source = {
+        "episode_file": "runs/goal/episodes.jsonl",
+        "episode_file_sha256": showcase.sha256_file(episode_file),
+        "line_number": 2,
+        "record_sha256": hashlib.sha256(second_line).hexdigest(),
+    }
+    selected_by_renderer: list[float] = []
+
+    def renderer_resolves_first_episode_id_match(command: list[str]) -> None:
+        rendered = load_episode_row(episode_file, command[command.index("--episode-id") + 1])
+        selected_by_renderer.append(float(rendered.raw["replay_steps"][-1]["x"]))
+
+    sidecar = {
+        "episode_id": "duplicate-ep",
+        "scenario_id": "same-scenario",
+        "seed": 7,
+        "source_episodes_jsonl_sha256": source["episode_file_sha256"],
+        "resimulated": False,
+        "determinism_check_status": "pass",
+    }
+
+    def read_renderer_sidecar(path: Path) -> tuple[dict[str, Any], None]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sidecar), encoding="utf-8")
+        return sidecar, None
+
+    monkeypatch.setattr(showcase, "_invoke_renderer", renderer_resolves_first_episode_id_match)
+    monkeypatch.setattr(showcase, "_read_renderer_sidecar", read_renderer_sidecar)
+    monkeypatch.setattr(showcase, "_read_renderer_artifacts", lambda _payload, _root: ([], []))
+    row = {"raw": second, "source": source}
+    case = {
+        "case_id": "selected-second-row",
+        "episode_id": "duplicate-ep",
+        "scenario_id": "same-scenario",
+        "seed": 7,
+        "source": source,
+    }
+
+    replay = showcase._render_direct_replay(
+        case,
+        row,
+        campaign_root,
+        tmp_path / "output",
+        render_limit_reached=False,
+    )
+
+    assert selected_by_renderer == []
+    assert replay["status"] == "mismatch"
+    assert replay["renderer_called"] is False
+    assert "duplicate" in replay["reason"].lower()
+
+
+def test_direct_replay_rejects_changed_selected_record_digest(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    campaign_root = tmp_path / "campaign"
+    episode_file = campaign_root / "runs" / "goal" / "episodes.jsonl"
+    episode_file.parent.mkdir(parents=True)
+    raw = {
+        "episode_id": "ep-1",
+        "scenario_id": "scenario-1",
+        "seed": 11,
+        "replay_steps": [
+            {"t": 0.0, "x": 0.0, "y": 0.0, "heading": 0.0},
+            {"t": 1.0, "x": 1.0, "y": 0.0, "heading": 0.0},
+        ],
+    }
+    raw_line = (json.dumps(raw) + "\n").encode("utf-8")
+    episode_file.write_bytes(raw_line)
+    source = {
+        "episode_file": "runs/goal/episodes.jsonl",
+        "episode_file_sha256": showcase.sha256_file(episode_file),
+        "line_number": 1,
+        "record_sha256": hashlib.sha256(b"different row").hexdigest(),
+    }
+    monkeypatch.setattr(
+        showcase,
+        "_invoke_renderer",
+        lambda _command: pytest.fail("renderer must not run after a source-row digest mismatch"),
+    )
+
+    replay = showcase._render_direct_replay(
+        {
+            "case_id": "case-1",
+            "episode_id": "ep-1",
+            "scenario_id": "scenario-1",
+            "seed": 11,
+            "source": source,
+        },
+        {"raw": raw, "source": source},
+        campaign_root,
+        tmp_path / "output",
+        render_limit_reached=False,
+    )
+
+    assert replay["status"] == "mismatch"
+    assert replay["renderer_called"] is False
+    assert "record digest changed" in replay["reason"]
 
 
 def test_case_selection_round_robins_families_and_planners() -> None:

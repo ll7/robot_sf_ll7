@@ -386,11 +386,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     duration_checkout = next(
         step
         for step in aggregate["steps"]
-        if step.get("name") == "Checkout for duration-cache update"
+        if step.get("name") == "Checkout source for aggregate CI checks and duration-cache update"
     )
-    assert duration_checkout["id"] == "checkout_duration_cache"
+    assert duration_checkout["id"] == "checkout_ci_source"
     assert "always()" in duration_checkout["if"]
-    assert duration_checkout["continue-on-error"] is True
+    assert "dispatch-ownership.result != 'success'" in duration_checkout["if"]
+    assert "run_full_ci == 'true'" in duration_checkout["if"]
+    needs_check = next(
+        step for step in aggregate["steps"] if step.get("name") == "Check split job results"
+    )
+    assert "steps.checkout_ci_source.outcome == 'success'" in needs_check["if"]
     duration_download = next(
         step for step in aggregate["steps"] if step.get("name") == "Download test-duration shards"
     )
@@ -406,11 +411,11 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
         "path": ".duration-artifacts",
     }
     assert "always()" in duration_download["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_download["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_download["if"]
     assert duration_merge["id"] == "merge-test-durations"
     assert duration_merge["continue-on-error"] is True
     assert "always()" in duration_merge["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_merge["if"]
     # The inline merge program is replaced by the tested helper.
     assert "merge_test_durations.py" in duration_merge["run"]
     assert "--artifact-dir .duration-artifacts" in duration_merge["run"]
@@ -420,7 +425,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "merged.update(durations)" not in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
     assert "always()" in duration_save["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
     assert duration_save["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
@@ -499,7 +504,7 @@ def test_ci_aggregate_uses_declarative_needs_checker() -> None:
     checkout_index = next(
         index
         for index, step in enumerate(aggregate["steps"])
-        if step.get("id") == "checkout_duration_cache"
+        if step.get("id") == "checkout_ci_source"
     )
     result_index = aggregate["steps"].index(result_step)
     assert checkout_index < result_index
@@ -5783,6 +5788,32 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
     assert "PYTEST_XDIST_DIST" not in core_invocation, (
         "core lane must not change its distribution default"
     )
+
+
+def test_pr_ready_check_isolates_audit_launch_smoke_from_optional_xdist() -> None:
+    """Issue #9615: keep the latency-sensitive live launch smoke out of xdist contention."""
+
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+    node = (
+        "tests/render/test_audit_workbench_launch.py::"
+        "test_launch_opt_in_binds_fake_app_server_and_private_mcp"
+    )
+
+    assert script_text.count(f'optional_audit_launch_smoke="{node}"') == 1
+    serial_lane = script_text.split("run_pr_ready_lane optional_launch_smoke env", 1)[1].split(
+        "optional_parallel_pytest_addopts=", 1
+    )[0]
+    parallel_lane = script_text.split("run_pr_ready_lane optional env", 1)[1].split(
+        "else\n  if [[ ${#optional_changed_files[@]}", 1
+    )[0]
+    assert "PYTEST_NUM_WORKERS=1" in serial_lane
+    assert '--lane optional "$optional_audit_launch_smoke"' in serial_lane
+    assert (
+        'optional_parallel_pytest_addopts="${optional_pytest_addopts} --deselect=$optional_audit_launch_smoke"'
+        in script_text
+    )
+    assert '"PYTEST_ADDOPTS=$optional_parallel_pytest_addopts"' in parallel_lane
+    assert "PYTEST_NUM_WORKERS=1" not in parallel_lane
 
 
 def test_worktree_shared_venv_selection_gate_contract() -> None:

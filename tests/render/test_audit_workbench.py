@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -3938,13 +3940,126 @@ def test_document_and_offline_assets_mark_fixture_boundary(tmp_path: Path) -> No
     assert (tmp_path / "audit" / "components" / "review_panels" / "review_panels.js").is_file()
 
 
-def test_browser_controller_runtime_covers_normal_and_missing_media_cases() -> None:
-    """Execute the dependency-free DOM harness used by the fixture UI slice."""
+_NODE_ERROR_TYPES = r"AssertionError|SyntaxError|TypeError|ReferenceError|RangeError|Error"
+_NODE_ERROR_CODES = (
+    "ERR_ASSERTION",
+    "ERR_MODULE_NOT_FOUND",
+    "ERR_UNKNOWN_FILE_EXTENSION",
+    "MODULE_NOT_FOUND",
+)
+
+
+def _safe_node_diagnostic(output: str, *, stream: str) -> str:
+    """Project only known error structure; arbitrary harness text stays private."""
+    details = [f"lines={len(output.splitlines())}", f"characters={len(output)}"]
+    if stream == "stdout":
+        details.append(f"success_marker={'audit_workbench_runtime: ok' in output}")
+    else:
+        error = re.search(rf"\b({_NODE_ERROR_TYPES})\b", output)
+        if error:
+            details.append(f"error_type={error.group(1)}")
+        for code in _NODE_ERROR_CODES:
+            if re.search(rf"\b{code}\b", output):
+                details.append(f"error_code={code}")
+                break
+        location = re.search(r"\baudit_workbench_runtime\.mjs:(\d{1,5})(?::(\d{1,3}))?\b", output)
+        if location:
+            line, column = location.groups()
+            details.append(f"harness_location={line}:{column or 'unknown'}")
+    return ", ".join(details) + ", raw=withheld"
+
+
+def _safe_node_version(output: str) -> str:
+    """The version probe is emitted only when it has Node's numeric format."""
+    version = output.strip()
+    return version if re.fullmatch(r"v\d{1,3}\.\d{1,3}\.\d{1,3}", version) else "unavailable"
+
+
+def _run_browser_controller_harness() -> subprocess.CompletedProcess[str]:
+    """Execute the dependency-free DOM harness and retain bounded failure detail."""
     completed = subprocess.run(
         ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
+        env={"PATH": os.environ.get("PATH", "")},
     )
+    if completed.returncode:
+        try:
+            version = subprocess.run(
+                ["node", "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+                env={"PATH": os.environ.get("PATH", "")},
+            ).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            version = "unavailable"
+        pytest.fail(
+            f"Node DOM harness exit={completed.returncode}, version={_safe_node_version(version)}\n"
+            f"stdout: {_safe_node_diagnostic(completed.stdout, stream='stdout')}\n"
+            f"stderr: {_safe_node_diagnostic(completed.stderr, stream='stderr')}",
+            pytrace=False,
+        )
+    return completed
+
+
+def test_browser_controller_runtime_covers_normal_and_missing_media_cases() -> None:
+    """The DOM harness exercises both normal and missing-media paths."""
+    completed = _run_browser_controller_harness()
 
     assert "audit_workbench_runtime: ok" in completed.stdout
+
+
+def test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing Node assertion preserves its exit and clue without leaking credentials."""
+    secret = "abc1234"
+    monkeypatch.setenv("GITHUB_TOKEN", secret)
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert kwargs["capture_output"] is True and kwargs["text"] is True
+        assert kwargs["env"] == {"PATH": os.environ.get("PATH", "")}
+        if args == ["node", "--version"]:
+            return subprocess.CompletedProcess(args, 0, "v22.20.0\n", "")
+        return subprocess.CompletedProcess(
+            args,
+            7,
+            f"stdout {secret} token={secret} " + "x" * 2500,
+            "AssertionError [ERR_ASSERTION] at harness.mjs:42\n"
+            "at audit_workbench_runtime.mjs:42:7\n"
+            f'{{"password":"demosynthetic123","authorization":"demosynthetic456"}}\n'
+            f"Authorization: Bearer {secret}\n"
+            f"fixture={_FakeSession.session_token}\n" + "y" * 2500,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(pytest.fail.Exception) as failure:
+        _run_browser_controller_harness()
+
+    message = str(failure.value)
+    assert "exit=7" in message and "version=v22.20.0" in message
+    assert "error_type=AssertionError" in message and "error_code=ERR_ASSERTION" in message
+    assert "harness_location=42:7" in message
+    assert "success_marker=False" in message and message.count("raw=withheld") == 2
+    assert len(message) < 350
+    for hidden in (
+        secret,
+        "demosynthetic123",
+        "demosynthetic456",
+        _FakeSession.session_token,
+        "x" * 50,
+        "y" * 50,
+    ):
+        assert hidden not in message
+    oversized_location = "audit_workbench_runtime.mjs:" + "9" * 4000
+    projected = _safe_node_diagnostic(oversized_location, stream="stderr")
+    assert "harness_location=" not in projected
+    assert len(projected) < 100
+    assert calls == [
+        ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
+        ["node", "--version"],
+    ]

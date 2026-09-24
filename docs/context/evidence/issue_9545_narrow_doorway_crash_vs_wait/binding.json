@@ -17,7 +17,7 @@
   "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; 0.99 is checkpoint-embedded artifact metadata used for eval-time discounted replay only, not proof of the training-time objective.",
   "gamma_training_config_declared": null,
   "gamma_used_for_discounted_replay": 0.99,
-  "generated_at_utc": "2026-09-23T14:22:28.459455+00:00",
+  "generated_at_utc": "2026-09-24T08:43:50.003414+00:00",
   "observation_contract": {
     "fallback_or_degraded_execution": false,
     "occupancy_grid_preserved": true,
@@ -31,7 +31,7 @@
   "producer_script": "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py",
   "producer_script_sha256": "aeda00d68b98564e94a3351051b313f11a7e7a2758e8f485df589e7b819bd597",
   "producer_source_blob_sha256": "aeda00d68b98564e94a3351051b313f11a7e7a2758e8f485df589e7b819bd597",
-  "producer_source_commit": "26dfb96c0260b53cb0457308ec0383773f9765d5",
+  "producer_source_commit": "89b2935301b26ae13a5d5618b0a76a2f5c0e96ec",
   "producer_source_commit_note": "This is the source/code commit used to generate the evidence. Generated evidence is committed later in a separate artifact commit; this binding intentionally does not self-reference that later artifact commit.",
   "resolved_cli": {
     "hold_start_offset": 20,

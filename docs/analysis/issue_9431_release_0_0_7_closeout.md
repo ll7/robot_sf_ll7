@@ -153,8 +153,21 @@ invalidate the pinned trace bytes or establish release-level evidence.
 
 ## Publication boundary
 
-The GitHub software release and both W&B evidence packages are published. The
-preassigned Zenodo identifiers were never published and return no citable DOI;
-this closeout intentionally makes no Zenodo DOI claim. Issue #9431 remains open
-until its goal-adjacent timeout comparison is either made computable from valid
-evidence or explicitly waived by its owner; no such waiver is asserted here.
+The GitHub software release and both W&B evidence packages are published.
+After this closeout was first written, the author published the existing
+[Zenodo record 22814343](https://zenodo.org/records/22814343), with version DOI
+`10.5281/zenodo.22814343` and concept DOI `10.5281/zenodo.22814342`.
+The [publication readback](https://github.com/ll7/robot_sf_ll7/issues/9431#issuecomment-5812815038)
+reports an anonymous download of the exact 0.0.7 archive at SHA-256
+`684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`
+and a passing three-file published audit. A later
+[resolver readback](https://github.com/ll7/robot_sf_ll7/issues/9431#issuecomment-5813593849)
+reports HTTP 200 from the DOI redirect and DataCite. These are the author's
+recorded checks; this update does not alter or reissue the published assets.
+
+The author recorded a release-owner exception to the prospective doctor's
+post-tag collision check; it was skipped, not passed. The broad readiness run
+was interrupted in an optional lane and exited 143, while the focused release
+tests and published-record verification passed. Issue #9431 remains open for
+its other acceptance work, including the goal-adjacent timeout comparison;
+no waiver is asserted here.

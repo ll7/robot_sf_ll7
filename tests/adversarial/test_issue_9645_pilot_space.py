@@ -25,8 +25,9 @@ def test_issue_9645_space_varies_only_effective_dimensions_and_freezes_environme
     assert (search_space.spawn_time_s.min, search_space.spawn_time_s.max) == (0.0, 0.0)
     assert (search_space.pedestrian_delay_s.min, search_space.pedestrian_delay_s.max) == (0.0, 0.0)
     assert (search_space.scenario_seed.min, search_space.scenario_seed.max) == (123, 123)
-    assert (search_space.start_x.min, search_space.start_x.max) == (1.0, 3.0)
+    assert (search_space.start_x.min, search_space.start_x.max) == (2.5, 3.0)
     assert (search_space.goal_x.min, search_space.goal_x.max) == (7.0, 9.0)
+    assert (search_space.goal_y.min, search_space.goal_y.max) == (2.5, 4.0)
     assert (search_space.pedestrian_speed_mps.min, search_space.pedestrian_speed_mps.max) == (
         0.8,
         1.4,

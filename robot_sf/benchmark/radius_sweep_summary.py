@@ -24,6 +24,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
 from robot_sf.benchmark.radius_rank_stability import (
     SWEEP_SUMMARY_SCHEMA,
@@ -40,6 +41,12 @@ from robot_sf.benchmark.radius_sweep_manifest import (
     EXPECTED_SEEDS,
     PRODUCTION_RADII,
     RELEASE_PLANNER_KEYS,
+)
+from robot_sf.benchmark.release_acceptance import (
+    _algorithm_metadata_runtime_marker as _release_algorithm_metadata_runtime_marker,
+)
+from robot_sf.benchmark.release_acceptance import (
+    _status_markers as _release_status_markers,
 )
 from robot_sf.benchmark.result_provenance import (
     SCHEMA_VERSION as RESULT_PROVENANCE_SCHEMA,
@@ -550,6 +557,12 @@ def _episode_from_record(
         expected=planner_identities_for_scenario[scenario],
         radius=radius,
     )
+    _validate_episode_runtime_status(
+        record,
+        planner=planner,
+        expected_algorithm=planner_identities_for_scenario[scenario].algorithm,
+        radius=radius,
+    )
     seed_raw = record.get("seed")
     if (
         isinstance(seed_raw, bool)
@@ -594,6 +607,111 @@ def _episode_from_record(
         typed_collisions=total,
         snqi=_finite(metrics.get("snqi"), "episode SNQI"),
     )
+
+
+def _validate_episode_runtime_status(
+    record: Mapping[str, Any],
+    *,
+    planner: str,
+    expected_algorithm: str,
+    radius: float,
+) -> None:
+    """Reject row-level runtime fallback markers independently of campaign aggregates."""
+    top_level_status = {
+        field: record[field]
+        for field in (
+            "status",
+            "row_status",
+            "readiness_status",
+            "availability_status",
+            "evidence_status",
+            "execution_status",
+            "fallback",
+            "degraded",
+            "fallback_triggered",
+            "fallback_or_degraded",
+            "fallback_used",
+        )
+        if field in record
+    }
+    status_markers = _release_status_markers(top_level_status, "episode")
+    if status_markers:
+        marker_path, marker_value = status_markers[0]
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode contains a fallback/degraded "
+            f"runtime marker: {marker_path}={marker_value}"
+        )
+
+    raw_metadata = record.get("algorithm_metadata")
+    if raw_metadata is None:
+        return
+    metadata = _mapping(raw_metadata, "episode algorithm_metadata")
+    if metadata.get("evidence_eligible") is False:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has ineligible algorithm metadata"
+        )
+    foresight = metadata.get("foresight_prediction")
+    if isinstance(foresight, Mapping) and foresight.get("evidence_eligible") is False:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has ineligible foresight metadata"
+        )
+
+    diagnostics = metadata.get("planner_diagnostics")
+    if isinstance(diagnostics, Mapping):
+        fallback_reasons = diagnostics.get("fallback_reasons")
+        if fallback_reasons is not None and (
+            not isinstance(fallback_reasons, Mapping) or bool(fallback_reasons)
+        ):
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} planner {planner!r} episode contains a "
+                "fallback/degraded runtime marker: "
+                "algorithm_metadata.planner_diagnostics.fallback_reasons=non-empty-or-invalid"
+            )
+        diagnostic_status = {
+            key: value
+            for key, value in diagnostics.items()
+            if key
+            in {
+                "status",
+                "row_status",
+                "readiness_status",
+                "availability_status",
+                "execution_mode",
+                "fallback",
+                "degraded",
+                "fallback_triggered",
+                "fallback_or_degraded",
+                "fallback_used",
+                "fallback_count",
+            }
+            or ("fallback" in str(key) and isinstance(value, (int, float)))
+            or (key == "fallback_reason" and value not in (None, ""))
+        }
+        marker = runtime_fallback_or_degraded_marker(diagnostic_status)
+        if marker is not None:
+            marker_path, marker_value = marker
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} planner {planner!r} episode contains a "
+                "fallback/degraded runtime marker: "
+                f"algorithm_metadata.planner_diagnostics.{marker_path}={marker_value}"
+            )
+
+    # planner_diagnostics carries planner-specific diagnostics (including empty diagnostic
+    # dictionaries) rather than the shared runtime status contract. The producer also echoes
+    # active fallback into algorithm_metadata.status; keep the canonical release parser on the
+    # remaining runtime fields to avoid treating descriptive diagnostics as fallback evidence.
+    runtime_metadata = dict(metadata)
+    runtime_metadata.pop("planner_diagnostics", None)
+    marker = _release_algorithm_metadata_runtime_marker(
+        runtime_metadata,
+        expected_algorithm=expected_algorithm,
+    )
+    if marker is not None:
+        marker_path, marker_value = marker
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode contains a fallback/degraded "
+            f"runtime marker: algorithm_metadata.{marker_path}={marker_value}"
+        )
 
 
 def _validate_runner_receipt(  # noqa: C901, PLR0912
@@ -739,14 +857,26 @@ def _validate_runner_row_binding(
 ) -> None:
     """Require one runner receipt row to identify the parsed JSONL episode."""
     row = _mapping(receipt_row, f"runner receipt row {jsonl_line}")
+    receipt_line = row.get("jsonl_line")
+    receipt_seed = row.get("seed")
+    if (
+        isinstance(receipt_line, bool)
+        or not isinstance(receipt_line, int)
+        or isinstance(receipt_seed, bool)
+        or not isinstance(receipt_seed, int)
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance row numeric identity has invalid types at "
+            f"{episodes_path}:{jsonl_line + 1}"
+        )
     bindings = (
         ("episode_id", episode_record.get("episode_id")),
         ("scenario_id", episode_record.get("scenario_id")),
-        ("seed", episode_record.get("seed")),
+        ("seed", receipt_seed),
         ("config_hash", episode_record.get("config_hash")),
         ("repo_commit", episode_record.get("git_hash")),
     )
-    if row.get("jsonl_line") != jsonl_line or any(
+    if receipt_line != jsonl_line or any(
         row.get(field) != expected for field, expected in bindings
     ):
         raise RadiusSweepSummaryError(

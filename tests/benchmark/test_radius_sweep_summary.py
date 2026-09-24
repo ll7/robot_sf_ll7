@@ -471,6 +471,110 @@ def test_composer_rejects_runner_receipt_for_wrong_frozen_algorithm(
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
+@pytest.mark.parametrize(
+    ("location", "expected_error"),
+    (
+        ("status", "fallback/degraded runtime marker"),
+        ("evidence_status", "fallback/degraded runtime marker"),
+        ("execution_status", "fallback/degraded runtime marker"),
+        ("planner_runtime", "fallback/degraded runtime marker"),
+        ("planner_diagnostics", "fallback/degraded runtime marker"),
+        ("planner_diagnostic_reasons", "fallback/degraded runtime marker"),
+        ("foresight_ineligible", "ineligible foresight metadata"),
+    ),
+)
+def test_composer_rejects_row_fallback_even_with_matching_receipt_and_summary(
+    tmp_path: Path,
+    compact_scope: None,
+    location: str,
+    expected_error: str,
+) -> None:
+    """Row-level runtime markers cannot be hidden by a clean aggregate status count."""
+    roots, receipt = _write_triplet(tmp_path)
+    episodes_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes_path.read_text(encoding="utf-8").splitlines()]
+    metadata = rows[0]["algorithm_metadata"]
+    if location == "status":
+        metadata["status"] = "fallback"
+    elif location == "evidence_status":
+        rows[0]["evidence_status"] = "fallback"
+    elif location == "execution_status":
+        rows[0]["execution_status"] = "degraded"
+    elif location == "planner_runtime":
+        metadata["planner_runtime"] = {"fallback_triggered": True}
+    elif location == "planner_diagnostics":
+        metadata["planner_diagnostics"] = {"fallback": True, "fallback_count": 1}
+    elif location == "planner_diagnostic_reasons":
+        metadata["planner_diagnostics"] = {
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {"wrapper_exception": 1},
+        }
+    else:
+        metadata["foresight_prediction"] = {"evidence_eligible": False}
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    # The row receipt matches the edited artifact. The campaign summary still claims zero
+    # fallback/degraded rows, so only checking that aggregate would miss this marker.
+    _write_runner_receipt(episodes_path, rows)
+
+    with pytest.raises(RadiusSweepSummaryError, match=expected_error):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_episode_status_allows_empty_social_force_diagnostics() -> None:
+    """Empty planner diagnostic maps are not mistaken for runtime fallback markers."""
+    composer._validate_episode_runtime_status(
+        {
+            "status": "success",
+            "algorithm_metadata": {
+                "algorithm": "social_force",
+                "canonical_algorithm": "social_force",
+                "status": "ok",
+                "planner_diagnostics": {
+                    "planner_type": "SocialForcePlanner",
+                    "fallback": False,
+                    "fallback_count": 0,
+                    "fallback_reason": None,
+                    "fallback_reasons": {},
+                },
+            },
+        },
+        planner="social_force",
+        expected_algorithm="social_force",
+        radius=0.5,
+    )
+
+
+@pytest.mark.parametrize("field", ("jsonl_line", "seed"))
+def test_runner_row_binding_rejects_boolean_numeric_identities(field: str, tmp_path: Path) -> None:
+    """JSON booleans are not accepted as integer row identifiers."""
+    episode = {
+        "episode_id": "episode-1",
+        "scenario_id": "case-a",
+        "seed": 1,
+        "config_hash": "config-hash",
+        "git_hash": "a" * 40,
+    }
+    receipt_row = {
+        "episode_id": "episode-1",
+        "scenario_id": "case-a",
+        "seed": 1,
+        "config_hash": "config-hash",
+        "repo_commit": "a" * 40,
+        "jsonl_line": 1,
+    }
+    receipt_row[field] = True
+
+    with pytest.raises(RadiusSweepSummaryError, match="numeric identity has invalid types"):
+        composer._validate_runner_row_binding(
+            receipt_row,
+            episode,
+            jsonl_line=1,
+            episodes_path=tmp_path / "episodes.jsonl",
+        )
+
+
 @pytest.mark.parametrize("symlink_parent", ("runs", "planner"))
 def test_composer_rejects_symlinked_episode_path_ancestors(
     tmp_path: Path, compact_scope: None, symlink_parent: str

@@ -147,6 +147,9 @@ used by focused unit tests validate plumbing only and are never benchmark eviden
 The composer verifies
 the exact 3-radius × 14-planner × 48-scenario × 30-seed identities, rejects duplicate rows, and
 derives success, typed-collision, and SNQI aggregates and seed-keyed pairs from the episode records.
+It also classifies each episode's runtime status, planner-runtime and foresight fallback markers,
+and explicit evidence-eligibility flags; a clean campaign-summary fallback count alone cannot admit
+a row.
 Each episode's algorithm fields (`algo`, `scenario_params.algo`, and any
 `algorithm_metadata.algorithm` / `canonical_algorithm`) must canonicalize to the algorithm resolved
 for that planner key and scenario from the campaign config at the pinned source commit.

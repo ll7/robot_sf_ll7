@@ -132,6 +132,48 @@ payload = [certificate_to_dict(certificate) for certificate in certificates]
 
 Programmatic tests can call `certify_map_definition(...)` directly with a `MapDefinition`.
 
+## Adversarial scenario verdicts
+
+Falsification callers can combine the serialized certificate with the existing feasibility
+oracle, predicate contract, and named execution/replay records through
+`robot_sf.adversarial.classify_scenario_admissibility(...)`. The output contract is
+[`scenario_admissibility.v1`](../robot_sf/benchmark/schemas/scenario_admissibility.v1.json),
+and `partition_candidates_by_admissibility(...)` retains cases by verdict for search
+stratification.
+
+The adapter has five outcomes: `structurally_invalid`,
+`geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
+`empirically_feasible`, and `planner_specific_failure`. It rejects only explicit structural or
+geometry/kinodynamic exclusions. An oracle exclusion is scoped to its recorded robot envelope;
+the envelope and certificate assumptions remain attached to the verdict. A
+`dynamically_overconstrained` certificate, a blocked or truncated oracle, missing provenance, or
+conflicting evidence remains `admissible_feasibility_unknown`. Since `scenario_cert.v1` reports the
+highest-severity route at the scenario level, geometry or kinematic exclusion requires every
+applicable route certificate to support the same excluded classification; a different or usable
+route keeps the whole case unknown.
+
+Execution inputs are normalized records with `case_id`, `scenario_id`, `scenario_variant`,
+`planner_id`, `run_status`, `route_complete`, `seed`, `horizon_steps`, SHA-256 hashes for the
+scenario, robot model, simulator config, planner config, and environment, plus
+`planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. The checkpoint field is either a
+SHA-256 hash or the explicit value `not_applicable` for a known checkpoint-free planner; missing
+checkpoint provenance stays unknown. Only `scenario_variant: original` and `run_status: ok` records
+can establish an outcome. Replay records additionally require `determinism_check_status: pass` and
+`resimulated: true`; callers adapt canonical episode rows and the existing replay provenance sidecar
+into this input shape. Incomplete records stay visible in `evidence` and do not establish
+feasibility.
+
+An observed reference or replay completion is empirical evidence for that named case and run, not
+a proof that every planner can solve it. Replay counts only after simulator resimulation with a
+passing determinism check. A target-planner failure alone does not establish scenario
+infeasibility; `planner_specific_failure` requires a completed reference run and an incomplete
+target run bound to the same scenario, seed, horizon, source revision, and configuration hashes,
+plus a deterministic replay by the target planner that reproduces the incomplete route under the
+same scenario bindings and matching planner-config and checkpoint hashes as the target run. Missing,
+mismatched, or successful replay remains unknown. The target outcome is a separate field from
+scenario admissibility. This helper does not change benchmark denominators or establish real-world
+safety.
+
 ## Limits
 
 `scenario_cert.v1` is a first-pass fail-closed contract, not a high-budget oracle planner. It does

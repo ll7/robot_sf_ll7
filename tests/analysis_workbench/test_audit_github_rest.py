@@ -345,6 +345,56 @@ def test_create_issue_posts_exact_human_body_and_does_not_patch() -> None:
         _provider(fake).update_issue(REPOSITORY, 9, body="unsafe")
 
 
+def test_canonical_revision_create_posts_immutable_issue_without_patch() -> None:
+    fake = FakeHTTP()
+    body = "immutable body"
+    fake.add(
+        "POST",
+        "/repos/ll7/robot_sf_ll7/issues",
+        HttpResponse(201, _issue(9, body=body)),
+    )
+
+    issue = _provider(fake).create_issue_with_finding_revision(
+        REPOSITORY,
+        finding_id="f-rest-create",
+        expected_finding_revision=0,
+        title="audit issue",
+        body=body,
+        labels=("benchmark-audit",),
+    )
+
+    assert issue.number == 9
+    assert issue.body == body
+    assert [method for method, _url, _body in fake.calls] == ["POST"]
+
+
+@pytest.mark.parametrize(
+    ("finding_id", "expected_finding_revision"),
+    [
+        ("", 0),
+        ("f-invalid", -1),
+        ("f-invalid", True),
+    ],
+)
+def test_canonical_revision_create_rejects_malformed_reservation_before_http(
+    finding_id: str,
+    expected_finding_revision: Any,
+) -> None:
+    fake = FakeHTTP()
+
+    with pytest.raises(GitHubRestValidationError):
+        _provider(fake).create_issue_with_finding_revision(
+            REPOSITORY,
+            finding_id=finding_id,
+            expected_finding_revision=expected_finding_revision,
+            title="audit issue",
+            body="body",
+            labels=("benchmark-audit",),
+        )
+
+    assert fake.calls == []
+
+
 def test_append_comment_is_idempotent_and_preserves_human_comments() -> None:
     fake = FakeHTTP()
     human = _comment(1, "Human comment remains unchanged")

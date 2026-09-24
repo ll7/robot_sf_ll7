@@ -525,7 +525,13 @@ def test_evidence_success_preserves_formatting_and_downstream_gates(
 
     assert result.returncode == (67 if later_failure else 0), result.stdout + result.stderr
     calls = trace.read_text(encoding="utf-8").splitlines()
-    expected = ["ratchet --check", "format", "core --lane core", "optional --lane optional"]
+    expected = [
+        "ratchet --check",
+        "format",
+        "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
+        "optional --lane optional",
+    ]
     assert calls == expected + ([] if later_failure else ["stamp"])
     if later_failure:
         assert "later gate rejected" in result.stderr
@@ -1535,8 +1541,8 @@ def test_pr_ready_sigterm_writes_optional_receipt_and_cleans_lane(
 
         assert process.returncode == 143, stdout + stderr
         payload = json.loads(receipt.read_text(encoding="utf-8"))
-        assert payload["phase"] == "optional_lane"
-        assert payload["lane"] == "optional"
+        assert payload["phase"] == "optional_launch_smoke_lane"
+        assert payload["lane"] == "optional_launch_smoke"
         assert payload["signal"]["name"] == "SIGTERM"
         assert payload["cleanup"]["verified"] is True
         assert payload["process"]["child_process_group_exists"] is False
@@ -1676,6 +1682,7 @@ def test_pr_ready_check_escalates_optional_changed_files_to_the_optional_lane(
     lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
     assert lane_lines == [
         "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
         "optional --lane optional",
     ]
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
@@ -1900,6 +1907,7 @@ def test_pr_ready_coverage_database_parent_survives_lanes_and_reporting(
     assert result.returncode == 0, result.stderr
     records = lifetime_log.read_text(encoding="utf-8").splitlines()
     assert [record.split(":", maxsplit=1)[0] for record in records] == [
+        "lane",
         "lane",
         "lane",
         "report",
@@ -2374,6 +2382,7 @@ def test_publication_preflight_lane_coverage_routing(preflight_repo: Path) -> No
     # When an optional file changes, both core and optional lanes must be run
     assert lane_lines == [
         "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
         "optional --lane optional",
     ]
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
@@ -2443,6 +2452,7 @@ def test_pr_ready_check_regression_shapes_classification(preflight_repo: Path) -
     lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
     assert lane_lines == [
         "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
         "optional --lane optional",
     ]
 

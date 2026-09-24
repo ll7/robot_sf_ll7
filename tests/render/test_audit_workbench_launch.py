@@ -257,7 +257,9 @@ def test_native_launch_runs_selected_campaign_row_over_http_and_rejects_stale_se
         parsed = urlsplit(opened.url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
-        def post(operation: str, arguments: dict[str, object]) -> dict[str, object]:
+        def post(
+            operation: str, arguments: dict[str, object], *, timeout: float = 60.0
+        ) -> dict[str, object]:
             request = Request(
                 origin + "/api/audit",
                 data=json.dumps({"operation": operation, "arguments": arguments}).encode("utf-8"),
@@ -268,7 +270,7 @@ def test_native_launch_runs_selected_campaign_row_over_http_and_rejects_stale_se
                 },
                 method="POST",
             )
-            with urlopen(request, timeout=60) as response:
+            with urlopen(request, timeout=timeout) as response:
                 return json.load(response)
 
         selected = post(
@@ -279,6 +281,7 @@ def test_native_launch_runs_selected_campaign_row_over_http_and_rejects_stale_se
         selected_episode_id = selected["packet"]["primary"]["episode_id"]
         assert selected_episode_id != binding.campaign_row.episode_id
 
+        # The two sequential child runs each allow 60s startup plus 30s execution.
         result = post(
             "run_native_diagnostic",
             {
@@ -290,6 +293,7 @@ def test_native_launch_runs_selected_campaign_row_over_http_and_rejects_stale_se
                 "activation_epsilon_m": 1e-9,
                 "deadline_s": 30.0,
             },
+            timeout=210.0,
         )
         assert result["status"] == "complete", result
         assert result["diagnostic_only"] is True

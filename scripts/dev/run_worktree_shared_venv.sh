@@ -654,7 +654,7 @@ dependency_profile_report=""
 run_dependency_profile_check() {
   if dependency_profile_report="$("$venv_path/bin/python" \
     "$repo_root/scripts/dev/check_worktree_optional_deps.py" \
-    --profile "$dependency_profile" 2>&1)"; then
+    --profile "$dependency_profile" --check-entry-points 2>&1)"; then
     return 0
   fi
   return 2
@@ -680,13 +680,16 @@ complete_worktree_dependency_profile() {
   # worktree is eligible; an explicit --venv stays authoritative and the
   # owning checkout is never mutated. Recovery runs its own capacity gate and
   # repository lock, so this preserves the existing fail-closed boundaries.
+  # Issue #9591: if a linked worktree uses the shared environment and that
+  # environment lacks the profile or has stale entry points, auto-recover a
+  # worktree-local .venv without mutating the shared checkout.
   if [[ -n "$dependency_profile_recovery_attempted" ]]; then
     return 1
   fi
   if [[ "$is_linked_worktree" -ne 1 || -n "$venv_override" || -n "$standalone" ]]; then
     return 1
   fi
-  if [[ "$venv_path" != "$repo_root/.venv" ]]; then
+  if [[ "$venv_path" != "$repo_root/.venv" && "$venv_path" != "$main_repo_root/.venv" ]]; then
     return 1
   fi
   local recovery_script="$repo_root/scripts/dev/recover_fast_pysf_worktree.sh"
@@ -704,6 +707,8 @@ complete_worktree_dependency_profile() {
     echo "ERROR: dependency-profile completion sync failed (recovery exit $recovery_rc)." >&2
     return 1
   fi
+  dependency_profile_recovery_attempted=1
+  venv_path="$repo_root/.venv"
   return 0
 }
 

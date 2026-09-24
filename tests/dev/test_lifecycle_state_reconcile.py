@@ -595,3 +595,13 @@ def test_plan_open_entry_rejects_malformed_covering_list() -> None:
             read_claim=lambda issue: {"ok": True, "claimed": False},
             read_covering=lambda issue: {"ok": True, "covering_prs": ["NaN"], "truncated": False},
         )
+
+
+def test_report_flag_alias_parses_as_report_mode() -> None:
+    """The documented `--report --json` invocation parses (issue #9625)."""
+    parser = reconcile._build_parser()
+    args = parser.parse_args(["--report", "--json"])
+    assert args.report is True
+    assert args.json is True
+    assert args.apply is False
+    assert parser.parse_args([]).report is False

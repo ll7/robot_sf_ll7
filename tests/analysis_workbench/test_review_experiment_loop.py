@@ -194,6 +194,22 @@ class FakeExecutor:
         return self.results.get(operation_id)
 
 
+class _FakeMonotonicClock:
+    """Deterministic monotonic clock for phase-boundary deadline tests."""
+
+    def __init__(self) -> None:
+        """Start the clock at the beginning of the test."""
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        """Return the current synthetic monotonic time."""
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        """Advance time only at the phase boundary under test."""
+        self.value += seconds
+
+
 def _run_injected(
     request: ComponentRequest,
     *,
@@ -2460,9 +2476,8 @@ def test_resume_rejects_reordered_self_consistent_operation_list(tmp_path: Path)
 def test_wall_deadline_between_control_and_treatment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real_monotonic = time.monotonic
-    clock = {"jump": 0.0}
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+    clock = _FakeMonotonicClock()
+    monkeypatch.setattr(time, "monotonic", clock)
 
     class SlowControl(FakeExecutor):
         def execute(
@@ -2474,7 +2489,7 @@ def test_wall_deadline_between_control_and_treatment(
             attempt: int,
         ):
             if kind == "control":
-                clock["jump"] = 1.0
+                clock.advance(1.0)
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2))
@@ -2495,9 +2510,8 @@ def test_wall_deadline_between_control_and_treatment(
 def test_wall_deadline_resume_dispatches_remaining_treatment_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real_monotonic = time.monotonic
-    clock = {"jump": 0.0}
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+    clock = _FakeMonotonicClock()
+    monkeypatch.setattr(time, "monotonic", clock)
 
     class SlowControl(FakeExecutor):
         def execute(
@@ -2509,7 +2523,7 @@ def test_wall_deadline_resume_dispatches_remaining_treatment_only(
             attempt: int,
         ):
             if kind == "control":
-                clock["jump"] = 1.0
+                clock.advance(1.0)
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2), output="wall-resume")
@@ -2584,9 +2598,8 @@ def test_post_result_cancellation_precedes_recipe_terminal_marker(tmp_path: Path
 def test_post_result_wall_deadline_precedes_recipe_terminal_marker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real_monotonic = time.monotonic
-    clock = {"jump": 0.0}
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + clock["jump"])
+    clock = _FakeMonotonicClock()
+    monkeypatch.setattr(time, "monotonic", clock)
 
     class TerminalTreatment(FakeExecutor):
         def execute(
@@ -2600,7 +2613,7 @@ def test_post_result_wall_deadline_precedes_recipe_terminal_marker(
             result = super().execute(operation_id, candidate, kind, spec, attempt)
             result["terminal"] = True
             if kind == "treatment":
-                clock["jump"] = 1.0
+                clock.advance(1.0)
             return result
 
     recipe = _recipe(max_candidates=1, max_executions=2)
@@ -2665,6 +2678,7 @@ def test_resume_rejects_missing_persisted_elapsed_floor(tmp_path: Path) -> None:
 def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:
     started = threading.Event()
     release = threading.Event()
+    completed = threading.Event()
 
     class Blocking(FakeExecutor):
         def execute(
@@ -2676,23 +2690,32 @@ def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:
             attempt: int,
         ):
             started.set()
-            release.wait(timeout=5)
+            release.wait()
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2))
     first_result: list[ComponentResult] = []
 
     def first_controller() -> None:
-        first_result.append(_run_injected(request, base=tmp_path, executor=Blocking()))
+        try:
+            first_result.append(_run_injected(request, base=tmp_path, executor=Blocking()))
+        finally:
+            completed.set()
 
     thread = threading.Thread(target=first_controller)
     thread.start()
-    assert started.wait(timeout=5)
-    second = _run_injected(request, base=tmp_path, resume=True, executor=FakeExecutor())
-    assert second.status == "failed"
-    assert "session_lock_owned" in second.reason
-    release.set()
-    thread.join(timeout=5)
+    try:
+        assert started.wait(timeout=5)
+        second = _run_injected(request, base=tmp_path, resume=True, executor=FakeExecutor())
+        assert second.status == "failed"
+        assert "session_lock_owned" in second.reason
+    finally:
+        release.set()
+        finished = completed.wait(timeout=30)
+        thread.join(timeout=1)
+
+    assert finished, "original controller did not complete after releasing the session lock"
+    assert not thread.is_alive()
     assert first_result and first_result[0].status == "complete"
 
 

@@ -9,10 +9,15 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
 ## 1. Binding (measured, not assumed)
 
 - Checkpoint: `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417`
-  (`output/model_cache/...-model.zip`, sha256
-  `2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d`).
-- Predictive foresight checkpoint: `predictive_proxy_selected_v2_full` (CPU inference,
-  sha256 `a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1`).
+  is bound to the immutable GitHub release asset
+  [`ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip`](https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip),
+  size 93,662,266 bytes, sha256
+  `2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d`.
+- Predictive foresight checkpoint: `predictive_proxy_selected_v2_full` (CPU inference),
+  bound to the immutable GitHub release asset
+  [`predictive_proxy_selected_v2_full-predictive_model.pt`](https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt),
+  size 4,958,329 bytes, sha256
+  `a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1`.
 - Training recipe:
   `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml`
   — `reward_name: route_completion_v3`, final-stage weights
@@ -52,10 +57,10 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
 - Counterfactual fork: 20 steps before measured contact, then 60 steps. This is early
   enough for the zero-command branch to decelerate; both branches replay the same
   measured prefix.
-- Checkpoint path alias: `model/registry.yaml` keeps the logical local path ending in
-  `model.zip`, while the release-backed cache uses the pinned release asset ending in
-  `-model.zip`. The resolver verifies the release asset SHA-256 before reuse; this alias is
-  exercised by the offline preflight command below and is not a second checkpoint.
+- Runtime hydration: `model/registry.yaml` keeps the logical local cache path used by the
+  resolver, while the binding records only the canonical release URI, asset name, size, and
+  SHA-256. The resolver verifies the release asset SHA-256 before reuse; the cache is not a
+  second checkpoint or a durable evidence source.
 - Termination: `terminated = route_complete OR timeout(timestep >= max_sim_steps) OR
   ped/robot/obstacle collision`; `RobotEnv` returns `truncated=False` always. The v3
   `timeout` reward term fires only on non-collision, non-success timeout.

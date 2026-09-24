@@ -42,6 +42,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,7 +56,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
-from robot_sf.models import resolve_model_path
+from robot_sf.models import get_registry_entry, resolve_model_path
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -129,6 +130,89 @@ def _portable_path(path: Path) -> str:
         return str(path)
 
 
+def _release_artifact_metadata(model_id: str) -> dict[str, object]:
+    """Return the canonical immutable release identity for one registry model.
+
+    The replay still hydrates a worktree-local cache through ``resolve_model_path`` at runtime,
+    but durable evidence must identify the public release asset rather than that cache location.
+    Requiring every release field here also prevents a future binding from silently falling back to
+    a W&B alias or an unpinned asset.
+    """
+    entry = get_registry_entry(model_id)
+    release = entry.get("github_release")
+    if not isinstance(release, dict):
+        raise RuntimeError(f"Model registry entry {model_id!r} has no github_release metadata")
+
+    required = ("repo", "tag", "asset_name", "url", "sha256", "size_bytes")
+    missing = [field for field in required if release.get(field) in (None, "")]
+    if missing:
+        raise RuntimeError(
+            f"Model registry entry {model_id!r} has incomplete github_release metadata: "
+            + ", ".join(missing)
+        )
+
+    repo = str(release["repo"]).strip()
+    tag = str(release["tag"]).strip()
+    asset_name = str(release["asset_name"]).strip()
+    uri = str(release["url"]).strip()
+    expected_uri = f"https://github.com/{repo}/releases/download/{tag}/{asset_name}"
+    if uri != expected_uri:
+        raise RuntimeError(
+            f"Model registry entry {model_id!r} github_release.url does not match its "
+            f"repo/tag/asset identity: {uri!r} != {expected_uri!r}"
+        )
+    if "/" in asset_name or "\\" in asset_name or asset_name in {".", ".."}:
+        raise RuntimeError(f"Model registry entry {model_id!r} has an unsafe release asset name")
+
+    sha256 = str(release["sha256"]).strip().lower()
+    if re.fullmatch(r"[0-9a-f]{64}", sha256) is None:
+        raise RuntimeError(f"Model registry entry {model_id!r} has an invalid release SHA-256")
+    size_bytes = release["size_bytes"]
+    if isinstance(size_bytes, bool):
+        raise RuntimeError(f"Model registry entry {model_id!r} has an invalid release size")
+    try:
+        size_bytes = int(size_bytes)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"Model registry entry {model_id!r} has an invalid release size"
+        ) from exc
+    if size_bytes <= 0:
+        raise RuntimeError(f"Model registry entry {model_id!r} has a non-positive release size")
+
+    return {
+        "registry_path": "model/registry.yaml",
+        "registry_model_id": model_id,
+        "source": "github_release",
+        "location": "github_release",
+        "repo": repo,
+        "tag": tag,
+        "asset_name": asset_name,
+        "artifact_uri": uri,
+        "sha256": sha256,
+        "size_bytes": size_bytes,
+        "metadata_asset": str(release.get("metadata_asset") or "").strip() or None,
+        "published_at_utc": str(release.get("published_at_utc") or "").strip() or None,
+    }
+
+
+def _verify_resolved_release_artifact(path: Path, artifact: dict[str, object]) -> None:
+    """Require a hydrated cache file to match its canonical release identity."""
+    if not path.is_file():
+        raise RuntimeError(
+            f"Registry release artifact {artifact['registry_model_id']!r} did not resolve to a file"
+        )
+    expected_sha256 = str(artifact["sha256"])
+    expected_size = int(artifact["size_bytes"])
+    observed_size = path.stat().st_size
+    observed_sha256 = _sha256_file(path)
+    if observed_size != expected_size or observed_sha256 != expected_sha256:
+        raise RuntimeError(
+            f"Hydrated release artifact {artifact['registry_model_id']!r} does not match "
+            f"the registry pin: expected size={expected_size}, sha256={expected_sha256}; "
+            f"observed size={observed_size}, sha256={observed_sha256}"
+        )
+
+
 def _checkpoint_gamma() -> tuple[float | None, str]:
     """Read embedded gamma from the SB3 checkpoint data blob without torch."""
     for cand in (
@@ -137,7 +221,6 @@ def _checkpoint_gamma() -> tuple[float | None, str]:
     ):
         try:
             if cand.exists():
-                import re
                 import zipfile
 
                 raw = zipfile.ZipFile(cand).read("data")
@@ -862,10 +945,14 @@ def build_binding(
     scenarios = load_scenarios(SCENARIO_YAML)
     scenario = next(s for s in scenarios if s.get("name") == "francis2023_narrow_doorway")
     cap = int(scenario["simulation_config"]["max_episode_steps"])
+    checkpoint_artifact = _release_artifact_metadata(MODEL_ID)
+    predictive_checkpoint_artifact = _release_artifact_metadata(PREDICTIVE_MODEL_ID)
     model_path = resolve_model_path(MODEL_ID)
     predictive_model_path = resolve_model_path(PREDICTIVE_MODEL_ID)
+    _verify_resolved_release_artifact(Path(model_path), checkpoint_artifact)
+    _verify_resolved_release_artifact(Path(predictive_model_path), predictive_checkpoint_artifact)
     base_cfg = yaml.safe_load(training_base_path.read_text(encoding="utf-8"))
-    gamma_embedded, gamma_source = _checkpoint_gamma()
+    gamma_embedded, _ = _checkpoint_gamma()
     run_seeds = (
         tuple(scenario.get("seeds", [])) if resolved_seeds is None else tuple(resolved_seeds)
     )
@@ -878,7 +965,7 @@ def build_binding(
         -1
     ]["reward_kwargs"]
     binding = {
-        "schema": "issue_9545_binding.v2",
+        "schema": "issue_9545_binding.v3",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "producer_source_commit": producer_source_commit,
         "producer_source_blob_sha256": producer_source_blob_sha256,
@@ -896,17 +983,13 @@ def build_binding(
             "hold_steps": int(hold_steps),
         },
         "checkpoint_model_id": MODEL_ID,
-        "checkpoint_local_path": _portable_path(Path(model_path)),
-        "checkpoint_sha256": _sha256_file(Path(model_path))
-        if Path(model_path).exists()
-        else "unavailable",
+        "checkpoint_artifact": checkpoint_artifact,
+        "checkpoint_sha256": checkpoint_artifact["sha256"],
         "checkpoint_gamma_embedded": gamma_embedded,
-        "checkpoint_gamma_source": f"SB3 data blob: {gamma_source}",
+        "checkpoint_gamma_source": f"SB3 data blob: {checkpoint_artifact['artifact_uri']}",
         "predictive_checkpoint_model_id": PREDICTIVE_MODEL_ID,
-        "predictive_checkpoint_local_path": _portable_path(Path(predictive_model_path)),
-        "predictive_checkpoint_sha256": _sha256_file(Path(predictive_model_path))
-        if Path(predictive_model_path).exists()
-        else "unavailable",
+        "predictive_checkpoint_artifact": predictive_checkpoint_artifact,
+        "predictive_checkpoint_sha256": predictive_checkpoint_artifact["sha256"],
         "gamma_used_for_discounted_replay": gamma,
         "gamma_training_config_declared": None,
         "gamma_provenance_note": "Base training config declares no ppo_hyperparams.gamma; "

@@ -15,6 +15,8 @@ import scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 as producer
 from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     BASELINE_PREFLIGHT_CONFIG,
     FINAL_STAGE_WEIGHTS,
+    MODEL_ID,
+    PREDICTIVE_MODEL_ID,
     SCENARIO_YAML,
     TRAINING_BASE_CONFIG,
     TRAINING_CONFIG,
@@ -23,6 +25,7 @@ from scripts.analysis.narrow_doorway_crash_vs_wait_issue_9545 import (
     _discounted_return,
     _min_obstacle_clearance,
     _physical_pedestrian_ttc,
+    _release_artifact_metadata,
     _replay_branch_from_prefix,
     _rollout_policy,
     _serialize_env_action,
@@ -459,6 +462,29 @@ def test_binding_records_gamma_provenance_gap(tmp_path: Path) -> None:
     assert "not proof of the training-time objective" in binding["gamma_provenance_note"]
 
 
+def test_release_artifact_metadata_matches_canonical_registry_pins() -> None:
+    """Durable binding metadata must use the published registry release identities."""
+    expected = {
+        MODEL_ID: {
+            "asset_name": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+            "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+            "sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+            "size_bytes": 93662266,
+        },
+        PREDICTIVE_MODEL_ID: {
+            "asset_name": "predictive_proxy_selected_v2_full-predictive_model.pt",
+            "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt",
+            "sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+            "size_bytes": 4958329,
+        },
+    }
+    for model_id, fields in expected.items():
+        artifact = _release_artifact_metadata(model_id)
+        assert {key: artifact[key] for key in fields} == fields
+        assert "output/" not in json.dumps(artifact, sort_keys=True)
+        assert "model_cache" not in json.dumps(artifact, sort_keys=True)
+
+
 def test_binding_records_resolved_cli_overrides_and_hash_scopes(tmp_path: Path) -> None:
     """Binding identity follows a subset/fork override and names each hash scope."""
     binding = build_binding(
@@ -504,6 +530,17 @@ def _assert_full_source_provenance(binding: dict) -> None:
         assert binding[binding_key] == relative_path
         assert binding[f"{binding_key}_sha256"] == _sha256_file(REPO_ROOT / relative_path)
 
+    for model_id, binding_key in (
+        (MODEL_ID, "checkpoint_artifact"),
+        (PREDICTIVE_MODEL_ID, "predictive_checkpoint_artifact"),
+    ):
+        assert binding[binding_key] == _release_artifact_metadata(model_id)
+        assert "output/" not in json.dumps(binding[binding_key], sort_keys=True)
+        assert "model_cache" not in json.dumps(binding[binding_key], sort_keys=True)
+    assert "output/model_cache" not in json.dumps(binding, sort_keys=True)
+    assert "checkpoint_local_path" not in binding
+    assert "predictive_checkpoint_local_path" not in binding
+
     producer_path = REPO_ROOT / "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py"
     assert binding["producer_script"] == producer_path.relative_to(REPO_ROOT).as_posix()
     assert binding["producer_script_sha256"] == _sha256_file(producer_path)
@@ -516,13 +553,36 @@ def _assert_full_source_provenance(binding: dict) -> None:
 
 def test_binding_records_full_source_provenance(tmp_path: Path) -> None:
     """Generated binding identity covers all declared replay inputs and producer source."""
-    _assert_full_source_provenance(build_binding(tmp_path, 0.99))
+    producer_path = REPO_ROOT / "scripts/analysis/narrow_doorway_crash_vs_wait_issue_9545.py"
+    _assert_full_source_provenance(
+        build_binding(
+            tmp_path,
+            0.99,
+            producer_source_commit="0" * 40,
+            producer_source_blob_sha256=_sha256_file(producer_path),
+        )
+    )
 
 
 def test_committed_binding_records_full_source_provenance() -> None:
     """The committed evidence binding must match the current source identities."""
     binding = json.loads((EVIDENCE_DIR / "binding.json").read_text(encoding="utf-8"))
     _assert_full_source_provenance(binding)
+
+
+def test_binding_schema_uses_release_artifact_identity(tmp_path: Path) -> None:
+    """Generated binding carries release identity, never a worktree-local cache path."""
+    binding = build_binding(tmp_path, 0.99)
+    assert binding["schema"] == "issue_9545_binding.v3"
+    assert binding["checkpoint_sha256"] == binding["checkpoint_artifact"]["sha256"]
+    assert (
+        binding["predictive_checkpoint_sha256"]
+        == binding["predictive_checkpoint_artifact"]["sha256"]
+    )
+    assert binding["checkpoint_gamma_source"] == (
+        f"SB3 data blob: {binding['checkpoint_artifact']['artifact_uri']}"
+    )
+    assert "output/model_cache" not in json.dumps(binding, sort_keys=True)
 
 
 def test_committed_traces_use_final_action_velocity_ttc_schema() -> None:

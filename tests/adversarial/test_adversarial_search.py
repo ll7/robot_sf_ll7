@@ -1294,6 +1294,61 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
     assert manifest["summary"]["best_bundle_path"].endswith("candidate_0001")
     assert (config.output_dir / "candidate_0001" / "scenario.yaml").exists()
     assert (config.output_dir / "candidate_0001" / "route_overrides.yaml").exists()
+    assert all(
+        row["scenario_admissibility"]["search_disposition"] == "retain"
+        and row["scenario_admissibility"]["verdict"] == "admissible_feasibility_unknown"
+        for row in manifest["candidates"]
+    )
+
+
+def test_search_applies_and_records_admissibility_rejection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An explicit helper exclusion is recorded and stops evaluation before the planner call."""
+    from robot_sf.adversarial.scenario_admissibility import ScenarioAdmissibilityVerdict
+
+    config = dataclasses.replace(_config(tmp_path, require_certification=False), budget=1)
+    evaluated: list[CandidateSpec] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        _candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        evaluated.append(candidate)
+        raise AssertionError("explicitly rejected candidate must not reach evaluation")
+
+    def reject_every_candidate(*args: Any, **_kwargs: Any) -> ScenarioAdmissibilityVerdict:
+        case_id = args[0]
+        return ScenarioAdmissibilityVerdict(
+            case_id=case_id,
+            scenario_id="case-static",
+            verdict="geometric_or_kinodynamic_impossibility",
+            target_planner_outcome="not_evaluated",
+            search_disposition="reject",
+            reason_codes=("scenario_certificate_geometrically_infeasible",),
+            assumptions={},
+            evidence={},
+        )
+
+    monkeypatch.setattr(search, "classify_scenario_admissibility", reject_every_candidate)
+    result = search.run_adversarial_search(
+        config,
+        evaluator=evaluator,
+        certifier=lambda *_args: passed_status("certification passed"),
+        sampler=_SequenceSampler([_candidate(7)]),
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    row = manifest["candidates"][0]
+    assert evaluated == []
+    assert result.num_invalid_candidates == 1
+    assert row["scenario_admissibility"]["search_disposition"] == "reject"
+    assert row["scenario_admissibility"]["reason_codes"] == [
+        "scenario_certificate_geometrically_infeasible"
+    ]
+    assert row["analysis_eligibility"]["eligible"] is False
 
 
 def test_coordinate_refinement_sampler_improves_synthetic_objective(tmp_path: Path) -> None:
@@ -2319,6 +2374,10 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["certification_status"]["status"] == "not_available"
     assert manifest["candidates"][0]["error"] == "scenario_cert.v1 adapter is not available"
+    assert manifest["candidates"][0]["scenario_admissibility"]["verdict"] == (
+        "admissible_feasibility_unknown"
+    )
+    assert manifest["candidates"][0]["scenario_admissibility"]["search_disposition"] == ("retain")
 
 
 def test_required_certification_uses_real_scenario_certification_api(tmp_path: Path) -> None:

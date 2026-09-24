@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,10 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
+from robot_sf.adversarial.scenario_admissibility import (
+    classify_scenario_admissibility,
+    validate_scenario_admissibility,
+)
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
     summarize_benchmark_availability,
@@ -242,6 +246,7 @@ def _invalid_evaluation(
     scenario_yaml_path: Path | None,
     bundle_path: Path | None,
     reason: str,
+    scenario_admissibility: dict[str, Any] | None = None,
 ) -> CandidateEvaluation:
     """Build an evaluation payload for a rejected candidate."""
     return CandidateEvaluation(
@@ -259,7 +264,73 @@ def _invalid_evaluation(
         scenario_yaml_path=scenario_yaml_path,
         bundle_path=bundle_path,
         error=reason,
+        scenario_admissibility=scenario_admissibility,
     )
+
+
+def _candidate_scenario_id(scenario_yaml_path: Path) -> str | None:
+    """Read the one materialized scenario ID, returning None for malformed input."""
+    try:
+        payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return None
+    scenarios = payload.get("scenarios") if isinstance(payload, Mapping) else None
+    if not isinstance(scenarios, list) or len(scenarios) != 1:
+        return None
+    scenario = scenarios[0]
+    scenario_id = scenario.get("name") if isinstance(scenario, Mapping) else None
+    return scenario_id.strip() if isinstance(scenario_id, str) and scenario_id.strip() else None
+
+
+def _certificate_for_scenario(
+    status: CertificationStatus, scenario_id: str | None
+) -> Mapping[str, Any] | None:
+    """Select only a certificate whose producer scenario ID matches the candidate."""
+    details = status.details if isinstance(status.details, Mapping) else {}
+    certificates = details.get("certificates")
+    if not isinstance(certificates, list):
+        return details if details.get("schema_version") == "scenario_cert.v1" else None
+    matches = [
+        item
+        for item in certificates
+        if isinstance(item, Mapping) and item.get("scenario_id") == scenario_id
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _admissibility_payload(
+    *,
+    index: int,
+    scenario_yaml_path: Path,
+    certification_status: CertificationStatus,
+) -> dict[str, Any]:
+    """Classify a materialized candidate for durable stratification and early rejection."""
+    scenario_id = _candidate_scenario_id(scenario_yaml_path)
+    try:
+        verdict = classify_scenario_admissibility(
+            f"candidate_{index:04d}",
+            scenario_artifact_path=scenario_yaml_path,
+            scenario_id=scenario_id,
+            scenario_certificate=_certificate_for_scenario(certification_status, scenario_id),
+        )
+        return verdict.to_dict()
+    except Exception as exc:  # noqa: BLE001 - classification failure must remain an explicit unknown.
+        payload = classify_scenario_admissibility(f"candidate_{index:04d}").to_dict()
+        payload["reason_codes"] = sorted(
+            set(payload["reason_codes"] + ["scenario_admissibility_classifier_error"])
+        )
+        payload["assumptions"] = {"classifier_error_type": type(exc).__name__}
+        validate_scenario_admissibility(payload)
+        return payload
+
+
+def _admissibility_rejection_reason(payload: Mapping[str, Any]) -> str:
+    """Summarize explicit exclusion reason codes for candidate failure attribution."""
+    reason_codes = payload.get("reason_codes")
+    reasons = (
+        ", ".join(str(reason) for reason in reason_codes) if isinstance(reason_codes, list) else ""
+    )
+    return f"scenario admissibility rejected candidate: {reasons or 'explicit exclusion'}"
 
 
 def run_adversarial_search(
@@ -333,6 +404,28 @@ def run_adversarial_search(
             scenario_yaml_path,
             config.require_certification,
         )
+        admissibility = _admissibility_payload(
+            index=index,
+            scenario_yaml_path=scenario_yaml_path,
+            certification_status=certification_status,
+        )
+        if admissibility["search_disposition"] == "reject":
+            num_invalid += 1
+            reason = _admissibility_rejection_reason(admissibility)
+            evaluation = _invalid_evaluation(
+                candidate=candidate,
+                certification_status=certification_status,
+                scenario_yaml_path=scenario_yaml_path,
+                bundle_path=candidate_dir,
+                reason=reason,
+                scenario_admissibility=admissibility,
+            )
+            write_json(
+                candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
+            )
+            evaluations.append(evaluation)
+            _observe_candidate(active_sampler, evaluation)
+            continue
         if not candidate_allowed(
             certification_status,
             require_certification=config.require_certification,
@@ -344,6 +437,7 @@ def run_adversarial_search(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 reason=certification_status.reason,
+                scenario_admissibility=admissibility,
             )
             write_json(
                 candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
@@ -360,6 +454,7 @@ def run_adversarial_search(
                 effective_scenario_hash=_effective_hash_for_bundle(
                     scenario_yaml_path, candidate_dir
                 ),
+                scenario_admissibility=admissibility,
             )
             score = objective(evaluation)
             evaluation = evaluation.with_objective(score)
@@ -378,6 +473,7 @@ def run_adversarial_search(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 error=error,
+                scenario_admissibility=admissibility,
             )
         evaluations.append(evaluation)
         _observe_candidate(active_sampler, evaluation)
@@ -469,6 +565,26 @@ def production_candidate_evaluator(
         certification_status = active_certifier(
             candidate, scenario_yaml_path, config.require_certification
         )
+        admissibility = _admissibility_payload(
+            index=index,
+            scenario_yaml_path=scenario_yaml_path,
+            certification_status=certification_status,
+        )
+        if admissibility["search_disposition"] == "reject":
+            reason = _admissibility_rejection_reason(admissibility)
+            evaluation = _invalid_evaluation(
+                candidate=candidate,
+                certification_status=certification_status,
+                scenario_yaml_path=scenario_yaml_path,
+                bundle_path=candidate_dir,
+                reason=reason,
+                scenario_admissibility=admissibility,
+            )
+            write_json(
+                candidate_dir / "failure_attribution.json",
+                evaluation.failure_attribution.to_json(),
+            )
+            return evaluation
         if not candidate_allowed(
             certification_status, require_certification=config.require_certification
         ):
@@ -478,6 +594,7 @@ def production_candidate_evaluator(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 reason=certification_status.reason,
+                scenario_admissibility=admissibility,
             )
             write_json(
                 candidate_dir / "failure_attribution.json",
@@ -495,6 +612,7 @@ def production_candidate_evaluator(
                 effective_scenario_hash=_effective_hash_for_bundle(
                     scenario_yaml_path, candidate_dir
                 ),
+                scenario_admissibility=admissibility,
             )
             score = objective(evaluation)
             return evaluation.with_objective(score)
@@ -512,6 +630,7 @@ def production_candidate_evaluator(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 error=error,
+                scenario_admissibility=admissibility,
             )
 
     return _evaluate

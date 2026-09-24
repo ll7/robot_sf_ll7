@@ -146,7 +146,11 @@ oracle, predicate contract, and named execution/replay records through
 `scenario_artifact_path` with the evidence. The output contract is
 [`scenario_admissibility.v1`](../robot_sf/benchmark/schemas/scenario_admissibility.v1.json),
 and `partition_candidates_by_admissibility(...)` retains cases by verdict for search
-stratification.
+stratification. The canonical single-objective and production-QD candidate pipelines also
+reject only an explicit `search_disposition: reject` before planner evaluation. Single-objective
+search manifests preserve each candidate's verdict; QD artifacts attach it to admitted elites and
+count explicit exclusions in the run summary. Unknown, failed, or unavailable certification is not
+rejected by this boundary and continues through the existing certification gate.
 
 The adapter has five outcomes: `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
@@ -162,8 +166,12 @@ the envelope and certificate assumptions remain attached to the verdict. A
 conflicting evidence remains `admissible_feasibility_unknown`. A positive actor-free oracle result
 requires a `passed` completion with route completion true, no blocker, explicit
 `fallback_or_degraded: false`, a successful termination reason, positive completion steps within
-the horizon, and a matching horizon margin. Missing fallback status, contradictory completion
-status/termination, or inconsistent steps remain blocked or unknown. A geometric oracle exclusion
+the horizon, a matching horizon margin, raw observed completion true, and no rollout blocker or
+fallback marker. The oracle report also records the source manifest digest at report production
+and whether the source bytes remained stable during the report; the adapter requires both fields to
+match the candidate artifact before accepting feasibility or an exclusion. Missing digest,
+changed source bytes, missing fallback status, contradictory completion status/termination, or
+inconsistent steps remain blocked or unknown. A geometric oracle exclusion
 must carry the producer's no-path completion record; a contradictory positive completion cannot be
 overridden by the geometric label. Since `scenario_cert.v1` reports the
 highest-severity route at the scenario level, geometry or kinematic exclusion requires every

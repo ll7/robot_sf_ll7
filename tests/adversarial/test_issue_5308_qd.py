@@ -249,6 +249,60 @@ def test_archive_admits_only_certified_finite(tmp_path: Path) -> None:
     assert archive.filled_cell_count() == 1
 
 
+def test_archive_rejects_explicit_admissibility_exclusion_with_passed_certificate(
+    tmp_path: Path,
+) -> None:
+    """A helper exclusion cannot enter the QD archive after later objective scoring."""
+    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
+    archive = QDArchive(grid=grid)
+    rejected = replace(
+        _make_evaluation(
+            candidate=_candidates(1)[0],
+            min_distance=1.0,
+            critical_time=1.0,
+            objective=99.0,
+            cert_status=passed_status("custom certifier says passed"),
+            temp_root=tmp_path,
+        ),
+        scenario_admissibility={"search_disposition": "reject"},
+    )
+
+    assert not archive.try_insert(
+        descriptor=(1.0, 1.0), evaluation=rejected, certification_status=passed_status("passed")
+    )
+    assert archive.filled_cell_count() == 0
+
+
+def test_qd_search_counts_explicit_admissibility_exclusions(tmp_path: Path) -> None:
+    """A rejected candidate is counted, observed, and never rescored into the archive."""
+    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
+    config = QDSearchConfig(
+        search_space=_space(),
+        objective="worst_case_snqi",
+        grid=grid,
+        budget=1,
+        require_certification=False,
+    )
+    rejected = replace(
+        _make_evaluation(
+            candidate=_candidates(1)[0],
+            min_distance=1.0,
+            critical_time=1.0,
+            objective=99.0,
+            cert_status=passed_status("custom certifier says passed"),
+            temp_root=tmp_path,
+        ),
+        scenario_admissibility={"search_disposition": "reject"},
+    )
+    result = run_map_elites(config, evaluator=_FakeEvaluator([rejected]))
+
+    assert result.num_evaluated == 1
+    assert result.num_admissibility_rejected == 1
+    assert result.num_admitted == 0
+    assert result.archive.filled_cell_count() == 0
+    assert result.to_json()["search_summary"]["num_admissibility_rejected"] == 1
+
+
 def test_archive_keeps_higher_quality_incumbent(tmp_path: Path) -> None:
     """A new elite only replaces the incumbent at its cell when scoring higher."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)

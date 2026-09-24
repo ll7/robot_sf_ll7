@@ -707,6 +707,7 @@ def _oracle(
         "rollout_algo": report.get("rollout_algo"),
         "rollout_seed": report.get("rollout_seed"),
         "scenario_manifest": report.get("scenario_manifest"),
+        "source_artifact_sha256": report.get("source_artifact_sha256"),
         "claim_boundary": report.get("claim_boundary"),
     }
     if nominal.get("claim_boundary") != DIAGNOSTIC_CLAIM_BOUNDARY:
@@ -783,6 +784,9 @@ def _completion_proves_actor_free_rollout(completion: Mapping[str, Any]) -> bool
         and completion.get("status") == "passed"
         and completion.get("blocker") is None
         and completion.get("fallback_or_degraded") is False
+        and completion.get("observed_route_completion_feasible") is True
+        and completion.get("fallback_marker") is None
+        and completion.get("rollout_blocker") is None
         and isinstance(steps, int)
         and not isinstance(steps, bool)
         and steps > 0
@@ -817,24 +821,48 @@ def _select_oracle_cell(
         reasons.append("feasibility_oracle_scenario_identity_unbound")
         return None
     if source.get("schema_version") != ISSUE_5574_REPORT_SCHEMA:
-        if not _artifact_reference_matches(
-            source.get("scenario_manifest"), artifact_sha256, "feasibility_oracle", reasons
-        ):
-            return None
-        return source
+        return _select_single_oracle(source, artifact_sha256, reasons)
+    return _select_issue_5574_oracle_cell(source, scenario_id, artifact_sha256, reasons)
+
+
+def _select_single_oracle(
+    source: Mapping[str, Any], artifact_sha256: str | None, reasons: list[str]
+) -> Mapping[str, Any] | None:
+    """Select a single-cell oracle only when its captured source identity matches."""
+    if not _captured_oracle_digest_matches(source, artifact_sha256, "feasibility_oracle", reasons):
+        return None
+    if not _artifact_reference_matches(
+        source.get("scenario_manifest"), artifact_sha256, "feasibility_oracle", reasons
+    ):
+        return None
+    return source
+
+
+def _select_issue_5574_oracle_cell(
+    source: Mapping[str, Any],
+    scenario_id: str,
+    artifact_sha256: str | None,
+    reasons: list[str],
+) -> Mapping[str, Any] | None:
+    """Select one report cell after binding both report and cell source identity."""
     cells = source.get("cells")
-    expected = scenario_id
     matches = (
         [
             cell
             for cell in cells
-            if isinstance(cell, Mapping) and cell.get("scenario_id") == expected
+            if isinstance(cell, Mapping) and cell.get("scenario_id") == scenario_id
         ]
         if isinstance(cells, Sequence) and not isinstance(cells, (str, bytes))
         else []
     )
     if len(matches) != 1:
         reasons.append("feasibility_oracle_cell_missing_or_ambiguous")
+        return None
+    if not _captured_oracle_digest_matches(
+        source, artifact_sha256, "feasibility_oracle_report", reasons
+    ) or not _captured_oracle_digest_matches(
+        matches[0], artifact_sha256, "feasibility_oracle_cell", reasons
+    ):
         return None
     cell_manifest = matches[0].get("scenario_manifest")
     if not _artifact_reference_matches(
@@ -850,6 +878,23 @@ def _select_oracle_cell(
     if cell.get("schema_version") == ISSUE_5574_REPORT_SCHEMA:
         cell["schema_version"] = ENVELOPE_SENSITIVITY_SCHEMA
     return cell
+
+
+def _captured_oracle_digest_matches(
+    source: Mapping[str, Any], expected_sha256: str | None, evidence_name: str, reasons: list[str]
+) -> bool:
+    """Require producer-time oracle identity and a stable read of its source manifest."""
+    captured = source.get("source_artifact_sha256")
+    if (
+        expected_sha256 is None
+        or not isinstance(captured, str)
+        or _SHA256.fullmatch(captured) is None
+        or captured.lower() != expected_sha256.lower()
+        or source.get("source_artifact_identity_stable") is not True
+    ):
+        reasons.append(f"{evidence_name}_producer_source_digest_missing_mismatch_or_unstable")
+        return False
+    return True
 
 
 def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
@@ -875,6 +920,9 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
         and completion.get("termination_reason") is None
         and _positive_int(completion.get("horizon_steps"))
         and completion.get("fallback_or_degraded") in (None, False)
+        and completion.get("observed_route_completion_feasible") is None
+        and completion.get("fallback_marker") is None
+        and completion.get("rollout_blocker") is None
     )
 
 

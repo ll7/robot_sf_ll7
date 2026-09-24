@@ -2708,7 +2708,9 @@ regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
 The gate's default fetch is deliberately one bounded `gh run list --limit`
-window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
+window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; it
+selects the default `CI` workflow by `.github/workflows/ci.yml` rather than the
+ambiguous display name, while keeping `CI` as the report label. When
 cancellation churn fills that window it fails closed to `stale` instead of
 reading further back. Callers that need the decisive verdict behind a
 cancelled-run flood use the paginated reader below.

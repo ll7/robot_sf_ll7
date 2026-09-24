@@ -534,6 +534,24 @@ def test_composer_rejects_row_fallback_even_with_matching_receipt_and_summary(
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
+def test_composer_rejects_non_object_planner_diagnostics_even_with_matching_receipt(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """A malformed diagnostics container cannot hide row-level fallback markers."""
+    roots, receipt = _write_triplet(tmp_path)
+    episodes_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"]["planner_diagnostics"] = [{"fallback": True}]
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    _write_runner_receipt(episodes_path, rows)
+
+    with pytest.raises(
+        RadiusSweepSummaryError,
+        match="invalid algorithm_metadata.planner_diagnostics",
+    ):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
 def test_episode_status_allows_empty_social_force_diagnostics() -> None:
     """Empty planner diagnostic maps are not mistaken for runtime fallback markers."""
     composer._validate_episode_runtime_status(

@@ -645,8 +645,13 @@ def _validate_episode_evidence_eligibility(
 def _validate_episode_planner_diagnostics(
     metadata: Mapping[str, Any], *, planner: str, radius: float
 ) -> None:
-    """Reject fallback evidence inside planner diagnostics, allowing empty clean counters."""
+    """Reject malformed or fallback diagnostics while allowing empty clean counters."""
     diagnostics = metadata.get("planner_diagnostics")
+    if "planner_diagnostics" in metadata and not isinstance(diagnostics, Mapping):
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has invalid "
+            "algorithm_metadata.planner_diagnostics (expected an object)"
+        )
     if isinstance(diagnostics, Mapping):
         fallback_reasons = diagnostics.get("fallback_reasons")
         if "fallback_reasons" in diagnostics and (

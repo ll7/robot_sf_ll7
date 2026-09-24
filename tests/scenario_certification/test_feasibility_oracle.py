@@ -788,6 +788,48 @@ def test_issue_5574_report_marks_source_manifest_changed_during_run(tmp_path: Pa
     assert report["cells"][0]["source_artifact_identity_stable"] is False
 
 
+def test_issue_5574_report_brackets_scenario_loader_with_input_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An oracle sweep over stale loaded rows cannot bind a later include snapshot."""
+    scenario_path = tmp_path / "root.yaml"
+    included_path = tmp_path / "included.yaml"
+    scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
+    included_path.write_text(
+        "scenarios:\n  - name: case-static\n    marker: loaded-before-snapshot\n    seeds: [13]\n",
+        encoding="utf-8",
+    )
+    original_load = feasibility_oracle.load_scenarios
+    loaded_markers: list[str] = []
+
+    def load_then_mutate(path: Path) -> list[dict[str, Any]]:
+        scenarios = original_load(path)
+        loaded_markers.append(str(scenarios[0].get("marker")))
+        included_path.write_text(
+            "scenarios:\n  - name: case-static\n    marker: snapshot-after-load\n    seeds: [13]\n",
+            encoding="utf-8",
+        )
+        return scenarios
+
+    def sweep(scenario: Any, **_kwargs: Any) -> EnvelopeSensitivityVerdict:
+        assert scenario["marker"] == "loaded-before-snapshot"
+        return _envelope_verdict("case-static", category=FEASIBLE)
+
+    monkeypatch.setattr(feasibility_oracle, "load_scenarios", load_then_mutate)
+    monkeypatch.setattr(feasibility_oracle, "run_envelope_sensitivity_sweep", sweep)
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("case-static",),
+        envelope_radii_m=(1.0, 0.5),
+    )
+
+    assert loaded_markers == ["loaded-before-snapshot"]
+    assert report["source_artifact_identity_stable"] is True
+    assert report["cells"][0]["effective_input_identity_stable"] is False
+    assert report["cells"][0]["effective_input_sha256"] is None
+
+
 def test_issue_5574_report_marks_referenced_map_change_unstable(tmp_path: Path) -> None:
     """Map mutation is detected even when the scenario manifest itself is unchanged."""
     scenario_path = tmp_path / "candidates.yaml"

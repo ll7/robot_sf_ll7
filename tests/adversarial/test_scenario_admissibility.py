@@ -1061,6 +1061,99 @@ def test_certificate_producer_marks_referenced_input_change_unstable(
     assert certificate["evidence"]["effective_input_identity_stable"] is False
 
 
+def test_certificate_producer_brackets_scenario_loader_with_input_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A loader that returns old include bytes cannot bind a later include snapshot."""
+    scenario_path = tmp_path / "root.yaml"
+    included_path = tmp_path / "included.yaml"
+    scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
+    included_path.write_text(
+        "scenarios:\n  - name: case-static\n    marker: loaded-before-snapshot\n    seeds: [19]\n",
+        encoding="utf-8",
+    )
+    original_load = scenario_certification_v1.load_scenarios
+    loaded_markers: list[str] = []
+
+    def load_then_mutate(path: Path) -> list[dict[str, Any]]:
+        scenarios = original_load(path)
+        loaded_markers.append(str(scenarios[0].get("marker")))
+        included_path.write_text(
+            "scenarios:\n  - name: case-static\n    marker: snapshot-after-load\n    seeds: [19]\n",
+            encoding="utf-8",
+        )
+        return scenarios
+
+    def certify_fixture(scenario: dict[str, Any], *, scenario_path: Path, **_kwargs: Any):
+        return ScenarioCertificate(
+            schema_version=CERT_SCHEMA_VERSION,
+            scenario_id="case-static",
+            source=scenario_path.as_posix(),
+            classification="valid",
+            benchmark_eligibility="eligible",
+            reasons=[],
+            checks={"loaded_marker": scenario.get("marker")},
+            route_certificates=[],
+        )
+
+    monkeypatch.setattr(scenario_certification_v1, "load_scenarios", load_then_mutate)
+    monkeypatch.setattr(scenario_certification_v1, "certify_scenario", certify_fixture)
+
+    certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    )
+
+    assert loaded_markers == ["loaded-before-snapshot"]
+    assert certificate["checks"]["loaded_marker"] == "loaded-before-snapshot"
+    assert certificate["evidence"]["effective_input_sha256"] is None
+    assert certificate["evidence"]["effective_input_identity_stable"] is False
+
+
+def test_map_registry_remap_changes_effective_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Equal map bytes selected through different suffixes retain parser identity."""
+    from robot_sf.training import scenario_loader
+
+    scenario_path = tmp_path / "candidate.yaml"
+    registry_path = tmp_path / "registry.yaml"
+    map_svg = tmp_path / "map.svg"
+    map_yaml = tmp_path / "map.yaml"
+    map_bytes = b"same map bytes\n"
+    map_svg.write_bytes(map_bytes)
+    map_yaml.write_bytes(map_bytes)
+    scenario_path.write_text(
+        "scenarios:\n  - name: case-static\n    map_id: fixture-map\n    seeds: [19]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", registry_path.as_posix())
+    scenario_loader._load_map_registry.cache_clear()
+    try:
+        registry_path.write_text("maps:\n  fixture-map: map.svg\n", encoding="utf-8")
+        svg_identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+        registry_path.write_text("maps:\n  fixture-map: map.yaml\n", encoding="utf-8")
+        scenario_loader._load_map_registry.cache_clear()
+        yaml_identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    finally:
+        scenario_loader._load_map_registry.cache_clear()
+
+    assert svg_identity["status"] == yaml_identity["status"] == "available"
+    assert svg_identity["effective_input_sha256"] != yaml_identity["effective_input_sha256"]
+    svg_map = next(item for item in svg_identity["files"] if item["role"] == "map_file")
+    yaml_map = next(item for item in yaml_identity["files"] if item["role"] == "map_file")
+    assert svg_map["sha256"] == yaml_map["sha256"]
+    assert (svg_map["map_id"], svg_map["parser"], svg_map["path"]) == (
+        "fixture-map",
+        "svg",
+        "map.svg",
+    )
+    assert (yaml_map["map_id"], yaml_map["parser"], yaml_map["path"]) == (
+        "fixture-map",
+        "legacy_serialized_map",
+        "map.yaml",
+    )
+
+
 def test_actor_free_oracle_success_does_not_resolve_unknown_invalid_certificate() -> None:
     verdict = classify_scenario_admissibility(
         "case-static",

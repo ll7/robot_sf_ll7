@@ -64,6 +64,7 @@ class ScenarioManifestSource:
 
     path: Path
     data: Any
+    content_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -120,8 +121,17 @@ def _load_yaml_documents(path: Path) -> Any:
     Returns:
         Any: Parsed YAML content.
     """
-    with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
+    return _load_yaml_documents_with_digest(path)[0]
+
+
+def _load_yaml_documents_with_digest(path: Path) -> tuple[Any, str]:
+    """Parse YAML from one byte buffer and return that buffer's digest.
+
+    Returns:
+        Parsed YAML value and the SHA-256 of the exact bytes parsed.
+    """
+    content = path.read_bytes()
+    return yaml.safe_load(content.decode("utf-8")), hashlib.sha256(content).hexdigest()
 
 
 def _load_scenario_manifest(
@@ -330,9 +340,11 @@ def _load_scenarios_recursive(
         raise ValueError(f"Scenario include cycle detected at '{resolved}'.")
     visited.add(resolved)
     try:
-        data = _load_yaml_documents(resolved)
+        data, content_sha256 = _load_yaml_documents_with_digest(resolved)
         if collector is not None:
-            collector.manifest_sources.append(ScenarioManifestSource(resolved, data))
+            collector.manifest_sources.append(
+                ScenarioManifestSource(resolved, data, content_sha256=content_sha256)
+            )
         scenarios, includes, local_map_search_paths = _load_scenario_manifest(
             data,
             source=resolved,

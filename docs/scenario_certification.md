@@ -30,7 +30,10 @@ Each certificate includes:
   certificates also record `source_artifact_sha256`, captured when the certifier reads the
   manifest, and `effective_input_sha256` plus `effective_input_identity_stable`. The effective
   identity covers included manifests and the selected scenario's resolved map and route-override
-  files; the adapter requires it to match current bytes when those inputs exist.
+  files, including the resolved `map_id` path and parser selected by its suffix; the adapter
+  requires it to match current bytes when those inputs exist. Validation loading records each
+  manifest digest from the same byte buffer it parsed, and file-based producers bracket scenario
+  loading and evidence generation with matching input identities.
 
 Benchmark inclusion policy:
 

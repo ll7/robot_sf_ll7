@@ -120,6 +120,7 @@ def certify_scenario_file(
         List of certificates in manifest order, or a single selected certificate.
     """
 
+    input_identity_before_load = scenario_input_identity(scenario_path)
     source_digest_before = _scenario_source_sha256(scenario_path)
     scenarios = load_scenarios(scenario_path)
     source_digest_after = _scenario_source_sha256(scenario_path)
@@ -165,6 +166,24 @@ def certify_scenario_file(
                 effective_input_identity_stable=input_stable,
             )
         )
+    input_identity_after_certification = scenario_input_identity(scenario_path)
+    full_input_identity_stable = (
+        input_identity_before_load.get("status") == "available"
+        and input_identity_after_certification.get("status") == "available"
+        and input_identity_before_load.get("effective_input_sha256") is not None
+        and input_identity_before_load.get("effective_input_sha256")
+        == input_identity_after_certification.get("effective_input_sha256")
+    )
+    if not full_input_identity_stable:
+        certificates = [
+            _bind_source_digest(
+                certificate,
+                source_digest,
+                effective_input_sha256=None,
+                effective_input_identity_stable=False,
+            )
+            for certificate in certificates
+        ]
     return certificates
 
 

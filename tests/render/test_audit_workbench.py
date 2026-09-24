@@ -3962,7 +3962,7 @@ def _safe_node_diagnostic(output: str, *, stream: str) -> str:
             if re.search(rf"\b{code}\b", output):
                 details.append(f"error_code={code}")
                 break
-        location = re.search(r"\baudit_workbench_runtime\.mjs:(\d+)(?::(\d+))?\b", output)
+        location = re.search(r"\baudit_workbench_runtime\.mjs:(\d{1,5})(?::(\d{1,3}))?\b", output)
         if location:
             line, column = location.groups()
             details.append(f"harness_location={line}:{column or 'unknown'}")
@@ -4055,6 +4055,10 @@ def test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics
         "y" * 50,
     ):
         assert hidden not in message
+    oversized_location = "audit_workbench_runtime.mjs:" + "9" * 4000
+    projected = _safe_node_diagnostic(oversized_location, stream="stderr")
+    assert "harness_location=" not in projected
+    assert len(projected) < 100
     assert calls == [
         ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
         ["node", "--version"],

@@ -26,14 +26,18 @@ from scripts.tools.manage_adversarial_counterexample_corpus import main as corpu
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_PACKET = _REPO_ROOT / "tests/fixtures/adversarial_counterexample_corpus/issue_9645/payload"
+_SOURCE_BUNDLE = _SOURCE_PACKET.parent
 
 
 @contextmanager
 def _packet_copy() -> Iterator[Path]:
     with tempfile.TemporaryDirectory(prefix=".test-counterexample-corpus-", dir=_REPO_ROOT) as raw:
-        destination = Path(raw) / "payload"
-        shutil.copytree(_SOURCE_PACKET, destination)
-        yield destination
+        destination = Path(raw) / "issue_9645"
+        destination.mkdir()
+        shutil.copytree(_SOURCE_PACKET, destination / "payload")
+        for filename in ("evidence_bundle_manifest.json", "checksums.sha256"):
+            shutil.copyfile(_SOURCE_BUNDLE / filename, destination / filename)
+        yield destination / "payload"
 
 
 def _import(tmp_path: Path, payload: Path | None = None):
@@ -77,7 +81,7 @@ def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibilit
     )
     assert replay_artifacts[0]["path_normalization"] == "scenario_params.route_overrides_file"
     assert replay_artifacts[0]["provenance_path_normalization"] == "run.invocation"
-    for item in pilot["source_files"] + pilot["manifest_files"]:
+    for item in pilot["source_files"] + pilot["manifest_files"] + pilot["bundle_receipts"]:
         stored = corpus_root / item["path"]
         assert hashlib.sha256(stored.read_bytes()).hexdigest() == item["sha256"]
     validate_corpus(corpus)
@@ -126,6 +130,50 @@ def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
         validate_corpus(corpus)
 
 
+def test_pilot_candidate_table_is_bound_to_the_outer_bundle_checksums(tmp_path: Path) -> None:
+    with _packet_copy() as payload:
+        table_path = payload / "candidate_evaluations.csv"
+        table_path.write_bytes(table_path.read_bytes() + b"tampered\n")
+
+        corpus, receipt, _corpus_root = _import(tmp_path, payload)
+
+    assert receipt["decision"] == "rejected"
+    assert any("pilot_evidence_invalid" in blocker for blocker in receipt["blockers"])
+    assert corpus["search_runs"] == []
+    assert corpus["cases"] == []
+
+
+def test_bundle_checksum_sidecar_must_match_the_manifest(tmp_path: Path) -> None:
+    with _packet_copy() as payload:
+        checksum_path = payload.parent / "checksums.sha256"
+        checksum_path.write_text(
+            checksum_path.read_text().replace("payload/summary.json", "payload/tampered.json")
+        )
+
+        corpus, receipt, _corpus_root = _import(tmp_path, payload)
+
+    assert receipt["decision"] == "rejected"
+    assert any("pilot_evidence_invalid" in blocker for blocker in receipt["blockers"])
+    assert corpus["search_runs"] == []
+
+
+def _refresh_bundle_checksum_for_payload(payload: Path, relative: str) -> None:
+    """Refresh test-only bundle receipts after a deliberate semantic mutation."""
+    manifest_path = payload.parent / "evidence_bundle_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    target = payload / relative
+    record = next(item for item in manifest["files"] if item["path"] == relative)
+    record["size_bytes"] = target.stat().st_size
+    record["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+    manifest["totals"]["total_bytes"] = sum(item["size_bytes"] for item in manifest["files"])
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    checksum_lines = [
+        f"{item['sha256']}  payload/{item['path']}"
+        for item in sorted(manifest["files"], key=lambda row: row["path"])
+    ]
+    (payload.parent / "checksums.sha256").write_text("\n".join(checksum_lines) + "\n")
+
+
 def test_replay_records_with_different_selected_metric_identity_are_rejected(
     tmp_path: Path,
 ) -> None:
@@ -143,6 +191,10 @@ def test_replay_records_with_different_selected_metric_identity_are_rejected(
         )
         replay_row["normalized_sha256"] = hashlib.sha256(replay_path.read_bytes()).hexdigest()
         path_receipt.write_text(json.dumps(normalization))
+        _refresh_bundle_checksum_for_payload(
+            payload, "historical_issue_1501_failure_0002/replay_2.jsonl"
+        )
+        _refresh_bundle_checksum_for_payload(payload, "path_normalization.json")
 
         corpus, receipt, _corpus_root = _import(tmp_path, payload)
         assert receipt["decision"] == "rejected"

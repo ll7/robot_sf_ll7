@@ -1,0 +1,117 @@
+{
+  "schema_version": "benchmark_result_provenance.v1",
+  "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
+  "run": {
+    "run_id": "5415fb369b504814aceb92cbb44214c9",
+    "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+    "python_version": "3.13.14",
+    "invocation": "uv run robot_sf_bench run --matrix docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/scenario.yaml --out output/issue9645-portable-replay/representative_success_replay.jsonl --algo goal --base-seed 123 --horizon 100 --dt 0.1 --record-forces --no-video --workers 1 --no-resume --benchmark-profile baseline-safe --fail-fast",
+    "benchmark_profile": "baseline-safe",
+    "runner": "map_runner.run_map_batch",
+    "protocol_version": "0.1.0",
+    "execution_context": {
+      "hostname": "auxme-imech039",
+      "schema_version": "benchmark_execution_context.v1",
+      "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+      "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",
+      "python_version": "3.13.14",
+      "thread_env": {
+        "OMP_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null
+      },
+      "numpy_version": "2.4.6",
+      "numba_version": "0.67.0",
+      "execution_context_sha256": "6dc34a26c637cb84a21fd1414db605253bb550465504b5d3da40cf90de4ae244"
+    }
+  },
+  "inputs": {
+    "schema_path": {
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
+      "artifact_status": "available"
+    },
+    "scenario_matrix": {
+      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/scenario.yaml",
+      "sha256": "aa462c23d2f38c42477cdf2ed6fc6e3a797acbd6abbfc2e8044c60ccd48442e4",
+      "artifact_status": "available"
+    },
+    "algo_config": {
+      "path": null,
+      "sha256": null,
+      "artifact_status": "not_provided"
+    }
+  },
+  "campaign_identity": {
+    "scenario_matrix_hash": "901d6556de4358b4",
+    "input_bundle_sha256": "1ae367b6ed9435bb4cdac1d802af865cfe6b770dc5efe8728e4d8e9c2bbf8d1d",
+    "algorithm": "goal",
+    "config_hash": "d71ba736a8ec0390",
+    "suite_key": "default",
+    "total_jobs": 1,
+    "written": 1
+  },
+  "raw_artifacts": [
+    {
+      "kind": "episodes_jsonl",
+      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/episode_records_replay.jsonl",
+      "sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b",
+      "artifact_status": "available"
+    }
+  ],
+  "rows": [
+    {
+      "episode_id": "crossing_ttc_template_adversarial_0010--123--ad4155ab7af86a34",
+      "scenario_id": "crossing_ttc_template_adversarial_0010",
+      "seed": 123,
+      "config_hash": "ad4155ab7af86a34",
+      "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+      "raw_artifact": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/episode_records_replay.jsonl",
+      "jsonl_line": 0,
+      "simulator_settings": {
+        "horizon": 100,
+        "dt": 0.1,
+        "record_forces": true,
+        "observation_mode": "goal_state",
+        "observation_level": "oracle_full_state",
+        "observation_noise_hash": "0a5609f0b2b1",
+        "tracking_precision_hash": "d06cee655fee"
+      },
+      "postprocessing": [
+        {
+          "step": "compute_all_metrics",
+          "status": "completed"
+        },
+        {
+          "step": "post_process_metrics",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "derived_artifacts": [],
+  "completeness": {
+    "status": "complete",
+    "required_fields_checked": [
+      "algorithm",
+      "campaign_identity",
+      "completeness",
+      "config_hash",
+      "episode_id",
+      "input_binding_schema_version",
+      "input_bundle_sha256",
+      "inputs",
+      "repo_commit",
+      "repo_commit",
+      "run",
+      "run_id",
+      "runner",
+      "scenario_id",
+      "scenario_matrix_hash",
+      "schema_version",
+      "seed",
+      "total_jobs",
+      "written"
+    ]
+  }
+}

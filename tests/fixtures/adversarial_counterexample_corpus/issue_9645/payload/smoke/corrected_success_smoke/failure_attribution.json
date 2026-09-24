@@ -1,0 +1,19 @@
+{
+  "details": {
+    "availability_status": "available",
+    "execution_mode": "native",
+    "outcome": {
+      "collision_event": false,
+      "route_complete": true,
+      "timeout_event": false
+    },
+    "readiness_status": "native",
+    "status": "success",
+    "termination_reason": "success"
+  },
+  "primary_failure": "success",
+  "reasons": [
+    "episode completed without an attributed failure"
+  ],
+  "status": "attributed"
+}

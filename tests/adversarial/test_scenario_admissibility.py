@@ -177,6 +177,7 @@ def _execution(
         "scenario_id": scenario_id,
         "scenario_variant": "original",
         "planner_id": planner_id,
+        "episode_id": "episode-target",
         "run_status": "ok",
         "fallback_or_degraded": False,
         "route_complete": route_complete,
@@ -190,6 +191,7 @@ def _execution(
             "not_applicable" if planner_id in {"goal", "social_force", "orca"} else "d" * 64
         ),
         "environment_sha256": "e" * 64,
+        "source_episodes_jsonl_sha256": "a" * 64,
         "source_commit": "f" * 40,
         "evidence_ref": f"artifacts/{planner_id}.json",
     }
@@ -984,6 +986,16 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
             "f" * 64,
             "planner_specific_failure_replay_configuration_mismatch",
         ),
+        (
+            "episode_id",
+            "unrelated-episode",
+            "planner_specific_failure_replay_source_episode_mismatch",
+        ),
+        (
+            "source_episodes_jsonl_sha256",
+            "b" * 64,
+            "planner_specific_failure_replay_source_episode_mismatch",
+        ),
     ],
 )
 def test_replay_must_match_target_case_and_execution_bindings(
@@ -1002,6 +1014,34 @@ def test_replay_must_match_target_case_and_execution_bindings(
     assert verdict.target_planner_outcome == "route_incomplete"
     assert reason in verdict.reason_codes
     assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
+@pytest.mark.parametrize("checked_count", [True, 1.0], ids=["boolean", "float"])
+def test_simulator_collision_requires_integer_sample_count(checked_count: Any) -> None:
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    reason = "planned_path_simulator_collision: first_collision_sample_index=0"
+    certificate["reasons"] = [reason]
+    route = certificate["route_certificates"][0]
+    route["reasons"] = [reason]
+    route["checks"].update(
+        {
+            "inflated_collision_free_path": False,
+            "simulator_obstacle_collision": {
+                "validated": True,
+                "collides_obstacle": True,
+                "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+                "obstacle_source": "MapDefinition.obstacles_pysf_runtime_normalized",
+                "sample_spacing_m": 0.05,
+                "checked_sample_count": checked_count,
+                "first_collision_sample_index": 0,
+            },
+        }
+    )
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
 
 
 @pytest.mark.parametrize(

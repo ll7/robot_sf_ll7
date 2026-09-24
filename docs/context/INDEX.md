@@ -3,6 +3,13 @@
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 
+Issue #9656 historical benchmark hard-case mining: 36 source-linked cases from the checksum-pinned
+Release 0.0.2 bundle, one-seed scenario/config snapshots, a 241-row collision-event/count
+inconsistency, and four revision-divergent replay comparisons. Diagnostic-only; no real-world
+safety claim or corpus admission:
+[issue_9656_hard_case_mining.md](issue_9656_hard_case_mining.md),
+[compact evidence](evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json).
+
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA
 `09f6b1beeff71b4ee30deae7cc2504c0c7310729`) and the release/audit workflow around it.

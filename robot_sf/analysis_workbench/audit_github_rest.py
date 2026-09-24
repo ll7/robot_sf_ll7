@@ -31,6 +31,7 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
 
 from robot_sf.analysis_workbench.audit_github import (
+    GitHubCapabilityUnavailable,
     GitHubIssue,
     GitHubIssueMissing,
     GitHubTransportError,
@@ -87,8 +88,14 @@ class GitHubRestHTTPError(GitHubRestError):
     """The provider returned a non-success HTTP status."""
 
 
-class GitHubRestUnsupportedError(GitHubRestError, NotImplementedError):
-    """The requested operation is outside this append-only transport."""
+class GitHubRestUnsupportedError(GitHubRestError, GitHubCapabilityUnavailable, NotImplementedError):
+    """The requested operation is outside this append-only transport.
+
+    The REST adapter raises this before constructing an HTTP request.  The
+    synchronizer therefore reports an explicit unavailable capability with no
+    remote-write charge; an exception raised after a ``POST`` remains an
+    ambiguous provider outcome.
+    """
 
 
 class GitHubRestDuplicateMarkerError(GitHubRestError):

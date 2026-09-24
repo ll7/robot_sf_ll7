@@ -85,6 +85,13 @@ _MARKER_RE = re.compile(
 )
 _MARKER_TOKEN_RE = re.compile(r"<!--\s*robot_sf_audit_finding:v1(?P<body>.*?)-->", re.DOTALL)
 _MARKER_SHAPED_TEXT_RE = re.compile(r"<!--\s*robot_sf_audit_finding:v1", re.IGNORECASE)
+_PUBLICATION_TOKEN_RE = re.compile(
+    r"<!--\s*robot_sf_audit_publication:v1(?P<body>.*?)-->", re.DOTALL
+)
+_PUBLICATION_MARKER_RE = re.compile(
+    r"<!-- robot_sf_audit_publication:v1 finding_id=(?P<finding_id>[A-Za-z0-9_.:-]+) "
+    r"revision=(?P<revision>[0-9]+)(?: digest=(?P<digest>[0-9a-f]{64}))? -->"
+)
 _SECRET_PATTERNS = (
     re.compile(r"(?i)\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{12,}\b"),
     re.compile(r"(?i)\bgithub_pat_[A-Za-z0-9_]{12,}\b"),
@@ -140,6 +147,10 @@ class GitHubPrivacyError(GitHubSyncError, ValueError):
 
 class GitHubTransportError(GitHubSyncError):
     """Raised when a provider response is malformed or transport is unavailable."""
+
+
+class GitHubCapabilityUnavailable(GitHubTransportError):
+    """Provider cannot perform the requested operation before a mutation starts."""
 
 
 class GitHubOutboxError(GitHubSyncError):
@@ -600,6 +611,7 @@ class GitHubOutboxEntry:
     publication_key: str = ""
     comment: Mapping[str, Any] | None = None
     request_operation_id: str = ""
+    publication_provenance: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         _validate_repository(self.repository)
@@ -658,6 +670,10 @@ class GitHubOutboxEntry:
             raise GitHubValidationError("outbox issue must be an object")
         if self.comment is not None and not isinstance(self.comment, Mapping):
             raise GitHubValidationError("outbox comment must be an object")
+        if self.publication_provenance is not None and not isinstance(
+            self.publication_provenance, Mapping
+        ):
+            raise GitHubValidationError("outbox publication provenance must be an object")
         if not re.fullmatch(r"[0-9a-f]{64}", self.request_digest):
             raise GitHubValidationError("outbox request_digest must be a SHA-256 hex digest")
         for name in ("auditor_block_digest", "expected_block_digest"):
@@ -714,6 +730,11 @@ class GitHubOutboxEntry:
             "publication_key": self.publication_key,
             "comment": dict(self.comment) if self.comment is not None else None,
             "request_operation_id": self.request_operation_id,
+            "publication_provenance": (
+                dict(self.publication_provenance)
+                if self.publication_provenance is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -754,7 +775,26 @@ class GitHubOutboxEntry:
             publication_key=payload.get("publication_key", ""),
             comment=payload.get("comment"),
             request_operation_id=payload.get("request_operation_id", ""),
+            publication_provenance=payload.get("publication_provenance"),
         )
+
+    @property
+    def expected_finding_revision(self) -> int | None:
+        """Return the canonical revision expected by this publication.
+
+        ``finding_revision`` is retained as the wire-compatible field name from
+        the first append-only schema.  The explicit alias keeps recovery code
+        and receipts clear about the fact that this is an expected revision,
+        not an observed remote revision.
+        """
+
+        return self.finding_revision
+
+    @property
+    def publication_snapshot(self) -> Mapping[str, Any] | None:
+        """Return the last complete remote snapshot retained by the receipt."""
+
+        return self.issue
 
 
 @dataclass(frozen=True, slots=True)
@@ -895,16 +935,54 @@ class GitHubSyncResult:
     def to_service_dict(self) -> dict[str, Any]:
         """Return the compact projection accepted by the service envelope.
 
-        The typed result keeps the comment at the top level for direct callers,
-        while the authenticated service already carries the same durable
-        comment under ``outbox``.  Omitting that duplicate projection keeps the
-        complete response below the service node bound for both legacy and
-        append-only publications.
+        Durable snapshots retain complete issue/comment bodies in the local
+        outbox, but duplicating them in an MCP/service response can exceed its
+        bounded result size.  Preserve their content hashes and omit the raw
+        bodies from this transport projection.
         """
 
-        payload = self.to_dict()
-        payload.pop("comment", None)
-        return payload
+        issue_snapshot = self.issue.to_dict() if self.issue is not None else None
+        entry = self.outbox
+        entry_issue = entry.issue if entry is not None else None
+        entry_comment = entry.comment if entry is not None else None
+        return {
+            "status": self.status,
+            "repository": self.repository,
+            "finding_id": self.finding_id,
+            "operation_id": self.operation_id,
+            "issue": _compact_issue_snapshot(issue_snapshot) if issue_snapshot else None,
+            "outbox": (
+                {
+                    "state": entry.state,
+                    "attempts": entry.attempts,
+                    "publication_kind": entry.publication_kind,
+                    "publication_revision": entry.publication_revision,
+                    "publication_digest": entry.publication_digest,
+                    "publication_key": entry.publication_key,
+                    "request_operation_id": entry.request_operation_id,
+                    "body_sha256": _sha256_text(entry.body),
+                    "issue": _compact_issue_snapshot(entry_issue) if entry_issue else None,
+                    "comment": (_compact_issue_snapshot(entry_comment) if entry_comment else None),
+                    "reason": entry.reason,
+                }
+                if entry is not None
+                else None
+            ),
+            "finding": (
+                {
+                    "finding_id": self.finding.finding_id,
+                    "github_issue": self.finding.github_issue,
+                }
+                if self.finding is not None
+                else None
+            ),
+            "reason": self.reason,
+            "replayed": self.replayed,
+            "remote_write": self.remote_write,
+            "publication_kind": self.publication_kind,
+            "publication_revision": self.publication_revision,
+            "publication_digest": self.publication_digest,
+        }
 
 
 class GitHubOutbox:
@@ -1004,6 +1082,48 @@ class GitHubOutbox:
             ):
                 return entry
         return None
+
+    def find_publication_kind(
+        self,
+        repository: str,
+        finding_id: str,
+        publication_kind: str,
+    ) -> GitHubOutboxEntry | None:
+        """Find the durable snapshot for one publication kind.
+
+        The initial issue is finding-wide, while its later comments are
+        revision-wide.  A changed finding therefore must recover the original
+        issue receipt even when the new render has a different body digest.
+        """
+
+        _validate_repository(repository)
+        _validate_finding_id(finding_id)
+        if publication_kind not in _PUBLICATION_KINDS:
+            raise GitHubValidationError(f"unknown publication kind: {publication_kind}")
+        candidates: list[GitHubOutboxEntry] = []
+        for stored in self.store.list_records():
+            if (
+                not isinstance(stored.record, ActionRecord)
+                or stored.record.action_type != self.ACTION_TYPE
+            ):
+                continue
+            try:
+                entry = GitHubOutboxEntry.from_dict(stored.record.details)
+            except (GitHubSyncError, TypeError, ValueError) as exc:
+                raise GitHubOutboxError(f"outbox projection is malformed: {exc}") from exc
+            if (
+                entry.repository == repository
+                and entry.finding_id == finding_id
+                and entry.publication_kind == publication_kind
+            ):
+                candidates.append(entry)
+        if not candidates:
+            return None
+        # Prefer a terminal receipt, then the most recently updated durable
+        # snapshot.  The ordering is deterministic even for old stores whose
+        # timestamps were not populated.
+        candidates.sort(key=lambda item: (item.state == "succeeded", item.updated_at), reverse=True)
+        return candidates[0]
 
     def _get_with_revision(
         self, repository: str, finding_id: str, operation_id: str
@@ -1532,6 +1652,18 @@ class GitHubSync:
                                 reason=reason,
                                 remote_write=remote_write,
                             )
+                        except GitHubCapabilityUnavailable as exc:
+                            reason = f"issue create capability unavailable: {exc}"
+                            entry = self._mark(entry, "failed", reason)
+                            self._mark_claim(claim, "failed", reason)
+                            return self._result(
+                                "unavailable",
+                                repository,
+                                finding,
+                                entry,
+                                reason=reason,
+                                remote_write="none",
+                            )
                         except Exception as exc:  # noqa: BLE001 - create outcome is inherently ambiguous.
                             reconciled, reconcile_error = self._search(repository, rendered.marker)
                             if (
@@ -1828,6 +1960,19 @@ class GitHubSync:
                         reason=reason,
                         remote_write=remote_write,
                     )
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue update capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    if claim is not None:
+                        self._mark_claim(claim, "failed", reason)
+                    return self._result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        entry,
+                        reason=reason,
+                        remote_write="none",
+                    )
                 except Exception as exc:  # noqa: BLE001 - update may have applied remotely.
                     reason = f"update outcome is ambiguous: {type(exc).__name__}: {exc}"
                     remote_write = (
@@ -1905,23 +2050,58 @@ class GitHubSync:
         worker_id: str,
     ) -> GitHubSyncResult:
         """Run the D1 create/link-once plus append-only revision protocol."""
-
         revision = 0 if expected_finding_revision is None else expected_finding_revision
-        initial_body = _render_initial_issue_body(rendered, revision)
-        initial_digest = _publication_digest(
+        initial_body_for_request = _render_initial_issue_body(rendered, revision)
+        initial_digest_for_request = _publication_digest(
             rendered,
             finding_revision=revision,
             publication_kind="initial_issue",
-            body=initial_body,
+            body=initial_body_for_request,
         )
-        initial_key = _publication_key(
+        initial_key_for_request = _publication_key(
             repository,
             finding.finding_id,
             publication_kind="initial_issue",
             finding_revision=revision,
-            publication_digest=initial_digest,
+            publication_digest=initial_digest_for_request,
         )
-        entry = self.outbox.find_publication(repository, finding.finding_id, initial_key)
+        comment_digest = _publication_digest(
+            rendered, finding_revision=revision, publication_kind="revision_comment"
+        )
+        comment_key = _publication_key(
+            repository,
+            finding.finding_id,
+            publication_kind="revision_comment",
+            finding_revision=revision,
+            publication_digest=comment_digest,
+        )
+        comment_body = _render_publication_comment(finding, rendered, revision, comment_digest)
+        linked = _linked_issue_identity(finding, repository, rendered.marker)
+        linked_current_comment = (
+            linked is not None
+            and linked.get("publication_kind") == "revision_comment"
+            and linked.get("publication_revision") == revision
+        )
+
+        # Initial issue identity is finding-wide.  On a later revision the
+        # rendered body and its digest change, so recover the old snapshot by
+        # publication kind instead of treating it as a second create intent.
+        exact_initial_entry = self.outbox.find_publication(
+            repository, finding.finding_id, initial_key_for_request
+        )
+        kind_initial_entry = self.outbox.find_publication_kind(
+            repository, finding.finding_id, "initial_issue"
+        )
+        if (
+            linked_current_comment
+            and kind_initial_entry is not None
+            and _publication_provenance(kind_initial_entry) is not None
+            and _publication_provenance(kind_initial_entry).get("adoption_mode")
+            == "canonical_link_comment"
+        ):
+            entry = kind_initial_entry
+        else:
+            entry = exact_initial_entry or kind_initial_entry
         if entry is None:
             entry = self.outbox.enqueue(
                 self._publication_entry(
@@ -1929,72 +2109,180 @@ class GitHubSync:
                     operation_id=operation_id,
                     finding_revision=revision,
                     publication_kind="initial_issue",
-                    publication_digest=initial_digest,
-                    publication_key=initial_key,
-                    body=initial_body,
+                    publication_digest=initial_digest_for_request,
+                    publication_key=initial_key_for_request,
+                    body=initial_body_for_request,
                 )
             )
-        if entry.state == "succeeded" and entry.issue is not None:
-            issue = _issue_from_entry(entry)
-            if issue is None:
-                raise GitHubOutboxError("succeeded append-only entry has an invalid issue")
+            initial_body = initial_body_for_request
+            initial_revision = revision
+            initial_block_digest = rendered.auditor_block_digest
+            current_initial_entry = True
+        else:
+            current_initial_entry = entry.publication_key == initial_key_for_request
             try:
-                updated_finding = self._persist_link(
-                    finding,
-                    issue,
-                    entry,
-                    expected_finding_revision=expected_finding_revision,
-                    link=_build_link(issue, finding, rendered, entry=entry),
-                )
+                if current_initial_entry:
+                    _validate_publication_entry_payload(
+                        entry,
+                        rendered,
+                        finding_revision=revision,
+                        publication_kind="initial_issue",
+                        publication_digest=initial_digest_for_request,
+                        publication_key=initial_key_for_request,
+                        body=initial_body_for_request,
+                    )
+                else:
+                    _validate_initial_entry_identity(entry, rendered)
             except GitHubConflictError as exc:
+                entry = self._mark_publication_stale(entry, str(exc))
                 return self._append_result(
                     "conflict",
                     repository,
                     finding,
                     operation_id,
                     entry,
-                    issue,
+                    _issue_from_entry(entry),
                     finding,
-                    reason=f"durable finding link remains unresolved: {exc}",
+                    reason=str(exc),
                     replayed=True,
                 )
+            initial_body = entry.body
+            initial_revision = entry.publication_revision
+            if initial_revision is None:
+                raise GitHubOutboxError("initial publication entry has no expected revision")
+            initial_block_digest = entry.auditor_block_digest or None
+
+        def _stale(reason: str, issue: GitHubIssue | None = None) -> GitHubSyncResult:
+            stale_entry = self._mark_publication_stale(entry, reason)
             return self._append_result(
-                "unchanged",
+                "conflict",
                 repository,
                 finding,
                 operation_id,
-                entry,
-                issue,
-                updated_finding,
+                stale_entry,
+                issue or _issue_from_entry(stale_entry),
+                finding,
+                reason=reason,
                 replayed=True,
             )
 
-        search, search_error = self._search(repository, rendered.marker)
-        if search_error is not None:
-            entry = self._mark(entry, "failed", search_error)
+        def _ambiguous(reason: str, issue: GitHubIssue | None = None) -> GitHubSyncResult:
+            ambiguous_entry = self._mark(entry, "ambiguous", reason, allow_terminalize=True)
             return self._append_result(
-                "failed",
+                "ambiguous",
                 repository,
                 finding,
                 operation_id,
-                entry,
-                None,
+                ambiguous_entry,
+                issue or _issue_from_entry(ambiguous_entry),
                 finding,
-                reason=search_error,
+                reason=reason,
+                replayed=True,
             )
-        if search is None or not search.complete:
-            reason = (search.reason if search is not None else "") or "marker search is incomplete"
-            entry = self._mark(entry, "ambiguous", reason)
-            return self._append_result(
-                "ambiguous", repository, finding, operation_id, entry, None, finding, reason=reason
-            )
-        remote = _select_marker_issue(search, repository=repository, finding_id=finding.finding_id)
 
-        if remote is None:
-            if entry.state in {"in_flight", "ambiguous"} and not retry_ambiguous:
-                reason = (
-                    "create remains ambiguous; exact marker is absent and retry was not authorized"
+        # A canonical link is authoritative evidence about which issue must be
+        # reread.  A link to a newer/current comment with a different digest is
+        # a same-revision conflict, not permission to create another comment.
+        if linked is not None:
+            linked_revision = linked.get("publication_revision")
+            if linked_revision is not None and linked_revision > revision:
+                return _stale("canonical finding link points to a newer publication revision")
+            if linked_current_comment and linked.get("publication_digest") != comment_digest:
+                return _stale("canonical finding link conflicts with the requested revision digest")
+            if linked_current_comment and linked.get("comment_id") is None:
+                return _stale(
+                    "canonical finding link is missing the current publication comment ID"
                 )
+
+        remote: GitHubIssue | None = None
+        remote_write = "none"
+
+        # A terminal initial receipt is reread before it is reported as
+        # unchanged.  Missing or altered remote state downgrades the local
+        # receipt to a visible stale/conflict state without erasing it.
+        if entry.state == "succeeded" and entry.issue is not None:
+            snapshot = _issue_from_entry(entry)
+            if snapshot is None:
+                return _stale("succeeded initial publication has an invalid issue snapshot")
+            if linked is not None and linked["number"] != snapshot.number:
+                return _stale(
+                    "canonical finding link conflicts with the durable publication snapshot",
+                    snapshot,
+                )
+            try:
+                remote = self._refresh_append_issue(
+                    snapshot,
+                    repository=repository,
+                    finding_id=finding.finding_id,
+                    marker=rendered.marker,
+                )
+                _validate_initial_publication_issue(
+                    remote,
+                    rendered,
+                    finding_revision=initial_revision,
+                    initial_body=initial_body,
+                    expected_block_digest=initial_block_digest,
+                )
+            except GitHubIssueMissing as exc:
+                return _stale(str(exc), snapshot)
+            except GitHubTransportError as exc:
+                return _ambiguous(str(exc), snapshot)
+            except GitHubConflictError as exc:
+                return _stale(str(exc), snapshot)
+            entry = self._persist_entry(replace(entry, issue=remote.to_dict(), reason=""))
+            if current_initial_entry and not linked_current_comment:
+                try:
+                    updated_finding = self._persist_link(
+                        finding,
+                        remote,
+                        entry,
+                        expected_finding_revision=expected_finding_revision,
+                        link=_build_link(remote, finding, rendered, entry=entry),
+                    )
+                except GitHubConflictError as exc:
+                    return self._append_result(
+                        "conflict",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        remote,
+                        finding,
+                        reason=f"durable finding link remains unresolved: {exc}",
+                        replayed=True,
+                    )
+                return self._append_result(
+                    "unchanged",
+                    repository,
+                    finding,
+                    operation_id,
+                    entry,
+                    remote,
+                    updated_finding,
+                    replayed=True,
+                )
+
+        # A non-terminal receipt still needs a complete marker search before
+        # create/recovery.  This is the read-only boundary that makes a retry
+        # safe without claiming a provider-side CAS.
+        if remote is None:
+            search, search_error = self._search(repository, rendered.marker)
+            if search_error is not None:
+                entry = self._mark(entry, "failed", search_error)
+                return self._append_result(
+                    "failed",
+                    repository,
+                    finding,
+                    operation_id,
+                    entry,
+                    None,
+                    finding,
+                    reason=search_error,
+                )
+            if search is None or not search.complete:
+                reason = (
+                    search.reason if search is not None else ""
+                ) or "marker search is incomplete"
                 entry = self._mark(entry, "ambiguous", reason)
                 return self._append_result(
                     "ambiguous",
@@ -2006,6 +2294,221 @@ class GitHubSync:
                     finding,
                     reason=reason,
                 )
+            remote = _select_marker_issue(
+                search, repository=repository, finding_id=finding.finding_id
+            )
+
+        if linked is not None:
+            try:
+                linked_remote = _coerce_issue(self.provider.get_issue(repository, linked["number"]))
+                if linked_current_comment:
+                    try:
+                        initial_publication = _parse_publication_marker(linked_remote.body)
+                    except GitHubSyncError as exc:
+                        raise GitHubConflictError(
+                            f"canonical finding link points to malformed issue provenance: {exc}"
+                        ) from exc
+                    if (
+                        initial_publication is None
+                        or initial_publication[0] != finding.finding_id
+                        or initial_publication[2] is not None
+                        or initial_publication[1] > revision
+                    ):
+                        raise GitHubConflictError(
+                            "canonical finding link does not identify a compatible initial issue"
+                        )
+                    _validate_initial_publication_issue(
+                        linked_remote,
+                        rendered,
+                        finding_revision=initial_publication[1],
+                        initial_body=linked_remote.body,
+                    )
+                    linked_comment = _find_exact_publication_comment(
+                        linked_remote,
+                        finding_id=finding.finding_id,
+                        finding_revision=revision,
+                        publication_digest=comment_digest,
+                        expected_body=comment_body,
+                    )
+                    if linked_comment is None or linked_comment.get("id") != linked.get(
+                        "comment_id"
+                    ):
+                        raise GitHubConflictError(
+                            "canonical finding link does not match the exact remote publication comment"
+                        )
+                else:
+                    _validate_initial_publication_issue(
+                        linked_remote,
+                        rendered,
+                        finding_revision=initial_revision,
+                        initial_body=initial_body,
+                        expected_block_digest=initial_block_digest,
+                    )
+            except (LookupError, GitHubIssueMissing) as exc:
+                return _stale(f"canonical finding link is stale: remote issue is missing ({exc})")
+            except GitHubTransportError as exc:
+                return _ambiguous(f"canonical finding link could not be reread: {exc}")
+            except GitHubValidationError as exc:
+                return _stale(f"canonical finding link returned a malformed remote issue: {exc}")
+            except GitHubConflictError as exc:
+                return _stale(f"canonical finding link conflicts with remote publication: {exc}")
+            except Exception as exc:  # noqa: BLE001 - provider read failures remain ambiguous.
+                return _ambiguous(
+                    f"canonical finding link could not be reread: {type(exc).__name__}: {exc}"
+                )
+            if remote is not None and remote.number != linked_remote.number:
+                return _stale("canonical finding link conflicts with marker search", remote)
+            remote = linked_remote
+
+        if remote is not None:
+            try:
+                remote = self._refresh_append_issue(
+                    remote,
+                    repository=repository,
+                    finding_id=finding.finding_id,
+                    marker=rendered.marker,
+                )
+                if linked_current_comment and current_initial_entry:
+                    # With the original outbox gone, the canonical current-comment
+                    # link proves which immutable issue to adopt.  Its initial
+                    # auditor block may legitimately predate the linked comment.
+                    try:
+                        initial_publication = _parse_publication_marker(remote.body)
+                    except GitHubSyncError as exc:
+                        raise GitHubConflictError(
+                            f"canonical finding link points to malformed issue provenance: {exc}"
+                        ) from exc
+                    if initial_publication is None:
+                        raise GitHubConflictError(
+                            "canonical finding link points to an issue without publication provenance"
+                        )
+                    observed_block_digest = _sha256_text(_extract_auditor_block(remote.body))
+                    if (
+                        initial_publication[1] == initial_revision
+                        and observed_block_digest == initial_block_digest
+                    ):
+                        _validate_initial_publication_issue(
+                            remote,
+                            rendered,
+                            finding_revision=initial_revision,
+                            initial_body=initial_body,
+                            expected_block_digest=initial_block_digest,
+                        )
+                    else:
+                        _validate_initial_publication_issue(
+                            remote,
+                            rendered,
+                            finding_revision=initial_publication[1],
+                            initial_body=remote.body,
+                        )
+                        entry = self._mark_publication_stale(
+                            entry,
+                            "initial create intent differs from the linked immutable issue snapshot",
+                        )
+                        entry = self.outbox.enqueue(
+                            _adopt_initial_publication_snapshot(entry, remote)
+                        )
+                        initial_revision = entry.publication_revision
+                        initial_block_digest = entry.auditor_block_digest
+                        initial_body = entry.body
+                        current_initial_entry = False
+                elif current_initial_entry:
+                    # A complete marker search can recover the immutable initial
+                    # snapshot even when both the outbox and optional finding link
+                    # were lost.  Its revision/block are read from the immutable
+                    # issue, not inferred from the current finding revision.
+                    try:
+                        initial_publication = _parse_publication_marker(remote.body)
+                    except GitHubSyncError as exc:
+                        raise GitHubConflictError(
+                            f"marker-discovered issue has malformed publication provenance: {exc}"
+                        ) from exc
+                    if (
+                        initial_publication is None
+                        or initial_publication[0] != finding.finding_id
+                        or initial_publication[2] is not None
+                        or initial_publication[1] > revision
+                    ):
+                        raise GitHubConflictError(
+                            "marker-discovered issue does not identify a compatible initial snapshot"
+                        )
+                    _validate_initial_publication_issue(
+                        remote,
+                        rendered,
+                        finding_revision=initial_publication[1],
+                        initial_body=remote.body,
+                    )
+                    observed_block_digest = _sha256_text(_extract_auditor_block(remote.body))
+                    if (
+                        initial_publication[1] != revision
+                        or observed_block_digest != initial_block_digest
+                    ):
+                        entry = self._mark_publication_stale(
+                            entry,
+                            "initial create intent differs from the marker-discovered immutable issue snapshot",
+                        )
+                        entry = self.outbox.enqueue(
+                            _adopt_initial_publication_snapshot(
+                                entry,
+                                remote,
+                                adoption_mode="marker_search",
+                            )
+                        )
+                        initial_revision = entry.publication_revision
+                        initial_block_digest = entry.auditor_block_digest
+                        initial_body = entry.body
+                        current_initial_entry = False
+                    else:
+                        _validate_initial_publication_issue(
+                            remote,
+                            rendered,
+                            finding_revision=initial_revision,
+                            initial_body=initial_body,
+                            expected_block_digest=initial_block_digest,
+                        )
+                else:
+                    _validate_initial_publication_issue(
+                        remote,
+                        rendered,
+                        finding_revision=initial_revision,
+                        initial_body=initial_body,
+                        expected_block_digest=initial_block_digest,
+                    )
+            except GitHubIssueMissing as exc:
+                return _stale(str(exc), remote)
+            except GitHubTransportError as exc:
+                return _ambiguous(str(exc), remote)
+            except GitHubConflictError as exc:
+                return _stale(str(exc), remote)
+
+        if remote is None:
+            if entry.state == "conflict":
+                return self._append_result(
+                    "conflict",
+                    repository,
+                    finding,
+                    operation_id,
+                    entry,
+                    _issue_from_entry(entry),
+                    finding,
+                    reason=entry.reason or "initial publication receipt is terminally conflicted",
+                    replayed=True,
+                )
+            if entry.state in {"in_flight", "ambiguous"} and not retry_ambiguous:
+                return _ambiguous(
+                    "create remains ambiguous; exact marker is absent and retry was not authorized"
+                )
+            if not current_initial_entry:
+                return _ambiguous(
+                    "a nonterminal initial-create receipt belongs to a different immutable "
+                    "finding snapshot; marker reconciliation is required before any new create"
+                )
+            if self.finding_store is not None and not callable(
+                getattr(self.provider, "create_issue_with_finding_revision", None)
+            ):
+                return _stale(
+                    "provider lacks canonical finding-revision reservation; refusing issue create"
+                )
             claim, claim_owned = self._acquire_finding_claim(
                 rendered,
                 operation_id=entry.operation_id,
@@ -2016,14 +2519,18 @@ class GitHubSync:
             )
             if not claim_owned:
                 if claim.state == "succeeded":
-                    remote = self._refresh_claim_issue(claim, repository, finding.finding_id)
+                    try:
+                        remote = self._refresh_claim_issue(claim, repository, finding.finding_id)
+                    except GitHubIssueMissing as exc:
+                        return _stale(str(exc))
+                    except GitHubTransportError as exc:
+                        return _ambiguous(str(exc))
                 else:
                     reason = claim.reason or "another worker owns the finding publication"
-                    entry = self._mark(
-                        entry, "ambiguous" if claim.state == "ambiguous" else "pending", reason
-                    )
+                    status = "ambiguous" if claim.state == "ambiguous" else "pending"
+                    entry = self._mark(entry, status, reason)
                     return self._append_result(
-                        "ambiguous" if claim.state == "ambiguous" else "pending",
+                        status,
                         repository,
                         finding,
                         operation_id,
@@ -2034,25 +2541,49 @@ class GitHubSync:
                     )
             if remote is None and claim_owned:
                 entry = self._claim(entry, worker_id)
+                status = "created"
                 try:
                     remote = _coerce_issue(
-                        self.provider.create_issue(
-                            repository,
-                            title=rendered.title,
+                        self._create_issue(
+                            rendered,
+                            finding_revision=revision,
                             body=initial_body,
-                            labels=rendered.labels,
                         )
                     )
                     _validate_issue_for_finding(
                         remote, repository, finding.finding_id, rendered.marker
                     )
+                    _validate_initial_publication_issue(
+                        remote,
+                        rendered,
+                        finding_revision=initial_revision,
+                        initial_body=initial_body,
+                        expected_block_digest=initial_block_digest,
+                        exact_payload=True,
+                    )
                     remote_write = "applied"
-                    status = "created"
-                except Exception as exc:  # noqa: BLE001 - remote create is ambiguous by definition.
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue create capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    self._mark_claim(claim, "failed", reason)
+                    return self._append_result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        None,
+                        finding,
+                        reason=reason,
+                        remote_write="none",
+                    )
+                except Exception as exc:  # noqa: BLE001 - create outcome is ambiguous by definition.
                     reconciled, reconcile_error = self._search(repository, rendered.marker)
                     remote = (
                         _select_marker_issue(
-                            reconciled, repository=repository, finding_id=finding.finding_id
+                            reconciled,
+                            repository=repository,
+                            finding_id=finding.finding_id,
                         )
                         if reconciled is not None
                         and reconcile_error is None
@@ -2074,19 +2605,126 @@ class GitHubSync:
                             reason=reason,
                             remote_write="ambiguous",
                         )
+                    try:
+                        remote = self._refresh_append_issue(
+                            remote,
+                            repository=repository,
+                            finding_id=finding.finding_id,
+                            marker=rendered.marker,
+                        )
+                        _validate_initial_publication_issue(
+                            remote,
+                            rendered,
+                            finding_revision=initial_revision,
+                            initial_body=initial_body,
+                            expected_block_digest=initial_block_digest,
+                            exact_payload=True,
+                        )
+                    except GitHubIssueMissing as missing:
+                        reason = str(missing)
+                        entry = self._mark(entry, "ambiguous", reason)
+                        self._mark_claim(claim, "ambiguous", reason)
+                        return self._append_result(
+                            "ambiguous",
+                            repository,
+                            finding,
+                            operation_id,
+                            entry,
+                            None,
+                            finding,
+                            reason=reason,
+                            remote_write="ambiguous",
+                        )
+                    except GitHubTransportError as transport_error:
+                        reason = (
+                            "create outcome remains ambiguous after exact-marker recovery: "
+                            f"{type(transport_error).__name__}: {transport_error}"
+                        )
+                        entry = self._mark(entry, "ambiguous", reason)
+                        self._mark_claim(claim, "ambiguous", reason)
+                        return self._append_result(
+                            "ambiguous",
+                            repository,
+                            finding,
+                            operation_id,
+                            entry,
+                            remote,
+                            finding,
+                            reason=reason,
+                            remote_write="ambiguous",
+                        )
+                    except GitHubSyncError as conflict:
+                        return _stale(str(conflict), remote)
                     status = "reconciled"
-                    remote_write = "none"
-                entry = replace(
-                    entry,
-                    issue=remote.to_dict(),
-                    state="succeeded",
-                    reason="",
-                    updated_at=utc_now(),
+                    # Complete exact-marker readback confirms that this create
+                    # was accepted despite the lost provider response.
+                    remote_write = "applied"
+
+                # Persist the local receipt before the post-create reread.  A
+                # missing/transport-failed reread must not erase evidence that
+                # the provider accepted the immutable issue.
+                entry = self._persist_entry(
+                    replace(entry, issue=remote.to_dict(), state="succeeded", reason="")
                 )
-                # Persist the remote observation before attempting the optional
-                # canonical FindingStore link CAS.  A link conflict must not
-                # erase evidence that GitHub accepted the immutable issue.
-                entry = self._persist_entry(entry)
+                try:
+                    reread = self._refresh_append_issue(
+                        remote,
+                        repository=repository,
+                        finding_id=finding.finding_id,
+                        marker=rendered.marker,
+                    )
+                    _validate_initial_publication_issue(
+                        reread,
+                        rendered,
+                        finding_revision=initial_revision,
+                        initial_body=initial_body,
+                        expected_block_digest=initial_block_digest,
+                        exact_payload=True,
+                    )
+                    remote = reread
+                    entry = self._persist_entry(replace(entry, issue=remote.to_dict()))
+                except GitHubIssueMissing as exc:
+                    entry = self._mark_publication_stale(entry, str(exc))
+                    self._mark_claim(claim, "conflict", str(exc), allow_terminalize=True)
+                    return self._append_result(
+                        "conflict",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        remote,
+                        finding,
+                        reason=str(exc),
+                        remote_write=remote_write,
+                    )
+                except GitHubTransportError as exc:
+                    entry = self._mark(entry, "ambiguous", str(exc), allow_terminalize=True)
+                    self._mark_claim(claim, "ambiguous", str(exc), allow_terminalize=True)
+                    return self._append_result(
+                        "ambiguous",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        remote,
+                        finding,
+                        reason=str(exc),
+                        remote_write=remote_write,
+                    )
+                except GitHubConflictError as exc:
+                    entry = self._mark_publication_stale(entry, str(exc))
+                    self._mark_claim(claim, "conflict", str(exc), allow_terminalize=True)
+                    return self._append_result(
+                        "conflict",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        remote,
+                        finding,
+                        reason=str(exc),
+                        remote_write=remote_write,
+                    )
                 try:
                     updated_finding = self._persist_link(
                         finding,
@@ -2120,9 +2758,6 @@ class GitHubSync:
                 try:
                     entry, _ = self.outbox.complete_success(entry, succeeded_claim)
                 except GitHubOutboxError:
-                    # The remote issue and publication entry are already
-                    # durable; preserve the observation if the paired claim
-                    # boundary races with another worker.
                     entry = self._persist_entry(entry)
                 return self._append_result(
                     status,
@@ -2136,56 +2771,22 @@ class GitHubSync:
                 )
 
         # A marker found remotely settles the immutable initial publication,
-        # even when the local outbox was lost or this is a migration from the
-        # legacy body-CAS path.  Never rewrite the issue body.
+        # even when local outbox state was lost.  Keep the issue body byte-for-
+        # byte intact and only use the issue as a complete comment snapshot.
         if entry.state != "succeeded" or entry.issue is None:
             entry = self._persist_entry(
-                replace(
-                    entry,
-                    state="succeeded",
-                    issue=remote.to_dict(),
-                    reason="",
-                    updated_at=utc_now(),
-                )
+                replace(entry, state="succeeded", issue=remote.to_dict(), reason="")
             )
-        # A crash may have left the finding-wide claim in flight even though
-        # the exact immutable issue is now visible. Reconcile that local
-        # ownership boundary before considering later revisions.
         self._repair_succeeded_claim(entry, remote)
 
-        _validate_issue_for_finding(remote, repository, finding.finding_id, rendered.marker)
-        comment_digest = _publication_digest(
-            rendered, finding_revision=revision, publication_kind="revision_comment"
-        )
-        comment_key = _publication_key(
-            repository,
-            finding.finding_id,
-            publication_kind="revision_comment",
-            finding_revision=revision,
-            publication_digest=comment_digest,
-        )
-        comment_entry = self.outbox.find_publication(repository, finding.finding_id, comment_key)
-        comment_body = _render_publication_comment(finding, rendered, revision, comment_digest)
-        if comment_entry is None:
-            comment_entry = self.outbox.enqueue(
-                self._publication_entry(
-                    rendered,
-                    operation_id=operation_id,
-                    finding_revision=revision,
-                    publication_kind="revision_comment",
-                    publication_digest=comment_digest,
-                    publication_key=comment_key,
-                    body=comment_body,
-                )
-            )
-        if comment_entry.state == "succeeded":
+        if current_initial_entry and entry.publication_key == initial_key_for_request:
             try:
                 updated_finding = self._persist_link(
                     finding,
                     remote,
-                    comment_entry,
+                    entry,
                     expected_finding_revision=expected_finding_revision,
-                    link=_build_link(remote, finding, rendered, entry=comment_entry),
+                    link=_build_link(remote, finding, rendered, entry=entry),
                 )
             except GitHubConflictError as exc:
                 return self._append_result(
@@ -2193,7 +2794,7 @@ class GitHubSync:
                     repository,
                     finding,
                     operation_id,
-                    comment_entry,
+                    entry,
                     remote,
                     finding,
                     reason=f"durable finding link remains unresolved: {exc}",
@@ -2204,11 +2805,165 @@ class GitHubSync:
                 repository,
                 finding,
                 operation_id,
-                comment_entry,
+                entry,
                 remote,
                 updated_finding,
                 replayed=True,
             )
+
+        # Read the complete remote comment collection before creating a local
+        # comment receipt or issuing a POST.  This is the outbox-loss replay
+        # dedupe boundary and also verifies the canonical link's comment ID.
+        try:
+            existing_comment = _find_exact_publication_comment(
+                remote,
+                finding_id=finding.finding_id,
+                finding_revision=revision,
+                publication_digest=comment_digest,
+                expected_body=comment_body,
+            )
+        except GitHubSyncError as exc:
+            return _stale(str(exc), remote)
+
+        comment_entry = self.outbox.find_publication(repository, finding.finding_id, comment_key)
+        if comment_entry is None:
+            comment_entry = self._publication_entry(
+                rendered,
+                operation_id=operation_id,
+                finding_revision=revision,
+                publication_kind="revision_comment",
+                publication_digest=comment_digest,
+                publication_key=comment_key,
+                body=comment_body,
+            )
+            if existing_comment is not None:
+                comment_entry = self._persist_entry(
+                    replace(
+                        comment_entry,
+                        state="succeeded",
+                        issue=remote.to_dict(),
+                        comment=existing_comment,
+                        reason="",
+                    )
+                )
+                return self._append_comment_result(
+                    "reconciled",
+                    repository,
+                    finding,
+                    operation_id,
+                    comment_entry,
+                    remote,
+                    expected_finding_revision=expected_finding_revision,
+                    replayed=True,
+                )
+            comment_entry = self.outbox.enqueue(comment_entry)
+        else:
+            try:
+                _validate_publication_entry_payload(
+                    comment_entry,
+                    rendered,
+                    finding_revision=revision,
+                    publication_kind="revision_comment",
+                    publication_digest=comment_digest,
+                    publication_key=comment_key,
+                    body=comment_body,
+                )
+            except GitHubConflictError as exc:
+                comment_entry = self._mark_publication_stale(comment_entry, str(exc))
+                return self._append_result(
+                    "conflict",
+                    repository,
+                    finding,
+                    operation_id,
+                    comment_entry,
+                    remote,
+                    finding,
+                    reason=str(exc),
+                    replayed=True,
+                )
+
+        if linked is not None and linked.get("publication_kind") == "revision_comment":
+            if existing_comment is None:
+                return self._mark_comment_stale(
+                    comment_entry,
+                    repository,
+                    finding,
+                    operation_id,
+                    remote,
+                    "canonical finding link points to a missing publication comment",
+                )
+
+        if comment_entry.state == "succeeded":
+            if existing_comment is None:
+                return self._mark_comment_stale(
+                    comment_entry,
+                    repository,
+                    finding,
+                    operation_id,
+                    remote,
+                    "remote publication comment is missing after local success",
+                )
+            if isinstance(comment_entry.comment, Mapping) and dict(comment_entry.comment) != dict(
+                existing_comment
+            ):
+                return self._mark_comment_stale(
+                    comment_entry,
+                    repository,
+                    finding,
+                    operation_id,
+                    remote,
+                    "remote publication comment differs from the durable receipt",
+                )
+            comment_entry = self._persist_entry(
+                replace(comment_entry, issue=remote.to_dict(), comment=existing_comment, reason="")
+            )
+            return self._append_comment_result(
+                "unchanged",
+                repository,
+                finding,
+                operation_id,
+                comment_entry,
+                remote,
+                expected_finding_revision=expected_finding_revision,
+                replayed=True,
+            )
+
+        if comment_entry.state in {"ambiguous", "in_flight"} and not retry_ambiguous:
+            reason = "comment remains ambiguous; retry_ambiguous=True is required before POST"
+            comment_entry = self._mark(comment_entry, "ambiguous", reason)
+            return self._append_result(
+                "ambiguous",
+                repository,
+                finding,
+                operation_id,
+                comment_entry,
+                remote,
+                finding,
+                reason=reason,
+            )
+        if comment_entry.state == "conflict":
+            return self._append_result(
+                "conflict",
+                repository,
+                finding,
+                operation_id,
+                comment_entry,
+                remote,
+                finding,
+                reason=comment_entry.reason,
+            )
+        if comment_entry.state == "failed":
+            return self._append_result(
+                "failed",
+                repository,
+                finding,
+                operation_id,
+                comment_entry,
+                remote,
+                finding,
+                reason=comment_entry.reason,
+            )
+
         claimed_comment = self._claim(comment_entry, worker_id)
         if claimed_comment.worker_id != worker_id and claimed_comment.state == "in_flight":
             reason = "another worker owns the in-flight auditor comment"
@@ -2222,6 +2977,75 @@ class GitHubSync:
                 finding,
                 reason=reason,
             )
+
+        # Re-read once more after claiming.  A concurrent worker may have
+        # appended the exact comment between the first read and this claim.
+        try:
+            remote = self._refresh_append_issue(
+                remote,
+                repository=repository,
+                finding_id=finding.finding_id,
+                marker=rendered.marker,
+            )
+            existing_comment = _find_exact_publication_comment(
+                remote,
+                finding_id=finding.finding_id,
+                finding_revision=revision,
+                publication_digest=comment_digest,
+                expected_body=comment_body,
+            )
+        except GitHubIssueMissing as exc:
+            return self._mark_comment_stale(
+                claimed_comment,
+                repository,
+                finding,
+                operation_id,
+                remote,
+                str(exc),
+            )
+        except GitHubTransportError as exc:
+            return self._append_result(
+                "ambiguous",
+                repository,
+                finding,
+                operation_id,
+                self._mark(claimed_comment, "ambiguous", str(exc)),
+                remote,
+                finding,
+                reason=str(exc),
+            )
+        except GitHubConflictError as exc:
+            return self._mark_comment_stale(
+                claimed_comment,
+                repository,
+                finding,
+                operation_id,
+                remote,
+                str(exc),
+            )
+        if existing_comment is not None:
+            comment_entry = self._persist_entry(
+                replace(
+                    claimed_comment,
+                    state="succeeded",
+                    issue=remote.to_dict(),
+                    comment=existing_comment,
+                    reason="",
+                )
+            )
+            return self._append_comment_result(
+                "reconciled",
+                repository,
+                finding,
+                operation_id,
+                comment_entry,
+                remote,
+                expected_finding_revision=expected_finding_revision,
+                replayed=True,
+            )
+
+        remote_write = "none"
+        status = "commented"
         try:
             write = self.provider.append_auditor_comment(
                 repository,
@@ -2229,12 +3053,33 @@ class GitHubSync:
                 body=comment_body,
                 request_digest=comment_digest,
             )
-            comment, write_status = _coerce_comment_write(write, publication_digest=comment_digest)
+            comment, write_status = _coerce_comment_write(
+                write,
+                publication_digest=comment_digest,
+                expected_body=comment_body,
+            )
             remote_write = "applied" if write_status == "created" else "none"
             status = "commented" if write_status == "created" else "reconciled"
         except Exception as exc:  # noqa: BLE001 - preserve unresolved comment ambiguity.
-            comment = self._reconcile_comment(remote, comment_digest)
-            if comment is None:
+            try:
+                reconciled = self._reconcile_comment(
+                    remote,
+                    finding_id=finding.finding_id,
+                    finding_revision=revision,
+                    publication_digest=comment_digest,
+                    expected_body=comment_body,
+                )
+            except GitHubConflictError as conflict:
+                return self._mark_comment_stale(
+                    claimed_comment,
+                    repository,
+                    finding,
+                    operation_id,
+                    remote,
+                    f"comment reconciliation found conflicting remote publication: {conflict}",
+                    remote_write="ambiguous",
+                )
+            if reconciled is None:
                 reason = f"comment outcome is ambiguous: {type(exc).__name__}: {exc}"
                 comment_entry = self._mark(claimed_comment, "ambiguous", reason)
                 return self._append_result(
@@ -2248,37 +3093,132 @@ class GitHubSync:
                     reason=reason,
                     remote_write="ambiguous",
                 )
-            write_status = "reconciled"
-            remote_write = "none"
+            remote, comment = reconciled
             status = "reconciled"
-        comment_entry = replace(
-            claimed_comment,
-            state="succeeded",
-            issue=remote.to_dict(),
-            comment=comment,
-            reason="",
-            updated_at=utc_now(),
-        )
-        comment_entry = self._persist_entry(comment_entry)
-        try:
-            updated_finding = self._persist_link(
-                finding,
-                remote,
-                comment_entry,
-                expected_finding_revision=expected_finding_revision,
-                link=_build_link(remote, finding, rendered, entry=comment_entry),
+            # The exact remote publication is known, but after a transport
+            # error we cannot attribute it to this POST or an earlier attempt.
+            remote_write = "ambiguous"
+
+        # Save a provisional local receipt before the final readback.  This is
+        # deliberately retained if the provider accepted the comment but the
+        # issue/comment readback is missing or unavailable.
+        comment_entry = self._persist_entry(
+            replace(
+                claimed_comment,
+                state="succeeded",
+                issue=remote.to_dict(),
+                comment=comment,
+                reason="",
             )
-        except GitHubConflictError as exc:
-            reason = f"durable finding link remains unresolved: {exc}"
+        )
+        try:
+            reread = self._refresh_append_issue(
+                remote,
+                repository=repository,
+                finding_id=finding.finding_id,
+                marker=rendered.marker,
+            )
+            exact_comment = _find_exact_publication_comment(
+                reread,
+                finding_id=finding.finding_id,
+                finding_revision=revision,
+                publication_digest=comment_digest,
+                expected_body=comment_body,
+            )
+            if exact_comment is None:
+                return self._mark_comment_stale(
+                    comment_entry,
+                    repository,
+                    finding,
+                    operation_id,
+                    reread,
+                    "remote publication comment is missing after local success",
+                    remote_write=remote_write,
+                )
+            remote = reread
+            comment = exact_comment
+            comment_entry = self._persist_entry(
+                replace(comment_entry, issue=remote.to_dict(), comment=comment, reason="")
+            )
+        except GitHubIssueMissing as exc:
+            return self._mark_comment_stale(
+                comment_entry,
+                repository,
+                finding,
+                operation_id,
+                remote,
+                str(exc),
+                remote_write=remote_write,
+            )
+        except GitHubTransportError as exc:
+            comment_entry = self._mark(comment_entry, "ambiguous", str(exc), allow_terminalize=True)
             return self._append_result(
-                "conflict",
+                "ambiguous",
                 repository,
                 finding,
                 operation_id,
                 comment_entry,
                 remote,
                 finding,
-                reason=reason,
+                reason=str(exc),
+                remote_write=remote_write,
+            )
+        except GitHubConflictError as exc:
+            return self._mark_comment_stale(
+                comment_entry,
+                repository,
+                finding,
+                operation_id,
+                remote,
+                str(exc),
+                remote_write=remote_write,
+            )
+
+        return self._append_comment_result(
+            status,
+            repository,
+            finding,
+            operation_id,
+            comment_entry,
+            remote,
+            expected_finding_revision=expected_finding_revision,
+            remote_write=remote_write,
+        )
+
+    def _append_comment_result(
+        self,
+        status: str,
+        repository: str,
+        finding: Finding,
+        operation_id: str,
+        entry: GitHubOutboxEntry,
+        remote: GitHubIssue,
+        *,
+        expected_finding_revision: int | None,
+        replayed: bool = False,
+        remote_write: str = "none",
+    ) -> GitHubSyncResult:
+        """Persist the canonical finding link for a settled comment receipt."""
+
+        try:
+            updated_finding = self._persist_link(
+                finding,
+                remote,
+                entry,
+                expected_finding_revision=expected_finding_revision,
+                link=_build_link(remote, finding, _rendered_from_entry(entry), entry=entry),
+            )
+        except GitHubConflictError as exc:
+            return self._append_result(
+                "conflict",
+                repository,
+                finding,
+                operation_id,
+                entry,
+                remote,
+                finding,
+                reason=f"durable finding link remains unresolved: {exc}",
+                replayed=replayed,
                 remote_write=remote_write,
             )
         return self._append_result(
@@ -2286,9 +3226,36 @@ class GitHubSync:
             repository,
             finding,
             operation_id,
-            comment_entry,
+            entry,
             remote,
             updated_finding,
+            replayed=replayed,
+            remote_write=remote_write,
+        )
+
+    def _mark_comment_stale(
+        self,
+        entry: GitHubOutboxEntry,
+        repository: str,
+        finding: Finding,
+        operation_id: str,
+        remote: GitHubIssue | None,
+        reason: str,
+        *,
+        remote_write: str = "none",
+    ) -> GitHubSyncResult:
+        """Record a missing or conflicting comment while retaining its receipt."""
+
+        stale_entry = self._mark_publication_stale(entry, reason)
+        return self._append_result(
+            "conflict",
+            repository,
+            finding,
+            operation_id,
+            stale_entry,
+            remote or _issue_from_entry(stale_entry),
+            finding,
+            reason=reason,
             remote_write=remote_write,
         )
 
@@ -2329,6 +3296,18 @@ class GitHubSync:
             publication_revision=finding_revision,
             publication_digest=publication_digest,
             publication_key=publication_key,
+            expected_block_digest=rendered.auditor_block_digest,
+            publication_provenance={
+                "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+                "repository": rendered.repository,
+                "finding_id": rendered.finding_id,
+                "finding_revision": finding_revision,
+                "publication_kind": publication_kind,
+                "publication_digest": publication_digest,
+                "publication_key": publication_key,
+                "marker": rendered.marker,
+                "auditor_block_digest": rendered.auditor_block_digest,
+            },
         )
 
     def _append_result(
@@ -2363,23 +3342,82 @@ class GitHubSync:
         )
 
     def _reconcile_comment(
-        self, remote: GitHubIssue, publication_digest: str
-    ) -> Mapping[str, Any] | None:
+        self,
+        remote: GitHubIssue,
+        *,
+        finding_id: str,
+        finding_revision: int,
+        publication_digest: str,
+        expected_body: str,
+    ) -> tuple[GitHubIssue, Mapping[str, Any]] | None:
         """Read the complete issue comment collection after an ambiguous POST."""
 
         try:
             refreshed = _coerce_issue(self.provider.get_issue(remote.repository, remote.number))
+        except (LookupError, GitHubIssueMissing):
+            return None
         except Exception:  # noqa: BLE001 - unreadable remote state remains ambiguous.
             return None
-        marker = _publication_request_marker(publication_digest)
-        matches = []
-        for comment in refreshed.comments:
-            body = comment.get("body")
-            if isinstance(body, str) and marker in body:
-                matches.append(comment)
-        if len(matches) != 1:
+        try:
+            _validate_issue_for_finding(
+                refreshed,
+                remote.repository,
+                finding_id,
+                finding_marker(remote.repository, finding_id),
+            )
+            comment = _find_exact_publication_comment(
+                refreshed,
+                finding_id=finding_id,
+                finding_revision=finding_revision,
+                publication_digest=publication_digest,
+                expected_body=expected_body,
+            )
+        except GitHubSyncError as exc:
+            raise GitHubConflictError(
+                f"remote comment reconciliation could not verify publication: {exc}"
+            ) from exc
+        if comment is None:
             return None
-        return dict(matches[0])
+        return refreshed, comment
+
+    def _refresh_append_issue(
+        self,
+        remote: GitHubIssue,
+        *,
+        repository: str,
+        finding_id: str,
+        marker: str,
+    ) -> GitHubIssue:
+        """Reread an append-only issue before adopting or appending a receipt."""
+
+        try:
+            refreshed = _coerce_issue(self.provider.get_issue(repository, remote.number))
+        except (LookupError, GitHubIssueMissing) as exc:
+            raise GitHubIssueMissing(
+                f"remote issue {repository}#{remote.number} is missing during publication recovery"
+            ) from exc
+        except GitHubValidationError as exc:
+            raise GitHubConflictError(f"remote issue reread is malformed: {exc}") from exc
+        except GitHubSyncError:
+            raise
+        except Exception as exc:
+            raise GitHubTransportError(f"remote issue reread failed: {exc}") from exc
+        try:
+            _validate_issue_for_finding(refreshed, repository, finding_id, marker)
+        except GitHubValidationError as exc:
+            raise GitHubConflictError(
+                f"remote issue identity changed during reread: {exc}"
+            ) from exc
+        return refreshed
+
+    def _mark_publication_stale(
+        self,
+        entry: GitHubOutboxEntry,
+        reason: str,
+    ) -> GitHubOutboxEntry:
+        """Retain the local receipt while recording a stale remote outcome."""
+
+        return self._mark(entry, "conflict", reason, allow_terminalize=True)
 
     def _preflight_finding_revision(
         self,
@@ -2591,6 +3629,7 @@ class GitHubSync:
         rendered: RenderedFinding,
         *,
         finding_revision: int | None,
+        body: str | None = None,
     ) -> GitHubIssue:
         """Create through the guarded canonical-revision seam when required."""
 
@@ -2609,14 +3648,14 @@ class GitHubSync:
                 finding_id=rendered.finding_id,
                 expected_finding_revision=finding_revision,
                 title=rendered.title,
-                body=rendered.body,
+                body=rendered.body if body is None else body,
                 labels=rendered.labels,
             )
         else:
             response = self.provider.create_issue(
                 rendered.repository,
                 title=rendered.title,
-                body=rendered.body,
+                body=rendered.body if body is None else body,
                 labels=rendered.labels,
             )
         return _coerce_issue(response)
@@ -2780,12 +3819,19 @@ class GitHubSync:
         )
         return self.outbox.update(claimed, expected_revision=revision)
 
-    def _mark(self, entry: GitHubOutboxEntry, state: str, reason: str) -> GitHubOutboxEntry:
+    def _mark(
+        self,
+        entry: GitHubOutboxEntry,
+        state: str,
+        reason: str,
+        *,
+        allow_terminalize: bool = False,
+    ) -> GitHubOutboxEntry:
         current = self.outbox._get_with_revision(*entry.key)
         if current is None:
             raise GitHubOutboxError("cannot mark a missing outbox entry")
         current_entry, revision = current
-        if current_entry.state == "succeeded" and state != "succeeded":
+        if current_entry.state == "succeeded" and state != "succeeded" and not allow_terminalize:
             return current_entry
         marked = replace(current_entry, state=state, reason=reason, updated_at=utc_now())
         try:
@@ -3119,6 +4165,31 @@ def _coerce_issue(value: GitHubIssue | Mapping[str, Any]) -> GitHubIssue:
     raise GitHubValidationError("provider returned a malformed issue")
 
 
+def _compact_issue_snapshot(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Project an issue/comment snapshot into a bounded identity receipt."""
+
+    allowed = (
+        "id",
+        "repository",
+        "number",
+        "url",
+        "title",
+        "labels",
+        "created_at",
+        "updated_at",
+        "expected_body_digest",
+        "expected_updated_at",
+    )
+    compact = {name: value[name] for name in allowed if name in value}
+    body = value.get("body")
+    if isinstance(body, str):
+        compact["body_sha256"] = _sha256_text(body)
+    comments = value.get("comments")
+    if isinstance(comments, (list, tuple)):
+        compact["comments_count"] = len(comments)
+    return compact
+
+
 def _sha256(value: Any) -> str:
     try:
         encoded = canonical_json(value).encode("utf-8")
@@ -3155,6 +4226,32 @@ def _publication_digest(
                 if body is not None
                 else rendered.auditor_block
             ),
+        }
+    )
+
+
+def _adopted_initial_publication_digest(
+    *,
+    repository: str,
+    finding_id: str,
+    finding_revision: int,
+    title: str,
+    body: str,
+    labels: tuple[str, ...],
+) -> str:
+    """Digest the observed immutable issue snapshot adopted through a linked comment."""
+
+    return _sha256(
+        {
+            "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+            "repository": repository,
+            "finding_id": finding_id,
+            "finding_revision": finding_revision,
+            "publication_kind": "initial_issue",
+            "adoption_mode": "canonical_link_comment",
+            "title": title,
+            "body": body,
+            "labels": labels,
         }
     )
 
@@ -3202,6 +4299,58 @@ def _publication_request_marker(publication_digest: str) -> str:
     return f"<!-- robot_sf_audit_request:v1 request_digest={publication_digest} -->"
 
 
+def _parse_publication_marker(value: str) -> tuple[str, int, str | None] | None:
+    """Parse one exact publication marker and reject forged duplicates."""
+
+    if not isinstance(value, str):
+        raise GitHubValidationError("publication marker source must be text")
+    tokens = list(_PUBLICATION_TOKEN_RE.finditer(value))
+    if not tokens:
+        if "robot_sf_audit_publication:v1" in value:
+            raise GitHubValidationError("publication marker is malformed")
+        return None
+    if len(tokens) != 1:
+        raise GitHubValidationError("publication contains duplicate publication markers")
+    match = _PUBLICATION_MARKER_RE.fullmatch(tokens[0].group(0))
+    if match is None:
+        raise GitHubValidationError("publication marker is malformed")
+    return (
+        match.group("finding_id"),
+        int(match.group("revision")),
+        match.group("digest"),
+    )
+
+
+def _publication_provenance(
+    entry: GitHubOutboxEntry,
+) -> Mapping[str, Any] | None:
+    """Return a defensive view of the immutable publication provenance."""
+
+    provenance = entry.publication_provenance
+    return dict(provenance) if isinstance(provenance, Mapping) else None
+
+
+def _comment_payload_without_request_marker(
+    body: str,
+    *,
+    publication_digest: str,
+) -> str:
+    """Return the auditor payload after validating its exact request marker."""
+
+    if not isinstance(body, str):
+        raise GitHubValidationError("comment body must be text")
+    marker = _publication_request_marker(publication_digest)
+    if body.count(marker) != 1:
+        raise GitHubValidationError("comment body must contain one exact request marker")
+    prefix, suffix = body.split(marker, 1)
+    if prefix.strip():
+        raise GitHubValidationError("comment request marker must be the leading marker")
+    payload = suffix.lstrip("\n")
+    if not payload:
+        raise GitHubValidationError("comment payload is empty")
+    return payload
+
+
 def _render_publication_comment(
     finding: Finding,
     rendered: RenderedFinding,
@@ -3231,12 +4380,239 @@ def _render_publication_comment(
     )
 
 
+def _validate_publication_entry_payload(
+    entry: GitHubOutboxEntry,
+    rendered: RenderedFinding,
+    *,
+    finding_revision: int,
+    publication_kind: str,
+    publication_digest: str,
+    publication_key: str,
+    body: str,
+) -> None:
+    """Verify every immutable field before recovering a publication receipt."""
+
+    expected_request_digest = _sha256(
+        {
+            "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+            "publication_key": publication_key,
+            "body": body,
+            "labels": rendered.labels,
+        }
+    )
+    expected_provenance = {
+        "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+        "repository": rendered.repository,
+        "finding_id": rendered.finding_id,
+        "finding_revision": finding_revision,
+        "publication_kind": publication_kind,
+        "publication_digest": publication_digest,
+        "publication_key": publication_key,
+        "marker": rendered.marker,
+        "auditor_block_digest": rendered.auditor_block_digest,
+    }
+    expected_values = {
+        "repository": rendered.repository,
+        "finding_id": rendered.finding_id,
+        "request_digest": expected_request_digest,
+        "title": rendered.title,
+        "body": body,
+        "marker": rendered.marker,
+        "labels": rendered.labels,
+        "auditor_block_digest": rendered.auditor_block_digest,
+        "finding_revision": finding_revision,
+        "publication_schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+        "publication_kind": publication_kind,
+        "publication_revision": finding_revision,
+        "publication_digest": publication_digest,
+        "publication_key": publication_key,
+    }
+    mismatches = [
+        name for name, expected in expected_values.items() if getattr(entry, name) != expected
+    ]
+    if entry.expected_block_digest not in {"", rendered.auditor_block_digest}:
+        mismatches.append("expected_block_digest")
+    provenance = _publication_provenance(entry)
+    if provenance is not None and provenance != expected_provenance:
+        mismatches.append("publication_provenance")
+    if mismatches:
+        raise GitHubConflictError(
+            "publication receipt payload/provenance mismatch: " + ", ".join(mismatches)
+        )
+
+
+def _validate_initial_entry_identity(
+    entry: GitHubOutboxEntry,
+    rendered: RenderedFinding,
+) -> None:
+    """Validate a recovered finding-wide issue receipt independently of a new revision."""
+
+    mismatches: list[str] = []
+    if entry.repository != rendered.repository:
+        mismatches.append("repository")
+    if entry.finding_id != rendered.finding_id:
+        mismatches.append("finding_id")
+    if entry.marker != rendered.marker:
+        mismatches.append("marker")
+    if entry.publication_schema_version != GITHUB_PUBLICATION_SCHEMA_VERSION:
+        mismatches.append("publication_schema_version")
+    if entry.publication_kind != "initial_issue":
+        mismatches.append("publication_kind")
+    if entry.publication_revision is None:
+        mismatches.append("publication_revision")
+    if not entry.publication_digest or not entry.publication_key:
+        mismatches.append("publication_identity")
+    if entry.expected_block_digest not in {"", entry.auditor_block_digest}:
+        mismatches.append("expected_block_digest")
+    try:
+        marker = _parse_publication_marker(entry.body)
+        block_digest = _sha256_text(_extract_auditor_block(entry.body))
+    except GitHubSyncError as exc:
+        raise GitHubConflictError(f"initial publication receipt is malformed: {exc}") from exc
+    if marker != (rendered.finding_id, entry.publication_revision, None):
+        mismatches.append("publication_marker")
+    if block_digest != entry.auditor_block_digest:
+        mismatches.append("auditor_block_digest")
+    provenance = _publication_provenance(entry)
+    adoption_mode = provenance.get("adoption_mode") if provenance is not None else None
+    if provenance is not None:
+        expected = {
+            "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+            "repository": entry.repository,
+            "finding_id": entry.finding_id,
+            "finding_revision": entry.finding_revision,
+            "publication_kind": entry.publication_kind,
+            "publication_digest": entry.publication_digest,
+            "publication_key": entry.publication_key,
+            "marker": entry.marker,
+            "auditor_block_digest": entry.auditor_block_digest,
+        }
+        if adoption_mode is not None:
+            expected["adoption_mode"] = adoption_mode
+        if provenance != expected:
+            mismatches.append("publication_provenance")
+    if adoption_mode in {"canonical_link_comment", "marker_search"}:
+        expected_digest = _adopted_initial_publication_digest(
+            repository=entry.repository,
+            finding_id=entry.finding_id,
+            finding_revision=entry.publication_revision,
+            title=entry.title,
+            body=entry.body,
+            labels=entry.labels,
+        )
+        if entry.publication_digest != expected_digest:
+            mismatches.append("adopted_publication_digest")
+    elif adoption_mode is not None:
+        mismatches.append("adoption_mode")
+    if entry.publication_revision is not None and entry.publication_digest:
+        expected_key = _publication_key(
+            entry.repository,
+            entry.finding_id,
+            publication_kind="initial_issue",
+            finding_revision=entry.publication_revision,
+            publication_digest=entry.publication_digest,
+        )
+        if entry.publication_key != expected_key:
+            mismatches.append("publication_key")
+    expected_request_digest = _sha256(
+        {
+            "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+            "publication_key": entry.publication_key,
+            "body": entry.body,
+            "labels": entry.labels,
+        }
+    )
+    if entry.request_digest != expected_request_digest:
+        mismatches.append("request_digest")
+    if mismatches:
+        raise GitHubConflictError(
+            "initial publication receipt identity mismatch: " + ", ".join(mismatches)
+        )
+
+
+def _adopt_initial_publication_snapshot(
+    entry: GitHubOutboxEntry,
+    issue: GitHubIssue,
+    *,
+    adoption_mode: str = "canonical_link_comment",
+) -> GitHubOutboxEntry:
+    """Record an immutable initial snapshot after independent remote validation."""
+
+    if adoption_mode not in {"canonical_link_comment", "marker_search"}:
+        raise GitHubConflictError("initial snapshot adoption mode is unsupported")
+
+    try:
+        publication = _parse_publication_marker(issue.body)
+        block_digest = _sha256_text(_extract_auditor_block(issue.body))
+    except GitHubSyncError as exc:
+        raise GitHubConflictError(f"linked initial issue snapshot is malformed: {exc}") from exc
+    if publication is None or publication[0] != entry.finding_id or publication[2] is not None:
+        raise GitHubConflictError("linked issue lacks valid initial publication provenance")
+    finding_revision = publication[1]
+    publication_digest = _adopted_initial_publication_digest(
+        repository=issue.repository,
+        finding_id=entry.finding_id,
+        finding_revision=finding_revision,
+        title=issue.title,
+        body=issue.body,
+        labels=issue.labels,
+    )
+    publication_key = _publication_key(
+        issue.repository,
+        entry.finding_id,
+        publication_kind="initial_issue",
+        finding_revision=finding_revision,
+        publication_digest=publication_digest,
+    )
+    request_digest = _sha256(
+        {
+            "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+            "publication_key": publication_key,
+            "body": issue.body,
+            "labels": issue.labels,
+        }
+    )
+    return replace(
+        entry,
+        operation_id=f"publication-adopted-{publication_key}",
+        state="pending",
+        reason="",
+        attempts=0,
+        issue=None,
+        comment=None,
+        request_digest=request_digest,
+        title=issue.title,
+        body=issue.body,
+        labels=issue.labels,
+        auditor_block_digest=block_digest,
+        finding_revision=finding_revision,
+        publication_revision=finding_revision,
+        publication_digest=publication_digest,
+        publication_key=publication_key,
+        expected_block_digest=block_digest,
+        publication_provenance={
+            "schema_version": GITHUB_PUBLICATION_SCHEMA_VERSION,
+            "repository": issue.repository,
+            "finding_id": entry.finding_id,
+            "finding_revision": finding_revision,
+            "publication_kind": "initial_issue",
+            "publication_digest": publication_digest,
+            "publication_key": publication_key,
+            "marker": entry.marker,
+            "auditor_block_digest": block_digest,
+            "adoption_mode": adoption_mode,
+        },
+        updated_at=utc_now(),
+    )
+
+
 def _coerce_comment_write(
     value: Any,
     *,
     publication_digest: str,
+    expected_body: str | None = None,
 ) -> tuple[Mapping[str, Any], str]:
-    """Validate the provider-neutral append-comment response."""
+    """Validate the provider-neutral append-comment response exactly."""
 
     if isinstance(value, Mapping):
         status = value.get("status", "created")
@@ -3252,8 +4628,14 @@ def _coerce_comment_write(
     body = comment.get("body")
     if isinstance(comment_id, bool) or not isinstance(comment_id, int) or comment_id <= 0:
         raise GitHubValidationError("append-comment response has an invalid comment id")
-    if not isinstance(body, str) or _publication_request_marker(publication_digest) not in body:
-        raise GitHubValidationError("append-comment response lost its immutable request marker")
+    payload = _comment_payload_without_request_marker(
+        body,
+        publication_digest=publication_digest,
+    )
+    if expected_body is not None and payload != expected_body:
+        raise GitHubConflictError("append-comment response payload differs from the request")
+    if _parse_publication_marker(payload) is None:
+        raise GitHubValidationError("append-comment response lost its publication marker")
     return dict(comment), str(status)
 
 
@@ -3293,6 +4675,113 @@ def _validate_issue_for_finding(
         raise GitHubValidationError("remote issue is missing the exact stable finding marker")
 
 
+def _validate_initial_publication_issue(
+    issue: GitHubIssue,
+    rendered: RenderedFinding,
+    *,
+    finding_revision: int,
+    initial_body: str,
+    expected_block_digest: str | None = None,
+    exact_payload: bool = False,
+) -> None:
+    """Validate initial-publication provenance without rewriting human text."""
+
+    _validate_issue_for_finding(
+        issue,
+        rendered.repository,
+        rendered.finding_id,
+        rendered.marker,
+    )
+    publication = _parse_publication_marker(issue.body)
+    if publication is None:
+        raise GitHubConflictError("remote issue is missing the immutable publication marker")
+    publication_finding, publication_revision, publication_digest = publication
+    if (
+        publication_finding != rendered.finding_id
+        or publication_revision != finding_revision
+        or publication_digest is not None
+    ):
+        raise GitHubConflictError("remote issue publication provenance does not match the request")
+    try:
+        observed_block_digest = _sha256_text(_extract_auditor_block(issue.body))
+    except GitHubSyncError as exc:
+        raise GitHubConflictError(f"remote issue auditor block is invalid: {exc}") from exc
+    if expected_block_digest is not None and observed_block_digest != expected_block_digest:
+        raise GitHubConflictError(
+            "remote issue auditor block digest differs from the publication snapshot"
+        )
+    if exact_payload and (
+        issue.title != rendered.title
+        or issue.body != initial_body
+        or issue.labels != rendered.labels
+    ):
+        raise GitHubValidationError("create response does not match the exact publication payload")
+
+
+def _find_exact_publication_comment(
+    issue: GitHubIssue,
+    *,
+    finding_id: str,
+    finding_revision: int,
+    publication_digest: str,
+    expected_body: str,
+) -> Mapping[str, Any] | None:
+    """Find one exact auditor comment, rejecting marker/payload forgery."""
+
+    marker = _publication_request_marker(publication_digest)
+    matches: list[Mapping[str, Any]] = []
+    for comment in issue.comments:
+        body = comment.get("body")
+        if not isinstance(body, str):
+            raise GitHubValidationError("remote issue comment body must be text")
+        occurrences = body.count(marker)
+        if occurrences > 1:
+            raise GitHubConflictError("remote comment contains a duplicate request marker")
+        if "robot_sf_audit_publication:v1" in body:
+            try:
+                publication = _parse_publication_marker(body)
+            except GitHubSyncError as exc:
+                raise GitHubConflictError(
+                    f"remote comment publication marker is malformed: {exc}"
+                ) from exc
+            if publication is not None and publication[0] == finding_id:
+                published_revision, published_digest = publication[1], publication[2]
+                if published_revision > finding_revision:
+                    raise GitHubConflictError(
+                        "remote issue already contains a newer finding revision"
+                    )
+                if published_revision == finding_revision:
+                    if published_digest != publication_digest:
+                        raise GitHubConflictError(
+                            "remote comment has a conflicting digest for this finding revision"
+                        )
+                    if occurrences != 1:
+                        raise GitHubConflictError(
+                            "remote comment publication is missing its exact request marker"
+                        )
+        if occurrences == 1:
+            payload = _comment_payload_without_request_marker(
+                body,
+                publication_digest=publication_digest,
+            )
+            if payload != expected_body:
+                raise GitHubConflictError(
+                    "remote comment payload differs from the publication snapshot"
+                )
+            publication = _parse_publication_marker(payload)
+            if publication != (finding_id, finding_revision, publication_digest):
+                raise GitHubConflictError(
+                    "remote comment publication provenance does not match the request"
+                )
+            comment_id = comment.get("id")
+            if isinstance(comment_id, bool) or not isinstance(comment_id, int) or comment_id <= 0:
+                raise GitHubValidationError("remote publication comment ID is invalid")
+            matches.append(comment)
+    if len(matches) > 1:
+        raise GitHubConflictError("remote issue contains duplicate publication comments")
+    return None if not matches else dict(matches[0])
+
+
 def _linked_issue_identity(
     finding: Finding,
     repository: str,
@@ -3313,7 +4802,31 @@ def _linked_issue_identity(
         raise GitHubValidationError("finding github_issue link number is invalid")
     if link.get("marker") != marker:
         raise GitHubConflictError("finding github_issue link marker does not match finding")
-    return {"repository": repository, "number": number}
+    url = link.get("url")
+    if url is not None and (
+        not isinstance(url, str) or not url.startswith(("https://", "http://"))
+    ):
+        raise GitHubValidationError("finding github_issue link URL is invalid")
+    for name in ("publication_digest", "publication_key", "auditor_block_digest"):
+        value = link.get(name)
+        if value is not None and value != "" and not re.fullmatch(r"[0-9a-f]{64}", str(value)):
+            raise GitHubValidationError(f"finding github_issue link {name} is invalid")
+    publication_kind = link.get("publication_kind")
+    if publication_kind is not None and publication_kind not in _PUBLICATION_KINDS:
+        raise GitHubValidationError("finding github_issue link publication kind is invalid")
+    publication_revision = link.get("publication_revision")
+    if publication_revision is not None and (
+        isinstance(publication_revision, bool)
+        or not isinstance(publication_revision, int)
+        or publication_revision < 0
+    ):
+        raise GitHubValidationError("finding github_issue link publication revision is invalid")
+    comment_id = link.get("comment_id")
+    if comment_id is not None and (
+        isinstance(comment_id, bool) or not isinstance(comment_id, int) or comment_id <= 0
+    ):
+        raise GitHubValidationError("finding github_issue link comment ID is invalid")
+    return dict(link, repository=repository, number=number)
 
 
 def _link_block_digest(link: Mapping[str, Any] | None) -> str:
@@ -3446,6 +4959,7 @@ __all__ = [
     "GITHUB_SYNC_SCHEMA_VERSION",
     "FindingEvidence",
     "GitHubAmbiguousCreate",
+    "GitHubCapabilityUnavailable",
     "GitHubConflictError",
     "GitHubFindingClaim",
     "GitHubIssue",

@@ -14,15 +14,18 @@ import yaml
 
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.three_width_doorway_application import (
+    DoorwayPairingSession,
     build_pair_manifest,
     build_pair_receipt,
     check_pair_receipts,
     check_variant_diff,
     generate_application_assets,
     load_three_width_manifest,
+    non_width_config_sha256,
     run_three_width_preflight,
     write_preflight_report,
 )
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.scenario_certification.v1 import RouteCertificate, ScenarioCertificate
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -195,10 +198,14 @@ def test_pair_manifest_shares_seeds_across_widths() -> None:
         }
         for token, gap in (("2p20", 2.2), ("2p80", 2.8), ("3p60", 3.6))
     ]
-    pairs = build_pair_manifest(assets, (225, 226), "manifest-sha")
+    pairs = build_pair_manifest(assets, (225, 226, 227), "manifest-sha")
     assert pairs["schema_version"] == "issue_9348_three_width_pair_manifest.v1"
     assert pairs["realization_hash_status"] == "pending_initial_and_external_rng_state_verification"
-    assert [pair["pair_id"] for pair in pairs["pairs"]] == ["pair_00225", "pair_00226"]
+    assert [pair["pair_id"] for pair in pairs["pairs"]] == [
+        f"{planner}_pair_{seed:05d}"
+        for planner in ("goal", "social_force")
+        for seed in (225, 226, 227)
+    ]
     for pair in pairs["pairs"]:
         assert [cell["gap_width_m"] for cell in pair["cells"]] == [2.2, 2.8, 3.6]
         assert all(cell["initial_actor_state_sha256"] is None for cell in pair["cells"])
@@ -208,8 +215,9 @@ def test_pair_manifest_shares_seeds_across_widths() -> None:
         for cell in pair["cells"]:
             cell["initial_actor_state_sha256"] = "a" * 64
             cell["external_rng_state_sha256"] = "b" * 64
+            cell["non_width_config_sha256"] = "c" * 64
     assert check_pair_receipts(pairs) == []
-    pairs["pairs"][0]["cells"][1]["external_rng_state_sha256"] = "c" * 64
+    pairs["pairs"][0]["cells"][1]["external_rng_state_sha256"] = "d" * 64
     assert "differs across widths" in check_pair_receipts(pairs)[0]
 
 
@@ -217,6 +225,7 @@ def test_pair_receipt_canonicalizes_actor_order_and_requires_rng() -> None:
     """Identical reset states hash equally; missing RNG state blocks admission."""
     reset = {
         "robot": {"position": [4.0, 5.0], "velocity": [0.0, 0.0], "heading": 0.0},
+        "route_state": {"robot_routes": [[7.0, 5.0], [25.5, 5.0]]},
         "pedestrians": [
             {"actor_id": "h1", "position": [27.0, 5.0], "velocity": [0.0, 0.0]},
             {"actor_id": "h2", "position": [25.0, 5.0], "velocity": [0.0, 0.0]},
@@ -234,6 +243,42 @@ def test_pair_receipt_canonicalizes_actor_order_and_requires_rng() -> None:
     snapshot.python_random_state = None
     with pytest.raises(ValueError, match="RNG snapshot is incomplete"):
         build_pair_receipt(reset, snapshot)
+
+
+def test_portable_reset_matches_three_widths_and_distinct_maps(tmp_path: Path) -> None:
+    """All 18 frozen cells have identical pre-command pairs and distinct maps."""
+    manifest = load_three_width_manifest(_MANIFEST)
+    assets = generate_application_assets(manifest, tmp_path / "variants")
+    session = DoorwayPairingSession()
+    sf_config = Path(manifest["_resolved"]["social_force_config_path"])
+    for planner in ("goal", "social_force"):
+        planner_config_sha = _sha256(sf_config) if planner == "social_force" else None
+        for seed in (225, 226, 227):
+            for asset in assets:
+                scenario_path = Path(asset["scenario_path"])
+                scenario = dict(load_scenarios(scenario_path)[0])
+                config = build_env_config(scenario, scenario_path=scenario_path)
+                common = non_width_config_sha256(
+                    scenario, planner=planner, planner_config_sha256=planner_config_sha
+                )
+                env = make_robot_env(config=config, seed=seed, debug=False)
+                try:
+                    obs, _ = env.reset(seed=seed)
+                    receipt = session.hook(
+                        planner=planner,
+                        seed=seed,
+                        map_sha256=asset["map_sha256"],
+                        non_width_config_sha256=common,
+                    )(env, obs)
+                    assert receipt["non_width_config_sha256"] == common
+                finally:
+                    env.close()
+    pairs = build_pair_manifest(assets, (225, 226, 227), _sha256(_MANIFEST))
+    completed = session.fill_pair_manifest(pairs)
+    assert len(completed["pairs"]) == 6
+    assert sum(len(pair["cells"]) for pair in completed["pairs"]) == 18
+    assert completed["realization_hash_status"] == "verified_pre_command"
+    assert check_pair_receipts(completed) == []
 
 
 def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) -> None:

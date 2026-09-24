@@ -82,18 +82,22 @@ distance, and pedestrian delay or impairment. Time for failures is censored
 at termination, not imputed as a successful arrival time. Execution errors,
 fallback, degraded rows and unavailable cells are counted separately.
 
-The three seed IDs do **not** yet prove paired realizations. Before campaign
-submission, each width cell must record SHA-256 receipts for the initial
+The three seed IDs alone do **not** prove paired realizations. Before campaign
+submission, each width cell records SHA-256 receipts for the initial
 actor state and external RNG state, with matching receipts across all three
 widths for each pair ID. `build_pair_receipt` hashes canonical reset actors
 and the existing simulator counterfactual snapshot's NumPy, Python,
 pedestrian-behaviour and residual-adversary RNG state;
 `check_pair_receipts` fails closed on missing or unequal receipts. The shared
-episode runner must invoke this directly after reset and before any planner
-command, attach the receipts to each row, and check all 18 rows before width
-comparison. Later closed-loop pedestrian paths may diverge naturally. Until
-that hook is integrated and validated, the experiment is **not ready for
-confirmation compute**; seed-only equality must not be called paired evidence.
+episode runner has an opt-in hook after reset and before the first planner
+command, attaches the receipt to its row, and checks all 18 rows before width
+comparison. A one-step real-runner smoke on 2026-09-24 verified six complete
+planner/seed pairs across three distinct map SHA-256 digests, with equal
+actor, external RNG and non-width configuration digests within each pair.
+The smoke is diagnostic and its one-step outcomes are not comparison results.
+Later closed-loop pedestrian paths may diverge naturally. The full H400
+campaign must preserve the same receipts, asset hashes and source commit in
+durable storage before a width effect is promoted.
 
 Analysis will use paired resampling over complete realization IDs within
 each planner, report uncertainty intervals and denominators for each endpoint,

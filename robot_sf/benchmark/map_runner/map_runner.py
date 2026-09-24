@@ -2435,6 +2435,7 @@ def _run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    pair_reset_hook: Callable[[Any, Any], Mapping[str, Any]] | None = None,
     close_policy: bool = True,
     policy_builder: Any | None = None,
 ) -> EpisodeRecordDict:
@@ -2473,6 +2474,7 @@ def _run_map_episode(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        pair_reset_hook=pair_reset_hook,
         close_policy=close_policy,
         policy_builder=policy_builder or _build_policy,
     )

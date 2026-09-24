@@ -25,6 +25,7 @@ import json
 import math
 import tempfile
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -238,6 +239,23 @@ def _check_width_tiers(gap_levels: tuple[float, ...], nominal_radius: float) -> 
         raise ValueError("all comparison widths must have positive collision-envelope clearance")
 
 
+def _validate_planner_config(planner: Mapping[str, Any]) -> None:
+    """Require the frozen planner configuration paths and content digest."""
+    if planner.get("algo_config") != {
+        "goal": None,
+        "social_force": "configs/algos/social_force_terminal_goal_v1.yaml",
+    }:
+        raise ValueError("planner_protocol.algo_config must retain the frozen planner settings")
+
+
+def _validate_expected_rows(planner: Mapping[str, Any], roster: list[str], seeds: list[int]) -> None:
+    """Require the preregistered Cartesian product without missing cells."""
+    if _positive_int(planner.get("expected_rows"), field="planner_protocol.expected_rows") != (
+        3 * len(roster) * len(seeds)
+    ):
+        raise ValueError("planner_protocol.expected_rows must equal 3 * planners * seeds")
+
+
 def _validate_application_protocol(
     oracle: Any, planner: Any
 ) -> tuple[int, int, tuple[str, ...], tuple[int, ...]]:
@@ -257,6 +275,9 @@ def _validate_application_protocol(
         raise ValueError("planner_protocol.roster must be a non-empty list")
     if len(set(roster)) != len(roster):
         raise ValueError("planner_protocol.roster must not contain duplicates")
+    if roster != ["goal", "social_force"]:
+        raise ValueError("planner_protocol.roster must retain the preregistered two planners")
+    _validate_planner_config(planner)
     seeds = planner.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError("planner_protocol.seeds must be a non-empty list")
@@ -268,10 +289,7 @@ def _validate_application_protocol(
         raise ValueError("oracle and planner protocol horizons must match")
     if str(planner.get("execution_status")) != "not_started":
         raise ValueError("planner_protocol.execution_status must remain not_started")
-    if _positive_int(planner.get("expected_rows"), field="planner_protocol.expected_rows") != (
-        3 * len(roster) * len(normalized_seeds)
-    ):
-        raise ValueError("planner_protocol.expected_rows must equal 3 * planners * seeds")
+    _validate_expected_rows(planner, roster, normalized_seeds)
     if planner.get("pair_admission") != (
         "fail_closed_until_initial_state_and_external_rng_hashes_match"
     ):
@@ -316,6 +334,14 @@ def load_three_width_manifest(path: Path) -> dict[str, Any]:
     )
     _validate_application_execution(payload.get("execution"))
 
+    social_force_config = _resolve_reference(
+        source, payload["planner_protocol"]["algo_config"]["social_force"]
+    )
+    if payload["planner_protocol"].get("algo_config_sha256") != {
+        "social_force": _sha256(social_force_config)
+    }:
+        raise ValueError("social-force planner config SHA-256 mismatch")
+
     normalized = copy.deepcopy(payload)
     normalized["_resolved"] = {
         "manifest_path": source,
@@ -331,6 +357,7 @@ def load_three_width_manifest(path: Path) -> dict[str, Any]:
         "horizon_steps": horizon,
         "planner_roster": tuple(str(item) for item in roster),
         "planner_seeds": tuple(normalized_seeds),
+        "social_force_config_path": social_force_config,
     }
     return normalized
 
@@ -372,6 +399,26 @@ def _receipt_digest(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def non_width_config_sha256(
+    scenario: Mapping[str, Any], *, planner: str, planner_config_sha256: str | None = None
+) -> str:
+    """Hash all scenario/planner settings except the preregistered map width identity.
+
+    Returns:
+        SHA-256 of the shared scientific configuration.
+    """
+    normalized = copy.deepcopy(dict(scenario))
+    normalized.pop("name", None)
+    normalized.pop("map_file", None)
+    metadata = normalized.get("metadata")
+    if isinstance(metadata, dict):
+        for key in ("geometry_variant_id", "gap_width_m"):
+            metadata.pop(key, None)
+    return _receipt_digest(
+        {"scenario": normalized, "planner": planner, "planner_config_sha256": planner_config_sha256}
+    )
+
+
 def build_pair_receipt(reset: Mapping[str, Any], snapshot: Any) -> dict[str, str]:
     """Hash reset actors and external streams from a pre-command simulator snapshot.
 
@@ -389,6 +436,9 @@ def build_pair_receipt(reset: Mapping[str, Any], snapshot: Any) -> dict[str, str
         raise ValueError("reset actor state is unavailable")
     if robot.get("position") is None or robot.get("velocity") is None:
         raise ValueError("reset robot pose or velocity is unavailable")
+    routes = reset.get("route_state")
+    if not isinstance(routes, Mapping):
+        raise ValueError("reset goal and route assignment state is unavailable")
     actors = []
     for actor in pedestrians:
         if not isinstance(actor, Mapping) or actor.get("actor_id") is None:
@@ -410,7 +460,9 @@ def build_pair_receipt(reset: Mapping[str, Any], snapshot: Any) -> dict[str, str
     if global_rng is None or python_rng is None or behavior_rng is None:
         raise ValueError("external RNG snapshot is incomplete")
     return {
-        "initial_actor_state_sha256": _receipt_digest({"robot": dict(robot), "actors": actors}),
+        "initial_actor_state_sha256": _receipt_digest(
+            {"robot": dict(robot), "actors": actors, "route_state": dict(routes)}
+        ),
         "external_rng_state_sha256": _receipt_digest(
             {
                 "global_numpy": global_rng,
@@ -420,6 +472,161 @@ def build_pair_receipt(reset: Mapping[str, Any], snapshot: Any) -> dict[str, str
             }
         ),
     }
+
+
+def capture_portable_reset(env: Any, obs: Any, snapshot: Any) -> dict[str, Any]:
+    """Extract the map-independent actor, goal and assigned-route state at reset.
+
+    Returns:
+        Canonicalizable pre-command state for the paired receipt.
+    """
+    from robot_sf.benchmark.map_runner.map_runner_episode import (  # noqa: PLC0415
+        _initial_pedestrian_actor_ids,
+        _initial_robot_velocity,
+    )
+
+    sim = env.simulator
+    positions = np.asarray(sim.ped_pos, dtype=float).reshape(-1, 2)
+    velocities = np.asarray(sim.ped_vel, dtype=float).reshape(-1, 2)
+    if positions.shape != velocities.shape or positions.shape[0] != len(snapshot.ped_headings):
+        raise ValueError("reset pedestrian state dimensions disagree")
+    actor_ids = _initial_pedestrian_actor_ids(sim, len(positions))
+    robot_velocity = _initial_robot_velocity(sim)
+    if actor_ids is None or robot_velocity is None:
+        raise ValueError("stable pedestrian IDs or robot reset velocity unavailable")
+    pose = sim.robot_poses[0]
+    routes = [
+        {
+            "waypoints": nav.waypoints,
+            "waypoint_id": nav.waypoint_id,
+            "spawn_id": nav.route_spawn_id,
+            "goal_id": nav.route_goal_id,
+            "goal_zone": nav.goal_zone,
+            "current_goal": nav.current_waypoint,
+            "next_goal": nav.next_waypoint,
+        }
+        for nav in sim.robot_navs
+    ]
+    if len(routes) != 1:
+        raise ValueError("doorway pairing requires exactly one robot route")
+    pedestrians = [
+        {
+            "actor_id": actor_ids[index],
+            "position": position,
+            "velocity": velocities[index],
+            "heading": snapshot.ped_headings[index],
+            "goal": snapshot.pysf_state[index, 4:6],
+        }
+        for index, position in enumerate(positions)
+    ]
+    return {
+        "robot": {
+            "position": pose[0],
+            "heading": pose[1],
+            "velocity": robot_velocity,
+            "goal": sim.goal_pos[0],
+        },
+        "pedestrians": pedestrians,
+        "route_state": {
+            "robot_routes": routes,
+            "pedestrian_goals": snapshot.pysf_state[:, 4:6],
+            "single_pedestrian_runtimes": snapshot.single_runtimes,
+            "route_navigators": snapshot.route_navigators,
+        },
+    }
+
+
+class DoorwayPairingSession:
+    """Restore one seed's portable reset across three maps before any command.
+
+    A session is process-local and intentionally serial. The caller supplies an
+    immutable map digest and non-width config digest for every cell, then checks
+    ``receipts`` before admitting the 18-row comparison.
+    """
+
+    def __init__(self) -> None:
+        self._anchors: dict[tuple[str, int], tuple[Any, dict[str, str]]] = {}
+        self.receipts: dict[tuple[str, int], list[dict[str, str]]] = {}
+
+    def hook(
+        self, *, planner: str, seed: int, map_sha256: str, non_width_config_sha256: str
+    ) -> Callable[[Any, Any], dict[str, str]]:
+        """Return the opt-in episode reset hook for one width cell."""
+        if planner not in {"goal", "social_force"} or seed not in {225, 226, 227}:
+            raise ValueError("pair cell is outside the frozen doorway roster")
+        for digest in (map_sha256, non_width_config_sha256):
+            if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                raise ValueError("pair cell requires SHA-256 map and common-config digests")
+        pair = (planner, seed)
+
+        def _after_reset(env: Any, obs: Any) -> dict[str, str]:
+            from robot_sf.benchmark.simulator_counterfactual_adapter import (  # noqa: PLC0415
+                SimulatorCounterfactualModel,
+            )
+
+            adapter = SimulatorCounterfactualModel(env.simulator)
+            snapshot = adapter.snapshot()
+            before = build_pair_receipt(capture_portable_reset(env, obs, snapshot), snapshot)
+            previous = self.receipts.get(pair, [])
+            if any(item["map_sha256"] == map_sha256 for item in previous):
+                raise ValueError(f"duplicate doorway map in pair {pair}")
+            if pair not in self._anchors:
+                self._anchors[pair] = (deepcopy(snapshot), dict(before))
+            else:
+                anchor, expected = self._anchors[pair]
+                # The reset observation was formed before this hook. Require the
+                # actor/route and RNG bytes to match already, then explicitly
+                # reconstruct from the source snapshot without stale policy input.
+                if before != expected:
+                    raise ValueError(f"doorway reset differs before portable restore: {pair}")
+                adapter.restore(anchor)
+            restored = adapter.snapshot()
+            receipt = build_pair_receipt(capture_portable_reset(env, obs, restored), restored)
+            if receipt != self._anchors[pair][1]:
+                raise ValueError(f"doorway restore receipt differs across widths: {pair}")
+            full = {
+                **receipt,
+                "map_sha256": map_sha256,
+                "non_width_config_sha256": non_width_config_sha256,
+            }
+            if previous and any(
+                item["non_width_config_sha256"] != non_width_config_sha256 for item in previous
+            ):
+                raise ValueError(f"doorway non-width config differs across widths: {pair}")
+            self.receipts.setdefault(pair, []).append(full)
+            return full
+
+        return _after_reset
+
+    def fill_pair_manifest(self, pair_manifest: Mapping[str, Any]) -> dict[str, Any]:
+        """Attach all 18 pre-command receipts and fail closed on missing cells.
+
+        Returns:
+            Complete, admitted pair manifest.
+        """
+        completed = copy.deepcopy(dict(pair_manifest))
+        for pair in completed.get("pairs", []):
+            identity = (str(pair["planner"]), int(pair["seed"]))
+            observed = self.receipts.get(identity, [])
+            by_map = {item["map_sha256"]: item for item in observed}
+            if len(observed) != 3 or len(by_map) != 3:
+                raise ValueError(f"pair {identity} requires three distinct pre-command receipts")
+            for cell in pair["cells"]:
+                receipt = by_map.get(cell["map_sha256"])
+                if receipt is None:
+                    raise ValueError(f"pair {identity} has no receipt for {cell['map_sha256']}")
+                for field in (
+                    "initial_actor_state_sha256",
+                    "external_rng_state_sha256",
+                    "non_width_config_sha256",
+                ):
+                    cell[field] = receipt[field]
+        failures = check_pair_receipts(completed)
+        if failures:
+            raise ValueError("; ".join(failures))
+        completed["realization_hash_status"] = "verified_pre_command"
+        completed["admission"] = "paired_reset_verified"
+        return completed
 
 
 def _build_application_scenario(
@@ -540,8 +747,9 @@ def build_pair_manifest(
     variant_assets: list[Mapping[str, Any]],
     seeds: tuple[int, ...],
     manifest_sha256: str,
+    planners: tuple[str, ...] = ("goal", "social_force"),
 ) -> dict[str, Any]:
-    """Build cross-width pair records sharing one seed per pair.
+    """Build one cross-width pair for every frozen planner and seed.
 
     A matching seed alone is insufficient when geometry changes random draws, so
     every pair carries the configuration hash now and reserves realization-hash
@@ -554,24 +762,27 @@ def build_pair_manifest(
     if len(ordered) != 3:
         raise ValueError("pair manifest requires exactly the three application widths")
     pairs = []
-    for seed in seeds:
-        pairs.append(
-            {
-                "pair_id": f"pair_{int(seed):05d}",
-                "seed": int(seed),
-                "cells": [
-                    {
-                        "variant_id": str(item["variant_id"]),
-                        "gap_width_m": float(item["gap_width_m"]),
-                        "scenario_sha256": str(item["scenario_sha256"]),
-                        "map_sha256": str(item["map_sha256"]),
-                        "initial_actor_state_sha256": None,
-                        "external_rng_state_sha256": None,
-                    }
-                    for item in ordered
-                ],
-            }
-        )
+    for planner in planners:
+        for seed in seeds:
+            pairs.append(
+                {
+                    "pair_id": f"{planner}_pair_{int(seed):05d}",
+                    "planner": planner,
+                    "seed": int(seed),
+                    "cells": [
+                        {
+                            "variant_id": str(item["variant_id"]),
+                            "gap_width_m": float(item["gap_width_m"]),
+                            "scenario_sha256": str(item["scenario_sha256"]),
+                            "map_sha256": str(item["map_sha256"]),
+                            "initial_actor_state_sha256": None,
+                            "external_rng_state_sha256": None,
+                            "non_width_config_sha256": None,
+                        }
+                        for item in ordered
+                    ],
+                }
+            )
     return {
         "schema_version": PAIR_MANIFEST_SCHEMA,
         "issue": 9348,
@@ -585,13 +796,25 @@ def build_pair_manifest(
 def check_pair_receipts(pair_manifest: Mapping[str, Any]) -> list[str]:
     """Return reasons that any three-width pair lacks portable initial-state custody."""
     failures: list[str] = []
-    for pair in pair_manifest.get("pairs", []):
+    pairs = pair_manifest.get("pairs", [])
+    identities = [(pair.get("planner"), pair.get("seed")) for pair in pairs]
+    expected = {(planner, seed) for planner in ("goal", "social_force") for seed in (225, 226, 227)}
+    if len(pairs) != 6 or set(identities) != expected:
+        failures.append("expected exactly six frozen planner/seed pairs")
+    for pair in pairs:
         pair_id = str(pair.get("pair_id"))
         cells = pair.get("cells", [])
         if len(cells) != 3:
             failures.append(f"{pair_id}: expected exactly three width cells")
             continue
-        for field in ("initial_actor_state_sha256", "external_rng_state_sha256"):
+        maps = [cell.get("map_sha256") for cell in cells]
+        if len(set(maps)) != 3:
+            failures.append(f"{pair_id}: map SHA-256 must differ across widths")
+        for field in (
+            "initial_actor_state_sha256",
+            "external_rng_state_sha256",
+            "non_width_config_sha256",
+        ):
             values = [cell.get(field) for cell in cells]
             if any(
                 not isinstance(value, str)

@@ -55,6 +55,11 @@ planner_protocol:
   roster:
     - goal
     - social_force
+  algo_config:
+    goal: null
+    social_force: configs/algos/social_force_terminal_goal_v1.yaml
+  algo_config_sha256:
+    social_force: bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb
   seeds: [225, 226, 227]
   horizon_steps: 400
   execution_status: not_started

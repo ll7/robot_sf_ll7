@@ -1,50 +1,40 @@
 # Three-width doorway comparison (issue #9348)
 
-Application note: SREV-adjacent benchmark slice; a three-width doorway comparison is a controlled
-geometry experiment that varies only the free passage width. Terms: a *variant* is one generated
-map/scenario pair at a fixed gap width; a *pair* is one shared seed executed across all three
-widths; the *oracle* is the planner-free feasibility rollout that must run before any planner.
+This application freezes a within-planner comparison at 2.2, 2.8 and 3.6 m
+free opening widths and 1.0 m wall depth. It uses the #6644 map generator;
+the historical 2.0 m map stays unchanged and is outside the comparison.
+The [protocol note](../context/issue_9348_three_width_doorway_protocol.md)
+records the source-backed geometry and planner-grid distinction.
 
-## What it does
+The intended campaign has `goal` and `social_force`, seeds 225–227, and a
+native horizon of 400 steps at 0.1 s per step: 18 rows. The generated
+scenarios differ only in their explained geometry identity and map path.
+The planner-free oracle runs first. Its conservative grid search reports no
+route at 2.2 and 2.8 m despite positive continuous clearance; the executed
+policies do not use that route search. This remains an explicit diagnostic
+finding, not a width effect or an ordinary planner failure.
 
-`scripts/validation/run_issue_9348_three_width_doorway_preflight.py` pins the reusable
-three-level configuration on top of the issue #6644 geometry family (no second generator):
-
-- **Widths**: 0.8 m (narrower than the 2.0 m collision diameter,
-  `infeasible_by_construction`), 2.0 m (equal, `boundary_tangent`), 2.2 m (wider,
-  `geometrically_feasible_candidate`) at fixed 1.0 m depth.
-- **Radius binding**: nominal 1.0 m from
-  `robot_sf.common.robot_defaults.DEFAULT_ROBOT_RADIUS`, audited by #6645 with runtime
-  binding by #6641; never inferred from a proxy.
-- **Oracle-first**: the planner-free feasibility sweep runs per variant before any planner;
-  planner rows stay `not_run` until a separately authorized campaign packet executes them.
-- **Pairing**: the pair manifest shares one seed across all three widths per `pair_id` and
-  carries configuration hashes now; realization hashes stay `pending_campaign`.
-
-## Command
+## Diagnostic commands
 
 ```bash
 uv run python scripts/validation/run_issue_9348_three_width_doorway_preflight.py \
   --out-json output/benchmarks/issue_9348_preflight.json \
   --variants-dir output/benchmarks/issue_9348_variants
+uv run python scripts/validation/run_issue_9348_paired_reset_smoke.py \
+  --out-json output/benchmarks/issue_9348_pair_smoke.json \
+  --variants-dir output/benchmarks/issue_9348_pair_smoke_variants
 ```
 
-## Output
+The first command records geometry, oracle findings, asset SHA-256 digests,
+and planner rows marked `not_run`. The second uses the real episode runner
+for one step in each of the 18 cells. Its opt-in post-reset hook restores a
+portable simulator snapshot and records initial actor, external random-stream,
+non-width configuration, and map digests. It fails if any planner/seed pair
+does not match across three distinct maps. One-step outcomes are diagnostic
+only and cannot establish the 400-step comparison. Keep generated assets and
+receipts in durable campaign storage before a confirmation run.
 
-- Preflight report (`issue_9348_three_width_doorway_preflight.v1` JSON): baseline checks,
-  three variant records with geometry, asset hashes, oracle verdicts, and explicit `not_run`
-  planner rows.
-- Variant assets (retained only with `--variants-dir`): per-width `variant.svg` and
-  `scenario.yaml` with content hashes. Raw runs and videos stay in `output/`.
-
-## Unavailable reasons and limits
-
-- A missing, changed, or hash-mismatched baseline map fails the preflight before any variant
-  is interpreted; the historical map is never overwritten.
-- Variant scenarios that differ from baseline outside the explained allowlist
-  (name/map/seeds/episode-horizon/radius/geometry metadata) fail the automated diff check.
-- Widths outside the pinned three require a manifest amendment, not an ad-hoc flag.
-- Evidence boundary: diagnostic within-simulator geometry evidence only. No real doorway
-  standard, accessibility requirement, general safety claim, or planner ranking follows.
-- The full 30-realization campaign and uncertainty-quantified comparison report belong to the
-  successor issue; this slice delivers configuration, manifest, checks, and oracle preflight.
+The 400-step run and paired uncertainty analysis belong to the 0.0.8
+campaign. Exclude unavailable, fallback and degraded rows from success
+evidence and report their counts. No physical doorway or deployment safety
+claim follows from this simulator-only slice.

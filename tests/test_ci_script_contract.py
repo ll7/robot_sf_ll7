@@ -5790,6 +5790,32 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
     )
 
 
+def test_pr_ready_check_isolates_audit_launch_smoke_from_optional_xdist() -> None:
+    """Issue #9615: keep the latency-sensitive live launch smoke out of xdist contention."""
+
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+    node = (
+        "tests/render/test_audit_workbench_launch.py::"
+        "test_launch_opt_in_binds_fake_app_server_and_private_mcp"
+    )
+
+    assert script_text.count(f'optional_audit_launch_smoke="{node}"') == 1
+    serial_lane = script_text.split("run_pr_ready_lane optional_launch_smoke env", 1)[1].split(
+        "optional_parallel_pytest_addopts=", 1
+    )[0]
+    parallel_lane = script_text.split("run_pr_ready_lane optional env", 1)[1].split(
+        "else\n  if [[ ${#optional_changed_files[@]}", 1
+    )[0]
+    assert "PYTEST_NUM_WORKERS=1" in serial_lane
+    assert '--lane optional "$optional_audit_launch_smoke"' in serial_lane
+    assert (
+        'optional_parallel_pytest_addopts="${optional_pytest_addopts} --deselect=$optional_audit_launch_smoke"'
+        in script_text
+    )
+    assert '"PYTEST_ADDOPTS=$optional_parallel_pytest_addopts"' in parallel_lane
+    assert "PYTEST_NUM_WORKERS=1" not in parallel_lane
+
+
 def test_worktree_shared_venv_selection_gate_contract() -> None:
     """Issue #8798: selection and freshness checks must run inside one serialized gate."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")

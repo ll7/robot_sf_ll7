@@ -153,15 +153,20 @@ applicable route certificate to support the same excluded classification; a diff
 route keeps the whole case unknown.
 
 Execution inputs are normalized records with `case_id`, `scenario_id`, `scenario_variant`,
-`planner_id`, `run_status`, `route_complete`, `seed`, `horizon_steps`, SHA-256 hashes for the
-scenario, robot model, simulator config, planner config, and environment, plus
-`planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. The checkpoint field is either a
-SHA-256 hash or the explicit value `not_applicable` for a known checkpoint-free planner; missing
-checkpoint provenance stays unknown. Only `scenario_variant: original` and `run_status: ok` records
-can establish an outcome. Replay records additionally require `determinism_check_status: pass` and
-`resimulated: true`; callers adapt canonical episode rows and the existing replay provenance sidecar
-into this input shape. Incomplete records stay visible in `evidence` and do not establish
-feasibility.
+`planner_id`, `run_status`, the explicit boolean `fallback_or_degraded`, `route_complete`, `seed`,
+`horizon_steps`, SHA-256 hashes for the scenario, robot model, simulator config, planner config, and
+environment, plus `planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. The fallback
+boolean must be false; the adapter also applies the canonical runtime fallback/degraded detector to
+the full normalized record, so nested fallback flags, unavailable/fallback/degraded statuses, and
+positive fallback counters cannot establish an outcome. Missing or malformed fallback state stays
+unknown. Callers derive this summary from the complete canonical runtime metadata rather than
+guessing from the episode's terminal status. The checkpoint field is either a SHA-256 hash or the
+explicit value `not_applicable` for a known checkpoint-free planner; missing checkpoint provenance
+stays unknown. Only `scenario_variant: original`, `run_status: ok`, and non-fallback/non-degraded
+records can establish an outcome. Replay records additionally require
+`determinism_check_status: pass` and `resimulated: true`; callers adapt canonical episode rows and
+the existing replay provenance sidecar into this input shape. Incomplete records stay visible in
+`evidence` and do not establish feasibility.
 
 An observed reference or replay completion is empirical evidence for that named case and run, not
 a proof that every planner can solve it. Replay counts only after simulator resimulation with a

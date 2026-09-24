@@ -12,6 +12,7 @@ from typing import Any, Literal
 from jsonschema import Draft202012Validator
 
 from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.scenario_certification.feasibility_diagnostics import DIAGNOSTIC_CLAIM_BOUNDARY
 
 SCENARIO_ADMISSIBILITY_SCHEMA = "scenario_admissibility.v1"
@@ -372,6 +373,9 @@ def _oracle(
         reasons.append("feasibility_oracle_claim_boundary_missing_or_unsupported")
         return None, assumptions
     if _oracle_excludes(nominal):
+        if cert_valid and _certificate_route_coverage_unresolved(cert):
+            reasons.append("oracle_geometric_exclusion_route_coverage_unresolved")
+            return None, assumptions
         reasons.append("oracle_geometric_exclusion_under_named_envelope")
         return GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY, assumptions
     if (
@@ -382,7 +386,7 @@ def _oracle(
         and isinstance(completion, Mapping)
         and completion.get("route_completion_feasible") is True
         and cert_valid
-        and _static_certificate(cert)
+        and _certificate_supports_actor_free_rollout(cert)
         and isinstance(report.get("rollout_algo"), str)
         and bool(report["rollout_algo"].strip())
         and isinstance(report.get("rollout_seed"), int)
@@ -447,6 +451,18 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
     )
 
 
+def _certificate_route_coverage_unresolved(cert: Any) -> bool:
+    """Return whether a valid exclusion certificate leaves some routes unresolved."""
+    if not isinstance(cert, Mapping) or cert.get("benchmark_eligibility") != "excluded":
+        return False
+    classification = cert.get("classification")
+    if classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
+        return not _all_routes_confirm_impossibility(cert, str(classification))
+    if classification == "invalid":
+        return _invalid_certificate_category(cert) is None
+    return True
+
+
 def _static_certificate(cert: Any) -> bool:
     routes = cert.get("route_certificates") if isinstance(cert, Mapping) else None
     if not isinstance(routes, Sequence) or isinstance(routes, (str, bytes)) or not routes:
@@ -458,6 +474,27 @@ def _static_certificate(cert: Any) -> bool:
         if not isinstance(count, int) or isinstance(count, bool) or count != 0:
             return False
     return True
+
+
+def _certificate_supports_actor_free_rollout(cert: Any) -> bool:
+    """Require a positive, static certificate before treating an oracle rollout as feasible."""
+    if not isinstance(cert, Mapping):
+        return False
+    if cert.get("classification") not in {"valid", "knife_edge", "hard_but_solvable"}:
+        return False
+    if cert.get("benchmark_eligibility") not in {"eligible", "stress_only"}:
+        return False
+    routes = cert.get("route_certificates")
+    if not isinstance(routes, Sequence) or isinstance(routes, (str, bytes)) or not routes:
+        return False
+    if any(
+        not isinstance(route, Mapping)
+        or route.get("classification") not in {"valid", "knife_edge", "hard_but_solvable"}
+        or route.get("benchmark_eligibility") not in {"eligible", "stress_only"}
+        for route in routes
+    ):
+        return False
+    return _static_certificate(cert)
 
 
 def _execution(
@@ -532,13 +569,20 @@ def _execution_digest_fields_valid(source: Mapping[str, Any]) -> bool:
     checkpoint_hash = source["planner_checkpoint_sha256"]
     return (
         all(isinstance(source[key], str) and _SHA256.fullmatch(source[key]) for key in fields)
-        and (
-            checkpoint_hash == "not_applicable"
-            or (isinstance(checkpoint_hash, str) and _SHA256.fullmatch(checkpoint_hash))
-        )
+        and _checkpoint_digest_is_valid(source["planner_id"], checkpoint_hash)
         and isinstance(source["source_commit"], str)
         and bool(_GIT_COMMIT.fullmatch(source["source_commit"]))
     )
+
+
+def _checkpoint_digest_is_valid(planner_id: str, checkpoint_hash: Any) -> bool:
+    """Accept the no-checkpoint sentinel only for a known classical planner."""
+    if isinstance(checkpoint_hash, str) and _SHA256.fullmatch(checkpoint_hash):
+        return True
+    if checkpoint_hash != "not_applicable":
+        return False
+    metadata = enrich_algorithm_metadata(algo=planner_id, metadata={})
+    return metadata.get("baseline_category") == "classical"
 
 
 def _execution_outcome_valid(source: Mapping[str, Any]) -> bool:

@@ -353,6 +353,16 @@ def test_append_evaluation_rejects_case_hash_mismatch(tmp_path: Path) -> None:
         append_planner_evaluation(corpus, wrong)
 
 
+def test_validate_corpus_rejects_planner_evaluation_for_absent_case(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, _corpus_root = _import(tmp_path)
+    corpus["planner_evaluations"][0]["case_id"] = f"case-{'0' * 64}"
+
+    with pytest.raises(CorpusError, match="planner evaluation references absent case"):
+        validate_corpus(corpus)
+
+
 def test_corpus_cli_import_status_and_slice_work_without_simulator_run(tmp_path: Path) -> None:
     corpus_root = tmp_path / "corpus"
     corpus_path = corpus_root / "corpus.json"

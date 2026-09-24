@@ -248,6 +248,66 @@ def _verify_inputs(
     }
 
 
+def _showcase_tool_snapshot(summary: dict[str, Any], snapshot_revision: str) -> dict[str, Any]:
+    """Preserve the executed showcase revision and verify an equivalent reachable snapshot.
+
+    Showcase PR heads can become unreachable when a PR is squash-merged. The
+    original revision remains the execution provenance; a separate snapshot
+    revision is recorded only when every source-file checksum matches that Git
+    tree. This avoids rewriting the historical execution identity.
+    """
+    provenance = summary.get("tool_provenance")
+    if not isinstance(provenance, dict):
+        return {
+            "showcase_tool_revision": None,
+            "showcase_tool_source_files_sha256": {},
+            "showcase_tool_source_snapshot_revision": None,
+            "showcase_tool_source_snapshot_status": "unavailable_tool_provenance",
+        }
+
+    raw_files = provenance.get("files")
+    if not isinstance(raw_files, dict) or not raw_files:
+        files: dict[str, str] = {}
+        status = "unavailable_file_inventory"
+        verified_revision = None
+    else:
+        files = {
+            path: checksum
+            for path, checksum in raw_files.items()
+            if isinstance(path, str) and isinstance(checksum, str)
+        }
+        verified = len(files) == len(raw_files)
+        for relative, expected in sorted(files.items()):
+            relative_path = PurePosixPath(relative)
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                verified = False
+                break
+            result = subprocess.run(
+                ["git", "show", f"{snapshot_revision}:{relative_path.as_posix()}"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                check=False,
+            )
+            if (
+                result.returncode != 0
+                or len(expected) != 64
+                or any(character not in "0123456789abcdefABCDEF" for character in expected)
+                or hashlib.sha256(result.stdout).hexdigest() != expected.lower()
+            ):
+                verified = False
+                break
+        status = "verified_file_hash_match" if verified else "source_files_not_matched"
+        verified_revision = snapshot_revision if verified else None
+
+    revision = provenance.get("git_revision")
+    return {
+        "showcase_tool_revision": revision if isinstance(revision, str) else None,
+        "showcase_tool_source_files_sha256": dict(sorted(files.items())),
+        "showcase_tool_source_snapshot_revision": verified_revision,
+        "showcase_tool_source_snapshot_status": status,
+    }
+
+
 def _compact_source_showcase_diagnostics(summary: dict[str, Any]) -> dict[str, Any]:
     """Retain upstream accounting and contradiction checks without local path details."""
     accounting = summary.get("accounting")
@@ -749,7 +809,8 @@ def _load_resume_records(
     previous_source = manifest.get("source") if isinstance(manifest.get("source"), dict) else {}
     if (
         manifest.get("schema_version") != SCHEMA_VERSION
-        or previous_source.get("campaign_id") != source.get("campaign_id")
+        or previous_source.get("source_campaign_id", previous_source.get("campaign_id"))
+        != source.get("campaign_id")
         or previous_source.get("bundle_sha256") != source.get("bundle_sha256")
         or previous_source.get("matrix_sha256") != source.get("matrix_sha256")
         or previous_source.get("source_revision") != source.get("source_revision")
@@ -1012,11 +1073,10 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
         "claim_boundary": "Historical simulator records and bounded same-scenario reruns only; no real-world safety claim.",
         "evidence_tier": "diagnostic_only",
         "source": {
-            **source_provenance,
+            **{key: value for key, value in source_provenance.items() if key != "campaign_id"},
+            "source_campaign_id": source_provenance["campaign_id"],
             "summary_sha256": summary_sha256,
-            "showcase_tool_revision": (summary.get("tool_provenance") or {}).get("git_revision")
-            if isinstance(summary.get("tool_provenance"), dict)
-            else None,
+            **_showcase_tool_snapshot(summary, replay_revision),
         },
         "source_showcase_diagnostics": _compact_source_showcase_diagnostics(summary),
         "execution_environment": {
@@ -1122,8 +1182,15 @@ def _write_report(path: Path, manifest: dict[str, Any]) -> None:
         "# Historical benchmark hard-case slice",
         "",
         f"- Evidence tier: `{manifest['evidence_tier']}`",
-        f"- Campaign: `{manifest['source']['campaign_id']}`",
+        f"- Source campaign: `{manifest['source']['source_campaign_id']}`",
         f"- Source revision: `{manifest['source']['source_revision']}`",
+        f"- Showcase execution revision: `{manifest['source']['showcase_tool_revision']}`",
+        f"- Showcase source snapshot: `{manifest['source']['showcase_tool_source_snapshot_status']}`"
+        + (
+            f" at `{manifest['source']['showcase_tool_source_snapshot_revision']}`"
+            if manifest["source"].get("showcase_tool_source_snapshot_revision")
+            else ""
+        ),
         f"- Source bundle SHA-256: `{manifest['source']['bundle_sha256']}`",
         f"- Scenario matrix SHA-256: `{manifest['source']['matrix_sha256']}`",
         f"- Source execution environment: `{environment.get('source_environment', 'not_recorded')}`",

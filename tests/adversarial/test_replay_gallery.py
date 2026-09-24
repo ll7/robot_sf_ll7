@@ -329,6 +329,35 @@ def test_gallery_does_not_verify_replay_from_a_dirty_checkout(
     assert case["source"]["gallery_checkout"]["dirty_paths"] == ["fixture-dirty.py"]
 
 
+def test_gallery_does_not_verify_when_checkout_becomes_dirty_during_replay(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    _install_fake_replay(monkeypatch)
+    checkout_states = iter(
+        [
+            {"revision": "a" * 40, "clean": True, "dirty_paths": []},
+            {
+                "revision": "a" * 40,
+                "clean": False,
+                "dirty_paths": ["robot_sf/adversarial/replay_gallery.py"],
+            },
+        ]
+    )
+    monkeypatch.setattr(replay_gallery, "_git_checkout_state", lambda _root: next(checkout_states))
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["verification_status"] == "outcome_reproduced_checkout_dirty"
+    assert case["source"]["gallery_checkout"]["clean"] is True
+    assert case["source"]["gallery_checkout_after_replay"] == {
+        "revision": "a" * 40,
+        "clean": False,
+        "dirty_paths": ["robot_sf/adversarial/replay_gallery.py"],
+    }
+
+
 def test_gallery_does_not_verify_replay_from_a_different_checkout_revision(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -464,6 +493,44 @@ def test_gallery_detects_materialized_map_bytes_changed_before_replay(
         and "bundle_sha256" in check
         for check in case["replay"]["source_input_binding"]["checks"]
     )
+
+
+def test_gallery_detects_map_bytes_changed_after_candidate_selection(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    candidate_row = payload["candidates"][0]
+    scenario_path = Path(candidate_row["scenario_yaml_path"])
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    map_path = tmp_path / "fixture-map.svg"
+    map_path.write_bytes(b"selected map bytes")
+    scenario = scenario_payload["scenarios"][0]
+    scenario["map_file"] = str(map_path)
+    scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
+        scenario, {}
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    materialize_scenario = replay_gallery._materialize_scenario
+
+    def mutate_source_map(source: Path, input_dir: Path, **kwargs: Any) -> dict[str, Any]:
+        map_path.write_bytes(b"changed after selection")
+        return materialize_scenario(source, input_dir, **kwargs)
+
+    monkeypatch.setattr(replay_gallery, "_materialize_scenario", mutate_source_map)
+    calls = _install_fake_replay(monkeypatch)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["verification_status"] == "not_replayed_map_changed_after_selection"
+    assert case["materialization"]["selection_binding"] == {
+        "status": "mismatch",
+        "selected_source_sha256": hashlib.sha256(b"selected map bytes").hexdigest(),
+        "materialized_source_sha256": hashlib.sha256(b"changed after selection").hexdigest(),
+    }
+    assert calls == []
 
 
 def test_tracked_source_file_binding_requires_matching_tracked_bytes(tmp_path: Path) -> None:

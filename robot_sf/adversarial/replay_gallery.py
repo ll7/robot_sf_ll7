@@ -325,6 +325,15 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         return None, _accounting_row(
             index, candidate_payload, scenario_error or "scenario_identity_unavailable"
         )
+    map_file_declared, map_file_sha256, map_file_error = _scenario_file_binding(
+        scenario_identity,
+        "map_file",
+        scenario_path=scenario_path,
+        source_root=source_root,
+        root=root,
+    )
+    if map_file_error is not None:
+        return None, _accounting_row(index, candidate_payload, map_file_error)
     effective_hash, hash_error = _source_effective_scenario_hash(
         scenario_path, scenario_identity, source_root=source_root, root=root
     )
@@ -334,6 +343,19 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         scenario_unchanged = False
     if not scenario_unchanged:
         return None, _accounting_row(index, candidate_payload, "scenario_changed_during_selection")
+    _, current_map_sha256, map_file_error = _scenario_file_binding(
+        scenario_identity,
+        "map_file",
+        scenario_path=scenario_path,
+        source_root=source_root,
+        root=root,
+    )
+    if map_file_error is not None:
+        return None, _accounting_row(index, candidate_payload, map_file_error)
+    if current_map_sha256 != map_file_sha256:
+        return None, _accounting_row(
+            index, candidate_payload, "scenario_map_changed_during_selection"
+        )
     try:
         if hashlib.sha256(episode_path.read_bytes()).hexdigest() != source_episode_sha256:
             return None, _accounting_row(
@@ -383,6 +405,8 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         "source_revision": source_revision,
         "source_root": source_root,
         "scenario_sha256": scenario_sha256,
+        "map_file_declared": map_file_declared,
+        "map_file_sha256": map_file_sha256,
         "effective_scenario_hash": effective_hash,
         "dedupe_key": dedupe_key,
         "mechanism_cluster": mechanism_cluster,
@@ -553,10 +577,36 @@ def _materialized_selection_binding(
             "selected_effective_scenario_hash": effective_hash,
             "materialized_effective_scenario_hash": materialized_hash,
         }
+    if selected.get("map_file_declared") is True:
+        map_asset = next(
+            (
+                asset
+                for asset in materialization.get("assets", [])
+                if isinstance(asset, dict) and asset.get("field") == "map_file"
+            ),
+            None,
+        )
+        materialized_map_sha256 = (
+            map_asset.get("source_sha256") if isinstance(map_asset, dict) else None
+        )
+        selected_map_sha256 = selected.get("map_file_sha256")
+        if not isinstance(selected_map_sha256, str):
+            return "not_replayed_map_input_unavailable_at_selection", {
+                "status": "unavailable",
+                "selected_source_sha256": selected_map_sha256,
+                "materialized_source_sha256": materialized_map_sha256,
+            }
+        if materialized_map_sha256 != selected_map_sha256:
+            return "not_replayed_map_changed_after_selection", {
+                "status": "mismatch",
+                "selected_source_sha256": selected_map_sha256,
+                "materialized_source_sha256": materialized_map_sha256,
+            }
     return None, {
         "status": "bound",
         "source_scenario_sha256": source_digest,
         "effective_scenario_hash": effective_hash,
+        "map_file_sha256": selected.get("map_file_sha256"),
     }
 
 
@@ -698,6 +748,12 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
     source_input_binding["status"] = _combined_binding_status(input_checks)
     result["source_input_binding"] = source_input_binding
     source_revision_for_case = selected["source_revision"] or context.source_revision
+    checkout_after_replay = _git_checkout_state(root)
+    result["source"]["gallery_checkout_after_replay"] = {
+        "revision": checkout_after_replay["revision"],
+        "clean": checkout_after_replay["clean"],
+        "dirty_paths": checkout_after_replay["dirty_paths"],
+    }
     result["replay_match"], result["verification_status"] = _replay_verification_status(
         replay_availability_error=replay_availability_error,
         source_input_status=source_input_binding["status"],
@@ -708,8 +764,12 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
         source_revision=source_revision_for_case,
         manifest_revision=context.source_revision,
         replay_revision=replay_revision,
-        checkout_revision=context.checkout_revision,
-        checkout_clean=context.checkout_clean,
+        checkout_revision=checkout_after_replay["revision"],
+        checkout_clean=(
+            context.checkout_clean
+            and checkout_after_replay["clean"]
+            and checkout_after_replay["revision"] == context.checkout_revision
+        ),
     )
 
     video_artifacts = _video_artifacts(replay_dir, output_dir)
@@ -1751,6 +1811,28 @@ def _source_effective_scenario_hash(
         return compute_effective_scenario_hash(scenario, route_payload), None
     except (TypeError, ValueError):
         return None, "effective_scenario_hash_unavailable"
+
+
+def _scenario_file_binding(
+    scenario: dict[str, Any],
+    field: str,
+    *,
+    scenario_path: Path,
+    source_root: Path,
+    root: Path,
+) -> tuple[bool, str | None, str | None]:
+    """Capture one scenario file input's bytes so later materialization cannot redefine it."""
+    raw_ref = scenario.get(field)
+    if raw_ref is None or raw_ref == "":
+        return False, None, None
+    source_path = _resolve_referenced_file(raw_ref, scenario_path.parent, source_root, root)
+    if source_path is None or not source_path.is_file():
+        return True, None, f"scenario_{field}_missing"
+    try:
+        source_bytes = source_path.read_bytes()
+    except OSError:
+        return True, None, f"scenario_{field}_unreadable"
+    return True, hashlib.sha256(source_bytes).hexdigest(), None
 
 
 def _manifest_attribution_matches(candidate: dict[str, Any], record: dict[str, Any]) -> bool:

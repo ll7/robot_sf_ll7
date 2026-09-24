@@ -1341,6 +1341,7 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
             trajectory_csv_path=trajectory_path,
             scenario_yaml_path=scenario_yaml_path,
             bundle_path=candidate_dir,
+            effective_planner_config={},
         )
 
     result = search.run_adversarial_search(
@@ -1507,6 +1508,47 @@ def test_target_episode_observation_binds_candidate_and_planner_config(
         )[0]
         == "target_episode_planner_config_hash_mismatch"
     )
+
+
+def test_target_episode_rejects_self_consistent_config_not_selected_by_search(
+    tmp_path: Path,
+) -> None:
+    """A matching row hash cannot substitute for the search-selected planner config."""
+    planner_config_path = tmp_path / "selected_planner.yaml"
+    planner_config_path.write_text("gain: 1\n", encoding="utf-8")
+    config = dataclasses.replace(_config(tmp_path), algo_config_path=planner_config_path)
+    candidate = _candidate(7)
+    scenario_path, _ = write_candidate_inputs(
+        config=config,
+        candidate=candidate,
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
+    alternate_config = {"gain": 2}
+    alternate_hash = search._config_hash(alternate_config)
+    record["algorithm_metadata"]["config"] = alternate_config
+    record["algorithm_metadata"]["config_hash"] = alternate_hash
+    record["scenario_params"]["algo_config_hash"] = alternate_hash
+    record["config_hash"] = search._config_hash(record["scenario_params"])
+    attribution = dataclasses.replace(
+        attribution_from_episode_record(record),
+        details={
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
+    )
+
+    reason, _route_complete = search._target_episode_observation_reason(
+        record,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_path,
+        failure_attribution=attribution,
+    )
+
+    assert reason == "target_episode_planner_config_selected_config_mismatch"
 
 
 def test_target_episode_observation_rechecks_scenario_inputs_after_parse(
@@ -2788,6 +2830,56 @@ def test_default_evaluator_treats_failures_as_failed_jobs(
             tmp_path / "scenario.yaml",
             tmp_path / "candidate",
         )
+
+
+def test_default_evaluator_uses_and_records_exact_planner_config_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The runner receives the selected config bytes captured for target binding."""
+    config_path = tmp_path / "selected.yaml"
+    selected_bytes = b"gain: 1\n"
+    config_path.write_bytes(selected_bytes)
+    config = dataclasses.replace(_config(tmp_path), algo_config_path=config_path)
+    candidate_dir = tmp_path / "candidate"
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        snapshot_path = Path(str(kwargs["algo_config_path"]))
+        assert snapshot_path == candidate_dir / "planner_config.snapshot.yaml"
+        assert snapshot_path.read_bytes() == selected_bytes
+        config_path.write_bytes(b"gain: 2\n")
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                    "algorithm_metadata": {
+                        "status": "ok",
+                        "execution_mode": "native",
+                        "config": {"gain": 1},
+                        "config_hash": search._config_hash({"gain": 1}),
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {"failures": []}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(7),
+        tmp_path / "scenario.yaml",
+        candidate_dir,
+    )
+
+    assert evaluation.effective_planner_config == {"gain": 1}
+    assert evaluation.planner_config_source_sha256 == hashlib.sha256(selected_bytes).hexdigest()
 
 
 def test_default_evaluator_records_fail_closed_benchmark_availability(

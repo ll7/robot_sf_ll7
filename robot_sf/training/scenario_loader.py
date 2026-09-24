@@ -1476,9 +1476,54 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path and geometry contract.
+    """Load and convert one map using a content-bound cache key.
+
+    The wrapper reads the source once to derive its content key. The cached parser
+    reads a second immutable byte buffer, verifies that it has the same digest, and
+    parses that buffer. A concurrent replacement therefore either retries against
+    the new content or fails closed; it cannot return a stale path-only cache entry.
+
+    Returns:
+        Parsed map definition for supported formats, else ``None``.
+    """
+    from robot_sf.nav.nav_types import (  # noqa: PLC0415
+        SUPPORTED_GEOMETRY_CONTRACTS,
+    )
+
+    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+        raise ValueError(
+            f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
+            f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+    path = Path(map_path).resolve()
+    for _attempt in range(3):
+        try:
+            source_bytes = path.read_bytes()
+        except OSError:
+            logger.warning("Scenario map file not found or unreadable: {}", path)
+            return None
+        content_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        try:
+            definition = _load_map_definition_cached(str(path), geometry_contract, content_sha256)
+        except _MapFileChangedDuringLoad:
+            continue
+        return definition
+    logger.warning("Scenario map file changed repeatedly while loading: {}", path)
+    return None
+
+
+class _MapFileChangedDuringLoad(RuntimeError):
+    """Signal a source replacement between the cache-key read and parser snapshot."""
+
+
+@lru_cache(maxsize=256)
+def _load_map_definition_cached(
+    map_path: str,
+    geometry_contract: str,
+    content_sha256: str,
+) -> MapDefinition | None:
+    """Parse a map snapshot, caching by path, geometry contract, and source digest.
 
     The cache size is set to 256 to accommodate all unique maps across typical
     multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
@@ -1504,24 +1549,34 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
         )
 
     path = Path(map_path)
-    if not path.exists():
-        logger.warning("Scenario map file not found: {}", path)
-        return None
+    try:
+        source_bytes = path.read_bytes()
+    except OSError as exc:
+        raise _MapFileChangedDuringLoad from exc
+    if hashlib.sha256(source_bytes).hexdigest() != content_sha256:
+        raise _MapFileChangedDuringLoad
     if path.suffix.lower() == ".svg":
-        return convert_map(str(path), geometry_contract=geometry_contract)
+        return convert_map(
+            str(path), geometry_contract=geometry_contract, source_bytes=source_bytes
+        )
     if path.suffix.lower() in {".json", ".yaml", ".yml"}:
         if geometry_contract != GEOMETRY_CONTRACT_LEGACY:
             raise ValueError(
                 f"geometry_contract {geometry_contract!r} is only supported for SVG maps; "
                 f"map {map_path!r} is {path.suffix.lower()} and uses the legacy map format."
             )
-        data = _load_yaml_documents(path)
+        data = yaml.safe_load(source_bytes.decode("utf-8"))
         if not isinstance(data, dict):
             logger.warning("Map definition '{}' must contain a mapping.", path)
             return None
         return serialize_map(data)
     logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
     return None
+
+
+# Keep existing private cache diagnostics and invalidation call sites working.
+_load_map_definition.cache_clear = _load_map_definition_cached.cache_clear  # type: ignore[attr-defined]
+_load_map_definition.cache_info = _load_map_definition_cached.cache_info  # type: ignore[attr-defined]
 
 
 def build_robot_config_from_scenario(

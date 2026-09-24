@@ -8,6 +8,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from itertools import pairwise
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -27,11 +28,13 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 from robot_sf.scenario_certification.input_identity import scenario_input_identity
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_loader import (
+    ScenarioValidationReport,
+    build_robot_config_from_scenario,
+    load_scenarios_for_validation,
+)
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from robot_sf.common.types import Vec2D
     from robot_sf.nav.global_route import GlobalRoute
     from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
@@ -120,15 +123,16 @@ def certify_scenario_file(
         List of certificates in manifest order, or a single selected certificate.
     """
 
-    input_identity_before_load = scenario_input_identity(scenario_path)
-    source_digest_before = _scenario_source_sha256(scenario_path)
-    scenarios = load_scenarios(scenario_path)
-    source_digest_after = _scenario_source_sha256(scenario_path)
-    source_digest = (
-        source_digest_before
-        if source_digest_before is not None and source_digest_before == source_digest_after
-        else None
+    scenario_path = Path(scenario_path)
+    validation_report = load_scenarios_for_validation(scenario_path)
+    _require_complete_scenario_load(validation_report)
+    input_identity_before_load = scenario_input_identity(
+        scenario_path, validation_report=validation_report
     )
+    source_digest = input_identity_before_load.get("source_artifact_sha256")
+    if not isinstance(source_digest, str):
+        source_digest = None
+    scenarios = validation_report.scenarios
     selected = [
         scenario
         for scenario in scenarios
@@ -139,7 +143,11 @@ def certify_scenario_file(
     certificates: list[ScenarioCertificate] = []
     for scenario in selected:
         selected_id = _scenario_id(scenario)
-        input_before = scenario_input_identity(scenario_path, scenario_id=selected_id)
+        input_before = scenario_input_identity(
+            scenario_path,
+            scenario_id=selected_id,
+            validation_report=validation_report,
+        )
         certificate = certify_scenario(
             scenario,
             scenario_path=scenario_path,
@@ -148,7 +156,11 @@ def certify_scenario_file(
             effective_input_sha256=input_before.get("effective_input_sha256"),
             effective_input_identity_stable=False,
         )
-        input_after = scenario_input_identity(scenario_path, scenario_id=selected_id)
+        input_after = scenario_input_identity(
+            scenario_path,
+            scenario_id=selected_id,
+            validation_report=validation_report,
+        )
         input_stable = (
             input_before.get("status") == "available"
             and input_after.get("status") == "available"
@@ -166,7 +178,9 @@ def certify_scenario_file(
                 effective_input_identity_stable=input_stable,
             )
         )
-    input_identity_after_certification = scenario_input_identity(scenario_path)
+    input_identity_after_certification = scenario_input_identity(
+        scenario_path, validation_report=validation_report
+    )
     full_input_identity_stable = (
         input_identity_before_load.get("status") == "available"
         and input_identity_after_certification.get("status") == "available"
@@ -185,6 +199,19 @@ def certify_scenario_file(
             for certificate in certificates
         ]
     return certificates
+
+
+def _require_complete_scenario_load(report: ScenarioValidationReport) -> None:
+    """Reject a tolerant-loader report that did not completely produce its scenarios."""
+    if report.load_error is not None:
+        raise ValueError(f"Scenario config could not be loaded: {report.load_error}")
+    issues = [*report.entry_issues, *report.load_issues]
+    if issues:
+        first_issue = issues[0]
+        raise ValueError(
+            "Scenario config expansion was incomplete: "
+            f"{first_issue.source}:{first_issue.index}: {first_issue.message}"
+        )
 
 
 def certify_scenario(

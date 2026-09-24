@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.adversarial import counterexample_corpus
 from robot_sf.adversarial.counterexample_corpus import (
     CorpusError,
     append_planner_evaluation,
@@ -29,6 +30,9 @@ from scripts.tools.manage_adversarial_counterexample_corpus import main as corpu
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_PACKET = _REPO_ROOT / "tests/fixtures/adversarial_counterexample_corpus/issue_9645/payload"
 _SOURCE_BUNDLE = _SOURCE_PACKET.parent
+_ISSUE9656_SOURCE_REVISION = "f7ebdcae2375d085e925213197a75a386e26a79c"
+_ISSUE9656_SOURCE_MATRIX = "configs/scenarios/classic_interactions_francis2023.yaml"
+_ISSUE9656_SOURCE_MATRIX_SHA256 = "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
 
 
 def _issue9656_candidate_fixture(
@@ -52,13 +56,20 @@ def _issue9656_candidate_fixture(
     map_path = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
     for index, status in enumerate(statuses):
         case_id = f"case-{index + 1:016x}"
+        planner_config_identity = f"{index + 1:016x}"
         case_dir = materialized / "cases" / case_id
         replay_dir = case_dir / "replay_input"
         replay_dir.mkdir(parents=True)
         episode_file = f"runs/planner_{index}/episodes.jsonl"
         source_row = {
             "algo": f"planner_{index}",
+            "algorithm_metadata": {
+                "canonical_algorithm": f"planner_{index}",
+                "config_hash": planner_config_identity,
+            },
             "episode_id": f"episode-{index}",
+            "git_hash": _ISSUE9656_SOURCE_REVISION,
+            "scenario_params": {"algo_config_hash": f"scenario-config-{index}"},
             "scenario_id": f"scenario_{index}",
             "seed": 100 + index,
         }
@@ -127,7 +138,13 @@ def _issue9656_candidate_fixture(
             "case_file": f"cases/{case_id}/case.json",
             "case_id": case_id,
             "criticality": criticality,
-            "planner": {"key": f"planner_{index}"},
+            "planner": {
+                "algorithm_metadata": {
+                    "canonical_algorithm": f"planner_{index}",
+                    "config_hash": planner_config_identity,
+                },
+                "key": f"planner_{index}",
+            },
             "replay": replay,
             "replay_input": replay_input,
             "scenario": {
@@ -141,10 +158,12 @@ def _issue9656_candidate_fixture(
                 **source_record,
                 "bundle_sha256": "a" * 64,
                 "campaign_id": "campaign-fixture",
-                "campaign_source_revision": "b" * 40,
-                "planner_config_hash": f"config-{index}",
+                "campaign_source_revision": _ISSUE9656_SOURCE_REVISION,
+                "planner_config_hash": planner_config_identity,
                 "planner_key": f"planner_{index}",
-                "row_git_hash": "b" * 40,
+                "row_git_hash": _ISSUE9656_SOURCE_REVISION,
+                "scenario_matrix": _ISSUE9656_SOURCE_MATRIX,
+                "scenario_matrix_sha256": _ISSUE9656_SOURCE_MATRIX_SHA256,
             },
             "source_record": source_row,
         }
@@ -169,7 +188,13 @@ def _issue9656_candidate_fixture(
         "status": "materialized",
         "evidence_tier": "diagnostic_only",
         "claim_boundary": "historical records and finite replays only",
-        "source": {"source_revision": "b" * 40},
+        "source": {
+            "source_revision": _ISSUE9656_SOURCE_REVISION,
+            "source_campaign_id": "campaign-fixture",
+            "bundle_sha256": "a" * 64,
+            "matrix_path": _ISSUE9656_SOURCE_MATRIX,
+            "matrix_sha256": _ISSUE9656_SOURCE_MATRIX_SHA256,
+        },
         "selection": {
             "case_count": len(summary_cases),
             "case_ids": [case["case_id"] for case in summary_cases],
@@ -207,6 +232,7 @@ def _issue9656_candidate_fixture(
     materialized_manifest = {
         "schema_version": "benchmark-hard-case-slice.v1",
         "cases": manifest_cases,
+        "source": summary["source"],
     }
     (materialized / "manifest.json").write_text(
         json.dumps(materialized_manifest, sort_keys=True), encoding="utf-8"
@@ -330,6 +356,18 @@ def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
     }
 
     for candidate in corpus["historical_candidates"]:
+        assert candidate["source_provenance"]["source_identity_binding_status"] == "verified"
+        assert (
+            candidate["target_planner"]["planner_id"]
+            == candidate["source_provenance"]["raw_planner_alias"]
+        )
+        assert (
+            candidate["target_planner"]["canonical_algorithm"]
+            == candidate["source_provenance"]["episode_canonical_algorithm"]
+        )
+        assert candidate["source_provenance"]["episode_scenario_algo_config_hash"].startswith(
+            "scenario-config-"
+        )
         assert candidate["source_provenance"]["source_row_binding"] == (
             "verified_episode_file_and_line_sha256"
         )
@@ -363,6 +401,16 @@ def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
         summary_path, materialized, bundle_root, campaign_root, corpus, corpus_root=corpus_root
     )
     assert duplicate["decision"] == "duplicate"
+    assert len(corpus["historical_candidates"]) == 3
+
+    case_path = materialized / "cases/case-0000000000000001/case.json"
+    case_document = json.loads(case_path.read_text(encoding="utf-8"))
+    case_document["source"]["row_git_hash"] = "0" * 40
+    case_path.write_text(json.dumps(case_document, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="duplicate #9656 import materialized case differs"):
+        import_issue9656_candidates(
+            summary_path, materialized, bundle_root, campaign_root, corpus, corpus_root=corpus_root
+        )
     assert len(corpus["historical_candidates"]) == 3
 
 
@@ -418,6 +466,147 @@ def test_issue9656_import_rejects_tampered_historical_episode_file(tmp_path: Pat
     with pytest.raises(CorpusError, match="source episode file digest differs"):
         import_issue9656_candidates(
             summary_path, materialized, bundle_root, campaign_root, corpus, corpus_root=corpus_root
+        )
+    assert corpus["historical_candidates"] == []
+    assert not (corpus_root / "historical_candidates").exists()
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value", "expected_issue"),
+    [
+        ("row_git_hash", "0" * 40, "row_git_hash"),
+        ("campaign_source_revision", "0" * 40, "campaign_source_revision"),
+        ("planner_config_hash", "tampered-config", "planner_config_hash"),
+    ],
+)
+def test_issue9656_import_blocks_conflicting_materialized_source_identity(
+    tmp_path: Path, field: str, bad_value: str, expected_issue: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    case_path = materialized / "cases/case-0000000000000001/case.json"
+    materialized_case = json.loads(case_path.read_text(encoding="utf-8"))
+    materialized_case["source"][field] = bad_value
+    case_path.write_text(json.dumps(materialized_case, sort_keys=True), encoding="utf-8")
+
+    corpus_root = tmp_path / "corpus"
+    corpus, receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+
+    candidate = corpus["historical_candidates"][0]
+    assert receipt["source_replay_status_counts"] == {"not_attempted": 1}
+    assert candidate["source_replay_status"] == "not_attempted"
+    assert candidate["candidate_status"] == "blocked_source_provenance_mismatch"
+    assert candidate["source_provenance"]["source_identity_binding_status"] == "blocked"
+    assert candidate["source_provenance"]["source_identity_binding_issues"] == [expected_issue]
+    assert candidate["target_planner"]["config_hash"] is None
+    assert corpus["cases"] == []
+
+
+def test_issue9656_import_blocks_canonical_algorithm_conflict(tmp_path: Path) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    case_path = materialized / "cases/case-0000000000000001/case.json"
+    materialized_case = json.loads(case_path.read_text(encoding="utf-8"))
+    materialized_case["planner"]["algorithm_metadata"]["canonical_algorithm"] = "wrong_planner"
+    case_path.write_text(json.dumps(materialized_case, sort_keys=True), encoding="utf-8")
+
+    corpus, receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=tmp_path / "corpus",
+    )
+
+    candidate = corpus["historical_candidates"][0]
+    assert receipt["source_replay_status_counts"] == {"not_attempted": 1}
+    assert candidate["candidate_status"] == "blocked_source_provenance_mismatch"
+    assert candidate["source_provenance"]["source_identity_binding_issues"] == [
+        "materialized_canonical_algorithm"
+    ]
+    assert candidate["target_planner"]["canonical_algorithm"] == "planner_0"
+    assert candidate["target_planner"]["config_hash"] is None
+
+
+@pytest.mark.parametrize("failure", ["mismatch", "unavailable"])
+def test_issue9656_import_fails_closed_without_historical_map_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    original = counterexample_corpus._issue9656_historical_git_blob
+
+    def historical_blob(revision: str, relative_path: str) -> bytes:
+        if relative_path.startswith("maps/svg_maps/"):
+            if failure == "unavailable":
+                raise CorpusError("#9656 historical Git blob is unavailable")
+            return original(revision, relative_path) + b"historical mismatch"
+        return original(revision, relative_path)
+
+    monkeypatch.setattr(counterexample_corpus, "_issue9656_historical_git_blob", historical_blob)
+    corpus = new_corpus()
+    corpus_root = tmp_path / "corpus"
+    expected = (
+        "map differs from campaign source revision"
+        if failure == "mismatch"
+        else "historical Git blob is unavailable"
+    )
+    with pytest.raises(CorpusError, match=expected):
+        import_issue9656_candidates(
+            summary_path,
+            materialized,
+            bundle_root,
+            campaign_root,
+            corpus,
+            corpus_root=corpus_root,
+        )
+    assert corpus["historical_candidates"] == []
+    assert not (corpus_root / "historical_candidates").exists()
+
+
+@pytest.mark.parametrize("failure", ["mismatch", "unavailable"])
+def test_issue9656_import_fails_closed_without_historical_matrix_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    original = counterexample_corpus._issue9656_historical_git_blob
+
+    def historical_blob(revision: str, relative_path: str) -> bytes:
+        if relative_path == _ISSUE9656_SOURCE_MATRIX:
+            if failure == "unavailable":
+                raise CorpusError("#9656 historical Git blob is unavailable")
+            return original(revision, relative_path) + b"historical matrix mismatch"
+        return original(revision, relative_path)
+
+    monkeypatch.setattr(counterexample_corpus, "_issue9656_historical_git_blob", historical_blob)
+    corpus = new_corpus()
+    corpus_root = tmp_path / "corpus"
+    expected = (
+        "source matrix digest does not match its campaign revision"
+        if failure == "mismatch"
+        else "historical Git blob is unavailable"
+    )
+    with pytest.raises(CorpusError, match=expected):
+        import_issue9656_candidates(
+            summary_path,
+            materialized,
+            bundle_root,
+            campaign_root,
+            corpus,
+            corpus_root=corpus_root,
         )
     assert corpus["historical_candidates"] == []
     assert not (corpus_root / "historical_candidates").exists()

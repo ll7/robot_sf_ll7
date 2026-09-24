@@ -13,7 +13,9 @@ and configuration; no stored discovery or failure record is rewritten.
 
 ## Initialize and import the bounded pilot
 
-The initial #9645 packet contains a zero-discovery search result and a separate
+The following command uses the small checked-in #9645 test/evidence fixture. It
+exercises the import path; it is not the durable output of the bounded pilot.
+The fixture contains a zero-discovery search result and a separate
 historical #1501 collision that was replayed twice under one current revision.
 The importer records the pilot's 64 completed candidates and explicit zero
 discoveries, then applies the admission checks to the independently replayed
@@ -25,7 +27,7 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py init \
   --corpus output/adversarial-corpus/corpus.json
 
 uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9645 \
-  --payload docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload \
+  --payload tests/fixtures/adversarial_counterexample_corpus/issue_9645/payload \
   --corpus output/adversarial-corpus/corpus.json \
   --corpus-root output/adversarial-corpus
 ```
@@ -63,9 +65,15 @@ materialized candidate directory is produced by the materializer command
 recorded in the #9656 report; pass that directory separately because its replay
 inputs are local generated artifacts. Set `ISSUE9656_CAMPAIGN_ROOT` to the
 extracted release bundle's `payload` directory. The importer rechecks each
-episode-file and raw-row digest before accepting its source binding, then verifies
-the evidence bundle, all 36 source aliases, materialized case and input digests,
-replay-status accounting, and criticality anomaly totals. It copies the summary,
+episode-file and raw-row digest, binds materialized source revision and planner
+identity to the summary and pinned episode row, and verifies campaign matrix and
+map bytes against the source Git revision. Planner identity comes from the
+materializer's `algorithm_metadata.config_hash`; the distinct
+`scenario_params.algo_config_hash` is retained separately. A source metadata
+conflict remains a blocked candidate; missing or mismatched historical map
+provenance fails closed.
+It then verifies the evidence bundle, all 36 source aliases, materialized case
+and input digests, replay-status accounting, and criticality anomaly totals. It copies the summary,
 source manifests, source case records, original input bytes, normalized replay
 inputs, referenced map files, and the complete evidence payload into corpus custody.
 
@@ -83,8 +91,11 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9
 Each candidate keeps its original `case-<16 hex>` source alias and receives a
 separate content-derived candidate ID. The 27 `not_attempted` rows stay
 `pending_exact_replay`, the five `unavailable_model_artifact` rows stay blocked
-on the missing model, and the four `mismatch_different_revision` rows stay
-blocked on replay parity. Their source outcomes, 17 collision-event metric
+on the missing model when source identity is verified, and the four
+`mismatch_different_revision` rows stay blocked on replay parity. A row whose
+materialized source identity conflicts with its checksum-pinned episode record
+is retained as `blocked_source_provenance_mismatch`, while its original replay
+status remains unchanged. Their source outcomes, 17 collision-event metric
 anomalies, and the 12 failed replay setup jobs remain visible in the candidate
 records and import receipt. These rows do not enter `cases`, planner status,
 admission attempts, or exported regression slices. They become admitted cases
@@ -136,12 +147,13 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py export-s
   --output-dir output/adversarial-corpus/regression-slice
 ```
 
-From the exported directory, use a listed command such as:
+From the exported directory, set `PLANNER_CONFIG_PATH` to the selected case's
+`planner_config_path` from the generated manifest, then use a listed command:
 
 ```bash
 uv run robot_sf_bench run --matrix replay_matrix.yaml \
   --out results/<case-id>.jsonl --algo goal \
-  --algo-config planner_configs/<case-id>.yaml \
+  --algo-config "$PLANNER_CONFIG_PATH" \
   --scenario-id crossing_ttc_template_adversarial_0008 --no-video
 ```
 

@@ -83,6 +83,44 @@ def test_absent_component_has_no_output():
     assert robot_force_metrics(_data(np.zeros((1, 0, 2)))) == {}
 
 
+def test_posthoc_configs_opt_in_to_recomputation_with_estimate_provenance():
+    data = _data([[[2.0, 0.0]], [[2.0, 0.0]]])
+    data.robot_force_config = CFG
+    data.social_force_config = asdict(SocialForceConfig())
+    result = robot_force_metrics(data)
+    reference = robot_force_reference(data.social_force_config, CFG["prf_ped_radius_m"])
+    expected = robot_force_reductions(
+        recompute_robot_ped_forces(data, CFG), dt=data.dt, reference=reference
+    )
+    assert {key: result[key] for key in expected} == expected
+    assert result["robot_force_impulse_total"] == pytest.approx(0.25)
+    assert result["robot_force_metadata"]["source"] == "posthoc_recomputed"
+    assert result["robot_force_metadata"]["sample_timing"] == (
+        "caller_supplied_positions_may_be_post_integration"
+    )
+    assert data.robot_ped_forces is None
+
+
+@pytest.mark.parametrize("missing", ["robot", "social"])
+def test_posthoc_requires_both_explicit_configs(missing):
+    data = _data([[[2.0, 0.0]]])
+    data.robot_force_config = None if missing == "robot" else CFG
+    data.social_force_config = None if missing == "social" else asdict(SocialForceConfig())
+    with pytest.raises(ValueError, match="require robot and social force configuration"):
+        robot_force_metrics(data)
+
+
+def test_recorded_force_path_keeps_metadata_and_ignores_snapshot_geometry():
+    data = _data([[[0.0, 0.0]]])  # Recomputing this singular snapshot would raise.
+    data.robot_force_config = CFG
+    data.social_force_config = asdict(SocialForceConfig())
+    data.robot_ped_forces = np.array([[[1.25, 0.0]]])
+    result = robot_force_metrics(data)
+    assert result["robot_force_peak"] == 1.25
+    assert result["robot_force_metadata"]["sample_timing"] == "pre_integration"
+    assert "source" not in result["robot_force_metadata"]
+
+
 def test_simulator_capture_recomputes_and_preserves_dynamics():
     from tests.sim.test_goal_force_instrumentation import _build_simulator
 
@@ -195,6 +233,32 @@ def test_new_undefined_values_serialize_as_null_without_legacy_drift():
     assert result["robot_force_mean_active"] is None
     assert result["robot_force_impulse_per_exposed_ped"] is None
     assert "force_quantiles" not in result
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize("ped_count", [0, 1])
+def test_posthoc_zero_exposure_serializes_against_metric_schema(ped_count):
+    import json
+    from pathlib import Path
+
+    from jsonschema import validate
+
+    from robot_sf.benchmark.metrics import post_process_metrics
+
+    data = _data(np.full((2, ped_count, 2), 10.0))
+    data.robot_force_config = CFG
+    data.social_force_config = asdict(SocialForceConfig())
+    result = post_process_metrics(robot_force_metrics(data), snqi_weights=None, snqi_baseline=None)
+    assert result["robot_force_exposed_ped_count"] == 0
+    assert result["robot_force_mean_active"] is None
+    assert result["robot_force_impulse_per_exposed_ped"] is None
+    assert result["robot_force_metadata"]["source"] == "posthoc_recomputed"
+    schema = json.loads(
+        (
+            Path(__file__).parents[2] / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+        ).read_text()
+    )
+    validate(result, schema["properties"]["metrics"])
     json.dumps(result, allow_nan=False)
 
 

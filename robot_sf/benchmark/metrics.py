@@ -297,16 +297,26 @@ def robot_force_pp_equivalent(data: EpisodeData) -> np.ndarray:
 def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
     """Compute optional robot-attributable metrics with declared reference provenance.
 
+    Explicit robot and social configurations opt into post-hoc recomputation when
+    recorded forces are absent. Caller-supplied positions may be post-integration;
+    this path is an estimate and never claims recorded simulator-force parity.
+
     Returns:
         Computed model quantity with the declared configuration.
     """
-    if data.robot_ped_forces is None:
+    if (
+        data.robot_ped_forces is None
+        and data.robot_force_config is None
+        and data.social_force_config is None
+    ):
         return {}
     if data.robot_force_config is None or data.social_force_config is None:
-        raise ValueError("recorded robot forces require robot and social force configuration")
+        raise ValueError("robot force metrics require robot and social force configuration")
     cfg = data.robot_force_config
+    posthoc = data.robot_ped_forces is None
+    forces = recompute_robot_ped_forces(data, cfg) if posthoc else data.robot_ped_forces
     reference = robot_force_reference(data.social_force_config, cfg["prf_ped_radius_m"])
-    result = robot_force_reductions(data.robot_ped_forces, dt=data.dt, reference=reference)
+    result = robot_force_reductions(forces, dt=data.dt, reference=reference)
     result["robot_force_metadata"] = {
         **cfg,
         "social_force_config": data.social_force_config,
@@ -315,6 +325,11 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
         "quantity": "model acceleration, not measured human discomfort",
         "sample_timing": "pre_integration",
     }
+    if posthoc:
+        result["robot_force_metadata"].update(
+            source="posthoc_recomputed",
+            sample_timing="caller_supplied_positions_may_be_post_integration",
+        )
     if data.robot_force_samples and len(data.robot_force_samples) > 1 and cfg["prf_active"]:
         result.update(
             robot_force_reductions(

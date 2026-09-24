@@ -160,7 +160,12 @@ def _oracle(
                 else "rollout_incomplete"
             ),
             "fallback_or_degraded": False,
+            "fallback_marker": None,
+            "observed_route_completion_feasible": True if complete else None,
+            "rollout_blocker": None,
         },
+        "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+        "source_artifact_identity_stable": True,
     }
 
 
@@ -169,6 +174,8 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
         "schema_version": ISSUE_5574_REPORT_SCHEMA,
         "scenario_ids": [scenario_id],
         "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
+        "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+        "source_artifact_identity_stable": True,
         "rollout_algo": "goal",
         "cells": [
             {
@@ -179,6 +186,8 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
                 "nominal_verdict": oracle,
                 "reduced_verdicts": [],
                 "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
+                "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+                "source_artifact_identity_stable": True,
                 "rollout_algo": "goal",
                 "rollout_seed": 19,
                 "claim_boundary": "diagnostic_only_not_benchmark_evidence",
@@ -728,10 +737,11 @@ def test_oracle_without_canonical_claim_boundary_remains_unknown() -> None:
 
 
 def test_committed_issue_5574_report_maps_excluded_and_unresolved_cells() -> None:
-    report_path = Path(
-        "docs/context/evidence/issue_5574_feasibility_oracle_2026-07-14/verdicts.json"
+    report = json.loads(
+        Path(
+            "docs/context/evidence/issue_5574_feasibility_oracle_2026-07-14/verdicts.json"
+        ).read_text(encoding="utf-8")
     )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
     excluded = classify_scenario_admissibility(
         "francis2023_narrow_doorway",
         scenario_artifact_path=report["scenario_manifest"],
@@ -747,8 +757,10 @@ def test_committed_issue_5574_report_maps_excluded_and_unresolved_cells() -> Non
 
     assert excluded.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert excluded.search_disposition == "retain"
-    assert "oracle_geometric_exclusion_route_coverage_unresolved" in excluded.reason_codes
-    assert excluded.assumptions["feasibility_oracle"]["envelope_radius_m"] == 1.0
+    assert "feasibility_oracle_report_producer_source_digest_missing_mismatch_or_unstable" in (
+        excluded.reason_codes
+    )
+    assert excluded.assumptions["feasibility_oracle"] == {}
     assert unresolved.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert unresolved.search_disposition == "retain"
 
@@ -781,6 +793,9 @@ def test_actor_free_oracle_success_requires_a_static_named_report() -> None:
         ("status", "blocked"),
         ("blocker", "rollout_was_blocked"),
         ("fallback_or_degraded", True),
+        ("observed_route_completion_feasible", False),
+        ("fallback_marker", "fallback_used=true"),
+        ("rollout_blocker", "hidden-blocker"),
         ("termination_reason", "collision"),
         ("min_completion_steps", 101),
         ("completion_horizon_margin_steps", 81),
@@ -823,6 +838,59 @@ def test_contradictory_positive_completion_cannot_be_overridden_by_geometric_exc
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("observed_route_completion_feasible", True),
+        ("rollout_blocker", "hidden-blocker"),
+        ("fallback_marker", "fallback_used=true"),
+    ],
+)
+def test_geometric_exclusion_rejects_contradictory_raw_completion_fields(
+    field: str, value: Any
+) -> None:
+    """A no-traversal verdict requires the producer's raw rollout fields to be empty."""
+    oracle = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    oracle["completion"][field] = value
+    verdict = classify_scenario_admissibility("case-static", feasibility_evidence=oracle)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+
+
+def test_oracle_report_producer_digest_rejects_stale_same_path_report(tmp_path: Path) -> None:
+    """A fresh certificate cannot make a stale report valid after its source path is reused."""
+    scenario_path = tmp_path / "reused.yaml"
+    source_a = b"scenarios:\n  - name: case-static\n    seeds: [19]\n"
+    source_b = b"scenarios:\n  - name: case-static\n    seeds: [20]\n"
+    scenario_path.write_bytes(source_a)
+    digest_a = hashlib.sha256(source_a).hexdigest()
+    digest_b = hashlib.sha256(source_b).hexdigest()
+    report = _oracle_report(_oracle())
+    report["scenario_manifest"] = scenario_path.as_posix()
+    report["source_artifact_sha256"] = digest_a
+    report["cells"][0]["scenario_manifest"] = scenario_path.as_posix()
+    report["cells"][0]["source_artifact_sha256"] = digest_a
+    scenario_path.write_bytes(source_b)
+    fresh_certificate = _certificate()
+    fresh_certificate["source"] = scenario_path.as_posix()
+    fresh_certificate["evidence"]["source_artifact_sha256"] = digest_b
+
+    verdict = _classify_scenario_admissibility(
+        "case-static",
+        scenario_artifact_path=scenario_path,
+        scenario_id="case-static",
+        scenario_certificate=fresh_certificate,
+        feasibility_evidence=report,
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "feasibility_oracle_report_producer_source_digest_missing_mismatch_or_unstable" in (
+        verdict.reason_codes
+    )
 
 
 def test_producer_certificate_digest_is_bound_through_admissibility_adapter(

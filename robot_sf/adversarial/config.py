@@ -320,6 +320,7 @@ class CandidateEvaluation:
     bundle_path: Path | None = None
     error: str | None = None
     effective_scenario_hash: str | None = None
+    scenario_admissibility: dict[str, Any] | None = None
 
     def with_objective(self, objective_value: float | None) -> CandidateEvaluation:
         """Return a copy with an objective score attached."""

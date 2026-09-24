@@ -14,6 +14,7 @@ import yaml
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.zenodo_publisher import (
     ZENODO_STATE_SCHEMA,
+    ZENODO_VERIFICATION_SCHEMA,
     ZenodoPublisherError,
     _seal_state,
     _verify_integrity,
@@ -22,6 +23,7 @@ from robot_sf.benchmark.zenodo_publisher import (
     load_state,
     publish,
     recover,
+    repair_draft_metadata,
     reserve,
     upload,
     verify,
@@ -29,6 +31,7 @@ from robot_sf.benchmark.zenodo_publisher import (
 )
 
 _MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
+_OLD_SOURCE_TAG = "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
 
 
 class _Response:
@@ -66,20 +69,21 @@ class _Session:
         self.posts: list[_Response] = []
         self.gets: list[_Response] = []
         self.puts: list[_Response] = []
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
 
     def post(self, url: str, **kwargs: Any) -> _Response:
         """Consume a queued POST response."""
-        del url, kwargs
+        self.calls.append(("POST", url, kwargs))
         return self.posts.pop(0)
 
     def get(self, url: str, **kwargs: Any) -> _Response:
         """Consume a queued GET response."""
-        del url, kwargs
+        self.calls.append(("GET", url, kwargs))
         return self.gets.pop(0)
 
     def put(self, url: str, **kwargs: Any) -> _Response:
         """Consume a queued PUT response."""
-        del url, kwargs
+        self.calls.append(("PUT", url, kwargs))
         return self.puts.pop(0)
 
 
@@ -149,6 +153,78 @@ def _unbound_state(
             "files": files or [],
         }
     )
+
+
+def _bound_uploaded_state(
+    binding: dict[str, Any], metadata: dict[str, Any], bundle: Path
+) -> dict[str, Any]:
+    """Build a sealed manifest-bound state with one uploaded bundle."""
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    concept_record_id = binding["concept_doi"].rsplit(".", 1)[-1]
+    metadata_contract = {key: value for key, value in metadata.items() if key != "prereserve_doi"}
+    metadata_contract_sha256 = hashlib.sha256(
+        json.dumps(
+            metadata_contract,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return _seal_state(
+        {
+            "schema_version": ZENODO_STATE_SCHEMA,
+            "deposition_id": deposition_id,
+            "record_id": deposition_id,
+            "concept_record_id": concept_record_id,
+            "doi": binding["version_doi"],
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+                }
+            ],
+            "release_binding": {
+                "metadata_sha256": binding["metadata_sha256"],
+                "metadata_contract_sha256": metadata_contract_sha256,
+                "release_tag": binding["release_tag"],
+                "concept_doi": binding["concept_doi"],
+                "version_doi": binding["version_doi"],
+            },
+        }
+    )
+
+
+def _operational_draft_payload(
+    binding: dict[str, Any],
+    metadata: dict[str, Any],
+    bundle: Path,
+    *,
+    submitted: bool = False,
+) -> dict[str, Any]:
+    """Return a remote draft with the release-bound metadata and bundle file."""
+    payload = _deposition_payload(binding, submitted=submitted)
+    payload["metadata"] = {
+        **metadata,
+        "prereserve_doi": {"doi": binding["version_doi"]},
+        "version": "0.0.7",
+        "publication_date": "2026-09-24",
+    }
+    payload["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {
+                "download": (
+                    f"https://zenodo.org/api/records/{payload['record_id']}"
+                    f"/files/{bundle.name}/content"
+                )
+            },
+        }
+    ]
+    return payload
 
 
 def test_benchmark_manifest_loads_exact_zenodo_metadata_binding() -> None:
@@ -364,6 +440,312 @@ def test_recover_rejects_draft_identity_metadata_and_state_drift(drift: str, err
     with pytest.raises(ZenodoPublisherError, match=error):
         recover(session, version_record_id, metadata, release_binding=binding)
     assert session.posts == []
+
+
+def _repair_remote(
+    binding: dict[str, Any], metadata: dict[str, Any], *, aliases: bool = False
+) -> dict[str, Any]:
+    """Build an empty draft with only the two intended frozen-field changes."""
+    remote = _deposition_payload(binding)
+    remote_metadata = {
+        **metadata,
+        "prereserve_doi": {"doi": binding["version_doi"]},
+        "version": "0.0.6",
+        "publication_date": "2026-09-23",
+        "description": "Prior description with the same release boundary.",
+        "related_identifiers": [
+            {
+                "identifier": _OLD_SOURCE_TAG,
+                "relation": "isSupplementTo",
+                "scheme": "url",
+            }
+        ],
+    }
+    if aliases:
+        remote_metadata["license"] = "gpl-3.0"
+        remote_metadata["creators"] = [
+            {**creator, "affiliation": None} for creator in metadata["creators"]
+        ]
+    remote["metadata"] = remote_metadata
+    return remote
+
+
+def test_repair_draft_metadata_previews_get_first_then_puts_and_verifies_exact_readback() -> None:
+    """Repair previews are read-only and writes are followed by exact remote readback."""
+    binding, metadata = _binding_and_metadata()
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    remote = _repair_remote(binding, metadata, aliases=True)
+    target_metadata = {
+        **{key: value for key, value in metadata.items() if key != "prereserve_doi"},
+        "version": "0.0.7",
+        "publication_date": "2026-09-24",
+    }
+
+    preview_session = _Session()
+    preview_session.gets = [_Response(remote)]
+    preview = repair_draft_metadata(
+        preview_session,
+        deposition_id,
+        metadata,
+        version="0.0.7",
+        publication_date="2026-09-24",
+        release_binding=binding,
+        apply=False,
+    )
+
+    assert preview["status"] == "ready"
+    assert preview["changed_fields"] == [
+        "description",
+        "publication_date",
+        "related_identifiers",
+        "version",
+    ]
+    assert preview_session.calls[0][0] == "GET"
+    assert len(preview_session.calls) == 1
+    assert preview_session.puts == []
+    expected_digest = preview["remote_metadata_sha256_before"]
+
+    repaired_remote = _deposition_payload(binding)
+    repaired_remote["metadata"] = {
+        **target_metadata,
+        "prereserve_doi": {"doi": binding["version_doi"]},
+    }
+    apply_session = _Session()
+    apply_session.gets = [_Response(remote), _Response(repaired_remote)]
+    apply_session.puts = [_Response(repaired_remote)]
+
+    result = repair_draft_metadata(
+        apply_session,
+        deposition_id,
+        metadata,
+        version="0.0.7",
+        publication_date="2026-09-24",
+        release_binding=binding,
+        expected_remote_metadata_sha256=expected_digest,
+        expected_remote_source_tag=_OLD_SOURCE_TAG,
+        apply=True,
+    )
+
+    assert result["status"] == "repaired"
+    assert result["changed_fields"] == [
+        "description",
+        "publication_date",
+        "related_identifiers",
+        "version",
+    ]
+    assert result["remote_metadata_sha256_after"]
+    assert [call[0] for call in apply_session.calls] == ["GET", "PUT", "GET"]
+    assert apply_session.calls[1][2]["json"] == {"metadata": target_metadata}
+    assert apply_session.gets == []
+
+
+def test_repair_draft_metadata_stale_remote_digest_blocks_put() -> None:
+    """An apply attempt with a stale preview digest cannot issue a PUT."""
+    binding, metadata = _binding_and_metadata()
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    session = _Session()
+    session.gets = [_Response(_repair_remote(binding, metadata))]
+
+    with pytest.raises(ZenodoPublisherError, match="changed since the repair preview"):
+        repair_draft_metadata(
+            session,
+            deposition_id,
+            metadata,
+            version="0.0.7",
+            publication_date="2026-09-24",
+            release_binding=binding,
+            expected_remote_metadata_sha256="0" * 64,
+            expected_remote_source_tag=_OLD_SOURCE_TAG,
+            apply=True,
+        )
+
+    assert [call[0] for call in session.calls] == ["GET"]
+    assert session.puts == []
+
+
+def test_repair_draft_metadata_apply_requires_and_checks_reviewed_source_tag() -> None:
+    """An apply needs the previewed source identity and rejects a different reviewed tag."""
+    binding, metadata = _binding_and_metadata()
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    remote = _repair_remote(binding, metadata)
+
+    missing_tag_session = _Session()
+    with pytest.raises(ZenodoPublisherError, match="reviewed remote source tag"):
+        repair_draft_metadata(
+            missing_tag_session,
+            deposition_id,
+            metadata,
+            version="0.0.7",
+            publication_date="2026-09-24",
+            release_binding=binding,
+            expected_remote_metadata_sha256="a" * 64,
+            apply=True,
+        )
+    assert missing_tag_session.calls == []
+
+    preview_session = _Session()
+    preview_session.gets = [_Response(remote)]
+    preview = repair_draft_metadata(
+        preview_session,
+        deposition_id,
+        metadata,
+        version="0.0.7",
+        publication_date="2026-09-24",
+        release_binding=binding,
+    )
+    apply_session = _Session()
+    apply_session.gets = [_Response(remote)]
+
+    with pytest.raises(ZenodoPublisherError, match="source tag differs from the reviewed preview"):
+        repair_draft_metadata(
+            apply_session,
+            deposition_id,
+            metadata,
+            version="0.0.7",
+            publication_date="2026-09-24",
+            release_binding=binding,
+            expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+            expected_remote_source_tag="https://github.com/ll7/robot_sf_ll7/releases/tag/other",
+            apply=True,
+        )
+
+    assert [call[0] for call in apply_session.calls] == ["GET"]
+    assert apply_session.puts == []
+
+
+@pytest.mark.parametrize(
+    ("drift", "error"),
+    [
+        ("deposition", "deposition ID"),
+        ("concept", "concept DOI"),
+        ("version_doi", "version DOI"),
+        ("published", "unpublished draft"),
+        ("files", "empty draft file inventory"),
+        ("title", "unrelated drift"),
+    ],
+)
+def test_repair_draft_metadata_rejects_identity_lifecycle_inventory_and_unrelated_drift(
+    drift: str, error: str
+) -> None:
+    """The repair gate accepts only a matching empty unpublished release draft."""
+    binding, metadata = _binding_and_metadata()
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    remote = _repair_remote(binding, metadata)
+    if drift == "deposition":
+        remote["id"] = deposition_id + 1
+    elif drift == "concept":
+        remote["conceptrecid"] = "999999"
+    elif drift == "version_doi":
+        remote["metadata"]["prereserve_doi"] = {"doi": "10.5281/zenodo.999999"}
+    elif drift == "published":
+        remote["submitted"] = True
+        remote["state"] = "done"
+        remote["doi"] = binding["version_doi"]
+    elif drift == "files":
+        remote["files"] = [{"filename": "unexpected.tar.gz"}]
+    else:
+        remote["metadata"]["title"] = "Different release"
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(ZenodoPublisherError, match=error):
+        repair_draft_metadata(
+            session,
+            deposition_id,
+            metadata,
+            version="0.0.7",
+            publication_date="2026-09-24",
+            release_binding=binding,
+        )
+
+    assert [call[0] for call in session.calls] == ["GET"]
+    assert session.puts == []
+
+
+def test_verify_and_publish_bind_operational_metadata_into_verification_receipt(
+    tmp_path: Path,
+) -> None:
+    """Version/date are checked during verification and sealed into publish admission."""
+    binding, metadata = _binding_and_metadata()
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"manifest-bound bundle")
+    state = _bound_uploaded_state(binding, metadata, bundle)
+    remote = _operational_draft_payload(binding, metadata, bundle)
+    operational_metadata = {"version": "0.0.7", "publication_date": "2026-09-24"}
+    session = _Session()
+    session.gets = [
+        _Response(remote),
+        _Response({}, content=bundle.read_bytes()),
+    ]
+
+    report = verify(
+        session,
+        state,
+        metadata,
+        release_binding=binding,
+        expected_operational_metadata=operational_metadata,
+    )
+
+    assert report["status"] == "pass", report
+    receipt = report["receipt"]
+    assert receipt["operational_metadata"] == operational_metadata
+    _verify_integrity(receipt, key="integrity", schema=ZENODO_VERIFICATION_SCHEMA)
+    assert state["verification_receipt"] == receipt
+
+    published = _deposition_payload(binding, submitted=True)
+    session.gets = [
+        _Response(remote),
+        _Response({}, content=bundle.read_bytes()),
+    ]
+    session.posts = [_Response(published)]
+    published_state = publish(
+        session,
+        state,
+        metadata,
+        release_binding=binding,
+        expected_operational_metadata=operational_metadata,
+    )
+
+    assert published_state["submitted"] is True
+    assert published_state["verification_receipt"]["operational_metadata"] == operational_metadata
+    _verify_integrity(
+        published_state["verification_receipt"],
+        key="integrity",
+        schema=ZENODO_VERIFICATION_SCHEMA,
+    )
+
+
+@pytest.mark.parametrize("field", ["version", "publication_date"])
+def test_verify_rejects_operational_metadata_drift(field: str, tmp_path: Path) -> None:
+    """A passing receipt requires both expected Zenodo-only publication fields."""
+    binding, metadata = _binding_and_metadata()
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"manifest-bound bundle")
+    state = _bound_uploaded_state(binding, metadata, bundle)
+    remote = _operational_draft_payload(binding, metadata, bundle)
+    remote["metadata"][field] = "0.0.6" if field == "version" else "2026-09-23"
+    state_before = json.dumps(state, sort_keys=True)
+    session = _Session()
+    session.gets = [
+        _Response(remote),
+        _Response({}, content=bundle.read_bytes()),
+    ]
+
+    report = verify(
+        session,
+        state,
+        metadata,
+        release_binding=binding,
+        expected_operational_metadata={
+            "version": "0.0.7",
+            "publication_date": "2026-09-24",
+        },
+    )
+
+    assert report["status"] == "fail"
+    assert any(f"metadata.{field}" in problem for problem in report["problems"])
+    assert json.dumps(state, sort_keys=True) == state_before
+    assert "verification_receipt" not in state
 
 
 def test_bound_zenodo_operation_rejects_metadata_checksum_mismatch() -> None:

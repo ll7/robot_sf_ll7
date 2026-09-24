@@ -134,9 +134,8 @@ Before each merge operation, verify:
    digest, and verify a trusted `pr-metadata: reconciled @ <digest>` trailer matches it. If the
    trailer is missing or stale, skip and report; the merger verifies metadata but never invents or
    mutates the final narrative.
-   Verify the PR's `## Issue Relationship Mirror` against the linked issue's current native
-   Parent/Blocked by/Blocking state. A mismatch is a stale handoff and must be refreshed before
-   merge; the merger does not create or repair relationships.
+   Verify the linked issue's current native Parent/Blocked by/Blocking state when relevant. The PR
+   body does not mirror graph links; the merger does not create or repair relationships.
 5. CI checks are passing (use `uv run python scripts/dev/check_pr_ci_status.py <number>`).
    In non-TTY agent sessions, prefer bounded polling over `gh pr checks --watch`:
    `uv run python scripts/dev/check_pr_ci_status.py <number> --poll-attempts 20 --poll-interval 30`.
@@ -336,7 +335,7 @@ Do not merge multiple PRs in parallel. Process sequentially.
   merges sequentially and re-read labels, base, checks, threads, and head SHA immediately before
   each merge.
 - Relationship writes are owned by the writable implementation/publication worktree, never by a
-  merge or review-only worktree. Treat missing or stale relationship evidence as a handoff blocker.
+  merge or review-only worktree. Refresh stale native-state reads before deciding readiness.
 
 ## Confidence
 

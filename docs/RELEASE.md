@@ -314,8 +314,8 @@ if ! uv run robot-sf release doctor \
   --repo "$PWD" \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --expected-release-sha <exact-release-sha> \
-  --expected-base-sha cd831d7582c117ac9529065e7d1c60386933c92d \
-  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
+  --expected-base-sha <exact-base-sha-from-resolved-release-identity> \
+  --tag <exact-release-tag-from-resolved-release-identity> \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --private-launch-packet <private-ops-launch-packet> \
   --dissertation <dissertation-worktree> \
@@ -435,6 +435,11 @@ bound to the draft before publication and normally does not resolve through
 `doi.org` yet; resolver success is not a pre-publication gate. After Zenodo
 publication, check DOI resolution separately as described in the
 [camera-ready release guide](./benchmark_camera_ready_release.md#doi-resolution-after-publication).
+If that post-publication resolver check returns 404 while the anonymous record
+audit succeeds, report “record public, DOI resolution pending,” share the
+Zenodo record URL, and contact Zenodo support if a later recheck remains
+unresolved. Do not republish, mint a new version, or reserve a replacement DOI
+to work around resolver delay.
 
 ### Immutable publication errata
 

@@ -83,6 +83,7 @@ jobs:
             --workflow ci.yml \
             --target-sha "${GITHUB_SHA}" \
             --target-branch "${GITHUB_REF_NAME}" \
+            --target-ref-type "${GITHUB_REF_TYPE}" \
             --current-run-id "${GITHUB_RUN_ID}" \
             --github-output "${GITHUB_OUTPUT}" \
             "${retry_args[@]}"

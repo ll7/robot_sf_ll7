@@ -58,6 +58,7 @@ DEFAULT_MAX_PAGES = 10
 REST_RUN_TIMEOUT = 90
 DISPATCH_GATE_SCHEMA_VERSION = "main_ci_dispatch_gate.v1"
 DISPATCH_ACTIVE_STATUSES = frozenset({"queued", "in_progress", "requested", "pending", "waiting"})
+DISPATCH_MATRIX_JOB_NAME = "compat-matrix"
 
 
 def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -232,14 +233,13 @@ def normalize_actions_run(row: Mapping[str, Any], *, index: int) -> dict[str, An
     }
 
 
-def fetch_dispatch_run_window(
-    repo: str = DEFAULT_REPO,
-    workflow: str = DEFAULT_WORKFLOW,
-    *,
-    target_branch: str = "main",
-    runner: Callable[..., Any] | None = None,
-) -> list[dict[str, Any]]:
-    """Read recent workflow runs for the selected branch's dispatch ownership gate."""
+def _validate_dispatch_window_inputs(
+    target_branch: str,
+    target_sha: str | None,
+    current_run_id: int | None,
+    max_pages: int,
+) -> tuple[str, str, int | None]:
+    """Validate branch/window selectors and normalize exact-head identity."""
     branch = target_branch.strip() if isinstance(target_branch, str) else ""
     if (
         not branch
@@ -250,32 +250,227 @@ def fetch_dispatch_run_window(
         raise MainCiRunFetchError(
             "dispatch ownership target_branch must be a non-empty branch name, not a full ref"
         )
+    if max_pages <= 0:
+        raise ValueError("max_pages must be positive")
+    if (target_sha is None) != (current_run_id is None):
+        raise MainCiRunFetchError(
+            "dispatch ownership target_sha and current_run_id must be supplied together"
+        )
+    target = target_sha.strip().lower() if isinstance(target_sha, str) else ""
+    if target_sha is not None and not target:
+        raise MainCiRunFetchError("dispatch ownership target_sha must not be empty")
+    current_id = (
+        _positive_int(current_run_id, field="current workflow run id")
+        if current_run_id is not None
+        else None
+    )
+    return branch, target, current_id
+
+
+def _is_older_active_exact_head(
+    runs: Sequence[Mapping[str, Any]], *, target_sha: str, current_run_id: int
+) -> bool:
+    """Whether a page already proves this run is a follower, not the owner."""
+    return any(
+        str(run.get("headSha") or "").lower() == target_sha
+        and str(run.get("status") or "").lower() in DISPATCH_ACTIVE_STATUSES
+        and _positive_int(run.get("databaseId"), field="active run id") < current_run_id
+        for run in runs
+    )
+
+
+def _attach_retry_matrix_admission(
+    runs: list[dict[str, Any]],
+    *,
+    repo: str,
+    target_sha: str,
+    runner: Callable[..., Any],
+    max_pages: int,
+) -> None:
+    """Attach job-API admission evidence to exact-head explicit retry failures."""
+    for run in runs:
+        is_retry_failure = (
+            str(run.get("headSha") or "").lower() == target_sha
+            and str(run.get("status") or "").lower() == "completed"
+            and str(run.get("event") or "") == "workflow_dispatch"
+            and str(run.get("displayTitle") or "").endswith("retry_failed=true")
+            and classify(run.get("conclusion")) == "red"
+        )
+        if not is_retry_failure:
+            continue
+        run["fullMatrixAdmitted"] = fetch_dispatch_retry_matrix_admitted(
+            repo=repo,
+            run_id=_positive_int(run.get("databaseId"), field="retry workflow run id"),
+            runner=runner,
+            max_pages=max_pages,
+        )
+
+
+def fetch_dispatch_run_window(
+    repo: str = DEFAULT_REPO,
+    workflow: str = DEFAULT_WORKFLOW,
+    *,
+    target_branch: str = "main",
+    target_sha: str | None = None,
+    current_run_id: int | None = None,
+    max_pages: int = DEFAULT_MAX_PAGES,
+    runner: Callable[..., Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Read a bounded run window, stopping early only for an older active owner."""
+    branch, target, current_id = _validate_dispatch_window_inputs(
+        target_branch, target_sha, current_run_id, max_pages
+    )
     rest_runner = runner or _default_rest_runner
     selector = resolve_workflow_selector(
         repo=repo,
         workflow=workflow,
-        max_pages=DEFAULT_MAX_PAGES,
+        max_pages=max_pages,
         runner=rest_runner,
     )
-    endpoint = (
+    endpoint_base = (
         f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
-        f"?{urlencode({'branch': branch, 'per_page': REST_PAGE_SIZE, 'page': 1})}"
+        f"?{urlencode({'branch': branch})}"
     )
-    payload = _rest_json(
-        endpoint,
-        runner=rest_runner,
-        operation=f"recent CI dispatch ownership window for branch {branch!r}",
-    )
+    runs: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        endpoint = f"{endpoint_base}&per_page={REST_PAGE_SIZE}&page={page}"
+        payload = _rest_json(
+            endpoint,
+            runner=rest_runner,
+            operation=f"recent CI dispatch ownership window page {page}",
+        )
+        if not isinstance(payload, Mapping):
+            raise MainCiRunFetchError(
+                f"CI dispatch ownership window page {page} returned a non-object payload"
+            )
+        rows = payload.get("workflow_runs")
+        if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
+            raise MainCiRunFetchError(
+                f"CI dispatch ownership window page {page} returned malformed rows"
+            )
+        page_runs = [
+            normalize_actions_run(row, index=index)
+            for index, row in enumerate(rows, start=len(runs))
+            if isinstance(row, Mapping)
+        ]
+        runs.extend(page_runs)
+        if (
+            target
+            and current_id is not None
+            and _is_older_active_exact_head(page_runs, target_sha=target, current_run_id=current_id)
+        ):
+            # An older exact-head active run is sufficient to make this run
+            # wait. No more pages or retry-receipt queries can change that.
+            return runs
+        if len(rows) < REST_PAGE_SIZE:
+            break
+    else:
+        raise MainCiRunFetchError(
+            f"CI dispatch ownership run window reached the {max_pages}-page budget "
+            "without exhaustion or an older same-head active run; refusing a partial window"
+        )
+
+    if target and current_id is not None:
+        _attach_retry_matrix_admission(
+            runs,
+            repo=repo,
+            target_sha=target,
+            runner=rest_runner,
+            max_pages=max_pages,
+        )
+    return runs
+
+
+def _fetch_retry_jobs_page(
+    payload: Any,
+    *,
+    run_id: int,
+    page: int,
+) -> list[Mapping[str, Any]]:
+    """Validate one Actions jobs response and return its job rows."""
     if not isinstance(payload, Mapping):
-        raise MainCiRunFetchError("CI dispatch ownership window returned a non-object payload")
-    rows = payload.get("workflow_runs")
-    if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
-        raise MainCiRunFetchError("CI dispatch ownership window returned malformed rows")
-    return [
-        normalize_actions_run(row, index=index)
-        for index, row in enumerate(rows)
-        if isinstance(row, Mapping)
+        raise MainCiRunFetchError(
+            f"retry workflow run {run_id} jobs page {page} returned a non-object payload"
+        )
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list) or any(not isinstance(job, Mapping) for job in jobs):
+        raise MainCiRunFetchError(
+            f"retry workflow run {run_id} jobs page {page} returned malformed rows"
+        )
+    for index, job in enumerate(jobs):
+        if not isinstance(job.get("name"), str) or not job.get("name"):
+            raise MainCiRunFetchError(
+                f"retry workflow run {run_id} job row {index} has no usable name"
+            )
+        if not isinstance(job.get("status"), str) or not job.get("status"):
+            raise MainCiRunFetchError(
+                f"retry workflow run {run_id} job row {index} has no usable status"
+            )
+        conclusion = job.get("conclusion")
+        if conclusion is not None and not isinstance(conclusion, str):
+            raise MainCiRunFetchError(
+                f"retry workflow run {run_id} job row {index} has a malformed conclusion"
+            )
+    return jobs
+
+
+def _compatibility_page_admission(jobs: Sequence[Mapping[str, Any]], *, run_id: int) -> bool | None:
+    """Return page evidence (or None if this page has no compatibility jobs)."""
+    matrix_jobs = [
+        job
+        for job in jobs
+        if str(job.get("name") or "") == DISPATCH_MATRIX_JOB_NAME
+        or str(job.get("name") or "").startswith(f"{DISPATCH_MATRIX_JOB_NAME} (")
     ]
+    if not matrix_jobs:
+        return None
+    for job in matrix_jobs:
+        status = str(job.get("status") or "").lower()
+        conclusion = job.get("conclusion")
+        if status == "completed" and not isinstance(conclusion, str):
+            raise MainCiRunFetchError(
+                f"retry workflow run {run_id} compatibility job has no conclusion"
+            )
+        if status not in {"queued", "in_progress", "completed"}:
+            raise MainCiRunFetchError(
+                f"retry workflow run {run_id} compatibility job has unknown status"
+            )
+    return any(
+        str(job.get("status") or "").lower() != "completed" or job.get("conclusion") != "skipped"
+        for job in matrix_jobs
+    )
+
+
+def fetch_dispatch_retry_matrix_admitted(
+    *,
+    repo: str,
+    run_id: int,
+    runner: Callable[..., Any],
+    max_pages: int = DEFAULT_MAX_PAGES,
+) -> bool:
+    """Prove a retry run admitted at least one non-skipped compatibility job."""
+    if max_pages <= 0:
+        raise ValueError("max_pages must be positive")
+    checked_run_id = _positive_int(run_id, field="retry workflow run id")
+    endpoint_base = (
+        f"repos/{quote(repo, safe='/')}/actions/runs/{checked_run_id}/jobs"
+        f"?{urlencode({'per_page': REST_PAGE_SIZE})}"
+    )
+    for page in range(1, max_pages + 1):
+        payload = _rest_json(
+            f"{endpoint_base}&page={page}",
+            runner=runner,
+            operation=f"retry workflow run {checked_run_id} jobs page {page}",
+        )
+        jobs = _fetch_retry_jobs_page(payload, run_id=checked_run_id, page=page)
+        if _compatibility_page_admission(jobs, run_id=checked_run_id) is True:
+            return True
+        if len(jobs) < REST_PAGE_SIZE:
+            return False
+    raise MainCiRunFetchError(
+        f"retry workflow run {checked_run_id} jobs exceeded the {max_pages}-page budget; "
+        "refusing to infer matrix admission"
+    )
 
 
 def count_decisive_runs(runs: Sequence[Any]) -> int:
@@ -511,6 +706,7 @@ def dispatch_gate_decision(
         str(run.get("event") or "") == "workflow_dispatch"
         and str(run.get("displayTitle") or "").endswith("retry_failed=true")
         and classify(run.get("conclusion")) in {"green", "red"}
+        and run.get("fullMatrixAdmitted") is True
         for run in completed
     )
     policy = dispatch_decision(
@@ -547,6 +743,7 @@ def wait_for_dispatch_gate(  # noqa: PLR0913 - explicit polling/test seams are i
     repo: str = DEFAULT_REPO,
     workflow: str = DEFAULT_WORKFLOW,
     target_branch: str = "main",
+    target_ref_type: str | None = None,
     retry_failed: bool = False,
     poll_seconds: float = 30.0,
     max_wait_seconds: float = 3000.0,
@@ -558,8 +755,18 @@ def wait_for_dispatch_gate(  # noqa: PLR0913 - explicit polling/test seams are i
         raise ValueError("poll_seconds must be positive")
     if max_wait_seconds < 0:
         raise ValueError("max_wait_seconds must not be negative")
+    if target_ref_type != "branch":
+        raise MainCiRunFetchError(
+            "dispatch ownership supports branch refs only; refusing a tag or missing ref type"
+        )
     read_runs = fetcher or (
-        lambda: fetch_dispatch_run_window(repo, workflow, target_branch=target_branch)
+        lambda: fetch_dispatch_run_window(
+            repo,
+            workflow,
+            target_branch=target_branch,
+            target_sha=target_sha,
+            current_run_id=current_run_id,
+        )
     )
     deadline = time.monotonic() + max_wait_seconds
     while True:
@@ -682,6 +889,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--target-sha", default=os.environ.get("GITHUB_SHA"))
     ap.add_argument("--target-branch", default=os.environ.get("GITHUB_REF_NAME"))
+    ap.add_argument("--target-ref-type", default=os.environ.get("GITHUB_REF_TYPE"))
     ap.add_argument("--current-run-id", type=int, default=os.environ.get("GITHUB_RUN_ID"))
     ap.add_argument("--retry-failed", action="store_true")
     ap.add_argument("--poll-seconds", type=float, default=30.0)
@@ -696,8 +904,16 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     if args.dispatch_gate:
-        if not args.target_sha or args.current_run_id is None or not args.target_branch:
-            ap.error("--dispatch-gate requires --target-sha, --target-branch, and --current-run-id")
+        if (
+            not args.target_sha
+            or args.current_run_id is None
+            or not args.target_branch
+            or not args.target_ref_type
+        ):
+            ap.error(
+                "--dispatch-gate requires --target-sha, --target-branch, "
+                "--target-ref-type, and --current-run-id"
+            )
         try:
             decision = wait_for_dispatch_gate(
                 args.target_sha,
@@ -705,6 +921,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo=args.repo,
                 workflow=args.workflow,
                 target_branch=args.target_branch,
+                target_ref_type=args.target_ref_type,
                 retry_failed=args.retry_failed,
                 poll_seconds=args.poll_seconds,
                 max_wait_seconds=args.max_wait_seconds,

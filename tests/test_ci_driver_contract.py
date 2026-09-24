@@ -151,6 +151,8 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
     assert gate["outputs"]["run_full_ci"] == "${{ steps.decision.outputs.run_full_ci }}"
     dispatch_command = "\n".join(step.get("run", "") for step in gate["steps"])
     assert '--target-branch "${GITHUB_REF_NAME}"' in dispatch_command
+    assert '--target-ref-type "${GITHUB_REF_TYPE}"' in dispatch_command
+    assert "compat-matrix" in jobs
     for job_name in (
         "fast-feedback",
         "compat-matrix",

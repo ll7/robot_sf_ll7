@@ -285,12 +285,33 @@ def test_dispatch_gate_failed_retry_receipt_is_idempotent() -> None:
         "conclusion": "failure",
         "event": "workflow_dispatch",
         "displayTitle": "CI manual recovery retry_failed=true",
+        "fullMatrixAdmitted": True,
     }
 
     decision = dispatch_gate_decision(sha, 20, [failed_retry], retry_failed=True)
 
     assert decision["action"] == "observe_failure"
     assert decision["retry_receipt_seen"] is True
+
+
+def test_dispatch_gate_keeps_retry_eligible_when_prior_retry_matrix_was_skipped() -> None:
+    """An all-skipped direct matrix does not consume the retry receipt."""
+    sha = "c" * 40
+    failed_retry = {
+        "databaseId": 11,
+        "headSha": sha,
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "workflow_dispatch",
+        "displayTitle": "CI manual recovery retry_failed=true",
+        "fullMatrixAdmitted": False,
+    }
+
+    decision = dispatch_gate_decision(sha, 20, [failed_retry], retry_failed=True)
+
+    assert decision["action"] == "run_full_ci"
+    assert decision["reason"] == "explicit_failed_retry"
+    assert decision["retry_receipt_seen"] is False
 
 
 def test_dispatch_gate_allows_first_explicit_failed_retry() -> None:
@@ -343,6 +364,7 @@ def test_dispatch_gate_follower_takes_ownership_after_stale_owner() -> None:
     decision = wait_for_dispatch_gate(
         sha,
         20,
+        target_ref_type="branch",
         poll_seconds=1,
         max_wait_seconds=10,
         fetcher=lambda: next(windows),
@@ -359,6 +381,7 @@ def test_dispatch_gate_timeout_is_fail_closed() -> None:
     decision = wait_for_dispatch_gate(
         sha,
         20,
+        target_ref_type="branch",
         poll_seconds=1,
         max_wait_seconds=0,
         fetcher=lambda: [
@@ -403,6 +426,162 @@ def test_fetch_dispatch_window_preserves_event_and_retry_receipt_title() -> None
 
     assert runs[0]["event"] == "workflow_dispatch"
     assert runs[0]["displayTitle"].endswith("retry_failed=true")
+
+
+def test_fetch_dispatch_window_paginates_until_older_same_head_active_run() -> None:
+    """An older exact-head run on page two keeps the current run waiting."""
+    sha = "9" * 40
+    unrelated = [
+        _actions_run(
+            {
+                "databaseId": 1000 + index,
+                "status": "completed",
+                "conclusion": "cancelled",
+                "headSha": "8" * 40,
+                "createdAt": f"2026-09-23T00:{index:02d}:00Z",
+            }
+        )
+        for index in range(100)
+    ]
+    older_active = _actions_run(
+        {
+            "databaseId": 11,
+            "status": "waiting",
+            "conclusion": None,
+            "headSha": sha,
+            "createdAt": "2026-09-22T12:00:00Z",
+        }
+    )
+    fake = _FakeRunREST([unrelated, [older_active]])
+
+    runs = fetch_dispatch_run_window(
+        target_sha=sha,
+        current_run_id=20,
+        runner=fake,
+    )
+    decision = dispatch_gate_decision(sha, 20, runs)
+
+    assert decision["action"] == "wait"
+    assert decision["reason"] == "older_same_head_run_active"
+    assert decision["owner_run_id"] == 11
+    assert any(call.endswith("page=2") for call in fake.calls)
+    assert not any("/jobs?" in call for call in fake.calls)
+
+
+def test_fetch_dispatch_window_fails_closed_when_page_budget_is_exhausted() -> None:
+    """A full final page is not evidence that no older owner exists."""
+    full_page = [
+        _actions_run(
+            {
+                "databaseId": 1000 + index,
+                "status": "completed",
+                "conclusion": "cancelled",
+                "headSha": "8" * 40,
+                "createdAt": f"2026-09-23T00:{index:02d}:00Z",
+            }
+        )
+        for index in range(100)
+    ]
+    fake = _FakeRunREST([full_page, full_page])
+
+    with pytest.raises(MainCiRunFetchError, match="2-page budget"):
+        fetch_dispatch_run_window(
+            target_sha="9" * 40,
+            current_run_id=20,
+            max_pages=2,
+            runner=fake,
+        )
+
+    assert any(call.endswith("page=2") for call in fake.calls)
+
+
+@pytest.mark.parametrize(
+    ("job_conclusion", "expected_admission", "expected_action"),
+    [("skipped", False, "run_full_ci"), ("failure", True, "observe_failure")],
+)
+def test_retry_receipt_requires_non_skipped_compatibility_job(
+    job_conclusion: str, expected_admission: bool, expected_action: str
+) -> None:
+    """The REST receipt requires compat-matrix admission and permits a retry otherwise."""
+    sha = "a" * 40
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            body = {"workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]}
+        elif "/actions/workflows/77/runs?branch=main&per_page=100&page=1" in path:
+            body = {
+                "workflow_runs": [
+                    {
+                        "id": 11,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "head_sha": sha,
+                        "created_at": "2026-09-22T12:50:16Z",
+                        "event": "workflow_dispatch",
+                        "display_title": "CI manual recovery retry_failed=true",
+                    }
+                ]
+            }
+        elif path == "repos/ll7/robot_sf_ll7/actions/runs/11/jobs?per_page=100&page=1":
+            body = {
+                "jobs": [
+                    {
+                        "name": "compat-matrix (ubuntu-latest, 3.11)",
+                        "status": "completed",
+                        "conclusion": job_conclusion,
+                    }
+                ]
+            }
+        else:
+            raise AssertionError(f"unexpected REST path: {path}")
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps(body), "")
+
+    runs = fetch_dispatch_run_window(
+        target_sha=sha,
+        current_run_id=20,
+        runner=fake_runner,
+    )
+    decision = dispatch_gate_decision(sha, 20, runs, retry_failed=True)
+
+    assert runs[0]["fullMatrixAdmitted"] is expected_admission
+    assert decision["action"] == expected_action
+    assert decision["retry_receipt_seen"] is expected_admission
+
+
+def test_retry_matrix_admission_lookup_failure_fails_closed() -> None:
+    """An unreadable receipt cannot silently authorize another retry."""
+    sha = "a" * 40
+
+    def fake_runner(path: str, payload: object = None, **_kwargs: object):
+        assert payload is None
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            body = {"workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]}
+            return subprocess.CompletedProcess(["gh"], 0, json.dumps(body), "")
+        if "/actions/workflows/77/runs?branch=main&per_page=100&page=1" in path:
+            body = {
+                "workflow_runs": [
+                    {
+                        "id": 11,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "head_sha": sha,
+                        "created_at": "2026-09-22T12:50:16Z",
+                        "event": "workflow_dispatch",
+                        "display_title": "CI manual recovery retry_failed=true",
+                    }
+                ]
+            }
+            return subprocess.CompletedProcess(["gh"], 0, json.dumps(body), "")
+        assert path.startswith("repos/ll7/robot_sf_ll7/actions/runs/11/jobs?")
+        return subprocess.CompletedProcess(["gh"], 1, "", "API unavailable")
+
+    with pytest.raises(MainCiRunFetchError, match="API unavailable"):
+        fetch_dispatch_run_window(
+            target_sha=sha,
+            current_run_id=20,
+            runner=fake_runner,
+        )
 
 
 def test_off_main_dispatch_window_observes_active_same_head_run() -> None:
@@ -481,6 +660,8 @@ def test_dispatch_gate_cli_writes_boolean_job_output(
             "a" * 40,
             "--target-branch",
             "feature/9340-test",
+            "--target-ref-type",
+            "branch",
             "--current-run-id",
             "20",
             "--github-output",
@@ -511,6 +692,8 @@ def test_dispatch_gate_cli_fails_closed_on_unreadable_run_window(
             "a" * 40,
             "--target-branch",
             "feature/9340-test",
+            "--target-ref-type",
+            "branch",
             "--current-run-id",
             "20",
             "--github-output",
@@ -521,6 +704,35 @@ def test_dispatch_gate_cli_fails_closed_on_unreadable_run_window(
     assert rc == 1
     assert output.read_text(encoding="utf-8") == "run_full_ci=false\n"
     assert json.loads(capsys.readouterr().out)["action"] == "error"
+
+
+def test_dispatch_gate_cli_fails_closed_on_tag_ref(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A tag workflow_dispatch cannot unlock branch-scoped matrix work."""
+    output = tmp_path / "github-output"
+
+    rc = main_ci_is_green.main(
+        [
+            "--dispatch-gate",
+            "--target-sha",
+            "a" * 40,
+            "--target-branch",
+            "v0.0.7",
+            "--target-ref-type",
+            "tag",
+            "--current-run-id",
+            "20",
+            "--github-output",
+            str(output),
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert output.read_text(encoding="utf-8") == "run_full_ci=false\n"
+    assert result["action"] == "error"
+    assert "branch refs only" in result["reason"]
 
 
 def test_unsorted_input_still_picks_newest_completed() -> None:

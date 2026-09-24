@@ -904,7 +904,7 @@ def _replay_record_availability(record: dict[str, Any]) -> str | None:
         return "replay_episode_algorithm_metadata_unavailable"
     if resolve_execution_mode(metadata) != "native":
         return "replay_episode_execution_mode_not_native"
-    if runtime_fallback_or_degraded_marker(record) is not None:
+    if _runtime_algorithm_fallback_marker(record) is not None:
         return "replay_episode_runtime_fallback_or_degraded"
     return None
 
@@ -1781,9 +1781,59 @@ def _source_availability_problem(
         return "source_algorithm_metadata_unavailable"
     if resolve_execution_mode(metadata) != execution_mode:
         return "source_execution_mode_mismatch"
-    if runtime_fallback_or_degraded_marker(record) is not None:
+    if _runtime_algorithm_fallback_marker(record) is not None:
         return "source_runtime_fallback_or_degraded"
     return None
+
+
+def _runtime_algorithm_fallback_marker(record: dict[str, Any]) -> tuple[str, str] | None:
+    """Inspect planner runtime metadata without treating unavailable metrics as fallback.
+
+    Episode records also carry diagnostic metric subtrees whose ``status`` can be
+    ``unavailable`` when a metric lacks support. Those are not execution-mode
+    failures. Runtime fallback and degradation are reported under the algorithm
+    metadata contract, which is the evidence this gallery must gate.
+    """
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, dict):
+        return None
+    runtime_metadata = _without_unavailable_diagnostic_statuses(metadata)
+    return runtime_fallback_or_degraded_marker(runtime_metadata)
+
+
+def _without_unavailable_diagnostic_statuses(value: Any, *, path: tuple[str, ...] = ()) -> Any:
+    """Drop unsupported diagnostic statuses while retaining every runtime marker.
+
+    The canonical episode metadata includes status-bearing diagnostic products
+    such as paired metric coverage and step-trace reset metadata. Their
+    ``unavailable`` status does not describe planner execution. Keep all other
+    fields, including any explicit fallback or degraded markers in those
+    products, for the shared runtime marker check.
+    """
+    if isinstance(value, dict):
+        normalized_path = tuple(part.lower() for part in path)
+        diagnostic_status = any(
+            part in {"paired_effect_metric_producer", "simulation_step_trace"}
+            for part in normalized_path
+        )
+        result: dict[str, Any] = {}
+        for raw_key, item in value.items():
+            key = str(raw_key)
+            if (
+                diagnostic_status
+                and key == "status"
+                and isinstance(item, str)
+                and item.strip().lower().replace("-", "_") in {"unavailable", "not_available"}
+            ):
+                continue
+            result[key] = _without_unavailable_diagnostic_statuses(item, path=(*path, key))
+        return result
+    if isinstance(value, list):
+        return [
+            _without_unavailable_diagnostic_statuses(item, path=(*path, str(index)))
+            for index, item in enumerate(value)
+        ]
+    return value
 
 
 def _source_effective_scenario_hash(

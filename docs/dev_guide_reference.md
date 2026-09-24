@@ -3199,12 +3199,12 @@ the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown t
 the metadata block near the top of the issue body; YAML issue forms expose both fields as required
 dropdowns. Use exactly one value from each enum and add repository-relative paths under
 `linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
-without rewriting existing issue bodies or changing labels and project fields. Every template also
-collects the explicit relationship block described in
-[Explicit Issue Relationships](context/issue_relationships.md); set native Parent, Blocked by, and
-Blocking links after creation and use the bounded audit before any existing-issue migration.
+without rewriting existing issue bodies or changing labels and project fields. Templates point
+authors to the native Parent, Blocked by, and Blocking fields described in
+[Native GitHub Issue Relationships](context/issue_relationships.md); they do not duplicate links in
+issue bodies.
 
-The read-only migration audit is:
+To inspect legacy body declarations during a reviewed migration, use:
 `uv run python scripts/dev/audit_issue_relationships.py --issue 123 --format json`.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks

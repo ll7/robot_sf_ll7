@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Audit and explicitly link GitHub issue relationships.
+"""Audit legacy issue-body relationship declarations and optionally migrate reviewed links.
 
-The issue body is parsed only when it contains the canonical ``## Relationships`` block from
-``docs/context/issue_relationships.md``.  Legacy headings and incidental issue mentions are
-reported for review, but never become write proposals.  The default command is read-only.  An
-explicit confirmation token is required before adding native parent or dependency links; no body,
-parent replacement, or ``Relates to`` mutation is performed.
+Native GitHub relationships are authoritative. An old ``## Relationships`` body block is only a
+migration candidate; missing blocks are normal, and incidental prose remains review-only. The
+default command is read-only. An explicit confirmation token is required before adding native
+parent or dependency links. The tool never edits bodies or replaces a different parent.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from typing import Any
 
 from scripts.dev._gh_rest import parse_json, run_gh_api
 
-SCHEMA = "issue_relationship_audit.v1"
+SCHEMA = "issue_relationship_audit.v2"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 CONFIRMATION_TOKEN = "RELATIONSHIP_MIGRATION"
 RELATION_KINDS = ("parent", "blocked_by", "blocking", "relates_to")
@@ -73,7 +72,7 @@ ApiRunner = Callable[[str, object | None, str | None], Any]
 
 @dataclass(frozen=True, slots=True)
 class Declaration:
-    """One explicitly declared relationship in an issue body."""
+    """One explicit relationship carried forward from a legacy issue body."""
 
     issue: int
     kind: str
@@ -252,7 +251,7 @@ def _legacy_mentions(  # noqa: C901 - explicit heading/line parsing remains fail
 def parse_relationships(  # noqa: C901 - canonical and legacy states are intentionally explicit
     body: str, *, issue: int, repo: str = DEFAULT_REPO
 ) -> dict[str, Any]:
-    """Parse one issue body into canonical declarations and review-only legacy mentions."""
+    """Parse old body declarations as migration candidates and prose as review-only leads."""
 
     if not isinstance(body, str):
         return {
@@ -306,7 +305,7 @@ def parse_relationships(  # noqa: C901 - canonical and legacy states are intenti
                     issue=issue,
                     kind=kind,
                     target=target,
-                    origin="canonical",
+                    origin="legacy_body",
                     line=line_number,
                     raw=line.strip(),
                 )
@@ -330,8 +329,6 @@ def parse_relationships(  # noqa: C901 - canonical and legacy states are intenti
             )
 
     legacy = _legacy_mentions(body, issue=issue, repo=repo)
-    if not present:
-        errors.append("missing canonical ## Relationships section")
     return {
         "section_present": present,
         "declarations": [asdict(item) for item in declarations],
@@ -507,7 +504,7 @@ def _operation_for(
     declaration: Mapping[str, Any],
     native: Mapping[str, tuple[int, ...]],
 ) -> dict[str, Any]:
-    """Turn one canonical declaration into a conservative add-only operation."""
+    """Turn one explicit legacy body declaration into a conservative add-only candidate."""
 
     kind = str(declaration["kind"])
     target = int(declaration["target"])
@@ -659,7 +656,7 @@ def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audi
     confirmation: str | None = None,
     api: ApiRunner = _api_default,
 ) -> dict[str, Any]:
-    """Run a bounded audit and optionally apply reviewed canonical add-only links."""
+    """Run a bounded legacy-body audit and optionally apply reviewed add-only links."""
 
     errors: list[str] = []
     if issue_numbers:
@@ -690,23 +687,19 @@ def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audi
     reports: list[dict[str, Any]] = []
     operations: list[dict[str, Any]] = []
     legacy_count = 0
-    canonical_count = 0
+    legacy_declaration_count = 0
     contract_finding_count = 0
-    missing_section_count = 0
 
     for row in issues:
         parsed = parse_relationships(row["body"], issue=row["number"], repo=repo)
         declarations = parsed["declarations"]
-        canonical_count += len(declarations)
+        legacy_declaration_count += len(declarations)
         contract_finding_count += len(parsed["errors"])
-        missing_section_count += int(
-            "missing canonical ## Relationships section" in parsed["errors"]
-        )
         errors.extend(f"issue #{row['number']}: {error}" for error in parsed["errors"])
         native: dict[str, tuple[int, ...]] = {}
         native_errors: list[str] = []
-        # Only concrete canonical declarations need native reads.  This keeps a whole-repository
-        # audit bounded while still verifying every proposed mutation.
+        # Only concrete legacy declarations need native reads. This keeps the candidate audit
+        # bounded while still verifying each proposed mutation.
         if declarations:
             native, native_errors = _native_state(
                 api,
@@ -800,7 +793,7 @@ def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audi
                             applied_canonical_edges.add(edge)
                         continue
 
-                    # If this exact canonical edge was already applied or present in this run,
+                    # If this exact native edge was already applied or present in this run,
                     # verify with exact read-back instead of calling the redundant POST endpoint.
                     if edge is not None and edge in applied_canonical_edges:
                         issue = int(operation["issue"])
@@ -849,10 +842,9 @@ def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audi
         "dry_run": not apply,
         "source": source,
         "issue_count": len(issues),
-        "canonical_declaration_count": canonical_count,
+        "legacy_declaration_count": legacy_declaration_count,
         "legacy_mention_count": legacy_count,
         "contract_finding_count": contract_finding_count,
-        "missing_section_count": missing_section_count,
         "native_reads": {"count": len(native_reads), "paths": native_reads},
         "issues": reports,
         "apply": apply_result,
@@ -879,7 +871,7 @@ def _text_summary(report: Mapping[str, Any]) -> str:
 
     lines = [
         f"{report['schema']} repository={report['repository']} state={report['state']}",
-        f"issues={report['issue_count']} canonical_declarations={report['canonical_declaration_count']} "
+        f"issues={report['issue_count']} legacy_declarations={report['legacy_declaration_count']} "
         f"legacy_mentions={report['legacy_mention_count']} contract_findings={report['contract_finding_count']} "
         f"dry_run={report['dry_run']}",
         f"source={report['source']['status']} truncated={report['source'].get('truncated', False)} "

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -98,9 +99,10 @@ class AdmissibilityPartition:
     by_verdict: Mapping[str, tuple[str, ...]]
 
 
-def classify_scenario_admissibility(
+def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindings are API inputs.
     case_id: str,
     *,
+    scenario_artifact_path: str | Path | None = None,
     scenario_id: str | None = None,
     scenario_certificate: Mapping[str, Any] | None = None,
     feasibility_evidence: Mapping[str, Any] | None = None,
@@ -111,7 +113,10 @@ def classify_scenario_admissibility(
 ) -> ScenarioAdmissibilityVerdict:
     """Map certificate, oracle, predicate, and named-run evidence without overclaiming.
 
-    Named execution mappings carry case/scenario/planner IDs, original variant, run status,
+    ``scenario_artifact_path`` identifies the candidate's canonical source artifact. Certificate
+    and oracle source paths must hash to those exact bytes, and named execution
+    ``scenario_sha256`` values must match that digest. Named execution mappings carry
+    case/scenario/planner IDs, original variant, run status,
     route completion, seed/horizon, source commit, evidence reference, and hashes for the
     scenario, robot model, simulator config, and environment. Planner-specific failure needs
     matching bindings, distinct planner IDs, and a deterministic replay of the target failure.
@@ -123,6 +128,11 @@ def classify_scenario_admissibility(
         raise ValueError("scenario_id must be non-empty when provided")
     reasons: list[str] = []
     evidence: dict[str, Any] = {}
+    artifact_identity = _file_artifact_identity(scenario_artifact_path)
+    evidence["scenario_artifact_identity"] = artifact_identity
+    artifact_sha256 = artifact_identity.get("sha256")
+    if artifact_sha256 is None:
+        reasons.append("scenario_artifact_identity_missing_or_unavailable")
     inputs = {
         name: _capture(name, value, evidence, reasons)
         for name, value in (
@@ -136,15 +146,25 @@ def classify_scenario_admissibility(
     }
 
     cert = inputs["scenario_certificate"]
-    cert_state, cert_valid, cert_assumptions = _certificate(cert, scenario_id, reasons)
+    cert_state, cert_valid, cert_assumptions = _certificate(
+        cert, scenario_id, artifact_sha256, reasons
+    )
     if scenario_id is None and cert_valid and cert is not None:
         scenario_id = cert["scenario_id"]
     predicate_state = _predicates(inputs["predicate_contract"], case_id, reasons)
     oracle_state, oracle_assumptions = _oracle(
-        inputs["feasibility_evidence"], case_id, scenario_id, cert, cert_valid, reasons
+        inputs["feasibility_evidence"],
+        case_id,
+        scenario_id,
+        artifact_sha256,
+        cert,
+        cert_valid,
+        reasons,
     )
     runs = {
-        role: _execution(inputs[f"{role}_execution"], role, case_id, scenario_id, reasons)
+        role: _execution(
+            inputs[f"{role}_execution"], role, case_id, scenario_id, artifact_sha256, reasons
+        )
         for role in ("reference", "target", "replay")
     }
     verdict = _resolve(cert_state, oracle_state, predicate_state, runs, reasons)
@@ -190,16 +210,41 @@ def _capture(
     return copied
 
 
+def _file_artifact_identity(value: str | Path | None) -> dict[str, Any]:
+    """Hash a caller-selected canonical scenario artifact without trusting declared digests."""
+    if not isinstance(value, (str, Path)) or not str(value).strip():
+        return {"status": "unavailable", "path": None, "sha256": None}
+    try:
+        path = Path(value).expanduser().resolve(strict=True)
+        if not path.is_file():
+            return {"status": "unavailable", "path": path.as_posix(), "sha256": None}
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except (OSError, RuntimeError, ValueError):
+        return {"status": "unavailable", "path": str(value), "sha256": None}
+    return {"status": "available", "path": path.as_posix(), "sha256": digest}
+
+
+def _artifact_reference_matches(
+    value: Any, expected_sha256: str | None, evidence_name: str, reasons: list[str]
+) -> bool:
+    """Require a source file reference to identify the canonical scenario bytes."""
+    if expected_sha256 is None:
+        reasons.append(f"{evidence_name}_scenario_artifact_identity_unavailable")
+        return False
+    identity = _file_artifact_identity(value if isinstance(value, (str, Path)) else None)
+    if identity["sha256"] is None:
+        reasons.append(f"{evidence_name}_scenario_artifact_identity_missing_or_unavailable")
+        return False
+    if identity["sha256"] != expected_sha256:
+        reasons.append(f"{evidence_name}_scenario_artifact_identity_mismatch")
+        return False
+    return True
+
+
 def _certificate(
-    cert: Any, scenario_id: str | None, reasons: list[str]
+    cert: Any, scenario_id: str | None, artifact_sha256: str | None, reasons: list[str]
 ) -> tuple[str | None, bool, dict[str, Any]]:
-    if cert is None or list(
-        Draft202012Validator(_load_schema("scenario_cert.v1.json")).iter_errors(cert)
-    ):
-        reasons.append("scenario_certificate_missing_or_malformed")
-        return None, False, {}
-    if scenario_id is not None and cert["scenario_id"] != scenario_id:
-        reasons.append("scenario_certificate_identity_mismatch")
+    if not _certificate_inputs_bound(cert, scenario_id, artifact_sha256, reasons):
         return None, False, {}
     classification = cert["classification"]
     eligibility = cert["benchmark_eligibility"]
@@ -238,6 +283,23 @@ def _certificate(
         return _CERT_PLAUSIBLE, True, assumptions
     reasons.append("scenario_certificate_requires_more_evidence")
     return None, True, assumptions
+
+
+def _certificate_inputs_bound(
+    cert: Any, scenario_id: str | None, artifact_sha256: str | None, reasons: list[str]
+) -> bool:
+    """Validate certificate shape, named scenario, and selected candidate bytes."""
+    if cert is None or list(
+        Draft202012Validator(_load_schema("scenario_cert.v1.json")).iter_errors(cert)
+    ):
+        reasons.append("scenario_certificate_missing_or_malformed")
+        return False
+    if scenario_id is not None and cert["scenario_id"] != scenario_id:
+        reasons.append("scenario_certificate_identity_mismatch")
+        return False
+    return _artifact_reference_matches(
+        cert.get("source"), artifact_sha256, "scenario_certificate", reasons
+    )
 
 
 def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: str) -> bool:
@@ -400,11 +462,12 @@ def _oracle(
     source: Any,
     case_id: str,
     scenario_id: str | None,
+    artifact_sha256: str | None,
     cert: Any,
     cert_valid: bool,
     reasons: list[str],
 ) -> tuple[str | None, dict[str, Any]]:
-    report = _select_oracle_cell(source, case_id, scenario_id, reasons)
+    report = _select_oracle_cell(source, case_id, scenario_id, artifact_sha256, reasons)
     if report is None:
         return None, {}
     schema = report.get("schema_version")
@@ -507,12 +570,20 @@ def _oracle_proves_actor_free_rollout(
 
 
 def _select_oracle_cell(
-    source: Any, case_id: str, scenario_id: str | None, reasons: list[str]
+    source: Any,
+    case_id: str,
+    scenario_id: str | None,
+    artifact_sha256: str | None,
+    reasons: list[str],
 ) -> Mapping[str, Any] | None:
     if not isinstance(source, Mapping):
         reasons.append("feasibility_oracle_missing_or_malformed")
         return None
     if source.get("schema_version") != ISSUE_5574_REPORT_SCHEMA:
+        if not _artifact_reference_matches(
+            source.get("scenario_manifest"), artifact_sha256, "feasibility_oracle", reasons
+        ):
+            return None
         return source
     cells = source.get("cells")
     expected = scenario_id or case_id
@@ -527,6 +598,16 @@ def _select_oracle_cell(
     )
     if len(matches) != 1:
         reasons.append("feasibility_oracle_cell_missing_or_ambiguous")
+        return None
+    cell_manifest = matches[0].get("scenario_manifest")
+    if not _artifact_reference_matches(
+        cell_manifest, artifact_sha256, "feasibility_oracle_cell", reasons
+    ):
+        return None
+    report_manifest = source.get("scenario_manifest")
+    if report_manifest is not None and not _artifact_reference_matches(
+        report_manifest, artifact_sha256, "feasibility_oracle_report", reasons
+    ):
         return None
     cell = {**dict(source), **dict(matches[0])}
     if cell.get("schema_version") == ISSUE_5574_REPORT_SCHEMA:
@@ -618,18 +699,51 @@ def _execution(
     role: str,
     case_id: str,
     scenario_id: str | None,
+    artifact_sha256: str | None,
     reasons: list[str],
 ) -> dict[str, Any] | None:
     if source is None:
         return None
-    reason = _execution_problem(source, role, case_id, scenario_id)
+    reason = _execution_problem(source, role, case_id, scenario_id, artifact_sha256)
     if reason is not None:
         reasons.append(reason)
         return None
     return dict(source)
 
 
-def _execution_problem(source: Any, role: str, case_id: str, scenario_id: str | None) -> str | None:
+def _execution_problem(
+    source: Any,
+    role: str,
+    case_id: str,
+    scenario_id: str | None,
+    artifact_sha256: str | None,
+) -> str | None:
+    binding_problem = _execution_binding_problem(source, role, case_id, scenario_id)
+    if binding_problem is not None:
+        return binding_problem
+    if source["scenario_variant"] != "original" or source["run_status"] != "ok":
+        return f"{role}_execution_not_an_original_recorded_run"
+    fallback_problem = _execution_fallback_problem(source, role)
+    if fallback_problem is not None:
+        return fallback_problem
+    if not _execution_digest_fields_valid(source):
+        return f"{role}_execution_provenance_incomplete"
+    artifact_problem = _execution_artifact_problem(source, role, artifact_sha256)
+    if artifact_problem is not None:
+        return artifact_problem
+    if not _execution_outcome_valid(source):
+        return f"{role}_execution_outcome_or_budget_invalid"
+    if role == "replay":
+        replay_problem = _replay_validation_problem(source)
+        if replay_problem is not None:
+            return replay_problem
+    return None
+
+
+def _execution_binding_problem(
+    source: Any, role: str, case_id: str, scenario_id: str | None
+) -> str | None:
+    """Validate normalized execution row shape and case/scenario identity."""
     required = {
         "case_id",
         "scenario_id",
@@ -657,18 +771,25 @@ def _execution_problem(source: Any, role: str, case_id: str, scenario_id: str | 
         return f"{role}_execution_identity_mismatch"
     if not _execution_text_fields_valid(source):
         return f"{role}_execution_provenance_incomplete"
-    if source["scenario_variant"] != "original" or source["run_status"] != "ok":
-        return f"{role}_execution_not_an_original_recorded_run"
-    fallback_problem = _execution_fallback_problem(source, role)
-    if fallback_problem is not None:
-        return fallback_problem
-    if not _execution_digest_fields_valid(source):
-        return f"{role}_execution_provenance_incomplete"
-    if not _execution_outcome_valid(source):
-        return f"{role}_execution_outcome_or_budget_invalid"
-    if role == "replay" and source.get("determinism_check_status") != "pass":
+    return None
+
+
+def _execution_artifact_problem(
+    source: Mapping[str, Any], role: str, artifact_sha256: str | None
+) -> str | None:
+    """Bind named execution rows to the candidate's canonical scenario bytes."""
+    if artifact_sha256 is None:
+        return f"{role}_execution_scenario_artifact_identity_unavailable"
+    if source["scenario_sha256"].lower() != artifact_sha256:
+        return f"{role}_execution_scenario_artifact_identity_mismatch"
+    return None
+
+
+def _replay_validation_problem(source: Mapping[str, Any]) -> str | None:
+    """Require replay determinism validation and simulator resimulation."""
+    if source.get("determinism_check_status") != "pass":
         return "replay_determinism_check_not_passed"
-    if role == "replay" and source.get("resimulated") is not True:
+    if source.get("resimulated") is not True:
         return "replay_did_not_resimulate_source_episode"
     return None
 
@@ -771,21 +892,27 @@ def _resolve(
         and _same_case(reference, target)
     )
     if matched_failure:
+        reasons.append("named_execution_completed_original_case")
         if replay is None:
             reasons.append("planner_specific_failure_replay_missing_or_invalid")
-            return ADMISSIBLE_FEASIBILITY_UNKNOWN
+            reasons.append("planner_specific_failure_attribution_unconfirmed")
+            return EMPIRICALLY_FEASIBLE
         if replay["planner_id"] != target["planner_id"]:
             reasons.append("planner_specific_failure_replay_wrong_planner")
-            return ADMISSIBLE_FEASIBILITY_UNKNOWN
+            reasons.append("planner_specific_failure_attribution_unconfirmed")
+            return EMPIRICALLY_FEASIBLE
         if not _same_case(replay, target):
             reasons.append("planner_specific_failure_replay_case_mismatch")
-            return ADMISSIBLE_FEASIBILITY_UNKNOWN
+            reasons.append("planner_specific_failure_attribution_unconfirmed")
+            return EMPIRICALLY_FEASIBLE
         if not _same_planner_configuration(replay, target):
             reasons.append("planner_specific_failure_replay_configuration_mismatch")
-            return ADMISSIBLE_FEASIBILITY_UNKNOWN
+            reasons.append("planner_specific_failure_attribution_unconfirmed")
+            return EMPIRICALLY_FEASIBLE
         if replay["route_complete"]:
             reasons.append("planner_specific_failure_replay_did_not_reproduce_failure")
-            return ADMISSIBLE_FEASIBILITY_UNKNOWN
+            reasons.append("planner_specific_failure_attribution_unconfirmed")
+            return EMPIRICALLY_FEASIBLE
         reasons.append("matched_reference_target_failure_reproduced_by_replay")
         return PLANNER_SPECIFIC_FAILURE
     if exclusions:

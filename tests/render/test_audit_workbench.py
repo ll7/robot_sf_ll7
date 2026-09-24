@@ -2288,7 +2288,7 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
             "status": "complete",
             "reason": "",
             "events_reason": "provider conversation events are not persisted",
-            "activity_scope": "lifecycle",
+            "activity_scope": "durable_lifecycle",
             "events": [
                 {
                     "message": "Codex start operation was admitted.",
@@ -2321,7 +2321,7 @@ def test_service_facade_codex_read_uses_authenticated_service_projection() -> No
     assert result["status"] == "complete"
     assert result["route_id"] == "route-read"
     assert result["activity"][0]["message"] == "Codex start operation was admitted."
-    assert result["activity_scope"] == "lifecycle"
+    assert result["activity_scope"] == "durable_lifecycle"
     assert result["activity"][0]["operation_id"] == "codex-read-1"
     assert result["activity"][0]["timestamp"] == "2026-09-24T13:00:00Z"
     assert result["events_reason"] == "provider conversation events are not persisted"

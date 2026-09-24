@@ -206,7 +206,7 @@ def test_read_codex_activity_projects_durable_status_without_authority_internals
     assert activity.operation.usage == {"tokens": 0, "compute": 0.0, "issue_writes": 0}
     assert activity.evidence
     assert len(activity.events) == 2
-    assert activity.activity_scope == "lifecycle"
+    assert activity.activity_scope == "durable_lifecycle"
     assert [event["operation_id"] for event in activity.events] == [
         "activity-start",
         "activity-start",
@@ -289,7 +289,7 @@ def test_read_codex_activity_recovers_durable_status_after_service_restart(
         assert activity.status == "complete"
         assert activity.operation is not None
         assert activity.operation.operation_id == "restart-resume"
-        assert activity.activity_scope == "lifecycle"
+        assert activity.activity_scope == "durable_lifecycle"
         assert "provider conversation events are not persisted" in activity.events_reason
         events = [dict(event) for event in activity.events]
         assert [event["operation_id"] for event in events] == [
@@ -430,7 +430,7 @@ def test_read_codex_activity_reports_inflight_operation_without_reservation_deta
     assert activity.operation.status == "inflight"
     assert activity.operation.result_status == ""
     assert activity.usage.to_dict() == {"tokens": 1, "compute": 1.0, "issue_writes": 0}
-    assert activity.activity_scope == "lifecycle"
+    assert activity.activity_scope == "durable_lifecycle"
     assert len(activity.events) == 1
     assert activity.events[0]["operation_id"] == "activity-inflight"
     assert "provider outcome remains unresolved" in activity.events[0]["message"]

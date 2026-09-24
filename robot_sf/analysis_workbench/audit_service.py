@@ -8573,7 +8573,9 @@ class AuditService:
         event_rows: list[tuple[str, int, Mapping[str, str]]] = []
         sequence = 0
         for operation in sorted(operations, key=lambda item: (item.created_at, item.operation_id)):
-            action = action_names.get(operation.action, "operation")
+            action = action_names.get(operation.action)
+            if action is None:
+                continue
             if operation.status == "inflight":
                 event_rows.append(
                     (
@@ -8955,7 +8957,7 @@ class AuditService:
             reason=reason,
             evidence=evidence,
             events=events,
-            activity_scope="lifecycle",
+            activity_scope="durable_lifecycle",
             events_reason=(
                 "Only durable Codex operation lifecycle summaries are shown; "
                 "provider conversation events are not persisted."

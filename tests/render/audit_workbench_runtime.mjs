@@ -1876,7 +1876,7 @@ assert.match(renderedText(xssRoot), /Activity is process-scoped/i);
 xssCodexFacade.codex_read = async () => ({
   status: "complete",
   operation_id: "audit-operation-1",
-  activity_scope: "lifecycle",
+  activity_scope: "durable_lifecycle",
   activity: [{
     message: "Codex start operation was admitted.",
     operation_id: "audit-operation-1",
@@ -1885,7 +1885,7 @@ xssCodexFacade.codex_read = async () => ({
   }],
 });
 const lifecycleRead = await xssCodexController.codexRead();
-assert.equal(lifecycleRead.activity_scope, "lifecycle");
+assert.equal(lifecycleRead.activity_scope, "durable_lifecycle");
 assert.match(renderedText(xssRoot), /Durable operation summaries only/i);
 assert.match(renderedText(xssRoot), /audit-operation-1/);
 assert.match(renderedText(xssRoot), /2026-09-24T13:00:00Z/);

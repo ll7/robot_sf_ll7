@@ -507,7 +507,9 @@ function normalizeCodexResult(result, fallback = "Codex activity unavailable") {
     evidence_ids: normalizeCodexEvidence(candidates),
     usage: normalizeCodexUsage(candidates),
     activity: normalizeCodexActivity(candidates),
-    activity_scope: ["process", "lifecycle"].includes(activityScope) ? activityScope : "unavailable",
+    activity_scope: ["process", "durable_lifecycle"].includes(activityScope)
+      ? activityScope
+      : "unavailable",
   };
   return normalized;
 }
@@ -1388,7 +1390,7 @@ function appendCodexDisplay(documentRef, body, codex) {
   body.appendChild(text(
     documentRef,
     "p",
-    codex.activity_scope === "lifecycle"
+    codex.activity_scope === "durable_lifecycle"
       ? "Durable operation summaries only; provider conversation events and transcripts are unavailable."
       : codex.activity_scope === "process"
         ? "Activity is process-scoped; no durable transcript is exposed."

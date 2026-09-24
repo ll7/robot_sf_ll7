@@ -33,6 +33,7 @@ from robot_sf.benchmark.episode_replay_figure import (
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
     resolve_execution_mode,
+    runtime_fallback_or_degraded_marker,
 )
 from robot_sf.benchmark.runner import run_batch
 
@@ -46,6 +47,8 @@ _CANONICAL_OUTCOME_FIELDS = (
     "collision_event",
     "timeout",
     "timeout_event",
+    "severe_intrusion",
+    "severe_intrusion_event",
 )
 _CANONICAL_METRIC_FIELDS = (
     "success",
@@ -73,6 +76,9 @@ class _ReplayContext:
     video: bool
     render: bool
     root: Path
+    checkout_revision: str | None
+    checkout_clean: bool
+    checkout_dirty_paths: tuple[str, ...]
 
 
 def build_replay_gallery(
@@ -103,6 +109,7 @@ def build_replay_gallery(
     root = _repository_root()
     source_root = _source_repository_root(source_manifest, root)
     payload = _load_search_manifest(source_manifest)
+    checkout_state = _git_checkout_state(root)
     destination = Path(output_dir).expanduser().resolve()
     source_manifest_sha256 = _sha256_file(source_manifest)
     source_revision = _manifest_revision(payload)
@@ -159,6 +166,9 @@ def build_replay_gallery(
         video=video,
         render=render,
         root=root,
+        checkout_revision=checkout_state["revision"],
+        checkout_clean=checkout_state["clean"],
+        checkout_dirty_paths=tuple(checkout_state["dirty_paths"]),
     )
     cases: list[dict[str, Any]] = []
     for selected_candidate in selected:
@@ -184,6 +194,11 @@ def build_replay_gallery(
             ).hexdigest()
             if isinstance(config.get("search_space"), dict)
             else None,
+            "gallery_checkout": {
+                "revision": replay_context.checkout_revision,
+                "clean": replay_context.checkout_clean,
+                "dirty_paths": list(replay_context.checkout_dirty_paths),
+            },
         },
         "selection": {
             "top_k": top_k,
@@ -240,7 +255,7 @@ def _load_search_manifest(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _prepare_candidate(  # noqa: C901 - keep the ordered row-disposition gates together
+def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-disposition gates together
     *,
     index: int,
     raw_candidate: Any,
@@ -312,6 +327,9 @@ def _prepare_candidate(  # noqa: C901 - keep the ordered row-disposition gates t
         )
     if not _source_identity_matches(candidate, source_record, scenario_identity):
         return None, _accounting_row(index, candidate_payload, "source_candidate_identity_mismatch")
+    source_availability_problem = _source_availability_problem(candidate_payload, source_record)
+    if source_availability_problem is not None:
+        return None, _accounting_row(index, candidate_payload, source_availability_problem)
     try:
         _candidate_spec(candidate)
     except (TypeError, ValueError, OverflowError):
@@ -408,6 +426,13 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         result["verification_status"] = "not_replayed_config_unavailable"
         result["replay_error"] = config_error or "runner_config_unavailable"
         return _complete_case(result, case_dir, context.output_dir)
+    result["source_input_binding"] = _source_input_binding(
+        materialization,
+        execution_config,
+        effective_scenario_hash=selected["effective_scenario_hash"],
+        root=context.root,
+        case_dir=case_dir,
+    )
 
     replay_summary, replay_error = _run_one_episode(
         case_dir / materialization["scenario_path"],
@@ -442,6 +467,7 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         context,
         result,
         replay_record,
+        materialization=materialization,
         replay_dir=replay_dir,
         episode_records=episode_records,
         case_dir=case_dir,
@@ -491,6 +517,12 @@ def _initial_case_result(
             "episode_id": selected["source_record"].get("episode_id"),
             "scenario_id": selected["source_record"].get("scenario_id"),
             "seed": selected["source_record"].get("seed"),
+            "effective_scenario_hash": selected["effective_scenario_hash"],
+            "gallery_checkout": {
+                "revision": context.checkout_revision,
+                "clean": context.checkout_clean,
+                "dirty_paths": list(context.checkout_dirty_paths),
+            },
         },
         "materialization": materialization,
         "execution_config": None,
@@ -541,6 +573,7 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
     result: dict[str, Any],
     replay_record: dict[str, Any],
     *,
+    materialization: dict[str, Any],
     replay_dir: Path,
     episode_records: Path,
     case_dir: Path,
@@ -571,25 +604,31 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
     objective_match = replay_objective is not None and math.isclose(
         selected["objective_value"], replay_objective, rel_tol=0.0, abs_tol=tolerance
     )
+    source_input_binding = result.get("source_input_binding")
+    if not isinstance(source_input_binding, dict):
+        source_input_binding = {"status": "unknown", "checks": []}
+    algorithm_config_binding = _algorithm_config_binding(selected["source_record"], replay_record)
+    input_checks = source_input_binding.get("checks")
+    if not isinstance(input_checks, list):
+        input_checks = []
+    input_checks.append(algorithm_config_binding)
+    source_input_binding["checks"] = input_checks
+    source_input_binding["status"] = _combined_binding_status(input_checks)
+    result["source_input_binding"] = source_input_binding
     source_revision_for_case = selected["source_revision"] or context.source_revision
-    if replay_availability_error is not None:
-        result["replay_match"] = "unavailable"
-        result["verification_status"] = "replay_execution_unavailable"
-    elif identity_match and outcome_match and objective_match:
-        result["replay_match"] = "match"
-        if result["source"]["revision_conflict"]:
-            result["verification_status"] = "source_revision_conflict"
-        elif source_revision_for_case is None:
-            result["verification_status"] = "outcome_reproduced_source_revision_unknown"
-        elif replay_revision is None:
-            result["verification_status"] = "outcome_reproduced_replay_revision_unknown"
-        elif source_revision_for_case != replay_revision:
-            result["verification_status"] = "outcome_reproduced_revision_changed"
-        else:
-            result["verification_status"] = "verified"
-    else:
-        result["replay_match"] = "mismatch"
-        result["verification_status"] = "replay_mismatch"
+    result["replay_match"], result["verification_status"] = _replay_verification_status(
+        replay_availability_error=replay_availability_error,
+        source_input_status=source_input_binding["status"],
+        identity_match=identity_match,
+        outcome_match=outcome_match,
+        objective_match=objective_match,
+        source_revision_conflict=result["source"]["revision_conflict"],
+        source_revision=source_revision_for_case,
+        manifest_revision=context.source_revision,
+        replay_revision=replay_revision,
+        checkout_revision=context.checkout_revision,
+        checkout_clean=context.checkout_clean,
+    )
 
     video_artifacts = _video_artifacts(replay_dir, output_dir)
     video_status = _video_status(context.video, video_artifacts, attempted=True)
@@ -607,12 +646,16 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
         "revision_matches_source": (
             source_revision_for_case is not None and replay_revision == source_revision_for_case
         ),
+        "source_revision_for_verification": source_revision_for_case,
         "objective_value": replay_objective,
         "objective_matches": objective_match,
         "identity_matches": identity_match,
         "identity_comparison": identity_details,
         "outcome_matches": outcome_match,
         "outcome_comparison": outcome_details,
+        "failure_attribution_matches": outcome_details.get("failure_attribution_matches"),
+        "source_input_binding": source_input_binding,
+        "algorithm_config_binding": algorithm_config_binding,
         "video_artifacts": video_artifacts,
         "video_status": video_status,
     }
@@ -624,7 +667,50 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
             replay_dir,
             case_dir / "figures",
             output_dir,
+            map_path=_materialized_map_path(materialization, case_dir),
         )
+
+
+def _replay_verification_status(  # noqa: C901, PLR0913 - preserve explicit provenance gates
+    *,
+    replay_availability_error: str | None,
+    source_input_status: str,
+    identity_match: bool,
+    outcome_match: bool,
+    objective_match: bool,
+    source_revision_conflict: bool,
+    source_revision: str | None,
+    manifest_revision: str | None,
+    replay_revision: str | None,
+    checkout_revision: str | None,
+    checkout_clean: bool,
+) -> tuple[str, str]:
+    """Return replay match and verification labels without weakening provenance gates."""
+    if replay_availability_error is not None:
+        return "unavailable", "replay_execution_unavailable"
+    if source_input_status == "mismatch":
+        return "mismatch", "replay_input_mismatch"
+    if not (identity_match and outcome_match and objective_match):
+        return "mismatch", "replay_mismatch"
+    if source_revision_conflict or (
+        source_revision is not None
+        and manifest_revision is not None
+        and source_revision != manifest_revision
+    ):
+        return "match", "source_revision_conflict"
+    if source_revision is None:
+        return "match", "outcome_reproduced_source_revision_unknown"
+    if replay_revision is None:
+        return "match", "outcome_reproduced_replay_revision_unknown"
+    if source_revision != replay_revision:
+        return "match", "outcome_reproduced_revision_changed"
+    if checkout_revision != source_revision:
+        return "match", "outcome_reproduced_checkout_revision_changed"
+    if not checkout_clean:
+        return "match", "outcome_reproduced_checkout_dirty"
+    if source_input_status != "bound":
+        return "match", "outcome_reproduced_source_inputs_unbound"
+    return "match", "verified"
 
 
 def _replay_availability(  # noqa: C901 - keep independent runner evidence gates explicit
@@ -704,6 +790,9 @@ def _materialize_scenario(
                 {
                     "field": field,
                     "source_path": _display_path(asset_path, source_root),
+                    "source_path_repository_relative": _is_repository_relative_path(
+                        asset_path, source_root
+                    ),
                     "source_sha256": digest,
                     "bundle_path": (Path("inputs") / "assets" / name).as_posix(),
                 }
@@ -751,6 +840,9 @@ def _runner_config(
             {
                 "field": name,
                 "source_path": _display_path(resolved, source_root),
+                "source_path_repository_relative": _is_repository_relative_path(
+                    resolved, source_root
+                ),
                 "source_sha256": digest,
                 "bundle_path": bundle_path.as_posix(),
             }
@@ -795,6 +887,226 @@ def _runner_config(
         None,
         execution_config,
     )
+
+
+def _source_input_binding(
+    materialization: dict[str, Any],
+    execution_config: dict[str, Any],
+    *,
+    effective_scenario_hash: str,
+    root: Path,
+    case_dir: Path,
+) -> dict[str, Any]:
+    """Bind materialized map/config files to tracked inputs at the source revision."""
+    checks: list[dict[str, Any]] = []
+    checks.append(
+        {
+            "input": "effective_scenario_hash",
+            "status": "bound"
+            if isinstance(effective_scenario_hash, str)
+            and re.fullmatch(r"[0-9a-fA-F]{64}", effective_scenario_hash)
+            else "unknown",
+            "evidence": "recomputed against source manifest during candidate selection",
+        }
+    )
+    assets = materialization.get("assets")
+    if not isinstance(assets, list):
+        checks.append({"input": "materialized_assets", "status": "unknown"})
+    else:
+        for asset in assets:
+            if not isinstance(asset, dict):
+                checks.append({"input": "materialized_asset", "status": "unknown"})
+                continue
+            field = asset.get("field")
+            checks.append(
+                _bundled_input_binding(
+                    case_dir=case_dir,
+                    field=str(field or "materialized_asset"),
+                    bundle_path=asset.get("bundle_path"),
+                    expected_sha256=asset.get("source_sha256"),
+                )
+            )
+            if field == "map_file":
+                checks.append(
+                    _tracked_source_file_binding(
+                        root=root,
+                        field="map_file",
+                        source_path=asset.get("source_path"),
+                        repository_relative=asset.get("source_path_repository_relative"),
+                        expected_sha256=asset.get("source_sha256"),
+                    )
+                )
+            elif field == "route_overrides_file":
+                checks.append(
+                    _tracked_source_file_binding(
+                        root=root,
+                        field="route_overrides_file",
+                        source_path=asset.get("source_path"),
+                        repository_relative=asset.get("source_path_repository_relative"),
+                        expected_sha256=asset.get("source_sha256"),
+                    )
+                )
+                checks.append(
+                    {
+                        "input": field,
+                        "status": "bound" if checks[0]["status"] == "bound" else "unknown",
+                        "evidence": "included in the recomputed effective scenario hash",
+                    }
+                )
+            else:
+                checks.append({"input": str(field or "materialized_asset"), "status": "unknown"})
+
+    file_inputs = execution_config.get("file_inputs")
+    if not isinstance(file_inputs, list):
+        checks.append({"input": "runner_config_files", "status": "unknown"})
+    else:
+        for file_input in file_inputs:
+            if not isinstance(file_input, dict):
+                checks.append({"input": "runner_config_file", "status": "unknown"})
+                continue
+            checks.append(
+                _bundled_input_binding(
+                    case_dir=case_dir,
+                    field=str(file_input.get("field") or "runner_config_file"),
+                    bundle_path=file_input.get("bundle_path"),
+                    expected_sha256=file_input.get("source_sha256"),
+                )
+            )
+            checks.append(
+                _tracked_source_file_binding(
+                    root=root,
+                    field=str(file_input.get("field") or "runner_config_file"),
+                    source_path=file_input.get("source_path"),
+                    repository_relative=file_input.get("source_path_repository_relative"),
+                    expected_sha256=file_input.get("source_sha256"),
+                )
+            )
+    return {"status": _combined_binding_status(checks), "checks": checks}
+
+
+def _bundled_input_binding(
+    *, case_dir: Path, field: str, bundle_path: Any, expected_sha256: Any
+) -> dict[str, Any]:
+    """Verify the exact copied bytes passed to the replay runner."""
+    if not isinstance(bundle_path, str) or not bundle_path.strip():
+        return {"input": field, "status": "unknown", "reason": "bundle_path_missing"}
+    relative_path = Path(bundle_path)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        return {"input": field, "status": "unknown", "reason": "unsafe_bundle_path"}
+    resolved = (case_dir / relative_path).resolve()
+    try:
+        resolved.relative_to(case_dir.resolve())
+    except ValueError:
+        return {"input": field, "status": "unknown", "reason": "bundle_path_outside_case"}
+    if not resolved.is_file():
+        return {"input": field, "status": "unknown", "reason": "bundled_input_missing"}
+    if (
+        not isinstance(expected_sha256, str)
+        or re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256) is None
+    ):
+        return {"input": field, "status": "unknown", "reason": "source_digest_missing_or_invalid"}
+    actual_sha256 = _sha256_file(resolved)
+    if actual_sha256.lower() != expected_sha256.lower():
+        return {
+            "input": field,
+            "status": "mismatch",
+            "source_sha256": expected_sha256,
+            "bundle_sha256": actual_sha256,
+        }
+    return {"input": field, "status": "bound", "bundle_sha256": actual_sha256}
+
+
+def _tracked_source_file_binding(
+    *,
+    root: Path,
+    field: str,
+    source_path: Any,
+    repository_relative: Any,
+    expected_sha256: Any,
+) -> dict[str, Any]:
+    """Check one materialized input against a tracked file in the exact-source checkout."""
+    if (
+        repository_relative is not True
+        or not isinstance(source_path, str)
+        or not source_path.strip()
+    ):
+        return {"input": field, "status": "unknown", "reason": "source_path_not_repo_relative"}
+    relative_path = Path(source_path)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        return {"input": field, "status": "unknown", "reason": "unsafe_source_path"}
+    resolved = (root / relative_path).resolve()
+    try:
+        normalized = resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return {"input": field, "status": "unknown", "reason": "source_path_outside_checkout"}
+    if not resolved.is_file():
+        return {"input": field, "status": "unknown", "reason": "tracked_source_file_missing"}
+    if (
+        not isinstance(expected_sha256, str)
+        or re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256) is None
+    ):
+        return {"input": field, "status": "unknown", "reason": "source_digest_missing_or_invalid"}
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", normalized],
+        cwd=root,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=5,
+    )
+    if tracked.returncode != 0:
+        return {"input": field, "status": "unknown", "reason": "source_file_not_git_tracked"}
+    actual_sha256 = _sha256_file(resolved)
+    if actual_sha256.lower() != expected_sha256.lower():
+        return {
+            "input": field,
+            "status": "mismatch",
+            "source_sha256": expected_sha256,
+            "checkout_sha256": actual_sha256,
+        }
+    return {"input": field, "status": "bound", "source_sha256": expected_sha256}
+
+
+def _combined_binding_status(checks: list[dict[str, Any]]) -> str:
+    """Combine input-binding evidence without promoting missing inputs to a match."""
+    statuses = [check.get("status") for check in checks]
+    if "mismatch" in statuses:
+        return "mismatch"
+    if not checks or any(status != "bound" for status in statuses):
+        return "unknown"
+    return "bound"
+
+
+def _algorithm_config_binding(source: dict[str, Any], replay: dict[str, Any]) -> dict[str, Any]:
+    """Compare the canonical planner configuration hashes recorded by both episodes."""
+    source_metadata = source.get("algorithm_metadata")
+    replay_metadata = replay.get("algorithm_metadata")
+    source_hash = source_metadata.get("config_hash") if isinstance(source_metadata, dict) else None
+    replay_hash = replay_metadata.get("config_hash") if isinstance(replay_metadata, dict) else None
+    if not isinstance(source_hash, str) or not source_hash.strip():
+        return {
+            "input": "algorithm_config_hash",
+            "status": "unknown",
+            "reason": "source_hash_missing",
+        }
+    if not isinstance(replay_hash, str) or not replay_hash.strip():
+        return {
+            "input": "algorithm_config_hash",
+            "status": "unknown",
+            "reason": "replay_hash_missing",
+        }
+    if source_hash != replay_hash:
+        return {
+            "input": "algorithm_config_hash",
+            "status": "mismatch",
+            "source_config_hash": source_hash,
+            "replay_config_hash": replay_hash,
+        }
+    return {
+        "input": "algorithm_config_hash",
+        "status": "bound",
+        "source_config_hash": source_hash,
+    }
 
 
 def _positive_integer_setting(config: dict[str, Any], name: str, *, default: int) -> int:
@@ -849,6 +1161,8 @@ def _render_replay(
     replay_dir: Path,
     figure_dir: Path,
     output_dir: Path,
+    *,
+    map_path: Path | None,
 ) -> dict[str, Any]:
     """Render the exact replay trace through existing figure infrastructure."""
     metadata = record.get("algorithm_metadata")
@@ -864,7 +1178,7 @@ def _render_replay(
     row_payload = dict(record)
     row_payload["replay_steps"] = replay_steps
     row_payload["replay_dt"] = trace.get("dt")
-    row_payload["replay_map_path"] = None
+    row_payload["replay_map_path"] = str(map_path) if map_path is not None else None
     episode_row = EpisodeRow.from_dict(row_payload)
     frame_steps = [critical_step] if critical_step is not None else [len(replay_steps) - 1]
     rendered, error = _generate_replay_figures(
@@ -889,10 +1203,35 @@ def _render_replay(
         "determinism_check_status": rendered.get("determinism_check_status"),
         "critical_frame_step": critical_step,
         "smallest_surface_clearance_m": smallest_clearance,
+        "map_context": {
+            "status": "provided" if map_path is not None else "unavailable",
+            "path": _relative_to(str(map_path), output_dir) if map_path is not None else None,
+            "sha256": _sha256_file(map_path) if map_path is not None else None,
+        },
         "artifacts": artifacts,
         "provenance_sidecar": _relative_to(rendered.get("provenance_sidecar"), output_dir),
         "caption_fragment": _relative_to(rendered.get("caption_fragment"), output_dir),
     }
+
+
+def _materialized_map_path(materialization: dict[str, Any], case_dir: Path) -> Path | None:
+    """Resolve the copied map asset for the existing renderer, keeping it inside the case."""
+    assets = materialization.get("assets")
+    if not isinstance(assets, list):
+        return None
+    for asset in assets:
+        if not isinstance(asset, dict) or asset.get("field") != "map_file":
+            continue
+        bundle_path = asset.get("bundle_path")
+        if not isinstance(bundle_path, str) or not bundle_path.strip():
+            return None
+        path = (case_dir / bundle_path).resolve()
+        try:
+            path.relative_to(case_dir.resolve())
+        except ValueError:
+            return None
+        return path if path.is_file() else None
+    return None
 
 
 def _replay_steps_from_trace(
@@ -1032,15 +1371,26 @@ def _objective_value(
 def _outcomes_match(
     source: dict[str, Any], replay: dict[str, Any], objective_name: str, *, tolerance: float
 ) -> tuple[bool, dict[str, Any]]:
-    """Compare canonical outcome fields and the objective's strict projection."""
+    """Compare raw outcome categories, failure attribution, and objective projection."""
+    raw_comparison = _raw_categorical_outcome_comparison(source, replay)
     if objective_name == "constraints_first_lexicographic_v1":
         source_projection = constraints_first_outcome_projection(source)
         replay_projection = constraints_first_outcome_projection(replay)
-        match = _json_values_match(source_projection, replay_projection, tolerance=tolerance)
-        return match, {
+        projection_match = _json_values_match(
+            source_projection, replay_projection, tolerance=tolerance
+        )
+        differences = list(raw_comparison["differences"])
+        if not projection_match:
+            differences.append("objective_projection")
+        differences = list(dict.fromkeys(differences))
+        return not differences, {
             "contract": objective_name,
             "source": source_projection,
             "replay": replay_projection,
+            "projection_matches": projection_match,
+            "raw_categorical": raw_comparison,
+            "failure_attribution_matches": raw_comparison["failure_attribution_matches"],
+            "differences": differences,
         }
     differences: list[str] = []
     if source.get("status") != replay.get("status"):
@@ -1064,7 +1414,64 @@ def _outcomes_match(
                     or not _json_values_match(left[field], right[field], tolerance=tolerance)
                 ):
                     differences.append(f"{container_name}.{field}")
-    return not differences, {"contract": "canonical_outcome_fields.v1", "differences": differences}
+    differences.extend(raw_comparison["differences"])
+    differences = list(dict.fromkeys(differences))
+    return not differences, {
+        "contract": "canonical_outcome_fields.v1",
+        "differences": differences,
+        "raw_categorical": raw_comparison,
+        "failure_attribution_matches": raw_comparison["failure_attribution_matches"],
+    }
+
+
+def _raw_categorical_outcome_comparison(
+    source: dict[str, Any], replay: dict[str, Any]
+) -> dict[str, Any]:
+    """Compare raw outcome labels and canonical failure-attribution category exactly."""
+    differences: list[str] = []
+    for field in ("status", "termination_reason"):
+        if field in source or field in replay:
+            if (
+                field not in source
+                or field not in replay
+                or type(source[field]) is not type(replay[field])
+                or source[field] != replay[field]
+            ):
+                differences.append(field)
+
+    source_outcome = source.get("outcome")
+    replay_outcome = replay.get("outcome")
+    if not isinstance(source_outcome, dict) or not isinstance(replay_outcome, dict):
+        differences.append("outcome")
+    else:
+        for field in _CANONICAL_OUTCOME_FIELDS:
+            if field not in source_outcome and field not in replay_outcome:
+                continue
+            if field not in source_outcome or field not in replay_outcome:
+                differences.append(f"outcome.{field}")
+                continue
+            source_value = source_outcome[field]
+            replay_value = replay_outcome[field]
+            if type(source_value) is not type(replay_value) or source_value != replay_value:
+                differences.append(f"outcome.{field}")
+
+    source_failure = attribution_from_episode_record(source).primary_failure
+    replay_failure = attribution_from_episode_record(replay).primary_failure
+    failure_matches = source_failure == replay_failure
+    if not failure_matches:
+        differences.append("failure_attribution.primary_failure")
+    return {
+        "source_status": source.get("status"),
+        "replay_status": replay.get("status"),
+        "source_termination_reason": source.get("termination_reason"),
+        "replay_termination_reason": replay.get("termination_reason"),
+        "failure_attribution": {
+            "source_primary_failure": source_failure,
+            "replay_primary_failure": replay_failure,
+        },
+        "failure_attribution_matches": failure_matches,
+        "differences": differences,
+    }
 
 
 def _episode_identity_matches(
@@ -1114,6 +1521,42 @@ def _source_identity_matches(
         and isinstance(candidate_metadata, dict)
         and all(candidate_metadata.get(key) == value for key, value in candidate.items())
     )
+
+
+def _source_availability_problem(
+    candidate_payload: dict[str, Any], record: dict[str, Any]
+) -> str | None:
+    """Reject a critical source row unless canonical availability says it ran natively."""
+    eligibility = candidate_payload.get("analysis_eligibility")
+    attribution = candidate_payload.get("failure_attribution")
+    details = attribution.get("details") if isinstance(attribution, dict) else None
+    if not isinstance(eligibility, dict) or not isinstance(details, dict):
+        return "source_availability_missing_or_malformed"
+
+    execution_mode = details.get("execution_mode")
+    readiness_status = details.get("readiness_status")
+    availability_status = details.get("availability_status")
+    if not all(
+        isinstance(value, str) and value.strip()
+        for value in (execution_mode, readiness_status, availability_status)
+    ):
+        return "source_availability_missing_or_malformed"
+    if availability_status != "available":
+        normalized = availability_status.strip().lower().replace("-", "_")
+        return f"source_availability_{normalized}"
+    if readiness_status != "native":
+        return "source_readiness_not_native"
+    if execution_mode != "native" or eligibility.get("execution_mode") != execution_mode:
+        return "source_execution_mode_not_native_or_mismatched"
+
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, dict) or str(metadata.get("status", "")).strip().lower() != "ok":
+        return "source_algorithm_metadata_unavailable"
+    if resolve_execution_mode(metadata) != execution_mode:
+        return "source_execution_mode_mismatch"
+    if runtime_fallback_or_degraded_marker(record) is not None:
+        return "source_runtime_fallback_or_degraded"
+    return None
 
 
 def _source_effective_scenario_hash(
@@ -1464,6 +1907,31 @@ def _git_revision(root: Path) -> str | None:
     return revision.lower() if _REVISION_RE.fullmatch(revision) else None
 
 
+def _git_checkout_state(root: Path) -> dict[str, Any]:
+    """Capture the exact checkout revision and whether tracked/untracked inputs are clean."""
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=normal"],
+            cwd=root,
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {
+            "revision": _git_revision(root),
+            "clean": False,
+            "dirty_paths": ["git_status_unavailable"],
+        }
+    lines = [line for line in status.stdout.splitlines() if line]
+    return {
+        "revision": _git_revision(root),
+        "clean": not lines,
+        "dirty_paths": [line[3:] if len(line) >= 4 else line for line in lines],
+    }
+
+
 def _video_artifacts(replay_dir: Path, output_dir: Path) -> list[str]:
     """Return stable relative paths for non-empty video outputs."""
     paths = sorted(
@@ -1589,6 +2057,15 @@ def _display_path(path: Path, root: Path) -> str:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return path.name
+
+
+def _is_repository_relative_path(path: Path, root: Path) -> bool:
+    """Return whether ``path`` resolves inside ``root``."""
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def _relative_to(raw: Any, root: Path) -> str | None:

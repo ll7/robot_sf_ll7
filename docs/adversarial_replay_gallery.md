@@ -24,8 +24,12 @@ The selector requires an analysis-eligible row, a `valid` or `hard_but_solvable`
 finite objective, one unambiguous source episode, a one-scenario YAML input, matching scenario and
 seed identity, candidate parameters matching the generated scenario metadata, and a recomputed
 effective-scenario hash matching the search manifest. The source failure attribution must agree
-with the canonical episode. Successful
-episodes are accounted as `source_episode_not_a_failure` and are not shown as falsification cases.
+with the canonical episode. Source availability must explicitly report `available`, native
+readiness, and native execution mode in both the attribution and eligibility receipts; the source
+episode must also report successful algorithm metadata with no fallback/degraded runtime marker.
+Missing, fallback, degraded, or inconsistent source availability stays in candidate accounting and
+cannot be selected as a critical discovery. Successful episodes are accounted as
+`source_episode_not_a_failure` and are not shown as falsification cases.
 Selected cases are ranked by objective value, then source candidate index; exact scenario hashes
 and existing failure-mechanism clusters reduce duplicate displays.
 
@@ -35,14 +39,24 @@ search configuration. It records a step trace for visualization. The replay is c
 the source episode's identity, canonical outcomes, registered objective value, and the configured
 absolute tolerance.
 
-`replay_match: match` means those values agree and the canonical runner reports an available,
-successful replay. Fallback, skipped, failed, missing, or inconsistent runner availability keeps
-the case `unavailable`, even when raw identity, outcome, and objective comparisons agree; those
-diagnostics and the runner summary remain in the case manifest. `verification_status: verified`
-additionally requires matching known source and replay revisions. A matching replay at a different
-revision is reported as `outcome_reproduced_revision_changed`; missing revision provenance stays
-explicit. Mismatches, missing inputs, failed execution, and missing replay records remain visible in
-the case manifest.
+`replay_match: match` means identity, exact categorical outcome/failure attribution, and objective
+projection agree and the canonical runner reports an available, successful replay. Matching
+objective projections cannot hide a different termination reason, event flag, or primary failure.
+Fallback, skipped, failed, missing, or inconsistent runner availability keeps the case `unavailable`,
+even when the other comparisons agree; those diagnostics and the runner summary remain in the case
+manifest.
+
+`verification_status: verified` additionally requires a known source revision from the episode
+record or, if absent there, from the manifest. If both provide a revision, they must agree. The
+replay revision and clean gallery code checkout must match that exact source revision; source
+map/config files must match tracked files at that revision; and source/replay planner configuration
+hashes must match. A matching replay without complete input binding remains
+`outcome_reproduced_source_inputs_unbound`; a dirty or different checkout has its own explicit
+status. A matching replay at another revision is reported as
+`outcome_reproduced_revision_changed`; missing revision provenance stays explicit. Input mismatches,
+failed execution, and missing replay records remain visible in the case manifest. `replay_match` is
+therefore an outcome comparison; only `verification_status: verified` asserts exact-source replay
+verification under these recorded checks.
 
 ## Reading the bundle
 
@@ -50,12 +64,14 @@ the case manifest.
   seed, budget, search-space hash, candidate dispositions, and per-case results.
 - `cases/<case-id>/case_manifest.json` records the source links and hashes, source certificate
   classification, copied scenario and file-backed runner configuration, effective runner settings,
-  replay comparison, and available rendering outputs.
+  replay comparison and input-binding checks, and available rendering outputs.
 - `cases/<case-id>/figures/` uses the existing still, filmstrip, and trajectory renderer on the
-  canonical replay trace. Each case records video as `rendered`, `unavailable`, `not_attempted`,
-  or `disabled`; a request that produces no video file is never reported as successful. The
-  current map-backed batch runner does not emit synthetic video for these search scenarios, so
-  their case manifests mark requested video as unavailable.
+  canonical replay trace and passes the materialized map context to the renderer when supported.
+  The case manifest records the map path and digest, or `unavailable` when no map was materialized.
+  Each case records video as `rendered`, `unavailable`, `not_attempted`, or `disabled`; a request
+  that produces no video file is never reported as successful. The current map-backed batch runner
+  does not emit synthetic video for these search scenarios, so their case manifests mark requested
+  video as unavailable.
 
 The original source episode JSONL is copied byte-for-byte into each case bundle, so diagnostic
 values such as non-finite sentinels are preserved without rewriting source evidence. The source

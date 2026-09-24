@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tarfile
@@ -719,6 +720,85 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
         violations=violations,
     )
     assert violations == []
+
+
+def test_release_bundle_binds_all_snqi_v2_spec_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A v2 release carries three source-pinned assets through cold verification."""
+    run_dir = tmp_path / "benchmarks" / "v2_release"
+    _make_run(run_dir, with_video=False)
+    asset_names = ("weights.v2.0.json", "anchors.v2.0.json", "family.v2.0.yaml")
+    assets = {}
+    metrics = {
+        "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+        "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+    }
+    for name in asset_names:
+        asset = tmp_path / "spec" / name
+        _write(asset, f"source-bound {name}\n")
+        stem = name.split(".", maxsplit=1)[0]
+        source_path = f"configs/benchmarks/snqi_v2/{name}"
+        assets[source_path] = asset
+        metrics[f"snqi_v2_{stem}_path"] = source_path
+        metrics[f"snqi_v2_{stem}_sha256"] = hashlib.sha256(asset.read_bytes()).hexdigest()
+
+    original_resolve = artifact_publication_module._resolve_repo_file
+
+    def resolve_asset(value: object, *, repo_root: Path) -> Path | None:
+        if isinstance(value, str) and value in assets:
+            return assets[value]
+        return original_resolve(value, repo_root=repo_root)
+
+    monkeypatch.setattr(artifact_publication_module, "_resolve_repo_file", resolve_asset)
+    _write(
+        run_dir / "release" / "release_manifest.resolved.json",
+        json.dumps({"metrics": metrics, "provenance": {"citation_path": "CITATION.cff"}}),
+    )
+    _write(run_dir / "release" / "release_result.json", "{}\n")
+    result = export_publication_bundle(run_dir, tmp_path / "publication", bundle_name="v2_bundle")
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    for role, name in zip(("weights", "anchors", "family"), asset_names, strict=True):
+        entry = manifest["release_metadata"]["files"][f"snqi_v2_{role}"]
+        assert entry["path"] == f"payload/release_metadata/snqi_v2/{name}"
+        assert entry["sha256"] == metrics[f"snqi_v2_{role}_sha256"]
+    violations: list[str] = []
+    _preflight_check_release_metadata(
+        result.bundle_dir / "payload", manifest, violations=violations
+    )
+    assert violations == []
+
+    anchor = result.bundle_dir / "payload/release_metadata/snqi_v2/anchors.v2.0.json"
+    anchor.write_text("replaced but rechecksummed\n", encoding="utf-8")
+    manifest["release_metadata"]["files"]["snqi_v2_anchors"]["sha256"] = hashlib.sha256(
+        anchor.read_bytes()
+    ).hexdigest()
+    violations.clear()
+    _preflight_check_release_metadata(
+        result.bundle_dir / "payload", manifest, violations=violations
+    )
+    assert any("disagrees with release manifest" in item for item in violations)
+
+
+def test_release_bundle_rejects_partial_snqi_v2_spec(tmp_path: Path) -> None:
+    """A declared v2 index cannot export without all three versioned files."""
+    run_dir = tmp_path / "benchmarks" / "partial_v2_release"
+    _make_run(run_dir, with_video=False)
+    _write(
+        run_dir / "release" / "release_manifest.resolved.json",
+        json.dumps(
+            {
+                "metrics": {
+                    "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+                    "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+                    "snqi_v2_weights_path": "configs/benchmarks/snqi_v2/weights.v2.0.json",
+                }
+            }
+        ),
+    )
+    _write(run_dir / "release" / "release_result.json", "{}\n")
+    with pytest.raises(ValueError, match="Release SNQI-v2 metadata is missing"):
+        export_publication_bundle(run_dir, tmp_path / "publication", bundle_name="partial_v2")
 
 
 def test_release_bundle_rejects_run_local_reserved_metadata_namespace(tmp_path: Path) -> None:

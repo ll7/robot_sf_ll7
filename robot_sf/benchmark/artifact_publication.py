@@ -63,6 +63,11 @@ _DEFAULT_ZENODO_METADATA_RELATIVE = Path(
 )
 _BUNDLED_SNQI_WEIGHTS_RELATIVE = Path("release_metadata/snqi/snqi_weights_camera_ready_v3.json")
 _BUNDLED_SNQI_BASELINE_RELATIVE = Path("release_metadata/snqi/snqi_baseline_camera_ready_v3.json")
+_SNQI_V2_ASSETS = {
+    "snqi_v2_weights": ("weights.v2.0.json", "snqi_v2_weights_path", "snqi_v2_weights_sha256"),
+    "snqi_v2_anchors": ("anchors.v2.0.json", "snqi_v2_anchors_path", "snqi_v2_anchors_sha256"),
+    "snqi_v2_family": ("family.v2.0.yaml", "snqi_v2_family_path", "snqi_v2_family_sha256"),
+}
 _RELEASE_METADATA_NAMESPACE = "release_metadata"
 _REQUIRED_RELEASE_METADATA_ROLES = (
     "release_manifest",
@@ -81,6 +86,10 @@ _RELEASE_METADATA_PAYLOAD_PATHS = {
     "rights_provenance": "payload/release_metadata/rights_provenance.md",
     "snqi_weights": "payload/release_metadata/snqi/snqi_weights_camera_ready_v3.json",
     "snqi_baseline": "payload/release_metadata/snqi/snqi_baseline_camera_ready_v3.json",
+    **{
+        role: f"payload/release_metadata/snqi_v2/{filename}"
+        for role, (filename, _, _) in _SNQI_V2_ASSETS.items()
+    },
 }
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
@@ -635,6 +644,28 @@ evidence.
 """
 
 
+def _resolve_snqi_v2_assets(
+    metrics: Mapping[str, Any], repo_root: Path
+) -> dict[str, tuple[Path, Path]]:
+    """Resolve and checksum-bind every v2 asset when the index is declared.
+
+    Returns:
+        Source and bundle path for each declared v2 asset, or an empty mapping.
+    """
+    if not any(str(key).startswith("snqi_v2_") for key in metrics):
+        return {}
+    files = {}
+    for role, (filename, path_key, sha_key) in _SNQI_V2_ASSETS.items():
+        asset = _resolve_repo_file(metrics.get(path_key), repo_root=repo_root)
+        declared_sha = metrics.get(sha_key)
+        if asset is None or not isinstance(declared_sha, str):
+            raise ValueError(f"Release SNQI-v2 metadata is missing {path_key} or {sha_key}")
+        if _sha256_file(asset) != declared_sha.lower():
+            raise ValueError(f"Release SNQI-v2 metadata checksum mismatch: {role}")
+        files[role] = (asset, Path("release_metadata/snqi_v2") / filename)
+    return files
+
+
 def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     run_root: Path,
 ) -> _ReleasePublicationMetadata | None:
@@ -739,6 +770,9 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
         "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
     }
+    v2_files = _resolve_snqi_v2_assets(metrics, repo_root)
+    files.update(v2_files)
+    source_paths.update({role: _to_repo_relative(asset) for role, (asset, _) in v2_files.items()})
     for role, path in resolved_sources.items():
         if path is not None:
             source_paths[role] = _to_repo_relative(path)
@@ -1557,7 +1591,10 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
                 "local_output": "working-storage-not-citation-target",
             },
             "cold_verification": {
-                "required_inputs": list(_REQUIRED_RELEASE_METADATA_ROLES),
+                "required_inputs": [
+                    *_REQUIRED_RELEASE_METADATA_ROLES,
+                    *(role for role in _SNQI_V2_ASSETS if role in metadata_records),
+                ],
                 "credentials": "not_recorded",
                 "snqi_claim_policy": "advisory_no_ranking",
             },
@@ -2437,6 +2474,56 @@ def _preflight_check_channels(
         warnings.append("publication_manifest.json omits publication_channels")
 
 
+def _read_snqi_v2_manifest_metrics(
+    payload_dir: Path, *, required: bool, violations: list[str]
+) -> Mapping[str, Any]:
+    """Read the bundled declaration before deciding which v2 roles are required.
+
+    Returns:
+        Resolved metrics declaration, or an empty mapping for a legacy bundle.
+    """
+    path = payload_dir / "release" / "release_manifest.resolved.json"
+    if not required or not path.is_file():
+        return {}
+    try:
+        raw_metrics = _read_json_file(path).get("metrics")
+    except ValueError as exc:
+        violations.append(f"release metadata manifest is malformed: {exc}")
+        return {}
+    return raw_metrics if isinstance(raw_metrics, Mapping) else {}
+
+
+def _check_snqi_v2_manifest_binding(
+    role: str, actual_sha: str, metrics: Mapping[str, Any], violations: list[str]
+) -> None:
+    """Require the cold payload to match the release manifest's pinned digest."""
+    if role not in _SNQI_V2_ASSETS:
+        return
+    _, path_key, sha_key = _SNQI_V2_ASSETS[role]
+    if not isinstance(metrics.get(path_key), str) or metrics.get(sha_key) != actual_sha:
+        violations.append(f"release metadata role {role!r} disagrees with release manifest")
+
+
+def _publication_manifest_entries_by_path(
+    manifest: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    """Index declared payload files by their canonical bundle-relative path.
+
+    Returns:
+        Manifest file entries keyed by ``payload/``-prefixed paths.
+    """
+    entries: dict[str, Mapping[str, Any]] = {}
+    raw_entries = manifest.get("files")
+    if isinstance(raw_entries, list):
+        for entry in raw_entries:
+            if not isinstance(entry, Mapping):
+                continue
+            path = entry.get("path")
+            if isinstance(path, str) and path.strip():
+                entries.setdefault(f"payload/{path.removeprefix('payload/')}", entry)
+    return entries
+
+
 def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     payload_dir: Path,
     manifest: Mapping[str, Any],
@@ -2457,18 +2544,15 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     if not isinstance(files, Mapping):
         violations.append("publication_manifest.release_metadata.files must be an object")
         return
-    manifest_entries = manifest.get("files")
-    manifest_entries_by_path: dict[str, Mapping[str, Any]] = {}
-    if isinstance(manifest_entries, list):
-        for raw_entry in manifest_entries:
-            if not isinstance(raw_entry, Mapping):
-                continue
-            raw_manifest_path = raw_entry.get("path")
-            if not isinstance(raw_manifest_path, str) or not raw_manifest_path.strip():
-                continue
-            normalized_path = raw_manifest_path.removeprefix("payload/")
-            manifest_entries_by_path.setdefault(f"payload/{normalized_path}", raw_entry)
-    required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
+    manifest_entries_by_path = _publication_manifest_entries_by_path(manifest)
+    resolved_metrics = _read_snqi_v2_manifest_metrics(
+        payload_dir, required=required, violations=violations
+    )
+    v2_declared = any(str(key).startswith("snqi_v2_") for key in resolved_metrics)
+    v2_roles = tuple(_SNQI_V2_ASSETS) if v2_declared else ()
+    required_roles = (*_REQUIRED_RELEASE_METADATA_ROLES, *v2_roles) if required else tuple(files)
+    if required and not v2_declared and any(role in files for role in _SNQI_V2_ASSETS):
+        violations.append("release metadata has SNQI-v2 assets without a manifest declaration")
     for role in required_roles:
         entry = files.get(role)
         if not isinstance(entry, Mapping):
@@ -2505,6 +2589,7 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
         actual_sha = _sha256_file(candidate)
         if not isinstance(declared_sha, str) or declared_sha.lower() != actual_sha:
             violations.append(f"release metadata role {role!r} checksum does not match payload")
+        _check_snqi_v2_manifest_binding(role, actual_sha, resolved_metrics, violations)
 
     if required and manifest_entries_by_path:
         reserved_prefix = f"payload/{_RELEASE_METADATA_NAMESPACE}/"
@@ -2534,6 +2619,8 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
         cold = block.get("cold_verification")
         if not isinstance(cold, Mapping) or cold.get("credentials") != "not_recorded":
             violations.append("release metadata cold-verification credential policy is invalid")
+        elif v2_declared and cold.get("required_inputs") != list(required_roles):
+            violations.append("release metadata cold-verification v2 input inventory is incomplete")
 
 
 def _preflight_check_release_reconciliation(

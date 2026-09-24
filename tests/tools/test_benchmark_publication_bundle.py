@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -326,8 +327,20 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
         "trace_manifest.yaml",
     ]
     checksums = checksums_path.read_text(encoding="utf-8")
-    assert "summary.json" in checksums
-    assert "metric_table.csv" in checksums
+    checksum_entries = {
+        relative_path: digest
+        for line in checksums.splitlines()
+        for digest, relative_path in [line.split("  ", maxsplit=1)]
+    }
+    assert set(checksum_entries) == {
+        "payload/claim_boundary.md",
+        "payload/metric_table.csv",
+        "payload/summary.json",
+        "payload/trace_manifest.yaml",
+    }
+    for relative_path, expected_digest in checksum_entries.items():
+        actual_digest = hashlib.sha256((bundle_dir / relative_path).read_bytes()).hexdigest()
+        assert actual_digest == expected_digest
 
 
 def test_evidence_bundle_command_writes_dry_run_mirror_manifest(

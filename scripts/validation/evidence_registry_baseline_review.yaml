@@ -14,8 +14,8 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9431
-latest_reviewed_date: 2026-09-23
+latest_reconciliation_issue: 7980
+latest_reviewed_date: 2026-09-24
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -157,6 +157,16 @@ decision_summary: >-
   across 98 files, and records the 40-file evidence-tree addition: 38 diagnostic trace files plus
   two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
   campaign provenance bytes without modifying either artifact.
+  Source-binding successor addendum (issue #7980; 2026-09-24): PR #8468 adds twelve
+  diagnostic issue #7980 evidence files (six exact-digest/check/receipt/crosswalk artifacts and
+  their six `evidence-review-marker.v1` sidecars) and incorporates the two-file custody-wording
+  correction from PR #8471. The evidence linter reports no new finding path or per-code increase:
+  the reviewed machine baseline remains 438 findings across 98 files, while the evidence-tree
+  manifest grows from 2,423 to 2,435 files. The builder remains fail-closed without authenticated
+  immutable-member custody, and the tracked packet remains diagnostic-only; this structural
+  registry refresh admits no benchmark, ranking, causal, safety, release, dissertation, or
+  paper-facing result. This is the separately reviewed owner-directed registry delta required by
+  the 2026-09-15 PR #8468 merge plan.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

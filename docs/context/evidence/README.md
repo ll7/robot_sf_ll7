@@ -126,7 +126,7 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 ## Current Bundles
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
-  #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
+  Issue #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
   job-13512 bytes are checksum-covered for custody but have conflicting execution lineage and no
   materialized SNQI, while the older slice is rank-non-identifiable. No ranking, benchmark,
   realism, sim-to-real, safety, paper, or dissertation claim is promoted.
@@ -148,7 +148,11 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   [packet](issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json)
   remains `smoke_diagnostic` / `diagnostic_only`: it closes custody and reconstruction gaps but
   is not benchmark, planner-ranking, causal, safety, dissertation, release, or paper-facing
-  admission evidence.
+  admission evidence. The issue #7980
+  [source-bound diagnostic successor](issue_6102_robot_speed_tier_recovery/result_interpretation_packet.issue_7980.v1.json)
+  projects all 24 exact contrast rows against the recorded synthesis digest while retaining the
+  same non-admitted boundary and all six non-activated exclusions. An authenticated receipt for
+  the pinned W&B `synthesis.json.gz` member remains pending.
 
 - `issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17/`: generated
   `scenario_evidence_crosswalk.v1` instance (issue #5602 tooling) over the full

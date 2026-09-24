@@ -68,3 +68,26 @@ def test_trace_duration_distinguishes_pair_exposure_from_elapsed_time():
     assert summary["force_active_pedestrian_seconds"] == pytest.approx(0.3)
     assert summary["max_concurrently_exposed_pedestrians"] == 2
     assert summary["termination_reason"] == "collision"
+
+
+def test_serialized_nested_human_discomfort_is_used():
+    rows = [
+        {
+            "scenario_id": "proxy",
+            "seed": i,
+            "algo": "goal",
+            "metrics": {
+                "robot_force_impulse_total": i,
+                "min_distance": 4 - i,
+                "human_interaction_proxy": {
+                    "canonical_reductions": {"human_discomfort_exposure_m_s": 2 * i}
+                },
+            },
+        }
+        for i in range(3)
+    ]
+    report = analyze(rows)
+    correlation = report["correlations"][2]
+    assert correlation["n"] == 3
+    assert correlation["spearman_rho"] == 1
+    assert report["largest_rank_disagreements"][0]["metrics"]["human_discomfort_exposure_m_s"] == 0

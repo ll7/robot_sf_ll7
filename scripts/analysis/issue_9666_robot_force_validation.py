@@ -21,6 +21,14 @@ FORCES = (
 COMPARATORS = ("min_distance", "near_misses", "human_discomfort_exposure_m_s")
 
 
+def metric_value(row: dict, key: str) -> float | None:
+    """Resolve the serializer's canonical nested human-proxy reduction."""
+    metrics = row["metrics"]
+    if key == "human_discomfort_exposure_m_s" and key not in metrics:
+        return metrics.get("human_interaction_proxy", {}).get("canonical_reductions", {}).get(key)
+    return metrics.get(key)
+
+
 def trace_evidence(row: dict) -> dict:
     """Summarize recorded inputs without inferring a causal interaction mechanism."""
     samples = row["metrics"].get("robot_force_samples")
@@ -65,10 +73,7 @@ def analyze(rows: list[dict]) -> dict:
         for force in FORCES:
             for comparator in COMPARATORS:
                 pairs = np.array(
-                    [
-                        (r["metrics"].get(force, np.nan), r["metrics"].get(comparator, np.nan))
-                        for r in members
-                    ],
+                    [(metric_value(r, force), metric_value(r, comparator)) for r in members],
                     dtype=float,
                 )
                 pairs = pairs[np.isfinite(pairs).all(axis=1)]
@@ -111,7 +116,7 @@ def analyze(rows: list[dict]) -> dict:
                     "distance_rank": float(distance_rank[i]),
                     "trace_evidence": trace_evidence(row),
                     "metrics": {
-                        k: metrics.get(k)
+                        k: metric_value(row, k)
                         for k in (*FORCES, *COMPARATORS, "robot_force_exposed_ped_count")
                     },
                     "observed_pattern": "multiple_pedestrians_exposed"

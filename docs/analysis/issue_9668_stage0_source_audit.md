@@ -51,7 +51,9 @@ the benchmark evidence. The 0.0.8 evaluation therefore needs a similar resource 
 the separate 1,344-episode calibration split and doorway slice; these are estimates, not run
 results.
 
-Issue #9431 remains an open native blocker for #9668. Its 0.0.7 Zenodo draft was verified but
-not published, and the documented release-doctor gate is unresolved. The current programme does
-not authorize changing that frozen record. No 0.0.8 tag, Zenodo reservation, DOI, or publication
-action follows from this audit.
+Issue #9431 remains open and a native blocker for #9668. Its existing 0.0.7 Zenodo deposition
+22814343 was published on 2026-09-24, and the public archive passed anonymous checksum readback
+at the same SHA-256 above. The issue records an explicit release-owner exception to the prospective
+doctor's tag-collision gate; DOI resolver registration was still pending at its latest check.
+This programme does not authorize changing the frozen 0.0.7 record. No 0.0.8 tag, Zenodo
+reservation, DOI, or publication action follows from this audit.

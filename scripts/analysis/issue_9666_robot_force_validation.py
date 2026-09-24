@@ -21,6 +21,31 @@ FORCES = (
 COMPARATORS = ("min_distance", "near_misses", "human_discomfort_exposure_m_s")
 
 
+def trace_evidence(row: dict) -> dict:
+    """Summarize recorded inputs without inferring a causal interaction mechanism."""
+    samples = row["metrics"].get("robot_force_samples")
+    dt = row.get("scenario_params", {}).get("run_dt")
+    if not samples or dt is None:
+        return {"status": "unavailable"}
+    active_steps = active_pairs = max_concurrent = 0
+    for sample in samples:
+        forces = np.asarray(sample["forces"], dtype=float).reshape(-1, 2)
+        active = int(np.count_nonzero(np.linalg.norm(forces, axis=-1) > 0))
+        active_steps += active > 0
+        active_pairs += active
+        max_concurrent = max(max_concurrent, active)
+    return {
+        "status": "recorded",
+        "steps": len(samples),
+        "duration_s": len(samples) * dt,
+        "force_active_duration_s": active_steps * dt,
+        "force_active_pedestrian_seconds": active_pairs * dt,
+        "max_concurrently_exposed_pedestrians": max_concurrent,
+        "termination_reason": row.get("termination_reason"),
+        "boundary": "pre-integration model force; descriptive duration and multiplicity, not causal proof",
+    }
+
+
 def analyze(rows: list[dict]) -> dict:
     """Compute correlations and rank disagreements without fabricating missing observations.
 
@@ -65,8 +90,10 @@ def analyze(rows: list[dict]) -> dict:
     eligible = [
         r
         for r in rows
-        if np.isfinite(r["metrics"].get("robot_force_impulse_total", np.nan))
-        and np.isfinite(r["metrics"].get("min_distance", np.nan))
+        if all(
+            r["metrics"].get(key) is not None and np.isfinite(r["metrics"][key])
+            for key in ("robot_force_impulse_total", "min_distance")
+        )
     ]
     disagreements = []
     if eligible:
@@ -82,13 +109,22 @@ def analyze(rows: list[dict]) -> dict:
                     "algo": row["algo"],
                     "force_rank": float(force_rank[i]),
                     "distance_rank": float(distance_rank[i]),
+                    "trace_evidence": trace_evidence(row),
                     "metrics": {
                         k: metrics.get(k)
                         for k in (*FORCES, *COMPARATORS, "robot_force_exposed_ped_count")
                     },
                     "observed_pattern": "multiple_pedestrians_exposed"
                     if metrics.get("robot_force_exposed_ped_count", 0) > 1
-                    else "single_pedestrian_duration_vs_peak",
+                    else (
+                        "one_pedestrian_exposed"
+                        if metrics.get("robot_force_exposed_ped_count") == 1
+                        else (
+                            "no_pedestrians_exposed"
+                            if metrics.get("robot_force_exposed_ped_count") == 0
+                            else "exposure_count_unavailable"
+                        )
+                    ),
                     "interpretation": "descriptive pattern; causal mechanism needs aligned trace inspection",
                 }
             )
@@ -111,8 +147,16 @@ def main() -> None:
     sources = []
     for path in args.episodes:
         raw = path.read_bytes()
-        rows.extend(json.loads(line) for line in raw.splitlines() if line.strip())
-        sources.append({"name": path.name, "sha256": hashlib.sha256(raw).hexdigest()})
+        file_rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        rows.extend(file_rows)
+        sources.append(
+            {
+                "name": f"{path.parent.name}/{path.name}",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "rows": len(file_rows),
+                "algorithms": sorted({row["algo"] for row in file_rows}),
+            }
+        )
     if len(rows) != args.expected_episodes:
         raise ValueError(f"expected {args.expected_episodes} episodes, received {len(rows)}")
     report = analyze(rows)

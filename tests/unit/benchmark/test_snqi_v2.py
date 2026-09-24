@@ -306,11 +306,51 @@ def test_family_determinism_grid_and_scaling():
     assert report["top1_frequency"] == other["top1_frequency"]
 
 
+def write_campaign_arm(path, rows):
+    """Create real producer custody for synthetic episode rows."""
+    from robot_sf.benchmark.result_provenance import (
+        build_result_provenance_manifest,
+        manifest_path_for_result_jsonl,
+        write_result_provenance_manifest,
+    )
+
+    rows = [
+        {
+            **row,
+            "episode_id": f"{row['scenario_id']}-{row['seed']}",
+            "config_hash": "fixture",
+            "git_hash": "a" * 40,
+        }
+        for row in rows
+    ]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    payload = build_result_provenance_manifest(
+        out_path=path,
+        episode_records=rows,
+        schema_path=ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        scenario_path=ROOT / "configs/scenarios/classic_interactions_francis2023.yaml",
+        scenarios=[{"name": "fixture"}],
+        algo=rows[0]["algo"],
+        algo_config_path=None,
+        benchmark_profile="baseline-safe",
+        suite_key="fixture",
+        total_jobs=len(rows),
+        written=len(rows),
+        horizon=600,
+        dt=0.1,
+        record_forces=True,
+        active_observation_mode="native",
+        active_observation_level="full",
+    )
+    write_result_provenance_manifest(manifest_path_for_result_jsonl(path), payload)
+    return rows
+
+
 def test_campaign_writes_both_reports_and_fields(tmp_path):
     entries = []
     for planner in ("a", "b"):
         path = tmp_path / f"{planner}.jsonl"
-        path.write_text("".join(json.dumps(r) + "\n" for r in records() if r["algo"] == planner))
+        write_campaign_arm(path, [r for r in records() if r["algo"] == planner])
         entries.append({"status": "ok", "planner": {"key": planner}, "episodes_path": str(path)})
     artifacts = enrich_campaign_v2(
         entries, fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=10
@@ -322,7 +362,12 @@ def test_campaign_writes_both_reports_and_fields(tmp_path):
     assert raw["metrics"]["snqi"] == records()[0]["metrics"]["snqi"]
     assert len(raw["metrics"]["snqi_v2_terms"]) == 7
     before = {
-        entry["episodes_path"]: Path(entry["episodes_path"]).read_bytes() for entry in entries
+        str(path): path.read_bytes()
+        for entry in entries
+        for path in (
+            Path(entry["episodes_path"]),
+            Path(entry["episodes_path"] + ".provenance.json"),
+        )
     }
     enrich_campaign_v2(
         entries, fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=10
@@ -525,7 +570,7 @@ def test_unavailable_optional_metric_does_not_mark_planner_degraded():
         score_episode(row, fixture_spec())
 
 
-def test_real_small_campaign_v2_outputs(tmp_path):
+def test_real_small_campaign_v2_outputs(tmp_path, monkeypatch):
     from robot_sf.benchmark.camera_ready._config_types import (
         CampaignConfig,
         PlannerSpec,
@@ -555,6 +600,23 @@ def test_real_small_campaign_v2_outputs(tmp_path):
         snqi_contract=SnqiContractConfig(calibration_trials=10),
         snqi_v2_spec=fixture_spec(),
     )
+    from robot_sf.benchmark.camera_ready import campaign
+    from robot_sf.benchmark.identity.hash_utils import sha256_file
+    from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
+
+    originals = {}
+    original_enrich = campaign.enrich_campaign_v2
+
+    def capture_enrichment(entries, *args, **kwargs):
+        for entry in entries:
+            path = Path(entry["episodes_path"])
+            originals[str(path)] = {
+                "hash": sha256_file(path),
+                "rows": [json.loads(line) for line in path.read_text().splitlines()],
+            }
+        return original_enrich(entries, *args, **kwargs)
+
+    monkeypatch.setattr(campaign, "enrich_campaign_v2", capture_enrichment)
     result = run_campaign(
         cfg, output_root=tmp_path / "out", campaign_id="v2-smoke", skip_publication_bundle=True
     )
@@ -570,6 +632,19 @@ def test_real_small_campaign_v2_outputs(tmp_path):
     rows = [json.loads(line) for line in paths[0].read_text().splitlines()]
     assert len(rows) == 1
     assert all("snqi_v2" in row["metrics"] and "snqi" in row["metrics"] for row in rows)
+    assert not summary["campaign_integrity"]["blockers"]
+    sidecar = json.loads(paths[0].with_suffix(".jsonl.provenance.json").read_text())
+    validate_result_provenance_manifest(sidecar)
+    artifact = next(item for item in sidecar["raw_artifacts"] if item["kind"] == "episodes_jsonl")
+    assert artifact["sha256"] == sha256_file(paths[0])
+    assert sidecar["snqi_v2_enrichment"]["input_sha256"] == originals[str(paths[0])]["hash"]
+    assert sidecar["snqi_v2_enrichment"]["output_sha256"] == artifact["sha256"]
+    for before, after in zip(originals[str(paths[0])]["rows"], rows, strict=True):
+        for key, value in before.items():
+            if key == "metrics":
+                assert {k: after[key][k] for k in value} == value
+            else:
+                assert after[key] == value
 
 
 def test_family_rejects_unpaired_or_duplicate_cells():
@@ -578,3 +653,90 @@ def test_family_rejects_unpaired_or_duplicate_cells():
         build_family_report(rows[:-1], fixture_spec(), bootstrap_samples=2)
     with pytest.raises(ValueError, match="paired scenario/seed"):
         build_family_report(rows + rows[:1], fixture_spec(), bootstrap_samples=2)
+
+
+def test_streaming_retains_only_compact_records_and_distinguishes_same_algo_arms(
+    tmp_path, monkeypatch
+):
+    import weakref
+
+    from robot_sf.benchmark.snqi import v2_reports
+
+    class Payload(list):
+        """Weak-referenceable decoded trace payload for a retention assertion."""
+
+    entries, expected, refs = [], [], []
+    for arm in ("variant-a", "variant-b"):
+        rows = [
+            {
+                **row,
+                "algo": "shared",
+                "metrics": {
+                    **row["metrics"],
+                    "robot_force_samples": [[1.0, 2.0]] * 3000,
+                },
+                "algorithm_metadata": {"simulation_step_trace": {"steps": ["large"] * 3000}},
+            }
+            for row in records()
+            if row["algo"] == "a"
+        ]
+        path = tmp_path / f"{arm}.jsonl"
+        written = write_campaign_arm(path, rows)
+        entries.append({"status": "ok", "planner": {"key": arm}, "episodes_path": str(path)})
+        expected.extend({**row, "planner_key": arm, "kinematics": None} for row in written)
+    expected_family = build_family_report(expected, fixture_spec(), bootstrap_samples=2)
+    original_reader = v2_reports.read_episode_files
+    original_writer = v2_reports.write_v2_reports
+
+    def watched_reader(paths):
+        for row in original_reader(paths):
+            payload = Payload(row["metrics"]["robot_force_samples"])
+            refs.append(weakref.ref(payload))
+            row["metrics"]["robot_force_samples"] = payload
+            assert sum(ref() is not None for ref in refs) <= 2
+            yield row
+
+    def checked_reports(rows, *args, **kwargs):
+        assert all(ref() is None for ref in refs)
+        assert all("algorithm_metadata" not in row for row in rows)
+        assert all(set(row["metrics"]) == set(SOURCES.values()) for row in rows)
+        return original_writer(rows, *args, **kwargs)
+
+    monkeypatch.setattr(v2_reports, "read_episode_files", watched_reader)
+    monkeypatch.setattr(v2_reports, "write_v2_reports", checked_reports)
+    artifacts = enrich_campaign_v2(
+        entries, fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=2
+    )
+    actual = json.loads(Path(artifacts["snqi_v2_family_json"]).read_text())
+    assert actual == expected_family
+    assert {row["planner"] for row in actual["declared_ranking"]} == {"variant-a", "variant-b"}
+    for entry in entries:
+        row = json.loads(Path(entry["episodes_path"]).read_text().splitlines()[0])
+        assert len(row["metrics"]["robot_force_samples"]) == 3000
+        assert len(row["algorithm_metadata"]["simulation_step_trace"]["steps"]) == 3000
+
+
+@pytest.mark.parametrize("defect", ["unpaired", "stale_sidecar", "missing_sidecar"])
+def test_streaming_failure_keeps_originals_and_removes_staged_files(tmp_path, defect):
+    entries = []
+    for arm in ("a", "b"):
+        path = tmp_path / f"{arm}.jsonl"
+        rows = [row for row in records() if row["algo"] == arm]
+        if defect == "unpaired" and arm == "b":
+            rows = rows[:1]
+        write_campaign_arm(path, rows)
+        entries.append({"status": "ok", "planner": {"key": arm}, "episodes_path": str(path)})
+    path = Path(entries[-1]["episodes_path"] + ".provenance.json")
+    if defect == "stale_sidecar":
+        payload = json.loads(path.read_text())
+        payload["raw_artifacts"][0]["sha256"] = "0" * 64
+        path.write_text(json.dumps(payload))
+    elif defect == "missing_sidecar":
+        path.unlink()
+    before = {path: path.read_bytes() for path in tmp_path.iterdir()}
+    with pytest.raises(ValueError, match="paired scenario/seed|sidecar"):
+        enrich_campaign_v2(
+            entries, fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=2
+        )
+    assert all(path.read_bytes() == content for path, content in before.items())
+    assert not list(tmp_path.glob(".*.snqi-v2.tmp"))

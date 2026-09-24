@@ -7,8 +7,10 @@ Undefined source metrics and incomplete planner/seed coverage fail closed.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+import tempfile
+from collections.abc import Iterator, Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -17,12 +19,16 @@ from robot_sf.benchmark.fallback_policy import (
     runtime_fallback_or_degraded_marker,
     summarize_benchmark_availability,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.result_provenance import (
+    load_result_provenance_manifest,
+    manifest_path_for_result_jsonl,
+    validate_result_provenance_manifest,
+    write_result_provenance_manifest,
+)
 from robot_sf.benchmark.snqi.bootstrap import bootstrap_stability
 from robot_sf.benchmark.snqi.compute import compute_snqi_v2, normalize_snqi_v2_terms
 from robot_sf.benchmark.snqi.v2_spec import FAMILY, QUALITY_TERMS, TERMS, WEIGHTS, SnqiV2Spec
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 CLAIM_BOUNDARY = (
     "SNQI-v2 is a declared benchmark aggregate over simulator quantities. It is not a validated "
@@ -336,24 +342,158 @@ def write_v2_reports(
     return artifacts
 
 
-def read_episode_files(paths: Sequence[Path]) -> list[dict[str, Any]]:
-    """Read JSONL strictly, preserving undefined numeric values for the score validator.
+def read_episode_files(paths: Sequence[Path]) -> Iterator[dict[str, Any]]:
+    """Yield JSONL objects one at a time without retaining raw lines or prior episodes."""
+    seen = False
+    for path in paths:
+        with path.open(encoding="utf-8") as stream:
+            for line_number, line in enumerate(stream, 1):
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if not isinstance(record, dict):
+                    raise ValueError(f"{path}:{line_number}: expected episode object")
+                seen = True
+                yield record
+    if not seen:
+        raise ValueError("SNQI-v2 requires at least one episode")
+
+
+def compact_report_episode(episode: Mapping[str, Any], spec: SnqiV2Spec) -> dict[str, Any]:
+    """Validate a raw episode and retain only report identities and scalar score inputs.
+
+    Force samples, simulation/planner traces and unrelated metrics never enter the
+    report working set. Runtime validation precedes projection so dropping metadata
+    cannot hide a fallback marker.
 
     Returns:
-        Validated result described above.
+        An independent compact record accepted by the unchanged report calculations.
+    """
+    scored = score_episode(episode, spec)
+    return {
+        **{
+            key: scored[key]
+            for key in (
+                "planner_key",
+                "algo",
+                "kinematics",
+                "scenario_id",
+                "seed",
+                "steps",
+                "episode_id",
+                "config_hash",
+                "git_hash",
+            )
+            if key in scored
+        },
+        "metrics": {source: scored["metrics"].get(source) for source in spec.sources.values()},
+    }
+
+
+def _stage_v2_file(
+    path: Path, temporary: Path, spec: SnqiV2Spec, planner: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Stream one enriched JSONL file.
+
+    Returns:
+        Compact scalar report records with producer row identities.
     """
     records = []
-    for path in paths:
-        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            if not isinstance(record, dict):
-                raise ValueError(f"{path}:{line_number}: expected episode object")
-            records.append(record)
-    if not records:
-        raise ValueError("SNQI-v2 requires at least one episode")
+    with temporary.open("w", encoding="utf-8") as output:
+        for episode in read_episode_files([path]):
+            spec.validate_evaluation_seeds([episode["seed"]])
+            enriched = score_episode(
+                {**episode, "planner_key": planner["key"], "kinematics": planner.get("kinematics")},
+                spec,
+            )
+            output.write(json.dumps(enriched, separators=(",", ":")) + "\n")
+            records.append(compact_report_episode(enriched, spec))
     return records
+
+
+def _temporary_sibling(path: Path) -> Path:
+    """Reserve a task-owned sibling for atomic publication.
+
+    Returns:
+        Path of the newly created empty temporary file.
+    """
+    with tempfile.NamedTemporaryFile(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".snqi-v2.tmp", delete=False
+    ) as temporary:
+        return Path(temporary.name)
+
+
+def _stage_v2_provenance(
+    path: Path,
+    temporary: Path,
+    sidecar: Path,
+    staged_sidecar: Path,
+    spec: SnqiV2Spec,
+    records: Sequence[Mapping[str, Any]],
+    original_hash: str,
+) -> None:
+    """Rebind a verified producer sidecar with explicit enrichment lineage."""
+    payload = load_result_provenance_manifest(sidecar)
+    validate_result_provenance_manifest(payload)
+    artifacts = [
+        entry for entry in payload["raw_artifacts"] if entry.get("kind") == "episodes_jsonl"
+    ]
+    if (
+        len(artifacts) != 1
+        or artifacts[0].get("sha256") != original_hash
+        or Path(artifacts[0].get("path", "")).resolve() != path
+    ):
+        raise ValueError("SNQI-v2 producer sidecar does not bind the original episode file")
+    if len(payload["rows"]) != len(records):
+        raise ValueError("SNQI-v2 producer sidecar row count mismatch")
+    for index, (bound, row) in enumerate(zip(payload["rows"], records, strict=True)):
+        if (
+            bound.get("jsonl_line") != index
+            or any(
+                bound.get(key) != row.get(key)
+                for key in ("episode_id", "scenario_id", "seed", "config_hash")
+            )
+            or bound.get("repo_commit") != row.get("git_hash")
+        ):
+            raise ValueError("SNQI-v2 producer sidecar row identity mismatch")
+    enriched_hash = sha256_file(temporary)
+    previous = payload.get("snqi_v2_enrichment", {})
+    if previous and previous.get("output_sha256") != original_hash:
+        raise ValueError("SNQI-v2 existing enrichment lineage is stale")
+    payload["snqi_v2_enrichment"] = {
+        "operation": "add_snqi_v2_fields",
+        "input_sha256": previous.get("input_sha256", original_hash),
+        "output_sha256": enriched_hash,
+        "episode_count": len(records),
+        "specification": spec.provenance(),
+    }
+    artifacts[0]["sha256"] = enriched_hash
+    validate_result_provenance_manifest(payload)
+    write_result_provenance_manifest(staged_sidecar, payload)
+
+
+def _validated_run_input(
+    entry: Mapping[str, Any], repo_root: Path
+) -> tuple[Path, Mapping[str, Any]]:
+    """Check arm availability and its explicit file and planner identity.
+
+    Returns:
+        Resolved episode file and planner descriptor.
+    """
+    if entry.get("status") != "ok":
+        raise ValueError("SNQI-v2 refuses failed, unavailable or degraded campaign arms")
+    path_value = entry.get("episodes_path")
+    if not isinstance(path_value, str) or not path_value:
+        raise ValueError("SNQI-v2 run requires episodes_path")
+    if (
+        "summary" in entry
+        and not summarize_benchmark_availability(entry["summary"]).benchmark_success
+    ):
+        raise ValueError("SNQI-v2 refuses fallback/degraded run summaries")
+    planner = entry.get("planner", {})
+    if not planner.get("key"):
+        raise ValueError("SNQI-v2 run requires explicit planner.key")
+    return (repo_root / path_value).resolve(), planner
 
 
 def enrich_campaign_v2(
@@ -364,57 +504,48 @@ def enrich_campaign_v2(
     repo_root: Path,
     bootstrap_samples: int = 2000,
 ) -> dict[str, str]:
-    """Validate all native run records before enriching JSONL and writing both reports.
+    """Stage enriched files one episode at a time, then validate the complete report pair.
 
-    Writes use sibling temporary files and atomic replacement. Repeating enrichment
-    is idempotent; legacy metrics and episode identity remain intact.
+    Memory scales with scalar score inputs and identities plus the largest episode,
+    not the complete decoded force/trace payload. All source files remain untouched
+    until scoring and paired-coverage checks pass. Sibling files are then atomically
+    replaced individually; this is not a multi-file filesystem transaction.
+    Repeating enrichment is idempotent and preserves legacy field values.
 
     Returns:
-        Validated result described above.
+        Paths to the mandatory diagnostics and family JSON/Markdown artifacts.
     """
-    files: dict[Path, list[dict[str, Any]]] = {}
+    staged: dict[Path, Path] = {}
     all_records = []
-    for entry in run_entries:
-        if entry.get("status") != "ok":
-            raise ValueError("SNQI-v2 refuses failed, unavailable or degraded campaign arms")
-        path_value = entry.get("episodes_path")
-        if not isinstance(path_value, str) or not path_value:
-            raise ValueError("SNQI-v2 run requires episodes_path")
-        path = (repo_root / path_value).resolve()
-        if path in files:
-            raise ValueError("SNQI-v2 duplicate campaign episode path")
-        if (
-            "summary" in entry
-            and not summarize_benchmark_availability(entry["summary"]).benchmark_success
-        ):
-            raise ValueError("SNQI-v2 refuses fallback/degraded run summaries")
-        records = read_episode_files([path])
-        planner = entry.get("planner", {})
-        if not planner.get("key"):
-            raise ValueError("SNQI-v2 run requires explicit planner.key")
-        enriched = [
-            score_episode(
-                {**ep, "planner_key": planner["key"], "kinematics": planner.get("kinematics")}, spec
+    original_hashes: dict[Path, str] = {}
+    try:
+        for entry in run_entries:
+            path, planner = _validated_run_input(entry, repo_root)
+            if path in staged:
+                raise ValueError("SNQI-v2 duplicate campaign episode path")
+            sidecar = manifest_path_for_result_jsonl(path)
+            if not sidecar.is_file():
+                raise ValueError("SNQI-v2 requires the producer provenance sidecar")
+            original_hashes[path] = sha256_file(path)
+            original_hashes[sidecar] = sha256_file(sidecar)
+            staged[path] = _temporary_sibling(path)
+            records = _stage_v2_file(path, staged[path], spec, planner)
+            staged[sidecar] = _temporary_sibling(sidecar)
+            _stage_v2_provenance(
+                path, staged[path], sidecar, staged[sidecar], spec, records, original_hashes[path]
             )
-            for ep in records
-        ]
-        spec.validate_evaluation_seeds([ep["seed"] for ep in records])
-        files[path] = enriched
-        all_records.extend(
-            {**ep, "planner_key": planner["key"], "kinematics": planner.get("kinematics")}
-            for ep in enriched
+            all_records.extend(records)
+        artifacts = write_v2_reports(
+            all_records, spec, reports_dir, bootstrap_samples=bootstrap_samples
         )
-    artifacts = write_v2_reports(
-        all_records, spec, reports_dir, bootstrap_samples=bootstrap_samples
-    )
-    for path, records in files.items():
-        temporary = path.with_suffix(path.suffix + ".snqi-v2.tmp")
-        temporary.write_text(
-            "".join(json.dumps(ep, separators=(",", ":")) + "\n" for ep in records),
-            encoding="utf-8",
-        )
-        temporary.replace(path)
-    return artifacts
+        if any(sha256_file(path) != digest for path, digest in original_hashes.items()):
+            raise ValueError("SNQI-v2 source or sidecar changed during enrichment")
+        for path, temporary in staged.items():
+            temporary.replace(path)
+        return artifacts
+    finally:
+        for temporary in staged.values():
+            temporary.unlink(missing_ok=True)
 
 
 def _write_markdown_report(path: Path, name: str, payload: Mapping[str, Any]) -> None:

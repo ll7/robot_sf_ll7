@@ -240,13 +240,17 @@ def _analyze_v2(args: argparse.Namespace) -> int:
     Returns:
         Zero after successful report creation.
     """
-    from robot_sf.benchmark.snqi.v2_reports import read_episode_files, write_v2_reports
+    from robot_sf.benchmark.snqi.v2_reports import (
+        compact_report_episode,
+        read_episode_files,
+        write_v2_reports,
+    )
     from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec
 
     if not all((args.episodes, args.weights, args.anchors, args.family, args.reports_dir)):
         raise ValueError("SNQI-v2 requires --episodes --weights --anchors --family --reports-dir")
     spec = load_snqi_v2_spec(args.weights, args.anchors, args.family)
-    episodes = read_episode_files(args.episodes)
+    episodes = [compact_report_episode(ep, spec) for ep in read_episode_files(args.episodes)]
     spec.validate_evaluation_seeds([ep["seed"] for ep in episodes])
     artifacts = write_v2_reports(episodes, spec, args.reports_dir)
     print(json.dumps(artifacts, sort_keys=True))

@@ -105,3 +105,21 @@ planner and is explicitly labeled unpaired; the confidence intervals share seed 
 Undefined correlations are null. Correlations use average ties; tied top-1 values
 split credit; top-3 boundary ties use lexical arm identity. Bootstrap intervals
 with very few seeds are diagnostic and do not establish population precision.
+
+
+## Bounded report memory and producer custody
+
+Campaign enrichment reads and rewrites one JSONL episode at a time. Reports retain only scalar
+score inputs and episode/arm identities; force samples and planner/simulation traces stay on disk.
+Memory therefore scales with the compact episode table plus the largest decoded episode. The
+2,013 family vectors and paired coverage checks are unchanged. Offline report recomputation uses
+the same compact projection.
+
+Before replacement, enrichment validates the existing producer sidecar and its original JSONL
+hash and row identities. It stages the new JSONL and sidecar, records the original input hash,
+new output hash and specification provenance in `snqi_v2_enrichment`, and updates the sidecar's
+raw-artifact hash. All paired-report checks pass before any source file is replaced. Individual
+replacements are atomic; the file set is not a filesystem transaction. An interruption between
+replacements leaves a hash mismatch that downstream custody checks reject. Repeating a completed
+enrichment leaves episode and sidecar bytes unchanged. Extra disk space for staged JSONL files is
+required until replacement completes. Legacy field values are preserved; JSON formatting may change.

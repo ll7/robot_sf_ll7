@@ -25,6 +25,7 @@ from robot_sf.analysis_workbench.audit_github import (
 from robot_sf.analysis_workbench.audit_github_rest import (
     GitHubRESTProvider,
     HttpResponse,
+    auditor_request_marker,
 )
 from robot_sf.analysis_workbench.audit_mcp import (
     AuditMCPDispatcher,
@@ -164,6 +165,50 @@ class ServiceFakeProvider:
         )
 
 
+class AppendOnlyServiceFakeProvider(ServiceFakeProvider):
+    """Service fake exposing only immutable issue plus append-comment writes."""
+
+    def __init__(self, *, issues: list[GitHubIssue] | None = None) -> None:
+        """Initialize append-only comments and their deterministic receipts."""
+
+        super().__init__(issues=issues)
+        self.comment_calls: list[dict[str, Any]] = []
+        self.reconciled_comment_result = False
+
+    def append_auditor_comment(
+        self,
+        repository: str,
+        number: int,
+        *,
+        body: str,
+        request_digest: str,
+    ) -> dict[str, Any]:
+        """Append one immutable comment, optionally returning reconciliation."""
+
+        issue = self.get_issue(repository, number)
+        marker = auditor_request_marker(request_digest)
+        for comment in issue.comments:
+            if str(comment.get("body", "")).count(marker) == 1:
+                return {"status": "unchanged", "comment": comment}
+        comment = {
+            "id": 1000 + len(issue.comments),
+            "body": f"{marker}\n{body}",
+        }
+        self.comment_calls.append({"number": number, "body": body})
+        self.issues = [
+            replace(issue, comments=(*issue.comments, comment)) if item.number == number else item
+            for item in self.issues
+        ]
+        status = "reconciled" if self.reconciled_comment_result else "created"
+        self.reconciled_comment_result = False
+        return {"status": status, "comment": comment}
+
+    def update_issue_if_unchanged(self, *_args: Any, **_kwargs: Any) -> GitHubIssue:
+        """Reject the legacy body-CAS path so this fake cannot mask routing."""
+
+        raise AssertionError("append-only service fake attempted an issue-body update")
+
+
 def _setup(
     tmp_path: Path,
     provider: ServiceFakeProvider | None = None,
@@ -275,14 +320,63 @@ def test_service_sync_uses_canonical_finding_and_durable_replay(tmp_path: Path) 
         service.close()
 
 
-def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
+def test_service_append_only_reconciled_comment_consumes_reserved_write(
     tmp_path: Path,
 ) -> None:
-    class NoPostHTTP:
-        """Injected REST transport proving the unsupported path is read-only."""
+    provider = AppendOnlyServiceFakeProvider()
+    service, session, finding, revision, provider = _setup(
+        tmp_path,
+        provider=provider,
+        issue_write_budget=2,
+    )
+    try:
+        initial = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="append-service-initial",
+        )
+        assert initial.status == "committed"
+        assert initial.value is not None and initial.value.status == "created"
+        assert service.get_session(session).usage.issue_writes == 1
+
+        stored_record = service.store.get(finding.finding_id)
+        assert stored_record is not None and isinstance(stored_record.record, Finding)
+        revised = replace(stored_record.record, observations=("service append revision",))
+        revised_commit = service.finding_store.update(
+            revised,
+            operation_id="append-service-revision",
+            expected_revision=stored_record.revision,
+            actor="human",
+        )
+        provider.reconciled_comment_result = True
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised_commit.revision,
+            operation_id="append-service-comment",
+        )
+
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "reconciled"
+        assert result.value.remote_write == "applied"
+        assert len(provider.comment_calls) == 1
+        assert service.get_session(session).usage.issue_writes == 2
+    finally:
+        service.close()
+
+
+def test_service_rest_initial_create_uses_append_only_provider_without_patch(
+    tmp_path: Path,
+) -> None:
+    class InitialCreateHTTP:
+        """Injected REST transport proving service-backed initial publication."""
 
         def __init__(self) -> None:
             self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
 
         def request(
             self,
@@ -293,15 +387,41 @@ def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
             body: bytes | None,
             timeout: float,
         ) -> HttpResponse:
-            del headers, body, timeout
-            self.calls.append((method, url))
+            del headers, timeout
+            path = urlparse(url).path
+            self.calls.append((method, path))
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                number = 17
+                self.issue = {
+                    "repository": REPOSITORY,
+                    "number": number,
+                    "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                    "title": payload["title"],
+                    "body": payload["body"],
+                    "labels": [{"name": label} for label in payload["labels"]],
+                    "state": "open",
+                    "comments": 0,
+                    "updated_at": "2026-09-23T00:00:00Z",
+                }
+                return HttpResponse(201, self.issue)
             assert method == "GET"
-            return HttpResponse(
-                200,
-                {"total_count": 0, "incomplete_results": False, "items": []},
-            )
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return HttpResponse(200, self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
 
-    http = NoPostHTTP()
+    http = InitialCreateHTTP()
     provider = GitHubRESTProvider(
         http,
         allowed_repositories=(REPOSITORY,),
@@ -314,16 +434,16 @@ def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
             finding_id=finding.finding_id,
             repository=REPOSITORY,
             expected_finding_revision=revision,
-            operation_id="rest-unsupported-create",
+            operation_id="rest-initial-create",
         )
 
-        assert result.status == "unavailable"
-        assert result.value is not None and result.value.status == "unavailable"
-        assert result.value.remote_write == "none"
-        assert result.value.outbox is not None
-        assert result.value.outbox.state == "failed"
-        assert [method for method, _url in http.calls] == ["GET"]
-        assert service.get_session(session).usage.issue_writes == 0
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "created"
+        assert result.value.remote_write == "applied"
+        assert result.value.outbox is not None and result.value.outbox.state == "succeeded"
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert [method for method, _path in http.calls].count("PATCH") == 0
+        assert service.get_session(session).usage.issue_writes == 1
         assert not service.authority.snapshot()["reservations"]
         assert not service._reservations
     finally:
@@ -418,25 +538,8 @@ def test_service_rest_post_timeout_is_accounted_after_readback(
                     return HttpResponse(200, [])
             raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
 
-    class RevisionAwareRESTProvider(GitHubRESTProvider):
-        """Injected reservation seam delegating the mutation to the REST adapter."""
-
-        def create_issue_with_finding_revision(
-            self,
-            repository: str,
-            *,
-            finding_id: str,
-            expected_finding_revision: int,
-            title: str,
-            body: str,
-            labels: tuple[str, ...],
-        ) -> Any:
-            assert finding_id
-            assert expected_finding_revision >= 0
-            return self.create_issue(repository, title=title, body=body, labels=labels)
-
     http = PostTimeoutHTTP()
-    provider = RevisionAwareRESTProvider(
+    provider = GitHubRESTProvider(
         http,
         allowed_repositories=(REPOSITORY,),
         api_base_url="https://api.github.test",
@@ -768,6 +871,88 @@ def test_service_context_change_after_reservation_is_rejected_before_provider(
         assert result.status == "conflict"
         assert provider.create_calls == []
         assert service.get_session(session).usage.issue_writes == 0
+    finally:
+        service.close()
+
+
+def test_service_preflight_conflict_after_reservation_is_durable_and_uncharged(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    service, session, finding, revision, provider = _setup(tmp_path)
+    try:
+        build_sync = service._github_sync
+
+        def build_racing_sync(*args: Any, **kwargs: Any) -> Any:
+            delegate = build_sync(*args, **kwargs)
+
+            class RacingSync:
+                def sync(self, *sync_args: Any, **sync_kwargs: Any) -> Any:
+                    stored = service.store.get(finding.finding_id)
+                    assert stored is not None and isinstance(stored.record, Finding)
+                    service.finding_store.update(
+                        replace(stored.record, title="canonical finding raced preflight"),
+                        operation_id="canonical-preflight-race",
+                        expected_revision=stored.revision,
+                        actor="human",
+                    )
+                    return delegate.sync(*sync_args, **sync_kwargs)
+
+            return RacingSync()
+
+        monkeypatch.setattr(service, "_github_sync", build_racing_sync)
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="preflight-conflict-after-reservation",
+        )
+
+        assert result.status == "conflict"
+        assert result.operation is not None and result.operation.status == "conflict"
+        assert provider.create_calls == []
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+    finally:
+        service.close()
+
+
+def test_service_local_link_conflict_after_reservation_is_durable_and_uncharged(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    service, session, finding, revision, provider = _setup(tmp_path)
+    try:
+        build_sync = service._github_sync
+
+        def build_link_conflict_sync(*args: Any, **kwargs: Any) -> Any:
+            delegate = build_sync(*args, **kwargs)
+
+            class LinkConflictSync:
+                def sync(self, repository: str, value: Finding, **sync_kwargs: Any) -> Any:
+                    linked = replace(
+                        value,
+                        github_issue={"repository": "other/repo", "number": 17},
+                    )
+                    return delegate.sync(repository, linked, **sync_kwargs)
+
+            return LinkConflictSync()
+
+        monkeypatch.setattr(service, "_github_sync", build_link_conflict_sync)
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="link-conflict-after-reservation",
+        )
+
+        assert result.status == "conflict"
+        assert result.operation is not None and result.operation.status == "conflict"
+        assert provider.create_calls == []
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
     finally:
         service.close()
 

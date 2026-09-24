@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.scenario_certification.feasibility_diagnostics import DIAGNOSTIC_CLAIM_BOUNDARY
 
 SCENARIO_ADMISSIBILITY_SCHEMA = "scenario_admissibility.v1"
@@ -635,6 +636,7 @@ def _execution_problem(source: Any, role: str, case_id: str, scenario_id: str | 
         "scenario_variant",
         "planner_id",
         "run_status",
+        "fallback_or_degraded",
         "route_complete",
         "seed",
         "horizon_steps",
@@ -657,6 +659,9 @@ def _execution_problem(source: Any, role: str, case_id: str, scenario_id: str | 
         return f"{role}_execution_provenance_incomplete"
     if source["scenario_variant"] != "original" or source["run_status"] != "ok":
         return f"{role}_execution_not_an_original_recorded_run"
+    fallback_problem = _execution_fallback_problem(source, role)
+    if fallback_problem is not None:
+        return fallback_problem
     if not _execution_digest_fields_valid(source):
         return f"{role}_execution_provenance_incomplete"
     if not _execution_outcome_valid(source):
@@ -665,6 +670,15 @@ def _execution_problem(source: Any, role: str, case_id: str, scenario_id: str | 
         return "replay_determinism_check_not_passed"
     if role == "replay" and source.get("resimulated") is not True:
         return "replay_did_not_resimulate_source_episode"
+    return None
+
+
+def _execution_fallback_problem(source: Mapping[str, Any], role: str) -> str | None:
+    """Reject absent, malformed, or positive fallback/degraded execution metadata."""
+    if not isinstance(source["fallback_or_degraded"], bool):
+        return f"{role}_execution_fallback_status_missing_or_malformed"
+    if source["fallback_or_degraded"] or runtime_fallback_or_degraded_marker(dict(source)):
+        return f"{role}_execution_fallback_or_degraded"
     return None
 
 

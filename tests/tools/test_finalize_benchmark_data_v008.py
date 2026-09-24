@@ -366,8 +366,9 @@ def test_failed_preflight_removes_owned_publication_export(
     assert not external.exists()
 
 
+@pytest.mark.parametrize("mark_failure", [False, True])
 def test_receipt_write_failure_invalidates_candidate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mark_failure: bool
 ) -> None:
     producer = tmp_path / "producer"
     _producer(producer)
@@ -417,7 +418,14 @@ def test_receipt_write_failure_invalidates_candidate(
     )
     monkeypatch.setattr(finalizer, "_publish_copy", publish)
     monkeypatch.setattr(finalizer, "_write_json", fail_receipt)
-    with pytest.raises(OSError, match="receipt storage failed"):
+    if mark_failure:
+        monkeypatch.setattr(
+            finalizer,
+            "_mark_candidate_failure",
+            lambda *args: (_ for _ in ()).throw(OSError("mark storage failed")),
+        )
+    expected_error = "mark storage failed" if mark_failure else "receipt storage failed"
+    with pytest.raises(OSError, match=expected_error):
         finalizer.finalize(
             producer_root=producer,
             candidate_root=candidate,
@@ -425,9 +433,10 @@ def test_receipt_write_failure_invalidates_candidate(
             baseline_archive=baseline,
             expected_source_sha=SOURCE_SHA,
         )
-    result = finalizer._read_mapping(candidate / "release" / "release_result.json")
-    assert result["release_benchmark_success"] is False
-    assert result["finalization_failed_stage"] == "finalization_receipt"
+    if not mark_failure:
+        result = finalizer._read_mapping(candidate / "release" / "release_result.json")
+        assert result["release_benchmark_success"] is False
+        assert result["finalization_failed_stage"] == "finalization_receipt"
     assert not finalizer._publication_output(candidate).exists()
     assert not any(path.exists() for path in finalizer._receipt_paths(candidate))
 

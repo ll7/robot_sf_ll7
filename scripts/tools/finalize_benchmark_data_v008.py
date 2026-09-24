@@ -402,11 +402,15 @@ def finalize(
         pending_receipt.rename(receipt_path)
         return receipt
     except BaseException:
-        _mark_candidate_failure(candidate_root, stage)
-        if stage == "finalization_receipt":
-            _remove_owned_output(candidate_root)
-        for path in _receipt_paths(candidate_root):
-            path.unlink(missing_ok=True)
+        try:
+            _mark_candidate_failure(candidate_root, stage)
+        finally:
+            try:
+                if stage == "finalization_receipt":
+                    _remove_owned_output(candidate_root)
+            finally:
+                for path in _receipt_paths(candidate_root):
+                    path.unlink(missing_ok=True)
         raise
 
 

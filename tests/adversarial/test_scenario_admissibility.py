@@ -49,11 +49,26 @@ def _certificate(
     pedestrian_count: int = 0,
     route_reason: str | None = None,
 ) -> dict[str, Any]:
-    reasons = (
-        [route_reason]
-        if route_reason is not None
-        else (["route_requires_at_least_two_waypoints"] if classification == "invalid" else [])
-    )
+    if route_reason is not None:
+        reasons = [route_reason]
+    elif classification == "invalid":
+        reasons = ["route_requires_at_least_two_waypoints"]
+    elif classification == "geometrically_infeasible":
+        reasons = ["no_inflated_collision_free_path: empty_path"]
+    elif classification == "kinodynamically_infeasible":
+        reasons = ["route_turn_radius_below_bicycle_limit: 1.000 < 2.000"]
+    else:
+        reasons = []
+    route_checks: dict[str, Any] = {"dynamic": {"single_pedestrian_count": pedestrian_count}}
+    if classification == "geometrically_infeasible":
+        route_checks["inflated_collision_free_path"] = False
+    if classification == "kinodynamically_infeasible":
+        route_checks["kinodynamic"] = {
+            "robot_model": "BicycleDriveSettings",
+            "command_limits_valid": True,
+            "minimum_turning_radius_m": 2.0,
+            "route_minimum_turn_radius_m": 1.0,
+        }
     return {
         "schema_version": CERT_SCHEMA_VERSION,
         "scenario_id": scenario_id,
@@ -70,7 +85,7 @@ def _certificate(
                 "classification": classification,
                 "benchmark_eligibility": eligibility,
                 "reasons": reasons,
-                "checks": {"dynamic": {"single_pedestrian_count": pedestrian_count}},
+                "checks": route_checks,
                 "evidence": {},
             }
         ],
@@ -205,6 +220,144 @@ def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
     assert kinematic.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
     assert invalid_geometry.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
     assert impossible.assumptions["scenario_certificate"]["settings"] == {"robot_radius_m": 0.4}
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["label_only", "missing_check", "contradictory_check", "missing_summary_reason"],
+)
+def test_geometric_certificate_label_needs_matching_producer_evidence(mutation: str) -> None:
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    route = certificate["route_certificates"][0]
+    if mutation == "label_only":
+        certificate["reasons"] = []
+        route["reasons"] = []
+        route["checks"].pop("inflated_collision_free_path")
+    elif mutation == "missing_check":
+        route["checks"].pop("inflated_collision_free_path")
+    elif mutation == "contradictory_check":
+        route["checks"]["inflated_collision_free_path"] = True
+    else:
+        certificate["reasons"] = []
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+
+
+def test_supported_geometric_collision_check_patterns_can_exclude() -> None:
+    swept = _certificate("geometrically_infeasible", eligibility="excluded")
+    swept_reason = "planned_path_swept_envelope_clips_obstacle: full_polyline_clearance_m=-0.25"
+    swept["reasons"] = [swept_reason]
+    swept_route = swept["route_certificates"][0]
+    swept_route["reasons"] = [swept_reason]
+    swept_route["checks"].update(
+        {
+            "inflated_collision_free_path": False,
+            "swept_envelope": {
+                "validated": True,
+                "clips_obstacle": True,
+                "clearance_m": -0.25,
+                "vertex_clearance_m": -0.25,
+                "clipped_vertex_count": 1,
+                "planned_waypoint_count": 4,
+            },
+        }
+    )
+
+    simulator = _certificate("geometrically_infeasible", eligibility="excluded")
+    simulator_reason = "planned_path_simulator_collision: first_collision_sample_index=3"
+    simulator["reasons"] = [simulator_reason]
+    simulator_route = simulator["route_certificates"][0]
+    simulator_route["reasons"] = [simulator_reason]
+    simulator_route["checks"].update(
+        {
+            "inflated_collision_free_path": False,
+            "simulator_obstacle_collision": {
+                "validated": True,
+                "collides_obstacle": True,
+                "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+                "obstacle_source": "MapDefinition.obstacles_pysf_runtime_normalized",
+                "sample_spacing_m": 0.05,
+                "checked_sample_count": 4,
+                "first_collision_sample_index": 3,
+            },
+        }
+    )
+
+    assert (
+        classify_scenario_admissibility("case-static", scenario_certificate=swept).verdict
+        == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    )
+    assert (
+        classify_scenario_admissibility("case-static", scenario_certificate=simulator).verdict
+        == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    )
+
+    swept["route_certificates"][0]["checks"]["swept_envelope"]["clearance_m"] = -0.5
+    assert (
+        classify_scenario_admissibility("case-static", scenario_certificate=swept).verdict
+        == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    )
+    simulator["route_certificates"][0]["checks"]["simulator_obstacle_collision"][
+        "first_collision_sample_index"
+    ] = 2
+    assert (
+        classify_scenario_admissibility("case-static", scenario_certificate=simulator).verdict
+        == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    )
+
+
+def test_kinodynamic_certificate_label_needs_matching_bicycle_check_evidence() -> None:
+    certificate = _certificate("kinodynamically_infeasible", eligibility="excluded")
+    route = certificate["route_certificates"][0]
+    certificate["reasons"] = []
+    route["reasons"] = []
+    route["checks"].pop("kinodynamic")
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+
+    inconsistent = _certificate("kinodynamically_infeasible", eligibility="excluded")
+    inconsistent["route_certificates"][0]["checks"]["kinodynamic"][
+        "route_minimum_turn_radius_m"
+    ] = 3.0
+    unresolved = classify_scenario_admissibility("case-static", scenario_certificate=inconsistent)
+    assert unresolved.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+
+
+def test_supported_steering_limit_evidence_excludes_but_unknown_robot_type_does_not() -> None:
+    steering = _certificate("kinodynamically_infeasible", eligibility="excluded")
+    steering_reason = "bicycle_max_steer_non_positive"
+    steering["reasons"] = [steering_reason]
+    steering_route = steering["route_certificates"][0]
+    steering_route["reasons"] = [steering_reason]
+    steering_route["checks"]["kinodynamic"] = {
+        "robot_model": "BicycleDriveSettings",
+        "command_limits_valid": False,
+    }
+
+    unsupported = _certificate("kinodynamically_infeasible", eligibility="excluded")
+    unsupported_reason = "unsupported_robot_config: CustomDriveSettings"
+    unsupported["reasons"] = [unsupported_reason]
+    unsupported_route = unsupported["route_certificates"][0]
+    unsupported_route["reasons"] = [unsupported_reason]
+    unsupported_route["checks"]["kinodynamic"] = {
+        "robot_model": "CustomDriveSettings",
+        "command_limits_valid": False,
+    }
+
+    assert (
+        classify_scenario_admissibility("case-static", scenario_certificate=steering).verdict
+        == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    )
+    assert (
+        classify_scenario_admissibility("case-static", scenario_certificate=unsupported).verdict
+        == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    )
 
 
 def test_valid_certificate_and_valid_predicates_do_not_establish_feasibility() -> None:

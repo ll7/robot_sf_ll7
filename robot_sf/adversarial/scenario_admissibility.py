@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -303,20 +304,165 @@ def _certificate_inputs_bound(
 
 
 def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: str) -> bool:
-    """Require every applicable route to support a scenario-level exclusion."""
+    """Require producer-shaped reason and check evidence for every excluded route."""
     routes = cert.get("route_certificates")
-    return (
-        _route_inventory_complete(cert)
-        and isinstance(routes, Sequence)
-        and not isinstance(routes, (str, bytes))
-        and bool(routes)
-        and all(
-            isinstance(route, Mapping)
-            and route.get("classification") == classification
-            and route.get("benchmark_eligibility") == "excluded"
-            for route in routes
-        )
+    if (
+        not _route_inventory_complete(cert)
+        or not isinstance(routes, Sequence)
+        or isinstance(routes, (str, bytes))
+        or not routes
+    ):
+        return False
+    if not _certificate_reasons_match_routes(cert, routes):
+        return False
+    return all(
+        isinstance(route, Mapping)
+        and route.get("classification") == classification
+        and route.get("benchmark_eligibility") == "excluded"
+        and _route_has_impossibility_evidence(route, classification)
+        for route in routes
     )
+
+
+def _certificate_reasons_match_routes(cert: Mapping[str, Any], routes: Sequence[Any]) -> bool:
+    """Require scenario-level reason aggregation to match all route-level reasons."""
+    top_reasons = cert.get("reasons")
+    if not isinstance(top_reasons, list) or not all(
+        isinstance(reason, str) and reason for reason in top_reasons
+    ):
+        return False
+    route_reasons: set[str] = set()
+    for route in routes:
+        reasons = route.get("reasons") if isinstance(route, Mapping) else None
+        if not isinstance(reasons, list) or not all(
+            isinstance(reason, str) and reason for reason in reasons
+        ):
+            return False
+        route_reasons.update(reasons)
+    return top_reasons == sorted(route_reasons)
+
+
+def _route_has_impossibility_evidence(route: Mapping[str, Any], classification: str) -> bool:
+    """Validate a route exclusion against the checks emitted by scenario_cert.v1."""
+    reasons = route.get("reasons")
+    checks = route.get("checks")
+    if (
+        not isinstance(reasons, list)
+        or len(reasons) != 1
+        or not isinstance(reasons[0], str)
+        or not isinstance(checks, Mapping)
+    ):
+        return False
+    if classification == "geometrically_infeasible":
+        return _route_has_geometric_evidence(reasons[0], checks)
+    if classification == "kinodynamically_infeasible":
+        return _route_has_kinodynamic_evidence(reasons[0], checks)
+    return False
+
+
+def _route_has_geometric_evidence(reason: str, checks: Mapping[str, Any]) -> bool:
+    """Match one of the geometric failure records emitted by the canonical producer."""
+    if checks.get("inflated_collision_free_path") is not False:
+        return False
+    if reason.startswith("no_inflated_collision_free_path:"):
+        return bool(reason.partition(":")[2].strip())
+    swept_match = re.fullmatch(
+        r"planned_path_swept_envelope_clips_obstacle: full_polyline_clearance_m="
+        r"(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
+        reason,
+    )
+    if swept_match is not None:
+        swept = checks.get("swept_envelope")
+        if not isinstance(swept, Mapping):
+            return False
+        clearance = _finite_number(swept.get("clearance_m"))
+        vertex_clearance = _finite_number(swept.get("vertex_clearance_m"))
+        clipped_vertices = swept.get("clipped_vertex_count")
+        waypoint_count = swept.get("planned_waypoint_count")
+        return (
+            swept.get("validated") is True
+            and swept.get("clips_obstacle") is True
+            and clearance is not None
+            and clearance < 0.0
+            and vertex_clearance is not None
+            and math.isclose(float(swept_match.group(1)), clearance, rel_tol=1e-6, abs_tol=1e-9)
+            and _nonnegative_int(clipped_vertices)
+            and _minimum_int(waypoint_count, 2)
+        )
+    simulator_match = re.fullmatch(
+        r"planned_path_simulator_collision: first_collision_sample_index=(\d+)", reason
+    )
+    if simulator_match is not None:
+        simulator = checks.get("simulator_obstacle_collision")
+        if not isinstance(simulator, Mapping):
+            return False
+        sample_index = int(simulator_match.group(1))
+        recorded_index = simulator.get("first_collision_sample_index")
+        checked_count = simulator.get("checked_sample_count")
+        sample_spacing = _finite_number(simulator.get("sample_spacing_m"))
+        return (
+            simulator.get("validated") is True
+            and simulator.get("collides_obstacle") is True
+            and simulator.get("runtime_component") == "ContinuousOccupancy.is_obstacle_collision"
+            and simulator.get("obstacle_source")
+            == "MapDefinition.obstacles_pysf_runtime_normalized"
+            and sample_spacing is not None
+            and sample_spacing > 0.0
+            and isinstance(recorded_index, int)
+            and not isinstance(recorded_index, bool)
+            and recorded_index == sample_index
+            and checked_count == sample_index + 1
+        )
+    return False
+
+
+def _route_has_kinodynamic_evidence(reason: str, checks: Mapping[str, Any]) -> bool:
+    """Match supported bicycle infeasibility reasons to their recorded check values."""
+    kinodynamic = checks.get("kinodynamic")
+    if not isinstance(kinodynamic, Mapping):
+        return False
+    if reason == "bicycle_max_steer_non_positive":
+        return (
+            kinodynamic.get("robot_model") == "BicycleDriveSettings"
+            and kinodynamic.get("command_limits_valid") is False
+        )
+    match = re.fullmatch(
+        r"route_turn_radius_below_bicycle_limit: (-?\d+\.\d{3}) < (-?\d+\.\d{3})",
+        reason,
+    )
+    route_radius = _finite_number(kinodynamic.get("route_minimum_turn_radius_m"))
+    minimum_radius = _finite_number(kinodynamic.get("minimum_turning_radius_m"))
+    return (
+        match is not None
+        and kinodynamic.get("robot_model") == "BicycleDriveSettings"
+        and kinodynamic.get("command_limits_valid") is True
+        and route_radius is not None
+        and minimum_radius is not None
+        and route_radius >= 0.0
+        and minimum_radius > 0.0
+        and route_radius < minimum_radius
+        and match.group(1) == f"{route_radius:.3f}"
+        and match.group(2) == f"{minimum_radius:.3f}"
+    )
+
+
+def _finite_number(value: Any) -> float | None:
+    """Return a finite non-boolean number as float."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        parsed = float(value)
+    except OverflowError:
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _nonnegative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _minimum_int(value: Any, minimum: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
 def _route_inventory_complete(cert: Mapping[str, Any]) -> bool:

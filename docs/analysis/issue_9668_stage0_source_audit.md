@@ -98,6 +98,10 @@ as named by `payload/release/release_manifest.resolved.json` inside the checksum
 publication archive. The older
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml` is not that
 archive's canonical campaign config.
+Against the same archived resolved manifest, the current template also matches the ordered
+14 planner keys and every planner-config path and SHA-256, plus the scenario-matrix and seed-set
+paths and SHA-256 checksums. This is a source-byte check before execution; the final campaign
+manifest and episode outputs still require the release equivalence gate.
 
 The 0.0.7 full campaign used Slurm job `15715`: 36 allocated CPUs and 03:00:36 elapsed. Its
 terminal scheduler state was `FAILED (2:0)` because of a documented post-run custody promotion

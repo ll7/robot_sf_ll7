@@ -1,6 +1,6 @@
-## Issue #5326 durable objective-comparison table (diagnostic tier)
+## Adversarial sampler comparison (diagnostic tier)
 
-> Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path is reproducible by construction; the `--empirical` CPU path runs the real `pysocialforce` evaluator and produces certified/replayable failures without Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level review of certification/replay/independent-seed evidence.
+> Claim boundary: diagnostic-only; not paper-facing benchmark evidence. Execution mode: `CPU-empirical`. A finite search budget cannot establish that no counterexample exists outside the evaluated rows or support a general method-superiority claim.
 
 | objective | sampler | budget | seed | best_valid_objective | certified_valid_failures | replayable_valid_failures | replay_success_rate | invalid_candidate_rate | signed_property_violations | held_out_family_status | fallback/degraded |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -11,7 +11,7 @@
 
 ### Stop-rule decision
 
-**DIRECTION NARROWED (diagnostic).** Both objectives compared under matched CPU-synthetic budgets with no degraded execution. This is a contract/structure check only; it does not constitute benchmark evidence for the signed-objective hypothesis (requires artifact-level confirmation of certification/replay/independent-seed evidence).
+**DIRECTION NARROWED (diagnostic).** Configured samplers were compared under matched CPU-empirical budgets with no degraded execution. The finite-budget result does not establish that no critical candidate exists outside the evaluated rows or support a general method-superiority claim.
 
 ### Exclusions and caveats
 
@@ -20,4 +20,4 @@
 - paper-facing success claims: forbidden at this tier
 - confirmation tier: artifact-level review of certification/replay/independent-seed
 - report_status: diagnostic_local_nominal; schema adversarial-sampler-comparison.v3; budgets=[16]; seeds=[1101, 2202]
-- source report: output/issue9645-pilot/comparison.json
+- source report: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json

@@ -16,10 +16,11 @@ slice preserves the event and metrics independently and flags 17 selected cases 
 contradiction; it does not repair the source values. The camera-ready analyzer's seven
 planner-level integrity findings remain visible in the evidence packet.
 
-Four distinct cases were rerun once successfully. Their scenario, seed, planner, config identity,
-and all three canonical event flags matched the selected source rows. Named metrics differed in
-each case, and the replay checkout (`5cccee50be333adceee4c978b54bf63d32454cc9`) differs from the
-source campaign (`f7ebdcae2375d085e925213197a75a386e26a79c`), so every result is
+Four distinct cases each produced one episode row on the corrected replay run. Their scenario,
+seed, planner/config identity, and all three canonical event flags matched the selected source
+rows, but named metrics differed in every case. The replay checkout
+(`5cccee50be333adceee4c978b54bf63d32454cc9`) differs from the source campaign
+(`f7ebdcae2375d085e925213197a75a386e26a79c`), so every result is
 `mismatch_different_revision`, not an exact historical replay.
 
 ## Source and reproducibility

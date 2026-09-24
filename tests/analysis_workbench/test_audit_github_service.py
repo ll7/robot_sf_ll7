@@ -7,6 +7,7 @@ import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -19,6 +20,10 @@ from robot_sf.analysis_workbench.audit_github import (
     GitHubCapabilityUnavailable,
     GitHubConflictError,
     GitHubIssue,
+    GitHubOutbox,
+    GitHubPreflightConflict,
+    GitHubPreflightValidationError,
+    GitHubSync,
     SearchResult,
     render_finding_issue,
 )
@@ -287,6 +292,53 @@ def _setup_known_source(
         else None
     )
     return service, session, finding, commit.revision, fake
+
+
+def test_sync_classifies_canonical_preflight_conflicts_before_provider_io(tmp_path: Path) -> None:
+    finding = add_candidate(new_finding("preflight-boundary", "preflight symptom"), "episode-1")
+    provider = ServiceFakeProvider()
+    missing_record_store = SimpleNamespace(store=SimpleNamespace(get=lambda _finding_id: None))
+    stale_record = SimpleNamespace(record=replace(finding, title="stale title"), revision=0)
+    stale_record_store = SimpleNamespace(
+        store=SimpleNamespace(get=lambda _finding_id: stale_record)
+    )
+
+    with GitHubOutbox(tmp_path / "outbox") as outbox:
+        rejected_calls = (
+            # A requested canonical revision cannot be checked without an adapter.
+            (None, 0),
+            # Adapters without the shared AuditStore and stores missing a record fail closed.
+            (object(), None),
+            (missing_record_store, None),
+            # Existing canonical content must match the caller snapshot before provider I/O.
+            (stale_record_store, None),
+        )
+        for finding_store, expected_revision in rejected_calls:
+            with pytest.raises(GitHubPreflightConflict):
+                GitHubSync(provider, outbox, finding_store=finding_store).sync(
+                    REPOSITORY,
+                    finding,
+                    operation_id="canonical-preflight-conflict",
+                    expected_finding_revision=expected_revision,
+                )
+
+    assert provider.create_calls == []
+
+
+def test_sync_classifies_malformed_local_issue_link_before_provider_io(tmp_path: Path) -> None:
+    finding = add_candidate(new_finding("malformed-link", "preflight symptom"), "episode-1")
+    malformed_finding = replace(finding, github_issue={"repository": REPOSITORY, "number": "bad"})
+    provider = ServiceFakeProvider()
+
+    with GitHubOutbox(tmp_path / "outbox") as outbox:
+        with pytest.raises(GitHubPreflightValidationError):
+            GitHubSync(provider, outbox).sync(
+                REPOSITORY,
+                malformed_finding,
+                operation_id="malformed-local-link",
+            )
+
+    assert provider.create_calls == []
 
 
 def test_service_sync_uses_canonical_finding_and_durable_replay(tmp_path: Path) -> None:

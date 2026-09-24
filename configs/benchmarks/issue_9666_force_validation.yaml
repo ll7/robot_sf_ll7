@@ -45,6 +45,7 @@ workers: 16
 horizon: 600
 dt: 0.1
 record_forces: true
+record_simulation_step_trace: true
 checkpoint_provenance_enforcement: error
 resume: false
 stop_on_failure: true

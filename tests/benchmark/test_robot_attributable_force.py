@@ -87,7 +87,11 @@ def test_simulator_capture_recomputes_and_preserves_dynamics():
     from tests.sim.test_goal_force_instrumentation import _build_simulator
 
     sim = _build_simulator(oracle_enabled=False, robot_force_enabled=True)
+    state = sim.pysf_state.pysf_states()
+    state[0, :2] = np.asarray(sim.robot_pos[0]) + np.array([2.0, 0.0])
+    state[0, 4:6] = state[0, :2] + np.array([6.0, 0.0])
     sim.step_once([(0.0, 0.0)])
+    assert np.linalg.norm(sim.last_robot_ped_forces) > 0
     inputs = sim.last_robot_force_inputs
     data = _data([inputs["peds_pos"]])
     component = inputs["components"][0]
@@ -207,3 +211,61 @@ def test_recorded_robot_component_subtracts_from_registered_total():
     np.testing.assert_allclose(
         sim.last_ped_forces[0] - sim.last_robot_ped_forces[0], remaining, atol=1e-12
     )
+
+
+def test_disabled_robot_force_capture_is_zero():
+    from tests.sim.test_goal_force_instrumentation import _build_simulator
+
+    sim = _build_simulator(oracle_enabled=False, robot_force_enabled=False)
+    sim.step_once([(0.0, 0.0)])
+    assert not sim.last_robot_ped_forces.any()
+
+
+@pytest.mark.parametrize("persist", [False, True])
+def test_runner_persists_force_series_only_for_explicit_trace(persist):
+    import json
+
+    from robot_sf.benchmark.map_runner.map_runner_episode import _compute_post_loop_metrics
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+    samples = [
+        {
+            "peds_pos": [[2.0, 0.0]],
+            "forces": [[1.25, 0.0]],
+            "components": [{**CFG, "robot_pos": [0.0, 0.0]}],
+            "social_force_config": asdict(SocialForceConfig()),
+            "ped_radius_m": 0.35,
+        }
+        for _ in range(2)
+    ]
+    result = _compute_post_loop_metrics(
+        robot_positions=[np.zeros(2), np.zeros(2)],
+        robot_headings=[0.0, 0.0],
+        ped_positions=[np.array([[2.0, 0.0]])] * 2,
+        ped_forces=[np.array([[1.25, 0.0]])] * 2,
+        robot_force_samples=samples,
+        persist_robot_force_samples=persist,
+        visibility_trace=[None, None],
+        track_confidence_trace=[None, None],
+        visibility_evidence_statuses=[],
+        visibility_evidence_reasons=[],
+        reached_goal_step=None,
+        collision_seen=False,
+        ped_collision_seen=False,
+        obstacle_collision_seen=False,
+        robot_collision_seen=False,
+        map_def=None,
+        goal_vec=np.array([10.0, 0.0]),
+        scenario={},
+        config=RobotSimulationConfig(),
+        horizon_val=2,
+        record_forces=True,
+        experimental_ped_impact=False,
+        ped_impact_radius_m=2.0,
+        ped_impact_window_steps=5,
+    )
+    assert result.metrics_raw["robot_force_peak"] == 1.25
+    assert "robot_force_metadata" in result.metrics_raw
+    assert ("robot_force_samples" in result.metrics_raw) is persist
+    if persist:
+        assert json.loads(json.dumps(result.metrics_raw["robot_force_samples"])) == samples

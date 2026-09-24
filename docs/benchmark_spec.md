@@ -479,7 +479,9 @@ and the computed reference. The reference is the full pedestrian-pair force magn
 3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
 lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
 
-`robot_force_samples` preserves per-step vectors and pre-integration force inputs; existing
+`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
+reductions and metadata; samples remain in memory for all force reductions. Existing
 post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
 inputs without a simulator, including explicitly supplied response multipliers. Reconstructing from
 post-integration legacy snapshots is a post-hoc estimate, not exact recorded-force parity.

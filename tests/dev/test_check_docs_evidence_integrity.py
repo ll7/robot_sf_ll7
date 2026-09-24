@@ -449,6 +449,28 @@ def test_cited_command_and_config_paths_must_exist(tmp_path: Path) -> None:
     assert sum("cited command/config path" in problem for problem in problems) == 2
 
 
+def test_serialized_fixture_commands_preserve_historical_paths_as_source_data(
+    tmp_path: Path,
+) -> None:
+    """Fixture command strings are historical input data, not current path citations."""
+    fixture = tmp_path / "tests/fixtures/evidence/record.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "source_revision": "a" * 40,
+                "command": "uv run python scripts/removed_historical_tool.py "
+                "--config configs/removed_historical_config.yaml",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    problems = check_files([fixture.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert not any("cited command/config path" in problem for problem in problems)
+
+
 def test_output_flag_paths_are_not_required_to_exist(tmp_path: Path) -> None:
     """Paths handed to an output flag are created by the command, not inputs."""
     script = tmp_path / "scripts/tools/create_scenario.py"

@@ -281,12 +281,12 @@ publication_authorized: false
         load_release_preparation_version(marker)
 
 
-def test_repo_release_preparation_marker_targets_v0_0_6() -> None:
+def test_repo_release_preparation_marker_targets_v0_0_8() -> None:
     """The active marker stages the next software target without publication authority."""
     from scripts.dev.check_version_alignment import DEFAULT_RELEASE_PREPARATION
 
-    assert DEFAULT_RELEASE_PREPARATION.name == "release_0_0_6_preparation.yaml"
-    assert load_release_preparation_version() == "0.0.6"
+    assert DEFAULT_RELEASE_PREPARATION.name == "release_0_0_8_preparation.yaml"
+    assert load_release_preparation_version() == "0.0.8"
 
 
 @pytest.mark.parametrize("release_tag", ["v0.0.5", "rc0.0.5"])

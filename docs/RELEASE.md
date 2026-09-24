@@ -129,6 +129,10 @@ storage before any publication decision. Bundle creation is a reviewable
 candidate step; tagging, Zenodo publication, and DOI creation require the
 author's explicit go recorded on issue #9668. The canonical 0.0.8 campaign
 itself also waits for that go because its resolved identity requires the DOI.
+The source candidate already carries `CITATION.cff` version `0.0.8` and
+`configs/releases/release_0_0_8_preparation.yaml` with
+`publication_authorized: false`. The alignment guard accepts this explicit
+untagged preparation state; it is not authorization to tag or publish.
 
 ## Preflight
 

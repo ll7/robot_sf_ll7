@@ -358,8 +358,9 @@ def _route_has_geometric_evidence(reason: str, checks: Mapping[str, Any]) -> boo
     """Match one of the geometric failure records emitted by the canonical producer."""
     if checks.get("inflated_collision_free_path") is not False:
         return False
-    if reason.startswith("no_inflated_collision_free_path:"):
-        return bool(reason.partition(":")[2].strip())
+    if reason == "no_inflated_collision_free_path: empty_path":
+        planner = checks.get("planner")
+        return isinstance(planner, Mapping) and planner.get("path_status") == "no_path"
     swept_match = re.fullmatch(
         r"planned_path_swept_envelope_clips_obstacle: full_polyline_clearance_m="
         r"(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",

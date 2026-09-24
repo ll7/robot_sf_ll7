@@ -205,3 +205,33 @@ def test_publication_path_rejects_external_descriptor(
         finalizer._publication_path({"bundle_dir": "<external>/bundle"}, "bundle_dir")
     with pytest.raises(ValueError, match="leaves the source checkout"):
         finalizer._publication_path({"bundle_dir": "../bundle"}, "bundle_dir")
+
+
+def test_publication_does_not_accept_missing_export_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        finalizer,
+        "_build_publication_payload",
+        lambda **kwargs: {
+            "bundle_dir": "publication/missing_bundle",
+            "archive_path": "publication/missing_bundle.tar.gz",
+        },
+    )
+    monkeypatch.setattr(finalizer, "_record_publication_payload", lambda *args: None)
+    with pytest.raises(ValueError, match="did not leave a bundle"):
+        finalizer._publish_copy(
+            candidate,
+            original,
+            SimpleNamespace(
+                release_tag="benchmark-data-0.0.8",
+                doi="10.5281/zenodo.123456",
+                repository_url="https://example.org/repository",
+            ),
+        )
+    rejected = json.loads((candidate / "release" / "release_result.json").read_text())
+    assert rejected["publication_preflight_status"] == "fail"

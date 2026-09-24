@@ -141,6 +141,9 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
         else:
             raise ValueError("publication bundle descriptor did not stabilize")
         bundle_dir = _publication_path(publication_payload, "bundle_dir")
+        archive = _publication_path(publication_payload, "archive_path")
+        if not bundle_dir.is_dir() or not archive.is_file():
+            raise ValueError("publication export did not leave a bundle directory and archive")
         _assert_no_historical_release_identity(bundle_dir)
         _run_publication_preflight(bundle_dir)
     except (OSError, ValueError, PublicationPreflightError) as exc:
@@ -157,7 +160,7 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
         )
         _write_json(result_path, result)
         raise
-    return _publication_path(publication_payload, "archive_path")
+    return archive
 
 
 def _publication_path(payload: dict[str, Any], key: str) -> Path:

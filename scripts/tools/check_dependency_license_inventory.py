@@ -4394,6 +4394,54 @@ def _reported_unresolved_count(report_path: Path) -> int:
 
 COMPARISON_SCHEMA_VERSION = "dependency_license_comparison.v1"
 _COMPARISON_FINAL_STATUSES = ("blocked", "complete")
+_COMPARISON_REPORT_FIELDS = frozenset(
+    {
+        "candidate_binding",
+        "environment",
+        "failures",
+        "installed_not_locked",
+        "packages",
+        "policy",
+        "profile_manifest",
+        "profiles",
+        "project",
+        "repository_inputs",
+        "schema_version",
+        "structural_issues",
+        "summary",
+        "surface",
+        "target",
+        "unrepresented_lock_package_dispositions",
+        "unrepresented_lock_packages",
+        _REPORT_CONTENT_DIGEST_FIELD,
+    }
+)
+_COMPARISON_SUMMARY_FIELDS = frozenset(
+    {
+        "candidate_bound",
+        "installed_distribution_count",
+        "installed_not_locked_count",
+        "license_status_counts",
+        "locked_package_count",
+        "outside_selected_package_count",
+        "policy_exact_disposition_count",
+        "policy_exact_match_count",
+        "policy_pending_component_count",
+        "policy_pending_package_count",
+        "profile_count",
+        "profile_membership_edge_count",
+        "selected_package_count",
+        "selected_profile_count",
+        "status",
+        "structural_issue_count",
+        "summary_contract_version",
+        "unrepresented_lock_package_count",
+        "unrepresented_reason_counts",
+        "unrepresented_reviewed_exclusion_count",
+        "unrepresented_unresolved_count",
+        "unresolved_count",
+    }
+)
 _COMPARISON_DYNAMIC_PROFILE_FIELDS = frozenset(
     {
         "package_ids",
@@ -4589,6 +4637,30 @@ def _comparison_profile_semantics(
     return by_id, issues
 
 
+def _comparison_report_schema_issues(
+    report: Any, *, report_name: str, allow_review_marker: bool = False
+) -> list[str]:
+    """Require the current inventory's exact top-level report schema."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    allowed = set(_COMPARISON_REPORT_FIELDS)
+    if allow_review_marker:
+        allowed.add("review_marker")
+    if set(report) != allowed:
+        return [f"{report_name} has missing or unclassified fields"]
+    return []
+
+
+def _comparison_summary_schema_issues(report: Any, *, report_name: str) -> list[str]:
+    """Require the canonical summary field set for one inventory report."""
+    summary = report.get("summary") if isinstance(report, dict) else None
+    if not isinstance(summary, dict):
+        return [f"{report_name} has no summary object"]
+    if set(summary) != _COMPARISON_SUMMARY_FIELDS:
+        return [f"{report_name} summary has missing or unclassified fields"]
+    return []
+
+
 def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shape validation
     baseline: Any, baseline_path: Path
 ) -> list[str]:
@@ -4596,6 +4668,12 @@ def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shap
     issues: list[str] = []
     if not isinstance(baseline, dict):
         return [f"comparison baseline is not a JSON object: {baseline_path}"]
+    issues.extend(
+        _comparison_report_schema_issues(
+            baseline, report_name="comparison baseline", allow_review_marker=True
+        )
+    )
+    issues.extend(_comparison_summary_schema_issues(baseline, report_name="comparison baseline"))
     if baseline.get("schema_version") != SCHEMA_VERSION:
         issues.append("comparison baseline schema_version is not current")
     recorded = baseline.get(_REPORT_CONTENT_DIGEST_FIELD)
@@ -4616,6 +4694,14 @@ def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shap
     failures = baseline.get("failures")
     if not isinstance(failures, list) or not all(isinstance(failure, str) for failure in failures):
         issues.append("comparison baseline has no string failures list")
+    elif isinstance(unresolved, int) and not isinstance(unresolved, bool):
+        if unresolved != len(failures):
+            issues.append(
+                "comparison baseline summary unresolved_count differs from failures count"
+            )
+        expected_status = "blocked" if failures else "complete"
+        if summary.get("status") != expected_status:
+            issues.append("comparison baseline summary status differs from failures")
     _input_rows, input_issues = _comparison_input_rows(baseline, report_name="comparison baseline")
     issues.extend(input_issues)
     issues.extend(_comparison_package_shape_issues(baseline, report_name="comparison baseline"))
@@ -4637,6 +4723,12 @@ def _comparison_source_binding_issues(
 ) -> list[str]:
     """Fail closed when the baseline is not source-bound to the current run."""
     issues: list[str] = []
+    issues.extend(
+        _comparison_report_schema_issues(current, report_name="comparison current report")
+    )
+    issues.extend(
+        _comparison_summary_schema_issues(current, report_name="comparison current report")
+    )
     baseline_inputs, baseline_input_issues = _comparison_input_rows(
         baseline, report_name="comparison baseline"
     )
@@ -4676,6 +4768,7 @@ def _comparison_policy_surface_issues(  # noqa: C901 - compare each reported sem
     for field, label in (
         ("policy", "policy"),
         ("profile_manifest", "profile manifest"),
+        ("project", "project"),
         ("target", "target"),
         ("surface", "profile surface"),
     ):

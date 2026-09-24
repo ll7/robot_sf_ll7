@@ -2327,6 +2327,7 @@ def test_compare_baseline_policy_mismatch_fails_closed(
     ("shape", "needle"),
     (
         ("schema", "schema"),
+        ("extra_field", "unclassified"),
         ("failures", "failures"),
         ("packages", "package"),
         ("unrepresented_dispositions", "disposition"),
@@ -2346,6 +2347,8 @@ def test_compare_baseline_digest_refreshed_malformed_shapes_fail_before_write(
     def mutate(payload: dict) -> None:
         if shape == "schema":
             payload["schema_version"] = "forged.inventory.v0"
+        elif shape == "extra_field":
+            payload["forged_field"] = True
         elif shape == "failures":
             payload["failures"] = "not-a-list"
         elif shape == "packages":
@@ -2356,6 +2359,131 @@ def test_compare_baseline_digest_refreshed_malformed_shapes_fail_before_write(
             payload["unrepresented_lock_package_dispositions"][0]["status"] = []
         else:
             payload["policy"]["package_dispositions"] = "not-a-list"
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert needle in capsys.readouterr().err
+
+
+def test_compare_baseline_digest_refreshed_summary_extra_field_fails_before_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A forged summary field cannot pass the canonical summary schema."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        payload["summary"]["forged_field"] = True
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert "summary" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("field", "needle"),
+    (
+        ("name", "project name"),
+        ("license", "project license"),
+    ),
+)
+def test_compare_baseline_project_semantics_drift_fails_before_write(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    field: str,
+    needle: str,
+) -> None:
+    """A refreshed baseline cannot forge the reported project identity."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        payload["project"][field] = "forged-project-value"
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert needle in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("field", "needle"),
+    (
+        ("unresolved_count", "unresolved_count differs"),
+        ("status", "summary status differs"),
+    ),
+)
+def test_compare_baseline_forged_summary_fails_before_write(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    field: str,
+    needle: str,
+) -> None:
+    """A digest-refreshed summary must still agree with canonical report accounting."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        if field == "unresolved_count":
+            payload["summary"][field] += 1
+        else:
+            payload["summary"][field] = "complete"
         from scripts.tools.check_dependency_license_inventory import _report_content_digest
 
         payload["report_content_sha256"] = _report_content_digest(payload)

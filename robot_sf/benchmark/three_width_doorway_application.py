@@ -5,7 +5,7 @@ Consumes the versioned three-level application manifest
 geometry-family owners for computation: variant-map generation, the variant
 matrix, doorway-geometry derivation, clearance margins, and the
 oracle-first sensitivity sweep. This module adds no second generator; it pins
-the narrow/middle/wide application (3.6 m / 4.2 m / 4.8 m at fixed 1.0 m
+the narrow/middle/wide application (2.2 m / 2.8 m / 3.6 m at fixed 1.0 m
 depth), builds cross-width pair manifests, and checks that generated variant
 scenarios differ from the historical baseline only in explained fields.
 
@@ -829,12 +829,14 @@ def run_three_width_preflight(
             "evidence_admission": "not_started",
             "missingness_policy": "blocked or degraded oracle/planner rows remain explicit and are not promoted",
         },
+        # Diagnostic preflight completion only. A conservative grid no-route
+        # finding remains visible above, while confirmation admission requires
+        # portable pairing and planner-specific clearance interpretation.
         "go": all(
             (
                 all(baseline_checks.values()),
                 bool(records),
                 oracle_available,
-                geometry_feasible,
                 all(item["planner"]["status"] == "not_run" for item in records),
             )
         ),

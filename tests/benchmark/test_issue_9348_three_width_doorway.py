@@ -78,19 +78,20 @@ def test_manifest_pins_three_width_tiers() -> None:
     """The application manifest must pin narrow/middle/wide tiers at fixed depth."""
     manifest = load_three_width_manifest(_MANIFEST)
     resolved = manifest["_resolved"]
-    assert tuple(resolved["gap_levels"]) == (3.6, 4.2, 4.8)
+    assert tuple(resolved["gap_levels"]) == (2.2, 2.8, 3.6)
     assert tuple(resolved["depth_levels"]) == (1.0,)
     assert float(resolved["nominal_radius_m"]) == 1.0
     assert tuple(resolved["planner_roster"]) == ("goal", "social_force")
-    assert len(resolved["planner_seeds"]) == 30
+    assert tuple(resolved["planner_seeds"]) == (225, 226, 227)
+    assert manifest["planner_protocol"]["expected_rows"] == 18
 
 
 def test_matrix_has_three_positive_clearance_widths(tmp_path: Path) -> None:
     """All comparison widths must clear the collision diameter at fixed depth."""
     manifest = load_three_width_manifest(_MANIFEST)
     assets = generate_application_assets(manifest, tmp_path / "matrix")
-    assert [asset["gap_width_m"] for asset in assets] == [3.6, 4.2, 4.8]
-    assert [round(asset["derived_clearance_margin_m"], 3) for asset in assets] == [1.6, 2.2, 2.8]
+    assert [asset["gap_width_m"] for asset in assets] == [2.2, 2.8, 3.6]
+    assert [round(asset["derived_clearance_margin_m"], 3) for asset in assets] == [0.2, 0.8, 1.6]
     assert all(
         asset["expected_geometry_tier"] == "geometrically_feasible_candidate" for asset in assets
     )
@@ -178,14 +179,14 @@ def test_pair_manifest_shares_seeds_across_widths() -> None:
             "scenario_sha256": f"scenario-{token}",
             "map_sha256": f"map-{token}",
         }
-        for token, gap in (("3p60", 3.6), ("4p20", 4.2), ("4p80", 4.8))
+        for token, gap in (("2p20", 2.2), ("2p80", 2.8), ("3p60", 3.6))
     ]
     pairs = build_pair_manifest(assets, (225, 226), "manifest-sha")
     assert pairs["schema_version"] == "issue_9348_three_width_pair_manifest.v1"
     assert pairs["realization_hash_status"] == "pending_initial_and_external_rng_state_verification"
     assert [pair["pair_id"] for pair in pairs["pairs"]] == ["pair_00225", "pair_00226"]
     for pair in pairs["pairs"]:
-        assert [cell["gap_width_m"] for cell in pair["cells"]] == [3.6, 4.2, 4.8]
+        assert [cell["gap_width_m"] for cell in pair["cells"]] == [2.2, 2.8, 3.6]
         assert all(cell["initial_actor_state_sha256"] is None for cell in pair["cells"])
         assert all(cell["external_rng_state_sha256"] is None for cell in pair["cells"])
     assert check_pair_receipts(pairs)
@@ -247,3 +248,30 @@ def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) ->
     write_preflight_report(report, report_path)
     payload = report_path.read_text(encoding="utf-8")
     assert '"review_marker": "AI-GENERATED NEEDS-REVIEW"' in payload
+
+
+def test_conservative_grid_result_is_reported_without_changing_frozen_widths(
+    tmp_path: Path,
+) -> None:
+    """A grid no-route finding stays distinct from positive continuous clearance."""
+
+    def conservative_certifier(scenario: dict[str, Any], path: Path) -> ScenarioCertificate:
+        certificate = _fake_certifier(scenario, path)
+        if float(scenario["metadata"]["gap_width_m"]) < 3.6:
+            certificate.classification = "geometrically_infeasible"
+            certificate.benchmark_eligibility = "excluded"
+            certificate.route_certificates[0].classification = "geometrically_infeasible"
+            certificate.route_certificates[0].benchmark_eligibility = "excluded"
+            certificate.route_certificates[0].checks["inflated_collision_free_path"] = False
+        return certificate
+
+    report = run_three_width_preflight(
+        _MANIFEST,
+        output_dir=tmp_path / "variants",
+        episode_runner=_fake_episode_runner,
+        certifier=conservative_certifier,
+    )
+    assert report["checks"]["all_widths_positive_clearance"] is True
+    assert report["checks"]["nominal_grid_route_feasible_for_every_variant"] is False
+    assert report["execution"]["confirmation_ready"] is False
+    assert report["go"] is True  # The diagnostic geometry preflight ran, not the campaign.

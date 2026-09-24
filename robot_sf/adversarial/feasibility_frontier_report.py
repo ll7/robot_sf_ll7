@@ -62,14 +62,16 @@ _CORPUS_DISPOSITIONS = {
 }
 _EVALUATION_SETS = ("fixed", "regression", "held_out")
 _OPTIMIZER_SELECTION_SCHEMA = "frontier-optimizer-selection.v1"
-_FALSIFICATION_SOURCE_SCHEMA = "frontier-falsification-source.v1"
+_FALSIFICATION_SOURCE_SCHEMA = "frontier-falsification-source.v2"
 _EVALUATION_SOURCE_SCHEMA = "frontier-evaluation-source.v2"
 _CORPUS_CASE_STATUS_SCHEMA = "frontier-corpus-case-status.v1"
+_ADMISSIBILITY_EVIDENCE_SCHEMA = "scenario_admissibility.v1"
 _SEARCH_CANDIDATE_SOURCE_FIELDS = (
     "candidate_id",
     "case_id",
     "evaluation_status",
     "admissibility_verdict",
+    "admissibility_evidence_artifact",
     "target_failure_observed",
     "replay_status",
     "corpus_disposition",
@@ -971,6 +973,17 @@ def _validate_discovered_case_observation(
         )
     if current_round == origin_round:
         _validate_same_round_case_observation(current_round, observation, origin_candidate, errors)
+        observation_admissibility = observation.get("admissibility_evidence_artifact")
+        candidate_admissibility = origin_candidate.get("admissibility_evidence_artifact")
+        if (
+            observation_admissibility is not None
+            or candidate_admissibility is not None
+            or observation.get("admissibility_verdict") in _CONFIRMED_FEASIBILITY_VERDICTS
+        ) and not _same_artifact_reference(observation_admissibility, candidate_admissibility):
+            errors.append(
+                f"round {current_round} case {case_id!r} admissibility evidence does not "
+                "match its origin candidate"
+            )
         return
     previous = latest_observations.get(case_id)
     previous_verdict = (
@@ -1304,6 +1317,53 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             errors.append(f"{candidate_prefix}.case_id must be non-empty text or null")
         elif corpus_disposition == "duplicate" and not isinstance(case_id, str):
             errors.append(f"{candidate_prefix} duplicate record requires case_id")
+        admissibility_artifact = candidate.get("admissibility_evidence_artifact")
+        if corpus_disposition in {"admitted", "duplicate"}:
+            _validate_artifact_role(
+                admissibility_artifact,
+                f"{candidate_prefix}.admissibility_evidence_artifact",
+                "admissibility-evidence",
+                errors,
+            )
+            admissibility_source = _validate_artifact(
+                admissibility_artifact,
+                f"{candidate_prefix}.admissibility_evidence_artifact",
+                evidence_root,
+                artifacts,
+                errors,
+                parse_json=True,
+            )
+            _validate_admissibility_evidence_source(
+                admissibility_source,
+                admissibility_artifact,
+                case_id,
+                candidate.get("admissibility_verdict"),
+                f"{candidate_prefix}.admissibility_evidence_artifact",
+                errors,
+            )
+        elif admissibility_artifact is not None:
+            _validate_artifact_role(
+                admissibility_artifact,
+                f"{candidate_prefix}.admissibility_evidence_artifact",
+                "admissibility-evidence",
+                errors,
+            )
+            admissibility_source = _validate_artifact(
+                admissibility_artifact,
+                f"{candidate_prefix}.admissibility_evidence_artifact",
+                evidence_root,
+                artifacts,
+                errors,
+                parse_json=True,
+            )
+            _validate_admissibility_evidence_source(
+                admissibility_source,
+                admissibility_artifact,
+                case_id,
+                candidate.get("admissibility_verdict"),
+                f"{candidate_prefix}.admissibility_evidence_artifact",
+                errors,
+            )
         replay_artifact = candidate.get("replay_artifact")
         if candidate.get("replay_status") == "verified" or replay_artifact is not None:
             _validate_artifact_role(
@@ -1441,12 +1501,25 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 "admissibility-evidence",
                 errors,
             )
-            _validate_artifact(
+            admissibility_source = _validate_artifact(
                 admissibility_evidence,
                 f"{obs_prefix}.admissibility_evidence_artifact",
                 evidence_root,
                 artifacts,
                 errors,
+                parse_json=True,
+            )
+            _validate_admissibility_evidence_source(
+                admissibility_source,
+                admissibility_evidence,
+                observation.get("case_id"),
+                observation.get("admissibility_verdict"),
+                f"{obs_prefix}.admissibility_evidence_artifact",
+                errors,
+            )
+        else:
+            errors.append(
+                f"{obs_prefix}.admissibility_evidence_artifact is required for every case observation"
             )
 
 
@@ -1978,6 +2051,134 @@ def _validate_artifact_role(value: Any, prefix: str, expected_role: str, errors:
     """Require references used as a specific evidence type to declare that role."""
     if isinstance(value, dict) and value.get("role") != expected_role:
         errors.append(f"{prefix}.role must be {expected_role!r}")
+
+
+def _validate_admissibility_evidence_source(
+    source: Any,
+    artifact: Any,
+    case_id: Any,
+    verdict: Any,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Bind the #9651 verdict artifact to its case and require support for confirmation."""
+    if not isinstance(source, dict):
+        return
+    _validate_admissibility_record_shape(source, artifact, prefix, errors)
+    if source.get("case_id") != case_id:
+        errors.append(f"{prefix}.case_id does not match the candidate or observation")
+    if source.get("verdict") != verdict:
+        errors.append(f"{prefix}.verdict does not match the candidate or observation")
+    expected_disposition = (
+        "reject"
+        if verdict in {"structurally_invalid", "geometric_or_kinodynamic_impossibility"}
+        else "retain"
+    )
+    if source.get("search_disposition") != expected_disposition:
+        errors.append(f"{prefix}.search_disposition conflicts with its verdict")
+    evidence = source.get("evidence")
+    if not isinstance(evidence, dict):
+        errors.append(f"{prefix}.evidence must be an object")
+        return
+    _validate_confirmed_admissibility_support(source, evidence, case_id, prefix, errors)
+
+
+def _validate_admissibility_record_shape(  # noqa: C901 - report independent schema-field defects.
+    source: dict[str, Any], artifact: Any, prefix: str, errors: list[str]
+) -> None:
+    """Check required #9651 record fields before binding its evidence to a case."""
+    required = {
+        "schema_version",
+        "case_id",
+        "scenario_id",
+        "verdict",
+        "target_planner_outcome",
+        "search_disposition",
+        "reason_codes",
+        "assumptions",
+        "evidence",
+    }
+    missing = sorted(required - source.keys())
+    extra = sorted(source.keys() - required)
+    if missing:
+        errors.append(f"{prefix} is missing required fields: {missing}")
+    if extra:
+        errors.append(f"{prefix} contains unsupported fields: {extra}")
+    if not isinstance(artifact, dict) or artifact.get("schema_version") != (
+        _ADMISSIBILITY_EVIDENCE_SCHEMA
+    ):
+        errors.append(f"{prefix}.schema_version must be {_ADMISSIBILITY_EVIDENCE_SCHEMA!r}")
+    if source.get("schema_version") != _ADMISSIBILITY_EVIDENCE_SCHEMA:
+        errors.append(f"{prefix} must contain a {_ADMISSIBILITY_EVIDENCE_SCHEMA} record")
+    scenario_id = source.get("scenario_id")
+    if scenario_id is not None and (not isinstance(scenario_id, str) or not scenario_id.strip()):
+        errors.append(f"{prefix}.scenario_id must be non-empty text or null")
+    if source.get("target_planner_outcome") not in {
+        "not_evaluated",
+        "unavailable",
+        "route_completed",
+        "route_incomplete",
+    }:
+        errors.append(f"{prefix}.target_planner_outcome is unsupported")
+    reason_codes = source.get("reason_codes")
+    if (
+        not isinstance(reason_codes, list)
+        or not reason_codes
+        or any(not isinstance(item, str) or not item.strip() for item in reason_codes)
+    ):
+        errors.append(f"{prefix}.reason_codes must contain non-empty text")
+    elif len(reason_codes) != len(set(reason_codes)):
+        errors.append(f"{prefix}.reason_codes must be unique")
+    if not isinstance(source.get("assumptions"), dict):
+        errors.append(f"{prefix}.assumptions must be an object")
+    if not isinstance(source.get("evidence"), dict):
+        errors.append(f"{prefix}.evidence must be an object")
+
+
+def _validate_confirmed_admissibility_support(
+    source: dict[str, Any], evidence: dict[str, Any], case_id: Any, prefix: str, errors: list[str]
+) -> None:
+    """Require the evidence shape that the #9651 confirmed verdict names."""
+    verdict = source.get("verdict")
+    reason_codes = source.get("reason_codes")
+    if verdict == "empirically_feasible":
+        completed_execution = any(
+            isinstance(execution, dict)
+            and execution.get("case_id") == case_id
+            and execution.get("route_complete") is True
+            for execution in (
+                evidence.get("reference_execution"),
+                evidence.get("target_execution"),
+                evidence.get("replay_execution"),
+            )
+        )
+        assumptions = source.get("assumptions")
+        oracle = assumptions.get("feasibility_oracle") if isinstance(assumptions, dict) else None
+        oracle_support = (
+            isinstance(oracle, dict)
+            and oracle.get("empirical_scope") == "named_actor_free_rollout_of_original_static_case"
+            and isinstance(evidence.get("feasibility_evidence"), dict)
+        )
+        if not completed_execution and not oracle_support:
+            errors.append(f"{prefix} does not contain evidence supporting empirical feasibility")
+    elif verdict == "planner_specific_failure":
+        reference = evidence.get("reference_execution")
+        target = evidence.get("target_execution")
+        replay = evidence.get("replay_execution")
+        matched_failure = (
+            isinstance(reference, dict)
+            and isinstance(target, dict)
+            and isinstance(replay, dict)
+            and all(item.get("case_id") == case_id for item in (reference, target, replay))
+            and reference.get("route_complete") is True
+            and target.get("route_complete") is False
+            and replay.get("route_complete") is False
+            and reference.get("planner_id") != target.get("planner_id")
+            and replay.get("planner_id") == target.get("planner_id")
+            and "matched_reference_target_failure_reproduced_by_replay" in (reason_codes or [])
+        )
+        if not matched_failure:
+            errors.append(f"{prefix} does not contain matched planner-specific failure evidence")
 
 
 def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:

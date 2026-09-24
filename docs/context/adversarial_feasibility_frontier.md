@@ -45,19 +45,24 @@ method and explicit objective definition/seeds/budget/selection rule, fixed/regr
 episode rows, and falsification method/objective/search-space/failure predicate/seeds/budget/stop
 reason.
 
-Optimizer, search, evaluation, corpus, replay, and later admissibility-evidence artifacts use
-relative paths inside the evidence bundle and carry a full source revision, schema label, role, and
-SHA-256. Each per-round corpus status artifact uses `frontier-corpus-case-status.v1`; its case ID,
-origin round/candidate, planner/config identity, and recorded status fields must match the enclosing
-observation. A checksummed artifact for a different case cannot substantiate that observation.
+Optimizer, search, evaluation, corpus, replay, and admissibility-evidence artifacts use relative
+paths inside the evidence bundle and carry a full source revision, schema label, role, and SHA-256.
+Each per-round corpus status artifact uses `frontier-corpus-case-status.v1`; its case ID, origin
+round/candidate, planner/config identity, and recorded status fields must match the enclosing
+observation. Admissibility evidence uses `scenario_admissibility.v1`; its case ID, verdict, and
+retain/reject disposition must match the candidate or observation. The report parses the JSON and
+checks those content bindings rather than treating a role label and digest as sufficient. Confirmed
+feasibility additionally requires a named completed execution or a bound feasible oracle result.
+A checksummed artifact for a different case or verdict cannot substantiate the observation.
 Round-level optimizer, search, and evaluation references require the `optimization`,
 `falsification-search`, `fixed-evaluation`, `regression-evaluation`, and `held_out-evaluation` roles,
 respectively. Case observations require `falsification-search`, `corpus`, and
-`admissibility-evidence` on their corresponding references. Escaping paths, absent files, changed
-bytes, missing budgets, abbreviated source revisions, duplicate identities, and candidate-ledger/budget
-count mismatches fail closed. Candidate rows retain
-evaluation status, admissibility verdict, target-failure observation, replay result, corpus
-disposition, and stable case ID. Case observations use the `falsification-search` role for their
+`admissibility-evidence` on their corresponding references. Every admitted search candidate and
+every corpus observation must provide that artifact, including cases whose feasibility remains
+unknown. Escaping paths, absent files, changed bytes, missing budgets, abbreviated source revisions,
+duplicate identities, and candidate-ledger/budget count mismatches fail closed. Candidate rows retain
+evaluation status, admissibility verdict and evidence reference, target-failure observation, replay
+result, corpus disposition, and stable case ID. Case observations use the `falsification-search` role for their
 origin search artifact and the `corpus` role for their corpus artifact. A case ID's origin round and
 origin candidate stay unchanged across observations. Case observations link the discovery round and
 candidate to corpus and replay artifacts. For non-historical cases, the search reference must be the
@@ -86,7 +91,7 @@ but not in the current loop's new-discovery count. The unknown-feasibility cumul
 cases ever admitted with that initial verdict; the current unknown count follows observations through
 the rounds and can decrease after a valid evidence-backed upgrade.
 
-The v1 schema uses the current #9651 admissibility verdicts and #9652 planner statuses:
+The v2 report contract uses the current #9651 admissibility verdicts and #9652 planner statuses:
 `solved`, `unsolved`, `mixed`, and `unknown`. The report preserves those upstream values; it does
 not infer dynamic feasibility from a planner failure. `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
@@ -110,8 +115,9 @@ outcomes are reported separately; neither is synthesized as a success or failure
 
 The optimizer artifact content uses `frontier-optimizer-selection.v1` and records its experiment,
 round, source revision, selected planner ID, and selected config SHA-256. The search artifact uses
-`frontier-falsification-source.v1` and records the same round identity, target planner/config, and the
-complete candidate ledger fields consumed by the report. The selected optimizer identity and search
+`frontier-falsification-source.v2` and records the same round identity, target planner/config, and
+the complete candidate ledger fields consumed by the report, including each admissibility-evidence
+reference. The selected optimizer identity and search
 target must match the enclosing round planner/configuration, and the report's candidate rows must
 match that checksummed search ledger.
 

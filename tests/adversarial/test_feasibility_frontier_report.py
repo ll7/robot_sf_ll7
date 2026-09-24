@@ -43,6 +43,67 @@ def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:
     }
 
 
+def _admissibility_artifact(root: Path, name: str, *, case_id: str, verdict: str) -> dict[str, str]:
+    """Write a case-bound #9651 verdict fixture with explicit feasibility support."""
+    confirmed = verdict in {"empirically_feasible", "planner_specific_failure"}
+    evidence: dict[str, Any] = {}
+    assumptions: dict[str, Any] = {}
+    if verdict == "empirically_feasible":
+        evidence.update(
+            reference_execution={"case_id": case_id, "route_complete": True},
+            target_execution={"case_id": case_id, "route_complete": False},
+        )
+        reason_codes = ["named_execution_completed_original_case"]
+        target_outcome = "route_incomplete"
+    elif verdict == "planner_specific_failure":
+        evidence.update(
+            reference_execution={
+                "case_id": case_id,
+                "planner_id": "reference",
+                "route_complete": True,
+            },
+            target_execution={
+                "case_id": case_id,
+                "planner_id": "target",
+                "route_complete": False,
+            },
+            replay_execution={
+                "case_id": case_id,
+                "planner_id": "target",
+                "route_complete": False,
+            },
+        )
+        reason_codes = ["matched_reference_target_failure_reproduced_by_replay"]
+        target_outcome = "route_incomplete"
+    else:
+        reason_codes = ["feasibility_not_demonstrated"]
+        target_outcome = "unavailable"
+    payload = {
+        "schema_version": "scenario_admissibility.v1",
+        "case_id": case_id,
+        "scenario_id": None,
+        "verdict": verdict,
+        "target_planner_outcome": target_outcome,
+        "search_disposition": "retain"
+        if confirmed or verdict == "admissible_feasibility_unknown"
+        else "reject",
+        "reason_codes": reason_codes,
+        "assumptions": assumptions,
+        "evidence": evidence,
+    }
+    content = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    path = root / "evidence" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return {
+        "path": f"evidence/{name}",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "source_revision": _REVISION,
+        "role": "admissibility-evidence",
+        "schema_version": "scenario_admissibility.v1",
+    }
+
+
 def _write_source_artifact(
     root: Path,
     reference: dict[str, Any],
@@ -200,6 +261,10 @@ def _refresh_case_status_artifacts(evidence: dict[str, Any], root: Path) -> None
                 )
                 if candidate is not None:
                     observation["replay_artifact"] = candidate.get("replay_artifact")
+                    if origin_round == round_data.get("round_number"):
+                        observation["admissibility_evidence_artifact"] = candidate.get(
+                            "admissibility_evidence_artifact"
+                        )
             planner = round_data["planner"]
             corpus_digest = hashlib.sha256(observation["case_id"].encode("utf-8")).hexdigest()[:12]
             observation["corpus_artifact"]["path"] = (
@@ -297,7 +362,7 @@ def _evaluation_set(
     }
 
 
-def _candidate(
+def _candidate(  # noqa: PLR0913 - fixture helper mirrors the persisted candidate fields.
     *,
     candidate_id: str,
     evaluation_status: str,
@@ -307,11 +372,26 @@ def _candidate(
     disposition: str,
     case_id: str | None = None,
     replay_artifact: dict[str, str] | None = None,
+    admissibility_evidence_artifact: dict[str, str] | None = None,
+    root: Path | None = None,
 ) -> dict[str, Any]:
+    if (
+        admissibility_evidence_artifact is None
+        and root is not None
+        and disposition in {"admitted", "duplicate"}
+        and isinstance(case_id, str)
+    ):
+        admissibility_evidence_artifact = _admissibility_artifact(
+            root,
+            f"candidate-{candidate_id}-admissibility.json",
+            case_id=case_id,
+            verdict=verdict,
+        )
     return {
         "candidate_id": candidate_id,
         "evaluation_status": evaluation_status,
         "admissibility_verdict": verdict,
+        "admissibility_evidence_artifact": admissibility_evidence_artifact,
         "target_failure_observed": failure,
         "replay_status": replay_status,
         "corpus_disposition": disposition,
@@ -355,6 +435,12 @@ def _observation(
             _artifact(root, f"round-{round_number}-{case_id}-replay.json", role="replay")
             if replay_status == "verified"
             else None
+        ),
+        "admissibility_evidence_artifact": _admissibility_artifact(
+            root,
+            f"round-{round_number}-{hashlib.sha256(case_id.encode()).hexdigest()[:12]}-admissibility.json",
+            case_id=case_id,
+            verdict=verdict,
         ),
     }
     planner = {
@@ -501,6 +587,33 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
         ]
         success_count = 2
         stop_reason = "no_new_admissible_counterexample"
+    for candidate in candidates:
+        if candidate.get("corpus_disposition") in {"admitted", "duplicate"} and isinstance(
+            candidate.get("case_id"), str
+        ):
+            candidate["admissibility_evidence_artifact"] = _admissibility_artifact(
+                root,
+                f"round-{round_number}-{candidate['candidate_id']}-admissibility.json",
+                case_id=candidate["case_id"],
+                verdict=candidate["admissibility_verdict"],
+            )
+    for observation in observations:
+        if observation.get("origin_round") != round_number:
+            continue
+        candidate = next(
+            (
+                item
+                for item in candidates
+                if item.get("candidate_id") == observation.get("origin_candidate_id")
+                and item.get("case_id") == observation.get("case_id")
+                and item.get("corpus_disposition") == "admitted"
+            ),
+            None,
+        )
+        if candidate is not None:
+            observation["admissibility_evidence_artifact"] = candidate.get(
+                "admissibility_evidence_artifact"
+            )
     return {
         "round_number": round_number,
         "source_revision": _REVISION,
@@ -614,6 +727,12 @@ def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path:
             disposition="duplicate",
             case_id="case-001",
             replay_artifact=repeat_replay,
+            admissibility_evidence_artifact=_admissibility_artifact(
+                tmp_path,
+                "round-2-repeat-case-001-admissibility.json",
+                case_id="case-001",
+                verdict="empirically_feasible",
+            ),
         )
     )
     second_search["budget"]["candidate_limit"] = 5
@@ -659,6 +778,12 @@ def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
             disposition="duplicate",
             case_id="historical-unknown-duplicate",
             replay_artifact=repeat_replay,
+            admissibility_evidence_artifact=_admissibility_artifact(
+                tmp_path,
+                "round-2-repeat-historical-unknown-admissibility.json",
+                case_id="historical-unknown-duplicate",
+                verdict="empirically_feasible",
+            ),
         )
     )
     second_search["budget"]["candidate_limit"] += 1
@@ -740,8 +865,11 @@ def test_frontier_report_can_upgrade_historical_unknown_feasibility_once(tmp_pat
         verdict="empirically_feasible",
         replay_status="verified",
     )
-    upgraded["admissibility_evidence_artifact"] = _artifact(
-        tmp_path, "historical-upgrade-proof.json", role="admissibility-evidence"
+    upgraded["admissibility_evidence_artifact"] = _admissibility_artifact(
+        tmp_path,
+        "historical-upgrade-proof.json",
+        case_id="historical-unknown",
+        verdict="empirically_feasible",
     )
     payload["rounds"][1]["case_observations"].append(upgraded)
 
@@ -783,8 +911,11 @@ def test_frontier_report_does_not_count_historical_upgrade_without_verified_fail
         verdict="empirically_feasible",
         replay_status="unavailable",
     )
-    upgraded["admissibility_evidence_artifact"] = _artifact(
-        tmp_path, "historical-unreplayed-upgrade-proof.json", role="admissibility-evidence"
+    upgraded["admissibility_evidence_artifact"] = _admissibility_artifact(
+        tmp_path,
+        "historical-unreplayed-upgrade-proof.json",
+        case_id="historical-unknown",
+        verdict="empirically_feasible",
     )
     payload["rounds"][1]["case_observations"].append(upgraded)
 
@@ -826,8 +957,11 @@ def test_frontier_report_credits_historical_upgrade_when_replay_evidence_arrives
         verdict="empirically_feasible",
         replay_status="unavailable",
     )
-    upgraded["admissibility_evidence_artifact"] = _artifact(
-        tmp_path, "historical-delayed-feasibility-proof.json", role="admissibility-evidence"
+    upgraded["admissibility_evidence_artifact"] = _admissibility_artifact(
+        tmp_path,
+        "historical-delayed-feasibility-proof.json",
+        case_id="historical-delayed-replay",
+        verdict="empirically_feasible",
     )
     payload["rounds"][1]["case_observations"].append(upgraded)
     third = _round(tmp_path, 3)
@@ -983,6 +1117,7 @@ def test_frontier_report_uses_later_historical_rows_to_guard_case_identity(
             disposition="admitted",
             case_id=historical_id,
             replay_artifact=_artifact(tmp_path, "historical-reimport-replay.json", role="replay"),
+            root=tmp_path,
         )
     )
     first_search["budget"]["candidates_completed"] = len(first_search["candidates"])
@@ -1416,6 +1551,53 @@ def test_frontier_report_rejects_path_escape_and_noncanonical_admissibility(tmp_
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_requires_admissibility_evidence_for_confirmed_observations(
+    tmp_path: Path,
+) -> None:
+    """A confirmed corpus row cannot bypass its case-bound #9651 verdict artifact."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"][0]["admissibility_evidence_artifact"] = None
+
+    with pytest.raises(FrontierReportError, match="required for every case observation"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_admissibility_artifact_for_another_case(
+    tmp_path: Path,
+) -> None:
+    """A role and digest do not let one case reuse another case's admissibility verdict."""
+    payload = _evidence(tmp_path)
+    reference = payload["rounds"][0]["falsification"]["candidates"][0][
+        "admissibility_evidence_artifact"
+    ]
+    artifact_path = tmp_path / reference["path"]
+    record = json.loads(artifact_path.read_text(encoding="utf-8"))
+    record["case_id"] = "different-case"
+    content = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    artifact_path.write_bytes(content)
+    reference["sha256"] = hashlib.sha256(content).hexdigest()
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(FrontierReportError, match="case_id does not match"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_generic_admissibility_artifact_content(tmp_path: Path) -> None:
+    """A checksummed role label without the structured verdict cannot confirm feasibility."""
+    payload = _evidence(tmp_path)
+    reference = payload["rounds"][0]["falsification"]["candidates"][0][
+        "admissibility_evidence_artifact"
+    ]
+    artifact_path = tmp_path / reference["path"]
+    content = b"persisted fixture artifact with no admissibility record\n"
+    artifact_path.write_bytes(content)
+    reference["sha256"] = hashlib.sha256(content).hexdigest()
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(FrontierReportError, match="could not parse artifact JSON"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_rejects_case_observation_from_nonadmitted_candidate(
     tmp_path: Path,
 ) -> None:
@@ -1555,6 +1737,7 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
             disposition="admitted",
             case_id="case-origin-unknown",
             replay_artifact=origin_replay,
+            root=tmp_path,
         )
     )
     first["falsification"]["budget"]["candidates_completed"] = 4
@@ -1581,11 +1764,14 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
         replay_status="verified",
     )
     if include_evidence:
-        later_observation["admissibility_evidence_artifact"] = _artifact(
+        later_observation["admissibility_evidence_artifact"] = _admissibility_artifact(
             tmp_path,
             "round-2-case-origin-unknown-feasibility.json",
-            role="admissibility-evidence",
+            case_id="case-origin-unknown",
+            verdict="empirically_feasible",
         )
+    else:
+        later_observation["admissibility_evidence_artifact"] = None
     payload["rounds"][1]["case_observations"].append(later_observation)
 
     if include_evidence:
@@ -1640,6 +1826,7 @@ def test_frontier_report_rejects_feasibility_downgrade_after_confirmation(tmp_pa
             replay_artifact=_artifact(
                 tmp_path, "round-1-unknown-downgrade-replay.json", role="replay"
             ),
+            root=tmp_path,
         )
     )
     first["falsification"]["budget"]["candidates_completed"] = 4
@@ -1666,8 +1853,11 @@ def test_frontier_report_rejects_feasibility_downgrade_after_confirmation(tmp_pa
         verdict="empirically_feasible",
         replay_status="verified",
     )
-    upgraded["admissibility_evidence_artifact"] = _artifact(
-        tmp_path, "round-2-unknown-downgrade-proof.json", role="admissibility-evidence"
+    upgraded["admissibility_evidence_artifact"] = _admissibility_artifact(
+        tmp_path,
+        "round-2-unknown-downgrade-proof.json",
+        case_id="case-origin-unknown",
+        verdict="empirically_feasible",
     )
     second["case_observations"].append(upgraded)
     third = _round(tmp_path, 3)
@@ -1701,6 +1891,7 @@ def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified
             if candidate["corpus_disposition"] == "admitted":
                 candidate["corpus_disposition"] = "pending"
                 candidate["case_id"] = None
+                candidate["admissibility_evidence_artifact"] = None
         round_data["case_observations"] = []
         for evaluation in round_data["evaluation_sets"].values():
             evaluation["episodes"][0]["success"] = True

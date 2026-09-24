@@ -696,6 +696,7 @@ _FAST_FILES = {
     # preflight contracts for the #9348 application module; keep them in fast
     # shards for the exact-head changed-coverage gate (issue #9348).
     "test_issue_9348_three_width_doorway.py",
+    "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
     "test_scenario_coverage.py",
     "test_seed_distribution_report.py",

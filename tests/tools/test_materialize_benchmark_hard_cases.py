@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,6 +22,7 @@ from scripts.tools.materialize_benchmark_hard_cases import (
     _run_replay,
     _sanitize,
     _selected_cases,
+    _showcase_tool_snapshot,
     materialize,
 )
 
@@ -135,7 +137,14 @@ def _build_inputs(root: Path, *, include_unavailable: bool = True) -> tuple[Path
             "source_files_sha256": checksums,
         },
         "cases": cases,
-        "tool_provenance": {"git_revision": "showcase-revision"},
+        "tool_provenance": {
+            "git_revision": "showcase-revision",
+            "files": {
+                "scripts/replay_episode_figure.py": _sha256(
+                    REPO_ROOT / "scripts/replay_episode_figure.py"
+                )
+            },
+        },
     }
     summary_path = root / "showcase_summary.json"
     summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
@@ -186,6 +195,17 @@ def test_materializes_rows_deterministically_and_keeps_unavailable_rows_visible(
     assert first["selection"]["planner_counts"] == {"goal": 2}
     assert first["selection"]["scenario_family_counts"] == {"fixture": 2}
     assert first["selection"]["scenario_id_count"] == 2
+    assert first["source"]["source_campaign_id"] == "fixture-campaign"
+    assert "campaign_id" not in first["source"]
+    assert first["source"]["showcase_tool_revision"] == "showcase-revision"
+    assert first["source"]["showcase_tool_source_snapshot_status"] == ("verified_file_hash_match")
+    assert (
+        first["source"]["showcase_tool_source_snapshot_revision"]
+        == first["replay"]["materializer_revision"]
+    )
+    assert first["source"]["showcase_tool_source_files_sha256"] == {
+        "scripts/replay_episode_figure.py": _sha256(REPO_ROOT / "scripts/replay_episode_figure.py")
+    }
     assert first["criticality_anomaly_counts"] == {
         "collision_event_without_positive_collision_metric": 2
     }
@@ -208,6 +228,10 @@ def test_materializes_rows_deterministically_and_keeps_unavailable_rows_visible(
     assert case_b["replay_input"]["status"] == "unavailable"
     assert case_b["source_record"]["scenario_id"] == "scenario_b"
     assert _sha256(tmp_path / "first/manifest.json") == _sha256(tmp_path / "second/manifest.json")
+    report = (tmp_path / "first/report.md").read_text(encoding="utf-8")
+    assert "- Source campaign: `fixture-campaign`" in report
+    assert "Showcase source snapshot: `verified_file_hash_match` at" in report
+    assert "- Campaign:" not in report
     first_row = json.loads(
         (campaign_root / "runs/goal__differential_drive/episodes.jsonl").read_text().splitlines()[0]
     )
@@ -220,6 +244,41 @@ def test_materializes_rows_deterministically_and_keeps_unavailable_rows_visible(
     assert (replay_matrix.parent / replay_payload["scenarios"][0]["map_file"]).resolve() == (
         REPO_ROOT / "maps/svg_maps/classic_bottleneck_high.svg"
     ).resolve()
+
+
+def test_showcase_execution_revision_is_preserved_when_snapshot_does_not_match() -> None:
+    """A non-matching current tree is never substituted for the executed revision."""
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    record = _showcase_tool_snapshot(
+        {
+            "tool_provenance": {
+                "git_revision": "0" * 40,
+                "files": {"scripts/replay_episode_figure.py": "0" * 64},
+            }
+        },
+        revision,
+    )
+
+    assert record["showcase_tool_revision"] == "0" * 40
+    assert record["showcase_tool_source_snapshot_revision"] is None
+    assert record["showcase_tool_source_snapshot_status"] == "source_files_not_matched"
+
+
+def test_showcase_snapshot_requires_a_file_hash_inventory() -> None:
+    """A historical revision without file hashes stays explicitly unverified."""
+    record = _showcase_tool_snapshot(
+        {"tool_provenance": {"git_revision": "historical-revision"}}, "HEAD"
+    )
+
+    assert record["showcase_tool_revision"] == "historical-revision"
+    assert record["showcase_tool_source_snapshot_revision"] is None
+    assert record["showcase_tool_source_snapshot_status"] == "unavailable_file_inventory"
 
 
 def test_rejects_duplicate_materialized_case_identity() -> None:

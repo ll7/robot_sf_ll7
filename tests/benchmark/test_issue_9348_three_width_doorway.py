@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import yaml
 
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.three_width_doorway_application import (
     build_pair_manifest,
     build_pair_receipt,
@@ -108,6 +109,19 @@ def test_variant_assets_change_only_explained_fields(tmp_path: Path) -> None:
         variant_scenario = dict(load_scenarios(asset["scenario_path"])[0])
         assert check_variant_diff(base_scenario, variant_scenario) == []
         assert Path(asset["map_path"]).is_file()
+
+
+def test_executed_planners_do_not_attach_classic_global_route(tmp_path: Path) -> None:
+    """Generated scenario configs leave the classic global planner disabled."""
+    manifest = load_three_width_manifest(_MANIFEST)
+    assets = generate_application_assets(manifest, tmp_path / "variants")
+    for asset in assets:
+        scenario_path = Path(asset["scenario_path"])
+        scenario = dict(load_scenarios(scenario_path)[0])
+        config = build_env_config(scenario, scenario_path=scenario_path)
+        assert config.use_planner is False
+        assert config.sim_config.time_per_step_in_secs == pytest.approx(0.1)
+        assert scenario["simulation_config"]["max_episode_steps"] == 400
 
 
 def test_generated_svg_changes_only_symmetric_wall_endpoints(tmp_path: Path) -> None:

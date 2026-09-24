@@ -12,7 +12,8 @@ unchanged reference, not a width-comparison cell. The effective collision
 radius is 1.0 m from `robot_sf/common/robot_defaults.py`, audited in
 `docs/context/issue_6645_narrow_doorway_radius_binding.md`. The grid/planner
 clearance has separate conventions; the grid feasibility oracle is therefore
-an additional admission gate, not a substitute for continuous clearance.
+a separate diagnostic, not a substitute for continuous clearance or a direct
+test of either executed policy.
 At source `120c870d80daba4a06389f9df3c469a2f467da94`, the reference
 scenario SHA-256 is
 `d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671`
@@ -41,6 +42,25 @@ continuous-geometry width labels or authorize counting a grid failure as an
 ordinary planner failure. The application preflight reports this check
 separately from source/map/radius validity. Its `go` field permits only
 diagnostic preflight continuation, never confirmation dispatch.
+
+The distinction is source-backed. The oracle calls
+`robot_sf/scenario_certification/v1.py::_plan_inflated_shortest_path`, which
+uses `ClassicGlobalPlanner` A* at the nominal 1.0 m radius with inflation
+fallback disabled. The campaign path builds each generated scenario through
+`robot_sf/benchmark/map_runner/map_runner_env.py::build_env_config`; the
+effective `use_planner` is false at 2.2, 2.8 and 3.6 m (focused headless
+config probe, 2026-09-24). Consequently
+`robot_sf/gym_env/base_env.py::attach_planner_to_map` returns before attaching
+the classic grid planner. The `goal` policy in
+`robot_sf/benchmark/map_runner/map_runner.py::_goal_policy` steers toward the
+observed goal. The `social_force` adapter in
+`robot_sf/planner/socnav_social_force.py::plan_velocity_world` combines goal,
+pedestrian and occupancy-grid obstacle forces; its grid is a 0.2 m observation
+grid, not an inflated A* route search. Thus the 2.2/2.8 m oracle no-route is
+not an automatic executed-planner admission failure. It remains a flagged
+grid/certification discrepancy. Any affected row requires normal runtime
+and pairing gates before comparison; an oracle exclusion cannot be reported
+as an ordinary planner outcome or erased by a successful policy rollout.
 
 The #6644 generator moves only the two doorway wall ends symmetrically about
 y=5 m. The application tests check that no other SVG element or scenario

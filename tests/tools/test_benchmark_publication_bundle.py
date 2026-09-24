@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import jsonschema
 import pytest
 
+from robot_sf.benchmark import artifact_publication
 from scripts.tools import benchmark_publication_bundle
 
 _EVIDENCE_BUNDLE_SCHEMA = (
@@ -337,6 +339,30 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
     assert {line.split(maxsplit=1)[1] for line in checksums.splitlines()} == {
         f"payload/{entry['path']}" for entry in manifest["files"]
     }
+    checksum_entries = {
+        relative_path: digest
+        for line in checksums.splitlines()
+        for digest, relative_path in [line.split("  ", maxsplit=1)]
+    }
+    for entry in manifest["files"]:
+        relative_path = f"payload/{entry['path']}"
+        payload_path = bundle_dir / relative_path
+        assert checksum_entries[relative_path] == entry["sha256"]
+        payload_digest = hashlib.sha256(payload_path.read_bytes()).hexdigest()
+        assert payload_digest == checksum_entries[relative_path]
+
+
+def test_evidence_bundle_location_is_repository_relative_for_local_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Repository-local bundle paths are stable from the repository root."""
+    repository_root = tmp_path / "repository"
+    bundle_dir = repository_root / "docs" / "context" / "evidence" / "example"
+    monkeypatch.setattr(artifact_publication, "get_repository_root", lambda: repository_root)
+
+    location = artifact_publication._evidence_payload_location(bundle_dir, "reports/summary.json")
+
+    assert location == "docs/context/evidence/example/payload/reports/summary.json"
 
 
 def test_evidence_bundle_command_writes_dry_run_mirror_manifest(

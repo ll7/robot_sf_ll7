@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -35,6 +37,77 @@ from robot_sf.benchmark.snqi.v2_spec import (
 
 ROOT = Path(__file__).resolve().parents[3]
 ASSETS = ROOT / "configs/benchmarks/snqi_v2"
+# From the 0.0.7 publication bundle's resolved manifest (source 07f7e8d43084).
+# Keep these pins independent of the current checkout so calibration fails on input drift.
+FROZEN_007_CAMPAIGN = (
+    ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+)
+FROZEN_007_CAMPAIGN_SHA256 = "095331329b06673dc165109c8523579549f769c98542b207a712f6e2bf9ed6ad"
+FROZEN_007_SCENARIO_SHA256 = "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+FROZEN_007_SEED_SETS_SHA256 = "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+FROZEN_007_PLANNER_CONFIG_SHA256 = {
+    "prediction_planner": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481",
+    "social_force": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb",
+    "ppo": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield": (
+        "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
+    ),
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": (
+        "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
+    ),
+    "hybrid_rule_v3_fast_progress_static_escape": (
+        "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935"
+    ),
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": (
+        "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd"
+    ),
+    "guarded_ppo": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772",
+    "predictive_mppi": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb",
+    "risk_dwa": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c",
+}
+
+
+def test_development_calibration_matches_frozen_007_campaign_identity():
+    """Only development seeds and execution/publication metadata may differ from 0.0.7."""
+    frozen_bytes = FROZEN_007_CAMPAIGN.read_bytes()
+    assert hashlib.sha256(frozen_bytes).hexdigest() == FROZEN_007_CAMPAIGN_SHA256
+    frozen = yaml.safe_load(frozen_bytes)
+    calibration = yaml.safe_load((ASSETS / "calibration.dev101_102.yaml").read_bytes())
+
+    assert len(calibration["planners"]) == 14
+    assert calibration["seed_policy"] == {
+        "mode": "fixed-list",
+        "seeds": [101, 102],
+        "seed_sets_path": frozen["seed_policy"]["seed_sets_path"],
+    }
+    assert calibration["name"] == "snqi_v2_calibration_dev101_102"
+    assert calibration["paper_facing"] is False
+    assert calibration["workers"] == 16
+    assert calibration["export_publication_bundle"] is False
+    assert calibration["arm_isolation"] == "subprocess"
+
+    allowed_deviations = {
+        "name",
+        "paper_facing",
+        "seed_policy",
+        "workers",
+        "export_publication_bundle",
+        "arm_isolation",
+    }
+    assert {key: value for key, value in calibration.items() if key not in allowed_deviations} == {
+        key: value for key, value in frozen.items() if key not in allowed_deviations
+    }
+    assert hashlib.sha256((ROOT / frozen["scenario_matrix"]).read_bytes()).hexdigest() == (
+        FROZEN_007_SCENARIO_SHA256
+    )
+    assert hashlib.sha256(
+        (ROOT / frozen["seed_policy"]["seed_sets_path"]).read_bytes()
+    ).hexdigest() == (FROZEN_007_SEED_SETS_SHA256)
+    assert {
+        arm["key"]: hashlib.sha256((ROOT / arm["algo_config"]).read_bytes()).hexdigest()
+        for arm in calibration["planners"]
+        if "algo_config" in arm
+    } == FROZEN_007_PLANNER_CONFIG_SHA256
 
 
 def fixture_spec() -> SnqiV2Spec:

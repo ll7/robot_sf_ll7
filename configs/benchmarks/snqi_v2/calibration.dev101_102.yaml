@@ -3,7 +3,7 @@
 name: snqi_v2_calibration_dev101_102
 paper_facing: false
 paper_profile_version: paper-matrix-v1
-scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
 comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 amv_profile:
@@ -47,8 +47,9 @@ workers: 16
 horizon: 600
 dt: 0.1
 record_forces: true
+checkpoint_provenance_enforcement: error
 resume: true
-stop_on_failure: false
+stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123
@@ -58,8 +59,8 @@ export_publication_bundle: false
 include_videos_in_publication: false
 overwrite_publication_bundle: true
 repository_url: https://github.com/ll7/robot_sf_ll7
-release_tag: '{release_tag}'
-doi: 10.5281/zenodo.<record-id>
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
 paper_interpretation_profile: baseline-ready-core
 planners:
 - key: prediction_planner
@@ -74,6 +75,7 @@ planners:
 - key: social_force
   algo: social_force
   planner_group: core
+  algo_config: configs/algos/social_force_terminal_goal_v1.yaml
   benchmark_profile: baseline-safe
 - key: orca
   algo: orca
@@ -83,7 +85,7 @@ planners:
 - key: ppo
   algo: ppo
   planner_group: experimental
-  algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+  algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
   benchmark_profile: experimental
   adapter_impact_eval: true
 - key: socnav_sampling
@@ -96,30 +98,30 @@ planners:
   planner_group: experimental
   benchmark_profile: experimental
   socnav_missing_prereq_policy: fail-fast
-- key: scenario_adaptive_hybrid_orca_v1
+- key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
   algo: hybrid_rule_local_planner
   planner_group: experimental
-  algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+  algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
   benchmark_profile: experimental
 - key: scenario_adaptive_hybrid_orca_v2_collision_guard
   algo: hybrid_rule_local_planner
   planner_group: experimental
-  algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+  algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
   benchmark_profile: experimental
 - key: hybrid_rule_v3_fast_progress_static_escape
   algo: hybrid_rule_local_planner
   planner_group: experimental
-  algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+  algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
   benchmark_profile: experimental
 - key: hybrid_rule_v3_fast_progress_static_escape_continuous
   algo: hybrid_rule_local_planner
   planner_group: experimental
-  algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+  algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
   benchmark_profile: experimental
 - key: guarded_ppo
   algo: guarded_ppo
   planner_group: experimental
-  algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+  algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
   benchmark_profile: experimental
 - key: predictive_mppi
   algo: predictive_mppi

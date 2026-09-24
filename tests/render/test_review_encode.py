@@ -155,6 +155,26 @@ def test_interval_endpoints_and_first_terminal_frames(tmp_path: Path) -> None:
     assert mapping["segments"][-1]["presentation_end_s"] == pytest.approx(2.0)
 
 
+def test_require_imageio_reports_missing_optional_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The feature-specific error survives while optional import stays canonical."""
+
+    from robot_sf.common import optional_import
+
+    imported_names: list[str] = []
+
+    def unavailable(name: str) -> None:
+        imported_names.append(name)
+
+    monkeypatch.setattr(optional_import, "try_import", unavailable)
+
+    with pytest.raises(ImportError, match="^review encode requires imageio$"):
+        review_encode._require_imageio()
+
+    assert imported_names == ["imageio.v2"]
+
+
 def test_encoded_video_uses_actual_source_pixels(tmp_path: Path) -> None:
     """The encoder must consume decoded fixture pixels instead of synthetic frames."""
 

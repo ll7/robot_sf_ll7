@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Force-residual predictor tests are deterministic synthetic contracts and
+    # must cover the changed planner-visible prediction module in PR shards.
+    "test_force_residual_intent_predictor.py",
     # ScenarioBelief projection tests are deterministic identity and data-contract
     # checks; keep them in PR shards so changed-line coverage sees the adapter.
     "test_identity_safe_scenario_belief.py",

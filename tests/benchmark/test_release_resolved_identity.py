@@ -20,6 +20,7 @@ from robot_sf.benchmark.release_protocol import (
     load_release_campaign_config,
     load_release_manifest,
     verify_resolved_release_identity,
+    write_release_bootstrap_metadata,
     write_resolved_release_identity,
 )
 from robot_sf.benchmark.release_tag_identity import derive_sha_tag
@@ -372,6 +373,91 @@ def test_clean_candidate_generates_and_verifies_byte_identical_resolved_identity
         "metadata_template_sha256": _sha256(repo / "zenodo_metadata.template.json"),
     }
     assert _git(repo, "status", "--porcelain", "--untracked-files=normal") == ""
+
+
+def test_clean_candidate_generates_reproducible_bootstrap_metadata_with_only_doi_tokens(
+    tmp_path: Path,
+) -> None:
+    """Bootstrap metadata freezes source identity while leaving reserved DOI slots pending."""
+    repo, template, source_commit = _release_template_repository(tmp_path)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "release" / "zenodo_metadata.bootstrap.json"
+
+    first_report = write_release_bootstrap_metadata(
+        template_path=template,
+        output_path=output,
+        source_commit=source_commit,
+        release_tag=release_tag,
+        repository_root=repo,
+    )
+    first_bytes = output.read_bytes()
+    first_payload = json.loads(first_bytes)
+    metadata = first_payload["metadata"]
+    description = metadata["description"]
+    base_sha = _git(repo, "rev-parse", f"{source_commit}^")
+
+    assert source_commit in description
+    assert base_sha in description
+    assert release_tag in metadata["related_identifiers"][0]["identifier"]
+    assert description.count("{{concept_doi}}") == 1
+    assert description.count("{{version_doi}}") == 1
+    assert "{{source_sha}}" not in description
+    assert "{{latest_main_base_commit}}" not in description
+    assert metadata["related_identifiers"] == [
+        {
+            "identifier": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{release_tag}",
+            "relation": "isSupplementTo",
+            "scheme": "url",
+        },
+        {
+            "identifier": f"https://github.com/ll7/robot_sf_ll7/commit/{source_commit}",
+            "relation": "isDerivedFrom",
+            "scheme": "url",
+        },
+    ]
+    assert first_report["metadata_sha256"] == hashlib.sha256(first_bytes).hexdigest()
+    assert first_report["source_commit"] == source_commit
+    assert first_report["latest_main_base_commit"] == base_sha
+    assert first_report["release_tag"] == release_tag
+
+    second_report = write_release_bootstrap_metadata(
+        template_path=template,
+        output_path=output,
+        source_commit=source_commit,
+        release_tag=release_tag,
+        repository_root=repo,
+    )
+
+    assert output.read_bytes() == first_bytes
+    assert second_report == first_report
+    assert _git(repo, "status", "--porcelain", "--untracked-files=normal") == ""
+
+
+@pytest.mark.parametrize("invalid_state", ["dirty", "tag_exists"])
+def test_bootstrap_metadata_requires_clean_source_and_unused_tag(
+    tmp_path: Path,
+    invalid_state: str,
+) -> None:
+    """Bootstrap generation fails before output when source or tag identity is unsafe."""
+    repo, template, source_commit = _release_template_repository(tmp_path)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "blocked" / "zenodo_metadata.bootstrap.json"
+    if invalid_state == "dirty":
+        (repo / "untracked.txt").write_text("not frozen\n", encoding="utf-8")
+    else:
+        _git(repo, "tag", release_tag, "HEAD")
+
+    expected_error = "not clean" if invalid_state == "dirty" else "tag already exists"
+    with pytest.raises(ValueError, match=expected_error):
+        write_release_bootstrap_metadata(
+            template_path=template,
+            output_path=output,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            repository_root=repo,
+        )
+
+    assert not output.exists()
 
 
 def test_generation_rejects_an_existing_tag_collision(tmp_path: Path) -> None:
@@ -797,6 +883,43 @@ def test_generate_and_verify_command_reports_exact_artifact_digests(
     assert verified["status"] == "verified"
     assert verified["source_commit"] == source_commit
     assert verified["latest_main_base_commit"] == _git(repo, "rev-parse", f"{source_commit}^")
+
+
+def test_bootstrap_metadata_command_reports_exact_identity_and_digest(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The bootstrap CLI emits the frozen source identity and canonical metadata digest."""
+    repo, template, source_commit = _release_template_repository(tmp_path)
+    output = repo / "output" / "cli" / "zenodo_metadata.bootstrap.json"
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+
+    assert (
+        identity_cli.main(
+            [
+                "bootstrap-metadata",
+                "--template",
+                str(template),
+                "--output",
+                str(output),
+                "--source-commit",
+                source_commit,
+                "--release-tag",
+                release_tag,
+                "--repository-root",
+                str(repo),
+            ]
+        )
+        == 0
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "generated"
+    assert report["source_commit"] == source_commit
+    assert report["latest_main_base_commit"] == _git(repo, "rev-parse", f"{source_commit}^")
+    assert report["release_tag"] == release_tag
+    assert report["metadata_path"] == "output/cli/zenodo_metadata.bootstrap.json"
+    assert report["metadata_sha256"] == _sha256(output)
 
 
 def test_public_runner_preflight_consumes_the_verified_resolved_identity(

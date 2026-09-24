@@ -2974,6 +2974,147 @@ def _validate_source_identifier_drift(
             _validate_source_identifier_change(remote, frozen)
 
 
+def _bootstrap_metadata_contract(
+    metadata: Mapping[str, Any],
+    *,
+    frozen_metadata: Mapping[str, Any],
+    binding: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require DOI-pending metadata to differ only at the two assigned DOI slots.
+
+    Returns:
+        The validated caller-owned bootstrap metadata contract.
+    """
+    normalized = _validate_metadata(metadata)
+    bootstrap = _metadata_contract(normalized)
+    frozen_description = frozen_metadata.get("description")
+    if not isinstance(frozen_description, str):
+        raise ZenodoPublisherError(
+            "Zenodo bootstrap repair requires a text resolved metadata description"
+        )
+    concept_doi = str(binding["concept_doi"])
+    version_doi = str(binding["version_doi"])
+    resolved_doi_sentence = f"concept DOI {concept_doi}, and version DOI {version_doi}."
+    doi_values = re.findall(r"(?<![A-Za-z0-9])10\.5281/zenodo\.\d+(?!\d)", frozen_description)
+    if (
+        doi_values != [concept_doi, version_doi]
+        or frozen_description.count(resolved_doi_sentence) != 1
+    ):
+        raise ZenodoPublisherError(
+            "Zenodo bootstrap repair requires one exact paired concept/version DOI sentence"
+        )
+    expected_bootstrap = deepcopy(dict(frozen_metadata))
+    expected_bootstrap["description"] = frozen_description.replace(
+        resolved_doi_sentence,
+        "concept DOI {{concept_doi}}, and version DOI {{version_doi}}.",
+        1,
+    )
+    if set(bootstrap) != set(expected_bootstrap):
+        raise ZenodoPublisherError(
+            "Zenodo bootstrap metadata fields do not match the resolved release identity"
+        )
+    for key, expected in expected_bootstrap.items():
+        if _canonical_metadata_value_for_comparison(
+            key, bootstrap.get(key)
+        ) != _canonical_metadata_value_for_comparison(key, expected):
+            raise ZenodoPublisherError(
+                f"Zenodo bootstrap metadata does not match the resolved release identity at "
+                f"metadata.{key}"
+            )
+    return bootstrap
+
+
+def _validate_reserved_doi_hint(
+    metadata: Mapping[str, Any], *, binding: Mapping[str, Any], operation: str
+) -> None:
+    """Validate Zenodo's optional DOI reservation hint against the frozen binding."""
+    preregistered = metadata.get("prereserve_doi")
+    if preregistered is not None and (
+        not isinstance(preregistered, Mapping)
+        or set(preregistered) != {"doi"}
+        or preregistered.get("doi") != binding["version_doi"]
+    ):
+        raise ZenodoPublisherError(f"Zenodo {operation} has a mismatched reserved version DOI")
+
+
+def _validate_bootstrap_draft_metadata(
+    remote: Mapping[str, Any],
+    *,
+    binding: Mapping[str, Any],
+    frozen_metadata: Mapping[str, Any],
+    bootstrap_metadata: Mapping[str, Any],
+) -> list[str]:
+    """Require exact bootstrap metadata.
+
+    Returns:
+        Metadata fields changed by DOI resolution.
+    """
+    publisher = remote.get("imprint_publisher")
+    if publisher is not None and publisher != "Zenodo":
+        raise ZenodoPublisherError("Zenodo metadata repair found an unexpected publisher")
+    _validate_reserved_doi_hint(remote, binding=binding, operation="bootstrap draft")
+    allowed_extras = {"prereserve_doi", "imprint_publisher", "version", "publication_date"}
+    unexpected = set(remote) - set(bootstrap_metadata) - allowed_extras
+    if unexpected:
+        raise ZenodoPublisherError("Zenodo bootstrap draft has unexpected metadata fields")
+    remote_contract = {key: value for key, value in remote.items() if key not in allowed_extras}
+    if set(remote_contract) != set(bootstrap_metadata):
+        raise ZenodoPublisherError("Zenodo bootstrap draft has unreviewed metadata field inventory")
+    for key, expected in bootstrap_metadata.items():
+        if _canonical_metadata_value_for_comparison(
+            key, remote_contract.get(key)
+        ) != _canonical_metadata_value_for_comparison(key, expected):
+            raise ZenodoPublisherError(
+                f"Zenodo bootstrap draft has unreviewed drift at metadata.{key}"
+            )
+
+    differing: list[str] = []
+    for key, expected in frozen_metadata.items():
+        if _canonical_metadata_value_for_comparison(
+            key, remote_contract.get(key)
+        ) == _canonical_metadata_value_for_comparison(key, expected):
+            continue
+        if key != "description":
+            raise ZenodoPublisherError(
+                f"Zenodo bootstrap draft differs from resolved metadata at metadata.{key}"
+            )
+        differing.append(key)
+    return differing
+
+
+def _checked_bootstrap_metadata_draft(
+    payload: Mapping[str, Any],
+    *,
+    deposition_id: int,
+    binding: Mapping[str, Any],
+    frozen_metadata: Mapping[str, Any],
+    bootstrap_metadata: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Validate one unpublished empty draft against exact DOI-pending metadata.
+
+    Returns:
+        Remote metadata and the final metadata fields changed by DOI assignment.
+    """
+    state = _public_state(payload)
+    if state["deposition_id"] != deposition_id or state["record_id"] != deposition_id:
+        raise ZenodoPublisherError("Zenodo metadata repair changed the requested deposition ID")
+    _validate_unpublished_draft(payload, "bootstrap metadata repair")
+    _assert_deposition_identity(state, binding)
+    if payload.get("files") != []:
+        raise ZenodoPublisherError("Zenodo metadata repair requires an empty draft file inventory")
+    remote_metadata = payload.get("metadata")
+    if not isinstance(remote_metadata, Mapping):
+        raise ZenodoPublisherError("Zenodo metadata repair response omitted metadata")
+    remote = dict(remote_metadata)
+    differing = _validate_bootstrap_draft_metadata(
+        remote,
+        binding=binding,
+        frozen_metadata=frozen_metadata,
+        bootstrap_metadata=bootstrap_metadata,
+    )
+    return remote, differing
+
+
 def _checked_metadata_repair_draft(
     payload: Mapping[str, Any],
     *,
@@ -3001,6 +3142,7 @@ def _checked_metadata_repair_draft(
     publisher = remote.get("imprint_publisher")
     if publisher is not None and publisher != "Zenodo":
         raise ZenodoPublisherError("Zenodo metadata repair found an unexpected publisher")
+    _validate_reserved_doi_hint(remote, binding=binding, operation="metadata repair")
     allowed_extras = {"prereserve_doi", "imprint_publisher", "version", "publication_date"}
     unexpected = set(remote) - set(frozen_metadata) - allowed_extras
     if unexpected:
@@ -3033,7 +3175,7 @@ def _checked_metadata_repair_draft(
     return remote, differing
 
 
-def repair_draft_metadata(  # noqa: C901, PLR0913
+def repair_draft_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     session: _Session,
     deposition_id: int,
     metadata: Mapping[str, Any],
@@ -3041,6 +3183,9 @@ def repair_draft_metadata(  # noqa: C901, PLR0913
     version: str,
     publication_date: str,
     release_binding: Any,
+    bootstrap_metadata: Mapping[str, Any] | None = None,
+    bootstrap_metadata_sha256: str | None = None,
+    expected_bootstrap_metadata_sha256: str | None = None,
     expected_remote_metadata_sha256: str | None = None,
     expected_remote_source_tag: str | None = None,
     expected_remote_source_sha: str | None = None,
@@ -3050,13 +3195,13 @@ def repair_draft_metadata(  # noqa: C901, PLR0913
 ) -> dict[str, Any]:
     """Preview or repair one manifest-bound, empty Zenodo draft's metadata.
 
-    Only the source SHA, mainline base, and release tag in the structured
-    provenance sentence and matching GitHub source identifiers may differ from
-    frozen metadata. The two publication fields are an explicit Zenodo-only
-    overlay; the resolved metadata file and its archive copy remain byte-
-    identical. A write requires the digest and every changed source value from
-    a preceding preview, and a fresh GET immediately before PUT checks that
-    exact remote metadata again.
+    Without bootstrap metadata, only the source SHA, mainline base, and release
+    tag in the structured provenance sentence and matching GitHub source
+    identifiers may differ from frozen metadata. With bootstrap metadata, the
+    empty draft must match the deterministic DOI-pending template exactly;
+    only those two DOI slots plus the two publication fields may change. A
+    write requires the preview digest and reviewed source identity, and a fresh
+    GET immediately before PUT checks that exact remote metadata again.
 
     Returns:
         Credential-free preview or repair report.
@@ -3085,6 +3230,41 @@ def repair_draft_metadata(  # noqa: C901, PLR0913
         raise ZenodoPublisherError("Zenodo metadata repair requires a preview metadata SHA-256")
     if apply and not expected_remote_source_tag:
         raise ZenodoPublisherError("Zenodo metadata repair requires the reviewed remote source tag")
+    bootstrap_contract: dict[str, Any] | None = None
+    if bootstrap_metadata is None:
+        if bootstrap_metadata_sha256 is not None or expected_bootstrap_metadata_sha256 is not None:
+            raise ZenodoPublisherError(
+                "Zenodo bootstrap metadata digests require a bootstrap metadata file"
+            )
+    else:
+        if (
+            not isinstance(bootstrap_metadata_sha256, str)
+            or _SHA256_RE.fullmatch(bootstrap_metadata_sha256) is None
+        ):
+            raise ZenodoPublisherError("Zenodo bootstrap metadata SHA-256 is invalid")
+        if expected_bootstrap_metadata_sha256 is not None and (
+            not isinstance(expected_bootstrap_metadata_sha256, str)
+            or _SHA256_RE.fullmatch(expected_bootstrap_metadata_sha256) is None
+        ):
+            raise ZenodoPublisherError("Zenodo expected bootstrap metadata SHA-256 is invalid")
+        if apply and expected_bootstrap_metadata_sha256 is None:
+            raise ZenodoPublisherError(
+                "Zenodo bootstrap metadata repair requires the reviewed bootstrap SHA-256"
+            )
+        if (
+            expected_bootstrap_metadata_sha256 is not None
+            and bootstrap_metadata_sha256 != expected_bootstrap_metadata_sha256
+        ):
+            raise ZenodoPublisherError("Zenodo bootstrap metadata changed since the repair preview")
+        bootstrap_contract = _bootstrap_metadata_contract(
+            bootstrap_metadata,
+            frozen_metadata=frozen_metadata,
+            binding=binding,
+        )
+        if apply and (expected_remote_source_sha is None or expected_remote_base_sha is None):
+            raise ZenodoPublisherError(
+                "Zenodo bootstrap repair requires the reviewed remote source and base SHAs"
+            )
     for label, value in (
         ("source SHA", expected_remote_source_sha),
         ("mainline base SHA", expected_remote_base_sha),
@@ -3097,17 +3277,30 @@ def repair_draft_metadata(  # noqa: C901, PLR0913
         session.get(endpoint, timeout=60, allow_redirects=False),
         "metadata repair preview",
     )
-    remote_metadata, frozen_drift = _checked_metadata_repair_draft(
-        before,
-        deposition_id=requested_id,
-        binding=binding,
-        frozen_metadata=frozen_metadata,
-        allow_source_drift=True,
-    )
+    if bootstrap_contract is None:
+        remote_metadata, frozen_drift = _checked_metadata_repair_draft(
+            before,
+            deposition_id=requested_id,
+            binding=binding,
+            frozen_metadata=frozen_metadata,
+            allow_source_drift=True,
+        )
+    else:
+        remote_metadata, frozen_drift = _checked_bootstrap_metadata_draft(
+            before,
+            deposition_id=requested_id,
+            binding=binding,
+            frozen_metadata=frozen_metadata,
+            bootstrap_metadata=bootstrap_contract,
+        )
     before_sha256 = _remote_metadata_contract_sha256(before)
     old_source_tag = _source_tag(remote_metadata, require_url_scheme=True)
-    remote_identity = _metadata_source_identity(remote_metadata, binding=binding)
     frozen_identity = _metadata_source_identity(frozen_metadata, binding=binding)
+    remote_identity = (
+        frozen_identity
+        if bootstrap_contract is not None
+        else _metadata_source_identity(remote_metadata, binding=binding)
+    )
     if (
         expected_remote_metadata_sha256 is not None
         and before_sha256 != expected_remote_metadata_sha256
@@ -3136,6 +3329,7 @@ def repair_draft_metadata(  # noqa: C901, PLR0913
     report: dict[str, Any] = {
         "schema_version": "robot-sf-zenodo-draft-metadata-repair.v1",
         "status": "ready" if changed_fields else "already_matching",
+        "metadata_mode": "bootstrap" if bootstrap_contract is not None else "resolved",
         "deposition_id": requested_id,
         "concept_doi": binding["concept_doi"],
         "doi": binding["version_doi"],
@@ -3155,6 +3349,11 @@ def repair_draft_metadata(  # noqa: C901, PLR0913
         "changed_fields": changed_fields,
         "operational_metadata_before": {key: remote_metadata.get(key) for key in overlay},
         "operational_metadata_after": overlay,
+        **(
+            {"bootstrap_metadata_sha256": bootstrap_metadata_sha256}
+            if bootstrap_contract is not None
+            else {}
+        ),
     }
     _assert_credential_free(report)
     if not apply or not changed_fields:

@@ -51,9 +51,11 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   again after publication and require a passing published-record receipt; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused
-- confirm the dataset metadata is the tracked benchmark-specific file
+- for the historical v0.1 release, confirm the dataset metadata is the tracked
+  benchmark-specific file
   `configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json`;
-  do not modify or reuse the root software-release `.zenodo.json`
+  for v0.2, use the tracked metadata template and its generated bootstrap and
+  resolved outputs; never modify or reuse the root software-release `.zenodo.json`
 - confirm SNQI is documented as advisory/no-ranking, including when calibration
   reports a warning
 - classify smoke artifacts before handoff: raw episode files remain worktree-local
@@ -62,9 +64,14 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   root in the release evidence
 
 For a future v0.2 benchmark-data release, freeze a tracked identity template
-instead of writing its own final commit SHA into tracked bytes. After the exact
-clean source commit and already-reserved concept/version DOI coordinates are
-known, generate and verify the ignored resolved identity:
+instead of writing its own final commit SHA into tracked bytes. Freeze the
+candidate source SHA and intended full-SHA tag while the tag is still unused.
+Render the DOI-pending metadata, reserve the Zenodo draft exactly once with that
+metadata, then use the returned concept/version DOI coordinates to generate and
+verify the ignored resolved identity. A successful reservation allocates a DOI
+even though the draft is unpublished; if the request or local state write has
+an uncertain outcome, do not retry `reserve` or mint a replacement. Locate and
+recover that exact draft first.
 
 - Manifest template:
   `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
@@ -79,26 +86,47 @@ the selected source commit (and applies the same value to the optional
 the moving `origin/main` or creating a self-referential manifest.
 
 ```bash
+set -euo pipefail
 SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
 RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"
+BOOTSTRAP_METADATA=output/release/zenodo_metadata.bootstrap.json
+ZENODO_STATE=output/release/zenodo-deposition.json
+TRACKED_RELEASE_TEMPLATE=configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml
+test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+uv run python scripts/tools/resolve_benchmark_release_identity.py bootstrap-metadata \
+  --template configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml \
+  --output "$BOOTSTRAP_METADATA" \
+  --source-commit "$SOURCE_COMMIT" \
+  --release-tag "$RELEASE_TAG"
+uv run robot-sf release zenodo reserve \
+  --token-file /home/<user>/.config/robot-sf/zenodo.token \
+  --state "$ZENODO_STATE" \
+  --metadata "$BOOTSTRAP_METADATA"
+RESERVED_CONCEPT_DOI="10.5281/zenodo.$(jq -er '.concept_record_id' "$ZENODO_STATE")"
+RESERVED_VERSION_DOI="$(jq -er '.doi' "$ZENODO_STATE")"
 uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
-  --template "${TRACKED_RELEASE_TEMPLATE:?set the tracked template path}" \
+  --template "$TRACKED_RELEASE_TEMPLATE" \
   --output output/release/release_identity.resolved.json \
   --source-commit "$SOURCE_COMMIT" \
   --release-tag "$RELEASE_TAG" \
-  --concept-doi "${RESERVED_BENCHMARK_CONCEPT_DOI:?set the reserved concept DOI}" \
-  --version-doi "${RESERVED_BENCHMARK_VERSION_DOI:?set the reserved version DOI}"
+  --concept-doi "$RESERVED_CONCEPT_DOI" \
+  --version-doi "$RESERVED_VERSION_DOI"
 uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
   --identity output/release/release_identity.resolved.json
 ```
 
-Run the same verify command at the same repository-relative output path in a
-disposable cold checkout of `SOURCE_COMMIT`. The identity and sibling
-`zenodo_metadata.resolved.json` must be byte-identical to the first generation.
-Use the resolved identity as `--manifest` for future runner and doctor checks. See
+Run both `bootstrap-metadata` and `generate` at the same repository-relative
+output paths in a disposable cold checkout of `SOURCE_COMMIT`. Compare both
+metadata files and the resolved identity byte-for-byte with the first
+generation. Use the resolved identity as `--manifest` for the campaign runner
+and pre-tag doctor. Save the passing doctor JSON and checksum before creating
+or publishing the GitHub tag; after tag publication, verify the exact tag,
+source SHA, and assets without rerunning the now-inapplicable unused-tag check.
+See
 [`benchmark_release_protocol.md`](./benchmark_release_protocol.md#future-tracked-template-identity-resolution)
-for the template slots and fail-closed rules. These commands do not reserve a
-DOI, create a tag, publish a release, or submit a campaign.
+for the template slots and fail-closed rules. The resolver commands do not
+reserve a DOI, create a tag, publish a release, or submit a campaign; the
+separate `reserve` command is the one irreversible DOI-allocation step.
 
 ## Preflight
 
@@ -300,19 +328,19 @@ note.
 
 ## Publication
 
-Before campaign submission, run the fail-closed release doctor against the
-exact release worktree while the planned GitHub tag and release are still
-unused. Save its credential-free JSON output before the GitHub release is
-published; the doctor includes an unused-tag check and is a pre-tag gate, not a
-post-tag publishing check. Supply the private-ops packet and dissertation
-checkout when they are available:
+After the v0.2 resolved identity and campaign evidence are ready, run the
+fail-closed release doctor against the exact release worktree while the planned
+GitHub tag and release are still unused. Save its credential-free JSON output
+before creating or publishing the GitHub release; the doctor includes an
+unused-tag check and is a pre-tag gate, not a post-tag publishing check. Supply
+the private-ops packet and dissertation checkout when they are available:
 
 ```bash
 set -euo pipefail
 mkdir -p output/release
 if ! uv run robot-sf release doctor \
   --repo "$PWD" \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest output/release/release_identity.resolved.json \
   --expected-release-sha <exact-release-sha> \
   --expected-base-sha <exact-base-sha-from-resolved-release-identity> \
   --tag <exact-release-tag-from-resolved-release-identity> \

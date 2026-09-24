@@ -782,6 +782,166 @@ def test_paginated_list_accepts_check_run_object_envelope() -> None:
     assert pagination is not None and pagination["row_count"] == 1
 
 
+def test_paginated_check_runs_follow_declared_count_across_short_pages() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        item = {"id": len(calls), "name": f"check-{len(calls)}"}
+        return {"total_count": 2, "check_runs": [item]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert error is None
+    assert rows == [
+        {"id": 1, "name": "check-1"},
+        {"id": 2, "name": "check-2"},
+    ]
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 2,
+        "truncated": False,
+        "total_count": 2,
+    }
+    assert calls == [
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        "repos/owner/repo/commits/sha/check-runs?per_page=100&page=2",
+    ]
+
+
+def test_paginated_check_runs_reject_short_incomplete_page() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        rows = [{"id": 1, "name": "CI"}] if len(calls) == 1 else []
+        return {"total_count": 2, "check_runs": rows}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 1,
+        "truncated": True,
+        "total_count": 2,
+    }
+    assert "returned 1 of 2 declared rows" in (error or "")
+    assert len(calls) == 2
+
+
+def test_paginated_check_runs_require_an_envelope_on_every_page() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        if len(calls) == 1:
+            return {"total_count": 2, "check_runs": [{"id": 1, "name": "CI"}]}, None
+        return [{"id": 2, "name": "newer failure"}], None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 1,
+        "truncated": True,
+        "total_count": 2,
+    }
+    assert "response was not an object" in (error or "")
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        {"check_runs": []},
+        {"total_count": True, "check_runs": []},
+        {"total_count": -1, "check_runs": []},
+        {"total_count": 1.5, "check_runs": []},
+    ],
+)
+def test_paginated_check_runs_reject_invalid_total_count(envelope: dict[str, Any]) -> None:
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=lambda *_args: (envelope, None),
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination is not None and pagination["truncated"] is True
+    assert "invalid total_count" in (error or "")
+
+
+def test_paginated_check_runs_reject_changed_total_count() -> None:
+    calls = 0
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        nonlocal calls
+        assert method == "GET"
+        assert payload is None
+        calls += 1
+        count = 2 if calls == 1 else 3
+        return {"total_count": count, "check_runs": [{"id": calls}]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination is not None and pagination["total_count"] == 2
+    assert pagination["truncated"] is True
+    assert "total_count changed from 2 to 3" in (error or "")
+
+
+def test_paginated_check_runs_reject_duplicate_ids_across_pages() -> None:
+    calls = 0
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        nonlocal calls
+        assert method == "GET"
+        assert payload is None
+        calls += 1
+        return {"total_count": 2, "check_runs": [{"id": 7, "name": f"page-{calls}"}]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination is not None and pagination["truncated"] is True
+    assert "repeated check-run ID 7" in (error or "")
+    assert calls == 2
+
+
 def test_paginated_list_rejects_malformed_page() -> None:
     def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
         assert method == "GET"
@@ -795,7 +955,13 @@ def test_paginated_list_rejects_malformed_page() -> None:
     )
 
     assert rows is None
-    assert pagination is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 100,
+        "truncated": True,
+    }
     assert "was not a list" in (error or "")
 
 

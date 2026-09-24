@@ -165,6 +165,117 @@ def _get_object(path: str, *, api: GhApi = _run_gh_api) -> tuple[dict[str, Any] 
     return _object(value, operation=path)
 
 
+def _paginated_page_value(
+    value: Any,
+    *,
+    operation: str,
+    response_key: str | None,
+    expected_count: int | None,
+) -> tuple[Any, int | None, str | None]:
+    """Extract a list value and stable total from a REST page envelope."""
+    if response_key is None:
+        return value, None, None
+    envelope, error = _object(value, operation=operation)
+    if error or envelope is None:
+        return None, None, error or f"{operation} returned no response envelope"
+    raw_count = envelope.get("total_count")
+    if isinstance(raw_count, bool) or not isinstance(raw_count, int) or raw_count < 0:
+        return None, None, f"{operation} returned an invalid total_count"
+    if expected_count is not None and raw_count != expected_count:
+        return (
+            None,
+            raw_count,
+            f"{operation} total_count changed from {expected_count} to {raw_count}",
+        )
+    return envelope.get(response_key), raw_count, None
+
+
+def _check_run_page_identity_error(
+    items: list[dict[str, Any]], seen_ids: set[int], *, operation: str
+) -> str | None:
+    """Reject duplicate valid check-run IDs across pages."""
+    for item in items:
+        identifier = _check_run_identifier(item)
+        if identifier is not None:
+            if identifier in seen_ids:
+                return f"{operation} repeated check-run ID {identifier}"
+            seen_ids.add(identifier)
+    return None
+
+
+def _wrapped_page_progress_error(
+    *, path: str, row_count: int, page_row_count: int, expected_count: int
+) -> tuple[bool, str | None]:
+    """Return whether a wrapped collection is complete or already inconsistent."""
+    if row_count > expected_count:
+        return False, f"{path} returned {row_count} rows, exceeding total_count {expected_count}"
+    if row_count == expected_count:
+        return True, None
+    if page_row_count == 0:
+        return False, f"{path} returned {row_count} of {expected_count} declared rows"
+    return False, None
+
+
+def _collect_paginated_page(
+    value: Any,
+    *,
+    operation: str,
+    path: str,
+    response_key: str | None,
+    expected_count: int | None,
+    rows: list[dict[str, Any]],
+    seen_check_run_ids: set[int],
+) -> tuple[bool, int | None, str | None]:
+    """Validate a page, append its rows, and report completion or a fail-closed error."""
+    page_value, page_count, error = _paginated_page_value(
+        value,
+        operation=operation,
+        response_key=response_key,
+        expected_count=expected_count,
+    )
+    if error:
+        return False, page_count, error
+    page_rows, error = _list(page_value, operation=operation)
+    if error or page_rows is None:
+        return False, page_count, error or f"{operation} returned no collection"
+    if response_key == "check_runs":
+        error = _check_run_page_identity_error(page_rows, seen_check_run_ids, operation=operation)
+        if error:
+            return False, page_count, error
+    rows.extend(page_rows)
+    if response_key is None:
+        return len(page_rows) < REST_PAGE_SIZE, None, None
+    assert page_count is not None  # set only by a validated wrapped response
+    complete, error = _wrapped_page_progress_error(
+        path=path,
+        row_count=len(rows),
+        page_row_count=len(page_rows),
+        expected_count=page_count,
+    )
+    return complete, page_count, error
+
+
+def _pagination_summary(
+    *,
+    pages_read: int,
+    page_budget: int,
+    rows: list[dict[str, Any]],
+    expected_count: int | None,
+    truncated: bool,
+) -> dict[str, int | bool]:
+    """Build bounded REST pagination metadata."""
+    summary: dict[str, int | bool] = {
+        "pages_read": pages_read,
+        "page_size": REST_PAGE_SIZE,
+        "page_budget": page_budget,
+        "row_count": len(rows),
+        "truncated": truncated,
+    }
+    if expected_count is not None:
+        summary["total_count"] = expected_count
+    return summary
+
+
 def _get_paginated_list(
     path: str,
     *,
@@ -175,55 +286,87 @@ def _get_paginated_list(
     """Read a bounded REST collection and fail closed on possible truncation.
 
     GitHub's review/comment endpoints return a JSON list, while the commit
-    check-runs endpoint wraps that list in an object.  The first request keeps
-    the historical path for deterministic fixtures and compatibility; later
-    pages add ``page=N``.  A short page is the only successful end-of-results
-    signal.  Reaching the page budget with a full page is reported as a
-    possible truncation instead of being treated as complete.
+    check-runs endpoint wraps that list in an object with ``total_count``.  The
+    first request keeps the historical path for deterministic fixtures and
+    compatibility; later pages add ``page=N``.  Wrapped collections are
+    complete only when the stable declared count equals the number of unique
+    returned check-run IDs.  A short page cannot override a larger declared
+    count.  Reaching the page budget before that count is met fails closed.
     """
     if page_budget < 1:
         return None, None, "REST pagination page budget must be positive"
     rows: list[dict[str, Any]] = []
     pages_read = 0
+    expected_count: int | None = None
+    seen_check_run_ids: set[int] = set()
+
     for page in range(1, page_budget + 1):
         page_path = path if page == 1 else f"{path}&page={page}"
         value, error = api("GET", page_path, None)
         if error:
-            return None, None, error
-        if response_key is not None and isinstance(value, dict):
-            page_value = value.get(response_key)
-        else:
-            page_value = value
-        page_rows, error = _list(page_value, operation=page_path)
-        if error or page_rows is None:
-            return None, None, error or f"{page_path} returned no collection"
-        rows.extend(page_rows)
+            return (
+                None,
+                _pagination_summary(
+                    pages_read=pages_read,
+                    page_budget=page_budget,
+                    rows=rows,
+                    expected_count=expected_count,
+                    truncated=True,
+                ),
+                error,
+            )
         pages_read = page
-        if len(page_rows) < REST_PAGE_SIZE:
+        complete, page_count, error = _collect_paginated_page(
+            value,
+            operation=page_path,
+            path=path,
+            response_key=response_key,
+            expected_count=expected_count,
+            rows=rows,
+            seen_check_run_ids=seen_check_run_ids,
+        )
+        if error:
+            return (
+                None,
+                _pagination_summary(
+                    pages_read=pages_read,
+                    page_budget=page_budget,
+                    rows=rows,
+                    expected_count=expected_count,
+                    truncated=True,
+                ),
+                error,
+            )
+        if response_key is not None:
+            expected_count = page_count
+        if complete:
             return (
                 rows,
-                {
-                    "pages_read": pages_read,
-                    "page_size": REST_PAGE_SIZE,
-                    "page_budget": page_budget,
-                    "row_count": len(rows),
-                    "truncated": False,
-                },
+                _pagination_summary(
+                    pages_read=pages_read,
+                    page_budget=page_budget,
+                    rows=rows,
+                    expected_count=expected_count,
+                    truncated=False,
+                ),
                 None,
             )
+    expected_rows = (
+        f"{len(rows)} of {expected_count} declared rows"
+        if expected_count is not None
+        else "full pages"
+    )
     return (
         None,
-        {
-            "pages_read": pages_read,
-            "page_size": REST_PAGE_SIZE,
-            "page_budget": page_budget,
-            "row_count": len(rows),
-            "truncated": True,
-        },
-        (
-            f"{path} reached the REST pagination page budget ({page_budget}) with full pages; "
-            "response may be truncated"
+        _pagination_summary(
+            pages_read=pages_read,
+            page_budget=page_budget,
+            rows=rows,
+            expected_count=expected_count,
+            truncated=True,
         ),
+        f"{path} reached the REST pagination page budget ({page_budget}) with {expected_rows}; "
+        "response may be truncated",
     )
 
 

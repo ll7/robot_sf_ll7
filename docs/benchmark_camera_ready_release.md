@@ -198,6 +198,7 @@ not durable.
 
 ```bash
 set -euo pipefail
+mkdir -p output/release
 CAMPAIGN_SUMMARY=output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json
 ARCHIVE_PATH="$(jq -r '.publication_bundle.archive_path' "$CAMPAIGN_SUMMARY")"
 CHECKSUMS_PATH="$(jq -r '.publication_bundle.checksums_path' "$CAMPAIGN_SUMMARY")"
@@ -271,11 +272,19 @@ The helper never reserves, uploads to, or publishes Zenodo. Use the direct
 Zenodo CLI for the reserved deposition after the bundle has passed the
 independent cold check:
 
+If no deposition has been reserved for this release, run `reserve` exactly
+once. If the deposition already exists, skip `reserve` and use only its
+reviewed deposition ID and DOI-bound manifest; never create a replacement DOI
+to recover local state. Run the commands below as separate operator steps,
+pausing after the metadata preview to review its report before deciding whether
+to apply a repair.
+
 ```bash
 set -euo pipefail
 # Keep this file outside Git with mode 0600; never print its contents.
 ZENODO_TOKEN_FILE=/home/<user>/.config/robot-sf/zenodo.token
 FROZEN_SOURCE_ROOT=<absolute-untouched-source-checkout>
+TOOLING_ROOT=<reviewed-checkout-containing-the-Zenodo-CLI>
 RELEASE_CONFIG_DIR="$FROZEN_SOURCE_ROOT/configs/benchmarks/releases"
 ZENODO_STATE=output/release/zenodo-deposition.json
 ZENODO_METADATA="$RELEASE_CONFIG_DIR/benchmark_data_release_s30_h600_zenodo_metadata.json"
@@ -285,6 +294,9 @@ ZENODO_PUBLICATION_MANIFEST=<exact-publication-bundle-manifest-path>
 VERSION=<reviewed-release-version>
 PUBLICATION_DATE=<reviewed-YYYY-MM-DD>
 
+cd "$TOOLING_ROOT"
+
+# New release only: skip this command when using an already-reserved draft.
 uv run robot-sf release zenodo reserve \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
@@ -325,6 +337,7 @@ uv run robot-sf release zenodo repair-draft-metadata \
 uv run robot-sf release zenodo recover \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA" \
   --deposition-id "$DEPOSITION_ID"
@@ -332,6 +345,7 @@ uv run robot-sf release zenodo recover \
 uv run robot-sf release zenodo upload \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
   "$ZENODO_ARCHIVE" \
   "$ZENODO_CHECKSUMS" \
@@ -340,6 +354,7 @@ uv run robot-sf release zenodo upload \
 uv run robot-sf release zenodo verify \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA" \
   --expected-version "$VERSION" \
@@ -349,6 +364,7 @@ uv run robot-sf release zenodo verify \
 uv run robot-sf release zenodo publish \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA" \
   --expected-version "$VERSION" \
@@ -358,6 +374,7 @@ uv run robot-sf release zenodo publish \
 uv run robot-sf release zenodo verify \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA" \
   --expected-version "$VERSION" \
@@ -371,10 +388,13 @@ immutable archive. If the draft already matches, skip `--apply` and continue
 with `recover`. Record the exact preview and resulting metadata diff. Before
 upload, require the archive SHA-256 to match the frozen release identity and
 the GitHub asset digest, then verify the extracted payload with
-`sha256sum -c checksums.sha256`; stop on any mismatch. When running the
-subsequent `recover`, `upload`, `verify`, and `publish` from a tooling
-worktree, pass `--repository-root "$FROZEN_SOURCE_ROOT"` on each command so
-all operations validate the untouched exact-source identity.
+`sha256sum -c checksums.sha256`; stop on any mismatch. Use the reviewed tooling
+checkout for the CLI and pass `--repository-root "$FROZEN_SOURCE_ROOT"` on
+each manifest-bound command so all operations validate the untouched
+exact-source identity. If the deposition already exists, do not reserve a
+second DOI: set `DEPOSITION_ID` and the DOI-bound manifest from the reviewed
+release identity, preview/repair that exact empty draft, then run `recover` to
+rebuild local state.
 
 ### DOI resolution after publication
 

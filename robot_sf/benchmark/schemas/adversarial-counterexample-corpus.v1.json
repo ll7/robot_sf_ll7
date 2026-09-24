@@ -162,6 +162,26 @@
                   "empirically_feasible",
                   "planner_specific_failure"
                 ]
+              },
+              "evidence_receipt": {
+                "type": "object",
+                "required": [
+                  "schema_version",
+                  "case_id",
+                  "effective_scenario_sha256",
+                  "verdict",
+                  "evaluation_id"
+                ],
+                "properties": {
+                  "schema_version": {"const": "adversarial-case-admissibility-evidence.v1"},
+                  "case_id": {"type": "string", "minLength": 1},
+                  "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                  "verdict": {
+                    "enum": ["empirically_feasible", "planner_specific_failure"]
+                  },
+                  "evaluation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": true

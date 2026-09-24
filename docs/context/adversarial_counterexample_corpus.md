@@ -59,6 +59,15 @@ that the dynamic task is feasible. The #9656 mined rows are not admitted by the
 source aliases and provenance without treating mismatched, unavailable, or
 unattempted replays as verified cases.
 
+An affirmative feasibility verdict requires an
+`adversarial-case-admissibility-evidence.v1` receipt bound to the case ID,
+effective scenario digest, verdict, and a planner evaluation ID. That evaluation
+must reference a verified, successful replay at the admitted source revision;
+static certification and a target-planner collision replay do not establish
+dynamic feasibility. The case's selected replay projection must also match each
+verified replay artifact, and the target planner's configuration snapshot must
+match the configuration recorded in its replay episode.
+
 ## Import historical #9656 candidates
 
 The #9656 evidence bundle stores the digest-bound hard-case summary. Its

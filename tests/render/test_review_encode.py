@@ -1439,6 +1439,58 @@ def test_cli_deeply_nested_json_returns_schema_valid_failure(
     assert f"cannot read {expected_source}: RecursionError" in envelope["reason"]
 
 
+@pytest.mark.parametrize("oversized_input", ["request", "config"])
+def test_cli_oversized_integer_json_returns_schema_valid_failure(
+    tmp_path: Path, oversized_input: str
+) -> None:
+    """Python's integer-token limit is reported through the stable CLI error boundary."""
+
+    input_path = _write_cli_input(tmp_path)
+    config_path = tmp_path / "oversized-integer-config.json"
+    digits = "9" * 5_000
+    arguments = [
+        sys.executable,
+        "-m",
+        "robot_sf.render.review_encode",
+        "--input",
+        str(input_path),
+    ]
+
+    if oversized_input == "request":
+        input_text = input_path.read_text(encoding="utf-8")
+        original_config = '"config": {}'
+        assert original_config in input_text
+        input_path.write_text(
+            input_text.replace(original_config, f'"config": {{"extra": {digits}}}'),
+            encoding="utf-8",
+        )
+        assert input_path.stat().st_size <= review_encode.MAX_REQUEST_BYTES
+    else:
+        config_path.write_text(f'{{"extra": {digits}}}\n', encoding="utf-8")
+        assert config_path.stat().st_size <= review_encode.MAX_CONFIG_BYTES
+        arguments.extend(["--config", str(config_path)])
+
+    completed = subprocess.run(
+        [
+            *arguments,
+            "--output",
+            "oversized-integer-out",
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stdout)
+    component_result_from_dict(envelope)
+    assert envelope["status"] == "failed"
+    assert f"cannot read {oversized_input}: ValueError" in envelope["reason"]
+
+
 def test_cli_main_malformed_request_in_process(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

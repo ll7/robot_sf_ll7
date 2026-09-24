@@ -2690,7 +2690,7 @@ def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:
             attempt: int,
         ):
             started.set()
-            release.wait(timeout=5)
+            release.wait()
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2))

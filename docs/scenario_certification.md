@@ -175,7 +175,10 @@ row; named evidence without it remains unknown.
 Execution inputs are normalized records with `case_id`, `scenario_id`, `scenario_variant`,
 `planner_id`, `run_status`, the explicit boolean `fallback_or_degraded`, `route_complete`, `seed`,
 `horizon_steps`, SHA-256 hashes for the scenario, robot model, simulator config, planner config, and
-environment, plus `planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. The fallback
+environment, plus `planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. Target and replay
+records additionally require the source `episode_id` and a valid
+`source_episodes_jsonl_sha256`; callers take these from the target episode store and replay
+provenance sidecar. The fallback
 boolean must be false; the adapter also applies the canonical runtime fallback/degraded detector to
 the full normalized record, so nested fallback flags, unavailable/fallback/degraded statuses, and
 positive fallback counters cannot establish an outcome. Missing or malformed fallback state stays
@@ -185,8 +188,11 @@ explicit value `not_applicable` for a known checkpoint-free planner; missing che
 stays unknown. Only `scenario_variant: original`, `run_status: ok`, and non-fallback/non-degraded
 records can establish an outcome. Replay records additionally require
 `determinism_check_status: pass` and `resimulated: true`; callers adapt canonical episode rows and
-the existing replay provenance sidecar into this input shape. Incomplete records stay visible in
-`evidence` and do not establish feasibility.
+the existing replay provenance sidecar into this input shape. For a target-planner failure replay,
+the sidecar's `episode_id` and `source_episodes_jsonl_sha256` must match the target episode row and
+its source episode-store artifact exactly. A replay from another episode or source artifact leaves
+planner-specific failure attribution unconfirmed, even when its scenario, seed, and planner
+configuration match. Incomplete records stay visible in `evidence` and do not establish feasibility.
 
 Artifact provenance is bound across evidence sources: the certificate `source` and oracle
 `scenario_manifest` references must resolve to bytes with the same SHA-256 as
@@ -203,11 +209,12 @@ passing determinism check. A target-planner failure alone does not establish sce
 infeasibility; `planner_specific_failure` requires a completed reference run and an incomplete
 target run bound to the same scenario, seed, horizon, source revision, and configuration hashes,
 plus a deterministic replay by the target planner that reproduces the incomplete route under the
-same scenario bindings and matching planner-config and checkpoint hashes as the target run. Missing,
-mismatched, or successful replay leaves planner-specific failure attribution unconfirmed. A valid
-completed reference run still establishes empirical feasibility for that same named scenario, and
-the target's `route_incomplete` outcome remains separate from that feasibility verdict. This helper
-does not change benchmark denominators or establish real-world safety.
+same scenario bindings and matching planner-config and checkpoint hashes as the target run. The
+replay must also bind to the target episode ID and source episode-store digest. Missing, mismatched,
+or successful replay leaves planner-specific failure attribution unconfirmed. A valid completed
+reference run still establishes empirical feasibility for that same named scenario, and the target's
+`route_incomplete` outcome remains separate from that feasibility verdict. This helper does not
+change benchmark denominators or establish real-world safety.
 
 ## Limits
 

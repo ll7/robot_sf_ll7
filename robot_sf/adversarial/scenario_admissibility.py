@@ -106,9 +106,11 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     ``scenario_sha256`` values must match that digest. Named execution mappings carry
     case/scenario/planner IDs, original variant, run status,
     route completion, seed/horizon, source commit, evidence reference, and hashes for the
-    scenario, robot model, simulator config, and environment. Planner-specific failure needs
-    matching bindings, distinct planner IDs, and a deterministic replay of the target failure.
-    Replay evidence also needs a passing ``determinism_check_status`` and ``resimulated=True``.
+    scenario, robot model, simulator config, and environment. Target and replay rows also carry
+    ``episode_id`` and ``source_episodes_jsonl_sha256``; planner-specific failure requires the replay
+    sidecar's values to match the target row. Planner-specific failure needs matching bindings,
+    distinct planner IDs, and a deterministic replay of the target failure. Replay evidence also
+    needs a passing ``determinism_check_status`` and ``resimulated=True``.
     """
     if not isinstance(case_id, str) or not case_id.strip():
         raise ValueError("case_id must be non-empty")
@@ -406,6 +408,7 @@ def _route_has_geometric_evidence(reason: str, checks: Mapping[str, Any]) -> boo
             and isinstance(recorded_index, int)
             and not isinstance(recorded_index, bool)
             and recorded_index == sample_index
+            and _nonnegative_int(checked_count)
             and checked_count == sample_index + 1
         )
     return False
@@ -914,7 +917,7 @@ def _execution_problem(
     fallback_problem = _execution_fallback_problem(source, role)
     if fallback_problem is not None:
         return fallback_problem
-    if not _execution_digest_fields_valid(source):
+    if not _execution_digest_fields_valid(source, role):
         return f"{role}_execution_provenance_incomplete"
     artifact_problem = _execution_artifact_problem(source, role, artifact_sha256)
     if artifact_problem is not None:
@@ -951,13 +954,17 @@ def _execution_binding_problem(
         "source_commit",
         "evidence_ref",
     }
+    if role in {"target", "replay"}:
+        # The canonical replay sidecar identifies the source episode and its source file.
+        # Bind both on the target row so an unrelated replay cannot corroborate its failure.
+        required.update({"episode_id", "source_episodes_jsonl_sha256"})
     if not isinstance(source, Mapping) or not required.issubset(source):
         return f"{role}_execution_provenance_incomplete"
     if scenario_id is None:
         return f"{role}_execution_scenario_identity_unbound"
     if source["case_id"] != case_id or source["scenario_id"] != scenario_id:
         return f"{role}_execution_identity_mismatch"
-    if not _execution_text_fields_valid(source):
+    if not _execution_text_fields_valid(source, role):
         return f"{role}_execution_provenance_incomplete"
     return None
 
@@ -991,12 +998,14 @@ def _execution_fallback_problem(source: Mapping[str, Any], role: str) -> str | N
     return None
 
 
-def _execution_text_fields_valid(source: Mapping[str, Any]) -> bool:
+def _execution_text_fields_valid(source: Mapping[str, Any], role: str) -> bool:
     fields = ("scenario_id", "scenario_variant", "planner_id", "evidence_ref")
+    if role in {"target", "replay"}:
+        fields += ("episode_id",)
     return all(isinstance(source[key], str) and source[key].strip() for key in fields)
 
 
-def _execution_digest_fields_valid(source: Mapping[str, Any]) -> bool:
+def _execution_digest_fields_valid(source: Mapping[str, Any], role: str) -> bool:
     fields = (
         "scenario_sha256",
         "robot_model_sha256",
@@ -1004,6 +1013,8 @@ def _execution_digest_fields_valid(source: Mapping[str, Any]) -> bool:
         "planner_config_sha256",
         "environment_sha256",
     )
+    if role in {"target", "replay"}:
+        fields += ("source_episodes_jsonl_sha256",)
     checkpoint_hash = source["planner_checkpoint_sha256"]
     return (
         all(isinstance(source[key], str) and _SHA256.fullmatch(source[key]) for key in fields)
@@ -1085,16 +1096,9 @@ def _resolve(
             reasons.append("planner_specific_failure_replay_missing_or_invalid")
             reasons.append("planner_specific_failure_attribution_unconfirmed")
             return EMPIRICALLY_FEASIBLE
-        if replay["planner_id"] != target["planner_id"]:
-            reasons.append("planner_specific_failure_replay_wrong_planner")
-            reasons.append("planner_specific_failure_attribution_unconfirmed")
-            return EMPIRICALLY_FEASIBLE
-        if not _same_case(replay, target):
-            reasons.append("planner_specific_failure_replay_case_mismatch")
-            reasons.append("planner_specific_failure_attribution_unconfirmed")
-            return EMPIRICALLY_FEASIBLE
-        if not _same_planner_configuration(replay, target):
-            reasons.append("planner_specific_failure_replay_configuration_mismatch")
+        replay_mismatch = _replay_binding_mismatch(replay, target)
+        if replay_mismatch is not None:
+            reasons.append(replay_mismatch)
             reasons.append("planner_specific_failure_attribution_unconfirmed")
             return EMPIRICALLY_FEASIBLE
         if replay["route_complete"]:
@@ -1138,6 +1142,30 @@ def _same_planner_configuration(left: Mapping[str, Any], right: Mapping[str, Any
         left.get(key) == right.get(key)
         for key in ("planner_config_sha256", "planner_checkpoint_sha256")
     )
+
+
+def _same_replay_source_episode(replay: Mapping[str, Any], target: Mapping[str, Any]) -> bool:
+    """Bind canonical replay-sidecar identity and source artifact to the target row."""
+    return (
+        replay.get("episode_id") == target.get("episode_id")
+        and isinstance(replay.get("source_episodes_jsonl_sha256"), str)
+        and isinstance(target.get("source_episodes_jsonl_sha256"), str)
+        and replay["source_episodes_jsonl_sha256"].lower()
+        == target["source_episodes_jsonl_sha256"].lower()
+    )
+
+
+def _replay_binding_mismatch(replay: Mapping[str, Any], target: Mapping[str, Any]) -> str | None:
+    """Return the first failed binding required to attribute a planner-specific failure."""
+    if replay["planner_id"] != target["planner_id"]:
+        return "planner_specific_failure_replay_wrong_planner"
+    if not _same_case(replay, target):
+        return "planner_specific_failure_replay_case_mismatch"
+    if not _same_planner_configuration(replay, target):
+        return "planner_specific_failure_replay_configuration_mismatch"
+    if not _same_replay_source_episode(replay, target):
+        return "planner_specific_failure_replay_source_episode_mismatch"
+    return None
 
 
 def partition_candidates_by_admissibility(

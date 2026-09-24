@@ -12,17 +12,25 @@ on:
       - "**/*.md"
       - "docs/**"
   workflow_dispatch:
+    inputs:
+      retry_failed:
+        description: Retry one completed exact-head failure (recorded and deduplicated)
+        required: false
+        default: false
+        type: boolean
+
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('CI manual recovery retry_failed={0}', inputs.retry_failed) || github.event.head_commit.message || github.event.pull_request.title || github.workflow }}
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
-  # Latest-main-wins (issue #6399): cancelling in-progress runs in the
-  # per-ref group lets the final aggregate SHA of a merge burst be validated
-  # without queueing behind superseded intermediate runs. Because the group is
-  # per-ref, a new main push only cancels superseded main runs, and a new pull
-  # request push still only cancels its own superseded run.
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Pushes and pull-request updates retain latest-main-wins supersession.
+  # Manual recovery runs use a unique pending identity because GitHub replaces
+  # an existing pending run even when cancel-in-progress is false. The
+  # dispatch-ownership job below deduplicates expensive same-head matrices.
+  group: ${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}-dispatch-{2}', github.workflow, github.ref, github.run_id) || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: true
 
 env:
@@ -37,7 +45,52 @@ env:
   COVERAGE_CORE: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ctrace' || 'sysmon' }}
 
 jobs:
+  dispatch-ownership:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    concurrency:
+      # Serialize same-head manual elections only. Push, PR, and merge_group
+      # bypass gates must not hold the slot that a manual follower waits on.
+      group: ci-dispatch-owner-${{ github.event_name == 'workflow_dispatch' && github.sha || github.run_id }}
+      cancel-in-progress: false
+    outputs:
+      run_full_ci: ${{ steps.decision.outputs.run_full_ci }}
+    steps:
+      - name: Checkout gate source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Elect exact-head full-matrix owner
+        id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETRY_FAILED: ${{ inputs.retry_failed || false }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+            echo "run_full_ci=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          retry_args=()
+          if [[ "${RETRY_FAILED}" == "true" ]]; then
+            retry_args+=(--retry-failed)
+          fi
+          python scripts/dev/main_ci_is_green.py \
+            --dispatch-gate \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow ci.yml \
+            --target-sha "${GITHUB_SHA}" \
+            --target-branch "${GITHUB_REF_NAME}" \
+            --target-ref-type "${GITHUB_REF_TYPE}" \
+            --current-run-id "${GITHUB_RUN_ID}" \
+            --github-output "${GITHUB_OUTPUT}" \
+            "${retry_args[@]}"
+
   fast-feedback:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Split every event across four runners. Pull requests retain their fast-only
@@ -305,6 +358,8 @@ jobs:
           include-hidden-files: true
 
   compat-matrix:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -320,15 +375,25 @@ jobs:
         uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ matrix.python }}
-          sync-args: "--all-extras --frozen"
+          # Slim profile (issue #9355): base + viz + maps extras cover the full
+          # compat test closure (proven by check_compat_import_profile.py plus a
+          # slim-venv collection/runtime probe). Full --all-extras downloads
+          # (CUDA torch, Ray, browsers) blew the 1,200s setup budget on cold
+          # caches before any test ran.
+          sync-args: "--extra viz --extra maps --frozen"
 
-      - name: Run compatibility tests with full extras
+      - name: Verify compat import profile before tests
+        run: uv run python scripts/dev/check_compat_import_profile.py
+
+      - name: Run compatibility tests with profile extras
         run: >-
           uv run pytest tests/common tests/contract tests/factories tests/gym_env tests/maps
           tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit
           -q -m "not slow"
 
   fast-pysf-compat:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -352,6 +417,8 @@ jobs:
         run: uv lock --check --directory fast-pysf
 
   smoke-artifacts:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -415,6 +482,8 @@ jobs:
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
   scenario-validation:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -443,7 +512,10 @@ jobs:
   reproducibility-check:
     # Run on pull requests so hosted reproducibility evidence is green rather
     # than skipped; retain manual dispatch for standalone diagnostics.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: dispatch-ownership
+    if: >-
+      needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -505,6 +577,8 @@ jobs:
           if-no-files-found: warn
 
   xdist-scratch-isolation:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     # Shared all-extras setup can take ~19 minutes before the guard runs (#8631).
     timeout-minutes: 30
@@ -528,6 +602,8 @@ jobs:
             tests/validation/test_predictive_success_campaign_tags.py::test_main_writes_failure_summary_for_malformed_jsonl
 
   wheel-smoke-install:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     # Leave smoke-test headroom after an observed ~18-minute setup (#8631).
     timeout-minutes: 30
@@ -556,6 +632,8 @@ jobs:
           if-no-files-found: warn
 
   examples-smoke:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -608,6 +686,8 @@ jobs:
         run: scripts/dev/ci_driver.sh examples-smoke
 
   notebooks-smoke:
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -713,6 +793,8 @@ jobs:
     # timed test never downloads a model inside its loop. The test itself
     # monkeypatches the downloader to fail-closed if any in-loop fetch is
     # attempted.
+    needs: dispatch-ownership
+    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -751,6 +833,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
+      - dispatch-ownership
       - fast-feedback
       - changed-coverage-gate
       - coverage-gate
@@ -766,13 +849,18 @@ jobs:
       - exact-repeat-model-preflight
     if: always()
     steps:
-      - name: Checkout for duration-cache update
-        id: checkout_duration_cache
-        if: ${{ always() }}
-        continue-on-error: true
+      - name: Checkout source for aggregate CI checks and duration-cache update
+        id: checkout_ci_source
+        if: >-
+          ${{ always() && (needs.dispatch-ownership.result != 'success' ||
+          needs.dispatch-ownership.outputs.run_full_ci == 'true') }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check split job results
+        if: >-
+          ${{ always() && steps.checkout_ci_source.outcome == 'success' &&
+          (needs.dispatch-ownership.result != 'success' ||
+          needs.dispatch-ownership.outputs.run_full_ci == 'true') }}
         env:
           CI_NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
@@ -781,8 +869,14 @@ jobs:
             --treat-cancelled-as-superseded \
             --results "$CI_NEEDS_JSON"
 
+      - name: Record observed exact-head verdict
+        if: >-
+          ${{ always() && needs.dispatch-ownership.result == 'success' &&
+          needs.dispatch-ownership.outputs.run_full_ci == 'false' }}
+        run: echo "The dispatch gate observed a decisive exact-head CI run; no duplicate matrix launched."
+
       - name: Download test-duration shards
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -791,14 +885,14 @@ jobs:
 
       - name: Merge test durations
         id: merge-test-durations
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
         run: |
           python scripts/dev/merge_test_durations.py \
             --artifact-dir .duration-artifacts --output .test_durations
 
       - name: Save merged test durations
-        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
+        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

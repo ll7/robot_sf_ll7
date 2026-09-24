@@ -98,6 +98,7 @@ failure-state guardrail.
 - `docs/code_review.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
 - `docs/context/issue_713_batch_first_issue_workflow.md`
+- `docs/context/issue_relationships.md`
 - `.agents/skills/implementation-verification/SKILL.md`
 - `.agents/skills/pr-ready-check/SKILL.md`
 - `.agents/skills/gh-pr-opener/SKILL.md`
@@ -484,7 +485,8 @@ Route remaining issues by their blocker:
 1. Build a live label-based queue and select one issue or an orchestrator-authorized bounded batch
    of non-overlapping issues (`gh-issue-sequencer` output or explicit user targets).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
-   duplicate branch/PR risk before branching.
+   duplicate branch/PR risk before branching. Read native Parent/Blocked by/Blocking state; use
+   body and comment context only as evidence for a separately reviewed relationship candidate.
 3. Acquire the cross-machine issue claim before branching:
 
    ```bash
@@ -524,7 +526,19 @@ Route remaining issues by their blocker:
    - Check the sub-agent's status and wait for it to complete.
    - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
    - If validation or proof is insufficient, instruct the sub-agent to repair it, or mark the issue blocked.
+   - Before PR handoff, require the exact-diff implementation self-review receipt
+     (`uv run python scripts/dev/implementation_self_review.py verify --receipt-file <receipt.json>
+     --worktree <task-worktree>`): the receipt must validate bound to the exact final head and
+     complete `git diff origin/main...HEAD`, with executed validation, no fail verdicts, and no
+     blocking findings. `verify` binds Git state only, so follow it with the issue-bound gate
+     (`... gate --receipt-file <receipt.json> --issue <number> --expected-head-sha <head-sha>
+     --expected-base-sha <base-sha> [--issue-body-file <body.md>]`) before opening the PR.
+     A blocking self-review finding returns to implementation; never open the PR
+     merely because tests are green. Self-review never counts as independent merge-review
+     authority.
 10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
+    Keep `Closes`/`Refs` coverage references in the PR body; native relationship state remains on
+    the linked issue and is not copied into the PR body.
 11. Open the PR and keep the transient claim while the PR is open. Release it only after terminal
     delivery, with an explicit reason:
     ```bash
@@ -537,7 +551,9 @@ Route remaining issues by their blocker:
     - Follow `AGENTS.md` "Worktree Teardown And Preservation" to clean up the linked worktree and prune references.
     - Move to the next queue item.
 
-Never run unrelated refactors or paper-facing claims in this loop.
+Never run unrelated refactors or paper-facing claims in this loop. Do not mutate native issue
+relationships from a review-only worktree; relationship changes require an explicit declaration, a
+fresh read, and native-link readback before the PR is published.
 
 ### Parallel Lane Contract
 

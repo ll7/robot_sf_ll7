@@ -15,7 +15,6 @@ import os
 import re
 import shlex
 import subprocess
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +31,7 @@ from scripts.benchmark.build_radius_sweep_manifest_issue_6642 import (
     _load_yaml,
     build_and_check,
 )
+from scripts.dev.time_utils import utc_now_iso as _utc_now
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET_SCHEMA = "issue-7198-radius-sweep-admission.v1"
@@ -52,10 +52,6 @@ SUMMARY_FIELDS = (
     "blocked_or_inactive_entries",
     "active_ledger_jobs",
 )
-
-
-def _utc_now() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _sha256(path: Path) -> str:

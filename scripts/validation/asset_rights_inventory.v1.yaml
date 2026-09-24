@@ -364,7 +364,7 @@ rows:
 
   - id: example-fixture-json
     scope: examples
-    globs: ["examples/plotting/fixtures/**", "examples/fixtures/failed_campaign_dossier.json", "examples/fixtures/artifact_preservation/**", "examples/fixtures/campaign_capsule_v1.json"]
+    globs: ["examples/plotting/fixtures/**", "examples/fixtures/failed_campaign_dossier.json", "examples/fixtures/artifact_preservation/**", "examples/fixtures/campaign_capsule_v1.json", "examples/fixtures/offline_cold_load_v1/**"]
     status: project-authored
     source: "Robot SF hand-authored deterministic example fixtures."
     source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
@@ -376,6 +376,7 @@ rows:
       - examples/plotting/fixtures/pareto_dominated_tie.json
       - examples/fixtures/failed_campaign_dossier.json
       - examples/fixtures/campaign_capsule_v1.json
+      - examples/fixtures/offline_cold_load_v1/manifest.json
       - LICENSE
   - id: snqi-example-fixture
     scope: examples

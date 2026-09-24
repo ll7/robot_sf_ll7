@@ -707,6 +707,17 @@ workflow evidence only and does not authorize a policy change, merge, campaign, 
 
 ### Merge queue gate (issue #6274)
 
+An accepted review can be recorded before hosted checks finish with
+`merge-if-ci-green`. This conditional label is a handoff, not merge admission:
+`goal-pr-review` publishes its trusted exact-head review evidence and applies
+the label, and `gh-pr-merger` runs
+`uv run python -m scripts.dev.promote_merge_if_ci_green <pr> --expected-head-sha <head> --expected-base-sha <base>`
+after required CI is green on that head. Promotion adds `merge-ready` through
+the existing carrier guard and clears the conditional label. A pending, failed,
+unknown, or stale CI result leaves the PR unmerged. The native merge queue and
+direct guarded merge still require `merge-ready`; CI finishing does not require
+another review or a routine waiting comment.
+
 **Problem.** An external or parallel auto-merge path merged several PRs without the `merge-ready`
 label and without a current exact-head `gate-verdict: accepted` trailer (issue #6274). The in-repo
 `gh-pr-merger` contract is fail-closed, but it only governs merges it performs itself; any
@@ -2672,10 +2683,12 @@ The deterministic main signal is:
 uv run python scripts/dev/main_ci_is_green.py   # exit 0 green, 1 not-green
 ```
 
-It decides from the most recent **completed** CI run on `main`; an in-progress,
-cancelled, or timed-out run is `stale`, not `red`. Reviewing a PR while main is
-red is fine, and only the suspected-file overlap or per-PR staleness check can
-hold an otherwise green PR.
+It decides from a **completed CI run on the exact current `main` commit**. The
+helper reads the main ref before selecting evidence and checks it again after
+any manual-matrix admission lookup; an in-progress, cancelled, timed-out, or
+older-head run is `stale`, not `red`. Reviewing a PR while main is red is fine,
+and only the suspected-file overlap or per-PR staleness check can hold an
+otherwise green PR.
 
 For automated gates, emit the machine-readable signal instead of parsing the
 human line (issue #5571). The `--json` flag prints the `main_ci_is_green.v1`
@@ -2696,11 +2709,41 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
-The gate's default fetch is deliberately one bounded `gh run list --limit`
-window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
-cancellation churn fills that window it fails closed to `stale` instead of
-reading further back. Callers that need the decisive verdict behind a
-cancelled-run flood use the paginated reader below.
+The gate's default fetch is deliberately one bounded exact-commit
+`gh run list --branch main --commit <SHA> --limit` window (default 20 runs,
+30s timeout) so merge-hold evaluation stays fast. It selects the default `CI`
+workflow by `.github/workflows/ci.yml` rather than the ambiguous display name,
+while keeping `CI` as the report label, and classifies status locally because
+server-side status-filtered queries have returned older windows. A moved main
+ref or a window without decisive evidence fails closed to `stale`; callers that
+need the decisive verdict behind a cancelled-run flood use the paginated reader
+below.
+
+Manual CI recovery dispatches use a separate ownership gate before any full
+matrix job starts. GitHub can replace a pending run in a shared concurrency
+group even when `cancel-in-progress` is false, so each `workflow_dispatch` run
+has a unique workflow concurrency identity and the serialized
+`dispatch-ownership` job elects the oldest active run for the exact SHA on the
+branch selected for that manual dispatch. Its Actions API lookup is scoped to
+that branch, so dispatches on feature or release branches participate in the
+same election as dispatches on `main`; a missing or malformed branch fails
+closed. The gate does not coordinate runs on different branch names, even when
+those refs point to the same SHA. Followers wait for that owner: they mirror
+only a completed exact-head success/failure from a configured full-matrix event
+(`push`, `pull_request`, or `merge_group`). A completed `workflow_dispatch` is
+decisive only when the Actions jobs API proves that at least one `compat-matrix`
+job was admitted; an all-skipped matrix or missing/empty/unknown event is
+non-decisive, so a follower can take ownership and run full CI. Malformed run
+data or unreadable/missing `compat-matrix` job evidence fails the ownership
+gate closed: it cannot establish a verdict or authorize a new matrix.
+Otherwise a follower can take ownership if the prior run becomes stale or
+cancelled. Set the `retry_failed` workflow input only for one justified retry;
+the run title is its idempotent receipt. Repeated ordinary watcher dispatches
+therefore cannot cancel the owner or start duplicate full matrices. The job-level
+election concurrency key is shared only by manual runs for the same SHA; push,
+pull-request, and merge-group bypass gates use their unique run IDs, so a manual
+follower cannot hold the election slot while waiting for a push gate that needs
+to bypass the election.
 
 ### Scheduled main-CI incident reconciliation
 
@@ -3167,7 +3210,13 @@ the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown t
 the metadata block near the top of the issue body; YAML issue forms expose both fields as required
 dropdowns. Use exactly one value from each enum and add repository-relative paths under
 `linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
-without rewriting existing issue bodies or changing labels and project fields.
+without rewriting existing issue bodies or changing labels and project fields. Templates point
+authors to the native Parent, Blocked by, and Blocking fields described in
+[Native GitHub Issue Relationships](context/issue_relationships.md); they do not duplicate links in
+issue bodies.
+
+To inspect legacy body declarations during a reviewed migration, use:
+`uv run python scripts/dev/audit_issue_relationships.py --issue 123 --format json`.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - YAML issue forms for common backlog lanes:

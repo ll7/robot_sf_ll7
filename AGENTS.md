@@ -56,6 +56,12 @@ Always-required core context:
 - `docs/maintainer_values.md`: maintainer principles and tie-breakers.
 - `AGENTS.md`: invariants, precedence, and this router.
 - `docs/ai/agent_workflow_entrypoints.md`: route table, command entrypoints, handoff format, and large-file navigation.
+- **Issue/PR relationships**: `docs/context/issue_relationships.md`, issue/PR templates, and the
+  lifecycle skills. Native GitHub links are canonical; do not duplicate them in issue or PR bodies.
+  Set native links only from the owning writable worktree, and treat review-only worktrees as
+  read-only graph verification. Direct relationship
+  CLI operations require `gh >= 2.100.0`; older or unsupported CLIs must use the documented REST
+  or UI fallback and fail closed rather than treating missing fields as `none`.
 
 The route table is the single owner of task-to-guidance routing; references are required by default
 and optional only when marked optional/illustrative, generated, or explicitly background. For the
@@ -96,6 +102,19 @@ execution is never success evidence. If proof fails or cannot be gathered, close
 matrix is owned by `docs/code_review.md`; benchmark governance by `docs/benchmark_governance.md`.
 
 ## Delivery And Communication
+
+After an exact-head pull request (PR) review is accepted, apply `merge-if-ci-green`
+when hosted continuous integration (CI) is the only remaining gate. The label
+records completed review while checks are pending; it does not authorize a
+merge. The guarded merger promotes that same head to `merge-ready` after green
+required checks, then runs the existing merge preflight. CI completion alone
+does not start another review cycle. A moved head, substantive finding, or
+removed readiness label requires normal triage.
+
+For issue-linked PRs opened from a worktree, read the linked issue's fresh native
+Parent/Blocked by/Blocking state. Keep `Closes`/`Refs` in `Linked Issues` for coverage semantics;
+they do not establish dependency edges. Do not duplicate native links in the PR body. See
+`docs/context/issue_relationships.md` for the readback and review-only-worktree boundary.
 
 Use conventional commits. A PR states intent, linked issues, validation commands, artifact
 disposition, and downstream propagation; because merges squash, reconcile the final title and body

@@ -167,6 +167,57 @@ def test_review_agent_run_reports_missing_compact_artifacts(
     assert str(run_root) not in note.read_text(encoding="utf-8")
 
 
+def test_review_agent_run_rejects_readiness_status_disagreement(
+    linked_repo: tuple[Path, Path, Path],
+) -> None:
+    """A terminated readiness receipt cannot be summarized as a passed run."""
+    _, linked, run_root = linked_repo
+    run_dir = write_complete_run(run_root, "readiness-conflict")
+    (run_dir / "16-pr-ready-termination.json").write_text(
+        '{"schema":"pr_ready_termination.v1","status":"terminated"}\n',
+        encoding="utf-8",
+    )
+    (run_dir / "RESULT.md").write_text("PR readiness status: passed\n", encoding="utf-8")
+    (run_dir / "16-pr-ready-check.log").write_text(
+        "All checks passed!\nPR readiness received SIGTERM.\n", encoding="utf-8"
+    )
+
+    result = subprocess.run(
+        ["bash", str(REVIEW_SCRIPT), "--run-dir", str(run_dir)],
+        cwd=linked,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "readiness-inconsistent" in result.stdout
+    assert "readiness_status_disagreement" in result.stderr
+
+
+def test_review_agent_run_rejects_prefixed_unrecognized_json_artifact(
+    linked_repo: tuple[Path, Path, Path],
+) -> None:
+    """Every producer-written JSON artifact is parsed from its first byte."""
+    _, linked, run_root = linked_repo
+    run_dir = write_complete_run(run_root, "prefixed-json")
+    (run_dir / "10-base-sensitive.json").write_text(
+        'gate not required\n{"gate_required": false}\n', encoding="utf-8"
+    )
+
+    result = subprocess.run(
+        ["bash", str(REVIEW_SCRIPT), "--run-dir", str(run_dir)],
+        cwd=linked,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "malformed-json" in result.stdout
+    assert "10-base-sensitive.json" in result.stderr
+
+
 def test_review_agent_run_latest_does_not_hide_new_incomplete_bundle(
     linked_repo: tuple[Path, Path, Path],
 ) -> None:
@@ -231,3 +282,31 @@ def test_summarize_agent_runs_reads_canonical_result_and_validation(
     assert result.returncode == 0, result.stderr
     assert "run-001\tcomplete\tpassed\ttest-provider" in result.stdout
     assert result.stdout.rstrip().endswith("\t1")
+
+
+def test_summarize_agent_runs_does_not_report_conflicted_readiness_as_complete(
+    linked_repo: tuple[Path, Path, Path],
+) -> None:
+    """The run summary preserves a readiness conflict instead of a false pass."""
+    _, linked, run_root = linked_repo
+    run_dir = write_complete_run(run_root, "readiness-conflict")
+    (run_dir / "16-pr-ready-termination.json").write_text(
+        '{"schema":"pr_ready_termination.v1","status":"terminated"}\n',
+        encoding="utf-8",
+    )
+    (run_dir / "RESULT.md").write_text("PR readiness status: passed\n", encoding="utf-8")
+    (run_dir / "16-pr-ready-check.log").write_text(
+        "All checks passed!\nPR readiness received SIGTERM.\n", encoding="utf-8"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(SUMMARY_SCRIPT)],
+        cwd=linked,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "readiness-conflict\treadiness_conflict" in result.stdout
+    assert "readiness-conflict\tcomplete" not in result.stdout

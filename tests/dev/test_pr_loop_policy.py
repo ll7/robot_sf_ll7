@@ -1530,6 +1530,51 @@ def test_classify_review_body_carries_verdict() -> None:
     assert classify_pr_state(pr) == "ready_to_merge"
 
 
+def test_current_gate_verdict_status_ignores_prose_marker_mentions() -> None:
+    """A prose mention must not become a malformed control event."""
+    pr = {
+        "number": 3007,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": "Keep `gate-verdict: hold`; do not apply merge-ready until review.",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "accepted"
+
+
+def test_current_gate_verdict_status_rejects_malformed_dedicated_marker() -> None:
+    """A dedicated marker without its SHA remains fail-closed as malformed."""
+    pr = {
+        "number": 3008,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: hold",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            }
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
 def test_classify_explicit_gate_verdict_field_accepted() -> None:
     """A top-level gate_verdict dict should satisfy the gate (snapshot enrichment)."""
     pr = _pr(
@@ -2722,6 +2767,20 @@ def test_gate_verdict_regression_no_head_advances_to_merge() -> None:
         if expected != "ready_to_merge":
             assert state != "ready_to_merge"
             assert state != "mark_ready_candidate"
+
+
+def test_conditional_ready_label_routes_green_ci_to_promotion_without_review() -> None:
+    """An accepted exact-head review remains valid when hosted CI settles."""
+    fixture = json.loads((FIXTURE_DIR / "gate_verdict_regression.json").read_text())
+    reviewed = next(pr for pr in fixture["prs"] if pr["expected_state"] == "ready_to_merge")
+    reviewed = {**reviewed, "labels": ["merge-if-ci-green"]}
+    assert classify_pr_state(reviewed) == "ready_for_ci_promotion"
+    assert (
+        recommend_action("ready_for_ci_promotion", pr_number=9388, actions_remaining=1).action
+        == "promote_merge_if_ci_green"
+    )
+    pending = {**reviewed, "checks": {"overall": "pending"}}
+    assert classify_pr_state(pending) == "pending_ci"
 
 
 def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merge() -> None:

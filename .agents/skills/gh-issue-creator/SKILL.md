@@ -32,8 +32,8 @@ execution.
 3. Normalize prompt into required fields:
    - goal, scope/non-scope, value/effort/complexity/risk, definition of done, success metrics,
      validation plan.
-   - for child issues, include `Parent issue`, `Non-goals`, `Validation / Testing`, and
-     `Blocked by` fields before creation.
+   - for child issues, include `Non-goals` and `Validation / Testing` in the body. Set the native
+     Parent issue link and any concrete Blocked by links after creation.
 4. Assign an archetype and evidence tier using the convention in
    `docs/context/issue_1512_issue_archetypes.md`. Include the archetype metadata block in
    the issue body. Use only the canonical values from that note. When the archetype is unclear,
@@ -65,6 +65,10 @@ execution.
      verified label write). A failed, stale, or unavailable check leaves the issue
      without `state:ready` and emits a stable JSON outcome for follow-up; retries
      are idempotent and never remove labels.
+   - after creation, set supported Parent, Blocked by, and Blocking links in GitHub's Relationships
+     panel or through `gh`, then read them back. Use body/comment context to decide whether a link
+     is warranted; an issue mention alone is insufficient. See
+     `docs/context/issue_relationships.md`. `Relates to` is outside this workflow.
 7. Project routing:
    - use `gh project item-add` when the CLI route is the active Project #5 write path
    - use `gh project item-edit` for explicit field updates when the CLI route is active
@@ -78,7 +82,8 @@ execution.
 
 - Keep assumptions explicit and conservative.
 - If template fit is unclear, pick the smallest viable template and note the assumption.
-- Do not proceed with speculative follow-up links unless concrete and actionable.
+- Do not create a relationship from an issue mention alone. A contextual prerequisite may support a
+  link when the discussion makes the dependency clear and the reason is recorded.
 - For parent-derived child issues, require a duplicate check from `issue-splitter` or perform one
   before calling `gh issue create`.
 - Use REST for deterministic issue operations; use GraphQL/MCP only where useful for Project #5.

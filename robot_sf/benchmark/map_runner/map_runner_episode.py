@@ -1774,6 +1774,7 @@ class _EpisodeStepLoopResult:
     initial_ped_positions: np.ndarray
     initial_robot_velocity: np.ndarray | None
     initial_ped_velocities: np.ndarray | None
+    initial_ped_headings: np.ndarray | None
     trace_actor_ids: list[str] | None
     initial_goal_distance: float
     reached_goal_step: int | None
@@ -1804,6 +1805,7 @@ class _EpisodeStepLoopResult:
     view_integrity: dict[str, Any] | None
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
+    sampler_capture: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -1853,11 +1855,13 @@ class _StepLoopState:
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
     initial_robot_velocity: np.ndarray | None = None
     initial_ped_velocities: np.ndarray | None = None
+    initial_ped_headings: np.ndarray | None = None
     trace_actor_ids: list[str] | None = field(default_factory=list)
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
+    sampler_capture: dict[str, Any] | None = None
 
 
 def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
@@ -1871,6 +1875,25 @@ def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
     if not callable(metadata_fn):
         return None
     payload = metadata_fn()
+    return dict(payload) if isinstance(payload, Mapping) else None
+
+
+def _read_sampler_capture(env: Any) -> dict[str, Any] | None:
+    """Read the opt-in spawn-sampler capture mapping from the active simulator.
+
+    Returns:
+        JSON-safe capture mapping, or ``None`` when capture is disabled or
+        the simulator does not expose a well-formed record.
+    """
+    simulator = getattr(env, "simulator", None)
+    capture = getattr(simulator, "sampler_capture", None)
+    to_mapping = getattr(capture, "to_mapping", None)
+    if not callable(to_mapping):
+        return None
+    try:
+        payload = to_mapping()
+    except (AttributeError, TypeError, ValueError):
+        return None
     return dict(payload) if isinstance(payload, Mapping) else None
 
 
@@ -2003,6 +2026,7 @@ class _StepSimResult:
     reward: float
     terminated: bool
     truncated: bool
+    ped_headings: np.ndarray | None
     info: dict[str, Any]
     step_visible: np.ndarray | None
     step_confidence: np.ndarray | None
@@ -2090,6 +2114,9 @@ def _init_step_loop_state(
     initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
     initial_robot_velocity = _initial_robot_velocity(env.simulator)
     initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
+    initial_ped_headings = _read_simulator_ped_headings(
+        env.simulator, len(initial_ped_positions), initial=True
+    )
     trace_actor_ids = _initial_pedestrian_actor_ids(env.simulator, len(initial_ped_positions))
     initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
     state = _StepLoopState(obs=obs)
@@ -2105,8 +2132,10 @@ def _init_step_loop_state(
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
     state.initial_ped_velocities = initial_ped_velocities
+    state.initial_ped_headings = initial_ped_headings
     state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
+    state.sampler_capture = _read_sampler_capture(env)
     return state
 
 
@@ -2187,6 +2216,29 @@ def _initial_ped_velocities(simulator: Any, count: int) -> np.ndarray | None:
         return None
     try:
         array = np.asarray(value, dtype=float).reshape(-1, 2)
+    except (TypeError, ValueError):
+        return None
+    if array.shape[0] < count or not np.isfinite(array[:count]).all():
+        return None
+    return array[:count].copy()
+
+
+def _read_simulator_ped_headings(simulator: Any, count: int, *, initial: bool) -> np.ndarray | None:
+    """Read simulator-tracked pedestrian headings, preserving unavailable state explicitly.
+
+    Headings are the simulator's own per-row state (velocity-derived with a zero fallback
+    when stationary); they are recorded verbatim, never inferred here.
+
+    Returns:
+        A finite ``(count,)`` array, or ``None`` when headings are unavailable.
+    """
+
+    name = "_initial_ped_headings" if initial else "ped_headings"
+    value = getattr(simulator, name, None)
+    if value is None:
+        return None
+    try:
+        array = np.asarray(value, dtype=float).reshape(-1)
     except (TypeError, ValueError):
         return None
     if array.shape[0] < count or not np.isfinite(array[:count]).all():
@@ -2517,12 +2569,14 @@ def _step_snapshot_and_record(
     np.ndarray | None,
     str,
     str | None,
+    np.ndarray | None,
 ]:
     """Snapshot mutable simulator buffers and record positions/headings/visibility.
 
     Returns:
         Tuple of (robot_pos, peds, forces_arr, heading, step_visible,
-        step_confidence, step_visibility_status, step_visibility_reason).
+        step_confidence, step_visibility_status, step_visibility_reason,
+        ped_headings).
     """
     # Snapshot mutable simulator buffers; do not keep view aliases across steps.
     robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
@@ -2552,6 +2606,7 @@ def _step_snapshot_and_record(
     state.track_confidence_trace.append(step_confidence)
     state.visibility_evidence_statuses.append(step_visibility_status)
     state.visibility_evidence_reasons.append(step_visibility_reason)
+    ped_headings = _read_simulator_ped_headings(env.simulator, peds.shape[0], initial=False)
     return (
         robot_pos,
         peds,
@@ -2561,7 +2616,52 @@ def _step_snapshot_and_record(
         step_confidence,
         step_visibility_status,
         step_visibility_reason,
+        ped_headings,
     )
+
+
+def _trace_surface_radii_m(config: RobotSimulationConfig) -> tuple[float, float]:
+    """Return the canonical (robot_radius, ped_radius) pair for trace clearance math."""
+    robot_config = getattr(config, "robot_config", None)
+    try:
+        robot_radius = float(getattr(robot_config, "radius", 1.0))
+    except (TypeError, ValueError):
+        robot_radius = 1.0
+    try:
+        ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+    except (TypeError, ValueError, AttributeError):
+        ped_radius = 0.4
+    if not math.isfinite(robot_radius) or robot_radius < 0.0:
+        robot_radius = 1.0
+    if not math.isfinite(ped_radius) or ped_radius < 0.0:
+        ped_radius = 0.4
+    return robot_radius, ped_radius
+
+
+def _surface_clearances_m(
+    robot_pos: np.ndarray,
+    peds: np.ndarray,
+    *,
+    robot_radius: float,
+    ped_radius: float,
+) -> np.ndarray:
+    """Return per-pedestrian robot-surface to pedestrian-surface clearance in metres.
+
+    Returns:
+        Clearance array aligned with pedestrian rows; non-finite rows yield NaN.
+    """
+    try:
+        positions = np.asarray(peds, dtype=float).reshape(-1, 2)
+        origin = np.asarray(robot_pos, dtype=float).reshape(2)
+    except (TypeError, ValueError):
+        return np.empty((0,), dtype=float)
+    if positions.shape[0] == 0 or not np.isfinite(origin).all():
+        return np.full((positions.shape[0],), np.nan, dtype=float)
+    center = np.linalg.norm(positions - origin, axis=-1)
+    with np.errstate(invalid="ignore"):
+        clearance = center - robot_radius - ped_radius
+    clearance[~np.isfinite(positions).all(axis=-1)] = np.nan
+    return clearance
 
 
 def _step_build_simulation_trace(
@@ -2600,6 +2700,7 @@ def _step_build_simulation_trace(
                 [float(force[0]), float(force[1])] for force in sim.forces_arr
             ]
         }
+    trace_robot_radius_m, trace_ped_radius_m = _trace_surface_radii_m(slc.config)
     trace_pedestrians = _annotate_trace_visibility(
         _trace_pedestrians(
             sim.peds,
@@ -2610,6 +2711,13 @@ def _step_build_simulation_trace(
             sim.robot_pos,
             robot_velocity,
             state.trace_actor_ids,
+            headings=getattr(sim, "ped_headings", None),
+            surface_clearances=_surface_clearances_m(
+                sim.robot_pos,
+                sim.peds,
+                robot_radius=trace_robot_radius_m,
+                ped_radius=trace_ped_radius_m,
+            ),
         ),
         visible=sim.step_visible,
         track_confidence=sim.step_confidence,
@@ -3052,6 +3160,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
         initial_ped_velocities=state.initial_ped_velocities,
+        initial_ped_headings=state.initial_ped_headings,
         trace_actor_ids=(
             list(state.trace_actor_ids) if state.trace_actor_ids is not None else None
         ),
@@ -3088,6 +3197,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_metadata=state.planner_obstacle_force_law_metadata,
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
+        sampler_capture=state.sampler_capture,
     )
 
 
@@ -3191,7 +3301,7 @@ def _execute_step_loop(
             step_is_native=step_is_native,
             env=env,
         )
-        (robot_pos, peds, forces_arr, heading, s_vis, s_conf, s_stat, s_reason) = (
+        (robot_pos, peds, forces_arr, heading, s_vis, s_conf, s_stat, s_reason, ped_headings) = (
             _step_snapshot_and_record(
                 state,
                 slc,
@@ -3204,6 +3314,7 @@ def _execute_step_loop(
             peds=peds,
             forces_arr=forces_arr,
             heading=heading,
+            ped_headings=ped_headings,
             reward=reward,
             terminated=terminated,
             truncated=truncated,
@@ -3461,6 +3572,286 @@ def _finalize_planner_runtime_metadata(
     return algo_meta
 
 
+_RESET_SPAWN_OWNER = "robot_sf.ped_npc.ped_population.populate_simulation"
+_RESET_ROUTES_OWNER = "map_def.ped_routes"
+_RESET_SCENARIO_ECHO_KEYS = frozenset(
+    {
+        "spawn_config",
+        "spawn",
+        "spawn_zones",
+        "ped_spawn",
+        "routes",
+        "ped_routes",
+        "waypoints",
+    }
+)
+
+
+def _reset_scenario_echo(scenario: dict[str, Any] | None) -> dict[str, Any]:
+    """Echo JSON-scalar scenario spawn/route keys verbatim, if the record carries any.
+
+    Non-finite float echoes become explicit ``None`` so the block stays strict-
+    JSON serializable (``allow_nan=False``); every other scalar echoes verbatim.
+
+    Returns:
+        Mapping of echoed keys (possibly empty).
+    """
+    echoed: dict[str, Any] = {}
+    if not isinstance(scenario, dict):
+        return echoed
+    for key in sorted(_RESET_SCENARIO_ECHO_KEYS):
+        value = scenario.get(key, None)
+        if isinstance(value, float) and not math.isfinite(value):
+            echoed[key] = None
+        elif isinstance(value, (str, int, float, bool)) or (value is None and key in scenario):
+            echoed[key] = value
+    return echoed
+
+
+def _finite_pair_row(value: Any) -> np.ndarray | None:
+    """Return a finite length-2 row, or ``None`` for malformed input.
+
+    Ragged, short, non-numeric, or non-finite rows fail closed instead of
+    reaching positional indexing downstream.
+    """
+    try:
+        row = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return None
+    if row.shape[0] < 2 or not np.isfinite(row[:2]).all():
+        return None
+    return row[:2]
+
+
+def _finite_scalar(value: Any) -> float | None:
+    """Return a finite scalar float, or ``None`` for malformed input.
+
+    Non-scalar entries (arrays, sequences) fail closed instead of raising on
+    ``float()`` conversion or silently reducing.
+    """
+    if isinstance(value, (list, tuple, dict, np.ndarray)):
+        try:
+            array = np.asarray(value, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            return None
+        if array.shape[0] != 1 or not np.isfinite(array[0]):
+            return None
+        return float(array[0])
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _reset_pedestrian_frames(
+    positions: np.ndarray,
+    velocities: np.ndarray | None,
+    headings: np.ndarray | None,
+    actor_ids: list[str] | None,
+    origin: np.ndarray,
+    origin_ok: bool,
+    robot_radius: float,
+    ped_radius: float,
+) -> tuple[list[dict[str, Any]], list[float]]:
+    """Build reset pedestrian frames with clearance against the reset robot pose.
+
+    Returns:
+        Frame list and the finite surface clearances across those frames.
+    """
+    pedestrians: list[dict[str, Any]] = []
+    finite_clearances: list[float] = []
+    for ped_idx, ped_pos in enumerate(positions):
+        if ped_pos.shape[0] < 2 or not np.isfinite(ped_pos[:2]).all():
+            continue
+        frame: dict[str, Any] = {
+            "id": actor_ids[ped_idx]
+            if actor_ids is not None and ped_idx < len(actor_ids)
+            else int(ped_idx),
+            "position": [float(ped_pos[0]), float(ped_pos[1])],
+            "velocity": None,
+            "heading": None,
+            "surface_clearance_m": None,
+        }
+        if (
+            actor_ids is not None
+            and ped_idx < len(actor_ids)
+            and isinstance(actor_ids[ped_idx], str)
+        ):
+            frame["actor_id"] = actor_ids[ped_idx]
+        if velocities is not None and ped_idx < len(velocities):
+            row = _finite_pair_row(velocities[ped_idx])
+            if row is not None:
+                frame["velocity"] = [float(row[0]), float(row[1])]
+        if headings is not None and ped_idx < len(headings):
+            heading = _finite_scalar(headings[ped_idx])
+            if heading is not None:
+                frame["heading"] = heading
+        if origin_ok:
+            clearance = (
+                float(np.linalg.norm(np.asarray(ped_pos[:2], dtype=float) - origin))
+                - robot_radius
+                - ped_radius
+            )
+            if math.isfinite(clearance):
+                frame["surface_clearance_m"] = clearance
+                finite_clearances.append(clearance)
+        pedestrians.append(frame)
+    return pedestrians, finite_clearances
+
+
+def _reset_spawn_edge(
+    sampler_capture: dict[str, Any] | None, scenario_echo: dict[str, Any]
+) -> dict[str, Any]:
+    """Return the reset spawn-sampler edge, available only with a capture record."""
+    if not isinstance(sampler_capture, dict):
+        return {
+            "status": "unavailable",
+            "reason": "spawn_sampler_decision_not_retained",
+            "owner": _RESET_SPAWN_OWNER,
+            "scenario_echo": scenario_echo,
+        }
+    try:
+        counters = {
+            key: int(sampler_capture.get(key, 0))
+            for key in (
+                "route_anchor_attempts",
+                "route_anchor_failures",
+                "obstacle_rejections",
+                "separation_rejections",
+                "accepted_samples",
+            )
+        }
+    except (TypeError, ValueError):
+        return {
+            "status": "unavailable",
+            "reason": "spawn_sampler_decision_not_retained",
+            "owner": _RESET_SPAWN_OWNER,
+            "scenario_echo": scenario_echo,
+        }
+    return {
+        "status": "available",
+        "owner": _RESET_SPAWN_OWNER,
+        **counters,
+        "scenario_echo": scenario_echo,
+    }
+
+
+def _reset_routes_edge(sampler_capture: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the reset assigned-routes edge, available only with a capture record."""
+    if not isinstance(sampler_capture, dict):
+        return {
+            "status": "unavailable",
+            "reason": "route_objects_not_retained_per_episode",
+            "owner": _RESET_ROUTES_OWNER,
+        }
+    assigned = sampler_capture.get("assigned_routes")
+    if not isinstance(assigned, list) or not all(isinstance(row, dict) for row in assigned):
+        return {
+            "status": "unavailable",
+            "reason": "route_objects_not_retained_per_episode",
+            "owner": _RESET_ROUTES_OWNER,
+        }
+    return {
+        "status": "available",
+        "owner": _RESET_ROUTES_OWNER,
+        "assigned_routes": assigned,
+    }
+
+
+def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep provenance auditable.
+    *,
+    initial_robot_pos: np.ndarray,
+    initial_robot_heading: float | None,
+    initial_robot_velocity: np.ndarray | None,
+    initial_ped_positions: np.ndarray,
+    initial_ped_velocities: np.ndarray | None,
+    initial_ped_headings: np.ndarray | None,
+    trace_actor_ids: list[str] | None,
+    robot_radius: float,
+    ped_radius: float,
+    scenario: dict[str, Any] | None,
+    sampler_capture: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the reset-time provenance block for the simulation step trace.
+
+    Records the pre-command reset state (poses, velocities, simulator-tracked
+    headings) plus the minimum robot-surface to pedestrian-surface clearance and
+    whether the reset state already collides. Spawn-sampler decisions and route
+    objects are exposed only when an opt-in capture record is provided; without
+    one those edges report explicit ``unavailable`` provenance with their
+    build-time owners instead of reconstructed guesses.
+
+    Returns:
+        JSON-serializable reset provenance block.
+    """
+    try:
+        origin = np.asarray(initial_robot_pos, dtype=float).reshape(2)
+        origin_ok = bool(np.isfinite(origin).all())
+    except (TypeError, ValueError):
+        origin = np.zeros(2, dtype=float)
+        origin_ok = False
+    try:
+        positions = np.asarray(initial_ped_positions, dtype=float).reshape(-1, 2)
+    except (TypeError, ValueError):
+        positions = np.empty((0, 2), dtype=float)
+    try:
+        robot_velocity = (
+            [float(initial_robot_velocity[0]), float(initial_robot_velocity[1])]
+            if initial_robot_velocity is not None
+            and np.isfinite(np.asarray(initial_robot_velocity, dtype=float)).all()
+            else None
+        )
+    except (TypeError, ValueError, IndexError):
+        robot_velocity = None
+    try:
+        robot_heading = float(initial_robot_heading) if initial_robot_heading is not None else None
+        if robot_heading is not None and not math.isfinite(robot_heading):
+            robot_heading = None
+    except (TypeError, ValueError):
+        robot_heading = None
+
+    pedestrians, finite_clearances = _reset_pedestrian_frames(
+        positions,
+        initial_ped_velocities,
+        initial_ped_headings,
+        trace_actor_ids,
+        origin,
+        origin_ok,
+        robot_radius,
+        ped_radius,
+    )
+
+    if finite_clearances:
+        min_clearance: float | None = min(finite_clearances)
+        collision: bool | None = min_clearance < 0.0
+    elif pedestrians:
+        min_clearance = None
+        collision = None
+    else:
+        min_clearance = None
+        collision = False
+    headings_available = any(frame["heading"] is not None for frame in pedestrians)
+    scenario_echo = _reset_scenario_echo(scenario)
+    return {
+        "robot": {
+            "position": [float(origin[0]), float(origin[1])] if origin_ok else None,
+            "heading": robot_heading,
+            "velocity": robot_velocity,
+        },
+        "pedestrians": pedestrians,
+        "min_surface_clearance_m": min_clearance,
+        "collision_at_reset": collision,
+        "heading_source": (
+            "simulator.ped_headings (velocity-derived, 0.0 fallback when stationary)"
+            if headings_available
+            else "unavailable: simulator heading state not exposed"
+        ),
+        "spawn": _reset_spawn_edge(sampler_capture, scenario_echo),
+        "routes": _reset_routes_edge(sampler_capture),
+    }
+
+
 def _finalize_trace_metadata(  # noqa: PLR0913
     algo_meta: AlgoMeta,
     *,
@@ -3481,10 +3872,12 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     initial_ped_positions: np.ndarray,
     initial_robot_velocity: np.ndarray | None,
     initial_ped_velocities: np.ndarray | None,
+    initial_ped_headings: np.ndarray | None,
     trace_actor_ids: list[str] | None,
     horizon_val: int,
     termination_reason: str,
     safety_events: list[dict[str, Any]],
+    sampler_capture: dict[str, Any] | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -3499,11 +3892,25 @@ def _finalize_trace_metadata(  # noqa: PLR0913
         if topology_episode is not None:
             algo_meta["topology_guided_episode"] = topology_episode
     if record_simulation_step_trace:
+        reset_robot_radius_m, reset_ped_radius_m = _trace_surface_radii_m(config)
         algo_meta["simulation_step_trace"] = {
             "schema_version": "simulation-step-trace.v1",
             "dt": float(config.sim_config.time_per_step_in_secs),
             "initial_goal_distance_m": initial_goal_distance,
             "steps": simulation_step_trace,
+            "reset": _build_reset_provenance(
+                initial_robot_pos=initial_robot_pos,
+                initial_robot_heading=initial_robot_heading,
+                initial_robot_velocity=initial_robot_velocity,
+                initial_ped_positions=initial_ped_positions,
+                initial_ped_velocities=initial_ped_velocities,
+                initial_ped_headings=initial_ped_headings,
+                trace_actor_ids=trace_actor_ids,
+                robot_radius=reset_robot_radius_m,
+                ped_radius=reset_ped_radius_m,
+                scenario=scenario,
+                sampler_capture=sampler_capture,
+            ),
         }
         attach_pedestrian_control_trace(
             cast("dict[str, Any]", algo_meta),
@@ -3927,10 +4334,12 @@ def _finalize_metadata_outputs(
         initial_ped_positions=loop_result.initial_ped_positions,
         initial_robot_velocity=loop_result.initial_robot_velocity,
         initial_ped_velocities=loop_result.initial_ped_velocities,
+        initial_ped_headings=loop_result.initial_ped_headings,
         trace_actor_ids=loop_result.trace_actor_ids,
         horizon_val=ctx.horizon_val,
         termination_reason=loop_result.termination_reason,
         safety_events=loop_result.collision_events,
+        sampler_capture=loop_result.sampler_capture,
     )
     tp_summary, sw_summary, cbf_summary = _finalize_safety_summaries(
         algo_meta,

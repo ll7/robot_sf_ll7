@@ -29,6 +29,8 @@ has its own index so you never fall straight into issue-specific context notes.
   rejection accounting and deterministic risk-feature ordering for adversarial research.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
+- 📝 **[Scenario review contracts](./scenario_review/README.md)** — versioned review bundles,
+  visualization specs, component envelopes, and experiment recipes.
 - 🛠️ **[Developer Guide](./developer-guide.md)** — architecture, contribution workflow, validation
   gates, CI, and internals.
 
@@ -145,6 +147,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for external datasets including Stanford Drone Dataset, SocNavBench, ETH/UCY, and AMV calibration-source assets
 * **[ETH/UCY External Trajectory Data](./datasets/eth-ucy.md)** - Public acquisition, citation, and expected layout notes for locally staged ETH BIWI and UCY Crowds-by-Example trajectories
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
+* **[Native GitHub Issue Relationships](./context/issue_relationships.md)** - Native parent and dependency links, evidence standards, and legacy migration audit
 * **[Agent Workflow Entrypoints And Large-File Navigation](./ai/agent_workflow_entrypoints.md)** - Correct `uv run` command patterns, validation entrypoints, model registry path, and targeted large-file reading guidance for agents
 * **[Agent Run Manifest](./agent_run_manifest.md)** - Lightweight `agent_run_manifest.yaml` convention for making substantial agent-assisted runs auditable: when it is required, where to store it, trace/log hygiene, and a copyable template
 * **[Issue #2013 Backend Adapter Contract](./context/issue_2013_backend_adapter_contract.md)** - Required adapter fields, fail-closed behavior, and claim boundaries for alternate simulator backend integration
@@ -526,6 +529,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 
 * [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys,  `_meta` warnings, and validation hooks
 * [**Actuator-Feasibility Validation (Issue #6056)**](./actuator_feasibility.md) - Experimental diagnostic for distinguishing geometric clearance from actuator-feasible maneuvers, with provisional-limit and claim-boundary documentation
+* [**Robot Maneuver Candidates**](./maneuver_candidates.md) - Route-follow, passing, creeping, and braking trajectories for later risk arbitration
 * [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
 * [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
 * **Full Classic Interaction Benchmark** – Episodes, aggregation, effect sizes, adaptive precision, plots, videos, and scaling metrics. See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).

@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 119,
+  "total_guards": 132,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -17,7 +17,7 @@
       "samples": [
         "robot_sf/baselines/sicnav.py:378",
         "robot_sf/benchmark/latency/latency_stress.py:826",
-        "robot_sf/planner/socnav_base.py:738"
+        "robot_sf/planner/socnav_base.py:890"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -57,7 +57,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav_base.py:603"
+        "robot_sf/planner/socnav_base.py:755"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -67,7 +67,7 @@
       "blessed": true,
       "note": "Blessed broad catch: optional registry boundary.",
       "samples": [
-        "robot_sf/benchmark/cli.py:237"
+        "robot_sf/benchmark/cli.py:244"
       ]
     },
     "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": {
@@ -102,14 +102,23 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 82,
-      "has_as_count": 21,
-      "pragma_no_cover_count": 25,
+      "count_ceiling": 95,
+      "has_as_count": 26,
+      "pragma_no_cover_count": 28,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
         "robot_sf/__init__.py:12",
         "robot_sf/adversarial/certification.py:76",
+        "robot_sf/analysis_workbench/audit_authority.py:41",
+        "robot_sf/analysis_workbench/audit_codex.py:1150",
+        "robot_sf/analysis_workbench/audit_codex.py:1196",
+        "robot_sf/analysis_workbench/audit_codex.py:1431",
+        "robot_sf/analysis_workbench/audit_codex.py:1317",
+        "robot_sf/analysis_workbench/audit_github.py:65",
+        "robot_sf/analysis_workbench/audit_service_adapters.py:60",
+        "robot_sf/analysis_workbench/review_registry.py:290",
+        "robot_sf/analysis_workbench/review_registry.py:312",
         "robot_sf/baselines/dr_mpc.py:109",
         "robot_sf/baselines/dr_mpc.py:91",
         "robot_sf/baselines/drl_vo.py:24",
@@ -118,9 +127,9 @@
         "robot_sf/baselines/sicnav.py:422",
         "robot_sf/baselines/sicnav.py:300",
         "robot_sf/benchmark/case_workbench.py:1037",
-        "robot_sf/benchmark/cli.py:225",
+        "robot_sf/benchmark/cli.py:232",
         "robot_sf/benchmark/collision/collision_causal_report.py:55",
-        "robot_sf/benchmark/distributions.py:131",
+        "robot_sf/benchmark/distributions.py:160",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",
         "robot_sf/benchmark/episode_replay_figure.py:57",
@@ -150,7 +159,7 @@
         "robot_sf/benchmark/latency/latency_stress.py:672",
         "robot_sf/benchmark/live_forecast_replay_gate.py:964",
         "robot_sf/benchmark/near_miss_determinism.py:402",
-        "robot_sf/benchmark/plots.py:28",
+        "robot_sf/benchmark/plots.py:29",
         "robot_sf/benchmark/runner.py:47",
         "robot_sf/benchmark/runner.py:53",
         "robot_sf/benchmark/scenario/scenario_schema.py:25",
@@ -162,7 +171,7 @@
         "robot_sf/common/optional_import.py:108",
         "robot_sf/common/seed.py:50",
         "robot_sf/common/seed.py:80",
-        "robot_sf/feature_extractors/mamba_extractor.py:102",
+        "robot_sf/feature_extractors/mamba_extractor.py:111",
         "robot_sf/gym_env/crowd_sim_env.py:365",
         "robot_sf/gym_env/env_config.py:289",
         "robot_sf/gym_env/environment_factory.py:55",
@@ -178,12 +187,16 @@
         "robot_sf/planner/ompl_smoke.py:42",
         "robot_sf/planner/ompl_smoke.py:254",
         "robot_sf/planner/recurrent_ppo_learned_adapter.py:40",
-        "robot_sf/planner/socnav.py:90",
-        "robot_sf/planner/socnav.py:98",
-        "robot_sf/planner/socnav.py:103",
+        "robot_sf/planner/socnav.py:93",
+        "robot_sf/planner/socnav.py:101",
+        "robot_sf/planner/socnav.py:106",
         "robot_sf/planner/socnav_prediction.py:129",
         "robot_sf/planner/theta_star_v2.py:34",
+        "robot_sf/render/audit_workbench_launch.py:336",
         "robot_sf/render/lazy_sim_view.py:44",
+        "robot_sf/render/presentation_style.py:200",
+        "robot_sf/render/review_media_qa.py:625",
+        "robot_sf/render/review_rerun.py:395",
         "robot_sf/render/sim_view.py:18",
         "robot_sf/render/sim_view.py:39",
         "robot_sf/sim/registry.py:145",
@@ -200,10 +213,10 @@
       "note": "Blessed broad catch: native-lib / filesystem load may raise OSError. campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it exists to catch and report arm-dependency import failures with a remediation message, so try_import (which discards the exception) is the wrong tool there.",
       "samples": [
         "robot_sf/benchmark/campaign/campaign_runtime_preflight.py:106",
-        "robot_sf/benchmark/cli.py:3356",
-        "robot_sf/benchmark/cli.py:3390",
+        "robot_sf/benchmark/cli.py:3369",
+        "robot_sf/benchmark/cli.py:3403",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
-        "robot_sf/benchmark/orca_preflight.py:90"
+        "robot_sf/benchmark/orca_preflight.py:91"
       ]
     },
     "ImportError+OSError+RuntimeError+ValueError": {
@@ -237,7 +250,7 @@
         "robot_sf/baselines/dr_mpc.py:187",
         "robot_sf/baselines/sicnav.py:346",
         "robot_sf/baselines/sicnav.py:532",
-        "robot_sf/benchmark/cli.py:3560",
+        "robot_sf/benchmark/cli.py:3573",
         "robot_sf/telemetry/tensorboard_adapter.py:20",
         "robot_sf/telemetry/tensorboard_adapter.py:26",
         "robot_sf/training/multi_extractor_analysis.py:22"
@@ -267,7 +280,7 @@
         "robot_sf/planner/learned_gmm_predictor.py:97",
         "robot_sf/planner/learned_short_horizon_predictor.py:427",
         "robot_sf/planner/social_navigation_pyenvs_force_model.py:39",
-        "robot_sf/research/metadata.py:54",
+        "robot_sf/research/metadata.py:58",
         "robot_sf/training/hardware_probe.py:21"
       ]
     }

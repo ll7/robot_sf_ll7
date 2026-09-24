@@ -1,0 +1,24 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "req-review-camera-smoke-001",
+  "component_id": "review-camera",
+  "sources": [
+    {
+      "artifact_id": "smoke-scenario-source",
+      "uri": "tests/fixtures/scenario_review/review_camera/source_scene.json",
+      "format": "threejs-viewer.v1",
+      "schema": "threejs-viewer.v1",
+      "sha256": "9cc4ec0ab4f672a9f79c2300fa3dbc6654b404bb4e79826e69367a878352a0ba"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-11-smoke",
+  "config": {
+    "camera_mode": "full_scene",
+    "presentation": {
+      "width": 320,
+      "height": 180,
+      "fps": 10.0,
+      "speed": 1.0
+    }
+  }
+}

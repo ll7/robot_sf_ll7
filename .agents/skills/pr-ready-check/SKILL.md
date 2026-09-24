@@ -29,6 +29,8 @@ Run the canonical local readiness gates that mirror repo PR policy before handof
      `uv run python scripts/tools/sync_ai_config.py --check`.
    - runtime, benchmark, metric, schema, model-provenance, or paper-facing work: run executable
      proof appropriate to the claim.
+   - issue/PR workflow changes: read `docs/context/issue_relationships.md` and verify native graph
+     state on the linked issue when relevant. The PR body does not duplicate these links.
 3. Escalate to the full readiness pipeline when scripts, schemas, generated indexes, routing
    behavior, automation, runtime behavior, benchmark/metric/schema semantics, model provenance, or
    paper-facing claims are touched.
@@ -46,6 +48,8 @@ Run the canonical local readiness gates that mirror repo PR policy before handof
 - When full readiness is required, do not stop at lint green: ensure parallel tests and diff gates
   are also clean.
 - Treat benchmark fallback execution as unresolved unless explicitly scoped.
+- This validation skill verifies relationship documentation but does not create or mutate native
+  issue links; those writes belong to the owning issue/publication workflow.
 
 ## Output
 

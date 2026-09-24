@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.dev.git_common import resolve_agent_artifact_dir, resolve_git_common_dir
+from scripts.dev.git_common import (
+    git_head_commit,
+    resolve_agent_artifact_dir,
+    resolve_git_common_dir,
+)
 
 
 def _completed(returncode: int = 0, stdout: str = "", stderr: str = ""):
@@ -97,3 +101,30 @@ def test_resolve_agent_artifact_dir_requires_subdir_name() -> None:
     with patch("scripts.dev.git_common.resolve_git_common_dir", return_value=None):
         result = resolve_agent_artifact_dir("", mkdir=False)
     assert result == Path(__file__).resolve().parents[2] / "output" / "tmp"
+
+
+def test_git_head_commit_returns_stripped_sha() -> None:
+    """The helper returns the git HEAD hash without surrounding whitespace."""
+    sha = "a" * 40
+    with patch(
+        "scripts.dev.git_common.subprocess.run",
+        return_value=_completed(0, f"  {sha}\n"),
+    ):
+        assert git_head_commit() == sha
+
+
+def test_git_head_commit_returns_unknown_on_git_failure() -> None:
+    """A failing git call degrades to the unknown sentinel instead of raising."""
+    import subprocess
+
+    with patch(
+        "scripts.dev.git_common.subprocess.run",
+        side_effect=subprocess.CalledProcessError(128, ["git"]),
+    ):
+        assert git_head_commit() == "unknown"
+
+
+def test_git_head_commit_returns_unknown_when_git_is_unavailable() -> None:
+    """A missing git executable degrades to the unknown sentinel."""
+    with patch("scripts.dev.git_common.subprocess.run", side_effect=FileNotFoundError):
+        assert git_head_commit() == "unknown"

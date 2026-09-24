@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-01
+updated_at: 2026-09-16
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_relationships.md
+  status: current
+  freshness: maintained
+  area: agent_workflow
 - path: docs/context/issue_8829_compute_window_capacity_planner.md
   status: current
   freshness: maintained
@@ -7603,3 +7607,43 @@ entries:
   status: historical
   freshness: dated
   area: training
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/goal/classic_group_crossing_medium_seed22_worst
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/goal
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/orca/classic_head_on_corridor_medium_seed23_worst
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/orca
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/social_force/classic_group_crossing_medium_seed22_best
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/social_force
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

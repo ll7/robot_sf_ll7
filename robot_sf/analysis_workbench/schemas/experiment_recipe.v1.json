@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/experiment_recipe.v1.json",
+  "$title": "Robot SF Experiment Recipe v1",
+  "description": "Finite candidate-intervention recipe with controls, measurements, budget, and stop rules. Refers to existing pair/replay schemas and evaluator states.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recipe_id",
+    "hypothesis",
+    "source_identity",
+    "interventions",
+    "control_conditions",
+    "measurements",
+    "budget",
+    "stop_rules",
+    "preservation_destination"
+  ],
+  "properties": {
+    "schema_version": {"const": "experiment-recipe.v1"},
+    "recipe_id": {"type": "string", "minLength": 1},
+    "hypothesis": {"type": "string", "minLength": 1},
+    "source_identity": {"type": "object", "additionalProperties": true},
+    "interventions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["intervention_id", "factor"],
+        "properties": {
+          "intervention_id": {"type": "string", "minLength": 1},
+          "factor": {"type": "string", "minLength": 1},
+          "priority": {"type": "integer"}
+        }
+      }
+    },
+    "control_conditions": {"type": "object", "additionalProperties": true},
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "units"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "units": {"type": "string", "minLength": 1},
+          "expected_direction": {"type": "string"}
+        }
+      }
+    },
+    "evaluation_rule": {"type": "string"},
+    "activation_checks": {"type": "array", "items": {"type": "string"}},
+    "fidelity_checks": {"type": "array", "items": {"type": "string"}},
+    "budget": {"type": "object", "additionalProperties": true},
+    "stop_rules": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "preservation_destination": {"type": "string", "minLength": 1},
+    "admission_reference": {"type": "string"}
+  }
+}

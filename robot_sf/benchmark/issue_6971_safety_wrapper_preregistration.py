@@ -9,7 +9,6 @@ go/no-go decision.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -18,6 +17,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from robot_sf.benchmark.paired_effect_metric_contract import (
     REQUIRED_METRIC_NAMES,
     validate_paired_effect_metric_contract,
@@ -142,14 +142,6 @@ def _resolve_file(root: Path, value: Any, field: str) -> Path:
     path = root / relative
     _require(path.is_file(), f"{field} is missing: {relative}")
     return path
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _load_source_payload(path: Path) -> Any:

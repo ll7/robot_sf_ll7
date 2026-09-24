@@ -245,9 +245,23 @@ readiness label is stale, the audit must remove or re-evaluate `state:ready`
 through its normal readiness evidence path before triage can block the issue
 again.
 
-A stale state:running label is preserved when no active record is observable;
-absence of evidence is not evidence of completion. Multiple states without a
-decisive signal become a decision gate.
+By default, a stale `state:running` label is preserved when no active record is
+observable; absence of evidence is not evidence of completion. The autonomous
+entry point may explicitly enable a bounded stale-running reclaim policy. With
+`--reclaim-stale-running-after-hours H`, the plan captures one UTC cutoff and
+may remove only `state:running` when all of the following hold:
+
+1. the complete REST issue and comment inventories are available;
+2. the latest attributable human comment, or the issue creation timestamp when
+   no such comment exists, is older than the cutoff; and
+3. no linked open PR, atomic claim, local worktree, or active job is observed.
+
+The mutation records its cutoff, progress timestamp, and source, and apply
+requires the issue's state, labels, and `updated_at` snapshot to remain stable.
+The reclaim never adds `state:ready`, closes an issue, releases a claim, or
+removes any other label. If progress evidence is missing, malformed, partial,
+or changes after planning, the issue is preserved. Multiple states without a
+decisive signal remain a decision gate.
 
 Resource labels and evidence labels are composable. A resource label does not
 by itself prove that work is blocked. A type label is normally singular. A
@@ -362,6 +376,15 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "schema": "issue_audit_plan.v1",
       "repo": "ll7/robot_sf_ll7",
       "mode": "autonomous",
+      "stale_running_policy": {
+        "enabled": true,
+        "threshold_hours": 6.0,
+        "observed_at": "2026-09-16T15:04:18Z",
+        "cutoff_at": "2026-09-16T09:04:18Z",
+        "progress_source": "latest_human_issue_comment_or_issue_creation",
+        "active_record_policy": "preserve",
+        "action": "remove_state_running"
+      },
       "project5": {"writes": false, "owner": "gh-issue-sequencer"},
       "quota": {
         "available": true,

@@ -53,6 +53,36 @@ FILE_CAP_PATTERNS = (
     re.compile(r"([\d,]+)[- ]file\s+(?:cap|budget)\b", re.IGNORECASE),
     re.compile(r"[\d,]+/([\d,]+)\s*files?\b", re.IGNORECASE),
 )
+CONTEXT_FILE_PATTERNS = (
+    re.compile(rf"{_CAP_KEYWORDS}\D{{0,15}}?([\d,]+)\s*files?\b", re.IGNORECASE),
+    re.compile(r"\band\s+([\d,]+)\s*files?\b", re.IGNORECASE),
+    re.compile(r"([\d,]+)[- ]file\s+(?:cap|budget)\b", re.IGNORECASE),
+    re.compile(r"[\d,]+/([\d,]+)\s*files?\b", re.IGNORECASE),
+    re.compile(r"\b([\d,]+)\s*files?\b", re.IGNORECASE),
+)
+CONTEXT_TOKEN_PATTERNS = (
+    re.compile(rf"{_CAP_KEYWORDS}\D{{0,15}}?([\d,]+)\s*(?:input\s+)?tokens?\b", re.IGNORECASE),
+    re.compile(r"\band\s+([\d,]+)\s*(?:input\s+)?tokens?\b", re.IGNORECASE),
+    re.compile(r"([\d,]+)[- ]token\s+(?:cap|budget)\b", re.IGNORECASE),
+    re.compile(r"\b([\d,]+)\s*(?:input\s+)?tokens?\b", re.IGNORECASE),
+)
+_CONTEXT_HEADING_PATTERN = re.compile(
+    r"^#+\s+.*(?:context\s+budget|context-reading\s+budget|reading[- ]context|review[- ]context).*",
+    re.IGNORECASE,
+)
+_ANY_HEADING_PATTERN = re.compile(r"^#+\s+", re.IGNORECASE)
+_CONTEXT_LINE_PATTERN = re.compile(
+    r"(?i)(?:"
+    r"^\s*(?:[-*•]|\d+\.)?\s*(?:(?:review[- ]?)?context(?:[- ]reading)?\s+budget|reading[- ]context\s+budget)\b"
+    r"|^\s*(?:[-*•]|\d+\.)?\s*(?:review[- ]?)?context\s*:\s*.*?(?:files?|tokens?)\b"
+    r"|\b(?:review[- ]?)?context\s+budget\b"
+    r"|\b[\d,]+\s*(?:input\s+)?tokens?\b"
+    r")"
+)
+_CONTEXT_BLOCK_HEADER_PATTERN = re.compile(
+    r"^\s*(?:[-*•]|\d+\.)?\s*(?:(?:review[- ]?)?context(?:[- ]reading)?\s+budget|reading[- ]context\s+budget|context)\s*:\s*$",
+    re.IGNORECASE,
+)
 OVERRIDE_PATTERN = re.compile(
     r"^[ \t]*budget-override[ \t]*:[ \t]*(?P<reason>.*)$", re.IGNORECASE | re.MULTILINE
 )
@@ -78,11 +108,83 @@ def _first_cap(patterns: tuple[re.Pattern[str], ...], body: str) -> int | None:
     return None
 
 
+def split_budget_text(issue_body: str) -> tuple[str, str]:
+    """Split *issue_body* into diff-cap text and context-budget text (issue #9641).
+
+    Separates reviewer/agent reading-context budgets (files/tokens) from
+    pull-request diff caps (files/lines) so that reading-context budgets
+    do not trigger false-positive changed-file diff cap violations.
+    """
+    diff_lines: list[str] = []
+    context_lines: list[str] = []
+    in_context_section = False
+    in_context_block = False
+
+    for line in issue_body.splitlines():
+        if _CONTEXT_HEADING_PATTERN.match(line):
+            in_context_section = True
+            in_context_block = False
+            context_lines.append(line)
+            continue
+        if _ANY_HEADING_PATTERN.match(line):
+            in_context_section = False
+            in_context_block = False
+
+        if in_context_section:
+            context_lines.append(line)
+            continue
+
+        if _CONTEXT_BLOCK_HEADER_PATTERN.match(line):
+            in_context_block = True
+            context_lines.append(line)
+            continue
+
+        if in_context_block:
+            if line.startswith(("  ", "\t")) or not line.strip():
+                context_lines.append(line)
+                continue
+            in_context_block = False
+
+        if _CONTEXT_LINE_PATTERN.search(line):
+            context_lines.append(line)
+        else:
+            diff_lines.append(line)
+
+    return "\n".join(diff_lines), "\n".join(context_lines)
+
+
 def parse_declared_caps(issue_body: str) -> dict[str, int | None]:
-    """Return the declared ``files`` and ``lines`` caps (None when absent)."""
+    """Return the declared PR diff ``files`` and ``lines`` caps (None when absent).
+
+    Reading-context budget declarations are excluded so that agent context
+    limits are not misclassified as PR diff caps (issue #9641).
+    """
+    diff_text, _ = split_budget_text(issue_body)
     return {
-        "files": _first_cap(FILE_CAP_PATTERNS, issue_body),
-        "lines": _first_cap(LINE_CAP_PATTERNS, issue_body),
+        "files": _first_cap(FILE_CAP_PATTERNS, diff_text),
+        "lines": _first_cap(LINE_CAP_PATTERNS, diff_text),
+    }
+
+
+def parse_context_budget(issue_body: str) -> dict[str, int | None]:
+    """Return the declared reading-context ``files`` and ``tokens`` budgets (None when absent)."""
+    _, context_text = split_budget_text(issue_body)
+    return {
+        "files": _first_cap(CONTEXT_FILE_PATTERNS, context_text),
+        "tokens": _first_cap(CONTEXT_TOKEN_PATTERNS, context_text),
+    }
+
+
+def parse_budget_dimensions(issue_body: str) -> dict[str, dict[str, int | None]]:
+    """Return distinct classifications for declared budget dimensions (issue #9641).
+
+    Returns a mapping with two dimension categories:
+    - ``"diff"``: PR changed-file and net-new-line caps (``files`` and ``lines``).
+    - ``"context"``: Agent/reviewer reading-context budgets (``files`` and ``tokens``).
+    """
+    return {
+        "diff": parse_declared_caps(issue_body),
+        "context": parse_context_budget(issue_body),
     }
 
 
@@ -145,6 +247,11 @@ def evaluate_budget(*, issue_body: str, pr_body: str, numstat_text: str) -> dict
         return {
             "schema": SCHEMA,
             "caps": {"files": None, "lines": None},
+            "context_budget": {"files": None, "tokens": None},
+            "dimensions": {
+                "diff": {"files": None, "lines": None},
+                "context": {"files": None, "tokens": None},
+            },
             "measured": {"files": 0, "added": 0, "deleted": 0, "net": 0},
             "override_reason": override_reason,
             "status": STATUS_INVALID,
@@ -154,11 +261,17 @@ def evaluate_budget(*, issue_body: str, pr_body: str, numstat_text: str) -> dict
         }
     try:
         caps = parse_declared_caps(issue_body)
+        context_budget = parse_context_budget(issue_body)
     except BudgetParseError as error:
         message = str(error)
         return {
             "schema": SCHEMA,
             "caps": {"files": None, "lines": None},
+            "context_budget": {"files": None, "tokens": None},
+            "dimensions": {
+                "diff": {"files": None, "lines": None},
+                "context": {"files": None, "tokens": None},
+            },
             "measured": measured,
             "override_reason": override_reason,
             "status": STATUS_INVALID,
@@ -169,6 +282,11 @@ def evaluate_budget(*, issue_body: str, pr_body: str, numstat_text: str) -> dict
     result: dict[str, object] = {
         "schema": SCHEMA,
         "caps": caps,
+        "context_budget": context_budget,
+        "dimensions": {
+            "diff": caps,
+            "context": context_budget,
+        },
         "measured": measured,
         "override_reason": override_reason,
     }

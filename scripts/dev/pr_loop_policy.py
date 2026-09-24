@@ -62,8 +62,44 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
-from scripts.dev.pr_metadata import extract_metadata_digests, has_not_ready_body_narrative
+from scripts.dev.lane_markers import (
+    _BASE_POLICY_RE,
+    _GATE_VERDICT_MARKER_RE,
+    _GATE_VERDICT_RE,
+    _GATE_VERDICT_STATUSES,
+    _REVIEW_CLAIM_RE,
+    _REVIEW_CLAIM_RELEASED_RE,
+    BASE_POLICY_RE,
+    EXACT_HEAD_RE,
+    GATE_VERDICT_MIN_SHA_OVERLAP,
+    GATE_VERDICT_PROJECTION_SOURCE,
+    GATE_VERDICT_RE,
+    REVIEW_CLAIM_RE,
+    REVIEW_CLAIM_RELEASED_RE,
+    ReviewClaim,
+    ShaCarrier,
+    _parse_review_claim_marker,
+    _review_claim_released_shas,  # noqa: F401 - re-exported for test/consumer compat
+    extract_metadata_digests,
+    extract_sha_carriers,
+    invalid_sha_carriers,
+)
+from scripts.dev.pr_metadata import has_not_ready_body_narrative
+
+# Re-exported canonical marker names (issue #9254): external importers resolve
+# these from this module, so they are part of the public contract even when
+# this file does not reference them directly.
+__all__ = [
+    "BASE_POLICY_RE",
+    "EXACT_HEAD_RE",
+    "GATE_VERDICT_RE",
+    "REVIEW_CLAIM_RE",
+    "REVIEW_CLAIM_RELEASED_RE",
+    "ReviewClaim",
+    "ShaCarrier",
+    "extract_sha_carriers",
+    "invalid_sha_carriers",
+]
 from scripts.dev.route_efficiency_report import (
     EXPECTED_ARTIFACT_KEYS,
     has_validation_success,
@@ -84,6 +120,7 @@ VALID_ACTIONS = frozenset(
         "verify_artifacts",
         "refresh_snapshot",
         "mark_ready_candidate",
+        "promote_merge_if_ci_green",
         "await_gate_verdict",
         "await_review_threads",
         "reconcile_pr_metadata",
@@ -110,162 +147,13 @@ VALID_STATES = frozenset(
         "stacked_not_independently_mergeable",
         "merged_externally",
         "ready_to_merge",
+        "ready_for_ci_promotion",
         "no_action",
     }
 )
 
-# Minimum overlap (hex chars) required to treat an abbreviated trailer SHA as a
-# match for a longer head SHA. Seven mirrors git's default short SHA width.
-GATE_VERDICT_MIN_SHA_OVERLAP = 7
-GATE_VERDICT_PROJECTION_SOURCE = "trusted-review-projection"
-_GATE_VERDICT_STATUSES = frozenset({"accepted", "hold", "missing", "malformed", "ambiguous"})
-
-# Matches accepted and blocking HOLD trailers embedded in comment or review
-# body excerpts, capturing the verdict and hex SHA. The verdict word is
-# matched case-insensitively; surrounding markdown/code fences are tolerated.
-_GATE_VERDICT_RE = re.compile(
-    r"(?=gate-verdict\s*:\s*(?:accepted|hold)\s*@\s*"
-    r"(?P<sha>[0-9a-fA-F]{7,40})\b)"
-    r"gate-verdict\s*:\s*(?P<verdict>accepted|hold)\s*@\s*"
-    r"[0-9a-fA-F]{7,40}\b",
-    re.IGNORECASE,
-)
-GATE_VERDICT_RE = _GATE_VERDICT_RE
-_GATE_VERDICT_MARKER_RE = re.compile(
-    r"gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b",
-    re.IGNORECASE,
-)
-_BASE_POLICY_RE = re.compile(
-    r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
-    re.IGNORECASE,
-)
-BASE_POLICY_RE = _BASE_POLICY_RE
-_EXACT_HEAD_RE = re.compile(
-    r"exact\s+head\s*:\s*([0-9a-fA-F]{7,40})\b",
-    re.IGNORECASE,
-)
-EXACT_HEAD_RE = _EXACT_HEAD_RE
-
-# Issue #7508 markers from the goal-pr-review skill (PR #7500). A
-# ``review-claim`` comment announces a lane's mutable-write window; admission
-# gates treat an unexpired trusted claim as a hold. The same comment thread is
-# released with ``review-claim: released @ <head-sha>``. The ``until`` timestamp
-# is the ISO-8601 UTC expiry (default claim window 90 min).
-_REVIEW_CLAIM_RE = re.compile(
-    r"review-claim\s*:\s*(?P<lane>[^\s@]+)\s*@\s*(?P<sha>[0-9a-fA-F]{7,40})\b"
-    r"\s+until\s+(?P<until>\S+)",
-    re.IGNORECASE,
-)
-REVIEW_CLAIM_RE = _REVIEW_CLAIM_RE
-_REVIEW_CLAIM_RELEASED_RE = re.compile(
-    r"review-claim\s*:\s*released\s*@\s*(?P<sha>[0-9a-fA-F]{7,40})\b",
-    re.IGNORECASE,
-)
-REVIEW_CLAIM_RELEASED_RE = _REVIEW_CLAIM_RELEASED_RE
 _DECISION_PACKET_HEADING_RE = re.compile(r"^###\s+Decision\s+packet\b", re.IGNORECASE)
 DECISION_PACKET_HEADING_RE = _DECISION_PACKET_HEADING_RE
-
-
-@dataclass(frozen=True, slots=True)
-class ShaCarrier:
-    """One exact-head SHA carrier parsed from PR metadata text.
-
-    ``kind`` is one of ``gate-verdict``, ``base-policy``, or ``exact-head``;
-    ``sha`` is the hex carrier as written, lowercased; ``full`` is True only
-    for the 40-hex form that can be checked against a live head.
-    """
-
-    kind: str
-    sha: str
-    full: bool
-
-
-@dataclass(frozen=True, slots=True)
-class ReviewClaim:
-    """One parsed ``review-claim`` marker from a trusted comment (issue #7508).
-
-    ``lane`` is the claiming lane id, ``sha`` the claimed head SHA as written
-    (lowercased), and ``expires_at`` the parsed ``until`` timestamp (UTC) or
-    ``None`` when the timestamp is missing or unparseable.
-    """
-
-    lane: str
-    sha: str
-    expires_at: datetime | None
-
-
-def extract_sha_carriers(text: str) -> list[ShaCarrier]:
-    """Extract exact-head SHA carriers from a PR metadata text blob.
-
-    Covers the three canonical trailer forms: ``gate-verdict: accepted @
-    <sha>``, ``base-policy: (ordinary-cas|current-base) @ <sha>``, and
-    ``Exact head: <sha>``, plus a validated v2 ``exact_head`` field. Surrounding
-    markdown/code fences are tolerated so quoted historical evidence is still
-    surfaced for fail-closed validation.
-    Carriers are returned in document order with the SHA as written.
-    """
-    if not isinstance(text, str) or not text:
-        return []
-    carriers: list[ShaCarrier] = []
-    for match in _GATE_VERDICT_RE.finditer(text):
-        raw = match.group("sha")
-        carriers.append(ShaCarrier(kind="gate-verdict", sha=raw.lower(), full=len(raw) == 40))
-    for match in _BASE_POLICY_RE.finditer(text):
-        raw = match.group(2)
-        carriers.append(ShaCarrier(kind="base-policy", sha=raw.lower(), full=len(raw) == 40))
-    for match in _EXACT_HEAD_RE.finditer(text):
-        raw = match.group(1)
-        carriers.append(ShaCarrier(kind="exact-head", sha=raw.lower(), full=len(raw) == 40))
-    v2_result = parse_pr_contract_v2(text, source="sha-carrier")
-    if v2_result.contract is not None and v2_result.contract.exact_head:
-        raw = v2_result.contract.exact_head
-        carriers.append(ShaCarrier(kind="exact-head", sha=raw, full=len(raw) == 40))
-    return carriers
-
-
-def invalid_sha_carriers(carriers: list[ShaCarrier], live_head_sha: str) -> list[ShaCarrier]:
-    """Return the carrier subset that fails the live-head admission rule.
-
-    Admission rule (issue #7448): a carrier admits only when it carries the
-    full 40-hex SHA equal to the live head, case-insensitively. Abbreviated
-    carriers, carriers naming a different commit, and carriers with no
-    comparable live head all fail closed.
-    """
-    live_head = live_head_sha.lower()
-    return [carrier for carrier in carriers if not carrier.full or carrier.sha != live_head]
-
-
-def _parse_review_claim_marker(text: str) -> ReviewClaim | None:
-    """Parse one ``review-claim: <lane> @ <sha> until <UTC>`` marker, or None.
-
-    Returns ``None`` for non-string/empty blobs and for blobs whose timestamp
-    cannot be parsed as an ISO-8601 UTC datetime (fail closed: an unparseable
-    claim is treated as expired rather than parking the PR forever).
-    """
-    if not isinstance(text, str) or not text:
-        return None
-    match = _REVIEW_CLAIM_RE.search(text)
-    if not match:
-        return None
-    raw_until = match.group("until")
-    try:
-        expires_at = datetime.fromisoformat(raw_until.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    return ReviewClaim(
-        lane=match.group("lane").lower(),
-        sha=match.group("sha").lower(),
-        expires_at=expires_at.astimezone(UTC),
-    )
-
-
-def _review_claim_released_shas(text: str) -> set[str]:
-    """Return lowercased SHAs released by ``review-claim: released @ <sha>`` markers."""
-    if not isinstance(text, str) or not text:
-        return set()
-    return {match.group("sha").lower() for match in _REVIEW_CLAIM_RELEASED_RE.finditer(text)}
 
 
 def _has_decision_packet_heading(text: str) -> bool:
@@ -797,11 +685,12 @@ def _gate_verdict_events_from_body(
 
     events: list[_GateVerdictEvent] = []
     for marker in markers:
-        match = _GATE_VERDICT_RE.match(body, marker.start())
+        marker_start = marker.start("marker")
+        match = _GATE_VERDICT_RE.match(body, marker_start)
         position = _MarkerPosition(
             collection=collection,
             entry_index=entry_index,
-            offset=marker.start(),
+            offset=marker_start,
             published_at=published_at,
             legacy_order=legacy_order,
         )
@@ -1302,7 +1191,7 @@ def _merge_ready_state(
     title/body pair must also have a current ``pr-metadata: reconciled @
     <digest>`` trailer. Fail closed when either trailer is missing or stale.
     """
-    if "merge-ready" not in label_names or overall != "success":
+    if not {"merge-ready", "merge-if-ci-green"}.intersection(label_names) or overall != "success":
         return None
     base_state = _base_state_after_policy(pr, head_sha)
     if base_state is not None:
@@ -1317,7 +1206,7 @@ def _merge_ready_state(
     body_text = str(pr.get("body") or "")
     if has_not_ready_body_narrative(body_text):
         return "pending_pr_metadata"
-    return "ready_to_merge"
+    return "ready_to_merge" if "merge-ready" in label_names else "ready_for_ci_promotion"
 
 
 def _active_writer_or_author_decision(
@@ -1526,7 +1415,13 @@ def _compute_flow_decision(
     if review_state == "CHANGES_REQUESTED":
         return "escalate"
     match state:
-        case "pending_ci" | "pending_gate_verdict" | "pending_pr_metadata" | "ready_to_merge":
+        case (
+            "pending_ci"
+            | "pending_gate_verdict"
+            | "pending_pr_metadata"
+            | "ready_to_merge"
+            | "ready_for_ci_promotion"
+        ):
             return "continue"
         case "unknown_review_threads":
             return "continue"
@@ -1635,6 +1530,15 @@ def recommend_action(  # noqa: C901, PLR0912
                 state=state,
                 flow_decision=flow_decision,
                 reason="CI green, merge-ready label, and current exact-head gate verdict present",
+                actions_remaining=remaining,
+            )
+        case "ready_for_ci_promotion":
+            return PolicyDecision(
+                pr=pr_number,
+                action="promote_merge_if_ci_green",
+                state=state,
+                flow_decision=flow_decision,
+                reason="CI green and exact-head review accepted; promote without re-review",
                 actions_remaining=remaining,
             )
         case "pending_gate_verdict":

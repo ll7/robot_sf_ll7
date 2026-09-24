@@ -33,6 +33,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 import tomllib
 from pathlib import Path
@@ -385,11 +386,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     duration_checkout = next(
         step
         for step in aggregate["steps"]
-        if step.get("name") == "Checkout for duration-cache update"
+        if step.get("name") == "Checkout source for aggregate CI checks and duration-cache update"
     )
-    assert duration_checkout["id"] == "checkout_duration_cache"
+    assert duration_checkout["id"] == "checkout_ci_source"
     assert "always()" in duration_checkout["if"]
-    assert duration_checkout["continue-on-error"] is True
+    assert "dispatch-ownership.result != 'success'" in duration_checkout["if"]
+    assert "run_full_ci == 'true'" in duration_checkout["if"]
+    needs_check = next(
+        step for step in aggregate["steps"] if step.get("name") == "Check split job results"
+    )
+    assert "steps.checkout_ci_source.outcome == 'success'" in needs_check["if"]
     duration_download = next(
         step for step in aggregate["steps"] if step.get("name") == "Download test-duration shards"
     )
@@ -405,11 +411,11 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
         "path": ".duration-artifacts",
     }
     assert "always()" in duration_download["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_download["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_download["if"]
     assert duration_merge["id"] == "merge-test-durations"
     assert duration_merge["continue-on-error"] is True
     assert "always()" in duration_merge["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_merge["if"]
     # The inline merge program is replaced by the tested helper.
     assert "merge_test_durations.py" in duration_merge["run"]
     assert "--artifact-dir .duration-artifacts" in duration_merge["run"]
@@ -419,7 +425,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "merged.update(durations)" not in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
     assert "always()" in duration_save["if"]
-    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
+    assert "steps.checkout_ci_source.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
     assert duration_save["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
@@ -498,7 +504,7 @@ def test_ci_aggregate_uses_declarative_needs_checker() -> None:
     checkout_index = next(
         index
         for index, step in enumerate(aggregate["steps"])
-        if step.get("id") == "checkout_duration_cache"
+        if step.get("id") == "checkout_ci_source"
     )
     result_index = aggregate["steps"].index(result_step)
     assert checkout_index < result_index
@@ -2070,16 +2076,21 @@ def _make_incomplete_profile_worktree(
     return worktree, recovery_log, local_python, env
 
 
+@pytest.mark.parametrize("profile", ["core", "training"])
 def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
-    tmp_path: Path,
+    tmp_path: Path, profile: str
 ) -> None:
     """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
     worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
         tmp_path, recovery_heals=True
     )
 
+    command = [str(RUN_WORKTREE_SHARED_VENV)]
+    if profile != "core":
+        command.extend(["--profile", profile])
+    command.extend(["--", "python", "-V"])
     result = subprocess.run(
-        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        command,
         cwd=worktree,
         env=env,
         capture_output=True,
@@ -2090,11 +2101,11 @@ def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
 
     assert result.returncode == 7, result.stderr
     assert "Attempting one bounded completion sync" in result.stderr
-    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert f"Shared-venv dependency profile '{profile}' completed" in result.stderr
     assert "uv-reached" in result.stderr
     recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
     assert len(recovery_calls) == 1
-    assert "--profile core" in recovery_calls[0]
+    assert f"--profile {profile}" in recovery_calls[0]
     assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
 
 
@@ -4507,6 +4518,136 @@ def test_gh_comment_issue_uses_rest_api(tmp_path: Path) -> None:
     assert all("graphql" not in call.lower() for call in call_lines)
 
 
+def test_gh_comment_body_file_dev_stdin_materialized(tmp_path: Path) -> None:
+    """Issue #9456: an explicit /dev/stdin body must be accepted and materialized.
+
+    The stream is copied to a temporary file first so the downstream gates and
+    the file upload keep working; the POST must reference the materialized
+    file, never the stdio path itself.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        "printf '%s\\n' '{\"id\": 1, \"number\": 6843}'\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            "/dev/stdin",
+        ],
+        cwd=ROOT,
+        env=env,
+        input="stdio comment body\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert "api --method POST repos/ll7/robot_sf_ll7/issues/6843/comments" in call_lines[1]
+    assert "-F body=@/dev/stdin" not in call_lines[1]
+    body_match = re.search(r"-F body=@(\S+)", call_lines[1])
+    assert body_match is not None, call_lines[1]
+    body_arg = Path(body_match.group(1))
+    materialized = Path(tempfile.gettempdir())
+    assert body_arg != Path("/dev/stdin")
+    assert body_arg == materialized or materialized in body_arg.parents
+    assert body_arg.name
+
+
+def test_gh_comment_body_file_dev_stdin_empty_rejected(tmp_path: Path) -> None:
+    """An empty stdio stream must fail the emptiness gate without any API call."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        '#!/usr/bin/env bash\nset -eu\nprintf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n',
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            "/dev/stdin",
+        ],
+        cwd=ROOT,
+        env=env,
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "comment body is empty" in result.stderr
+    assert not calls.exists()
+
+
+def test_gh_comment_body_file_closed_fd_rejected(tmp_path: Path) -> None:
+    """An unreadable /dev/fd/N path must fail with a read error, not a traceback.
+
+    A closed-fd fake ``gh`` guards the test itself: any code path that reaches
+    the network fails loudly instead of publishing to a real issue.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text("#!/usr/bin/env bash\nset -eu\nexit 1\n", encoding="utf-8")
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            "/dev/fd/3",
+        ],
+        cwd=ROOT,
+        env=env,
+        input="unreadable",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "could not read comment body" in result.stderr
+
+
 def test_gh_comment_issue_fail_closed_on_missing(tmp_path: Path) -> None:
     """Issue path must exit nonzero and skip the POST when the target is missing/unknown.
 
@@ -5647,6 +5788,32 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
     assert "PYTEST_XDIST_DIST" not in core_invocation, (
         "core lane must not change its distribution default"
     )
+
+
+def test_pr_ready_check_isolates_audit_launch_smoke_from_optional_xdist() -> None:
+    """Issue #9615: keep the latency-sensitive live launch smoke out of xdist contention."""
+
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+    node = (
+        "tests/render/test_audit_workbench_launch.py::"
+        "test_launch_opt_in_binds_fake_app_server_and_private_mcp"
+    )
+
+    assert script_text.count(f'optional_audit_launch_smoke="{node}"') == 1
+    serial_lane = script_text.split("run_pr_ready_lane optional_launch_smoke env", 1)[1].split(
+        "optional_parallel_pytest_addopts=", 1
+    )[0]
+    parallel_lane = script_text.split("run_pr_ready_lane optional env", 1)[1].split(
+        "else\n  if [[ ${#optional_changed_files[@]}", 1
+    )[0]
+    assert "PYTEST_NUM_WORKERS=1" in serial_lane
+    assert '--lane optional "$optional_audit_launch_smoke"' in serial_lane
+    assert (
+        'optional_parallel_pytest_addopts="${optional_pytest_addopts} --deselect=$optional_audit_launch_smoke"'
+        in script_text
+    )
+    assert '"PYTEST_ADDOPTS=$optional_parallel_pytest_addopts"' in parallel_lane
+    assert "PYTEST_NUM_WORKERS=1" not in parallel_lane
 
 
 def test_worktree_shared_venv_selection_gate_contract() -> None:

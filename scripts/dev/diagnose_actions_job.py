@@ -6,7 +6,8 @@ through the job-log REST endpoint. GitHub still
 attaches the actionable error to the job's check-run annotations. This helper
 uses the job metadata to find that check run and prints those annotations when
 the exact log endpoint returns no usable output. Opt-in JSON classifies a narrow
-artifact-finalization failure; successful retrieval does not mean successful CI.
+artifact-finalization failure or repeated runner-acquisition exhaustion;
+successful retrieval does not mean successful CI.
 
 Example::
 
@@ -34,6 +35,10 @@ MAX_EXCERPT_CHARS = 2000
 FINALIZATION_403 = (
     "Failed to FinalizeArtifact: Received non-retryable error: Failed request: (403) Forbidden: "
     'Error from intermediary with HTTP status code 403 "Forbidden"'
+)
+RUNNER_ACQUISITION_EXHAUSTED_RE = re.compile(
+    r"The job was not started because it repeatedly failed to be acquired "
+    r"\(\d+ attempts?\)\."
 )
 
 
@@ -283,6 +288,9 @@ def _emit_json(
         # annotation, do not join lines to manufacture the observed signature.
         if any(FINALIZATION_403 in line for line in record.splitlines()):
             classification = "artifact_finalization_403"
+            record_number, excerpt = number, record
+        elif any(RUNNER_ACQUISITION_EXHAUSTED_RE.search(line) for line in record.splitlines()):
+            classification = "runner_acquisition_exhaustion"
             record_number, excerpt = number, record
             break
     if records and record_number is None:

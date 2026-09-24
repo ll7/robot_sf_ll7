@@ -97,6 +97,15 @@ def test_oracle_force_trace_enabled_requires_a_boolean() -> None:
         SimulationSettings(oracle_force_trace_enabled=1)  # type: ignore[arg-type]
 
 
+def test_sampler_capture_enabled_requires_a_boolean() -> None:
+    """The spawn-sampler capture flag must reject truthy non-boolean values."""
+    assert SimulationSettings().sampler_capture_enabled is False
+    assert SimulationSettings(sampler_capture_enabled=True).sampler_capture_enabled is True
+
+    with pytest.raises(TypeError, match="sampler_capture_enabled must be bool"):
+        SimulationSettings(sampler_capture_enabled=1)  # type: ignore[arg-type]
+
+
 def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() -> None:
     """Simulation settings resolve historical inputs and expose the explicit opt-in law."""
     assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1

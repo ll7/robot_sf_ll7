@@ -49,7 +49,9 @@ docs/context/issue_audit_contract.md before choosing an audit route.
 For `audit-template-compliance`, treat the `## Archetype Metadata` YAML block as part of the issue
 contract. Preserve the block, validate `archetype` and `evidence_tier` against
 `docs/context/issue_1512_issue_archetypes.md`, require a `linked_policy` key to remain present, and
-flag malformed YAML or invalid values instead of inventing replacements.
+flag malformed YAML or invalid values instead of inventing replacements. Also require the
+native relationship contract from `docs/context/issue_relationships.md`; issue-body templates do
+not carry duplicate relationship fields. Review native state separately from body text.
 
 ## Workflow
 
@@ -67,6 +69,9 @@ flag malformed YAML or invalid values instead of inventing replacements.
    and stop in the interactive route.
 8. For `split-parent-to-child`, require a duplicate child check first and update the parent with
    `Next Implementable Child` only after a child issue exists and the relationship is clear.
+9. For relationship maintenance, inspect fresh native state and relevant body/comment evidence.
+   Use `scripts/dev/audit_issue_relationships.py` only as the read-only/confirmation-gated helper
+   for legacy body declarations; contextual candidates require separate review and native readback.
 
 ## Guardrails
 

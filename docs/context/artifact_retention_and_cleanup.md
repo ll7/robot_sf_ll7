@@ -254,7 +254,8 @@ A class without a verified recipe needs an explicit `verification_status: unavai
 
 ```bash
 uv run python scripts/tools/source_bundle_export.py --export \
-  --repo "$SOURCE_REPO" --out "$BUNDLE_DIR" --workload-id <id> --format json
+  --repo "$SOURCE_REPO" --out "$BUNDLE_DIR" --workload-id <id> \
+  --generated path/to/tracked_generated_file --format json
 uv run python scripts/tools/source_bundle_export.py --verify \
   --bundle "$BUNDLE_DIR" --workdir "$SCRATCH_RESTORE" --format json
 ```
@@ -262,8 +263,20 @@ uv run python scripts/tools/source_bundle_export.py --verify \
 The bundle records repository URL classification, commit, tree, parents, ref context, vendored
 subproject revisions, generated-source provenance, admitted patch identity, and a compact
 tracked-file inventory, and verifies by cloning into a fresh repository and reproducing those
-identities. Dirty or untracked state is rejected unless an explicit patch is admitted and
-checksum-bound; private or credentialed remotes are never written into the public status.
+identities. Repeat `--generated` for each tracked generated-source file; generated declarations
+are repository-relative regular files and are validated before a bundle is admitted. Tracked dirty
+state requires an explicit patch whose bytes exactly equal the captured canonical dirty diff; the
+patch is copied with its digest and replayed during verification, which compares the resulting
+canonical diff byte-for-byte. Untracked or ignored state remains blocked. Shallow repositories are
+rejected through Git's repository query, including linked worktrees whose `.git` is a pointer file.
+Git subprojects and gitlinks are explicitly rejected because this bundle does not recursively
+restore their independent Git object stores. Private remotes retain only the SHA-256 digest of
+their exact configured URL in the manifest; encoded query, fragment, and credential-like URL data
+is treated as private too. Public status never emits private URLs, authority credentials, query or
+fragment data, or unsafe absolute/parent/symlink paths. Declared subproject/generated paths must be
+relative to the source root, and restore verification applies the same containment check to manifest
+and checksum members. The export destination must be a new path whose parent already exists; this
+prevents pre-existing files or directories from becoming unowned bundle members.
 
 ### Check log retention and bounded diagnostic excerpts
 

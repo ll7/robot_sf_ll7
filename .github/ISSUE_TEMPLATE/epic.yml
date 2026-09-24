@@ -49,6 +49,12 @@ body:
         - blocked
     validations:
       required: true
+  - type: markdown
+    attributes:
+      value: >-
+        Set Parent, Blocked by, or Blocking in GitHub's Relationships panel when needed. Native
+        links are authoritative; do not duplicate them in this issue body. See
+        docs/context/issue_relationships.md.
   - type: textarea
     id: goal
     attributes:

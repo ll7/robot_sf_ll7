@@ -1,0 +1,64 @@
+{
+  "schema_version": "simulation_timeline.v1",
+  "timeline_id": "diagnostics-fixture-timeline",
+  "evidence_boundary": "analysis_workbench_only",
+  "coordinate_frame": "world",
+  "units": {"position": "m", "heading": "rad", "time": "s", "velocity": "m/s"},
+  "source_trace": {
+    "schema_version": "simulation_trace_export.v1",
+    "trace_id": "diagnostics-fixture-trace",
+    "source": {
+      "scenario_id": "diagnostics-corridor",
+      "seed": 17,
+      "planner_id": "fixture-planner",
+      "episode_id": "episode-diagnostics",
+      "generated_by": "checked-in-fixture"
+    }
+  },
+  "frames": [
+    {
+      "frame_index": 0,
+      "step": 0,
+      "time_s": 0.0,
+      "state": {
+        "planner_decision": {
+          "selected_action": {"linear_velocity": 0.5, "angular_velocity": 0.1},
+          "candidates": [
+            {"candidate_id": "slow", "action": {"linear_velocity": 0.3}, "cost": 1.2},
+            {"candidate_id": "fast", "action": {"linear_velocity": 0.5}, "cost": 0.7}
+          ],
+          "constraints": {"collision_free": true, "route_feasible": true}
+        },
+        "policy": null,
+        "sensors": {},
+        "reward": null,
+        "collision": {},
+        "route": null,
+        "robot": {"actor_id": "robot", "position": [0.0, 0.0], "velocity": [0.5, 0.0]},
+        "pedestrians": [
+          {"actor_id": "ped-1", "position": [2.0, 1.0], "velocity": [0.0, -0.2], "diagnostics": {"clearance_m": 1.9}}
+        ],
+        "controls": {
+          "commanded": {"linear_m_s": 0.5, "turn_rate_rad_s": 0.1},
+          "executed": {"linear_m_s": 0.4, "turn_rate_rad_s": 0.1}
+        }
+      }
+    },
+    {
+      "frame_index": 1,
+      "step": 1,
+      "time_s": 1.0,
+      "state": {
+        "planner_decision": {"selected_action": {"linear_velocity": 0.2, "angular_velocity": 0.0}},
+        "policy": null,
+        "sensors": {},
+        "reward": null,
+        "collision": {},
+        "route": null,
+        "robot": {"actor_id": "robot", "position": [0.4, 0.0], "velocity": [0.4, 0.0]},
+        "pedestrians": []
+      }
+    }
+  ],
+  "events": []
+}

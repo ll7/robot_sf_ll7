@@ -1,0 +1,15 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev04-smoke",
+  "component_id": "srev04-review-package",
+  "sources": [
+    {
+      "artifact_id": "bundle",
+      "uri": "tests/fixtures/scenario_review/review_package/bundle.json",
+      "format": "review-bundle"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-04-smoke",
+  "config": {},
+  "required_capabilities": []
+}

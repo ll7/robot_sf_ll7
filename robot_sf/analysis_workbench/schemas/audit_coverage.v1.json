@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/audit_coverage.v1.json",
+  "$title": "Robot SF Benchmark Audit Coverage v1",
+  "description": "Release-bound operational coverage accounting. It is not a statistical confidence certificate or benchmark-validity verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "identity", "protocol", "counts", "strata",
+    "deficits", "exceptions", "findings", "materialization", "diagnostics",
+    "limitations", "report_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": "audit-coverage.v1"},
+    "status": {
+      "enum": [
+        "incomplete", "complete_with_declared_exceptions", "complete_under_protocol"
+      ]
+    },
+    "identity": {"$ref": "#/$defs/identity"},
+    "protocol": {"$ref": "#/$defs/protocol"},
+    "counts": {"$ref": "#/$defs/counts"},
+    "strata": {"type": "array", "items": {"$ref": "#/$defs/stratum"}},
+    "deficits": {"type": "array", "items": {"$ref": "#/$defs/deficit"}},
+    "exceptions": {"type": "array", "items": {"$ref": "#/$defs/exception"}},
+    "findings": {"$ref": "#/$defs/findings"},
+    "materialization": {"$ref": "#/$defs/materialization"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "limitations": {
+      "type": "array", "items": {"type": "string", "minLength": 1}
+    },
+    "report_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_digest", "source_digest", "release_digest", "protocol_version",
+        "protocol_digest", "detector_registry_digest", "detector_config_digest",
+        "source_revision", "scan_revision", "review_revision",
+        "coverage_receipt_revision", "identity_digest"
+      ],
+      "properties": {
+        "campaign_digest": {"type": "string"},
+        "source_digest": {"type": "string"},
+        "release_digest": {"type": "string"},
+        "protocol_version": {"type": "string", "minLength": 1},
+        "protocol_digest": {"type": "string", "minLength": 1},
+        "detector_registry_digest": {"type": "string"},
+        "detector_config_digest": {"type": "string"},
+        "source_revision": {"type": "string"},
+        "scan_revision": {"type": "string"},
+        "review_revision": {"type": "string"},
+        "coverage_receipt_revision": {"type": "string"},
+        "identity_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version", "account_all_expected_rows", "require_detector_attempts",
+        "full_human_review_target", "ordinary_control_review_target",
+        "anomaly_representative_target", "anomaly_context_control_target",
+        "require_integrity_disposition", "scenario_group_fields",
+        "ordinary_candidate_fields", "declared_exceptions", "metadata",
+        "protocol_digest"
+      ],
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "account_all_expected_rows": {"type": "boolean"},
+        "require_detector_attempts": {"type": "boolean"},
+        "full_human_review_target": {"type": "integer", "minimum": 0},
+        "ordinary_control_review_target": {"type": "integer", "minimum": 0},
+        "anomaly_representative_target": {"type": "integer", "minimum": 0},
+        "anomaly_context_control_target": {"type": "integer", "minimum": 0},
+        "require_integrity_disposition": {"type": "boolean"},
+        "scenario_group_fields": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        },
+        "ordinary_candidate_fields": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        },
+        "declared_exceptions": {
+          "type": "array", "items": {"$ref": "#/$defs/exception"}
+        },
+        "metadata": {"type": "object"},
+        "protocol_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "inventory": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "expected", "indexed", "readable", "missing", "duplicate", "invalid",
+        "unsupported", "unexpected", "replay_or_duplicate_rows"
+      ],
+      "properties": {
+        "expected": {"type": "integer", "minimum": 0},
+        "indexed": {"type": "integer", "minimum": 0},
+        "readable": {"type": "integer", "minimum": 0},
+        "missing": {"type": "integer", "minimum": 0},
+        "duplicate": {"type": "integer", "minimum": 0},
+        "invalid": {"type": "integer", "minimum": 0},
+        "unsupported": {"type": "integer", "minimum": 0},
+        "unexpected": {"type": "integer", "minimum": 0},
+        "replay_or_duplicate_rows": {"type": "integer", "minimum": 0}
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirement", "reason", "status"],
+      "properties": {
+        "requirement": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "status": {"enum": ["waived", "exception", "declared"]},
+        "stratum_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "detector_totals": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scheduled", "evaluable", "flagged", "clear", "unavailable", "error"],
+      "properties": {
+        "scheduled": {"type": "integer", "minimum": 0},
+        "evaluable": {"type": "integer", "minimum": 0},
+        "flagged": {"type": "integer", "minimum": 0},
+        "clear": {"type": "integer", "minimum": 0},
+        "unavailable": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0}
+      }
+    },
+    "detectors": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "scheduled", "evaluable", "flagged", "clear", "unavailable", "error",
+        "by_detector"
+      ],
+      "properties": {
+        "scheduled": {"type": "integer", "minimum": 0},
+        "evaluable": {"type": "integer", "minimum": 0},
+        "flagged": {"type": "integer", "minimum": 0},
+        "clear": {"type": "integer", "minimum": 0},
+        "unavailable": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0},
+        "by_detector": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/detector_totals"}
+        }
+      }
+    },
+    "detector_schedule_entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "detector_id"],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "detector_attempt": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "episode_id", "detector_id", "status", "detector_version",
+        "reason_code", "message", "attempt_id"
+      ],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["flagged", "clear", "unavailable", "error"]},
+        "detector_version": {"type": "string"},
+        "reason_code": {"type": "string"},
+        "message": {"type": "string"},
+        "attempt_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "ordinary_control_evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "planner_id", "scenario_group", "candidate_episode_ids",
+        "reviewed_episode_ids"
+      ],
+      "properties": {
+        "planner_id": {"type": "string", "minLength": 1},
+        "scenario_group": {"type": "string", "minLength": 1},
+        "candidate_episode_ids": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        },
+        "reviewed_episode_ids": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "materialization_row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "status"],
+      "properties": {
+        "episode_id": {"type": "string"},
+        "status": {"enum": ["verified", "diverged", "unverifiable", "unavailable"]}
+      }
+    },
+    "reviews": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "human_reviewed", "agent_reviewed", "full_episode_human",
+        "full_episode_agent", "interval_reviewed", "reviewed_episode_union",
+        "duplicate_or_replayed", "stale_or_mismatched", "untyped_or_invalid",
+        "full_human_ids", "human_ids", "agent_ids", "full_human_strata",
+        "observed_strata", "ordinary_control_candidates", "ordinary_control_reviewed",
+        "ordinary_control_groups", "ordinary_control_required", "ordinary_control_gap_groups"
+      ],
+      "properties": {
+        "human_reviewed": {"type": "integer", "minimum": 0},
+        "agent_reviewed": {"type": "integer", "minimum": 0},
+        "full_episode_human": {"type": "integer", "minimum": 0},
+        "full_episode_agent": {"type": "integer", "minimum": 0},
+        "interval_reviewed": {"type": "integer", "minimum": 0},
+        "reviewed_episode_union": {"type": "integer", "minimum": 0},
+        "duplicate_or_replayed": {"type": "integer", "minimum": 0},
+        "stale_or_mismatched": {"type": "integer", "minimum": 0},
+        "untyped_or_invalid": {"type": "integer", "minimum": 0},
+        "full_human_ids": {"type": "array", "items": {"type": "string"}},
+        "human_ids": {"type": "array", "items": {"type": "string"}},
+        "agent_ids": {"type": "array", "items": {"type": "string"}},
+        "full_human_strata": {"type": "integer", "minimum": 0},
+        "observed_strata": {"type": "integer", "minimum": 0},
+        "ordinary_control_candidates": {"type": "integer", "minimum": 0},
+        "ordinary_control_reviewed": {"type": "integer", "minimum": 0},
+        "ordinary_control_groups": {"type": "integer", "minimum": 0},
+        "ordinary_control_required": {"type": "integer", "minimum": 0},
+        "ordinary_control_gap_groups": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "findings_counts": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "candidate_clusters", "candidate_members", "confirmed_members",
+        "high_priority_clusters", "representatives_reviewed", "context_controls_reviewed",
+        "unresolved_critical_integrity"
+      ],
+      "properties": {
+        "candidate_clusters": {"type": "integer", "minimum": 0},
+        "candidate_members": {"type": "integer", "minimum": 0},
+        "confirmed_members": {"type": "integer", "minimum": 0},
+        "high_priority_clusters": {"type": "integer", "minimum": 0},
+        "representatives_reviewed": {"type": "integer", "minimum": 0},
+        "context_controls_reviewed": {"type": "integer", "minimum": 0},
+        "unresolved_critical_integrity": {"type": "integer", "minimum": 0}
+      }
+    },
+    "materialization": {
+      "type": "object", "additionalProperties": false,
+      "required": ["total", "verified", "diverged", "unverifiable", "unavailable"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "verified": {"type": "integer", "minimum": 0},
+        "diverged": {"type": "integer", "minimum": 0},
+        "unverifiable": {"type": "integer", "minimum": 0},
+        "unavailable": {"type": "integer", "minimum": 0}
+      }
+    },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "coverage", "inventory", "detectors", "reviews", "review", "findings",
+        "materialization", "diagnostics", "status"
+      ],
+      "properties": {
+        "coverage": {"$ref": "#/$defs/inventory"},
+        "inventory": {"$ref": "#/$defs/inventory"},
+        "detectors": {"$ref": "#/$defs/detectors"},
+        "reviews": {"$ref": "#/$defs/reviews"},
+        "review": {"$ref": "#/$defs/reviews"},
+        "findings": {"$ref": "#/$defs/findings_counts"},
+        "materialization": {"$ref": "#/$defs/materialization"},
+        "diagnostics": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "status": {
+          "enum": [
+            "incomplete", "complete_with_declared_exceptions", "complete_under_protocol"
+          ]
+        }
+      }
+    },
+    "stratum": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "stratum_id", "planner_id", "scenario_group", "outcome", "denominator",
+        "full_human_reviewed", "target", "status", "reviewed_episode_ids"
+      ],
+      "properties": {
+        "stratum_id": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "scenario_group": {"type": "string", "minLength": 1},
+        "outcome": {"type": "string", "minLength": 1},
+        "denominator": {"type": "integer", "minimum": 0},
+        "full_human_reviewed": {"type": "integer", "minimum": 0},
+        "target": {"type": "integer", "minimum": 0},
+        "status": {"enum": ["met", "under_review"]},
+        "reviewed_episode_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "deficit": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "schema_version", "stratum_id", "observed", "target", "source_revision",
+        "protocol_revision", "reason", "status", "source_id", "protocol_id",
+        "dimensions", "denominator", "campaign_id", "campaign_digest", "source_digest",
+        "release_digest", "detector_registry_digest", "detector_config_digest",
+        "coverage_receipt_revision", "evidence_ids"
+      ],
+      "properties": {
+        "schema_version": {"const": "coverage-deficit.v1"},
+        "stratum_id": {"type": "string", "minLength": 1},
+        "observed": {"type": "integer", "minimum": 0},
+        "target": {"type": "integer", "minimum": 0},
+        "source_revision": {"type": "string"},
+        "protocol_revision": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "status": {"enum": ["under_review", "unavailable", "error", "met", "waived"]},
+        "source_id": {"type": "string"},
+        "protocol_id": {"type": "string"},
+        "dimensions": {"type": "object", "additionalProperties": {"type": "string"}},
+        "denominator": {"type": "integer", "minimum": 0},
+        "campaign_id": {"type": "string"},
+        "campaign_digest": {"type": "string"},
+        "source_digest": {"type": "string"},
+        "release_digest": {"type": "string"},
+        "detector_registry_digest": {"type": "string"},
+        "detector_config_digest": {"type": "string"},
+        "coverage_receipt_revision": {"type": "string"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "finding_row": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "finding_id", "candidate_members", "confirmed_members", "high_priority",
+        "integrity", "status", "representative_episode_id", "representative_reviewed",
+        "control_episode_ids", "control_reviewed"
+      ],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1},
+        "candidate_members": {"type": "array", "items": {"type": "string"}},
+        "confirmed_members": {"type": "array", "items": {"type": "string"}},
+        "high_priority": {"type": "boolean"},
+        "integrity": {"type": "boolean"},
+        "status": {"type": "string", "minLength": 1},
+        "representative_episode_id": {"type": "string"},
+        "representative_reviewed": {"type": "boolean"},
+        "control_episode_ids": {"type": "array", "items": {"type": "string"}},
+        "control_reviewed": {"type": "boolean"}
+      }
+    },
+    "findings": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "candidate_clusters", "candidate_members", "confirmed_members",
+        "high_priority_clusters", "representatives_reviewed", "context_controls_reviewed",
+        "unresolved_critical_integrity", "rows"
+      ],
+      "properties": {
+        "candidate_clusters": {"type": "integer", "minimum": 0},
+        "candidate_members": {"type": "integer", "minimum": 0},
+        "confirmed_members": {"type": "integer", "minimum": 0},
+        "high_priority_clusters": {"type": "integer", "minimum": 0},
+        "representatives_reviewed": {"type": "integer", "minimum": 0},
+        "context_controls_reviewed": {"type": "integer", "minimum": 0},
+        "unresolved_critical_integrity": {"type": "integer", "minimum": 0},
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/finding_row"}}
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "readable_episode_ids", "detector_schedule", "detector_attempts",
+        "ordinary_control_groups", "materialization_rows", "finding_reviews"
+      ],
+      "properties": {
+        "readable_episode_ids": {
+          "type": "array", "items": {"type": "string", "minLength": 1}
+        },
+        "detector_schedule": {
+          "type": "array", "items": {"$ref": "#/$defs/detector_schedule_entry"}
+        },
+        "detector_attempts": {
+          "type": "array", "items": {"$ref": "#/$defs/detector_attempt"}
+        },
+        "ordinary_control_groups": {
+          "type": "array", "items": {"$ref": "#/$defs/ordinary_control_evidence"}
+        },
+        "materialization_rows": {
+          "type": "array", "items": {"$ref": "#/$defs/materialization_row"}
+        },
+        "finding_reviews": {
+          "type": "array", "items": {"$ref": "#/$defs/finding_row"}
+        }
+      }
+    }
+  }
+}

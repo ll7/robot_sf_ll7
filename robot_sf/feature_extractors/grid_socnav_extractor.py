@@ -47,6 +47,7 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
 
         @property
         def output_dim(self) -> int:
+            """Return the feature width produced for one pedestrian-attention head."""
             return self._output_dim
 
         def forward(
@@ -54,6 +55,17 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             slot_feats: th.Tensor,
             count: th.Tensor | None,
         ) -> th.Tensor:
+            """Attend over variable-length pedestrian slots and pool to one vector.
+
+            Args:
+                slot_feats: Padded per-pedestrian features of shape
+                    ``(batch, max_peds, slot_input_dim)``.
+                count: Optional per-sample valid-slot counts of shape
+                    ``(batch, 1)``; entries beyond each count are masked out.
+
+            Returns:
+                Pooled pedestrian-context features of shape ``(batch, output_dim)``.
+            """
             batch_size, max_peds, _ = slot_feats.shape
             x = self.input_proj(slot_feats)
 
@@ -287,6 +299,17 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             return int(out.shape[1])
 
         def forward(self, obs: dict) -> th.Tensor:
+            """Fuse grid, social-navigation, and optional pedestrian-attention features.
+
+            Args:
+                obs: Batched observation tensors matching the configured observation
+                    space. Enabled branches also consume goal-vector and pedestrian
+                    slot/count keys selected during initialization.
+
+            Returns:
+                Features shaped ``(batch, features_dim)``, ordered as grid features,
+                social-navigation features, then optional pedestrian context.
+            """
             grid_obs = obs[self._grid_key]
             grid_features = self.grid_extractor(grid_obs)
 

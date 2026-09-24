@@ -15,7 +15,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Run unattended issue cleanup | `issue-audit-autonomous` | `issue-audit` |
 | Present/apply one maintainer decision envelope | `issue-audit` | `issue-contract-maintainer` |
 | Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |
-| Merge a PR carrying the merge-ready label | `gh-pr-merger` | `goal-pr-review` |
+| Promote a reviewed PR after green CI or merge a ready PR | `gh-pr-merger` | `goal-pr-review` |
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify branch claims | `implementation-verification` | `pr-ready-check` |
 | Run the standard readiness gate | `pr-ready-check` | none |
@@ -72,7 +72,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 - `gh-issue-autopilot`, `issue-to-pr`, and `gh-issue-to-pr` are compatibility aliases for
   `goal-issue-implementation` selected-issue mode; the canonical skill owns issue -> branch ->
   validation -> ready PR.
-- `gh-pr-merger` owns guarded merge after `goal-pr-review` has established merge-ready proof.
+- `gh-pr-merger` promotes merge-if-ci-green after hosted checks pass, then owns guarded merge after `goal-pr-review` has established exact-head review proof.
 - `gh-issue-creator` owns new issue creation.
 - `issue-contract-maintainer` owns ambiguity, template, and decision repair.
 - Use Project #5 `Priority Score` as an advisory queue-ordering signal; use
@@ -162,9 +162,9 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `gh-pr-comment-fixer` | atomic | context | yes | no | no | none | Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution. |
-| `gh-pr-merger` | atomic | verification | yes | no | no | none | Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch protection, and preflight checks. |
+| `gh-pr-merger` | atomic | verification | yes | no | no | none | Guarded PR merger; promotes merge-if-ci-green after green CI and merges merge-ready PRs after verifying branch protection and preflight checks. |
 | `gh-pr-opener` | atomic | context | yes | no | no | none | Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline. |
-| `goal-pr-review` | orchestrator | verification | yes | no | no | `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`, `review-benchmark-change`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready; not for merging. |
+| `goal-pr-review` | orchestrator | verification | yes | no | no | `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`, `review-benchmark-change`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready or merge-if-ci-green; not for merging. |
 | `pr-hindsight-review` | analysis | analysis | no | no | no | none | Review merged PRs after the fact to decide whether autonomous routing produced useful progress, partial coverage, duplicate coverage, or a successor slice. |
 
 ### Research Iteration

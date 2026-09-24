@@ -16,6 +16,10 @@ from typing import Any
 import yaml
 
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, SearchConfig
+from robot_sf.adversarial.eligibility import (
+    SCHEMA_VERSION as ELIGIBILITY_SCHEMA_VERSION,
+)
+from robot_sf.adversarial.eligibility import analysis_eligibility
 
 MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
 
@@ -526,6 +530,8 @@ def write_search_manifest(
     num_failed_evaluations: int,
 ) -> Path:
     """Write the top-level search manifest."""
+    rows = [_evaluation_to_json(item) for item in evaluations]
+    num_eligible = sum(1 for item in evaluations if analysis_eligibility(item).eligible)
     payload = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "created_at": datetime.now(UTC).isoformat(),
@@ -535,10 +541,11 @@ def write_search_manifest(
             "num_valid_candidates": len(evaluations) - num_invalid_candidates,
             "num_invalid_candidates": num_invalid_candidates,
             "num_failed_evaluations": num_failed_evaluations,
+            "num_analysis_eligible": num_eligible,
             "best_objective_value": best.objective_value if best else None,
             "best_bundle_path": best.bundle_path.as_posix() if best and best.bundle_path else None,
         },
-        "candidates": [_evaluation_to_json(item) for item in evaluations],
+        "candidates": rows,
     }
     return write_json(manifest_path, payload)
 
@@ -548,6 +555,7 @@ def _evaluation_to_json(evaluation: CandidateEvaluation) -> dict[str, Any]:
     attribution = (
         evaluation.failure_attribution.to_json() if evaluation.failure_attribution else None
     )
+    receipt = analysis_eligibility(evaluation)
     return {
         "candidate": evaluation.candidate.to_json(),
         "certification_status": evaluation.certification_status.to_json(),
@@ -564,6 +572,16 @@ def _evaluation_to_json(evaluation: CandidateEvaluation) -> dict[str, Any]:
         else None,
         "bundle_path": evaluation.bundle_path.as_posix() if evaluation.bundle_path else None,
         "error": evaluation.error,
+        "effective_scenario_hash": evaluation.effective_scenario_hash,
+        "analysis_eligibility": {
+            "schema_version": ELIGIBILITY_SCHEMA_VERSION,
+            "eligible": receipt.eligible,
+            "reason_codes": receipt.reason_codes,
+            "trace_present": receipt.trace_present,
+            "certificate_ok": receipt.certificate_ok,
+            "execution_mode": receipt.execution_mode,
+            "objective_scored": receipt.objective_scored,
+        },
     }
 
 

@@ -1,4 +1,8 @@
-"""QR-DQN-style primitives for issue #4016 distributional RL slices."""
+"""Estimate return distributions with quantile-regression deep Q-network primitives.
+
+These QR-DQN building blocks support reinforcement learning (RL) experiments for
+issue #4016. They load PyTorch lazily and do not establish benchmark evidence.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ if TYPE_CHECKING:
     from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
 
 
-def _init_classes() -> dict[str, Any]:  # noqa: C901
+def _init_classes() -> dict[str, Any]:  # noqa: C901, PLR0915 - lazy torch closure factory
 
     import torch  # noqa: PLC0415
     from torch import nn  # noqa: PLC0415
@@ -68,7 +72,10 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
         return (quantile_weights * huber / kappa).sum(dim=-2).mean()
 
     class QuantileQNetwork(nn.Module):
-        """Small MLP producing ordered quantile estimates per discrete action."""
+        """Small multilayer perceptron estimating quantiles per discrete action.
+
+        Outputs correspond to quantile fractions but are not sorted by value.
+        """
 
         def __init__(
             self,
@@ -101,6 +108,18 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             self.net = nn.Sequential(*layers)
 
         def forward(self, observations: torch.Tensor) -> torch.Tensor:
+            """Map a batch of observations to per-action quantile estimates.
+
+            Args:
+                observations: Float tensor with shape ``[batch, observation_dim]``.
+
+            Returns:
+                Tensor with shape ``[batch, action_count, num_quantiles]`` holding the
+                return-distribution quantile estimates for each action.
+
+            Raises:
+                ValueError: If the observation shape does not match the network input.
+            """
             if observations.ndim != 2 or observations.shape[-1] != self.observation_dim:
                 raise ValueError(
                     f"observations must have shape [batch, {self.observation_dim}], "
@@ -110,6 +129,12 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             return output.view(-1, self.action_count, self.num_quantiles)
 
         def metadata(self) -> dict[str, Any]:
+            """Return serializable network provenance metadata for checkpoints.
+
+            Returns:
+                Mapping with the algorithm name, network dimensions, quantile count,
+                and the primitive-only claim boundary marker.
+            """
             return {
                 "algorithm": "qr_dqn",
                 "observation_dim": self.observation_dim,
@@ -128,6 +153,20 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
     def select_action_quantiles(
         quantiles: torch.Tensor, action_indices: torch.Tensor
     ) -> torch.Tensor:
+        """Select the quantile rows for the chosen double-Q actions.
+
+        Args:
+            quantiles: Tensor with shape ``[batch, action_count, num_quantiles]``.
+            action_indices: Integer tensor with shape ``[batch]`` selecting one
+                action per sample.
+
+        Returns:
+            Tensor with shape ``[batch, num_quantiles]`` holding the selected
+            per-sample quantile estimates.
+
+        Raises:
+            ValueError: If shapes or action indices are out of range.
+        """
         if quantiles.ndim != 3:
             raise ValueError("quantiles must have shape [batch, action_count, num_quantiles]")
         if action_indices.ndim != 1 or action_indices.shape[0] != quantiles.shape[0]:
@@ -146,6 +185,24 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
         *,
         gamma: float,
     ) -> QRDQNTargetBatch:
+        """Build Bellman target quantiles for a double-Q update.
+
+        Args:
+            rewards: Float tensor with shape ``[batch]``.
+            dones: Float tensor with shape ``[batch]`` where 1.0 marks terminal steps.
+            target_next_quantiles: Tensor with shape
+                ``[batch, action_count, num_quantiles]`` from the target network.
+            next_action_indices: Integer tensor with shape ``[batch]`` holding the
+                online-network greedy actions for the double-Q selection.
+            gamma: Discount factor in ``[0, 1]``.
+
+        Returns:
+            A :class:`QRDQNTargetBatch` with the bootstrapped target quantiles and
+            the action indices used for the selection.
+
+        Raises:
+            ValueError: If tensor shapes are inconsistent or gamma is out of range.
+        """
         if rewards.ndim != 1 or dones.ndim != 1 or rewards.shape != dones.shape:
             raise ValueError("rewards and dones must have matching shape [batch]")
         if target_next_quantiles.ndim != 3 or target_next_quantiles.shape[0] != rewards.shape[0]:
@@ -162,6 +219,12 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
         return QRDQNTargetBatch(target_quantiles=target, next_action_indices=next_action_indices)
 
     def hard_update_target_network(source: nn.Module, target: nn.Module) -> None:
+        """Copy all parameters from the source network into the target network.
+
+        Args:
+            source: Network providing the current parameters.
+            target: Network whose parameters are overwritten in place.
+        """
         target.load_state_dict(source.state_dict())
 
     def save_quantile_checkpoint(
@@ -170,6 +233,17 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
         model: QuantileQNetwork,
         action_lattice: DiscreteUnicycleActionLattice,
     ) -> None:
+        """Persist a quantile-network checkpoint with provenance metadata.
+
+        The checkpoint stores the model weights, the network metadata (including
+        the primitive-only claim boundary), and the serialized action lattice so a
+        resumed run can reconstruct both the network and its discrete action set.
+
+        Args:
+            path: Destination file path for the ``torch.save`` payload.
+            model: Quantile network to persist.
+            action_lattice: Discrete action lattice coupled to the network outputs.
+        """
         torch.save(
             {
                 "model_state_dict": model.state_dict(),
@@ -180,6 +254,18 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
         )
 
     def load_quantile_checkpoint_metadata(path: Path) -> dict[str, Any]:
+        """Read a checkpoint on the CPU and return its metadata entries.
+
+        Loads the full checkpoint payload, including model tensors, but returns
+        only the metadata and action lattice without reconstructing a network.
+
+        Args:
+            path: Checkpoint file previously written by
+                :func:`save_quantile_checkpoint`.
+
+        Returns:
+            Mapping with the ``model_metadata`` and ``action_lattice`` entries.
+        """
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
         return {
             "model_metadata": checkpoint["model_metadata"],

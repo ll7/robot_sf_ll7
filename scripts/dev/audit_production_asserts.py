@@ -312,6 +312,132 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=_NEW_RESIDUAL_REFS,
     ),
+    (
+        "robot_sf/analysis_workbench/review_execute.py",
+        "run",
+        "early is not None",
+    ): _review(
+        "Every _admit_request early return sets the early result with the triple nulled, and the success path sets the triple with early nulled; reaching the failure branch proves the early result exists.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_execute.py",
+        "run",
+        "dir_early is not None",
+    ): _review(
+        "Every _prepare_output_dir early return sets the directory early result with the directory nulled, and the success paths return the directory with early nulled; reaching the failure branch proves the early result exists.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_experiment_loop.py",
+        "run",
+        "native_config is not None and normalized_admission is not None",
+    ): _review(
+        "Native executor construction follows a successful admission preflight that sets both values; this assertion narrows the validated internal pair before adapter construction.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9296",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_ai.py",
+        "_redact_config",
+        "isinstance(cleaned, dict)",
+    ): _review(
+        "The top-level call passes a dict and _redact_value preserves mappings for dict inputs, so the redacted copy is a dict by construction.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_ai.py",
+        "_validate_highlight",
+        "isinstance(metric, str) and isinstance(units, str) and isinstance(source_id, str)",
+    ): _review(
+        "The preceding field checks return early with errors on any malformed field, so reaching the construction site proves all three fields are non-empty strings.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_ai.py",
+        "_validate_highlight",
+        "isinstance(value, (int, float))",
+    ): _review(
+        "The preceding value check returns early on bools, non-numbers, and non-finite values, so reaching the construction site proves a finite number.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_alignment.py",
+        "_collect_traces",
+        "left is not None and right is not None",
+    ): _review(
+        "Both named trace sides either return a terminal diagnostic or assign a validated trace; reaching the return narrows both sides for alignment.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9394",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_alignment.py",
+        "_validate_alignment",
+        "anchor is not None and tolerances is not None",
+    ): _review(
+        "Anchor and tolerance validators return terminal errors for invalid input; reaching the normalized mapping narrows both validated values.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9394",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_storyboard.py",
+        "_verify_reference",
+        "raw is not None",
+    ): _review(
+        "The reader returns (bytes, None) on success and (None, error-code) on every failure path (unsafe path, unreadable, non-regular, oversize); the caller returns early whenever the error code is set, so reaching the digest site proves raw is bytes.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
+    ),
+    (
+        "robot_sf/render/review_media_qa.py",
+        "_fetch_source_bytes",
+        "raw is not None",
+    ): _review(
+        "The source-byte reader returns non-None raw bytes on success and non-None failure metadata on error; the caller returns early when failure is set, narrowing raw before SHA-256 computation.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
+    ),
+    (
+        "robot_sf/render/review_media_qa.py",
+        "_load_inputs",
+        "raw is not None and state is not None",
+    ): _review(
+        "The source fetcher returns non-None raw bytes and non-None integrity state on success; the caller appends diagnostics and continues on failure, narrowing both values before JSON decoding.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9458",),
+    ),
+    (
+        "robot_sf/benchmark/operational_quantities.py",
+        "compute_cost_breakdown",
+        "productive_m is not None and capital_per_period is not None",
+    ): _review(
+        "The missing-input guard follows both positive-value resolution paths; reaching the cost calculation narrows the optional values for arithmetic.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9350",),
+    ),
+    (
+        "robot_sf/analysis_workbench/audit_service.py",
+        "AuditService._native_campaign_binding_for_session",
+        "row is not None",
+    ): _review(
+        "The candidate filter keeps only bindings with a non-None campaign row and the empty/ambiguous branches raise before assignment; reaching the native-identity check narrows the row for URI/digest comparison.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9489",),
+    ),
+    (
+        "robot_sf/render/audit_workbench_launch.py",
+        "_load_native_diagnostic_config",
+        "selected is not None",
+    ): _review(
+        "The config coercion returns None only for unselected native configs and the validated mapping path assigns a config; reaching the return narrows the selected native diagnostic config.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9489",),
+    ),
 }
 
 

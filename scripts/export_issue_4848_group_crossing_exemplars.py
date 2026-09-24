@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -28,6 +27,7 @@ from robot_sf.evidence.writers import (
     write_sha256sums,
     write_text,
 )
+from scripts.dev.git_common import git_head_commit, resolve_repo_root
 
 # Target planners for exemplar selection (classical + social navigation diversity)
 TARGET_PLANNERS = ["goal", "orca", "social_force"]
@@ -74,29 +74,26 @@ class TraceRows:
     summary: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class CampaignProvenance:
+    """Release and campaign identity carried into every exported trace bundle."""
+
+    campaign_id: str = "issue4206_trace_capable_h600_rerun_20260704"
+    campaign_job: str = "13334"
+    source_commit: str | None = None
+    release_tag: str | None = None
+    config_sha256: str | None = None
+    issue_url: str = "https://github.com/ll7/robot_sf_ll7/issues/4848"
+
+
 def _repo_root() -> Path:
     """Return the current git worktree root."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return Path(result.stdout.strip())
+    return resolve_repo_root()
 
 
 def _git_commit() -> str:
     """Return the current commit hash, or ``unknown`` outside git."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-    return result.stdout.strip()
+    return git_head_commit()
 
 
 def _min_distance(
@@ -284,13 +281,15 @@ def write_bundle(
     selection: SelectedEpisode,
     output_dir: Path,
     pin_generated_at: str | None = None,
+    provenance: CampaignProvenance | None = None,
 ) -> dict[str, Any]:
     """Write a trace episode bundle for one selected episode."""
     derived = derive_trace_rows(episode_record)
+    campaign = provenance or CampaignProvenance()
 
     metadata = {
         "schema_version": "issue-4848-exemplar-trace.v1",
-        "issue": "https://github.com/ll7/robot_sf_ll7/issues/4848",
+        "issue": campaign.issue_url,
         "claim_boundary": (
             "exemplar trace episode from retained campaign data; "
             "illustrative group-crossing interaction only; "
@@ -298,8 +297,11 @@ def write_bundle(
         ),
         "generated_at_utc": pin_generated_at or datetime.now(UTC).isoformat(),
         "git_commit": _git_commit(),
-        "campaign_id": "issue4206_trace_capable_h600_rerun_20260704",
-        "campaign_job": "13334",
+        "source_commit": campaign.source_commit,
+        "campaign_id": campaign.campaign_id,
+        "campaign_job": campaign.campaign_job,
+        "release_tag": campaign.release_tag,
+        "config_sha256": campaign.config_sha256,
         "planner": selection.planner,
         "scenario_id": selection.scenario_id,
         "seed": selection.seed,
@@ -338,11 +340,12 @@ def write_bundle(
 def _write_readme(output_dir: Path, metadata: dict[str, Any]) -> None:
     """Write the human-facing evidence bundle README."""
     date = extract_marker_date(metadata)
-    readme = f"""{review_marker("robot_sf#4848", marker_date=date)}
-# Issue #4848 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
+    issue_number = metadata["issue"].rstrip("/").rsplit("/", 1)[-1]
+    readme = f"""{review_marker(f"robot_sf#{issue_number}", marker_date=date)}
+# Issue #{issue_number} Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
 
 Plain-language summary: this directory contains one exemplar trace episode from the
-retained `issue4206_trace_capable_h600_rerun_20260704` campaign (job 13334).
+retained `{metadata["campaign_id"]}` campaign (job {metadata["campaign_job"]}).
 It is an illustrative group-crossing interaction episode and does not establish a
 statistical benchmark or dissertation claim.
 
@@ -367,6 +370,9 @@ statistical benchmark or dissertation claim.
 - Selection mode: `{metadata["selection_mode"]}`
 - Selection metric: `{metadata["selection_metric"]} = {metadata["selection_metric_value"]}`
 - Git commit at generation: `{metadata["git_commit"]}`
+- Source commit: `{metadata["source_commit"] or "not specified"}`
+- Release tag: `{metadata["release_tag"] or "not specified"}`
+- Config SHA-256: `{metadata["config_sha256"] or "not specified"}`
 
 ## Claim Boundary
 
@@ -454,6 +460,7 @@ def _process_planner(
     campaign_root: Path,
     output_dir: Path,
     pin_generated_at: str | None = None,
+    provenance: CampaignProvenance | None = None,
 ) -> tuple[list[SelectedEpisode], dict[str, Any] | None]:
     """Process one planner: read episodes, select exemplars, write bundles."""
     if not campaign_root.is_dir():
@@ -490,6 +497,7 @@ def _process_planner(
             selection=sel,
             output_dir=bundle_dir,
             pin_generated_at=pin_generated_at,
+            provenance=provenance,
         )
         if first_metadata is None:
             first_metadata = metadata
@@ -538,6 +546,11 @@ def main() -> int:
             "For deterministic re-runs only; do not use wall-clock time."
         ),
     )
+    parser.add_argument("--campaign-id", default="issue4206_trace_capable_h600_rerun_20260704")
+    parser.add_argument("--campaign-job", default="13334")
+    parser.add_argument("--source-commit", default=None)
+    parser.add_argument("--release-tag", default=None)
+    parser.add_argument("--config-sha256", default=None)
     args = parser.parse_args()
 
     repo_root = _repo_root()
@@ -547,6 +560,13 @@ def main() -> int:
     output_dir = args.output_dir
     if not output_dir.is_absolute():
         output_dir = repo_root / output_dir
+    provenance = CampaignProvenance(
+        campaign_id=args.campaign_id,
+        campaign_job=args.campaign_job,
+        source_commit=args.source_commit,
+        release_tag=args.release_tag,
+        config_sha256=args.config_sha256,
+    )
 
     try:
         all_selections: list[SelectedEpisode] = []
@@ -557,6 +577,7 @@ def main() -> int:
                 campaign_root,
                 output_dir,
                 pin_generated_at=args.pin_generated_at,
+                provenance=provenance,
             )
             all_selections.extend(selections)
             if bundle_metadata is None and metadata is not None:

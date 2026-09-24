@@ -63,6 +63,11 @@ and does not establish that the merge succeeded or authorize a retry.
 Before treating CI or targeted tests as sufficient, compare the PR against the linked issue,
 design note, PR body, changed behavior, tests, docs, and stated claims.
 
+For issue-linked PRs, inspect the linked issue's fresh native Parent/Blocked by/Blocking state.
+Issue mentions and PR `Closes`/`Refs` entries do not establish dependency edges. Relationship writes
+belong to the owning writable worktree; review worktrees only inspect and report drift. See
+[Native GitHub Issue Relationships](context/issue_relationships.md).
+
 Reviewers should explicitly classify the result:
 
 - `aligned`: implementation behavior, tests, docs, and claims satisfy the intended design or issue

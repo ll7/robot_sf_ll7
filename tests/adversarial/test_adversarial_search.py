@@ -2978,7 +2978,7 @@ def test_unknown_certificate_remains_searchable_but_stress_only(
     fake_module.certify_scenario_file = lambda *_args, **_kwargs: [certificate]
     fake_module.certificate_to_dict = lambda _certificate: {
         "classification": "unknown",
-        "benchmark_eligibility": None,
+        "benchmark_eligibility": "stress_only",
         "reasons": ["planner error"],
     }
     monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
@@ -2989,7 +2989,28 @@ def test_unknown_certificate_remains_searchable_but_stress_only(
 
     assert status.passed
     assert status.details["certificates"][0]["classification"] == "unknown"
-    assert status.details["certificates"][0]["benchmark_eligibility"] is None
+    assert status.details["certificates"][0]["benchmark_eligibility"] == "stress_only"
+
+
+def test_unknown_certificate_without_eligibility_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unknown class without its required eligibility cannot enter search."""
+    fake_module = types.ModuleType("robot_sf.scenario_certification")
+    fake_module.certify_scenario_file = lambda *_args, **_kwargs: [object()]
+    fake_module.certificate_to_dict = lambda _certificate: {
+        "classification": "unknown",
+        "benchmark_eligibility": None,
+        "reasons": ["incomplete certificate"],
+    }
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
+
+    status = certification.certify_candidate(
+        _candidate(9), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+
+    assert not status.passed
+    assert status.status == "failed"
 
 
 def test_objective_registry_and_fallback_scoring(

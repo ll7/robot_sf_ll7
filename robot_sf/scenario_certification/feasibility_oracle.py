@@ -35,6 +35,7 @@ issue #3484 diagnostics and the static MAPF oracle do not provide.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
@@ -437,6 +438,7 @@ def build_issue_5574_feasibility_report(  # noqa: C901
     if any(radius >= radii[0] for radius in radii[1:]):
         raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
 
+    source_artifact_sha256 = _file_sha256(source)
     scenarios = load_scenarios(source)
     by_id: dict[str, Mapping[str, Any]] = {}
     for scenario in scenarios:
@@ -466,9 +468,16 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         )
         cell = envelope_sensitivity_verdict_to_dict(verdict, issue="5574")
         cell["scenario_manifest"] = source.as_posix()
+        cell["source_artifact_sha256"] = source_artifact_sha256
         cell["rollout_algo"] = rollout_algo
         cell["rollout_seed"] = selected_seed
         cells.append(cell)
+
+    source_artifact_identity_stable = (
+        source_artifact_sha256 is not None and source_artifact_sha256 == _file_sha256(source)
+    )
+    for cell in cells:
+        cell["source_artifact_identity_stable"] = source_artifact_identity_stable
 
     return {
         "schema_version": ISSUE_5574_REPORT_SCHEMA,
@@ -476,11 +485,29 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
         "scenario_manifest": source.as_posix(),
+        "source_artifact_sha256": source_artifact_sha256,
+        "source_artifact_identity_stable": source_artifact_identity_stable,
         "scenario_ids": list(requested_ids),
         "envelope_radii_m": list(radii),
         "rollout_algo": rollout_algo,
         "cells": cells,
     }
+
+
+def _file_sha256(path: Path) -> str | None:
+    """Hash one oracle source manifest.
+
+    Returns:
+        SHA-256 digest, or ``None`` if the source becomes unavailable.
+    """
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
 
 
 def annotate_zero_completion_cells(

@@ -159,6 +159,7 @@ class QDArchiveCell:
     certification_status: str
     scenario_yaml_path: str | None = None
     bundle_path: str | None = None
+    scenario_admissibility: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable cell payload."""
@@ -171,6 +172,7 @@ class QDArchiveCell:
             "certification_status": self.certification_status,
             "scenario_yaml_path": self.scenario_yaml_path,
             "bundle_path": self.bundle_path,
+            "scenario_admissibility": self.scenario_admissibility,
         }
 
 
@@ -201,6 +203,8 @@ class QDArchive:
         if evaluation.objective_value is None or not math.isfinite(
             float(evaluation.objective_value)
         ):
+            return False
+        if _scenario_admissibility_rejects(evaluation):
             return False
         cell = self.grid.cell_index(descriptor)
         if cell is None:
@@ -236,6 +240,7 @@ class QDArchive:
             bundle_path=(
                 evaluation.bundle_path.as_posix() if evaluation.bundle_path is not None else None
             ),
+            scenario_admissibility=evaluation.scenario_admissibility,
         )
         return True
 
@@ -358,6 +363,7 @@ class QDSearchResult:
     archive: QDArchive
     num_evaluated: int
     num_admitted: int
+    num_admissibility_rejected: int = 0
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable result payload."""
@@ -365,6 +371,7 @@ class QDSearchResult:
         payload["search_summary"] = {
             "num_evaluated": self.num_evaluated,
             "num_admitted": self.num_admitted,
+            "num_admissibility_rejected": self.num_admissibility_rejected,
         }
         return payload
 
@@ -400,24 +407,27 @@ def run_map_elites(
     )
     if not active_emitters:
         raise ValueError("emitters must contain at least one emitter")
-    if archive is None:
-        archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
-    elif (
-        archive.grid != config.grid or archive.require_certification != config.require_certification
-    ):
-        raise ValueError("archive grid and certification policy must match QDSearchConfig")
+    archive = _resolve_archive(config, archive)
 
     num_evaluated = 0
     num_admitted = 0
+    num_admissibility_rejected = 0
 
     for index in range(config.budget):
         emitter = active_emitters[index % len(active_emitters)]
         candidate = emitter.sample()
-        evaluation = evaluator(config, candidate)
-        if evaluation.objective_value is None:
-            score = objective_fn(evaluation)
-            evaluation = evaluation.with_objective(score)
         num_evaluated += 1
+        evaluation, admissibility_rejected = _evaluate_qd_candidate(
+            config=config,
+            candidate=candidate,
+            evaluator=evaluator,
+            objective_fn=objective_fn,
+        )
+        if admissibility_rejected:
+            num_admissibility_rejected += 1
+            for active_emitter in active_emitters:
+                _observe(active_emitter, evaluation)
+            continue
 
         cert_status = (
             certifier(candidate) if certifier is not None else evaluation.certification_status
@@ -442,7 +452,39 @@ def run_map_elites(
         archive=archive,
         num_evaluated=num_evaluated,
         num_admitted=num_admitted,
+        num_admissibility_rejected=num_admissibility_rejected,
     )
+
+
+def _resolve_archive(config: QDSearchConfig, archive: QDArchive | None) -> QDArchive:
+    """Create a matching archive or reject a caller-supplied incompatible one."""
+    if archive is None:
+        return QDArchive(grid=config.grid, require_certification=config.require_certification)
+    if archive.grid != config.grid or archive.require_certification != config.require_certification:
+        raise ValueError("archive grid and certification policy must match QDSearchConfig")
+    return archive
+
+
+def _evaluate_qd_candidate(
+    *,
+    config: QDSearchConfig,
+    candidate: CandidateSpec,
+    evaluator: QDEvaluator,
+    objective_fn: Any,
+) -> tuple[CandidateEvaluation, bool]:
+    """Evaluate one QD candidate without scoring an explicit admissibility exclusion."""
+    evaluation = evaluator(config, candidate)
+    if _scenario_admissibility_rejects(evaluation):
+        return evaluation, True
+    if evaluation.objective_value is None:
+        evaluation = evaluation.with_objective(objective_fn(evaluation))
+    return evaluation, False
+
+
+def _scenario_admissibility_rejects(evaluation: CandidateEvaluation) -> bool:
+    """Recognize only the helper's explicit pre-evaluation exclusion disposition."""
+    payload = evaluation.scenario_admissibility
+    return isinstance(payload, dict) and payload.get("search_disposition") == "reject"
 
 
 def _default_emitters(search_space: SearchSpaceConfig, *, seed: int) -> list[QDEmitter]:

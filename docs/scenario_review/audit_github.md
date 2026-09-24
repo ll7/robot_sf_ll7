@@ -37,6 +37,17 @@ time-of-check-to-time-of-use (TOCTOU) race on behalf of a live adapter. The supp
 fake provider only; they do not require
 credentials or mutate GitHub.
 
+The REST adapter's callable canonical-revision create and issue-body update seams report an
+unsupported capability before constructing a mutation request. `GitHubSync` records that pre-write
+boundary as `unavailable` with `remote_write: none` and a failed outbox entry. The authenticated
+service releases the reserved issue-write unit, so its durable issue-write usage is unchanged. This
+classification applies only while no mutation request has begun. After a create `POST` begins, an
+unreadable outcome or incomplete marker read remains `ambiguous` and consumes the reserved
+issue-write unit. If complete exact-marker readback confirms that the issue was accepted, the result
+is `reconciled` with `remote_write: applied` and still consumes that unit. A known existing canonical
+issue still follows the append-only comment path; the create-capability guard does not disable
+revision comments.
+
 `AuditService.sync_finding` is the service-owned entry point. It accepts a finding ID rather than a
 caller-owned finding object, reads the canonical `FindingStore` revision, authenticates the session
 token, checks the exact selection/source context and repository allowlist, and reserves the finite
@@ -92,8 +103,10 @@ the local receipt is retained and downgraded to a conflict; it is never silently
    An expected canonical finding revision is checked before the provider is allowed to mutate. A
    canonical-linked write without the provider reservation seam fails closed rather than creating
    an orphan issue after a revision race.
-2. A transport failure during create is recorded as `ambiguous`. Reopening the outbox searches
-   again; an incomplete search or an unconfirmed marker never authorizes a blind retry.
+2. A transport failure during create is reconciled as `applied` only when complete exact-marker
+   readback confirms the created issue; that confirmed write is charged. Otherwise it remains
+   `ambiguous`. Reopening the outbox searches again; an incomplete search or an unconfirmed marker
+   never authorizes a blind retry.
 3. More than one matching marker, a malformed marker, marker-shaped finding text, a
    repository/finding mismatch, or a changed auditor-owned block is retained as a visible conflict
    (user text is escaped before a create).

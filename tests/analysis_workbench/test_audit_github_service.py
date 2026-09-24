@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pytest
 
@@ -14,10 +16,15 @@ from robot_sf.analysis_workbench.audit_contracts import Finding
 from robot_sf.analysis_workbench.audit_findings import add_candidate, new_finding
 from robot_sf.analysis_workbench.audit_github import (
     AUDITOR_BLOCK_START,
+    GitHubCapabilityUnavailable,
     GitHubConflictError,
     GitHubIssue,
     SearchResult,
     render_finding_issue,
+)
+from robot_sf.analysis_workbench.audit_github_rest import (
+    GitHubRESTProvider,
+    HttpResponse,
 )
 from robot_sf.analysis_workbench.audit_mcp import (
     AuditMCPDispatcher,
@@ -264,6 +271,198 @@ def test_service_sync_uses_canonical_finding_and_durable_replay(tmp_path: Path) 
         assert replay.status == "committed"
         assert replay.operation is not None and replay.operation.replayed
         assert len(provider.create_calls) == 1
+    finally:
+        service.close()
+
+
+def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
+    tmp_path: Path,
+) -> None:
+    class NoPostHTTP:
+        """Injected REST transport proving the unsupported path is read-only."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, body, timeout
+            self.calls.append((method, url))
+            assert method == "GET"
+            return HttpResponse(
+                200,
+                {"total_count": 0, "incomplete_results": False, "items": []},
+            )
+
+    http = NoPostHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, finding, revision, _provider = _setup(tmp_path, provider=provider)
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-unsupported-create",
+        )
+
+        assert result.status == "unavailable"
+        assert result.value is not None and result.value.status == "unavailable"
+        assert result.value.remote_write == "none"
+        assert result.value.outbox is not None
+        assert result.value.outbox.state == "failed"
+        assert [method for method, _url in http.calls] == ["GET"]
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+    finally:
+        service.close()
+
+
+def _respond_with_posted_issue(issue: dict[str, Any]) -> HttpResponse:
+    return HttpResponse(200, issue)
+
+
+def _timeout_posted_issue_readback(_issue: dict[str, Any]) -> HttpResponse:
+    raise TimeoutError("issue reread timed out after marker recovery")
+
+
+@pytest.mark.parametrize(
+    (
+        "persist_post",
+        "timeout_issue_get",
+        "expected_result_status",
+        "expected_value_status",
+        "expected_remote_write",
+        "expected_outbox_state",
+    ),
+    [
+        (False, False, "unavailable", "ambiguous", "ambiguous", "ambiguous"),
+        (True, False, "committed", "reconciled", "applied", "succeeded"),
+        (True, True, "unavailable", "ambiguous", "ambiguous", "ambiguous"),
+    ],
+)
+def test_service_rest_post_timeout_is_accounted_after_readback(
+    tmp_path: Path,
+    persist_post: bool,
+    timeout_issue_get: bool,
+    expected_result_status: str,
+    expected_value_status: str,
+    expected_remote_write: str,
+    expected_outbox_state: str,
+) -> None:
+    issue_get_handler = {
+        False: _respond_with_posted_issue,
+        True: _timeout_posted_issue_readback,
+    }[timeout_issue_get]
+
+    class PostTimeoutHTTP:
+        """Inject a lost POST response and an optional issue-readback timeout."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
+            self.issue_get_handler = issue_get_handler
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, timeout
+            self.calls.append((method, url))
+            path = urlparse(url).path
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                if persist_post:
+                    number = 17
+                    self.issue = {
+                        "number": number,
+                        "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                        "title": payload["title"],
+                        "body": payload["body"],
+                        "labels": [{"name": label} for label in payload["labels"]],
+                        "state": "open",
+                        "comments": 0,
+                        "updated_at": "2026-09-23T00:00:00Z",
+                    }
+                raise TimeoutError("response lost after POST began")
+            assert method == "GET"
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return self.issue_get_handler(self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
+
+    class RevisionAwareRESTProvider(GitHubRESTProvider):
+        """Injected reservation seam delegating the mutation to the REST adapter."""
+
+        def create_issue_with_finding_revision(
+            self,
+            repository: str,
+            *,
+            finding_id: str,
+            expected_finding_revision: int,
+            title: str,
+            body: str,
+            labels: tuple[str, ...],
+        ) -> Any:
+            assert finding_id
+            assert expected_finding_revision >= 0
+            return self.create_issue(repository, title=title, body=body, labels=labels)
+
+    http = PostTimeoutHTTP()
+    provider = RevisionAwareRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, finding, revision, _provider = _setup(tmp_path, provider=provider)
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-post-timeout",
+        )
+
+        assert result.status == expected_result_status
+        assert result.value is not None and result.value.status == expected_value_status
+        assert result.value.remote_write == expected_remote_write
+        assert result.value.outbox is not None
+        assert result.value.outbox.state == expected_outbox_state
+        assert service._github_outbox is not None
+        claim = service._github_outbox.get_claim(REPOSITORY, finding.finding_id)
+        assert claim is not None and claim.state == expected_outbox_state
+        assert [method for method, _url in http.calls].count("POST") == 1
+        assert service.get_session(session).usage.issue_writes == 1
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
     finally:
         service.close()
 
@@ -925,6 +1124,9 @@ def test_service_reconciles_timeout_after_create_without_duplicate_issue(tmp_pat
         )
         assert first.status == "unavailable"
         assert first.value is not None and first.value.status == "ambiguous"
+        assert first.value.remote_write == "ambiguous"
+        assert first.value.outbox is not None and first.value.outbox.state == "ambiguous"
+        assert service.get_session(session).usage.issue_writes == 1
         assert len(provider.create_calls) == 1
 
         provider.search_complete = True
@@ -1100,6 +1302,58 @@ def test_service_does_not_charge_update_conflict_rejected_before_provider_send(
         assert result.value.remote_write == "none"
         assert provider.update_calls == []
         assert service.get_session(session).usage.issue_writes == 0
+    finally:
+        service.close()
+
+
+def test_service_reports_unsupported_update_without_remote_write_or_charge(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    seed_finding = add_candidate(new_finding("service-finding", "turning symptom"), "episode-1")
+    rendered = render_finding_issue(seed_finding, repository=REPOSITORY)
+    provider = ServiceFakeProvider(
+        issues=[
+            GitHubIssue(
+                repository=REPOSITORY,
+                number=100,
+                url=f"https://github.com/{REPOSITORY}/issues/100",
+                title=rendered.title,
+                body=rendered.body,
+                updated_at="100",
+            )
+        ]
+    )
+    service, session, finding, _revision, provider = _setup(tmp_path, provider)
+    try:
+        stored = service.store.get(finding.finding_id)
+        assert stored is not None and isinstance(stored.record, Finding)
+        changed = service.finding_store.update(
+            replace(stored.record, title="update unavailable before provider send"),
+            operation_id="update-capability-finding",
+            expected_revision=stored.revision,
+            actor="human",
+        )
+
+        def reject_before_send(*_args: Any, **_kwargs: Any) -> GitHubIssue:
+            raise GitHubCapabilityUnavailable("issue-body update is unsupported")
+
+        monkeypatch.setattr(provider, "update_issue_with_finding_revision", reject_before_send)
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=changed.revision,
+            operation_id="update-capability-unavailable",
+        )
+
+        assert result.status == "unavailable"
+        assert result.value is not None and result.value.status == "unavailable"
+        assert result.value.remote_write == "none"
+        assert result.value.outbox is not None and result.value.outbox.state == "failed"
+        assert provider.update_calls == []
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
     finally:
         service.close()
 

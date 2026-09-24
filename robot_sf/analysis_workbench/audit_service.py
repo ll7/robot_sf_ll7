@@ -7421,6 +7421,11 @@ class AuditService:
                     self._assert_source(target, expected_source_revision=operation_source_revision)
                     self._bind_context(target, operation_context)
                     provider_started = True
+                    from robot_sf.analysis_workbench.audit_github import (  # noqa: PLC0415
+                        GitHubPreflightConflict,
+                        GitHubPreflightValidationError,
+                    )
+
                     try:
                         provider_result = syncer.sync(
                             checked_repository,
@@ -7431,6 +7436,13 @@ class AuditService:
                             retry_ambiguous=retry_ambiguous,
                             worker_id=checked_worker_id,
                         )
+                    except (GitHubPreflightConflict, GitHubPreflightValidationError) as exc:
+                        # Canonical finding preflight runs after the service
+                        # reservation/lease but before any provider request.
+                        # Release the reserved unit through normal settlement
+                        # and retain the conflict as the durable service receipt.
+                        provider_started = False
+                        raise AuditContextConflict(str(exc)) from exc
                     except BaseException as exc:
                         post_send_reason = self._github_post_send_conflict(
                             target,

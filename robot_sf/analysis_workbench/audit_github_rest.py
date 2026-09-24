@@ -51,7 +51,8 @@ AUDITOR_REQUEST_MARKER_PREFIX = "<!-- robot_sf_audit_request:v1 "
 AUDITOR_REQUEST_MARKER_SUFFIX = " -->"
 
 _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-_SAFE_MARKER_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+_SAFE_MARKER_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+_SAFE_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _REQUEST_MARKER_RE = re.compile(
     r"^<!-- robot_sf_audit_request:v1 "
@@ -194,7 +195,7 @@ def auditor_request_marker(request_digest_or_id: str) -> str:
         raise GitHubRestValidationError("request marker identity must be text")
     if _DIGEST_RE.fullmatch(request_digest_or_id):
         field = f"request_digest={request_digest_or_id}"
-    elif _SAFE_MARKER_VALUE_RE.fullmatch(request_digest_or_id):
+    elif _SAFE_REQUEST_ID_RE.fullmatch(request_digest_or_id):
         field = f"request_id={request_digest_or_id}"
     else:
         raise GitHubRestValidationError("request marker identity is malformed")
@@ -678,11 +679,41 @@ class GitHubRESTProvider:
 
         self.update_issue(*_args, **_kwargs)
 
-    def create_issue_with_finding_revision(self, *_args: Any, **_kwargs: Any) -> None:
-        """Reject canonical finding-revision reservation not owned by REST."""
+    def create_issue_with_finding_revision(
+        self,
+        repository: str,
+        *,
+        finding_id: str,
+        expected_finding_revision: int,
+        title: str,
+        body: str,
+        labels: Sequence[str],
+    ) -> GitHubIssue:
+        """Create the immutable issue after validating a service reservation.
 
-        raise GitHubRestUnsupportedError(
-            "canonical finding-revision reservation is not implemented by this adapter"
+        The authenticated service/FindingStore owns the canonical revision
+        reservation; ordinary GitHub REST cannot atomically compare that local
+        revision with an issue create.  This seam therefore validates the
+        reservation envelope, performs exactly one immutable ``POST`` through
+        :meth:`create_issue`, and leaves any provider-side CAS claim explicit
+        to a stronger adapter.
+        """
+
+        if not isinstance(finding_id, str) or _SAFE_MARKER_VALUE_RE.fullmatch(finding_id) is None:
+            raise GitHubRestValidationError("finding_id must be non-empty marker-safe text")
+        if (
+            isinstance(expected_finding_revision, bool)
+            or not isinstance(expected_finding_revision, int)
+            or expected_finding_revision < 0
+        ):
+            raise GitHubRestValidationError(
+                "expected_finding_revision must be a non-negative integer"
+            )
+        return self.create_issue(
+            repository,
+            title=title,
+            body=body,
+            labels=labels,
         )
 
     def update_issue_with_finding_revision(self, *_args: Any, **_kwargs: Any) -> None:

@@ -17,6 +17,9 @@ aliases:
 
 # Issue Splitter
 
+Use `docs/context/issue_relationships.md` for the native parent/dependency contract. The issue
+body describes child scope; GitHub's native Parent and Blocked by links carry the graph.
+
 ## When to use
 
 Use this skill when an open parent, epic, decision, or research issue is too broad to implement
@@ -77,10 +80,9 @@ The batch summary must report:
 
 The child body must include these fields or equivalent headings:
 
-- `Relationships`: mirror the parent and any concrete blockers using the canonical block from
-  `docs/context/issue_relationships.md`; set unrelated fields to `none`.
-- `Parent issue`: link the parent issue, and name whether the child is extracted from an epic,
-  decision, research, or workflow parent.
+- Set the child's native Parent issue link to the source issue and any concrete native Blocked by
+  links after creation. Do not duplicate relationship values in the child body.
+- Name whether the child is extracted from an epic, decision, research, or workflow parent.
 - `Scope`: the smallest concrete behavior, docs change, validation run, fixture, or analysis that
   can close independently.
 - `Non-goals`: parent work deliberately excluded from the child.

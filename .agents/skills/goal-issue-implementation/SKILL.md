@@ -485,8 +485,8 @@ Route remaining issues by their blocker:
 1. Build a live label-based queue and select one issue or an orchestrator-authorized bounded batch
    of non-overlapping issues (`gh-issue-sequencer` output or explicit user targets).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
-   duplicate branch/PR risk before branching. Confirm the canonical `## Relationships` block and
-   native Parent/Blocked by/Blocking state; treat legacy mentions and `Relates to` as review-only.
+   duplicate branch/PR risk before branching. Read native Parent/Blocked by/Blocking state; use
+   body and comment context only as evidence for a separately reviewed relationship candidate.
 3. Acquire the cross-machine issue claim before branching:
 
    ```bash
@@ -537,8 +537,8 @@ Route remaining issues by their blocker:
      merely because tests are green. Self-review never counts as independent merge-review
      authority.
 10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
-    Mirror the reviewed issue relationship state in the PR's `## Issue Relationship Mirror` section;
-    a `Closes`/`Refs` coverage reference is not itself a graph edge.
+    Keep `Closes`/`Refs` coverage references in the PR body; native relationship state remains on
+    the linked issue and is not copied into the PR body.
 11. Open the PR and keep the transient claim while the PR is open. Release it only after terminal
     delivery, with an explicit reason:
     ```bash

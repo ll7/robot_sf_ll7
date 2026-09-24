@@ -37,16 +37,18 @@ time-of-check-to-time-of-use (TOCTOU) race on behalf of a live adapter. The supp
 fake provider only; they do not require
 credentials or mutate GitHub.
 
-The REST adapter's callable canonical-revision create and issue-body update seams report an
-unsupported capability before constructing a mutation request. `GitHubSync` records that pre-write
-boundary as `unavailable` with `remote_write: none` and a failed outbox entry. The authenticated
-service releases the reserved issue-write unit, so its durable issue-write usage is unchanged. This
-classification applies only while no mutation request has begun. After a create `POST` begins, an
-unreadable outcome or incomplete marker read remains `ambiguous` and consumes the reserved
-issue-write unit. If complete exact-marker readback confirms that the issue was accepted, the result
-is `reconciled` with `remote_write: applied` and still consumes that unit. A known existing canonical
-issue still follows the append-only comment path; the create-capability guard does not disable
-revision comments.
+The REST adapter's canonical-revision initial-create seam validates the local reservation envelope,
+then performs one immutable issue `POST`; it never follows creation with a body `PATCH`. The
+authenticated service and `GitHubSync` validate the canonical finding revision before crossing the
+provider mutation boundary. A deterministic local revision or finding-link conflict is retained as
+a durable service conflict, releases the reserved issue-write unit, and leaves issue-write usage
+unchanged. This local preflight/accounting contract does not atomically bind the local revision to
+GitHub. After a create `POST` begins, an unreadable outcome or incomplete marker read remains
+`ambiguous` and consumes the reserved issue-write unit. If complete exact-marker readback confirms
+that the issue was accepted, the result is `reconciled` with `remote_write: applied` and still
+consumes that unit. A reconciled append-comment result is also charged as a possible remote write.
+Issue-body update seams remain unsupported by the REST adapter; a known existing canonical issue
+uses the append-only comment path instead.
 
 `AuditService.sync_finding` is the service-owned entry point. It accepts a finding ID rather than a
 caller-owned finding object, reads the canonical `FindingStore` revision, authenticates the session
@@ -141,10 +143,16 @@ must provide complete marker and comment pagination/readback, authenticated repo
 canonical revision reservation, and explicit handling for provider transport uncertainty. Mutable
 issue-body routes still require a provider-side CAS/ETag (or equivalent atomic reservation); a
 read-then-PATCH sequence is not a CAS. The append-only fake-provider protocol does not establish
-provider-side exactly-once delivery, cross-system CAS, or physical provider write caps. Those live
-CAS/exactly-once/provider-cap gates remain unresolved and are not claimed by this slice. No live
-GitHub application programming interface (API) write or mutation-based capability probe is part of
-the offline validation below.
+provider-side exactly-once delivery, cross-system CAS, or physical provider write caps. These are
+claim-specific live gates, not prerequisites for the bounded local preflight, immutable-create,
+append-only, and finite local-accounting contract described above. Do not claim atomicity between
+the local journal and GitHub or exactly-once delivery; incomplete pagination, duplicate markers,
+unreconciled transport ambiguity, or link conflicts must remain visible and block unsafe retry.
+`local_accounting` is a finite local ledger and does not enforce a physical provider ceiling. A
+`strict_provider_ceiling` claim requires a verified finite provider cap and must refuse when that
+cap is absent; offline mode remains provider-free and read-only. No live GitHub application
+programming interface (API) write or mutation-based capability probe is part of the offline
+validation below.
 
 ## Offline fake-provider route
 

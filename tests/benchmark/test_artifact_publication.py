@@ -756,6 +756,8 @@ def test_release_bundle_binds_all_snqi_v2_spec_assets(
         json.dumps({"metrics": metrics, "provenance": {"citation_path": "CITATION.cff"}}),
     )
     _write(run_dir / "release" / "release_result.json", "{}\n")
+    for report in artifact_publication_module._SNQI_V2_REQUIRED_REPORTS:
+        _write(run_dir / report, "{}\n" if report.endswith(".json") else "# Report\n")
     result = export_publication_bundle(run_dir, tmp_path / "publication", bundle_name="v2_bundle")
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     for role, name in zip(("weights", "anchors", "family"), asset_names, strict=True):
@@ -778,6 +780,16 @@ def test_release_bundle_binds_all_snqi_v2_spec_assets(
         result.bundle_dir / "payload", manifest, violations=violations
     )
     assert any("disagrees with release manifest" in item for item in violations)
+
+    for report in ("reports/robot_force_validation.json", "reports/robot_force_validation.md"):
+        source = run_dir / report
+        original = source.read_text(encoding="utf-8")
+        source.unlink()
+        with pytest.raises(ValueError, match=f"missing required reports: {report}"):
+            export_publication_bundle(
+                run_dir, tmp_path / "publication", bundle_name="v2_missing_force_report"
+            )
+        _write(source, original)
 
 
 def test_release_bundle_rejects_partial_snqi_v2_spec(tmp_path: Path) -> None:

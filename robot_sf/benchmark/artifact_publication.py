@@ -68,6 +68,11 @@ _SNQI_V2_ASSETS = {
     "snqi_v2_anchors": ("anchors.v2.0.json", "snqi_v2_anchors_path", "snqi_v2_anchors_sha256"),
     "snqi_v2_family": ("family.v2.0.yaml", "snqi_v2_family_path", "snqi_v2_family_sha256"),
 }
+_SNQI_V2_REQUIRED_REPORTS = tuple(
+    f"reports/{name}.{suffix}"
+    for name in ("snqi_v2_diagnostics", "snqi_v2_family", "robot_force_validation")
+    for suffix in ("json", "md")
+)
 _RELEASE_METADATA_NAMESPACE = "release_metadata"
 _REQUIRED_RELEASE_METADATA_ROLES = (
     "release_manifest",
@@ -829,6 +834,18 @@ def _validate_publication_requirements(run_root: Path, selected_files: list[Path
         )
 
 
+def _validate_v2_release_reports(
+    release_metadata: _ReleasePublicationMetadata, selected_files: list[Path]
+) -> None:
+    """Require the declared v2 index and force evidence in a release bundle."""
+    if "snqi_v2_weights" not in release_metadata.files:
+        return
+    selected_set = {path.as_posix() for path in selected_files}
+    missing = sorted(set(_SNQI_V2_REQUIRED_REPORTS) - selected_set)
+    if missing:
+        raise ValueError("SNQI-v2 release bundle missing required reports: " + ", ".join(missing))
+
+
 def _validate_bundle_name(bundle_name: str) -> None:
     """Validate user-provided bundle name for safe output path construction."""
     name_path = Path(bundle_name)
@@ -1477,6 +1494,7 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
     release_metadata = _resolve_release_publication_metadata(run_root)
     if release_metadata is not None:
         _reject_run_local_release_metadata_paths(selected_files)
+        _validate_v2_release_reports(release_metadata, selected_files)
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
     _validate_bundle_name(target_name)

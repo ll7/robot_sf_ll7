@@ -60,6 +60,13 @@ from the copied episode row against its checksum-pinned source row. Only matchin
 replay. If the prior receipt did not contain an episode-output checksum, an otherwise exact
 comparison is retained as `replay_artifact_checksum_unverified`; capturing the current file hash
 establishes custody from that resume onward, not integrity of the original output at run time.
+An `exact_match` also requires an eligible source case, successful and available source/replay
+execution metadata, no nested fallback or degraded marker, matching non-empty planner config
+hashes, and a clean replay checkout at the recorded revision. A resumed attempt whose replay
+directory is missing remains `attempted` and is counted as `replay_artifact_missing_on_resume`;
+the missing artifact does not reset it to `not_attempted`. Legacy receipts without checkout
+cleanliness evidence remain `replay_checkout_cleanliness_unavailable` when their rows otherwise
+match.
 
 ## Replay boundary and failed attempt
 

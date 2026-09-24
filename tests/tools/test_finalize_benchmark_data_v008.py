@@ -282,3 +282,141 @@ def test_publication_does_not_accept_missing_export_artifacts(
         )
     rejected = json.loads((candidate / "release" / "release_result.json").read_text())
     assert rejected["publication_preflight_status"] == "fail"
+
+
+def test_interrupted_copy_never_exposes_accepted_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    candidate = tmp_path / "candidate"
+    original_copy2 = finalizer.shutil.copy2
+
+    def interrupt_snapshot(source: Path, target: Path) -> None:
+        if source == producer / "release" / "release_result.json":
+            raise KeyboardInterrupt
+        original_copy2(source, target)
+
+    monkeypatch.setattr(finalizer.shutil, "copy2", interrupt_snapshot)
+    with pytest.raises(KeyboardInterrupt):
+        finalizer._copy_producer(producer, candidate)
+    partial = tmp_path / "candidate.copying"
+    assert partial.is_dir()
+    assert not (partial / "release" / "release_result.json").exists()
+    assert not candidate.exists()
+
+
+def test_failed_preflight_removes_owned_publication_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    output = finalizer._publication_output(candidate)
+
+    def export(**kwargs: object) -> dict:
+        assert kwargs["output_dir"] == output
+        bundle = output / "candidate_publication_bundle"
+        bundle.mkdir(parents=True, exist_ok=True)
+        archive = output / "candidate_publication_bundle.tar.gz"
+        archive.write_bytes(b"unverified bundle")
+        return {
+            "bundle_dir": str(bundle.relative_to(tmp_path)),
+            "archive_path": str(archive.relative_to(tmp_path)),
+        }
+
+    monkeypatch.setattr(finalizer, "_build_publication_payload", export)
+    monkeypatch.setattr(finalizer, "_record_publication_payload", lambda *args: None)
+    monkeypatch.setattr(finalizer, "_assert_no_historical_release_identity", lambda *args: None)
+    monkeypatch.setattr(
+        finalizer,
+        "_run_publication_preflight",
+        lambda *args: (_ for _ in ()).throw(PublicationPreflightError("force drift")),
+    )
+    manifest = SimpleNamespace(
+        release_tag="benchmark-data-0.0.8",
+        doi="10.5281/zenodo.123456",
+        repository_url="https://example.org/repository",
+    )
+    with pytest.raises(PublicationPreflightError, match="force drift"):
+        finalizer._publish_copy(candidate, original, manifest)
+    assert not output.exists()
+    assert (
+        finalizer._read_mapping(candidate / "release" / "release_result.json")[
+            "release_benchmark_success"
+        ]
+        is False
+    )
+
+    output.mkdir()
+    sentinel = output / "prior.txt"
+    sentinel.write_text("preserve", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="already exists"):
+        finalizer._publish_copy(candidate, original, manifest)
+    assert sentinel.read_text(encoding="utf-8") == "preserve"
+
+
+def test_receipt_write_failure_invalidates_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    candidate = tmp_path / "candidate"
+    baseline = tmp_path / "baseline.tar.gz"
+    baseline.write_bytes(b"predecessor")
+    (tmp_path / "identity.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(finalizer, "load_release_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        finalizer,
+        "verify_resolved_release_identity",
+        lambda _: SimpleNamespace(
+            source_sha=SOURCE_SHA,
+            release_tag="benchmark-data-0.0.8",
+            version_doi="10.5281/zenodo.123456",
+            resolved_manifest_payload=finalizer._read_mapping(
+                producer / "release" / "release_manifest.resolved.json"
+            ),
+        ),
+    )
+
+    def gate(command: list[str], log_path: Path) -> None:
+        _write_json(Path(command[command.index("--output") + 1]), {"status": "pass"})
+        log_path.write_text("pass\n", encoding="utf-8")
+
+    def publish(root: Path, result: dict, manifest: object) -> Path:
+        output = finalizer._publication_output(root)
+        output.mkdir()
+        archive = output / "bundle.tar.gz"
+        archive.write_bytes(b"candidate archive")
+        return archive
+
+    real_write = finalizer._write_json
+
+    def fail_receipt(path: Path, payload: dict) -> None:
+        if path.name.endswith(".finalization_receipt.json"):
+            raise OSError("receipt storage failed")
+        real_write(path, payload)
+
+    monkeypatch.setattr(finalizer, "_run_gate", gate)
+    monkeypatch.setattr(
+        finalizer,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {"status": "valid"},
+    )
+    monkeypatch.setattr(finalizer, "_publish_copy", publish)
+    monkeypatch.setattr(finalizer, "_write_json", fail_receipt)
+    with pytest.raises(OSError, match="receipt storage failed"):
+        finalizer.finalize(
+            producer_root=producer,
+            candidate_root=candidate,
+            resolved_identity=tmp_path / "identity.json",
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+        )
+    result = finalizer._read_mapping(candidate / "release" / "release_result.json")
+    assert result["release_benchmark_success"] is False
+    assert result["finalization_failed_stage"] == "finalization_receipt"
+    assert not finalizer._publication_output(candidate).exists()

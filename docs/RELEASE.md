@@ -123,8 +123,13 @@ The finalizer refuses an already-published producer and checks the frozen
 the 20,160-row predecessor equivalence and robot-force gates, repeats full
 release acceptance on the candidate, then exports and preflights the bundle.
 Failed gates leave the candidate marked invalid and preserve the producer.
-Its sibling `*.finalization_receipt.json` records the source and output hashes;
-promote the archive, both gate reports, gate logs, and receipt to durable
+Its sibling `*.finalization_receipt.json` records the source and output hashes.
+the exported archive stays in a candidate-owned `*.publication_candidate/`
+directory. An archive without the matching finalization receipt is incomplete
+and must not be published, even when an interrupted export left files behind.
+The finalizer refuses an existing candidate publication directory and removes
+only its own export after a caught validation or receipt failure. Promote
+the archive, both gate reports, gate logs, and receipt to durable
 storage before any publication decision. Bundle creation is a reviewable
 candidate step; tagging, Zenodo publication, and DOI creation require the
 author's explicit go recorded on issue #9668. The canonical 0.0.8 campaign

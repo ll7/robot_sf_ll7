@@ -461,11 +461,12 @@ def _build_publication_payload(
     release_tag: str,
     doi: str,
     repository_url: str,
+    output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Export a benchmark publication bundle and return a JSON-safe payload."""
     result = export_publication_bundle(
         campaign_root,
-        get_artifact_category_path("benchmarks") / "publication",
+        output_dir or get_artifact_category_path("benchmarks") / "publication",
         bundle_name=f"{campaign_root.name}_publication_bundle",
         include_videos=False,
         repository_url=repository_url,

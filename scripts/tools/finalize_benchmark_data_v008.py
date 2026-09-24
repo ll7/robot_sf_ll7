@@ -124,6 +124,9 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
     producer_path = candidate_root / "release" / "producer_release_result.json"
     if not producer_path.is_file() or _read_mapping(producer_path) != producer_result:
         raise ValueError("candidate producer result snapshot is missing or changed")
+    publication_output = _publication_output(candidate_root)
+    if publication_output.exists():
+        raise FileExistsError(f"candidate publication output already exists: {publication_output}")
     result = dict(producer_result)
     result.update(
         {
@@ -142,6 +145,7 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
             release_tag=manifest.release_tag,
             doi=manifest.doi,
             repository_url=manifest.repository_url,
+            output_dir=publication_output,
         )
         for _ in range(5):
             result["publication_bundle"] = publication_payload
@@ -152,6 +156,7 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
                 release_tag=manifest.release_tag,
                 doi=manifest.doi,
                 repository_url=manifest.repository_url,
+                output_dir=publication_output,
             )
             if refreshed == publication_payload:
                 break
@@ -177,8 +182,22 @@ def _publish_copy(candidate_root: Path, producer_result: dict[str, Any], manifes
             }
         )
         _write_json(result_path, result)
+        if publication_output.exists():
+            shutil.rmtree(publication_output)
         raise
     return archive
+
+
+def _publication_output(candidate_root: Path) -> Path:
+    """Keep unverified exports in a candidate-owned namespace until receipt exists."""
+    return candidate_root.parent / f"{candidate_root.name}.publication_candidate"
+
+
+def _remove_owned_output(candidate_root: Path) -> None:
+    """Remove only the export namespace reserved for this candidate."""
+    publication_output = _publication_output(candidate_root)
+    if publication_output.exists():
+        shutil.rmtree(publication_output)
 
 
 def _publication_path(payload: dict[str, Any], key: str) -> Path:
@@ -196,7 +215,12 @@ def _publication_path(payload: dict[str, Any], key: str) -> Path:
 def _mark_candidate_failure(candidate_root: Path, stage: str) -> None:
     """Never leave a failed derivative looking like an accepted producer campaign."""
     result_path = candidate_root / "release" / "release_result.json"
-    result = _read_mapping(result_path)
+    source_path = (
+        result_path
+        if result_path.is_file()
+        else (candidate_root / "release" / "producer_release_result.json")
+    )
+    result = _read_mapping(source_path)
     result.update(
         {
             "finalization_status": "fail",
@@ -219,9 +243,17 @@ def _copy_producer(producer_root: Path, candidate_root: Path) -> None:
     staging_root = candidate_root.with_name(f"{candidate_root.name}.copying")
     if staging_root.exists():
         raise FileExistsError(f"incomplete candidate copy already exists: {staging_root}")
-    shutil.copytree(producer_root, staging_root, symlinks=False)
+
+    def exclude_active_result(source: str, names: list[str]) -> set[str]:
+        if Path(source) == producer_root / "release" and "release_result.json" in names:
+            return {"release_result.json"}
+        return set()
+
+    # A partial copy must never contain the producer's accepted result under
+    # the canonical filename, including if copytree is interrupted mid-file.
+    shutil.copytree(producer_root, staging_root, symlinks=False, ignore=exclude_active_result)
     snapshot = staging_root / "release" / "producer_release_result.json"
-    shutil.copy2(staging_root / "release" / "release_result.json", snapshot)
+    shutil.copy2(producer_root / "release" / "release_result.json", snapshot)
     _mark_candidate_failure(staging_root, "incomplete")
     staging_root.rename(candidate_root)
 
@@ -252,6 +284,8 @@ def finalize(
     _require_copyable_producer(producer_root)
     if candidate_root.exists():
         raise FileExistsError(f"publication candidate already exists: {candidate_root}")
+    if _publication_output(candidate_root).exists():
+        raise FileExistsError("candidate publication output already exists")
     _copy_producer(producer_root, candidate_root)
     report_dir = candidate_root / "reports"
     equivalence = report_dir / "metric_equivalence.json"
@@ -313,30 +347,32 @@ def finalize(
             raise ValueError("post-copy full release acceptance failed")
         stage = "publication_bundle"
         archive = _publish_copy(candidate_root, producer_result, manifest)
+        stage = "finalization_receipt"
+        receipt = {
+            "schema_version": "benchmark-data-v008-publication-finalization.v1",
+            "source_sha": expected_source_sha,
+            "resolved_identity_sha256": _sha256(resolved_identity),
+            "baseline_archive_sha256": BASELINE_ARCHIVE_SHA256,
+            "producer_release_result_sha256": _sha256(
+                producer_root / "release" / "release_result.json"
+            ),
+            "candidate_release_result_sha256": _sha256(
+                candidate_root / "release" / "release_result.json"
+            ),
+            "equivalence_report_sha256": _sha256(equivalence),
+            "equivalence_log_sha256": _sha256(equivalence_log),
+            "robot_force_validation_sha256": _sha256(report_dir / "robot_force_validation.json"),
+            "robot_force_log_sha256": _sha256(force_log),
+            "publication_archive_sha256": _sha256(archive),
+            "publication_archive": str(archive),
+        }
+        receipt_path = candidate_root.parent / f"{candidate_root.name}.finalization_receipt.json"
+        _write_json(receipt_path, receipt)
+        return receipt
     except Exception:
         _mark_candidate_failure(candidate_root, stage)
+        _remove_owned_output(candidate_root)
         raise
-    receipt = {
-        "schema_version": "benchmark-data-v008-publication-finalization.v1",
-        "source_sha": expected_source_sha,
-        "resolved_identity_sha256": _sha256(resolved_identity),
-        "baseline_archive_sha256": BASELINE_ARCHIVE_SHA256,
-        "producer_release_result_sha256": _sha256(
-            producer_root / "release" / "release_result.json"
-        ),
-        "candidate_release_result_sha256": _sha256(
-            candidate_root / "release" / "release_result.json"
-        ),
-        "equivalence_report_sha256": _sha256(equivalence),
-        "equivalence_log_sha256": _sha256(equivalence_log),
-        "robot_force_validation_sha256": _sha256(report_dir / "robot_force_validation.json"),
-        "robot_force_log_sha256": _sha256(force_log),
-        "publication_archive_sha256": _sha256(archive),
-        "publication_archive": str(archive),
-    }
-    receipt_path = candidate_root.parent / f"{candidate_root.name}.finalization_receipt.json"
-    _write_json(receipt_path, receipt)
-    return receipt
 
 
 def main() -> int:

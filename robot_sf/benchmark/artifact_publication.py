@@ -2584,6 +2584,50 @@ def _check_snqi_v2_field_consistency(payload_dir: Path) -> dict[str, Any]:
     }
 
 
+def _check_robot_force_report_consistency(payload_dir: Path) -> dict[str, Any]:
+    """Regenerate the v2 force report from cold episode rows and equivalence evidence.
+
+    Returns:
+        Whether the check ran and any deterministic regeneration violations.
+    """
+    violations: list[str] = []
+    metrics = _read_snqi_v2_manifest_metrics(payload_dir, required=True, violations=violations)
+    if not any(str(key).startswith("snqi_v2_") for key in metrics):
+        return {"checked": False, "violations": violations}
+
+    from scripts.analysis.issue_9668_robot_force_validation import (  # noqa: PLC0415
+        _render_markdown,
+        build_report,
+    )
+
+    report_path = payload_dir / "reports" / "robot_force_validation.json"
+    markdown_path = report_path.with_suffix(".md")
+    resolved_path = payload_dir / "release" / "release_manifest.resolved.json"
+    equivalence_path = payload_dir / "reports" / "metric_equivalence.json"
+    try:
+        report = _read_json_file(report_path)
+        resolved = _read_json_file(resolved_path)
+        source = resolved.get("source_sha")
+        if not isinstance(source, str) or not source:
+            raise ValueError("resolved manifest has no source_sha")
+        rows = report.get("episodes")
+        if type(rows) is not int or rows <= 0:
+            raise ValueError("robot-force report has no valid episode count")
+        expected = build_report(
+            payload_dir,
+            expected_source=source,
+            expected_rows=rows,
+            equivalence_report=equivalence_path,
+        )
+        if report != expected:
+            violations.append("robot-force report differs from cold deterministic regeneration")
+        if markdown_path.read_text(encoding="utf-8") != _render_markdown(expected):
+            violations.append("robot-force markdown differs from cold deterministic regeneration")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        violations.append(f"robot-force report cannot be regenerated from bundled rows: {exc}")
+    return {"checked": True, "violations": violations}
+
+
 def _manifest_checksum_mapping(
     manifest_files: list[object],
     *,
@@ -3025,6 +3069,8 @@ def verify_publication_bundle_preflight(
     violations.extend(snqi_evidence.get("violations", []))
     snqi_v2_evidence = _check_snqi_v2_field_consistency(payload_dir)
     violations.extend(snqi_v2_evidence.get("violations", []))
+    robot_force_evidence = _check_robot_force_report_consistency(payload_dir)
+    violations.extend(robot_force_evidence["violations"])
 
     status = "pass" if not violations else "fail"
     report = {
@@ -3043,6 +3089,11 @@ def verify_publication_bundle_preflight(
             **(
                 {"snqi_v2_field_consistency": snqi_v2_evidence}
                 if snqi_v2_evidence["checked"]
+                else {}
+            ),
+            **(
+                {"robot_force_report_consistency": robot_force_evidence}
+                if robot_force_evidence["checked"]
                 else {}
             ),
         },

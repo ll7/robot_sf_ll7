@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from robot_sf.benchmark.artifact_publication import _check_snqi_v2_field_consistency
+from robot_sf.benchmark.artifact_publication import (
+    _check_robot_force_report_consistency,
+    _check_snqi_v2_field_consistency,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -146,3 +149,32 @@ def test_snqi_v2_cold_recomputation_rejects_tampered_family_vector(
     _write_json(path, report)
     result = _check_snqi_v2_field_consistency(payload)
     assert any("weight-family vector 0" in value for value in result["violations"])
+
+
+def test_robot_force_report_cold_check_rejects_resigned_semantic_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checking file digests alone must not bless edited correlations."""
+    payload = tmp_path / "payload"
+    _write_json(
+        payload / "release" / "release_manifest.resolved.json",
+        {"source_sha": "a" * 40, "metrics": {"snqi_v2_weights_path": "weights.json"}},
+    )
+    report_path = payload / "reports" / "robot_force_validation.json"
+    expected = {"episodes": 1, "correlations": [{"spearman_rho": 0.5}]}
+    _write_json(report_path, expected)
+    report_path.with_suffix(".md").write_text("# Expected\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "scripts.analysis.issue_9668_robot_force_validation.build_report",
+        lambda *args, **kwargs: expected,
+    )
+    monkeypatch.setattr(
+        "scripts.analysis.issue_9668_robot_force_validation._render_markdown",
+        lambda report: "# Expected\n",
+    )
+    assert _check_robot_force_report_consistency(payload)["violations"] == []
+    _write_json(report_path, {"episodes": 1, "correlations": [{"spearman_rho": 0.9}]})
+    assert any(
+        "deterministic regeneration" in violation
+        for violation in _check_robot_force_report_consistency(payload)["violations"]
+    )

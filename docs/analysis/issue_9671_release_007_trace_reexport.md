@@ -49,7 +49,8 @@ and logs in durable artifact storage outside Git.
 
 After collection, run `scripts/validation/check_issue_9671_trace_reexport.py` with the exact
 archive, all four episode JSONL files, both diagnostic config files, and both produced
-`campaign_manifest.json` files. Retain each runner-produced
+`campaign_manifest.json` files. The validator accepts the absolute staged config paths recorded by
+those manifests, so the clean checkout can live under any host path. Retain each runner-produced
 `episodes.jsonl.provenance.json` beside its JSONL: the comparator checks its whole-file checksum,
 every row's line, episode, scenario, seed, source, and scenario-parameter hash, then binds the
 producer file to the matching diagnostic campaign directory. The producer's per-arm scenario

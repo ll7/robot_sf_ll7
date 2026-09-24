@@ -77,6 +77,7 @@ def _archive(path: Path, rows: list[dict]) -> None:
 
 
 def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]:
+    frozen_root = tmp_path / "frozen-root"
     configs = {}
     manifests = {}
     digests = {}
@@ -110,7 +111,7 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
                     "scenario_matrix_hash": "test-matrix-hash",
                     "invoked_command": (
                         "python scripts/tools/run_camera_ready_benchmark.py "
-                        f"--config {checker.FROZEN_PUBLIC_ROOT / checker.DIAGNOSTIC_CONFIG[name]} "
+                        f"--config {frozen_root / checker.DIAGNOSTIC_CONFIG[name]} "
                         f"--mode run --campaign-id {checker.CAMPAIGN_ID[name]}"
                     ),
                     "seed_policy": {"resolved_seeds": selected},
@@ -122,6 +123,7 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
 
 
 def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
+    frozen_root = tmp_path / "frozen-root"
     path = tmp_path / "runs" / "ppo__differential_drive" / "episodes.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     for row in rows:
@@ -135,7 +137,7 @@ def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
             "repo_commit": SOURCE_SHA,
             "invocation": (
                 "scripts/tools/run_camera_ready_benchmark.py "
-                f"--config {checker.FROZEN_PUBLIC_ROOT / checker.DIAGNOSTIC_CONFIG['headon_group']} "
+                f"--config {frozen_root / checker.DIAGNOSTIC_CONFIG['headon_group']} "
                 f"--mode run --campaign-id {checker.CAMPAIGN_ID['headon_group']}"
             ),
         },
@@ -219,6 +221,21 @@ def test_reports_mismatch_and_absent_release_row(tmp_path: Path) -> None:
     assert report["comparisons"][1]["trace_interaction_exposure_steps"] == 0
 
 
+def test_rejects_missing_paired_release_row(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [_row(113, "collision", trace=True), _row(114, "collision", trace=True)]
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError, match="required paired release rows are missing"):
+        _check(archive, traces, tmp_path, [113, 114])
+
+
 def test_rejects_parameter_drift(tmp_path: Path) -> None:
     archive = tmp_path / "release.tar.gz"
     _archive(archive, [_row(113, "collision", trace=False)])
@@ -250,6 +267,8 @@ def test_rejects_missing_per_pedestrian_force(tmp_path: Path) -> None:
     ("metadata_key", "metadata_value"),
     [
         ("execution_mode", "fallback"),
+        ("readiness_status", "fallback"),
+        ("availability_status", "not_available"),
         ("planner_runtime", {"fallback_used": True}),
     ],
 )
@@ -327,7 +346,7 @@ def test_rejects_unstaged_config_invocation(tmp_path: Path) -> None:
     traces = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
     manifest = json.loads(manifests["headon_group"].read_text())
     manifest["invoked_command"] = manifest["invoked_command"].replace(
-        str(checker.FROZEN_PUBLIC_ROOT / checker.DIAGNOSTIC_CONFIG["headon_group"]),
+        str(tmp_path / "frozen-root" / checker.DIAGNOSTIC_CONFIG["headon_group"]),
         "configs/benchmarks/issue_9671_trace_headon_group_v007.yaml",
     )
     manifests["headon_group"].write_text(json.dumps(manifest))

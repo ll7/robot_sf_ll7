@@ -368,7 +368,12 @@ run. Its classification is `success`, `no_signal`, or `no_change`, with a
 concise summary and one or more `evidence_artifacts` paths. Every referenced
 path must name an artifact already declared in the receipt and captured at the
 delivered head; the normal digest, exact Git diff, and post-review drift checks
-still apply. Older receipts may omit this object.
+still apply. Terminal-outcome evidence paths must resolve to locally verifiable
+files under the verifier's artifact root so its bytes can be compared with the
+declared digest. Receipts without this optional object retain the existing
+generic `artifacts` path behavior, including URI references; a URI cannot
+satisfy `terminal_outcome.evidence_artifacts` unless a future canonical verifier
+can fetch and hash those bytes. Older receipts may omit this object.
 
 The outcome is surfaced by the existing `admit_completion_receipt` consumer
 inside `closure.completion_receipt.terminal_outcome`, so the goal/issue-close

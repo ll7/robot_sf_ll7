@@ -292,6 +292,100 @@ def test_terminal_outcome_rejects_artifact_captured_at_another_head() -> None:
 
 
 @pytest.mark.parametrize(
+    "remote_uri",
+    [
+        "https://artifacts.example.invalid/evidence.json",
+        "s3://research-artifacts/evidence.json",
+    ],
+)
+def test_terminal_outcome_rejects_remote_artifacts_without_verifiable_bytes(
+    tmp_path: Path, remote_uri: str
+) -> None:
+    """A claimed remote digest cannot satisfy terminal evidence without fetched bytes."""
+    payload = _payload()
+    payload["artifacts"] = [
+        {
+            "path": remote_uri,
+            "schema": "research_evidence.v1",
+            "digest": "a" * 64,
+            "captured_head_sha": HEAD_SHA,
+        }
+    ]
+    payload["terminal_outcome"] = {
+        "schema": TERMINAL_OUTCOME_SCHEMA,
+        "classification": "no_signal",
+        "summary": "The finite search found no qualifying signal.",
+        "evidence_artifacts": [remote_uri],
+    }
+    payload["schema"] = "issue_completion_receipt.v1"
+    payload["receipt_digest"] = compute_receipt_digest(payload)
+
+    verification = verify_receipt_against_git(
+        payload,
+        repo_root=tmp_path,
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+        pr_snapshot={
+            "state": "open",
+            "head": {"sha": HEAD_SHA, "ref": BRANCH},
+            "base": {"sha": BASE_SHA},
+        },
+        git_runner=_git_runner(),
+        artifact_root=tmp_path,
+    )
+    admission = admit_completion_receipt(
+        {"receipt": payload, "verification": verification},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+
+    assert verification["ok"] is False
+    assert any("must be a locally verifiable file" in error for error in verification["errors"])
+    assert admission["eligible"] is False
+
+
+def test_legacy_receipt_without_terminal_outcome_keeps_remote_artifact_compatibility(
+    tmp_path: Path,
+) -> None:
+    """The outcome-specific local verification rule preserves legacy receipts."""
+    payload = _payload()
+    payload["artifacts"] = [
+        {
+            "path": "https://artifacts.example.invalid/legacy-report.json",
+            "schema": "legacy_report.v1",
+            "digest": "b" * 64,
+            "captured_head_sha": HEAD_SHA,
+        }
+    ]
+    receipt = build_receipt(payload)
+
+    verification = verify_receipt_against_git(
+        receipt,
+        repo_root=tmp_path,
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+        pr_snapshot={
+            "state": "open",
+            "head": {"sha": HEAD_SHA, "ref": BRANCH},
+            "base": {"sha": BASE_SHA},
+        },
+        git_runner=_git_runner(),
+        artifact_root=tmp_path,
+    )
+    admission = admit_completion_receipt(
+        {"receipt": receipt, "verification": verification},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+
+    assert "terminal_outcome" not in receipt
+    assert verification["ok"] is True
+    assert admission["eligible"] is True
+
+
+@pytest.mark.parametrize(
     ("validation_status", "criterion_disposition", "reason"),
     [
         ("skipped", "met", "non-passing validation status"),

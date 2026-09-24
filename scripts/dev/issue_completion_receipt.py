@@ -294,6 +294,11 @@ def _validate_terminal_outcome(  # noqa: C901 - schema and exact-head binding ga
     if head_sha is None:
         errors.append("terminal_outcome requires a delivered head SHA")
     for path in evidence:
+        if "://" in path:
+            errors.append(
+                f"terminal_outcome evidence artifact {path!r} must be a locally verifiable file"
+            )
+            continue
         if path not in exact_head_paths:
             errors.append(
                 f"terminal_outcome evidence artifact {path!r} is not declared at the delivered head"

@@ -34,7 +34,8 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9
 
 Rejected admission attempts are persisted in the corpus and cause the import
 command to exit nonzero. The importer binds both current replay JSONL files,
-their provenance, the scenario and route inputs, the archived source record,
+their provenance, the scenario and route inputs, resolved map bytes and map registry,
+the archived source record,
 the historical search source snapshots, and the #9645 accounting packet. It
 checks the packet's outer file inventory and checksum sidecar, compares the
 source-hash receipt with run metadata, and verifies each consumed payload file
@@ -101,6 +102,66 @@ records and import receipt. These rows do not enter `cases`, planner status,
 admission attempts, or exported regression slices. They become admitted cases
 only after the existing exact-replay, input-binding, admissibility, and duplicate
 checks pass.
+
+The imported #9656 source episode JSONL is retained as a path and digest reference; its raw bytes
+are not copied from campaign output into the corpus. A file that remains only in ignored local
+output is not admission evidence. Each candidate records this custody boundary explicitly and
+requires a new replay at the exact current target revision before admission.
+
+## Promote a pending candidate after exact replay
+
+`import-9656-candidates` never runs a simulator and leaves `not_attempted` rows in
+`pending_exact_replay`. Once a candidate has been replayed at the current target revision,
+prepare a complete case record with an explicit admissibility verdict, planner identity,
+discovery objective, source binding, and exact replay receipt. Store the case's scenario,
+route, map, and one-row replay artifacts beneath
+`historical_candidates/<candidate-id>/`; the case record paths must point into that candidate's
+stored directory. Promotion rechecks the source summary and source row, candidate materialization
+digests, scenario and planner configuration correspondence, case admissibility, replay receipt,
+and duplicate identity. Any changed candidate input or metadata is rejected and the candidate stays
+pending. Promotion records an admission attempt and keeps the original #9656 candidate row as
+history. The promoted case also records that the historical source episode bytes were not durably
+archived and that admission relied on the exact-target replay receipt. Promotion does not execute or
+independently authenticate a replay.
+
+The public `create_case_admission_replay_receipt` helper binds an existing one-row episode JSONL
+to the case inputs and selected event/metric projection. Its `artifact_path` is relative to the
+corpus root. The replay revision must exactly equal the target revision; the helper does not run a
+simulator.
+
+```python
+from robot_sf.adversarial.counterexample_corpus import (
+    create_case_admission_replay_receipt,
+    load_corpus,
+)
+
+corpus_root = "output/adversarial-corpus"
+corpus = load_corpus(f"{corpus_root}/corpus.json")
+case = reviewed_case_record  # full record with inputs staged under the candidate directory
+case["replay_receipt"] = create_case_admission_replay_receipt(
+    replay_observation,
+    case,
+    artifact_path="historical_candidates/<candidate-id>/replay_output/current.jsonl",
+    corpus_root=corpus_root,
+    target_revision=replay_observation["source_revision"],
+)
+```
+
+Write that full case record to `candidate-case.json`, then promote it with the CLI:
+
+```bash
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py promote-candidate \
+  --candidate-id <candidate-id> \
+  --case candidate-case.json \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus \
+  --output output/adversarial-corpus/promotion-receipt.json
+```
+
+For a case that did not originate from a #9656 row, use `admit-case` with a complete case record
+and an `--artifact-root` directory below the corpus root that contains every referenced scenario,
+route, map, and replay artifact. Both paths apply the same fail-closed case validator and duplicate
+policy.
 
 ## Record an evaluation and recompute status
 
@@ -183,11 +244,11 @@ Status is specific to the exact planner ID and configuration identity:
 
 ## Export a replay slice
 
-The slice contains a canonical scenario matrix, copied route overrides, a
-planner configuration snapshot per case, a checksum manifest, and a replay
-command for each case. Export refuses to overwrite an existing directory and
-checks the stored scenario/route bytes against their recorded digests and
-effective scenario identity. Each case manifest preserves its source case ID
+The slice contains a canonical scenario matrix, copied route overrides and map bytes,
+a map registry when the scenario uses `map_id`, a planner configuration snapshot per case,
+a checksum manifest, and a replay command for each case. Export refuses to overwrite an existing
+directory and checks the stored scenario/route/map bytes against their recorded digests and
+map-aware effective scenario identity. Each case manifest preserves its source case ID
 and records an explicit identity mapping from the source effective-scenario
 hash to the exported hash after `route_overrides_file` is normalized to the
 slice's `routes/` path. The exporter recomputes both identities and verifies the

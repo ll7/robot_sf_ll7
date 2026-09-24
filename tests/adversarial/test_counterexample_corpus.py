@@ -18,12 +18,15 @@ from robot_sf.adversarial import counterexample_corpus
 from robot_sf.adversarial.counterexample_corpus import (
     CorpusError,
     append_planner_evaluation,
+    create_case_admission_replay_receipt,
     create_planner_replay_receipt,
     export_regression_slice,
     import_issue9645_packet,
     import_issue9656_candidates,
     new_corpus,
+    promote_historical_candidate,
     recompute_planner_status,
+    save_corpus,
     validate_corpus,
 )
 from scripts.tools.manage_adversarial_counterexample_corpus import main as corpus_cli_main
@@ -43,6 +46,8 @@ def _issue9656_candidate_fixture(
         "unavailable_model_artifact",
         "mismatch_different_revision",
     ),
+    *,
+    promotion_case: bool = False,
 ) -> tuple[Path, Path, Path, Path]:
     """Build a digest-bound miniature #9656 evidence and materialization bundle."""
     bundle_root = tmp_path / "issue_9656_bundle"
@@ -56,124 +61,15 @@ def _issue9656_candidate_fixture(
     anomaly_counts: dict[str, int] = {}
     map_path = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
     for index, status in enumerate(statuses):
-        case_id = f"case-{index + 1:016x}"
-        planner_config_identity = f"{index + 1:016x}"
-        case_dir = materialized / "cases" / case_id
-        replay_dir = case_dir / "replay_input"
-        replay_dir.mkdir(parents=True)
-        episode_file = f"runs/planner_{index}/episodes.jsonl"
-        source_row = {
-            "algo": f"planner_{index}",
-            "algorithm_metadata": {
-                "canonical_algorithm": f"planner_{index}",
-                "config_hash": planner_config_identity,
-            },
-            "episode_id": f"episode-{index}",
-            "git_hash": _ISSUE9656_SOURCE_REVISION,
-            "scenario_params": {"algo_config_hash": f"scenario-config-{index}"},
-            "scenario_id": f"scenario_{index}",
-            "seed": 100 + index,
-        }
-        raw_line = json.dumps(source_row, separators=(",", ":"), sort_keys=True).encode() + b"\n"
-        episode_path = campaign_root / episode_file
-        episode_path.parent.mkdir(parents=True, exist_ok=True)
-        episode_path.write_bytes(raw_line)
-        record_sha = hashlib.sha256(raw_line).hexdigest()
-        source_record = {
-            "episode_file": episode_file,
-            "episode_file_sha256": hashlib.sha256(raw_line).hexdigest(),
-            "line_number": 1,
-            "record_sha256": record_sha,
-        }
-        anomaly = ["collision_event_without_positive_collision_metric"] if index == 0 else []
-        criticality = {
-            "anomalies": anomaly,
-            "evidence_tier": "diagnostic_only",
-            "metrics": {"collisions_metric": 0.0, "minimum_clearance_m": 0.5 + index},
-            "outcome": {"collision_event": False, "route_complete": False, "timeout_event": True},
-        }
-        replay = {"attempted": status == "mismatch_different_revision", "status": status}
-        planner_config = "planner_option: value\n"
-        (replay_dir / "planner_config.yaml").write_text(planner_config, encoding="utf-8")
-        planner_config_sha = hashlib.sha256(planner_config.encode()).hexdigest()
-        scenario_matrix = {
-            "map_search_paths": [str(map_path.parent)],
-            "scenarios": [
-                {
-                    "algo": f"planner_{index}",
-                    "id": f"scenario_{index}",
-                    "map_file": str(map_path),
-                    "seeds": [100 + index],
-                }
-            ],
-        }
-        matrix_text = yaml.safe_dump(scenario_matrix, sort_keys=True)
-        (replay_dir / "replay_matrix.yaml").write_text(matrix_text, encoding="utf-8")
-        matrix_sha = hashlib.sha256(matrix_text.encode()).hexdigest()
-        replay_input = {
-            "planner_config_path": "replay_input/planner_config.yaml",
-            "planner_config_sha256": planner_config_sha,
-            "replay_eligible": status != "unavailable_model_artifact",
-            "replay_ineligibility": (
-                "model artifact unavailable" if status == "unavailable_model_artifact" else None
-            ),
-            "scenario_matrix_path": "replay_input/replay_matrix.yaml",
-            "scenario_matrix_sha256": matrix_sha,
-            "status": "materialized",
-        }
-        summary_case = {
-            "benchmark_eligible": True,
-            "case_id": case_id,
-            "criticality": criticality,
-            "planner_key": f"planner_{index}",
-            "replay": replay,
-            "replay_input": replay_input,
-            "scenario_family": f"family_{index}",
-            "scenario_id": f"scenario_{index}",
-            "seed": 100 + index,
-            "selected_groups": ["timeout_event"],
-            "source_record": source_record,
-            "source_showcase_renderer": {"status": "unavailable", "artifacts": []},
-        }
-        materialized_case = {
-            "case_file": f"cases/{case_id}/case.json",
-            "case_id": case_id,
-            "criticality": criticality,
-            "planner": {
-                "algorithm_metadata": {
-                    "canonical_algorithm": f"planner_{index}",
-                    "config_hash": planner_config_identity,
-                },
-                "key": f"planner_{index}",
-            },
-            "replay": replay,
-            "replay_input": replay_input,
-            "scenario": {
-                "scenario_id": f"scenario_{index}",
-                "scenario_family": f"family_{index}",
-                "seed": 100 + index,
-            },
-            "schema_version": "benchmark-hard-case.v1",
-            "selection": {"selected_groups": ["timeout_event"]},
-            "source": {
-                **source_record,
-                "bundle_sha256": "a" * 64,
-                "campaign_id": "campaign-fixture",
-                "campaign_source_revision": _ISSUE9656_SOURCE_REVISION,
-                "planner_config_hash": planner_config_identity,
-                "planner_key": f"planner_{index}",
-                "row_git_hash": _ISSUE9656_SOURCE_REVISION,
-                "scenario_matrix": _ISSUE9656_SOURCE_MATRIX,
-                "scenario_matrix_sha256": _ISSUE9656_SOURCE_MATRIX_SHA256,
-            },
-            "source_record": source_row,
-        }
-        case_file = case_dir / "case.json"
-        case_file.write_text(json.dumps(materialized_case, sort_keys=True), encoding="utf-8")
+        summary_case = _build_issue9656_fixture_candidate(
+            index, status, materialized, campaign_root, map_path, promotion_case
+        )
         summary_cases.append(summary_case)
-        manifest_cases.append({"case_file": f"cases/{case_id}/case.json", **summary_case})
+        manifest_cases.append(
+            {"case_file": f"cases/{summary_case['case_id']}/case.json", **summary_case}
+        )
         source_status_counts[status] = source_status_counts.get(status, 0) + 1
-        for item in anomaly:
+        for item in summary_case["criticality"]["anomalies"]:
             anomaly_counts[item] = anomaly_counts.get(item, 0) + 1
 
     attempts = [
@@ -241,6 +137,218 @@ def _issue9656_candidate_fixture(
     return summary_path, materialized, campaign_root, bundle_root
 
 
+def _build_issue9656_fixture_candidate(
+    index: int,
+    status: str,
+    materialized: Path,
+    campaign_root: Path,
+    map_path: Path,
+    promotion_case: bool,
+) -> dict[str, object]:
+    case_id = f"case-{index + 1:016x}"
+    matching_episode, matching_scenario = _issue9656_fixture_matching_source(index, promotion_case)
+    source_row, planner_config_identity, source_record = _issue9656_fixture_episode(
+        index, matching_episode, campaign_root
+    )
+    planner_key = source_row["algo"]
+    canonical_algorithm = source_row["algorithm_metadata"]["canonical_algorithm"]
+    case_dir = materialized / "cases" / case_id
+    replay_input = _write_issue9656_fixture_replay_inputs(
+        index, status, case_dir, map_path, source_row, matching_episode, matching_scenario
+    )
+    anomaly = ["collision_event_without_positive_collision_metric"] if index == 0 else []
+    criticality = {
+        "anomalies": anomaly,
+        "evidence_tier": "diagnostic_only",
+        "metrics": {"collisions_metric": 0.0, "minimum_clearance_m": 0.5 + index},
+        "outcome": {"collision_event": False, "route_complete": False, "timeout_event": True},
+    }
+    replay = {"attempted": status == "mismatch_different_revision", "status": status}
+    summary_case = {
+        "benchmark_eligible": True,
+        "case_id": case_id,
+        "criticality": criticality,
+        "planner_key": planner_key,
+        "replay": replay,
+        "replay_input": replay_input,
+        "scenario_family": f"family_{index}",
+        "scenario_id": source_row["scenario_id"],
+        "seed": source_row["seed"],
+        "selected_groups": ["timeout_event"],
+        "source_record": source_record,
+        "source_showcase_renderer": {"status": "unavailable", "artifacts": []},
+    }
+    planner = {
+        "algorithm_metadata": {
+            "canonical_algorithm": canonical_algorithm,
+            "config_hash": planner_config_identity,
+        },
+        "key": planner_key,
+    }
+    materialized_case = _issue9656_fixture_materialized_case(
+        index, case_id, source_row, source_record, criticality, planner, replay, replay_input
+    )
+    case_file = case_dir / "case.json"
+    case_file.write_text(json.dumps(materialized_case, sort_keys=True), encoding="utf-8")
+    return summary_case
+
+
+def _issue9656_fixture_matching_source(
+    index: int, promotion_case: bool
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    if not promotion_case or index != 0:
+        return None, None
+    matching_episode = json.loads(
+        (_SOURCE_PACKET / "historical_issue_1501_failure_0002/replay_1.jsonl").read_text(
+            encoding="utf-8"
+        )
+    )
+    matching_scenario = yaml.safe_load(
+        (_SOURCE_PACKET / "historical_issue_1501_failure_0002/scenario.yaml").read_text(
+            encoding="utf-8"
+        )
+    )["scenarios"][0]
+    return matching_episode, matching_scenario
+
+
+def _issue9656_fixture_episode(
+    index: int,
+    matching_episode: dict[str, object] | None,
+    campaign_root: Path,
+) -> tuple[dict[str, object], str, dict[str, object]]:
+    config_identity = (
+        matching_episode["algorithm_metadata"]["config_hash"]
+        if matching_episode is not None
+        else f"{index + 1:016x}"
+    )
+    source_row = (
+        copy.deepcopy(matching_episode)
+        if matching_episode is not None
+        else {
+            "algo": f"planner_{index}",
+            "algorithm_metadata": {
+                "canonical_algorithm": f"planner_{index}",
+                "config_hash": config_identity,
+            },
+            "episode_id": f"episode-{index}",
+            "git_hash": _ISSUE9656_SOURCE_REVISION,
+            "scenario_params": {"algo_config_hash": f"scenario-config-{index}"},
+            "scenario_id": f"scenario_{index}",
+            "seed": 100 + index,
+        }
+    )
+    if matching_episode is not None:
+        source_row["git_hash"] = _ISSUE9656_SOURCE_REVISION
+        source_row["scenario_params"]["algo_config_hash"] = config_identity
+    episode_file = f"runs/planner_{index}/episodes.jsonl"
+    raw_line = json.dumps(source_row, separators=(",", ":"), sort_keys=True).encode() + b"\n"
+    episode_path = campaign_root / episode_file
+    episode_path.parent.mkdir(parents=True, exist_ok=True)
+    episode_path.write_bytes(raw_line)
+    record_sha = hashlib.sha256(raw_line).hexdigest()
+    source_record = {
+        "episode_file": episode_file,
+        "episode_file_sha256": record_sha,
+        "line_number": 1,
+        "record_sha256": record_sha,
+    }
+    return source_row, config_identity, source_record
+
+
+def _write_issue9656_fixture_replay_inputs(
+    index: int,
+    status: str,
+    case_dir: Path,
+    map_path: Path,
+    source_row: dict[str, object],
+    matching_episode: dict[str, object] | None,
+    matching_scenario: dict[str, object] | None,
+) -> dict[str, object]:
+    replay_dir = case_dir / "replay_input"
+    replay_dir.mkdir(parents=True)
+    planner_config = (
+        yaml.safe_dump(matching_episode["algorithm_metadata"].get("config", {}), sort_keys=True)
+        if matching_episode is not None
+        else "planner_option: value\n"
+    )
+    (replay_dir / "planner_config.yaml").write_text(planner_config, encoding="utf-8")
+    scenario_row = _issue9656_fixture_scenario_row(index, map_path, source_row, matching_scenario)
+    matrix_text = yaml.safe_dump(
+        {"map_search_paths": [str(map_path.parent)], "scenarios": [scenario_row]}, sort_keys=True
+    )
+    (replay_dir / "replay_matrix.yaml").write_text(matrix_text, encoding="utf-8")
+    return {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": hashlib.sha256(planner_config.encode()).hexdigest(),
+        "replay_eligible": status != "unavailable_model_artifact",
+        "replay_ineligibility": (
+            "model artifact unavailable" if status == "unavailable_model_artifact" else None
+        ),
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": hashlib.sha256(matrix_text.encode()).hexdigest(),
+        "status": "materialized",
+    }
+
+
+def _issue9656_fixture_scenario_row(
+    index: int,
+    map_path: Path,
+    source_row: dict[str, object],
+    matching_scenario: dict[str, object] | None,
+) -> dict[str, object]:
+    if matching_scenario is None:
+        return {
+            "algo": f"planner_{index}",
+            "id": f"scenario_{index}",
+            "map_file": str(map_path),
+            "seeds": [100 + index],
+        }
+    scenario_row = copy.deepcopy(matching_scenario)
+    scenario_row["id"] = matching_scenario["name"]
+    scenario_row["algo"] = source_row["algo"]
+    scenario_row["map_file"] = str(map_path)
+    return scenario_row
+
+
+def _issue9656_fixture_materialized_case(
+    index: int,
+    case_id: str,
+    source_row: dict[str, object],
+    source_record: dict[str, object],
+    criticality: dict[str, object],
+    planner: dict[str, object],
+    replay: dict[str, object],
+    replay_input: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "case_file": f"cases/{case_id}/case.json",
+        "case_id": case_id,
+        "criticality": criticality,
+        "planner": planner,
+        "replay": replay,
+        "replay_input": replay_input,
+        "scenario": {
+            "scenario_id": source_row["scenario_id"],
+            "scenario_family": f"family_{index}",
+            "seed": source_row["seed"],
+        },
+        "schema_version": "benchmark-hard-case.v1",
+        "selection": {"selected_groups": ["timeout_event"]},
+        "source": {
+            **source_record,
+            "bundle_sha256": "a" * 64,
+            "campaign_id": "campaign-fixture",
+            "campaign_source_revision": _ISSUE9656_SOURCE_REVISION,
+            "planner_config_hash": planner["algorithm_metadata"]["config_hash"],
+            "planner_key": planner["key"],
+            "row_git_hash": _ISSUE9656_SOURCE_REVISION,
+            "scenario_matrix": _ISSUE9656_SOURCE_MATRIX,
+            "scenario_matrix_sha256": _ISSUE9656_SOURCE_MATRIX_SHA256,
+        },
+        "source_record": source_row,
+    }
+
+
 def _refresh_issue9656_bundle(bundle_root: Path) -> None:
     payload = bundle_root / "payload"
     manifest_path = bundle_root / "evidence_bundle_manifest.json"
@@ -272,6 +380,69 @@ def _import(tmp_path: Path, payload: Path | None = None):
         payload or _SOURCE_PACKET, new_corpus(), corpus_root=corpus_root
     )
     return corpus, receipt, corpus_root
+
+
+def _stage_case_under_candidate(case: dict[str, object], corpus_root: Path, candidate_id: str):
+    """Copy exact case inputs/replay bytes under one imported candidate's custody root."""
+    case_record = copy.deepcopy(case)
+    source_prefix = f"cases/{case['case_id']}/"
+    destination_prefix = f"historical_candidates/{candidate_id}/admission_evidence/"
+    source = corpus_root / source_prefix
+    destination = corpus_root / destination_prefix
+    shutil.copytree(source, destination)
+
+    def relocate(relative: str) -> str:
+        assert relative.startswith(source_prefix)
+        return destination_prefix + relative[len(source_prefix) :]
+
+    case_record["inputs"]["scenario_path"] = relocate(case_record["inputs"]["scenario_path"])
+    case_record["inputs"]["route_overrides_path"] = relocate(
+        case_record["inputs"]["route_overrides_path"]
+    )
+    for asset in case_record["inputs"]["map_assets"]:
+        asset["path"] = relocate(asset["path"])
+    receipt = case_record["replay_receipt"]
+    for replay in receipt.get("replay_artifacts", []):
+        for field in ("path", "provenance_path"):
+            if replay.get(field):
+                replay[field] = relocate(replay[field])
+    for replay in receipt.get("artifact_receipts", []):
+        replay["artifact_path"] = relocate(replay["artifact_path"])
+    return case_record
+
+
+def _single_replay_admission_receipt(
+    case: dict[str, object], corpus_root: Path
+) -> dict[str, object]:
+    """Create an exact-revision receipt from a stored episode fixture without running it."""
+    old_receipt = case["replay_receipt"]
+    artifact_relative = old_receipt["replay_artifacts"][0]["path"]
+    artifact_path = f"cases/{case['case_id']}/{artifact_relative}"
+    artifact = corpus_root / artifact_path
+    projection = old_receipt["selected_projection"]
+    observation = {
+        "case_id": case["case_id"],
+        "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "planner_id": projection["planner_id"],
+        "planner_config_identity": projection["planner_config_identity"],
+        "source_revision": projection["source_revision"],
+        "episode_sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+        "outcome": projection["outcome"],
+        "termination_reason": projection["termination_reason"],
+        "metrics": projection["metrics"],
+        "execution_mode": "native",
+        "readiness_status": "native",
+        "availability_status": "available",
+        "fallback_or_degraded": False,
+        "evidence_status": "complete",
+    }
+    return create_case_admission_replay_receipt(
+        observation,
+        case,
+        artifact_path=artifact_path,
+        corpus_root=corpus_root,
+        target_revision=projection["source_revision"],
+    )
 
 
 def _append_episode_evaluation(
@@ -532,6 +703,135 @@ def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
             summary_path, materialized, bundle_root, campaign_root, corpus, corpus_root=corpus_root
         )
     assert len(corpus["historical_candidates"]) == 3
+
+
+def test_pending_historical_candidate_promotes_after_exact_replay_and_input_binding(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",), promotion_case=True
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, imported = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    assert imported["candidate_status_counts"] == {"pending_exact_replay": 1}
+    corpus, pilot = import_issue9645_packet(_SOURCE_PACKET, corpus, corpus_root=corpus_root)
+    assert pilot["decision"] == "admitted"
+
+    candidate = corpus["historical_candidates"][0]
+    assert candidate["source_provenance"]["raw_episode_artifact_custody"] == {
+        "status": "digest_only_not_copied_from_campaign_output",
+        "episode_file": candidate["source_provenance"]["episode_file"],
+        "episode_file_sha256": candidate["source_provenance"]["episode_file_sha256"],
+        "raw_episode_artifact_used_as_admission_evidence": False,
+        "local_ignored_output_used_as_admission_evidence": False,
+        "admission_requires": "exact_current_revision_replay",
+    }
+    case = copy.deepcopy(corpus["cases"][0])
+    case["replay_receipt"] = _single_replay_admission_receipt(case, corpus_root)
+    validate_corpus({**corpus, "cases": [case]}, corpus_root=corpus_root)
+    case_record = _stage_case_under_candidate(case, corpus_root, candidate["candidate_id"])
+    case_record["discovery"]["historical_candidate_binding"] = {
+        "candidate_id": candidate["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": candidate["source_case_id"],
+        "source_record_sha256": candidate["source_record_sha256"],
+        "source_replay_status": candidate["source_replay_status"],
+    }
+
+    case_path = tmp_path / "promotion-case.json"
+    case_path.write_text(json.dumps(case_record, sort_keys=True), encoding="utf-8")
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    receipt_path = tmp_path / "promotion-receipt.json"
+    cli_status = corpus_cli_main(
+        [
+            "promote-candidate",
+            "--candidate-id",
+            candidate["candidate_id"],
+            "--case",
+            str(case_path),
+            "--corpus",
+            str(corpus_path),
+            "--corpus-root",
+            str(corpus_root),
+            "--output",
+            str(receipt_path),
+        ]
+    )
+    assert cli_status == 0
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+    candidate = corpus["historical_candidates"][0]
+
+    assert receipt["decision"] == "duplicate"
+    assert receipt["case_id"] == case["case_id"]
+    assert candidate["source_candidate_status"] == "pending_exact_replay"
+    assert candidate["candidate_status"] == "admitted"
+    assert candidate["promoted_case_id"] == case["case_id"]
+    assert candidate["promotion_attempt_id"] == receipt["attempt_id"]
+    admitted_case = corpus["cases"][0]
+    promotion_evidence = next(
+        item
+        for item in admitted_case["supporting_source_evidence"]
+        if item.get("historical_candidate_promotion", {}).get("candidate_id")
+        == candidate["candidate_id"]
+    )["historical_candidate_promotion"]
+    historical_replay = promotion_evidence
+    assert historical_replay["source_replay_status"] == "not_attempted"
+    assert historical_replay["raw_episode_artifact_used_as_admission_evidence"] is False
+    assert historical_replay["local_ignored_output_used_as_admission_evidence"] is False
+    assert historical_replay["admission_replay_matches_target_revision"] is True
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_blocker"),
+    [
+        ("replay_matrix", "candidate_replay_matrix_artifact_invalid"),
+        ("planner_config", "candidate_planner_config_artifact_invalid"),
+        ("map", "candidate_map_artifact_invalid"),
+        ("scenario_metadata", "candidate_metadata_differs_from_checksum_pinned_summary_row"),
+    ],
+)
+def test_pending_historical_candidate_rejects_source_metadata_or_input_tampering(
+    tmp_path: Path, tamper: str, expected_blocker: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    candidate = corpus["historical_candidates"][0]
+    if tamper == "scenario_metadata":
+        candidate["scenario_id"] = "forged-scenario"
+    elif tamper == "map":
+        map_file = corpus_root / candidate["replay_inputs"]["map_assets"][0]["stored_path"]
+        map_file.write_bytes(map_file.read_bytes() + b"tampered")
+    else:
+        artifact = corpus_root / candidate["artifact_paths"][tamper]
+        artifact.write_bytes(artifact.read_bytes() + b"\n")
+
+    corpus, receipt = promote_historical_candidate(
+        candidate["candidate_id"], {}, corpus, corpus_root=corpus_root
+    )
+
+    assert receipt["decision"] == "rejected"
+    assert any(expected_blocker in blocker for blocker in receipt["blockers"])
+    assert candidate["candidate_status"] == "pending_exact_replay"
 
 
 def test_issue9656_import_rejects_duplicate_source_aliases_before_writing(
@@ -1406,9 +1706,16 @@ def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
         (slice_root / identity_mapping["exported_route_overrides_file"]).read_text(encoding="utf-8")
     )
     assert (
-        counterexample_corpus.compute_effective_scenario_hash(exported_scenario, exported_route)
+        counterexample_corpus.compute_case_effective_scenario_hash(
+            exported_scenario,
+            exported_route,
+            identity_mapping["map_assets"],
+        )
         == identity_mapping["exported_effective_scenario_sha256"]
     )
+    for asset in identity_mapping["map_assets"]:
+        stored_asset = slice_root / asset["path"]
+        assert hashlib.sha256(stored_asset.read_bytes()).hexdigest() == asset["sha256"]
     source_scenario_path = corpus_root / corpus["cases"][0]["inputs"]["scenario_path"]
     source_route_path = corpus_root / corpus["cases"][0]["inputs"]["route_overrides_path"]
     source_scenario = yaml.safe_load(source_scenario_path.read_text(encoding="utf-8"))["scenarios"][
@@ -1416,7 +1723,11 @@ def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
     ]
     source_route = yaml.safe_load(source_route_path.read_text(encoding="utf-8"))
     assert (
-        counterexample_corpus.compute_effective_scenario_hash(source_scenario, source_route)
+        counterexample_corpus.compute_case_effective_scenario_hash(
+            source_scenario,
+            source_route,
+            corpus["cases"][0]["inputs"]["map_assets"],
+        )
         == identity_mapping["source_effective_scenario_sha256"]
     )
     assert (
@@ -1424,10 +1735,46 @@ def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
         == (case["planner_config_sha256"])
     )
     assert (slice_root / "results").is_dir()
-    assert case["replay_command"].startswith(
-        "uv run robot_sf_bench run --matrix replay_matrix.yaml"
-    )
+    assert case["replay_command"].startswith("ROBOT_SF_MAP_REGISTRY=maps/registry.yaml ")
+    assert "uv run robot_sf_bench run --matrix replay_matrix.yaml" in case["replay_command"]
     validate_corpus(corpus)
+
+
+@pytest.mark.parametrize("asset_role", ["map", "map_registry"])
+def test_map_asset_tampering_invalidates_case_identity_and_slice_export(
+    tmp_path: Path, asset_role: str
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    case = corpus["cases"][0]
+    asset = next(item for item in case["inputs"]["map_assets"] if item["role"] == asset_role)
+    asset_path = corpus_root / asset["path"]
+    original_bytes = asset_path.read_bytes()
+    changed_bytes = original_bytes + b"\n# adversarial test mutation\n"
+    changed_sha256 = hashlib.sha256(changed_bytes).hexdigest()
+    asset_path.write_bytes(changed_bytes)
+
+    changed_identity_assets = copy.deepcopy(case["inputs"]["map_assets"])
+    next(item for item in changed_identity_assets if item["role"] == asset_role)["sha256"] = (
+        changed_sha256
+    )
+    scenario_document = yaml.safe_load(
+        (corpus_root / case["inputs"]["scenario_path"]).read_text(encoding="utf-8")
+    )
+    route_payload = yaml.safe_load(
+        (corpus_root / case["inputs"]["route_overrides_path"]).read_text(encoding="utf-8")
+    )
+    changed_hash = counterexample_corpus.compute_case_effective_scenario_hash(
+        scenario_document["scenarios"][0], route_payload, changed_identity_assets
+    )
+    assert changed_hash != case["effective_scenario_sha256"]
+    with pytest.raises(CorpusError, match="map asset|map registry|map file|map identity"):
+        validate_corpus(corpus, corpus_root=corpus_root)
+    with pytest.raises(CorpusError, match="map asset|map registry|map file|map identity"):
+        export_regression_slice(
+            corpus,
+            corpus_root=corpus_root,
+            output_dir=tmp_path / f"slice-{asset_role}",
+        )
 
 
 def test_append_evaluation_rejects_case_hash_mismatch(tmp_path: Path) -> None:
@@ -1446,6 +1793,35 @@ def test_validate_corpus_rejects_planner_evaluation_for_absent_case(
 
     with pytest.raises(CorpusError, match="planner evaluation references absent case"):
         validate_corpus(corpus)
+
+
+def test_validate_corpus_rejects_excluded_invalid_and_incomplete_case_records(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    invalid = copy.deepcopy(corpus)
+    invalid["cases"][0]["structural_validation"]["status"] = "invalid"
+    invalid["cases"][0]["admissibility"]["verdict"] = "excluded"
+    with pytest.raises(CorpusError):
+        validate_corpus(invalid)
+    with pytest.raises(CorpusError):
+        recompute_planner_status(
+            invalid,
+            planner_id="goal",
+            planner_config_identity=invalid["cases"][0]["target_planner"]["config_identity"],
+            corpus_root=corpus_root,
+        )
+    with pytest.raises(CorpusError):
+        export_regression_slice(
+            invalid,
+            corpus_root=corpus_root,
+            output_dir=tmp_path / "invalid-slice",
+        )
+
+    incomplete = copy.deepcopy(corpus)
+    del incomplete["cases"][0]["target_planner"]["configuration_snapshot"]
+    with pytest.raises(CorpusError):
+        validate_corpus(incomplete)
 
 
 def test_corpus_cli_import_status_and_slice_work_without_simulator_run(tmp_path: Path) -> None:

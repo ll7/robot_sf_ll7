@@ -92,8 +92,19 @@ def build_frontier_report(
 
     round_reports: list[dict[str, Any]] = []
     discovered_counterexamples: dict[str, int] = {}
-    admitted_unknown_cases: dict[str, int] = {}
+    historical_case_states = _historical_case_states(evidence["rounds"])
+    admitted_unknown_cases = {
+        case_id: 0
+        for case_id, state in historical_case_states.items()
+        if state["admissibility_verdict"] == "admissible_feasibility_unknown"
+    }
     current_case_verdicts: dict[str, str] = {}
+    known_confirmed_case_ids = {
+        case_id
+        for case_id, state in historical_case_states.items()
+        if state["admissibility_verdict"] in _CONFIRMED_FEASIBILITY_VERDICTS
+        and state["replay_status"] == "verified"
+    }
 
     for round_data in evidence["rounds"]:
         number = round_data["round_number"]
@@ -116,23 +127,24 @@ def build_frontier_report(
         )
 
         observations = round_data["case_observations"]
-        for observation in observations:
-            current_case_verdicts[observation["case_id"]] = observation["admissibility_verdict"]
         feasibility_upgrades = [
             observation["case_id"]
             for observation in observations
-            if _is_followup_feasibility_upgrade(evidence["rounds"], number, observation)
+            if _is_followup_feasibility_upgrade(number, observation, current_case_verdicts)
         ]
         verified_case_ids.extend(feasibility_upgrades)
         for case_id in feasibility_upgrades:
-            discovered_counterexamples[case_id] = number
+            discovered_counterexamples.setdefault(case_id, number)
+        known_confirmed_case_ids.update(verified_case_ids)
+        for observation in observations:
+            current_case_verdicts[observation["case_id"]] = observation["admissibility_verdict"]
         state_counts = Counter(item["planner_status"] for item in observations)
         verdict_counts = Counter(item["admissibility_verdict"] for item in observations)
         current_verdict_counts = Counter(current_case_verdicts.values())
         replay_counts = Counter(item["replay_status"] for item in observations)
 
         current_verified_status = _current_counterexample_status(
-            set(discovered_counterexamples), observations
+            known_confirmed_case_ids, observations
         )
         falsification = round_data["falsification"]
         candidate_status_counts = Counter(item["evaluation_status"] for item in candidates)
@@ -208,6 +220,7 @@ def build_frontier_report(
                         sorted(current_verdict_counts.items())
                     ),
                     "verified_counterexamples_cumulative": len(discovered_counterexamples),
+                    "confirmed_counterexamples_in_corpus": len(known_confirmed_case_ids),
                     "admitted_unknown_feasibility_cases_cumulative": len(admitted_unknown_cases),
                     "current_unknown_feasibility_case_count": current_verdict_counts.get(
                         "admissible_feasibility_unknown", 0
@@ -262,7 +275,7 @@ def render_frontier_markdown(
         "Execution mode, runtime readiness, availability, excluded rows, and missing outcomes "
         "remain visible in the accounting below.",
         "",
-        "| Round | Planner/config | Optimization method and budget | Search method and budget | Held-out success | Regression success | Verified counterexamples (cumulative) |",
+        "| Round | Planner/config | Optimization method and budget | Search method and budget | Held-out success | Regression success | Confirmed counterexamples in corpus |",
         "|---:|---|---|---|---:|---:|---:|",
     ]
     for item in report["rounds"]:
@@ -290,7 +303,7 @@ def render_frontier_markdown(
                 search_calls=search_budget["simulator_invocations"],
                 held=_format_rate(held_out),
                 reg=_format_rate(regression),
-                cumulative=item["case_frontier"]["verified_counterexamples_cumulative"],
+                cumulative=item["case_frontier"]["confirmed_counterexamples_in_corpus"],
             )
         )
     for item in report["rounds"]:
@@ -338,6 +351,10 @@ def render_frontier_markdown(
                 f"  - Replay status: `{item['case_frontier']['replay_status_counts']}`.",
                 f"  - Feasibility/admissibility partition: "
                 f"`{item['case_frontier']['admissibility_partition_counts']}`.",
+                f"  - New verified counterexamples discovered in this loop (cumulative): "
+                f"{item['case_frontier']['verified_counterexamples_cumulative']}; "
+                f"confirmed counterexamples known to the corpus: "
+                f"{item['case_frontier']['confirmed_counterexamples_in_corpus']}.",
                 f"  - Currently unknown-feasibility cases: "
                 f"{item['case_frontier']['current_unknown_feasibility_case_count']}; "
                 f"cases ever admitted with unknown feasibility: "
@@ -449,7 +466,7 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
         performance_axis.legend(frameon=False, ncol=3, loc="lower right")
 
         cumulative_known = [
-            item["case_frontier"]["verified_counterexamples_cumulative"] for item in rounds
+            item["case_frontier"]["confirmed_counterexamples_in_corpus"] for item in rounds
         ]
         current_unknown = [
             item["case_frontier"]["current_unknown_feasibility_case_count"] for item in rounds
@@ -486,7 +503,7 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
             marker="o",
             linewidth=1.8,
             color=planner_color("frontier_verified_counterexamples"),
-            label="Verified failure cases discovered (cumulative)",
+            label="Confirmed counterexamples known to corpus",
         )
         cases_axis.plot(
             x_values,
@@ -710,6 +727,7 @@ def _validate_case_observation_origins(
     round_candidates: dict[int, dict[str, dict[str, Any]]],
     errors: list[str],
 ) -> None:
+    latest_observations: dict[str, dict[str, Any]] = {}
     for round_data in rounds:
         if not isinstance(round_data, dict) or not isinstance(round_data.get("round_number"), int):
             continue
@@ -719,29 +737,65 @@ def _validate_case_observation_origins(
                 continue
             origin_round = observation.get("origin_round")
             case_id = observation.get("case_id")
-            candidate_id = observation.get("origin_candidate_id")
-            if isinstance(origin_round, int) and origin_round > 0 and origin_round <= current_round:
-                origin_candidate = round_candidates.get(origin_round, {}).get(case_id)
-                if origin_candidate is None:
-                    errors.append(
-                        f"round {current_round} case {case_id!r} refers to no admitted discovery "
-                        f"in origin round {origin_round}"
-                    )
-                elif candidate_id != origin_candidate.get("candidate_id"):
-                    errors.append(
-                        f"round {current_round} case {case_id!r} origin candidate does not match "
-                        "its discovery record"
-                    )
-                elif current_round == origin_round:
-                    _validate_same_round_case_observation(
-                        current_round, observation, origin_candidate, errors
-                    )
-                else:
+            if isinstance(origin_round, int) and origin_round > 0:
+                _validate_discovered_case_observation(
+                    current_round,
+                    origin_round,
+                    observation,
+                    round_candidates,
+                    latest_observations,
+                    errors,
+                )
+            elif origin_round == 0:
+                previous = latest_observations.get(case_id)
+                if previous is not None:
                     _validate_followup_case_observation(
-                        current_round, observation, origin_candidate, errors
+                        current_round,
+                        observation,
+                        previous["admissibility_verdict"],
+                        errors,
                     )
             elif origin_round != 0:
                 errors.append(f"round {current_round} case {case_id!r} has invalid origin_round")
+            if isinstance(case_id, str):
+                latest_observations[case_id] = observation
+
+
+def _validate_discovered_case_observation(
+    current_round: int,
+    origin_round: int,
+    observation: dict[str, Any],
+    round_candidates: dict[int, dict[str, dict[str, Any]]],
+    latest_observations: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    case_id = observation.get("case_id")
+    if origin_round > current_round:
+        errors.append(f"round {current_round} case {case_id!r} has invalid origin_round")
+        return
+    origin_candidate = round_candidates.get(origin_round, {}).get(case_id)
+    if origin_candidate is None:
+        errors.append(
+            f"round {current_round} case {case_id!r} refers to no admitted discovery "
+            f"in origin round {origin_round}"
+        )
+        return
+    if observation.get("origin_candidate_id") != origin_candidate.get("candidate_id"):
+        errors.append(
+            f"round {current_round} case {case_id!r} origin candidate does not match "
+            "its discovery record"
+        )
+        return
+    if current_round == origin_round:
+        _validate_same_round_case_observation(current_round, observation, origin_candidate, errors)
+        return
+    previous = latest_observations.get(case_id)
+    previous_verdict = (
+        previous["admissibility_verdict"]
+        if previous is not None
+        else origin_candidate.get("admissibility_verdict")
+    )
+    _validate_followup_case_observation(current_round, observation, previous_verdict, errors)
 
 
 def _validate_same_round_case_observation(
@@ -774,16 +828,15 @@ def _validate_same_round_case_observation(
 def _validate_followup_case_observation(
     current_round: int,
     observation: dict[str, Any],
-    origin_candidate: dict[str, Any],
+    previous_verdict: str,
     errors: list[str],
 ) -> None:
-    original_verdict = origin_candidate.get("admissibility_verdict")
     observed_verdict = observation.get("admissibility_verdict")
-    if observed_verdict == original_verdict:
+    if observed_verdict == previous_verdict:
         return
     evidence = observation.get("admissibility_evidence_artifact")
     valid_upgrade = (
-        original_verdict == "admissible_feasibility_unknown"
+        previous_verdict == "admissible_feasibility_unknown"
         and observed_verdict in _CONFIRMED_FEASIBILITY_VERDICTS
         and observation.get("evidence_status") == "complete"
         and isinstance(evidence, dict)
@@ -797,22 +850,31 @@ def _validate_followup_case_observation(
 
 
 def _is_followup_feasibility_upgrade(
-    rounds: list[dict[str, Any]], number: int, observation: dict[str, Any]
+    number: int, observation: dict[str, Any], latest_verdicts: dict[str, str]
 ) -> bool:
-    """Return whether a later observation upgrades an origin candidate's unknown feasibility."""
+    """Return whether this observation first upgrades the latest unknown verdict."""
     origin_round = observation["origin_round"]
     if origin_round >= number:
         return False
     if observation["admissibility_verdict"] not in _CONFIRMED_FEASIBILITY_VERDICTS:
         return False
-    origin_candidates = rounds[origin_round - 1]["falsification"]["candidates"]
-    origin_candidate = next(
-        candidate
-        for candidate in origin_candidates
-        if candidate.get("case_id") == observation["case_id"]
-        and candidate.get("candidate_id") == observation["origin_candidate_id"]
-    )
-    return origin_candidate["admissibility_verdict"] == "admissible_feasibility_unknown"
+    return latest_verdicts.get(observation["case_id"]) == "admissible_feasibility_unknown"
+
+
+def _historical_case_states(rounds: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    """Return each pre-loop case's first persisted feasibility and replay state."""
+    states: dict[str, dict[str, str]] = {}
+    for round_data in rounds:
+        for observation in round_data["case_observations"]:
+            if observation["origin_round"] == 0:
+                states.setdefault(
+                    observation["case_id"],
+                    {
+                        "admissibility_verdict": observation["admissibility_verdict"],
+                        "replay_status": observation["replay_status"],
+                    },
+                )
+    return states
 
 
 def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local blocker for diagnosis.
@@ -951,15 +1013,10 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         elif corpus_disposition == "duplicate" and not isinstance(case_id, str):
             errors.append(f"{candidate_prefix} duplicate record requires case_id")
         replay_artifact = candidate.get("replay_artifact")
-        if candidate.get("replay_status") == "verified":
-            _validate_artifact(
-                replay_artifact,
-                f"{candidate_prefix}.replay_artifact",
-                evidence_root,
-                artifacts,
-                errors,
+        if candidate.get("replay_status") == "verified" or replay_artifact is not None:
+            _validate_artifact_role(
+                replay_artifact, f"{candidate_prefix}.replay_artifact", "replay", errors
             )
-        elif replay_artifact is not None:
             _validate_artifact(
                 replay_artifact,
                 f"{candidate_prefix}.replay_artifact",
@@ -1033,6 +1090,9 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             )
         replay_artifact = observation.get("replay_artifact")
         if replay_status == "verified" or replay_artifact is not None:
+            _validate_artifact_role(
+                replay_artifact, f"{obs_prefix}.replay_artifact", "replay", errors
+            )
             _validate_artifact(
                 replay_artifact,
                 f"{obs_prefix}.replay_artifact",
@@ -1192,6 +1252,12 @@ def _validate_artifact(
         errors.append(f"artifact {relative_path!r} has inconsistent provenance declarations")
     else:
         artifacts[relative_path] = artifact
+
+
+def _validate_artifact_role(value: Any, prefix: str, expected_role: str, errors: list[str]) -> None:
+    """Require references used as a specific evidence type to declare that role."""
+    if isinstance(value, dict) and value.get("role") != expected_role:
+        errors.append(f"{prefix}.role must be {expected_role!r}")
 
 
 def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:

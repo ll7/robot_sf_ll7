@@ -57,11 +57,16 @@ case solved when the search recorded its target failure. Later planner-status ch
 `unsolved` to `solved` are allowed. Later feasibility updates are limited to
 `admissible_feasibility_unknown` → `empirically_feasible` or `planner_specific_failure`, and require
 complete evidence plus a checksummed artifact whose role is `admissibility-evidence`. The report
-does not infer stronger feasibility from a replay alone. A stable case ID may be admitted only once;
-later verified repeats use `corpus_disposition=duplicate`, remain visible in candidate accounting,
-and do not count as new unique discoveries. The unknown-feasibility cumulative count means cases
-ever admitted with that initial verdict; the current unknown count follows the latest recorded
-admissibility evidence and can decrease after a valid evidence-backed upgrade.
+does not infer stronger feasibility from a replay alone. Transitions are checked against the latest
+recorded verdict: an unknown-to-confirmed upgrade counts once, repeated observations at the confirmed
+verdict remain in the corpus without repeated discovery credit, and verdict downgrades fail closed.
+A replay artifact used to claim verified replay must declare the `replay` role as well as pass its
+path and digest checks. A stable case ID may be admitted only once; later verified repeats use
+`corpus_disposition=duplicate`, remain visible in candidate accounting, and do not count as new
+unique discoveries. Pre-loop historical confirmed cases are included in the known-corpus frontier,
+but not in the current loop's new-discovery count. The unknown-feasibility cumulative count means
+cases ever admitted with that initial verdict; the current unknown count follows observations through
+the rounds and can decrease after a valid evidence-backed upgrade.
 
 The v1 schema uses the current #9651 admissibility verdicts and #9652 planner statuses:
 `solved`, `unsolved`, `mixed`, and `unknown`. The report preserves those upstream values; it does

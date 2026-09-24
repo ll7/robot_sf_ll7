@@ -406,6 +406,93 @@ def test_frontier_report_rejects_re_admission_of_known_case(tmp_path: Path) -> N
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_seeds_confirmed_historical_cases_into_corpus_status(
+    tmp_path: Path,
+) -> None:
+    """Pre-loop verified cases count in status and memory without becoming new discoveries."""
+    payload = _evidence(tmp_path)
+    historical_id = "historical-confirmed"
+    for round_number, round_data in enumerate(payload["rounds"], start=1):
+        round_data["case_observations"].append(
+            _observation(
+                tmp_path,
+                round_number=round_number,
+                case_id=historical_id,
+                origin_round=0,
+                origin_candidate_id=None,
+                planner_status="unsolved",
+                verdict="empirically_feasible",
+                replay_status="verified",
+            )
+        )
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    first, second = report["rounds"]
+    assert first["case_frontier"]["verified_counterexamples_cumulative"] == 1
+    assert first["case_frontier"]["confirmed_counterexamples_in_corpus"] == 2
+    assert first["case_frontier"]["verified_counterexample_status"]["unsolved"] == 2
+    assert second["case_frontier"]["confirmed_counterexamples_in_corpus"] == 2
+    assert second["case_frontier"]["verified_counterexample_status"]["solved"] == 1
+    assert second["case_frontier"]["verified_counterexample_status"]["unsolved"] == 1
+
+
+def test_frontier_report_can_upgrade_historical_unknown_feasibility_once(tmp_path: Path) -> None:
+    """Origin-zero cases use their latest observation without indexing a search round."""
+    payload = _evidence(tmp_path)
+    first = payload["rounds"][0]
+    first["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id="historical-unknown",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unsolved",
+            verdict="admissible_feasibility_unknown",
+            replay_status="verified",
+        )
+    )
+    upgraded = _observation(
+        tmp_path,
+        round_number=2,
+        case_id="historical-unknown",
+        origin_round=0,
+        origin_candidate_id=None,
+        planner_status="solved",
+        verdict="empirically_feasible",
+        replay_status="verified",
+    )
+    upgraded["admissibility_evidence_artifact"] = _artifact(
+        tmp_path, "historical-upgrade-proof.json", role="admissibility-evidence"
+    )
+    payload["rounds"][1]["case_observations"].append(upgraded)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    first_report, second_report = report["rounds"]
+    assert first_report["case_frontier"]["current_unknown_feasibility_case_count"] == 1
+    assert second_report["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == [
+        "historical-unknown"
+    ]
+    assert second_report["case_frontier"]["verified_counterexamples_cumulative"] == 2
+    assert second_report["case_frontier"]["confirmed_counterexamples_in_corpus"] == 2
+
+
+@pytest.mark.parametrize("target", ["candidate", "observation"])
+def test_frontier_report_requires_replay_role_for_verified_artifact(
+    tmp_path: Path, target: str
+) -> None:
+    """A valid digest cannot make a non-replay artifact prove replay verification."""
+    payload = _evidence(tmp_path)
+    first = payload["rounds"][0]
+    if target == "candidate":
+        first["falsification"]["candidates"][0]["replay_artifact"]["role"] = "optimization"
+    else:
+        first["case_observations"][0]["replay_artifact"]["role"] = "optimization"
+
+    with pytest.raises(FrontierReportError, match="replay_artifact.role must be 'replay'"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_uses_later_historical_rows_to_guard_case_identity(
     tmp_path: Path,
 ) -> None:
@@ -715,8 +802,25 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
     payload["rounds"][1]["case_observations"].append(later_observation)
 
     if include_evidence:
+        third = _round(tmp_path, 3)
+        third["falsification"]["candidates"] = []
+        third["falsification"]["budget"]["candidates_completed"] = 0
+        third["case_observations"] = [
+            _observation(
+                tmp_path,
+                round_number=3,
+                case_id="case-origin-unknown",
+                origin_round=1,
+                origin_candidate_id="c-unknown-origin",
+                planner_status="solved",
+                verdict="empirically_feasible",
+                replay_status="verified",
+            )
+        ]
+        payload["rounds"].append(third)
         report = build_frontier_report(payload, evidence_root=tmp_path)
         second = report["rounds"][1]
+        third_report = report["rounds"][2]
         assert second["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == [
             "case-origin-unknown"
         ]
@@ -724,9 +828,79 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
         assert second["case_frontier"]["verified_counterexample_status"]["solved"] == 2
         assert second["case_frontier"]["current_unknown_feasibility_case_count"] == 1
         assert second["case_frontier"]["admitted_unknown_feasibility_cases_cumulative"] == 2
+        assert third_report["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == []
+        assert third_report["case_frontier"]["verified_counterexamples_cumulative"] == 2
+        assert third_report["falsification"]["no_verified_counterexample_statement"]
     else:
         with pytest.raises(FrontierReportError, match="unsupported admissibility-verdict"):
             build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_feasibility_downgrade_after_confirmation(tmp_path: Path) -> None:
+    """After an unknown-to-feasible transition, later evidence cannot downgrade the verdict."""
+    payload = _evidence(tmp_path)
+    first = payload["rounds"][0]
+    first["falsification"]["candidates"].append(
+        _candidate(
+            candidate_id="c-unknown-origin",
+            evaluation_status="complete",
+            verdict="admissible_feasibility_unknown",
+            failure=True,
+            replay_status="verified",
+            disposition="admitted",
+            case_id="case-origin-unknown",
+            replay_artifact=_artifact(
+                tmp_path, "round-1-unknown-downgrade-replay.json", role="replay"
+            ),
+        )
+    )
+    first["falsification"]["budget"]["candidates_completed"] = 4
+    first["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id="case-origin-unknown",
+            origin_round=1,
+            origin_candidate_id="c-unknown-origin",
+            planner_status="unsolved",
+            verdict="admissible_feasibility_unknown",
+            replay_status="verified",
+        )
+    )
+    second = payload["rounds"][1]
+    upgraded = _observation(
+        tmp_path,
+        round_number=2,
+        case_id="case-origin-unknown",
+        origin_round=1,
+        origin_candidate_id="c-unknown-origin",
+        planner_status="solved",
+        verdict="empirically_feasible",
+        replay_status="verified",
+    )
+    upgraded["admissibility_evidence_artifact"] = _artifact(
+        tmp_path, "round-2-unknown-downgrade-proof.json", role="admissibility-evidence"
+    )
+    second["case_observations"].append(upgraded)
+    third = _round(tmp_path, 3)
+    third["falsification"]["candidates"] = []
+    third["falsification"]["budget"]["candidates_completed"] = 0
+    third["case_observations"] = [
+        _observation(
+            tmp_path,
+            round_number=3,
+            case_id="case-origin-unknown",
+            origin_round=1,
+            origin_candidate_id="c-unknown-origin",
+            planner_status="unknown",
+            verdict="admissible_feasibility_unknown",
+            replay_status="verified",
+        )
+    ]
+    payload["rounds"].append(third)
+
+    with pytest.raises(FrontierReportError, match="unsupported admissibility-verdict transition"):
+        build_frontier_report(payload, evidence_root=tmp_path)
 
 
 def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified_null(

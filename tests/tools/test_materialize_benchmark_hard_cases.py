@@ -15,8 +15,10 @@ import yaml
 
 from scripts.tools.materialize_benchmark_hard_cases import (
     MaterializationError,
+    _classify_replay_row,
     _compare,
     _materialize_replay_matrix,
+    _replay_checkout_provenance,
     _replay_identity,
     _replay_ineligibility,
     _run_replay,
@@ -333,6 +335,139 @@ def test_replay_identity_requires_selected_case_planner_scenario_and_seed() -> N
 
 
 @pytest.mark.parametrize(
+    ("mutation", "expected_status"),
+    [
+        ("source_fallback", "fallback_or_degraded_not_evidence"),
+        ("replay_fallback", "fallback_or_degraded_not_evidence"),
+        ("source_failed", "unavailable_execution_evidence"),
+        ("replay_failed", "unavailable_execution_evidence"),
+        ("nested_failed", "unavailable_execution_evidence"),
+        ("source_unavailable", "unavailable_execution_evidence"),
+        ("replay_unavailable", "unavailable_execution_evidence"),
+        ("source_unavailable_flag", "unavailable_execution_evidence"),
+        ("ineligible", "unavailable_source_row_not_benchmark_eligible"),
+    ],
+)
+def test_exact_replay_requires_successful_available_nondegraded_evidence(
+    mutation: str, expected_status: str
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    observed = json.loads(json.dumps(source))
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+    if mutation.endswith("fallback"):
+        target = source if mutation.startswith("source") else observed
+        target["algorithm_metadata"]["planner_runtime"] = {"fallback_used": True}
+    elif mutation == "nested_failed":
+        observed["algorithm_metadata"]["planner_runtime"] = {"status": "failed"}
+    elif mutation.endswith("failed"):
+        target = source if mutation.startswith("source") else observed
+        target["algorithm_metadata"]["status"] = "failed"
+    elif mutation.endswith("unavailable"):
+        target = source if mutation.startswith("source") else observed
+        target["availability_status"] = "unavailable"
+    elif mutation == "source_unavailable_flag":
+        source["availability"] = False
+    else:
+        case["benchmark_eligible"] = False
+
+    classification = _classify_replay_row(
+        case, source, observed, "source-revision", replay_checkout_clean=True
+    )
+    assert classification["status"] == expected_status
+
+
+@pytest.mark.parametrize("missing_side", ["source", "replay", "both"])
+def test_exact_replay_requires_nonempty_planner_config_hashes(missing_side: str) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    observed = json.loads(json.dumps(source))
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+    if missing_side in {"source", "both"}:
+        source["algorithm_metadata"].pop("config_hash")
+    if missing_side in {"replay", "both"}:
+        observed["algorithm_metadata"].pop("config_hash")
+
+    classification = _classify_replay_row(
+        case, source, observed, "source-revision", replay_checkout_clean=True
+    )
+    assert classification["status"] == "unavailable_planner_config_identity"
+
+
+@pytest.mark.parametrize(
+    ("checkout_clean", "expected_status"),
+    [
+        (False, "replay_checkout_dirty"),
+        (None, "replay_checkout_cleanliness_unavailable"),
+    ],
+)
+def test_exact_replay_requires_clean_replay_checkout(
+    checkout_clean: bool | None, expected_status: str
+) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case, row, row, "source-revision", replay_checkout_clean=checkout_clean
+    )
+    assert classification["comparison"]["overall"] == "match"
+    assert classification["same_repository_revision"] is True
+    assert classification["status"] == expected_status
+
+
+def test_episode_failure_outcome_does_not_mark_execution_as_failed() -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    row["status"] = "failure"
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case, row, row, "source-revision", replay_checkout_clean=True
+    )
+    assert classification["episode_status"] == "failure"
+    assert classification["status"] == "exact_match"
+
+
+def test_replay_checkout_provenance_records_dirty_status(monkeypatch) -> None:
+    calls = iter(
+        [
+            SimpleNamespace(stdout="revision-a\n"),
+            SimpleNamespace(stdout=" M robot_sf/planner/example.py\n"),
+        ]
+    )
+
+    def fake_run(command, **kwargs):
+        del command, kwargs
+        return next(calls)
+
+    monkeypatch.setattr("scripts.tools.materialize_benchmark_hard_cases.subprocess.run", fake_run)
+    identity = _replay_checkout_provenance()
+    assert identity["revision"] == "revision-a"
+    assert identity["clean"] is False
+    assert identity["status_entries"] == [" M robot_sf/planner/example.py"]
+    assert (
+        identity["status_sha256"] == hashlib.sha256(b" M robot_sf/planner/example.py\n").hexdigest()
+    )
+
+
+@pytest.mark.parametrize(
     ("source_mode", "observed_mode", "expected_status"),
     [
         ("native", "native", "exact_match"),
@@ -350,7 +485,12 @@ def test_replay_records_episode_checksum_and_row_count(
 ) -> None:
     row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
     row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = source_mode
-    case = {"planner_key": "goal", "scenario_id": "scenario_a", "seed": 111}
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
     case_dir = tmp_path / f"{source_mode}-{observed_mode}"
     observed = json.loads(json.dumps(row))
     observed["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = observed_mode
@@ -373,6 +513,8 @@ def test_replay_records_episode_checksum_and_row_count(
         case_dir,
         {"planners": [{"key": "goal", "benchmark_profile": "baseline-safe"}]},
         "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_status_sha256=hashlib.sha256(b"").hexdigest(),
     )
 
     episode_path = case_dir / "replay" / "episodes.jsonl"
@@ -514,6 +656,8 @@ def test_resume_rederives_classification_when_prior_episode_checksum_is_absent(
         "returncode": 0,
         "source_revision": "source-revision",
         "replay_revision": "source-revision",
+        "replay_checkout_clean": True,
+        "replay_checkout_status_sha256": hashlib.sha256(b"").hexdigest(),
         "same_repository_revision": True,
         "identity": {"status": "match"},
         "comparison": {"overall": "match"},
@@ -586,6 +730,8 @@ def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(
         "returncode": 0,
         "source_revision": "source-revision",
         "replay_revision": "source-revision",
+        "replay_checkout_clean": True,
+        "replay_checkout_status_sha256": hashlib.sha256(b"").hexdigest(),
         "same_repository_revision": True,
         "identity": {"status": "match"},
         "comparison": {"overall": "match"},
@@ -625,3 +771,41 @@ def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(
     )
     assert repeated_case["replay"]["status"] == "replay_artifact_checksum_mismatch"
     assert repeated_case["replay"]["episode_output_sha256"] == expected_hash
+
+
+def test_resume_preserves_attempt_when_prior_replay_directory_is_missing(tmp_path: Path) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    prior_replay = {
+        "attempted": True,
+        "status": "runner_failed",
+        "returncode": 1,
+        "replay_revision": "prior-replay-revision",
+    }
+    case_record["replay"] = prior_replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = prior_replay
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    args = _args(summary, campaign_root, matrix, tmp_path / "resumed")
+    args.replay_limit = 1
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    resumed_case = json.loads(
+        (tmp_path / "resumed" / resumed["cases"][0]["case_file"]).read_text(encoding="utf-8")
+    )
+
+    assert resumed["replay"]["attempted"] == 1
+    assert resumed["replay"]["new_attempted"] == 0
+    assert resumed["replay"]["preserved_attempts_missing_artifacts"] == 1
+    assert resumed["replay"]["status_counts"] == {"replay_artifact_missing_on_resume": 1}
+    assert resumed_case["replay"]["attempted"] is True
+    assert resumed_case["replay"]["status"] == "replay_artifact_missing_on_resume"
+    assert resumed_case["replay"]["resume_prior_status"] == "runner_failed"
+    assert resumed_case["replay"]["resume_artifact_status"] == "missing"

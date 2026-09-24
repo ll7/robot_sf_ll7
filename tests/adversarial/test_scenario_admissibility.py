@@ -259,6 +259,21 @@ def test_top_level_impossibility_does_not_reject_a_case_with_another_usable_rout
     assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
 
 
+def test_declared_route_count_must_match_before_certificate_can_reject() -> None:
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    certificate["checks"]["route_count"] = 2
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert verdict.assumptions["scenario_certificate"]["route_inventory"] == {
+        "declared_count": 2,
+        "observed_count": 1,
+        "complete": False,
+    }
+    assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
+
+
 def test_oracle_exclusion_does_not_override_unresolved_mixed_route_certificate() -> None:
     certificate = _certificate("geometrically_infeasible", eligibility="excluded")
     certificate["checks"]["route_count"] = 2
@@ -306,6 +321,45 @@ def test_oracle_exclusion_does_not_override_unresolved_invalid_certificate() -> 
     assert "oracle_geometric_exclusion_route_coverage_unresolved" in verdict.reason_codes
 
 
+def test_oracle_exclusion_requires_a_complete_matching_certificate() -> None:
+    excluded = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    no_certificate = classify_scenario_admissibility("case-static", feasibility_evidence=excluded)
+    incomplete = _certificate("geometrically_infeasible", eligibility="excluded")
+    incomplete["checks"]["route_count"] = 2
+    incomplete_certificate = classify_scenario_admissibility(
+        "case-static", scenario_certificate=incomplete, feasibility_evidence=excluded
+    )
+    conflicting_positive = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=_certificate(),
+        feasibility_evidence=excluded,
+    )
+
+    for verdict in (no_certificate, incomplete_certificate, conflicting_positive):
+        assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+        assert verdict.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_route_coverage_unresolved" in no_certificate.reason_codes
+    assert (
+        "oracle_geometric_exclusion_route_coverage_unresolved"
+        in incomplete_certificate.reason_codes
+    )
+    assert "oracle_geometric_exclusion_certificate_conflict" in conflicting_positive.reason_codes
+
+
+def test_incomplete_route_inventory_cannot_bind_oracle_success() -> None:
+    certificate = _certificate()
+    certificate["checks"]["route_count"] = 2
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=certificate,
+        feasibility_evidence=_oracle_report(_oracle()),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "oracle_success_not_bound_to_static_case_and_provenance" in verdict.reason_codes
+
+
 @pytest.mark.parametrize("status", ["blocked", "time_truncated"])
 def test_blocked_or_truncated_oracle_results_are_unknown(status: str) -> None:
     oracle = _oracle(status=status, complete=False)
@@ -317,19 +371,25 @@ def test_blocked_or_truncated_oracle_results_are_unknown(status: str) -> None:
     assert f"oracle_{status}_does_not_prove_impossibility" in verdict.reason_codes
 
 
-def test_oracle_geometry_exclusion_is_named_and_conflicting_success_is_unknown() -> None:
+def test_oracle_geometry_exclusion_without_certificate_remains_unknown() -> None:
     excluded = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
     verdict = classify_scenario_admissibility("case-static", feasibility_evidence=excluded)
-    conflict = classify_scenario_admissibility(
-        "case-static",
-        feasibility_evidence=excluded,
-        reference_execution=_execution("reference", route_complete=True),
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_route_coverage_unresolved" in verdict.reason_codes
+
+
+def test_oracle_geometry_exclusion_is_named_with_complete_certificate() -> None:
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    excluded = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    verdict = classify_scenario_admissibility(
+        "case-static", scenario_certificate=certificate, feasibility_evidence=excluded
     )
 
     assert verdict.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    assert verdict.search_disposition == "reject"
     assert verdict.assumptions["feasibility_oracle"]["envelope_radius_m"] == 0.4
-    assert conflict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
-    assert "conflicting_feasibility_evidence" in conflict.reason_codes
 
 
 def test_oracle_without_canonical_claim_boundary_remains_unknown() -> None:
@@ -357,7 +417,9 @@ def test_committed_issue_5574_report_maps_excluded_and_unresolved_cells() -> Non
         feasibility_evidence=report,
     )
 
-    assert excluded.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    assert excluded.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert excluded.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_route_coverage_unresolved" in excluded.reason_codes
     assert excluded.assumptions["feasibility_oracle"]["envelope_radius_m"] == 1.0
     assert unresolved.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert unresolved.search_disposition == "retain"
@@ -601,6 +663,16 @@ def test_not_applicable_checkpoint_provenance_is_limited_to_classical_planners()
     assert classical.verdict == EMPIRICALLY_FEASIBLE
     assert rejected.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "reference_execution_provenance_incomplete" in rejected.reason_codes
+
+
+def test_not_applicable_checkpoint_sentinel_rejects_checkpoint_backed_sicnav() -> None:
+    sicnav = _execution("sicnav", route_complete=True)
+    sicnav["planner_checkpoint_sha256"] = "not_applicable"
+    verdict = classify_scenario_admissibility("case-static", reference_execution=sicnav)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "reference_execution_provenance_incomplete" in verdict.reason_codes
 
 
 @pytest.mark.parametrize("field", ["planner_config_sha256", "planner_checkpoint_sha256"])

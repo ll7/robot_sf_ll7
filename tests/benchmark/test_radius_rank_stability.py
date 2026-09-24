@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import robot_sf.benchmark.radius_rank_stability as rank_stability
 from robot_sf.benchmark.radius_rank_stability import (
     ANALYSIS_BLOCKED_PENDING_GATE2,
     EXPECTED_PLANNER_ROSTER,
@@ -61,6 +62,25 @@ if TYPE_CHECKING:
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RADII = (0.5, 0.8, 1.0)
 _BASELINE = 1.0
+_TEST_FAMILY_RULE_ID = "unit-test-only-family-rule.v1"
+_TEST_FAMILY_AUTHORITY_SHA256 = "f" * 64
+
+
+@pytest.fixture(autouse=True)
+def synthetic_family_rule_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin synthetic family semantics only inside non-evidence unit tests."""
+    monkeypatch.setattr(
+        rank_stability,
+        "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID",
+        _TEST_FAMILY_RULE_ID,
+    )
+    monkeypatch.setattr(
+        rank_stability,
+        "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256",
+        _TEST_FAMILY_AUTHORITY_SHA256,
+    )
+
+
 _FROZEN_BASELINE_CONFIG_PATH = _REPO_ROOT / EXPECTED_ARM_CAMPAIGN_CONFIGS["r1p0"]
 
 
@@ -171,6 +191,7 @@ def _campaign_provenance() -> dict:
     """Return synthetic runner-receipt identities; never benchmark or custody evidence."""
     return {
         f"{radius:g}": {
+            "campaign_id": f"fixture-campaign-{radius:g}",
             "campaign_commit": EXPECTED_CAMPAIGN_GIT_COMMIT,
             "config_path": EXPECTED_ARM_CAMPAIGN_CONFIGS[arm_key],
             "config_sha256": EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256[arm_key],
@@ -197,6 +218,30 @@ def _campaign_provenance() -> dict:
         }
         for radius, arm_key in zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True)
     }
+
+
+def _family_feasibility_provenance(families: dict, campaigns: dict) -> dict:
+    """Bind test-only family rows to the synthetic per-arm source identities."""
+    result = {}
+    for radius in _RADII:
+        key = f"{radius:g}"
+        family_key = f"{radius:.1f}"
+        campaign = campaigns[key]
+        result[key] = {
+            "schema_version": "issue_6642_family_feasibility_provenance.v1",
+            "radius_m": radius,
+            "source_campaign_id": campaign["campaign_id"],
+            "source_campaign_commit": campaign["campaign_commit"],
+            "source_config_sha256": campaign["config_sha256"],
+            "definition": "unit-test family-feasibility definition only",
+            "definition_id": _TEST_FAMILY_RULE_ID,
+            "authority_sha256": _TEST_FAMILY_AUTHORITY_SHA256,
+            "receipt_sha256": hashlib.sha256(f"fixture-family-receipt:{key}".encode()).hexdigest(),
+            "families_sha256": hashlib.sha256(
+                json.dumps(families[family_key], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+        }
+    return result
 
 
 def _bind_summary_to_frozen_campaign(summary: dict, config_path: Path) -> dict:
@@ -261,10 +306,13 @@ def _sweep_summary(
         "row_accounting": accounting if accounting is not None else _full_accounting(),
     }
     summary["family_feasibility"] = family if family is not None else _complete_family_feasibility()
+    summary["campaign_provenance"] = _campaign_provenance()
+    summary["family_feasibility_provenance"] = _family_feasibility_provenance(
+        summary["family_feasibility"], summary["campaign_provenance"]
+    )
     summary["paired_observations"] = (
         paired if paired is not None else _complete_paired_observations(tables)
     )
-    summary["campaign_provenance"] = _campaign_provenance()
     return summary
 
 
@@ -1153,6 +1201,72 @@ def test_analyze_radius_sensitivity_requires_matched_family_feasibility() -> Non
     assert report.verdict.verdict == VERDICT_INVALID
     assert report.verdict.interpretation_promoted is False
     assert "radius_0.5_missing_narrow_doorway_feasibility" in report.verdict.reasons
+
+
+def test_analyze_radius_sensitivity_requires_family_feasibility_provenance() -> None:
+    """Family labels without their receipt/rule/source binding cannot promote analysis."""
+    summary = _sweep_summary(_stable_tables())
+    del summary["family_feasibility_provenance"]
+
+    report = analyze_radius_sensitivity(summary)
+
+    assert report.verdict.verdict == VERDICT_INVALID
+    assert report.verdict.interpretation_promoted is False
+    assert "missing_family_feasibility_provenance" in report.verdict.reasons
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    (
+        ("definition_id", "other-rule.v1", "family_feasibility_definition_id_mismatch"),
+        ("authority_sha256", "0" * 64, "family_feasibility_authority_mismatch"),
+        ("source_campaign_id", "other-campaign", "family_feasibility_source_campaign_id_mismatch"),
+        ("source_campaign_commit", "0" * 40, "family_feasibility_source_campaign_commit_mismatch"),
+        ("source_config_sha256", "0" * 64, "family_feasibility_source_config_sha256_mismatch"),
+        ("receipt_sha256", "not-a-digest", "invalid_family_feasibility_receipt_sha256"),
+        ("families_sha256", "0" * 64, "family_feasibility_status_digest_mismatch"),
+    ),
+)
+def test_analyze_radius_sensitivity_rejects_unmatched_family_provenance(
+    field: str, value: str, reason: str
+) -> None:
+    """Family provenance must bind the pinned rule, source arm, and exact status map."""
+    summary = _sweep_summary(_stable_tables())
+    summary["family_feasibility_provenance"]["0.5"][field] = value
+
+    report = analyze_radius_sensitivity(summary)
+
+    assert report.verdict.verdict == VERDICT_INVALID
+    assert report.verdict.interpretation_promoted is False
+    assert any(reason in item for item in report.verdict.reasons)
+
+
+def test_analyze_radius_sensitivity_rejects_case_variant_duplicate_family_receipt_digest() -> None:
+    """Hexadecimal digest casing cannot make one family receipt appear distinct."""
+    summary = _sweep_summary(_stable_tables())
+    receipt_digest = "abcdef12" * 8
+    summary["family_feasibility_provenance"]["0.5"]["receipt_sha256"] = receipt_digest
+    summary["family_feasibility_provenance"]["0.8"]["receipt_sha256"] = receipt_digest.upper()
+    assert receipt_digest.upper() != receipt_digest
+
+    report = analyze_radius_sensitivity(summary)
+
+    assert report.verdict.verdict == VERDICT_INVALID
+    assert report.verdict.interpretation_promoted is False
+    assert "radius_0.8_duplicate_family_feasibility_receipt_sha256" in report.verdict.reasons
+
+
+def test_analyze_radius_sensitivity_stays_blocked_without_owner_approved_family_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Self-consistent fixture provenance is not authority while production pins are unset."""
+    monkeypatch.setattr(rank_stability, "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID", None)
+    monkeypatch.setattr(rank_stability, "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256", None)
+    report = analyze_radius_sensitivity(_sweep_summary(_stable_tables()))
+
+    assert report.verdict.verdict == VERDICT_INVALID
+    assert report.verdict.interpretation_promoted is False
+    assert "family_feasibility_rule_identity_unpinned" in report.verdict.reasons
 
 
 def test_analyze_radius_sensitivity_requires_seed_keyed_paired_observations() -> None:

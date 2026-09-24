@@ -53,6 +53,7 @@ _FIXTURE_CONFIG_PATHS = {
     "r0p8": "configs/benchmarks/fixture_arm_0p8.yaml",
     "r1p0": "configs/benchmarks/fixture_arm_1p0.yaml",
 }
+_FIXTURE_SCENARIO_MATRIX_PATH = "configs/scenarios/classic_interactions_francis2023.yaml"
 _FIXTURE_PLANNER_CONFIG_PATH = "configs/algos/fixture_goal.yaml"
 _FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH = "configs/benchmarks/fixture_family_roster.yaml"
 _FIXTURE_FAMILY_CONFIG_PATHS = {
@@ -91,6 +92,12 @@ class _GitConfigFixture:
 def git_config_fixture(tmp_path_factory: pytest.TempPathFactory) -> _GitConfigFixture:
     """Create exact committed config bytes for Git-blob provenance tests."""
     root = tmp_path_factory.mktemp("radius-sweep-source")
+    scenario_matrix = root / _FIXTURE_SCENARIO_MATRIX_PATH
+    scenario_matrix.parent.mkdir(parents=True, exist_ok=True)
+    scenario_matrix.write_text(
+        "scenarios:\n  - scenario_id: case_a\n  - scenario_id: case_b\n",
+        encoding="utf-8",
+    )
     planner_config = root / _FIXTURE_PLANNER_CONFIG_PATH
     planner_config.parent.mkdir(parents=True, exist_ok=True)
     planner_config.write_text("fixture: goal\n", encoding="utf-8")
@@ -129,6 +136,7 @@ def git_config_fixture(tmp_path_factory: pytest.TempPathFactory) -> _GitConfigFi
             str(root),
             "add",
             "--",
+            _FIXTURE_SCENARIO_MATRIX_PATH,
             *_FIXTURE_CONFIG_PATHS.values(),
             _FIXTURE_PLANNER_CONFIG_PATH,
             _FIXTURE_FAMILY_CAMPAIGN_CONFIG_PATH,
@@ -222,6 +230,9 @@ def _write_arm(
         "schema_version": composer.CAMPAIGN_SCHEMA,
         "campaign_id": f"campaign-{arm_key}",
         "scenario_matrix": composer.EXPECTED_SCENARIO_MATRIX,
+        "scenario_matrix_hash": composer._config_hash(
+            [{"scenario_id": scenario} for scenario in composer.EXPECTED_SCENARIO_NAMES]
+        ),
         "git": {"commit": commit},
         "radius_binding": binding,
         "seed_policy": {"resolved_seeds": list(composer.EXPECTED_SEEDS)},
@@ -236,6 +247,7 @@ def _write_arm(
             "campaign_id": manifest["campaign_id"],
             "git_hash": commit,
             "scenario_matrix": composer.EXPECTED_SCENARIO_MATRIX,
+            "scenario_matrix_hash": manifest["scenario_matrix_hash"],
             "campaign_execution_status": "completed",
             "evidence_status": "valid",
             "benchmark_success": True,
@@ -307,6 +319,7 @@ def _write_arm(
                     "scenario_id": scenario,
                     "seed": seed,
                     "git_hash": commit,
+                    "horizon": composer.EXPECTED_HORIZON,
                     "integrity": {
                         "contradictions": [],
                         "effective_view": {"degraded": False},
@@ -314,6 +327,9 @@ def _write_arm(
                     "scenario_params": {
                         "algo": "goal",
                         "algo_config_hash": composer._config_hash({"fixture": "goal"}),
+                        "run_horizon": composer.EXPECTED_HORIZON,
+                        "run_dt": composer.EXPECTED_DT,
+                        "record_forces": composer.EXPECTED_RECORD_FORCES,
                         "robot_config": {"radius": radius},
                     },
                     "metrics": {
@@ -347,17 +363,17 @@ def _write_runner_receipt(
         out_path=episodes_path,
         episode_records=rows,
         schema_path=schema_path,
-        scenario_path=episodes_path.parent / "inline-scenarios.json",
-        scenarios=[{"scenario_id": row["scenario_id"]} for row in rows],
+        scenario_path=(composer.SOURCE_REPOSITORY_ROOT / _FIXTURE_SCENARIO_MATRIX_PATH),
+        scenarios=[{"scenario_id": scenario} for scenario in composer.EXPECTED_SCENARIO_NAMES],
         algo=algorithm,
         algo_config_path=None,
         benchmark_profile="fixture",
-        suite_key="issue-6642-fixture",
+        suite_key=composer.EXPECTED_SUITE_KEY,
         total_jobs=len(rows),
         written=len(rows),
-        horizon=None,
-        dt=None,
-        record_forces=False,
+        horizon=composer.EXPECTED_HORIZON,
+        dt=composer.EXPECTED_DT,
+        record_forces=composer.EXPECTED_RECORD_FORCES,
         active_observation_mode=None,
         active_observation_level=None,
     )
@@ -468,6 +484,61 @@ def test_composer_rejects_runner_receipt_for_wrong_frozen_algorithm(
     with pytest.raises(
         RadiusSweepSummaryError, match="runner provenance receipt algorithm mismatch"
     ):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("matrix_path", "scenario matrix identity mismatch"),
+        ("matrix_digest", "invalid runner provenance receipt"),
+        ("matrix_hash", "scenario-matrix hash mismatch"),
+        ("suite_key", "suite identity mismatch"),
+    ),
+)
+def test_composer_binds_runner_receipt_to_frozen_matrix_and_suite(
+    tmp_path: Path,
+    compact_scope: None,
+    mutation: str,
+    message: str,
+) -> None:
+    """A valid artifact digest is insufficient if its frozen input/suite identity differs."""
+    roots, receipt = _write_triplet(tmp_path)
+    episodes_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    receipt_path = episodes_path.with_suffix(".jsonl.provenance.json")
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if mutation == "matrix_path":
+        payload["inputs"]["scenario_matrix"]["path"] = "configs/scenarios/wrong.yaml"
+    elif mutation == "matrix_digest":
+        payload["inputs"]["scenario_matrix"]["sha256"] = "0" * 64
+    elif mutation == "matrix_hash":
+        payload["campaign_identity"]["scenario_matrix_hash"] = "0" * 64
+    else:
+        identity = payload["campaign_identity"]
+        identity["suite_key"] = "unfrozen-suite"
+        identity["input_bundle_sha256"] = result_provenance._canonical_input_bundle_sha256(
+            inputs=payload["inputs"],
+            algo=identity["algorithm"],
+            protocol_version=payload["run"]["protocol_version"],
+            suite_key=identity["suite_key"],
+        )
+    receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match=message):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
+
+
+def test_composer_requires_campaign_manifest_and_summary_matrix_hashes_to_match(
+    tmp_path: Path, compact_scope: None
+) -> None:
+    """Campaign inputs cannot advertise different matrix expansions across surfaces."""
+    roots, receipt = _write_triplet(tmp_path)
+    manifest_path = roots[0] / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["scenario_matrix_hash"] = "0" * 16
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(RadiusSweepSummaryError, match="campaign identity mismatch"):
         compose_radius_sweep_summary(roots, gate1_canary_receipt=receipt)
 
 
@@ -692,6 +763,107 @@ def test_runner_row_binding_rejects_boolean_numeric_identities(field: str, tmp_p
             jsonl_line=1,
             episodes_path=tmp_path / "episodes.jsonl",
         )
+
+
+def test_runner_row_binding_requires_receipt_seed_to_match_episode_seed(tmp_path: Path) -> None:
+    """Receipt seed identity is compared with the episode record, not itself."""
+    episode = {
+        "episode_id": "episode-1",
+        "scenario_id": "case-a",
+        "seed": 1,
+        "config_hash": "config-hash",
+        "git_hash": "a" * 40,
+    }
+    receipt_row = {
+        "episode_id": "episode-1",
+        "scenario_id": "case-a",
+        "seed": 2,
+        "config_hash": "config-hash",
+        "repo_commit": "a" * 40,
+        "jsonl_line": 1,
+    }
+
+    with pytest.raises(RadiusSweepSummaryError, match="runner provenance row identity mismatch"):
+        composer._validate_runner_row_binding(
+            receipt_row,
+            episode,
+            jsonl_line=1,
+            episodes_path=tmp_path / "episodes.jsonl",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("horizon", 599, "row horizon mismatch"),
+        ("dt", 0.2, "row dt mismatch"),
+        ("record_forces", False, "row record_forces mismatch"),
+    ),
+)
+def test_runner_row_binding_requires_frozen_simulator_settings(
+    field: str, value: object, message: str, tmp_path: Path
+) -> None:
+    """Receipt rows cannot contradict the frozen h600/dt/force settings."""
+    episode = {
+        "episode_id": "episode-1",
+        "scenario_id": "case-a",
+        "seed": 1,
+        "config_hash": "config-hash",
+        "git_hash": "a" * 40,
+    }
+    receipt_row = {
+        "episode_id": "episode-1",
+        "scenario_id": "case-a",
+        "seed": 1,
+        "config_hash": "config-hash",
+        "repo_commit": "a" * 40,
+        "jsonl_line": 1,
+        "simulator_settings": {
+            "horizon": composer.EXPECTED_HORIZON,
+            "dt": composer.EXPECTED_DT,
+            "record_forces": composer.EXPECTED_RECORD_FORCES,
+        },
+    }
+    receipt_row["simulator_settings"][field] = value
+
+    with pytest.raises(RadiusSweepSummaryError, match=message):
+        composer._validate_runner_row_binding(
+            receipt_row,
+            episode,
+            jsonl_line=1,
+            episodes_path=tmp_path / "episodes.jsonl",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("horizon", 599, "episode horizon mismatch"),
+        ("run_horizon", 599, "episode horizon mismatch"),
+        ("run_dt", 0.2, "episode dt mismatch"),
+        ("record_forces", False, "episode record_forces mismatch"),
+    ),
+)
+def test_episode_record_requires_frozen_simulator_settings(
+    tmp_path: Path,
+    compact_scope: None,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    """Episode bytes themselves must agree with the frozen simulator settings."""
+    roots, _receipt = _write_triplet(tmp_path)
+    episode_path = roots[0] / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    if field == "horizon":
+        rows[0][field] = value
+    else:
+        rows[0]["scenario_params"][field] = value
+    episode_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    _write_runner_receipt(episode_path, rows)
+
+    with pytest.raises(RadiusSweepSummaryError, match=message):
+        compose_radius_sweep_summary(roots, gate1_canary_receipt=_receipt)
 
 
 @pytest.mark.parametrize("symlink_parent", ("runs", "planner"))

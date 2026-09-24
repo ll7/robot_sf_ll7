@@ -59,6 +59,9 @@ RELEASE_PLANNER_KEYS: tuple[str, ...] = (
 # manifest cannot replace a cell with a different scenario while preserving
 # only the count.
 EXPECTED_SCENARIO_MATRIX = "configs/scenarios/classic_interactions_francis2023.yaml"
+# The frozen runner's suite resolver maps this combined matrix to
+# ``classic_interactions`` because the filename contains "classic".
+EXPECTED_SUITE_KEY = "classic_interactions"
 EXPECTED_RELEASE_BASELINE_CONFIG = (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml"
 )
@@ -157,6 +160,13 @@ EXPECTED_SEEDS: tuple[int, ...] = tuple(range(EXPECTED_SEED_RANGE[0], EXPECTED_S
 EXPECTED_HORIZON = 600
 EXPECTED_DT = 0.1
 EXPECTED_KINEMATICS = "differential_drive"
+EXPECTED_RECORD_FORCES = True
+# Family-feasibility approval remains intentionally unset until an owner-approved
+# rule artifact and an evaluator over the exact admitted episode rows exist.
+FAMILY_FEASIBILITY_SCHEMA = "issue_6642_family_feasibility.v1"
+FAMILY_FEASIBILITY_PROVENANCE_SCHEMA = "issue_6642_family_feasibility_provenance.v1"
+EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID: str | None = None
+EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256: str | None = None
 EXPECTED_ROWS_PER_ARM = len(RELEASE_PLANNER_KEYS) * EXPECTED_SCENARIO_COUNT * len(EXPECTED_SEEDS)
 EXPECTED_TOTAL_ROWS = len(PRODUCTION_RADII) * EXPECTED_ROWS_PER_ARM
 
@@ -1295,10 +1305,13 @@ __all__ = [
     "EXPECTED_ARM_RELEASE_TAG_0P8M",
     "EXPECTED_CAMPAIGN_GIT_COMMIT",
     "EXPECTED_DT",
+    "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256",
+    "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID",
     "EXPECTED_GATE1_RECEIPT_SHA256",
     "EXPECTED_HORIZON",
     "EXPECTED_KINEMATICS",
     "EXPECTED_MANIFEST_CONFIG",
+    "EXPECTED_RECORD_FORCES",
     "EXPECTED_RELEASE_BASELINE_CONFIG",
     "EXPECTED_ROWS_PER_ARM",
     "EXPECTED_SCENARIO_COUNT",
@@ -1307,7 +1320,10 @@ __all__ = [
     "EXPECTED_SEEDS",
     "EXPECTED_SEED_RANGE",
     "EXPECTED_SEED_SET",
+    "EXPECTED_SUITE_KEY",
     "EXPECTED_TOTAL_ROWS",
+    "FAMILY_FEASIBILITY_PROVENANCE_SCHEMA",
+    "FAMILY_FEASIBILITY_SCHEMA",
     "GATE1_CANARY_ISSUE",
     "GATE1_STATUSES",
     "GATE1_STATUS_NOT_YET_PASSED",

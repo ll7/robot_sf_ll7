@@ -34,11 +34,19 @@ from robot_sf.benchmark.radius_sweep_manifest import (
     EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
     EXPECTED_ARM_CAMPAIGN_CONFIGS,
     EXPECTED_CAMPAIGN_GIT_COMMIT,
+    EXPECTED_DT,
+    EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256,
+    EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID,
     EXPECTED_GATE1_RECEIPT_SHA256,
+    EXPECTED_HORIZON,
+    EXPECTED_RECORD_FORCES,
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_MATRIX,
     EXPECTED_SCENARIO_NAMES,
     EXPECTED_SEEDS,
+    EXPECTED_SUITE_KEY,
+    FAMILY_FEASIBILITY_PROVENANCE_SCHEMA,
+    FAMILY_FEASIBILITY_SCHEMA,
     PRODUCTION_RADII,
     RELEASE_PLANNER_KEYS,
 )
@@ -58,12 +66,7 @@ from robot_sf.benchmark.result_provenance import (
 from robot_sf.benchmark.utils import _config_hash
 
 CAMPAIGN_SCHEMA = "benchmark-camera-ready-campaign.v1"
-FAMILY_FEASIBILITY_SCHEMA = "issue_6642_family_feasibility.v1"
 EXPECTED_KINEMATICS = "differential_drive"
-# These remain unset until a separately reviewed owner decision pins the exact
-# family rule. A self-declared receipt cannot authorize its own interpretation.
-EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID: str | None = None
-EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256: str | None = None
 SOURCE_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RADIUS_TO_ARM_KEY = dict(zip(PRODUCTION_RADII, ("r0p5", "r0p8", "r1p0"), strict=True))
 
@@ -580,6 +583,7 @@ def _episode_from_record(
         raise RadiusSweepSummaryError(f"radius {radius:g} episode is degraded")
 
     params = _mapping(record.get("scenario_params"), "episode scenario_params")
+    _validate_episode_simulator_settings(record, params, radius)
     robot = _mapping(params.get("robot_config"), "episode robot_config")
     if _finite(robot.get("radius"), "episode robot radius") != radius:
         raise RadiusSweepSummaryError(f"radius {radius:g} episode robot radius mismatch")
@@ -607,6 +611,31 @@ def _episode_from_record(
         typed_collisions=total,
         snqi=_finite(metrics.get("snqi"), "episode SNQI"),
     )
+
+
+def _validate_episode_simulator_settings(
+    record: Mapping[str, Any], params: Mapping[str, Any], radius: float
+) -> None:
+    """Require serialized episode settings to match the frozen campaign inputs."""
+    episode_horizon = record.get("horizon")
+    run_horizon = params.get("run_horizon")
+    if (
+        isinstance(episode_horizon, bool)
+        or episode_horizon != EXPECTED_HORIZON
+        or isinstance(run_horizon, bool)
+        or run_horizon != EXPECTED_HORIZON
+    ):
+        raise RadiusSweepSummaryError(f"radius {radius:g} episode horizon mismatch")
+    run_dt = params.get("run_dt")
+    if (
+        isinstance(run_dt, bool)
+        or not isinstance(run_dt, int | float)
+        or not math.isfinite(float(run_dt))
+        or not math.isclose(float(run_dt), EXPECTED_DT, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        raise RadiusSweepSummaryError(f"radius {radius:g} episode dt mismatch")
+    if params.get("record_forces") is not EXPECTED_RECORD_FORCES:
+        raise RadiusSweepSummaryError(f"radius {radius:g} episode record_forces mismatch")
 
 
 def _validate_episode_evidence_eligibility(
@@ -787,12 +816,42 @@ def _validate_episode_runtime_status(
         )
 
 
+def _validate_runner_matrix_input(
+    receipt_payload: Mapping[str, Any], *, campaign_commit: str, logical_episode_path: str
+) -> None:
+    """Bind the receipt's matrix input path and bytes to the frozen Git blob."""
+    inputs = _mapping(receipt_payload.get("inputs"), "runner receipt inputs")
+    matrix_input = _mapping(inputs.get("scenario_matrix"), "runner receipt scenario matrix")
+    matrix_input_path = matrix_input.get("path")
+    expected_matrix_parts = PurePosixPath(EXPECTED_SCENARIO_MATRIX).parts
+    normalized_matrix_path = (
+        matrix_input_path.replace("\\", "/") if isinstance(matrix_input_path, str) else ""
+    )
+    parsed_matrix_path = PurePosixPath(normalized_matrix_path)
+    if (
+        matrix_input.get("artifact_status") != "available"
+        or not normalized_matrix_path
+        or ".." in parsed_matrix_path.parts
+        or tuple(parsed_matrix_path.parts[-len(expected_matrix_parts) :]) != expected_matrix_parts
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt scenario matrix identity mismatch for {logical_episode_path}"
+        )
+    matrix_sha256 = _hex(matrix_input.get("sha256"), 64, "runner scenario-matrix SHA-256")
+    expected_matrix_sha256 = _committed_config_sha256(campaign_commit, EXPECTED_SCENARIO_MATRIX)
+    if matrix_sha256 != expected_matrix_sha256:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt scenario matrix digest mismatch for {logical_episode_path}"
+        )
+
+
 def _validate_runner_receipt(  # noqa: C901, PLR0912
     episodes_path: Path,
     *,
     planner: str,
     campaign_commit: str,
     expected_runner_algorithm: str,
+    expected_scenario_matrix_hash: str,
     episode_bytes: bytes,
 ) -> tuple[dict[str, Any], str, str]:
     """Validate the frozen runner receipt against the exact episode bytes read.
@@ -843,6 +902,11 @@ def _validate_runner_receipt(  # noqa: C901, PLR0912
         raise RadiusSweepSummaryError(
             f"runner provenance receipt runner mismatch for {logical_episode_path}"
         )
+    _validate_runner_matrix_input(
+        receipt_payload,
+        campaign_commit=campaign_commit,
+        logical_episode_path=logical_episode_path,
+    )
     completeness = _mapping(receipt_payload.get("completeness"), "runner receipt completeness")
     if completeness.get("status") != "complete":
         raise RadiusSweepSummaryError(
@@ -893,6 +957,14 @@ def _validate_runner_receipt(  # noqa: C901, PLR0912
         raise RadiusSweepSummaryError(
             f"runner provenance receipt algorithm mismatch for {logical_episode_path}"
         )
+    if campaign.get("scenario_matrix_hash") != expected_scenario_matrix_hash:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt scenario-matrix hash mismatch for {logical_episode_path}"
+        )
+    if campaign.get("suite_key") != EXPECTED_SUITE_KEY:
+        raise RadiusSweepSummaryError(
+            f"runner provenance receipt suite identity mismatch for {logical_episode_path}"
+        )
     written = campaign.get("written")
     total_jobs = campaign.get("total_jobs")
     if (
@@ -932,11 +1004,14 @@ def _validate_runner_row_binding(
     row = _mapping(receipt_row, f"runner receipt row {jsonl_line}")
     receipt_line = row.get("jsonl_line")
     receipt_seed = row.get("seed")
+    episode_seed = episode_record.get("seed")
     if (
         isinstance(receipt_line, bool)
         or not isinstance(receipt_line, int)
         or isinstance(receipt_seed, bool)
         or not isinstance(receipt_seed, int)
+        or isinstance(episode_seed, bool)
+        or not isinstance(episode_seed, int)
     ):
         raise RadiusSweepSummaryError(
             f"runner provenance row numeric identity has invalid types at "
@@ -945,7 +1020,7 @@ def _validate_runner_row_binding(
     bindings = (
         ("episode_id", episode_record.get("episode_id")),
         ("scenario_id", episode_record.get("scenario_id")),
-        ("seed", receipt_seed),
+        ("seed", episode_seed),
         ("config_hash", episode_record.get("config_hash")),
         ("repo_commit", episode_record.get("git_hash")),
     )
@@ -955,6 +1030,28 @@ def _validate_runner_row_binding(
         raise RadiusSweepSummaryError(
             f"runner provenance row identity mismatch at {episodes_path}:{jsonl_line + 1}"
         )
+    simulator_settings = _mapping(
+        row.get("simulator_settings"), f"runner receipt row {jsonl_line} simulator_settings"
+    )
+    row_horizon = simulator_settings.get("horizon")
+    row_dt = simulator_settings.get("dt")
+    if isinstance(row_horizon, bool) or row_horizon != EXPECTED_HORIZON:
+        raise RadiusSweepSummaryError(
+            f"runner provenance row horizon mismatch at {episodes_path}:{jsonl_line + 1}"
+        )
+    if (
+        isinstance(row_dt, bool)
+        or not isinstance(row_dt, int | float)
+        or not math.isfinite(float(row_dt))
+        or not math.isclose(float(row_dt), EXPECTED_DT, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        raise RadiusSweepSummaryError(
+            f"runner provenance row dt mismatch at {episodes_path}:{jsonl_line + 1}"
+        )
+    if simulator_settings.get("record_forces") is not EXPECTED_RECORD_FORCES:
+        raise RadiusSweepSummaryError(
+            f"runner provenance row record_forces mismatch at {episodes_path}:{jsonl_line + 1}"
+        )
 
 
 def _load_episodes(  # noqa: C901
@@ -962,6 +1059,7 @@ def _load_episodes(  # noqa: C901
     radius: float,
     commit: str,
     planner_identities: Mapping[str, Mapping[str, _PlannerIdentity]],
+    expected_scenario_matrix_hash: str,
 ) -> tuple[tuple[_Episode, ...], dict[str, dict[str, str]]]:
     episodes: list[_Episode] = []
     artifact_provenance: dict[str, dict[str, str]] = {}
@@ -996,6 +1094,7 @@ def _load_episodes(  # noqa: C901
             planner=planner,
             campaign_commit=commit,
             expected_runner_algorithm=_expected_runner_algorithm(planner_identities[planner]),
+            expected_scenario_matrix_hash=expected_scenario_matrix_hash,
             episode_bytes=episode_bytes,
         )
         try:
@@ -1347,18 +1446,31 @@ def _load_arm(root: Path) -> _Arm:
     _validate_campaign_status(summary, radius)
     planner_rows = _validate_planner_rows(summary, radius)
     campaign = _mapping(summary.get("campaign"), "campaign summary header")
+    manifest_scenario_matrix_hash = _hex(
+        manifest.get("scenario_matrix_hash"), 16, "manifest scenario-matrix hash"
+    )
+    summary_scenario_matrix_hash = _hex(
+        campaign.get("scenario_matrix_hash"), 16, "campaign-summary scenario-matrix hash"
+    )
     campaign_id = str(manifest.get("campaign_id") or "")
     if (
         campaign.get("campaign_id") != campaign_id
         or campaign.get("git_hash") != commit
         or campaign.get("scenario_matrix") != EXPECTED_SCENARIO_MATRIX
         or manifest.get("scenario_matrix") != EXPECTED_SCENARIO_MATRIX
+        or manifest_scenario_matrix_hash != summary_scenario_matrix_hash
         or tuple(_mapping(manifest.get("seed_policy"), "seed policy").get("resolved_seeds", ()))
         != EXPECTED_SEEDS
     ):
         raise RadiusSweepSummaryError(f"radius {radius:g} campaign identity mismatch")
     planner_identities = _committed_planner_identities(commit, config_path)
-    episodes, episode_artifacts = _load_episodes(root, radius, commit, planner_identities)
+    episodes, episode_artifacts = _load_episodes(
+        root,
+        radius,
+        commit,
+        planner_identities,
+        summary_scenario_matrix_hash,
+    )
     _validate_planner_aggregates(planner_rows, episodes, radius)
     (
         family_definition_id,
@@ -1490,10 +1602,20 @@ def compose_radius_sweep_summary(
         }
         families[radius_key] = arm.family_feasibility
         family_provenance[radius_key] = {
+            "schema_version": FAMILY_FEASIBILITY_PROVENANCE_SCHEMA,
+            "radius_m": arm.radius,
+            "source_campaign_id": arm.campaign_id,
+            "source_campaign_commit": arm.campaign_commit,
+            "source_config_sha256": arm.config_sha256,
             "definition": arm.family_feasibility_definition,
             "definition_id": arm.family_feasibility_definition_id,
             "authority_sha256": arm.family_feasibility_authority_sha256,
             "receipt_sha256": arm.family_feasibility_sha256,
+            "families_sha256": sha256(
+                json.dumps(arm.family_feasibility, sort_keys=True, separators=(",", ":")).encode(
+                    "utf-8"
+                )
+            ).hexdigest(),
         }
         provenance[radius_key] = {
             "campaign_commit": arm.campaign_commit,

@@ -133,6 +133,15 @@ wrong-algorithm, wrong-runner, wrong-commit, wrong-path, incomplete, or stale re
 Both the episode digest and exact sidecar-byte digest are carried per planner into
 `campaign_provenance` and Gate 3's evidence provenance.
 
+The composer also binds scenario-matrix provenance to the frozen source input: the manifest and
+campaign summary matrix hashes must agree, the receipt's matrix path and digest must identify the
+matrix blob at the pinned source commit, and its campaign identity must repeat that matrix hash and
+the expected `classic_interactions` suite key. Every receipt row must bind to the corresponding
+episode's seed and declare the frozen simulator settings (`horizon: 600`, `dt: 0.1`, and
+`record_forces: true`); the episode itself must carry the matching horizon, run horizon, timestep,
+and force-recording setting. These checks prevent a self-consistent but unrelated receipt, or
+receipt settings that diverge from the frozen campaign inputs, from admitting rows.
+
 This is a runner-produced digest receipt under the repository's current trust model, not a
 signature or durable-storage custody attestation. The summary therefore records
 `source_integrity_status: runner_receipt_matched`, `artifact_custody_status: unattested`, and
@@ -224,6 +233,16 @@ the family results from the exact source rows. Pinning identity strings alone ca
 path. Synthetic evaluator stubs in focused unit tests exercise summary mechanics only and are not
 campaign or benchmark evidence. The current preserved job 15504 (complete 0.5/0.8 m arms) and
 recovery job 15516 (complete 1.0 m arm) also do not contain an approved family-feasibility block.
+
+Gate 3 independently validates that each radius has the expected family-provenance schema, exact
+radius, non-empty rule definition and identity, unique receipt digest, status-map digest, and
+source campaign ID, commit, and config digest matching that radius's campaign provenance. All
+arms must use one rule identity, and production rule identity pins must be present. Because those
+pins and the evaluator remain unavailable, valid-looking or self-declared family statuses still
+produce a blocking `family_feasibility_rule_identity_unpinned` reason; they cannot set
+`interpretation_promoted: true` or authorize a Gate 3 verdict. This provenance gate does not admit
+family feasibility or promote Gate 3.
+
 The exact original Gate 1 receipt bytes whose declared SHA-256 is
 `88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922` are also absent from the
 preserved campaign trees. A source replay can test the canary behavior, but a byte-different replay

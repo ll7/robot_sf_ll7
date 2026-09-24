@@ -55,11 +55,14 @@ from robot_sf.benchmark.radius_sweep_manifest import (
     EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
     EXPECTED_ARM_CAMPAIGN_CONFIGS,
     EXPECTED_CAMPAIGN_GIT_COMMIT,
+    EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256,
+    EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID,
     EXPECTED_GATE1_RECEIPT_SHA256,
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_MATRIX,
     EXPECTED_SCENARIO_NAMES,
     EXPECTED_TOTAL_ROWS,
+    FAMILY_FEASIBILITY_PROVENANCE_SCHEMA,
     PRODUCTION_RADII,
     PRODUCTION_RADIUS_KEYS,
 )
@@ -647,6 +650,179 @@ def _family_feasibility_blockers(
     return blockers
 
 
+def _family_feasibility_header_blockers(
+    provenance: Mapping[str, object], *, radius: float, key: str
+) -> list[str]:
+    """Validate family-provenance schema and radius identity.
+
+    Returns:
+        Blocking reasons for an invalid schema or radius.
+    """
+    blockers = []
+    if provenance.get("schema_version") != FAMILY_FEASIBILITY_PROVENANCE_SCHEMA:
+        blockers.append(f"radius_{key}_invalid_family_feasibility_provenance_schema")
+    raw_radius = provenance.get("radius_m")
+    if (
+        isinstance(raw_radius, bool)
+        or not isinstance(raw_radius, int | float)
+        or not math.isfinite(float(raw_radius))
+        or float(raw_radius) != radius
+    ):
+        blockers.append(f"radius_{key}_family_feasibility_provenance_radius_mismatch")
+    return blockers
+
+
+def _family_feasibility_rule_blockers(
+    provenance: Mapping[str, object],
+    *,
+    key: str,
+    expected_definition_id: str | None,
+    expected_authority: str | None,
+) -> tuple[list[str], tuple[str, str, str] | None]:
+    """Validate rule identity and return its comparable normalized identity.
+
+    Returns:
+        Blocking reasons and a normalized rule identity when structurally valid.
+    """
+    blockers = []
+    definition = provenance.get("definition")
+    definition_id = provenance.get("definition_id")
+    authority_sha256 = provenance.get("authority_sha256")
+    if not isinstance(definition, str) or not definition.strip():
+        blockers.append(f"radius_{key}_missing_family_feasibility_definition")
+    if (
+        not isinstance(definition_id, str)
+        or not definition_id.strip()
+        or (expected_definition_id is not None and definition_id != expected_definition_id)
+    ):
+        blockers.append(f"radius_{key}_family_feasibility_definition_id_mismatch")
+    if not _is_hex_digest(authority_sha256, length=64) or (
+        expected_authority is not None and authority_sha256 != expected_authority
+    ):
+        blockers.append(f"radius_{key}_family_feasibility_authority_mismatch")
+    if (
+        isinstance(definition, str)
+        and definition.strip()
+        and isinstance(definition_id, str)
+        and _is_hex_digest(authority_sha256, length=64)
+    ):
+        return blockers, (definition.strip(), definition_id, str(authority_sha256))
+    return blockers, None
+
+
+def _family_feasibility_status_blockers(
+    provenance: Mapping[str, object], family_rows: object, *, key: str
+) -> list[str]:
+    """Verify that the digest binds the exact status map being interpreted.
+
+    Returns:
+        Blocking reasons for absent or mismatched status-map provenance.
+    """
+    families_sha256 = provenance.get("families_sha256")
+    if not isinstance(family_rows, Mapping) or not _is_hex_digest(families_sha256, length=64):
+        return [f"radius_{key}_invalid_family_feasibility_status_binding"]
+    encoded = json.dumps(family_rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if sha256(encoded).hexdigest() != families_sha256:
+        return [f"radius_{key}_family_feasibility_status_digest_mismatch"]
+    return []
+
+
+def _family_feasibility_source_blockers(
+    provenance: Mapping[str, object], source: object, *, key: str
+) -> list[str]:
+    """Require family provenance to identify the same campaign and config as its arm.
+
+    Returns:
+        Blocking reasons for an absent or mismatched campaign source link.
+    """
+    if not isinstance(source, Mapping):
+        return [f"radius_{key}_missing_campaign_provenance_for_family"]
+    blockers = []
+    for family_field, campaign_field in (
+        ("source_campaign_id", "campaign_id"),
+        ("source_campaign_commit", "campaign_commit"),
+        ("source_config_sha256", "config_sha256"),
+    ):
+        if not isinstance(provenance.get(family_field), str) or provenance.get(
+            family_field
+        ) != source.get(campaign_field):
+            blockers.append(f"radius_{key}_family_feasibility_{family_field}_mismatch")
+    return blockers
+
+
+def _family_feasibility_provenance_blockers(
+    sweep_summary: Mapping[str, object], radii: Sequence[float]
+) -> list[str]:
+    """Require exact, source-matched provenance for each family-status map.
+
+    The source rule pins intentionally remain unset until an owner-approved rule
+    artifact and evaluator exist. In that state, syntactically complete or
+    self-declared receipt metadata cannot authorize interpretation.
+
+    Returns:
+        Blocking reasons for absent, malformed, inconsistent, or unapproved provenance.
+    """
+    blockers: list[str] = []
+    expected_definition_id = EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID
+    expected_authority = EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256
+    if (
+        not isinstance(expected_definition_id, str)
+        or not expected_definition_id.strip()
+        or not _is_hex_digest(expected_authority, length=64)
+    ):
+        blockers.append("family_feasibility_rule_identity_unpinned")
+
+    raw_provenance = sweep_summary.get("family_feasibility_provenance")
+    if not isinstance(raw_provenance, Mapping):
+        return [*blockers, "missing_family_feasibility_provenance"]
+    provenance_by_radius = _float_keyed(raw_provenance)
+    blockers.extend(
+        _radius_mapping_blockers(raw_provenance, radii, "family_feasibility_provenance")
+    )
+    families_by_radius = _float_keyed(sweep_summary.get("family_feasibility"))
+    campaign_by_radius = _float_keyed(sweep_summary.get("campaign_provenance"))
+    seen_receipt_digests: set[str] = set()
+    observed_rules: set[tuple[str, str, str]] = set()
+
+    for radius in radii:
+        key = _radius_key(radius)
+        provenance = provenance_by_radius.get(radius)
+        if not isinstance(provenance, Mapping):
+            blockers.append(f"radius_{key}_missing_family_feasibility_provenance")
+            continue
+        blockers.extend(_family_feasibility_header_blockers(provenance, radius=radius, key=key))
+        rule_blockers, rule_identity = _family_feasibility_rule_blockers(
+            provenance,
+            key=key,
+            expected_definition_id=expected_definition_id,
+            expected_authority=expected_authority,
+        )
+        blockers.extend(rule_blockers)
+        if rule_identity is not None:
+            observed_rules.add(rule_identity)
+
+        receipt_sha256 = provenance.get("receipt_sha256")
+        if not _is_hex_digest(receipt_sha256, length=64):
+            blockers.append(f"radius_{key}_invalid_family_feasibility_receipt_sha256")
+        elif receipt_sha256.lower() in seen_receipt_digests:
+            blockers.append(f"radius_{key}_duplicate_family_feasibility_receipt_sha256")
+        else:
+            seen_receipt_digests.add(receipt_sha256.lower())
+
+        blockers.extend(
+            _family_feasibility_status_blockers(provenance, families_by_radius.get(radius), key=key)
+        )
+        blockers.extend(
+            _family_feasibility_source_blockers(provenance, campaign_by_radius.get(radius), key=key)
+        )
+
+    if len(observed_rules) > 1:
+        blockers.append("mixed_family_feasibility_rule_provenance")
+    if len(seen_receipt_digests) != len(radii):
+        blockers.append("incomplete_family_feasibility_receipt_provenance")
+    return blockers
+
+
 def _paired_observation_blockers(
     sweep_summary: Mapping[str, object],
     radii: Sequence[float],
@@ -1027,6 +1203,7 @@ def build_missingness_ledger(
     _, table_blockers = _metric_table_blockers(sweep_summary, radii, declared_planners)
     blocking_reasons.extend(table_blockers)
     blocking_reasons.extend(_family_feasibility_blockers(sweep_summary, radii))
+    blocking_reasons.extend(_family_feasibility_provenance_blockers(sweep_summary, radii))
     blocking_reasons.extend(_paired_observation_blockers(sweep_summary, radii, declared_planners))
     provenance_blockers, _ = _campaign_provenance_blockers(sweep_summary, radii)
     blocking_reasons.extend(provenance_blockers)

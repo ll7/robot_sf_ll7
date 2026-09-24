@@ -546,6 +546,8 @@ class Simulator:
     peds_have_obstacle_forces: bool
     # Last pedestrian force vectors used to step the simulation (K,2)
     last_ped_forces: np.ndarray = field(init=False, repr=False)
+    last_robot_ped_forces: np.ndarray = field(init=False, repr=False)
+    last_robot_force_inputs: dict = field(init=False, repr=False)
     _initial_pysf_states: np.ndarray = field(init=False, repr=False)
     ped_headings: np.ndarray = field(init=False, repr=False)
     _initial_ped_headings: np.ndarray = field(init=False, repr=False)
@@ -641,6 +643,8 @@ class Simulator:
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
         self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
         self.ped_headings = self._headings_from_current_ped_velocities()
         self._initial_ped_headings = self.ped_headings.copy()
@@ -1567,6 +1571,8 @@ class Simulator:
         if existing_headings is not None:
             self.ped_angular_velocities = np.zeros_like(existing_headings)
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
         self.last_force_computation = None
         self.last_step_diagnostics = None
         self.last_oracle_transition_traces = None
@@ -1660,6 +1666,57 @@ class Simulator:
                 )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
+    def _capture_robot_ped_forces(self) -> None:
+        """Copy already evaluated robot components and their pre-integration inputs."""
+        positions = np.array(self.pysf_sim.peds.pos(), dtype=float, copy=True)
+        total = np.zeros_like(positions)
+        components = []
+        for force in self.pysf_sim.forces:
+            if getattr(force, "component_type", None) != "pedestrian_robot":
+                continue
+            values = np.asarray(force.last_forces, dtype=float)
+            if values.ndim == 0 and values == 0:
+                continue
+            if values.shape != total.shape:
+                raise ValueError("robot force component shape differs from pedestrian positions")
+            total += values
+            response = (
+                force.get_ped_response_multipliers() if force.get_ped_response_multipliers else None
+            )
+            components.append(
+                {
+                    "robot_pos": list(force.get_robot_pos()),
+                    "prf_active": True,
+                    "prf_multiplier": float(force.config.force_multiplier),
+                    "prf_activation_m": float(force.config.activation_threshold),
+                    "prf_robot_radius_m": float(force.config.robot_radius),
+                    "prf_ped_radius_m": float(force.peds.agent_radius),
+                    **(
+                        {"response_multipliers": np.asarray(response).tolist()}
+                        if response is not None and len(response) == len(positions)
+                        else {}
+                    ),
+                }
+            )
+        self.last_robot_ped_forces = total
+        social_cfg = self.pysf_sim.config.social_force_config
+        self.last_robot_force_inputs = {
+            "peds_pos": positions.tolist(),
+            "components": components,
+            "ped_radius_m": float(self.pysf_sim.peds.agent_radius),
+            "social_force_config": {
+                key: getattr(social_cfg, key)
+                for key in (
+                    "factor",
+                    "lambda_importance",
+                    "gamma",
+                    "n",
+                    "n_prime",
+                    "activation_threshold",
+                )
+            },
+        }
+
     def step_once(self, actions: list[RobotAction]) -> None:
         """Advance simulation by one timestep.
 
@@ -1696,6 +1753,7 @@ class Simulator:
         else:
             self.last_force_computation = None
             ped_forces = self.pysf_sim.compute_forces()
+        self._capture_robot_ped_forces()
         ped_forces = self._apply_residual_adversary(ped_forces)
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
@@ -1926,6 +1984,8 @@ class PedSimulator(Simulator):
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
         self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
         self.ped_headings = self._headings_from_current_ped_velocities()
         self._initial_ped_headings = self.ped_headings.copy()
@@ -2084,6 +2144,7 @@ class PedSimulator(Simulator):
         else:
             self.last_force_computation = None
             ped_forces = self.pysf_sim.compute_forces()
+        self._capture_robot_ped_forces()
         ped_forces = self._apply_residual_adversary(ped_forces)
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists

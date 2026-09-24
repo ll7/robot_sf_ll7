@@ -18,6 +18,18 @@ from robot_sf.benchmark.metric_layers import (
 
 EXPECTED_METRICS = {
     "collision_rate",
+    "robot_force_impulse_total",
+    "robot_force_impulse_per_exposed_ped",
+    "robot_force_peak",
+    "robot_force_mean_active",
+    "robot_force_time_above_ref_s",
+    "robot_force_exposed_ped_count",
+    "robot_force_pp_equiv_impulse_total",
+    "robot_force_pp_equiv_impulse_per_exposed_ped",
+    "robot_force_pp_equiv_peak",
+    "robot_force_pp_equiv_mean_active",
+    "robot_force_pp_equiv_time_above_ref_s",
+    "robot_force_pp_equiv_exposed_ped_count",
     "human_collision_rate",
     "near_miss_rate",
     "min_time_to_collision",

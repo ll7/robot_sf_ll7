@@ -699,6 +699,7 @@ def _check_version_compatible(config: dict[str, Any]) -> str | None:
         or re.fullmatch(r"[vV]?[0-9]+(?:\.[0-9]+){0,2}", minimum) is None
     ):
         return "config_invalid: min_component_version must be a dotted version string"
+
     def _version_key(value: str) -> tuple[tuple[int, str], ...]:
         """Normalize decimal components without converting untrusted strings to ints.
 

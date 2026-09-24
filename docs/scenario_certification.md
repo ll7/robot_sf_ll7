@@ -145,7 +145,12 @@ stratification.
 The adapter has five outcomes: `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
 `empirically_feasible`, and `planner_specific_failure`. It rejects only explicit structural or
-geometry/kinodynamic exclusions. An oracle exclusion is scoped to its recorded robot envelope;
+geometry/kinodynamic exclusions. Structural exclusions require corroborating producer checks: an
+empty route inventory with the producer's no-route reason, a waypoint count below two with null
+endpoints, or a non-finite endpoint serialized as null/malformed. Reason labels without matching
+checks remain unknown. The current certificate does not include map bounds, obstacle geometry, or
+enough infrastructure policy data to verify outside-map, obstacle, or infrastructure labels, so
+those invalid certificates remain `admissible_feasibility_unknown`. An oracle exclusion is scoped to its recorded robot envelope;
 the envelope and certificate assumptions remain attached to the verdict. A
 `dynamically_overconstrained` certificate, a blocked or truncated oracle, missing provenance, or
 conflicting evidence remains `admissible_feasibility_unknown`. Since `scenario_cert.v1` reports the
@@ -158,6 +163,10 @@ steering-limit failure with matching kinematic values. The scenario-level reason
 the route-level reasons. Labels without those checks, empty reasons, or contradictory values stay
 `admissible_feasibility_unknown`; an unsupported robot model does not establish kinodynamic
 impossibility.
+
+Whenever a certificate, oracle, reference, target, or replay row is supplied, callers must also pass
+the expected `scenario_id`. The adapter does not infer that binding from a certificate or execution
+row; named evidence without it remains unknown.
 
 Execution inputs are normalized records with `case_id`, `scenario_id`, `scenario_variant`,
 `planner_id`, `run_status`, the explicit boolean `fallback_or_degraded`, `route_complete`, `seed`,

@@ -609,6 +609,84 @@ def _episode_from_record(
     )
 
 
+def _validate_episode_evidence_eligibility(
+    metadata: Mapping[str, Any], *, planner: str, radius: float
+) -> None:
+    """Require explicit episode evidence-eligibility fields to be valid booleans."""
+    if "evidence_eligible" in metadata and not isinstance(metadata["evidence_eligible"], bool):
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has invalid algorithm "
+            "evidence_eligible metadata"
+        )
+    if metadata.get("evidence_eligible") is False:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has ineligible algorithm metadata"
+        )
+    foresight = metadata.get("foresight_prediction")
+    if foresight is not None and not isinstance(foresight, Mapping):
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has invalid foresight metadata"
+        )
+    if (
+        isinstance(foresight, Mapping)
+        and "evidence_eligible" in foresight
+        and not isinstance(foresight["evidence_eligible"], bool)
+    ):
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has invalid foresight "
+            "evidence_eligible metadata"
+        )
+    if isinstance(foresight, Mapping) and foresight.get("evidence_eligible") is False:
+        raise RadiusSweepSummaryError(
+            f"radius {radius:g} planner {planner!r} episode has ineligible foresight metadata"
+        )
+
+
+def _validate_episode_planner_diagnostics(
+    metadata: Mapping[str, Any], *, planner: str, radius: float
+) -> None:
+    """Reject fallback evidence inside planner diagnostics, allowing empty clean counters."""
+    diagnostics = metadata.get("planner_diagnostics")
+    if isinstance(diagnostics, Mapping):
+        fallback_reasons = diagnostics.get("fallback_reasons")
+        if "fallback_reasons" in diagnostics and (
+            not isinstance(fallback_reasons, Mapping) or bool(fallback_reasons)
+        ):
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} planner {planner!r} episode contains a "
+                "fallback/degraded runtime marker: "
+                "algorithm_metadata.planner_diagnostics.fallback_reasons=non-empty-or-invalid"
+            )
+        diagnostic_status = {
+            key: value
+            for key, value in diagnostics.items()
+            if key
+            in {
+                "status",
+                "row_status",
+                "readiness_status",
+                "availability_status",
+                "execution_mode",
+                "fallback",
+                "degraded",
+                "fallback_triggered",
+                "fallback_or_degraded",
+                "fallback_used",
+                "fallback_count",
+            }
+            or ("fallback" in str(key) and isinstance(value, (int, float)))
+            or (key == "fallback_reason" and value not in (None, ""))
+        }
+        marker = runtime_fallback_or_degraded_marker(diagnostic_status)
+        if marker is not None:
+            marker_path, marker_value = marker
+            raise RadiusSweepSummaryError(
+                f"radius {radius:g} planner {planner!r} episode contains a "
+                "fallback/degraded runtime marker: "
+                f"algorithm_metadata.planner_diagnostics.{marker_path}={marker_value}"
+            )
+
+
 def _validate_episode_runtime_status(
     record: Mapping[str, Any],
     *,
@@ -646,55 +724,8 @@ def _validate_episode_runtime_status(
     if raw_metadata is None:
         return
     metadata = _mapping(raw_metadata, "episode algorithm_metadata")
-    if metadata.get("evidence_eligible") is False:
-        raise RadiusSweepSummaryError(
-            f"radius {radius:g} planner {planner!r} episode has ineligible algorithm metadata"
-        )
-    foresight = metadata.get("foresight_prediction")
-    if isinstance(foresight, Mapping) and foresight.get("evidence_eligible") is False:
-        raise RadiusSweepSummaryError(
-            f"radius {radius:g} planner {planner!r} episode has ineligible foresight metadata"
-        )
-
-    diagnostics = metadata.get("planner_diagnostics")
-    if isinstance(diagnostics, Mapping):
-        fallback_reasons = diagnostics.get("fallback_reasons")
-        if fallback_reasons is not None and (
-            not isinstance(fallback_reasons, Mapping) or bool(fallback_reasons)
-        ):
-            raise RadiusSweepSummaryError(
-                f"radius {radius:g} planner {planner!r} episode contains a "
-                "fallback/degraded runtime marker: "
-                "algorithm_metadata.planner_diagnostics.fallback_reasons=non-empty-or-invalid"
-            )
-        diagnostic_status = {
-            key: value
-            for key, value in diagnostics.items()
-            if key
-            in {
-                "status",
-                "row_status",
-                "readiness_status",
-                "availability_status",
-                "execution_mode",
-                "fallback",
-                "degraded",
-                "fallback_triggered",
-                "fallback_or_degraded",
-                "fallback_used",
-                "fallback_count",
-            }
-            or ("fallback" in str(key) and isinstance(value, (int, float)))
-            or (key == "fallback_reason" and value not in (None, ""))
-        }
-        marker = runtime_fallback_or_degraded_marker(diagnostic_status)
-        if marker is not None:
-            marker_path, marker_value = marker
-            raise RadiusSweepSummaryError(
-                f"radius {radius:g} planner {planner!r} episode contains a "
-                "fallback/degraded runtime marker: "
-                f"algorithm_metadata.planner_diagnostics.{marker_path}={marker_value}"
-            )
+    _validate_episode_evidence_eligibility(metadata, planner=planner, radius=radius)
+    _validate_episode_planner_diagnostics(metadata, planner=planner, radius=radius)
 
     # planner_diagnostics carries planner-specific diagnostics (including empty diagnostic
     # dictionaries) rather than the shared runtime status contract. The producer also echoes

@@ -480,7 +480,11 @@ def test_composer_rejects_runner_receipt_for_wrong_frozen_algorithm(
         ("planner_runtime", "fallback/degraded runtime marker"),
         ("planner_diagnostics", "fallback/degraded runtime marker"),
         ("planner_diagnostic_reasons", "fallback/degraded runtime marker"),
+        ("planner_diagnostic_reasons_null", "fallback/degraded runtime marker"),
+        ("algorithm_ineligible", "ineligible algorithm metadata"),
+        ("algorithm_eligibility_invalid", "invalid algorithm evidence_eligible metadata"),
         ("foresight_ineligible", "ineligible foresight metadata"),
+        ("foresight_eligibility_invalid", "invalid foresight evidence_eligible metadata"),
     ),
 )
 def test_composer_rejects_row_fallback_even_with_matching_receipt_and_summary(
@@ -511,8 +515,16 @@ def test_composer_rejects_row_fallback_even_with_matching_receipt_and_summary(
             "fallback_reason": None,
             "fallback_reasons": {"wrapper_exception": 1},
         }
+    elif location == "planner_diagnostic_reasons_null":
+        metadata["planner_diagnostics"] = {"fallback_reasons": None}
+    elif location == "algorithm_ineligible":
+        metadata["evidence_eligible"] = False
+    elif location == "algorithm_eligibility_invalid":
+        metadata["evidence_eligible"] = "false"
     else:
-        metadata["foresight_prediction"] = {"evidence_eligible": False}
+        metadata["foresight_prediction"] = {
+            "evidence_eligible": 0 if location == "foresight_eligibility_invalid" else False
+        }
     episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
     # The row receipt matches the edited artifact. The campaign summary still claims zero
     # fallback/degraded rows, so only checking that aggregate would miss this marker.

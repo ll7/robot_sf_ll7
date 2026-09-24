@@ -215,6 +215,61 @@ def test_fetch_runs_rejects_non_list_json(monkeypatch: pytest.MonkeyPatch, paylo
         fetch_runs()
 
 
+@pytest.mark.parametrize(
+    ("workflow", "expected_selector"),
+    [
+        (main_ci_is_green.DEFAULT_WORKFLOW, main_ci_is_green.DEFAULT_WORKFLOW_FILE),
+        ("CodeQL", "CodeQL"),
+    ],
+)
+def test_fetch_runs_uses_stable_default_workflow_selector(
+    monkeypatch: pytest.MonkeyPatch, workflow: str, expected_selector: str
+) -> None:
+    """Default CI queries by workflow file; other requested selectors stay intact."""
+    observed: dict[str, list[str]] = {}
+
+    def fake_gh(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        observed["args"] = args
+        return subprocess.CompletedProcess(args=["gh", *args], returncode=0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(main_ci_is_green, "_gh", fake_gh)
+
+    assert fetch_runs(workflow=workflow) == []
+    args = observed["args"]
+    selector_index = args.index("--workflow") + 1
+    assert args[selector_index] == expected_selector
+
+
+def test_default_workflow_selector_keeps_json_report_label(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """Default CLI selection uses the file path but retains the public JSON label."""
+    observed: dict[str, list[str]] = {}
+
+    def fake_gh(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        observed["args"] = args
+        return subprocess.CompletedProcess(
+            args=["gh", *args],
+            returncode=0,
+            stdout=json.dumps([_run(7, "completed", "success", "2026-07-12T12:00:00Z")]),
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "_gh",
+        fake_gh,
+    )
+    monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
+
+    assert main_ci_is_green.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["workflow"] == "CI"
+    args = observed["args"]
+    selector_index = args.index("--workflow") + 1
+    assert args[selector_index] == main_ci_is_green.DEFAULT_WORKFLOW_FILE
+
+
 def test_gh_oserror_becomes_a_failed_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """A missing GitHub CLI reports not-green without a traceback."""
     monkeypatch.setattr(

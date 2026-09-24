@@ -26,6 +26,8 @@ The #9646 report was generated from the same comparison index and four persisted
 
 See [the #9646 convergence report](convergence_report.md) and [its static figure](convergence_constraints_first_lexicographic_v1.png).
 
+Replay records were made portable by normalizing only worktree-local route, schema, and command paths. The original file hashes, normalized hashes, and rewritten fields are recorded in `path_normalization.json`; all non-path record fields were compared with the captured source outputs.
+
 ## Replays
 
 - Pilot representative `seed_1101/optuna/candidate_0010` was a success with 11.118 m minimum human distance and 0 near misses. Its re-run matched the original status, termination, step count, seed, outcome, and selected metrics exactly. This verifies a persisted successful-case replay, not a discovered failure.

@@ -28,7 +28,11 @@ from jsonschema import Draft202012Validator
 from robot_sf.adversarial.bundle import compute_effective_scenario_hash
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
-from robot_sf.benchmark.termination_reason import outcome_contradictions
+from robot_sf.benchmark.termination_reason import (
+    TERMINATION_REASONS,
+    outcome_contradictions,
+    status_from_termination_reason,
+)
 from robot_sf.cli_scenarios import validate_scenario_payload
 
 CORPUS_SCHEMA_VERSION = "adversarial-counterexample-corpus.v1"
@@ -2997,6 +3001,7 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_outcome_mismatch")
     if record.get("termination_reason") != item.get("termination_reason"):
         errors.append("replay_artifact_termination_reason_mismatch")
+    errors.extend(_replay_episode_status_projection_errors(record))
     artifact_metrics = record.get("metrics")
     if not isinstance(artifact_metrics, dict) or any(
         artifact_metrics.get(key) != value for key, value in item.get("metrics", {}).items()
@@ -3004,6 +3009,15 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_selected_metrics_mismatch")
     errors.extend(_validate_replay_event_projection(item, case, receipt, event_identity))
     return errors
+
+
+def _replay_episode_status_projection_errors(record: Mapping[str, Any]) -> list[str]:
+    termination_reason = record.get("termination_reason")
+    if not isinstance(termination_reason, str) or termination_reason not in TERMINATION_REASONS:
+        return ["replay_artifact_termination_reason_unsupported"]
+    if record.get("status") != status_from_termination_reason(termination_reason):
+        return ["replay_artifact_status_termination_mismatch"]
+    return []
 
 
 def _validate_replay_event_projection(

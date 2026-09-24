@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import math
+import shlex
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,16 @@ CONFIG_SHA256 = {
     "doorway": "bae73148b125af5652726a12dced5d64a3e108e9783894293da2d44e7f513fb0",
 }
 EFFECTIVE_HASH = {"headon_group": "c013f96aae21ada2", "doorway": "fa98965443316b1a"}
+DIAGNOSTIC_CONFIG = {
+    "headon_group": "configs/benchmarks/issue_9671_trace_headon_group_v007.yaml",
+    "doorway": "configs/benchmarks/issue_9671_trace_doorway_v007.yaml",
+}
+FROZEN_INPUT_SHA256 = {
+    "robot_sf/benchmark/schemas/episode.schema.v1.json": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    "configs/algos/social_force_terminal_goal_v1.yaml": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb",
+    "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
+}
 EXPECTED_TUPLES = {
     (planner, scenario, seed)
     for planner in ("goal", "social_force", "orca")
@@ -68,6 +79,34 @@ def _config_tuples(config: dict[str, Any]) -> set[tuple[str, str, int]]:
     }
 
 
+def _invocation_args(value: Any) -> list[str]:
+    """Drop only the Python/script prefix from the frozen runner's invocation."""
+    if not isinstance(value, str):
+        raise ValueError("producer invocation is missing")
+    tokens = shlex.split(value)
+    for index, token in enumerate(tokens):
+        if token.endswith("scripts/tools/run_camera_ready_benchmark.py"):
+            return tokens[index + 1 :]
+    raise ValueError("producer invocation does not use the frozen benchmark runner")
+
+
+def _argument(args: list[str], flag: str) -> str:
+    if args.count(flag) != 1 or args.index(flag) + 1 >= len(args):
+        raise ValueError(f"producer invocation lacks unique {flag}")
+    return args[args.index(flag) + 1]
+
+
+def _input_matches(entry: Any, relative_path: str) -> bool:
+    if not isinstance(entry, dict) or entry.get("artifact_status") != "available":
+        return False
+    path = entry.get("path")
+    return (
+        isinstance(path, str)
+        and (path == relative_path or path.endswith("/" + relative_path))
+        and entry.get("sha256") == FROZEN_INPUT_SHA256[relative_path]
+    )
+
+
 def _validate_bindings(
     config_paths: dict[str, Path],
     manifest_paths: dict[str, Path],
@@ -98,6 +137,7 @@ def _validate_bindings(
             raise ValueError("diagnostic config tuple sets overlap")
         tuples |= selected
         manifest = json.loads(manifest_paths[name].read_text())
+        invocation = _invocation_args(manifest.get("invoked_command"))
         if (
             manifest.get("git", {}).get("commit") != SOURCE_SHA
             or manifest.get("config_hash") != effective_hash[name]
@@ -106,12 +146,20 @@ def _validate_bindings(
             or manifest.get("scenario_matrix") != config["scenario_matrix"]
             or set(manifest.get("seed_policy", {}).get("resolved_seeds", []))
             != set(config["seed_policy"]["seeds"])
+            or _argument(invocation, "--config") != DIAGNOSTIC_CONFIG[name]
+            or _argument(invocation, "--campaign-id") != manifest["campaign_id"]
+            or _argument(invocation, "--mode") != "run"
         ):
             raise ValueError(f"{name} campaign manifest identity mismatch")
         bound[name] = {
             "campaign_id": manifest.get("campaign_id"),
             "scenario_matrix_hash": manifest.get("scenario_matrix_hash"),
             "tuples": sorted(selected),
+            "invocation_args": invocation,
+            "scenario_matrix_path": config["scenario_matrix"],
+            "planner_configs": {
+                planner["key"]: planner.get("algo_config") for planner in config["planners"]
+            },
             "config_path": str(path),
             "config_sha256": digest,
             "campaign_manifest_path": str(manifest_paths[name]),
@@ -123,6 +171,43 @@ def _validate_bindings(
     if tuples != required:
         raise ValueError("diagnostic configs do not declare exactly the requested tuple inventory")
     return bound
+
+
+def _validate_producer_inputs(path: Path, sidecar: dict[str, Any], binding: dict[str, Any]) -> None:
+    campaign = sidecar.get("campaign_identity") or {}
+    inputs = sidecar.get("inputs") or {}
+    if not _input_matches(
+        inputs.get("schema_path"), "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    ) or not _input_matches(inputs.get("scenario_matrix"), binding["scenario_matrix_path"]):
+        raise ValueError(f"{path} producer input hashes do not match frozen source")
+    algo_config = binding["planner_configs"].get(campaign["algorithm"])
+    if algo_config is None:
+        entry = inputs.get("algo_config") or {}
+        if entry.get("artifact_status") != "not_provided" or entry.get("sha256") is not None:
+            raise ValueError(f"{path} producer algorithm input is unexpected")
+    elif not _input_matches(inputs.get("algo_config"), algo_config):
+        raise ValueError(f"{path} producer algorithm input hash does not match frozen source")
+
+
+def _validate_producer_rows(
+    path: Path, rows: list[dict[str, Any]], producer_rows: list[dict[str, Any]], planner: str
+) -> None:
+    if len(producer_rows) != len(rows):
+        raise ValueError(f"{path} producer manifest row count mismatch")
+    for index, (row, producer) in enumerate(zip(rows, producer_rows, strict=True)):
+        row_hash = _config_hash(row["scenario_params"])
+        if (
+            producer.get("jsonl_line") != index
+            or producer.get("episode_id") != row.get("episode_id")
+            or producer.get("scenario_id") != row.get("scenario_id")
+            or producer.get("seed") != row.get("seed")
+            or producer.get("repo_commit") != SOURCE_SHA
+            or producer.get("config_hash") != row_hash
+            or row.get("config_hash") != row_hash
+            or (row.get("result_provenance") or {}).get("config_hash") != row_hash
+            or _key(row)[0] != planner
+        ):
+            raise ValueError(f"{path} producer manifest row {index} identity mismatch")
 
 
 def _validate_producer_manifest(
@@ -138,9 +223,6 @@ def _validate_producer_manifest(
         for artifact in raw_artifacts
     ):
         raise ValueError(f"{path} producer manifest does not bind JSONL bytes")
-    producer_rows = sidecar.get("rows") or []
-    if len(producer_rows) != len(rows):
-        raise ValueError(f"{path} producer manifest row count mismatch")
     campaign = sidecar.get("campaign_identity") or {}
     matched = []
     for name, binding in bindings.items():
@@ -153,25 +235,16 @@ def _validate_producer_manifest(
             matched.append(name)
     if len(matched) != 1:
         raise ValueError(f"{path} producer manifest has no unique diagnostic campaign binding")
-    name = matched[0]
+    binding = bindings[matched[0]]
     if sidecar.get("run", {}).get("repo_commit") != SOURCE_SHA:
         raise ValueError(f"{path} producer manifest has wrong source commit")
-    if campaign.get("algorithm") != path.parent.name.split("__", 1)[0]:
+    if _invocation_args(sidecar.get("run", {}).get("invocation")) != binding["invocation_args"]:
+        raise ValueError(f"{path} producer invocation does not match diagnostic campaign")
+    planner = path.parent.name.split("__", 1)[0]
+    if campaign.get("algorithm") != planner:
         raise ValueError(f"{path} producer manifest planner mismatch")
-    for index, (row, producer) in enumerate(zip(rows, producer_rows, strict=True)):
-        row_hash = _config_hash(row["scenario_params"])
-        if (
-            producer.get("jsonl_line") != index
-            or producer.get("episode_id") != row.get("episode_id")
-            or producer.get("scenario_id") != row.get("scenario_id")
-            or producer.get("seed") != row.get("seed")
-            or producer.get("repo_commit") != SOURCE_SHA
-            or producer.get("config_hash") != row_hash
-            or row.get("config_hash") != row_hash
-            or (row.get("result_provenance") or {}).get("config_hash") != row_hash
-            or _key(row)[0] != campaign["algorithm"]
-        ):
-            raise ValueError(f"{path} producer manifest row {index} identity mismatch")
+    _validate_producer_inputs(path, sidecar, binding)
+    _validate_producer_rows(path, rows, sidecar.get("rows") or [], planner)
     return hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
 
 

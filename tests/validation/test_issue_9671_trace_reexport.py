@@ -82,7 +82,7 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
             "record_forces": True,
             "record_planner_decision_trace": True,
             "record_simulation_step_trace": True,
-            "scenario_matrix": "test-matrix.yaml",
+            "scenario_matrix": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
             "scenario_candidates": ["classic_doorway_medium"] if selected else [],
             "seed_policy": {"seeds": selected},
             "planners": [{"key": "ppo"}] if selected else [],
@@ -97,9 +97,14 @@ def _bindings(tmp_path: Path, seeds: list[int]) -> tuple[dict, dict, dict, dict]
                 {
                     "git": {"commit": SOURCE_SHA},
                     "config_hash": effective[name],
-                    "scenario_matrix": "test-matrix.yaml",
+                    "scenario_matrix": config["scenario_matrix"],
                     "campaign_id": tmp_path.name,
                     "scenario_matrix_hash": "test-matrix-hash",
+                    "invoked_command": (
+                        "python scripts/tools/run_camera_ready_benchmark.py "
+                        f"--config {checker.DIAGNOSTIC_CONFIG[name]} --mode run "
+                        f"--campaign-id {tmp_path.name}"
+                    ),
                     "seed_policy": {"resolved_seeds": selected},
                 }
             )
@@ -118,7 +123,31 @@ def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
         row["episode_id"] = f"classic_doorway_medium--{row['seed']}--{config_hash}"
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
     sidecar = {
-        "run": {"repo_commit": SOURCE_SHA},
+        "run": {
+            "repo_commit": SOURCE_SHA,
+            "invocation": (
+                "scripts/tools/run_camera_ready_benchmark.py "
+                f"--config {checker.DIAGNOSTIC_CONFIG['headon_group']} --mode run "
+                f"--campaign-id {tmp_path.name}"
+            ),
+        },
+        "inputs": {
+            "schema_path": {
+                "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+                "sha256": checker.FROZEN_INPUT_SHA256[
+                    "robot_sf/benchmark/schemas/episode.schema.v1.json"
+                ],
+                "artifact_status": "available",
+            },
+            "scenario_matrix": {
+                "path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+                "sha256": checker.FROZEN_INPUT_SHA256[
+                    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
+                ],
+                "artifact_status": "available",
+            },
+            "algo_config": {"path": None, "sha256": None, "artifact_status": "not_provided"},
+        },
         "campaign_identity": {
             "scenario_matrix_hash": "test-matrix-hash",
             "algorithm": "ppo",
@@ -253,6 +282,32 @@ def test_rejects_mixed_trace_bytes_without_matching_producer_manifest(tmp_path: 
             configs,
             manifests,
             expected={("ppo", "classic_doorway_medium", seed) for seed in (113, 22)},
+            expected_archive_sha256=None,
+            expected_config_sha256=digests,
+            expected_effective_hash=effective,
+        )
+
+
+def test_rejects_coherent_file_and_sidecar_from_another_campaign(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    configs, manifests, digests, effective = _bindings(tmp_path, [113])
+    traces = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
+    sidecar_path = traces.with_name(traces.name + ".provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["run"]["invocation"] = (
+        "scripts/tools/run_camera_ready_benchmark.py "
+        "--config configs/benchmarks/other_campaign.yaml --mode run "
+        "--campaign-id other_campaign"
+    )
+    sidecar_path.write_text(json.dumps(sidecar))
+    with pytest.raises(ValueError, match="producer invocation does not match diagnostic campaign"):
+        check(
+            archive,
+            [traces],
+            configs,
+            manifests,
+            expected={("ppo", "classic_doorway_medium", 113)},
             expected_archive_sha256=None,
             expected_config_sha256=digests,
             expected_effective_hash=effective,

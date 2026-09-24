@@ -36,8 +36,9 @@ _SCENARIO_ARTIFACT_SHA256 = hashlib.sha256(_SCENARIO_ARTIFACT.read_bytes()).hexd
 
 
 def classify_scenario_admissibility(case_id: str, **kwargs: Any) -> Any:
-    """Use one explicit artifact identity for the normalized test evidence by default."""
+    """Use one explicit artifact and scenario identity for normalized test evidence."""
     kwargs.setdefault("scenario_artifact_path", _SCENARIO_ARTIFACT)
+    kwargs.setdefault("scenario_id", "case-static")
     return _classify_scenario_admissibility(case_id, **kwargs)
 
 
@@ -60,6 +61,8 @@ def _certificate(
     else:
         reasons = []
     route_checks: dict[str, Any] = {"dynamic": {"single_pedestrian_count": pedestrian_count}}
+    if classification == "invalid":
+        route_checks.update(start=None, goal=None, waypoint_count=1)
     if classification == "geometrically_infeasible":
         route_checks["inflated_collision_free_path"] = False
     if classification == "kinodynamically_infeasible":
@@ -218,8 +221,54 @@ def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
     assert impossible.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
     assert impossible.search_disposition == "reject"
     assert kinematic.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
-    assert invalid_geometry.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    assert invalid_geometry.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "scenario_certificate_invalidity_unresolved" in invalid_geometry.reason_codes
     assert impossible.assumptions["scenario_certificate"]["settings"] == {"robot_radius_m": 0.4}
+
+
+@pytest.mark.parametrize(
+    "mutation", ["contradictory_waypoint_count", "wrong_endpoint", "top_reason"]
+)
+def test_structural_certificate_label_needs_matching_producer_check(mutation: str) -> None:
+    certificate = _certificate("invalid", eligibility="excluded")
+    route = certificate["route_certificates"][0]
+    if mutation == "contradictory_waypoint_count":
+        route["checks"].update(waypoint_count=2, start=[0.0, 0.0], goal=[1.0, 1.0])
+    elif mutation == "wrong_endpoint":
+        route["checks"].update(waypoint_count=2, start=[0.0, 0.0], goal=None)
+    else:
+        certificate["reasons"] = []
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_invalidity_unresolved" in verdict.reason_codes
+
+
+def test_producer_shaped_nonfinite_endpoint_supports_structural_exclusion() -> None:
+    certificate = _certificate(
+        "invalid", eligibility="excluded", route_reason="start_point_not_finite"
+    )
+    certificate["route_certificates"][0]["checks"].update(
+        waypoint_count=2, start=[None, 1.0], goal=[4.0, 5.0]
+    )
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == STRUCTURALLY_INVALID
+    assert verdict.search_disposition == "reject"
+
+
+@pytest.mark.parametrize("reason", ["map_pool_empty", "no_applicable_robot_routes"])
+def test_empty_route_certificate_requires_exact_supported_reason(reason: str) -> None:
+    certificate = _certificate("invalid", eligibility="excluded")
+    certificate.update(reasons=[reason], checks={"route_count": 0}, route_certificates=[])
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == STRUCTURALLY_INVALID
+    assert verdict.search_disposition == "reject"
 
 
 @pytest.mark.parametrize(
@@ -761,6 +810,7 @@ def test_oracle_report_and_selected_cell_cannot_disagree_on_artifact(
 def test_missing_canonical_candidate_artifact_cannot_support_a_certificate_exclusion() -> None:
     verdict = _classify_scenario_admissibility(
         "case-static",
+        scenario_id="case-static",
         scenario_certificate=_certificate("invalid", eligibility="excluded"),
     )
 
@@ -778,6 +828,23 @@ def test_execution_scenario_hash_must_match_canonical_candidate_artifact() -> No
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "reference_execution_scenario_artifact_identity_mismatch" in verdict.reason_codes
+
+
+def test_named_execution_requires_caller_bound_scenario_id() -> None:
+    verdict = _classify_scenario_admissibility(
+        "case-static",
+        scenario_artifact_path=_SCENARIO_ARTIFACT,
+        scenario_certificate=_certificate(),
+        reference_execution=_execution(
+            "reference", route_complete=True, scenario_id="different-scenario"
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert verdict.scenario_id is None
+    assert "scenario_certificate_identity_unbound" in verdict.reason_codes
+    assert "reference_execution_scenario_identity_unbound" in verdict.reason_codes
 
 
 def test_reference_success_is_empirical_but_target_failure_alone_is_unknown() -> None:
@@ -854,7 +921,7 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
     "field,value,reason",
     [
         ("case_id", "other-case", "replay_execution_identity_mismatch"),
-        ("scenario_id", "other-scenario", "planner_specific_failure_replay_case_mismatch"),
+        ("scenario_id", "other-scenario", "replay_execution_identity_mismatch"),
         (
             "scenario_sha256",
             "f" * 64,

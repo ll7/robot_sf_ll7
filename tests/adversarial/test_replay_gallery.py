@@ -546,3 +546,92 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
         "evaluation_failed": 1,
     }
     assert result["cases"] == []
+
+
+@pytest.mark.parametrize(
+    ("certificate", "expected"),
+    [
+        ({"classification": "VALID"}, "admissible_by_source_certificate"),
+        ({"classification": "geometrically_infeasible"}, "invalid_or_infeasible"),
+        ({"classification": "knife_edge"}, "stress_only"),
+        ({}, "unknown"),
+        (
+            {
+                "details": {
+                    "certificates": [
+                        {"classification": "valid"},
+                        {"classification": "invalid"},
+                    ]
+                }
+            },
+            "unknown",
+        ),
+    ],
+)
+def test_feasibility_verdict_preserves_certificate_strength(
+    certificate: dict[str, Any], expected: str
+) -> None:
+    verdict = replay_gallery._feasibility_verdict(certificate)
+
+    assert verdict["status"] == expected
+    assert verdict["source_certificate"] == certificate
+    if expected == "unknown":
+        assert verdict["reason"] == "certificate classification does not establish feasibility"
+
+
+def test_certificate_classification_ignores_malformed_entries_without_inventing_a_verdict() -> None:
+    assert replay_gallery._certification_classification(None) is None
+    assert (
+        replay_gallery._certification_classification(
+            {"details": {"certificates": [{"classification": "valid"}, None]}}
+        )
+        == "valid"
+    )
+    assert (
+        replay_gallery._certification_classification({"details": {"certificates": "malformed"}})
+        is None
+    )
+
+
+def test_gallery_artifact_resolution_uses_source_bundle_before_checkout(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source"
+    current_root = tmp_path / "current"
+    source_dir = source_root / "run"
+    source_dir.mkdir(parents=True)
+    current_root.mkdir()
+    source_artifact = source_root / "run" / "artifact.json"
+    checkout_artifact = current_root / "run" / "artifact.json"
+    source_artifact.write_text("source", encoding="utf-8")
+    checkout_artifact.parent.mkdir()
+    checkout_artifact.write_text("checkout", encoding="utf-8")
+    manifest = source_root / "search_manifest.json"
+
+    assert (
+        replay_gallery._resolve_artifact_path(
+            "run/artifact.json",
+            source_manifest=manifest,
+            root=current_root,
+            source_root=source_root,
+        )
+        == source_artifact.resolve()
+    )
+    assert (
+        replay_gallery._resolve_artifact_path(
+            " ", source_manifest=manifest, root=current_root, source_root=source_root
+        )
+        is None
+    )
+    assert (
+        replay_gallery._resolve_referenced_file(
+            "artifact.json", source_dir, source_root, current_root
+        )
+        == source_artifact.resolve()
+    )
+    assert (
+        replay_gallery._resolve_referenced_file(
+            "missing.json", source_dir, source_root, current_root
+        )
+        is None
+    )

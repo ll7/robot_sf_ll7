@@ -2833,7 +2833,8 @@ def _metadata_source_identity(
     """
     source_tag = _source_tag(metadata, require_url_scheme=True)
     related = metadata.get("related_identifiers")
-    assert isinstance(related, list)  # _source_tag validates the list shape.
+    if not isinstance(related, list):
+        raise ZenodoPublisherError("Zenodo metadata repair found an invalid source relation list")
     derived = [
         item
         for item in related

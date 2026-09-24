@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # ScenarioBelief projection tests are deterministic identity and data-contract
+    # checks; keep them in PR shards so changed-line coverage sees the adapter.
+    "test_identity_safe_scenario_belief.py",
     # Benchmark Auditor record and journal tests are deterministic schema,
     # provenance, and persistence contracts for BA-03 (issue #9484).
     # Benchmark Auditor release-bound coverage tests are deterministic

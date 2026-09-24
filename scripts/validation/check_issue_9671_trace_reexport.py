@@ -21,7 +21,6 @@ from robot_sf.benchmark.fallback_policy import (
 from robot_sf.benchmark.utils import _config_hash
 
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
-FROZEN_PUBLIC_ROOT = Path("/home/luttkule/git/robot_sf_ll7.worktrees/issue-9671-frozen-execution")
 ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
 TRACE_KEYS = ("record_forces", "record_planner_decision_trace", "record_simulation_step_trace")
 CONFIG_SHA256 = {
@@ -49,6 +48,7 @@ EXPECTED_TUPLES = {
     for scenario in ("classic_head_on_corridor_medium", "classic_group_crossing_medium")
     for seed in (22, 23, 24)
 } | {("ppo", "classic_doorway_medium", seed) for seed in (113, 114)}
+PAIRED_RELEASE_TUPLES = {("ppo", "classic_doorway_medium", seed) for seed in (113, 114)}
 
 
 def _rows(lines: Any) -> list[dict[str, Any]]:
@@ -105,6 +105,12 @@ def _argument(args: list[str], flag: str) -> str:
     return args[args.index(flag) + 1]
 
 
+def _is_staged_config_path(value: str, name: str) -> bool:
+    path = Path(value)
+    expected = Path(DIAGNOSTIC_CONFIG[name])
+    return path.is_absolute() and path.parts[-len(expected.parts) :] == expected.parts
+
+
 def _input_matches(entry: Any, relative_path: str) -> bool:
     if not isinstance(entry, dict) or entry.get("artifact_status") != "available":
         return False
@@ -155,8 +161,7 @@ def _validate_bindings(
             or manifest.get("scenario_matrix") != config["scenario_matrix"]
             or set(manifest.get("seed_policy", {}).get("resolved_seeds", []))
             != set(config["seed_policy"]["seeds"])
-            or _argument(invocation, "--config")
-            != str(FROZEN_PUBLIC_ROOT / DIAGNOSTIC_CONFIG[name])
+            or not _is_staged_config_path(_argument(invocation, "--config"), name)
             or _argument(invocation, "--campaign-id") != manifest["campaign_id"]
             or _argument(invocation, "--mode") != "run"
         ):
@@ -345,12 +350,17 @@ def _compare_row(
     runtime = {
         field: metadata[field]
         for field in (
+            "status",
+            "row_status",
             "execution_mode",
+            "readiness_status",
+            "availability_status",
             "planner_kinematics",
             "adapter_impact",
             "planner_runtime",
             "planner_diagnostics",
             "foresight_prediction",
+            "benchmark_availability",
         )
         if field in metadata
     }
@@ -437,6 +447,9 @@ def check(
             f"extra={sorted(set(trace_rows) - required)}"
         )
     release = _release_rows(archive, {key[0] for key in trace_rows})
+    missing_paired_rows = sorted((PAIRED_RELEASE_TUPLES & required) - set(release))
+    if missing_paired_rows:
+        raise ValueError(f"required paired release rows are missing: {missing_paired_rows}")
     comparisons = []
     for key, row in sorted(trace_rows.items()):
         reference = release.get(key)

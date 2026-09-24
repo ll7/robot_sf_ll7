@@ -19,6 +19,7 @@ from scripts.tools.materialize_benchmark_hard_cases import (
     _compare,
     _materialize_replay_matrix,
     _replay_checkout_provenance,
+    _replay_checkout_stability_status,
     _replay_identity,
     _replay_ineligibility,
     _run_replay,
@@ -34,6 +35,15 @@ MATRIX_RELATIVE = "configs/scenarios/classic_interactions_francis2023.yaml"
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _clean_checkout_snapshot(revision: str) -> dict[str, Any]:
+    return {
+        "revision": revision,
+        "clean": True,
+        "status_sha256": hashlib.sha256(b"").hexdigest(),
+        "status_entries": [],
+    }
 
 
 def _source_row(
@@ -381,6 +391,50 @@ def test_exact_replay_requires_successful_available_nondegraded_evidence(
     assert classification["status"] == expected_status
 
 
+@pytest.mark.parametrize(
+    ("side", "diagnostics", "expected_status"),
+    [
+        ("source", {"fallback": True}, "fallback_or_degraded_not_evidence"),
+        ("replay", {"fallback": True}, "fallback_or_degraded_not_evidence"),
+        ("source", {"fallback_count": 1}, "fallback_or_degraded_not_evidence"),
+        ("replay", {"controller_fallback_count": 2}, "fallback_or_degraded_not_evidence"),
+        ("source", {"fallback": "true"}, "unavailable_execution_evidence"),
+        ("replay", {"fallback": None}, "unavailable_execution_evidence"),
+        ("replay", {"fallback_count": "2"}, "unavailable_execution_evidence"),
+        ("source", {"fallback_count": True}, "unavailable_execution_evidence"),
+        ("replay", {"fallback_count": float("nan")}, "unavailable_execution_evidence"),
+        ("source", {"planner_fallback_count": -1}, "unavailable_execution_evidence"),
+        ("replay", {"fallback_reason": ["not-a-string"]}, "unavailable_execution_evidence"),
+        ("replay", {"fallback": False, "fallback_count": 0}, "exact_match"),
+    ],
+)
+def test_nested_planner_diagnostics_fallback_markers_fail_closed(
+    side: str, diagnostics: dict[str, Any], expected_status: str
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    observed = json.loads(json.dumps(source))
+    target = source if side == "source" else observed
+    target["algorithm_metadata"]["planner_diagnostics"] = diagnostics
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        observed,
+        "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_stability_status=(
+            "clean_stable" if expected_status == "exact_match" else None
+        ),
+    )
+    assert classification["status"] == expected_status
+
+
 @pytest.mark.parametrize("missing_side", ["source", "replay", "both"])
 def test_exact_replay_requires_nonempty_planner_config_hashes(missing_side: str) -> None:
     source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
@@ -406,6 +460,7 @@ def test_exact_replay_requires_nonempty_planner_config_hashes(missing_side: str)
     ("checkout_clean", "expected_status"),
     [
         (False, "replay_checkout_dirty"),
+        (True, "replay_checkout_cleanliness_unavailable"),
         (None, "replay_checkout_cleanliness_unavailable"),
     ],
 )
@@ -439,7 +494,12 @@ def test_episode_failure_outcome_does_not_mark_execution_as_failed() -> None:
     }
 
     classification = _classify_replay_row(
-        case, row, row, "source-revision", replay_checkout_clean=True
+        case,
+        row,
+        row,
+        "source-revision",
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
     )
     assert classification["episode_status"] == "failure"
     assert classification["status"] == "exact_match"
@@ -465,6 +525,15 @@ def test_replay_checkout_provenance_records_dirty_status(monkeypatch) -> None:
     assert (
         identity["status_sha256"] == hashlib.sha256(b" M robot_sf/planner/example.py\n").hexdigest()
     )
+
+
+def test_replay_checkout_stability_requires_both_revision_and_status_hashes() -> None:
+    before = _clean_checkout_snapshot("revision-a")
+    after = _clean_checkout_snapshot("revision-a")
+    assert _replay_checkout_stability_status(before, after, "revision-a") == "clean_stable"
+
+    after.pop("status_sha256")
+    assert _replay_checkout_stability_status(before, after, "revision-a") == "unavailable"
 
 
 @pytest.mark.parametrize(
@@ -495,8 +564,14 @@ def test_replay_records_episode_checksum_and_row_count(
     observed = json.loads(json.dumps(row))
     observed["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = observed_mode
 
-    def fake_run(command, *, cwd, stdout, stderr, check):
-        del stdout, stderr, check
+    def fake_run(command, *, cwd, stdout=None, stderr=None, check, **kwargs):
+        del kwargs
+        del check
+        if command[:2] == ["git", "rev-parse"]:
+            return SimpleNamespace(stdout="source-revision\n")
+        if command[:2] == ["git", "status"]:
+            return SimpleNamespace(stdout="")
+        assert stdout is not None and stderr is not None
         episode_path = Path(cwd) / command[command.index("--out") + 1]
         episode_path.parent.mkdir(parents=True, exist_ok=True)
         output = json.dumps(observed) + "\n"
@@ -512,9 +587,6 @@ def test_replay_records_episode_checksum_and_row_count(
         REPO_ROOT / MATRIX_RELATIVE,
         case_dir,
         {"planners": [{"key": "goal", "benchmark_profile": "baseline-safe"}]},
-        "source-revision",
-        replay_checkout_clean=True,
-        replay_checkout_status_sha256=hashlib.sha256(b"").hexdigest(),
     )
 
     episode_path = case_dir / "replay" / "episodes.jsonl"
@@ -523,9 +595,78 @@ def test_replay_records_episode_checksum_and_row_count(
     assert replay["replay_malformed_line_count"] == int(observed_mode == "malformed-extra-line")
     assert replay["episode_output_sha256"] == _sha256(episode_path)
     assert replay["episode_output_checksum_status"] == "captured_at_run"
+    assert replay["replay_checkout_stability_status"] == "clean_stable"
+    assert replay["replay_checkout_before"]["revision"] == "source-revision"
+    assert replay["replay_checkout_after"]["revision"] == "source-revision"
     if observed_mode != "malformed-extra-line":
         assert replay["execution_mode_source"] == source_mode
         assert replay["execution_mode"] == observed_mode
+
+
+@pytest.mark.parametrize(
+    ("post_revision", "post_status", "expected_status", "checkout_status"),
+    [
+        (
+            "source-revision",
+            " M robot_sf/planner/example.py\n",
+            "replay_checkout_dirty",
+            "dirty",
+        ),
+        (
+            "moved-revision",
+            "",
+            "replay_checkout_head_changed_during_run",
+            "head_changed",
+        ),
+    ],
+)
+def test_checkout_mutation_during_replay_blocks_exact_match(
+    tmp_path: Path,
+    monkeypatch,
+    post_revision: str,
+    post_status: str,
+    expected_status: str,
+    checkout_status: str,
+) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    state = {"revision": "source-revision", "status": ""}
+
+    def fake_run(command, *, cwd, stdout=None, stderr=None, check, **kwargs):
+        del kwargs
+        del check
+        if command[:2] == ["git", "rev-parse"]:
+            return SimpleNamespace(stdout=f"{state['revision']}\n")
+        if command[:2] == ["git", "status"]:
+            return SimpleNamespace(stdout=state["status"])
+        assert stdout is not None and stderr is not None
+        episode_path = Path(cwd) / command[command.index("--out") + 1]
+        episode_path.parent.mkdir(parents=True, exist_ok=True)
+        episode_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+        state["revision"] = post_revision
+        state["status"] = post_status
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("scripts.tools.materialize_benchmark_hard_cases.subprocess.run", fake_run)
+    replay = _run_replay(
+        case,
+        row,
+        REPO_ROOT / MATRIX_RELATIVE,
+        tmp_path / checkout_status,
+        {"planners": [{"key": "goal", "benchmark_profile": "baseline-safe"}]},
+    )
+
+    assert replay["comparison"]["overall"] == "match"
+    assert replay["replay_checkout_stability_status"] == checkout_status
+    assert replay["replay_checkout_before"]["clean"] is True
+    assert replay["replay_checkout_after"]["revision"] == post_revision
+    assert replay["status"] == expected_status
 
 
 def test_nonfinite_values_are_null_with_explicit_source_paths() -> None:
@@ -580,7 +721,9 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
         "attempted": True,
         "status": "mismatch",
         "returncode": 0,
-        "replay_revision": "prior-replay-revision",
+        "replay_revision": "source-revision",
+        "replay_checkout_clean": True,
+        "replay_checkout_status_sha256": hashlib.sha256(b"").hexdigest(),
         "episode_output": "replay/episodes.jsonl",
     }
     case_record["replay"] = replay
@@ -602,9 +745,9 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
     resumed_case = json.loads((tmp_path / "resumed" / case_relative).read_text())
     assert resumed["replay"]["reused_attempts"] == 1
     assert resumed["replay"]["new_attempted"] == 0
-    assert resumed["replay"]["replay_revision"] == "prior-replay-revision"
-    assert resumed["replay"]["replay_revisions"] == ["prior-replay-revision"]
-    assert resumed["replay"]["materializer_revision"] != "prior-replay-revision"
+    assert resumed["replay"]["replay_revision"] == "source-revision"
+    assert resumed["replay"]["replay_revisions"] == ["source-revision"]
+    assert resumed["replay"]["materializer_revision"] != "source-revision"
     assert resumed_case["replay"]["reused"] is True
     replay_artifact = (
         tmp_path / "resumed" / case_relative.replace("case.json", "replay/episodes.jsonl")
@@ -621,6 +764,9 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
     )
     assert resumed_case["replay"]["execution_mode_source"] == "native"
     assert resumed_case["replay"]["execution_mode"] == "native"
+    assert resumed_case["replay"]["replay_checkout_stability_status"] == "unavailable"
+    assert resumed_case["replay"]["replay_checkout_clean"] is None
+    assert resumed_case["replay"]["status"] == "replay_checkout_cleanliness_unavailable"
 
 
 @pytest.mark.parametrize(
@@ -656,6 +802,8 @@ def test_resume_rederives_classification_when_prior_episode_checksum_is_absent(
         "returncode": 0,
         "source_revision": "source-revision",
         "replay_revision": "source-revision",
+        "replay_checkout_before": _clean_checkout_snapshot("source-revision"),
+        "replay_checkout_after": _clean_checkout_snapshot("source-revision"),
         "replay_checkout_clean": True,
         "replay_checkout_status_sha256": hashlib.sha256(b"").hexdigest(),
         "same_repository_revision": True,
@@ -730,6 +878,8 @@ def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(
         "returncode": 0,
         "source_revision": "source-revision",
         "replay_revision": "source-revision",
+        "replay_checkout_before": _clean_checkout_snapshot("source-revision"),
+        "replay_checkout_after": _clean_checkout_snapshot("source-revision"),
         "replay_checkout_clean": True,
         "replay_checkout_status_sha256": hashlib.sha256(b"").hexdigest(),
         "same_repository_revision": True,

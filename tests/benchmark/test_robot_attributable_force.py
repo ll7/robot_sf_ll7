@@ -178,3 +178,32 @@ def test_registry_and_schema_declare_units():
     for name in robot_force_reductions(np.zeros((1, 0, 2)), dt=0.1, reference=1):
         assert name in schema["properties"]["metrics"]["properties"]
         assert resolve_metric_source_binding(name).unit_status == "available"
+
+
+def test_new_undefined_values_serialize_as_null_without_legacy_drift():
+    import json
+
+    from robot_sf.benchmark.metrics import post_process_metrics
+
+    raw = robot_force_reductions(np.zeros((2, 0, 2)), dt=0.1, reference=1)
+    raw["force_q50"] = float("nan")
+    result = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
+    assert result["robot_force_mean_active"] is None
+    assert result["robot_force_impulse_per_exposed_ped"] is None
+    assert "force_quantiles" not in result
+    json.dumps(result, allow_nan=False)
+
+
+def test_recorded_robot_component_subtracts_from_registered_total():
+    from tests.sim.test_goal_force_instrumentation import _build_simulator
+
+    sim = _build_simulator(oracle_enabled=True, robot_force_enabled=True)
+    sim.step_once([(0.0, 0.0)])
+    records = sim.last_oracle_transition_traces[0].force_components.component_records
+    remaining = np.sum(
+        [record.force_xy for record in records if record.component_type != "pedestrian_robot"],
+        axis=0,
+    )
+    np.testing.assert_allclose(
+        sim.last_ped_forces[0] - sim.last_robot_ped_forces[0], remaining, atol=1e-12
+    )

@@ -151,6 +151,7 @@ def test_real_simulator_step_uses_post_behavior_goal_for_force_transition() -> N
     fake = SimpleNamespace(
         config=SimpleNamespace(residual_adversary=SimpleNamespace(is_active=False)),
         peds_behaviors=[behavior],
+        _capture_robot_ped_forces=lambda: None,  # This fixture isolates goal/force timing.
         pysf_state=states,
         pysf_sim=SimpleNamespace(peds=fake_peds, compute_forces=compute_forces),
         groups=groups,

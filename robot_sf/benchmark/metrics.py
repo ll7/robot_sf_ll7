@@ -3552,6 +3552,9 @@ def post_process_metrics(
     _attach_group_space_block(metrics)
     _attach_social_mini_game_block(metrics)
     metrics.pop("_episode_metadata", None)
+    for key, value in metrics.items():
+        if key.startswith("robot_force_"):
+            metrics[key] = _robot_force_json_value(value)
     return _sanitize_metrics(metrics)
 
 
@@ -4153,6 +4156,21 @@ def build_distributional_disruption_block(
         "cohort_metrics": cohort_metrics,
         "missing_data": missing_data,
     }
+
+
+def _robot_force_json_value(value: Any) -> Any:
+    """Represent undefined new force values as JSON null without changing legacy sanitization.
+
+    Returns:
+        A JSON-safe value preserving the optional force family's undefined entries.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _robot_force_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_robot_force_json_value(item) for item in value]
+    return value
 
 
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:

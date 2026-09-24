@@ -8,8 +8,8 @@ episode metrics. It is a preparation record, not acceptance evidence for a 0.0.8
 - Frozen 0.0.7 benchmark source: `07f7e8d43084de748915e1b1eb8b2a1603357c6e`.
 - First audit base: `origin/main@120c870d80daba4a06389f9df3c469a2f467da94`.
 - Command: `git diff --name-status 07f7e8d43084de748915e1b1eb8b2a1603357c6e..120c870d80daba4a06389f9df3c469a2f467da94 -- robot_sf/benchmark robot_sf/sim robot_sf/ped_npc configs/benchmarks configs/scenarios scripts/tools/run_benchmark_release.py`.
-- The 0.0.7 publication archive is the independently preserved issue #9431 bundle, SHA-256
-  `684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`.
+- The 0.0.7 publication archive is the independently preserved issue #9431 bundle, with SHA-256
+  checksum `684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`.
   Its 20,160 episode identities cover 14 arms, 48 scenarios, and seeds 111–140.
 
 ## Changes found before issue #9666 and #9667 merge
@@ -36,11 +36,12 @@ permitted; missing old fields, missing or extra identities, and changed finite v
 absolute tolerance `1e-12` fail the gate. Existing nonfinite unavailable sentinels must match
 their class exactly; they are never counted as finite measurements. It also requires a resolved
 manifest at each source and compares the predecessor matrix, scenario, seed policy, planner roster,
-kinematics, and legacy SNQI asset declarations; new v2 declarations are permitted.
+kinematics, and legacy Social Navigation Quality Index (SNQI) asset declarations; new v2
+declarations are permitted.
 
 The gate's archive self-test on the actual 0.0.7 bundle paired all 20,160 rows with zero
 mismatches and zero scientific-manifest differences. It found the historical
-`min_separation_corrupted_m` field is NaN on every row;
+`min_separation_corrupted_m` field is NaN (not a number) on every row;
 420 rows also use NaN in `min_predicted_separation_m`. These are predecessor sentinels, not new
 0.0.8 results. Seven focused comparator tests and Ruff passed. A successor campaign has not yet
 been submitted, so the actual 0.0.7-to-0.0.8 equivalence result is unavailable.
@@ -57,7 +58,8 @@ results.
 Issue #9431 remains open and a native blocker for #9668. Its existing 0.0.7 Zenodo deposition
 22814343 was published on 2026-09-24, and the public archive passed anonymous checksum readback
 at the same SHA-256 above. The issue records an explicit release-owner exception to the prospective
-doctor's tag-collision gate. A later #9431 readback at 2026-09-24 11:55 UTC found the DOI resolver
-and DataCite record live (HTTP 200); the published 0.0.7 files were unchanged.
+doctor's tag-collision gate. A later #9431 readback at 2026-09-24 11:55 UTC found the digital
+object identifier (DOI) resolver and DataCite record live (HTTP 200); the published 0.0.7 files
+were unchanged.
 This programme does not authorize changing the frozen 0.0.7 record. No 0.0.8 tag, Zenodo
 reservation, DOI, or publication action follows from this audit.

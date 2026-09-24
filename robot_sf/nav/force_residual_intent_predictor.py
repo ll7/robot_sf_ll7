@@ -77,6 +77,26 @@ def _clip_vector(vector: np.ndarray, maximum: float) -> tuple[np.ndarray, bool]:
     return vector * (maximum / norm), True
 
 
+def _snapshot_covariance(value: Any, name: str) -> np.ndarray:
+    """Validate a finite symmetric PSD covariance decoded from a snapshot.
+
+    Returns:
+        A validated covariance copy.
+    """
+    try:
+        covariance = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"snapshot_invalid_covariance:{name}") from exc
+    if (
+        covariance.shape != (4, 4)
+        or not np.all(np.isfinite(covariance))
+        or not np.allclose(covariance, covariance.T, rtol=0.0, atol=1e-8)
+        or np.linalg.eigvalsh(covariance).min(initial=0.0) < -1e-7
+    ):
+        raise ValueError(f"snapshot_invalid_covariance:{name}")
+    return covariance.copy()
+
+
 @dataclass(frozen=True, slots=True)
 class RobotKinematics:
     """Minimal current robot state visible to the planner-side predictor."""
@@ -373,9 +393,10 @@ class ForceResidualIntentPredictor:
     """Produce bounded CV/residual hypotheses from planner-visible track history.
 
     ``dt`` is the positive elapsed time since the preceding accepted update (or
-    the first sample's time scale after reset). The output timestamp is elapsed
-    predictor time from reset because this protocol intentionally accepts no
-    simulator clock or environment object.
+    the first sample's time scale after reset). Pass ``simulation_timestamp_s``
+    when the caller owns an absolute simulation clock; otherwise the shared
+    prediction timestamp uses the shared ``-1.0`` unavailable sentinel and
+    reset-relative elapsed time is available only in metadata.
     """
 
     def __init__(self, config: ForceResidualIntentConfig | None = None) -> None:
@@ -413,6 +434,7 @@ class ForceResidualIntentPredictor:
         tracks: Mapping[int, PlannerTrackBelief],
         robot_state: RobotKinematics,
         static_geometry: StaticGeometry,
+        simulation_timestamp_s: float | None = None,
     ) -> MultimodalPrediction:
         """Score current beliefs, update posteriors, and emit mode forecasts.
 
@@ -421,6 +443,9 @@ class ForceResidualIntentPredictor:
         current position and velocity before this observation updates the
         acceleration history; resulting forecasts are then available to the
         planner for that step.
+        ``simulation_timestamp_s`` is an optional non-negative absolute clock
+        value. When omitted, the shared prediction carries its ``-1.0`` unavailable
+        timestamp sentinel while reset-relative elapsed time remains metadata.
 
         Returns:
             A multimodal forecast for the accepted step.
@@ -429,6 +454,15 @@ class ForceResidualIntentPredictor:
         try:
             self._validate_step(step, dt)
             normalized_tracks = self._validate_tracks(step, tracks)
+            absolute_timestamp = (
+                None
+                if simulation_timestamp_s is None
+                else _finite_scalar(
+                    simulation_timestamp_s,
+                    "simulation_timestamp_s",
+                    minimum=0.0,
+                )
+            )
             if not isinstance(robot_state, RobotKinematics):
                 raise ValueError("invalid_robot_kinematics")
             if not isinstance(static_geometry, StaticGeometry):
@@ -755,13 +789,15 @@ class ForceResidualIntentPredictor:
             forecasts=forecasts,
             prediction_horizon=self.config.prediction_horizon_steps * self.config.prediction_dt_s,
             prediction_dt=self.config.prediction_dt_s,
-            timestamp=self._elapsed_time_s,
+            timestamp=-1.0 if absolute_timestamp is None else absolute_timestamp,
             schema_version="multimodal-prediction.v1",
             metadata={
                 "predictor_schema": _PREDICTION_SCHEMA,
                 "config_hash": self.config.config_hash,
                 "step": step,
                 "time_semantics": "elapsed_since_predictor_reset_s",
+                "elapsed_since_predictor_reset_s": self._elapsed_time_s,
+                "simulation_timestamp_available": absolute_timestamp is not None,
                 "force_model": {
                     "source": "analytic_estimator",
                     "version": self.config.force_model_version,
@@ -825,11 +861,15 @@ class ForceResidualIntentPredictor:
             None if last_dt_raw is None else _finite_scalar(last_dt_raw, "snapshot dt", minimum=0.0)
         )
         restored: dict[str, _TrackIntentState] = {}
+        restored_track_ids: set[int] = set()
         for payload in snapshot.get("states", []):
             state = self._state_from_dict(payload)
             if state.lifecycle_token in restored:
                 raise ValueError("snapshot_duplicate_identity")
+            if state.track_id in restored_track_ids:
+                raise ValueError("snapshot_duplicate_track_id")
             restored[state.lifecycle_token] = state
+            restored_track_ids.add(state.track_id)
         self._states = restored
         self._last_step = last_step
         self._elapsed_time_s = elapsed
@@ -970,7 +1010,12 @@ class ForceResidualIntentPredictor:
                 )
                 continue
             predicted_position, predicted_velocity = self._one_step_mean(state, mode_id, dt)
-            transition = self._transition(dt)
+            transition = self._mode_transition(
+                dt,
+                mode_id,
+                state.velocity,
+                state.desired_velocity,
+            )
             predicted_covariance = transition @ state.covariance @ transition.T
             predicted_covariance += self._process_noise(dt, mode_id)
             predicted_mean = np.concatenate((predicted_position, predicted_velocity))
@@ -1068,10 +1113,11 @@ class ForceResidualIntentPredictor:
         Returns:
             Predicted position and velocity.
         """
-        acceleration = self._mode_acceleration(mode_id, state.velocity, state.desired_velocity)
-        velocity, _ = _clip_vector(
-            state.velocity + dt * acceleration,
-            self.config.max_speed_mps,
+        velocity, _, _ = self._mode_step_velocity(
+            mode_id,
+            state.velocity,
+            state.desired_velocity,
+            dt,
         )
         position = state.position + dt * velocity
         return position, velocity
@@ -1386,23 +1432,25 @@ class ForceResidualIntentPredictor:
             covariances = np.zeros((self.config.prediction_horizon_steps, 2, 2), dtype=np.float32)
             clipped_steps = 0
             for index in range(self.config.prediction_horizon_steps):
-                acceleration = self._mode_acceleration(mode_id, current_velocity, desired_velocity)
-                next_velocity, speed_clipped = _clip_vector(
-                    current_velocity + self.config.prediction_dt_s * acceleration,
-                    self.config.max_speed_mps,
+                pre_step_velocity = current_velocity.copy()
+                next_velocity, speed_clipped, _ = self._mode_step_velocity(
+                    mode_id,
+                    pre_step_velocity,
+                    desired_velocity,
+                    self.config.prediction_dt_s,
                 )
-                if mode_id == _YIELD and float(np.dot(next_velocity, current_velocity)) <= 0.0:
-                    next_velocity = np.zeros(2, dtype=float)
                 clipped_steps += int(speed_clipped)
                 current_position = current_position + self.config.prediction_dt_s * next_velocity
-                current_velocity = next_velocity
-                current_covariance = (
-                    self._transition(self.config.prediction_dt_s)
-                    @ current_covariance
-                    @ self._transition(self.config.prediction_dt_s).T
+                transition = self._mode_transition(
+                    self.config.prediction_dt_s,
+                    mode_id,
+                    pre_step_velocity,
+                    desired_velocity,
                 )
+                current_covariance = transition @ current_covariance @ transition.T
                 current_covariance += self._process_noise(self.config.prediction_dt_s, mode_id)
                 current_covariance = self._symmetrize_psd(current_covariance)
+                current_velocity = next_velocity
                 means[index] = current_position.astype(np.float32)
                 covariances[index] = current_covariance[:2, :2].astype(np.float32)
             mode_provenance = (
@@ -1464,12 +1512,144 @@ class ForceResidualIntentPredictor:
         magnitude = min(self.config.yield_deceleration_mps2, self.config.max_deceleration_mps2)
         return -velocity / speed * magnitude
 
-    def _transition(self, dt: float) -> np.ndarray:
-        matrix = np.eye(4, dtype=float)
-        matrix[:2, 2:] = np.eye(2) * dt
-        return matrix
+    def _mode_step_velocity(
+        self,
+        mode_id: str,
+        velocity: np.ndarray,
+        desired_velocity: np.ndarray | None,
+        dt: float,
+    ) -> tuple[np.ndarray, bool, bool]:
+        """Apply one bounded mode velocity step.
+
+        Returns:
+            Bounded next velocity, speed-clipping status, and yield-stop status.
+        """
+        acceleration = self._mode_acceleration(mode_id, velocity, desired_velocity)
+        raw_next_velocity = velocity + dt * acceleration
+        next_velocity, clipped = _clip_vector(raw_next_velocity, self.config.max_speed_mps)
+        speed = float(np.linalg.norm(velocity))
+        yield_stop_speed = (
+            min(
+                self.config.yield_deceleration_mps2,
+                self.config.max_deceleration_mps2,
+            )
+            * dt
+        )
+        stopped = (
+            mode_id == _YIELD
+            and speed > 1e-12
+            and (
+                float(np.dot(next_velocity, velocity)) <= 0.0
+                or speed <= yield_stop_speed + 1e-12 * max(1.0, yield_stop_speed)
+            )
+        )
+        if stopped:
+            next_velocity = np.zeros(2, dtype=float)
+        return next_velocity, clipped, stopped
+
+    def _mode_transition(
+        self,
+        dt: float,
+        mode_id: str,
+        velocity: np.ndarray,
+        desired_velocity: np.ndarray | None,
+    ) -> np.ndarray:
+        """Linearize semi-implicit mode dynamics in ``[x, y, vx, vy]``.
+
+        Residual motion differentiates the relaxation acceleration with respect
+        to current velocity. Yield motion differentiates directional deceleration;
+        within the stopped region the local velocity derivative is zero, while
+        at the exact deceleration threshold it retains radial velocity support
+        from the moving side. Acceleration and speed clipping are included locally.
+
+        Returns:
+            The mode-specific 4x4 state transition Jacobian.
+        """
+        identity = np.eye(2, dtype=float)
+        acceleration = self._mode_acceleration(mode_id, velocity, desired_velocity)
+        raw_next_velocity = velocity + dt * acceleration
+        _, _, stopped = self._mode_step_velocity(
+            mode_id,
+            velocity,
+            desired_velocity,
+            dt,
+        )
+        speed = float(np.linalg.norm(velocity))
+
+        magnitude = min(
+            self.config.yield_deceleration_mps2,
+            self.config.max_deceleration_mps2,
+        )
+        yield_stop_speed = dt * magnitude
+        at_yield_stop_boundary = (
+            mode_id == _YIELD
+            and speed > 1e-12
+            and math.isclose(
+                speed,
+                yield_stop_speed,
+                rel_tol=0.0,
+                abs_tol=1e-9 * max(1.0, yield_stop_speed),
+            )
+        )
+        if at_yield_stop_boundary:
+            direction = velocity / speed
+            velocity_jacobian = np.outer(direction, direction)
+        elif stopped:
+            velocity_jacobian = np.zeros((2, 2), dtype=float)
+        elif mode_id == _RESIDUAL and desired_velocity is not None:
+            raw_acceleration = (desired_velocity - velocity) / self.config.relaxation_time_s
+            acceleration_norm = float(np.linalg.norm(raw_acceleration))
+            acceleration_limit = self.config.max_acceleration_mps2
+            if float(np.dot(raw_acceleration, velocity)) < 0.0:
+                acceleration_limit = min(
+                    acceleration_limit,
+                    self.config.max_deceleration_mps2,
+                )
+            if acceleration_norm <= acceleration_limit or acceleration_norm <= 1e-12:
+                velocity_jacobian = (1.0 - dt / self.config.relaxation_time_s) * identity
+            else:
+                direction = raw_acceleration / acceleration_norm
+                radial_projection = identity - np.outer(direction, direction)
+                velocity_jacobian = (
+                    identity
+                    - (
+                        dt
+                        * acceleration_limit
+                        / (self.config.relaxation_time_s * acceleration_norm)
+                    )
+                    * radial_projection
+                )
+        elif mode_id == _YIELD and speed > 1e-12:
+            direction = velocity / speed
+            tangential_projection = identity - np.outer(direction, direction)
+            velocity_jacobian = identity - (dt * magnitude / speed) * tangential_projection
+        elif mode_id in {_CV, _RESIDUAL} or speed <= 1e-12:
+            velocity_jacobian = identity
+        else:
+            velocity_jacobian = identity
+
+        raw_speed = float(np.linalg.norm(raw_next_velocity))
+        if not stopped and raw_speed > self.config.max_speed_mps:
+            direction = raw_next_velocity / raw_speed
+            clipping_jacobian = (self.config.max_speed_mps / raw_speed) * (
+                identity - np.outer(direction, direction)
+            )
+            velocity_jacobian = clipping_jacobian @ velocity_jacobian
+
+        transition = np.eye(4, dtype=float)
+        transition[:2, 2:] = dt * velocity_jacobian
+        transition[2:, 2:] = velocity_jacobian
+        return transition
 
     def _process_noise(self, dt: float, mode_id: str) -> np.ndarray:
+        """Return discrete process covariance for one mode step.
+
+        Residual model noise represents an uncertain post-step velocity increment
+        for mismatch in inferred desired velocity and analytic dynamics. Because
+        semi-implicit position uses that same next velocity, its covariance is
+        propagated through ``[dt I; I]`` into position, velocity, and their
+        cross-covariance rather than added to velocity alone.
+        """
         noise = np.diag(
             [
                 self.config.process_noise_position_m2_per_s * dt,
@@ -1479,7 +1659,11 @@ class ForceResidualIntentPredictor:
             ]
         )
         if mode_id == _RESIDUAL:
-            noise[2:, 2:] += np.eye(2) * self.config.residual_model_noise_m2_per_s * dt
+            velocity_increment_variance = self.config.residual_model_noise_m2_per_s * dt
+            noise[:2, :2] += np.eye(2) * velocity_increment_variance * dt**2
+            noise[:2, 2:] += np.eye(2) * velocity_increment_variance * dt
+            noise[2:, :2] += np.eye(2) * velocity_increment_variance * dt
+            noise[2:, 2:] += np.eye(2) * velocity_increment_variance
         return noise
 
     @staticmethod
@@ -1558,6 +1742,27 @@ class ForceResidualIntentPredictor:
     def _state_from_dict(self, payload: Mapping[str, Any]) -> _TrackIntentState:
         if not isinstance(payload, Mapping):
             raise ValueError("snapshot_invalid_track_state")
+        track_id = payload.get("track_id")
+        namespace = payload.get("tracker_namespace")
+        reset_epoch = payload.get("reset_epoch")
+        identity = payload.get("lifecycle_token")
+        if (
+            type(track_id) is not int
+            or track_id < 1
+            or not isinstance(namespace, str)
+            or not namespace.strip()
+            or type(reset_epoch) is not int
+            or reset_epoch < 0
+            or not isinstance(identity, str)
+        ):
+            raise ValueError("snapshot_invalid_track_identity")
+        expected_identity = json.dumps(
+            [namespace, reset_epoch, track_id],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if identity != expected_identity:
+            raise ValueError("snapshot_lifecycle_identity_mismatch")
         history: deque[_Observation] = deque(maxlen=self.config.history_steps)
         for item in payload.get("history", []):
             history.append(
@@ -1566,17 +1771,16 @@ class ForceResidualIntentPredictor:
                     time_s=_finite_scalar(item["time_s"], "snapshot history time", minimum=0.0),
                     position=np.asarray(_finite_xy(item["position"], "snapshot position")),
                     velocity=np.asarray(_finite_xy(item["velocity"], "snapshot velocity")),
-                    covariance=np.asarray(item["covariance"], dtype=float),
+                    covariance=_snapshot_covariance(item["covariance"], "history"),
                     confidence=float(item["confidence"]),
                     age_steps=int(item["age_steps"]),
                     missed_steps=int(item["missed_steps"]),
                 )
             )
-        identity = str(payload["lifecycle_token"])
         state = _TrackIntentState(
-            track_id=int(payload["track_id"]),
-            tracker_namespace=str(payload["tracker_namespace"]),
-            reset_epoch=int(payload["reset_epoch"]),
+            track_id=track_id,
+            tracker_namespace=namespace,
+            reset_epoch=reset_epoch,
             lifecycle_token=identity,
             history=history,
             log_probabilities={
@@ -1584,7 +1788,7 @@ class ForceResidualIntentPredictor:
             },
             position=np.asarray(_finite_xy(payload["position"], "snapshot position")),
             velocity=np.asarray(_finite_xy(payload["velocity"], "snapshot velocity")),
-            covariance=np.asarray(payload["covariance"], dtype=float),
+            covariance=_snapshot_covariance(payload["covariance"], "track"),
             confidence=float(payload["confidence"]),
             age_steps=int(payload["age_steps"]),
             missed_steps=int(payload["missed_steps"]),

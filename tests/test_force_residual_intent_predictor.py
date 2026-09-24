@@ -36,12 +36,17 @@ def _track(  # noqa: PLR0913
     confidence: float = 1.0,
     covariance_scale: float = 0.1,
     age_steps: int | None = None,
+    covariance: np.ndarray | None = None,
 ) -> PlannerTrackBelief:
     """Construct an identity-safe, tracker-owned planner input."""
     return PlannerTrackBelief(
         track_id=track_id,
         mean_state=np.asarray((*position, *velocity, 0.3), dtype=float),
-        covariance=np.eye(4, dtype=float) * covariance_scale,
+        covariance=(
+            np.eye(4, dtype=float) * covariance_scale
+            if covariance is None
+            else np.asarray(covariance, dtype=float)
+        ),
         confidence=confidence,
         existence_probability=1.0,
         existence_probability_calibrated=False,
@@ -74,6 +79,7 @@ def _update(
     *,
     geometry: StaticGeometry | None = None,
     robot: RobotKinematics | None = None,
+    simulation_timestamp_s: float | None = None,
 ) -> object:
     return predictor.update_and_predict(
         step=step,
@@ -81,6 +87,7 @@ def _update(
         tracks=tracks,
         robot_state=robot or _robot(),
         static_geometry=geometry or StaticGeometry(),
+        simulation_timestamp_s=simulation_timestamp_s,
     )
 
 
@@ -90,6 +97,8 @@ def test_empty_input_emits_valid_empty_horizon() -> None:
     assert prediction.forecasts == {}
     assert prediction.horizon == 3
     assert prediction.prediction_horizon == pytest.approx(0.3)
+    assert prediction.timestamp == -1.0
+    assert prediction.metadata["elapsed_since_predictor_reset_s"] == 0.0
     assert prediction.metadata["force_model"]["source"] == "analytic_estimator"
     assert prediction.metadata["force_model"]["simulator_parity_claim"] is False
 
@@ -115,6 +124,39 @@ def test_first_observation_is_cv_only_and_uses_identity_provenance() -> None:
     assert diagnostic["inferred_desired_velocity_mps"] is None
     assert diagnostic["acceleration_clipped"] is None
     assert diagnostic["desired_speed_clipped"] is None
+
+
+def test_absolute_timestamp_and_reset_relative_metadata_are_separate() -> None:
+    predictor = _predictor()
+    first = _update(
+        predictor,
+        42,
+        {1: _track(42)},
+        simulation_timestamp_s=123.4,
+    )
+    assert first.timestamp == pytest.approx(123.4)
+    assert first.metadata["elapsed_since_predictor_reset_s"] == 0.0
+    assert first.metadata["simulation_timestamp_available"] is True
+
+    next_prediction = _update(
+        predictor,
+        43,
+        {1: _track(43)},
+        simulation_timestamp_s=123.5,
+    )
+    assert next_prediction.timestamp == pytest.approx(123.5)
+    assert next_prediction.metadata["elapsed_since_predictor_reset_s"] == pytest.approx(0.1)
+
+    predictor.reset(seed=7)
+    after_reset = _update(
+        predictor,
+        100,
+        {1: _track(100)},
+        simulation_timestamp_s=900.25,
+    )
+    assert after_reset.timestamp == pytest.approx(900.25)
+    assert after_reset.metadata["elapsed_since_predictor_reset_s"] == 0.0
+    assert after_reset.metadata["simulation_timestamp_available"] is True
 
 
 def test_two_observations_enable_residual_and_predict_then_update() -> None:
@@ -623,6 +665,174 @@ def test_snapshot_restore_replays_identical_prediction() -> None:
         ForceResidualIntentPredictor(ForceResidualIntentConfig(prediction_dt_s=0.2)).restore_state(
             snapshot
         )
+
+
+def test_snapshot_restore_rejects_retokened_identity_duplicate_id_and_nonfinite_covariance() -> (
+    None
+):
+    source = _predictor()
+    _update(source, 0, {1: _track(0), 2: _track(0, track_id=2)})
+    valid_snapshot = source.snapshot_state()
+
+    retokened = json.loads(json.dumps(valid_snapshot))
+    track_two = next(item for item in retokened["states"] if item["track_id"] == 2)
+    track_two["lifecycle_token"] = '["tracker",0,1]'
+    with pytest.raises(ValueError, match="snapshot_lifecycle_identity_mismatch"):
+        _predictor().restore_state(retokened)
+
+    duplicate_identity = json.loads(json.dumps(valid_snapshot))
+    second_identity = next(item for item in duplicate_identity["states"] if item["track_id"] == 2)
+    second_identity["track_id"] = 1
+    second_identity["lifecycle_token"] = '["tracker",0,1]'
+    with pytest.raises(ValueError, match="snapshot_duplicate_identity"):
+        _predictor().restore_state(duplicate_identity)
+
+    duplicate_id = json.loads(json.dumps(valid_snapshot))
+    second = next(item for item in duplicate_id["states"] if item["track_id"] == 2)
+    second["track_id"] = 1
+    second["tracker_namespace"] = "second_tracker"
+    second["lifecycle_token"] = '["second_tracker",0,1]'
+    with pytest.raises(ValueError, match="snapshot_duplicate_track_id"):
+        _predictor().restore_state(duplicate_id)
+
+    nonfinite = json.loads(json.dumps(valid_snapshot))
+    nonfinite["states"][0]["covariance"][0][0] = float("nan")
+    with pytest.raises(ValueError, match="snapshot_invalid_covariance:track"):
+        _predictor().restore_state(nonfinite)
+
+
+def test_residual_and_yield_covariances_use_mode_jacobians() -> None:
+    covariance = np.asarray(
+        [
+            [100.0, 0.0, -9.9, 0.0],
+            [0.0, 0.3, 0.0, -0.15],
+            [-9.9, 0.0, 1.0, 0.0],
+            [0.0, -0.15, 0.0, 0.1],
+        ]
+    )
+    assert np.linalg.eigvalsh(covariance).min() > 0.0
+    config = ForceResidualIntentConfig(max_modes=3, yield_mode_enabled=True)
+    predictor = ForceResidualIntentPredictor(config)
+    _update(predictor, 0, {1: _track(0, velocity=(0.5, 0.0))})
+    forecast = _update(
+        predictor,
+        1,
+        {1: _track(1, position=(0.05, 0.0), velocity=(0.5, 0.0), covariance=covariance)},
+    ).forecasts[1]
+
+    dt = config.prediction_dt_s
+    residual_jacobian = (1.0 - dt / config.relaxation_time_s) * np.eye(2)
+    yield_direction = np.asarray([1.0, 0.0])
+    yield_jacobian = np.eye(2) - (dt * config.yield_deceleration_mps2 / 0.5) * (
+        np.eye(2) - np.outer(yield_direction, yield_direction)
+    )
+
+    def expected_state_covariance(mode_jacobian: np.ndarray, *, residual_noise: bool) -> np.ndarray:
+        transition = np.eye(4)
+        transition[:2, 2:] = dt * mode_jacobian
+        transition[2:, 2:] = mode_jacobian
+        process_noise = np.diag(
+            [
+                config.process_noise_position_m2_per_s * dt,
+                config.process_noise_position_m2_per_s * dt,
+                config.process_noise_velocity_m2_per_s * dt,
+                config.process_noise_velocity_m2_per_s * dt,
+            ]
+        )
+        if residual_noise:
+            velocity_increment_variance = config.residual_model_noise_m2_per_s * dt
+            process_noise[:2, :2] += np.eye(2) * velocity_increment_variance * dt**2
+            process_noise[:2, 2:] += np.eye(2) * velocity_increment_variance * dt
+            process_noise[2:, :2] += np.eye(2) * velocity_increment_variance * dt
+            process_noise[2:, 2:] += np.eye(2) * velocity_increment_variance
+        return transition @ covariance @ transition.T + process_noise
+
+    modes = {mode.mode_id: mode for mode in forecast.modes}
+    residual_covariance = expected_state_covariance(residual_jacobian, residual_noise=True)
+    yield_covariance = expected_state_covariance(yield_jacobian, residual_noise=False)
+    np.testing.assert_allclose(
+        modes["force_residual_desired_motion"].covariance[0],
+        residual_covariance[:2, :2],
+        rtol=1e-5,
+        atol=1e-4,
+    )
+    np.testing.assert_allclose(
+        modes["yield_or_decelerate"].covariance[0],
+        yield_covariance[:2, :2],
+        rtol=1e-5,
+        atol=1e-4,
+    )
+
+    likelihood_prediction = _update(
+        predictor,
+        2,
+        {
+            1: _track(
+                2,
+                position=(0.1, 0.0),
+                velocity=(0.5, 0.0),
+                covariance=np.zeros((4, 4)),
+            )
+        },
+    )
+    diagnostics = predictor.diagnostics["tracks"]["1"]["mode_update"]
+    floor = np.diag(
+        [
+            config.likelihood_covariance_floor_m2,
+            config.likelihood_covariance_floor_m2,
+            config.likelihood_velocity_covariance_floor_m2_per_s2,
+            config.likelihood_velocity_covariance_floor_m2_per_s2,
+        ]
+    )
+    assert {mode.mode_id for mode in likelihood_prediction.forecasts[1].modes} == {
+        "constant_velocity",
+        "force_residual_desired_motion",
+        "yield_or_decelerate",
+    }
+    np.testing.assert_allclose(
+        diagnostics["force_residual_desired_motion"]["innovation_covariance"],
+        residual_covariance + floor,
+        rtol=1e-8,
+        atol=1e-8,
+    )
+    np.testing.assert_allclose(
+        diagnostics["yield_or_decelerate"]["innovation_covariance"],
+        yield_covariance + floor,
+        rtol=1e-8,
+        atol=1e-8,
+    )
+
+
+def test_yield_stop_boundary_retains_radial_velocity_covariance() -> None:
+    covariance = np.asarray(
+        [
+            [1.0, 0.0, 0.2, 0.0],
+            [0.0, 0.1, 0.0, 0.0],
+            [0.2, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 0.1],
+        ]
+    )
+    config = ForceResidualIntentConfig(
+        max_modes=3,
+        yield_mode_enabled=True,
+        yield_deceleration_mps2=0.8,
+        prediction_horizon_steps=1,
+        prediction_dt_s=0.1,
+        process_noise_position_m2_per_s=0.0,
+        process_noise_velocity_m2_per_s=0.0,
+        residual_model_noise_m2_per_s=0.0,
+    )
+    prediction = _update(
+        ForceResidualIntentPredictor(config),
+        0,
+        {1: _track(0, velocity=(0.08, 0.0), covariance=covariance)},
+    )
+    yield_mode = next(
+        mode for mode in prediction.forecasts[1].modes if mode.mode_id == "yield_or_decelerate"
+    )
+
+    assert yield_mode.mean[0] == pytest.approx([0.0, 0.0], abs=1e-7)
+    assert yield_mode.covariance[0, 0, 0] == pytest.approx(1.05, abs=1e-6)
 
 
 def test_prediction_covariance_remains_psd_and_grows_with_uncertainty() -> None:

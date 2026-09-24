@@ -788,6 +788,144 @@ def test_gallery_rejects_runtime_fallback_marker_even_when_row_matches(
     assert case["replay"]["outcome_matches"] is True
 
 
+def test_gallery_rejects_adapter_mode_replay_even_when_source_was_native(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    summary = _runner_summary()
+    summary["algorithm_metadata_contract"]["planner_kinematics"]["execution_mode"] = "adapter"
+    summary["benchmark_availability"] = availability_payload(summary)
+    _install_fake_replay(monkeypatch, runner_summary=summary)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "replay_execution_unavailable"
+    assert case["replay"]["availability_error"] == "replay_execution_mode_not_native"
+
+
+def test_gallery_rejects_fallback_marker_in_replay_episode_row(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    _install_fake_replay(monkeypatch)
+    fake_run_batch = replay_gallery.run_batch
+
+    def replay_with_row_fallback(scenario_path: Path, **kwargs: Any) -> dict[str, Any]:
+        summary = fake_run_batch(scenario_path, **kwargs)
+        record_path = kwargs["out_path"]
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["algorithm_metadata"]["planner_runtime"] = {"fallback_used": True}
+        record_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(replay_gallery, "run_batch", replay_with_row_fallback)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "replay_execution_unavailable"
+    assert case["replay"]["availability_error"] == ("replay_episode_runtime_fallback_or_degraded")
+    assert case["replay"]["identity_matches"] is True
+    assert case["replay"]["outcome_matches"] is True
+
+
+def test_gallery_rejects_scenario_changed_after_selection_before_replay(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    calls = _install_fake_replay(monkeypatch)
+    materialize_scenario = replay_gallery._materialize_scenario
+
+    def mutate_scenario_then_materialize(
+        source: Path, input_dir: Path, **kwargs: Any
+    ) -> dict[str, Any]:
+        payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+        payload["scenarios"][0]["metadata"]["runtime_option"] = "changed-after-selection"
+        source.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        return materialize_scenario(source, input_dir, **kwargs)
+
+    monkeypatch.setattr(replay_gallery, "_materialize_scenario", mutate_scenario_then_materialize)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "not_replayed_scenario_changed_after_selection"
+    assert case["materialization"]["selection_binding"]["status"] == "mismatch"
+    assert calls == []
+
+
+def test_gallery_rejects_source_episode_changed_after_selection_before_replay(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    episode_path = Path(payload["candidates"][0]["episode_record_path"])
+    calls = _install_fake_replay(monkeypatch)
+    materialize_scenario = replay_gallery._materialize_scenario
+
+    def mutate_episode_then_materialize(
+        source: Path, input_dir: Path, **kwargs: Any
+    ) -> dict[str, Any]:
+        episode = _episode()
+        episode["outcome"]["collision_event"] = False
+        episode_path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
+        return materialize_scenario(source, input_dir, **kwargs)
+
+    monkeypatch.setattr(replay_gallery, "_materialize_scenario", mutate_episode_then_materialize)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "not_replayed_source_episode_changed_after_selection"
+    assert case["materialization"]["source_episode_selection_binding"]["status"] == "mismatch"
+    assert calls == []
+
+
+def test_gallery_rejects_route_overrides_changed_after_selection_before_replay(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    scenario_path = Path(payload["candidates"][0]["scenario_yaml_path"])
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    scenario = scenario_payload["scenarios"][0]
+    route_path = scenario_path.parent / "route-overrides.yaml"
+    route_payload = {"route": {"waypoints": [[1.0, 1.0], [2.0, 2.0]]}}
+    route_path.write_text(yaml.safe_dump(route_payload), encoding="utf-8")
+    scenario["route_overrides_file"] = str(route_path)
+    scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    payload["candidates"][0]["effective_scenario_hash"] = (
+        replay_gallery.compute_effective_scenario_hash(scenario, route_payload)
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    calls = _install_fake_replay(monkeypatch)
+    materialize_scenario = replay_gallery._materialize_scenario
+
+    def mutate_route_then_materialize(
+        source: Path, input_dir: Path, **kwargs: Any
+    ) -> dict[str, Any]:
+        changed_route = {"route": {"waypoints": [[1.0, 1.0], [3.0, 3.0]]}}
+        route_path.write_text(yaml.safe_dump(changed_route), encoding="utf-8")
+        return materialize_scenario(source, input_dir, **kwargs)
+
+    monkeypatch.setattr(replay_gallery, "_materialize_scenario", mutate_route_then_materialize)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == (
+        "not_replayed_effective_scenario_changed_after_selection"
+    )
+    assert case["materialization"]["selection_binding"]["status"] == "mismatch"
+    assert calls == []
+
+
 def test_gallery_deduplicates_identical_effective_scenarios(tmp_path: Path) -> None:
     manifest = _source_manifest(tmp_path)
     payload = json.loads(manifest.read_text(encoding="utf-8"))

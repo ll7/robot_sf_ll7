@@ -294,9 +294,23 @@ def _certificate_inputs_bound(
     if scenario_id is not None and cert["scenario_id"] != scenario_id:
         reasons.append("scenario_certificate_identity_mismatch")
         return False
-    return _artifact_reference_matches(
+    if not _artifact_reference_matches(
         cert.get("source"), artifact_sha256, "scenario_certificate", reasons
+    ):
+        return False
+    cert_evidence = cert.get("evidence")
+    producer_digest = (
+        cert_evidence.get("source_artifact_sha256") if isinstance(cert_evidence, Mapping) else None
     )
+    if (
+        artifact_sha256 is None
+        or not isinstance(producer_digest, str)
+        or _SHA256.fullmatch(producer_digest) is None
+        or producer_digest.lower() != artifact_sha256.lower()
+    ):
+        reasons.append("scenario_certificate_producer_source_digest_missing_or_mismatch")
+        return False
+    return True
 
 
 def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: str) -> bool:
@@ -745,7 +759,7 @@ def _oracle_proves_actor_free_rollout(
         and isinstance(geo, Mapping)
         and geo.get("route_geometrically_feasible") is True
         and isinstance(completion, Mapping)
-        and completion.get("route_completion_feasible") is True
+        and _completion_proves_actor_free_rollout(completion)
         and cert_valid
         and _certificate_supports_actor_free_rollout(cert)
         and isinstance(algo, str)
@@ -755,6 +769,38 @@ def _oracle_proves_actor_free_rollout(
         and seed >= 0
         and isinstance(manifest, str)
         and bool(manifest.strip())
+    )
+
+
+def _completion_proves_actor_free_rollout(completion: Mapping[str, Any]) -> bool:
+    """Require one internally consistent, non-fallback completion record."""
+    steps = completion.get("min_completion_steps")
+    horizon = completion.get("horizon_steps")
+    margin = completion.get("completion_horizon_margin_steps")
+    termination = completion.get("termination_reason")
+    return (
+        completion.get("route_completion_feasible") is True
+        and completion.get("status") == "passed"
+        and completion.get("blocker") is None
+        and completion.get("fallback_or_degraded") is False
+        and isinstance(steps, int)
+        and not isinstance(steps, bool)
+        and steps > 0
+        and isinstance(horizon, int)
+        and not isinstance(horizon, bool)
+        and horizon > 0
+        and steps <= horizon
+        and isinstance(margin, int)
+        and not isinstance(margin, bool)
+        and margin == horizon - steps
+        and termination
+        in {
+            "success",
+            "goal_reached",
+            "route_complete",
+            "completed",
+            "route_follow_reached_destination",
+        }
     )
 
 
@@ -808,6 +854,7 @@ def _select_oracle_cell(
 
 def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
     geo = nominal.get("geometric")
+    completion = nominal.get("completion")
     radius = nominal.get("envelope_radius_m")
     return (
         isinstance(radius, (int, float))
@@ -819,7 +866,21 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
         and isinstance(geo, Mapping)
         and geo.get("route_geometrically_feasible") is False
         and geo.get("benchmark_eligibility") == "excluded"
+        and isinstance(completion, Mapping)
+        and completion.get("route_completion_feasible") is False
+        and completion.get("status") == "failed"
+        and completion.get("blocker") == "route_geometrically_infeasible_no_traversal_path"
+        and completion.get("min_completion_steps") is None
+        and completion.get("completion_horizon_margin_steps") is None
+        and completion.get("termination_reason") is None
+        and _positive_int(completion.get("horizon_steps"))
+        and completion.get("fallback_or_degraded") in (None, False)
     )
+
+
+def _positive_int(value: Any) -> bool:
+    """Return whether value is a positive integer but not a boolean."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _certificate_supports_oracle_exclusion(cert: Any) -> bool:

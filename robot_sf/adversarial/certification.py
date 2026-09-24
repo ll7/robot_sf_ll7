@@ -21,7 +21,6 @@ _CLASSIFICATION_TO_ELIGIBILITY = {
     "knife_edge": "stress_only",
     "hard_but_solvable": "eligible",
     "valid": "eligible",
-    "unknown": "stress_only",
 }
 _ELIGIBILITY_SEVERITY = {
     "eligible": 0,

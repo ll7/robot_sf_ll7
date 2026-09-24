@@ -146,6 +146,7 @@ def _execution(
         "scenario_variant": "original",
         "planner_id": planner_id,
         "run_status": "ok",
+        "fallback_or_degraded": False,
         "route_complete": route_complete,
         "seed": seed,
         "horizon_steps": 100,
@@ -684,6 +685,96 @@ def test_execution_with_invalid_budget_is_not_used_as_feasibility_evidence() -> 
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "reference_execution_outcome_or_budget_invalid" in verdict.reason_codes
+
+
+@pytest.mark.parametrize("role", ["reference", "target", "replay"])
+@pytest.mark.parametrize(
+    "status_value",
+    ["false", None],
+    ids=["malformed", "null"],
+)
+def test_fallback_or_degraded_execution_cannot_establish_feasibility_or_planner_failure(
+    role: str, status_value: Any
+) -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    changed = {
+        "reference": reference,
+        "target": target,
+        "replay": replay,
+    }[role]
+    changed["fallback_or_degraded"] = status_value
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict != PLANNER_SPECIFIC_FAILURE
+    if role == "reference":
+        assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert f"{role}_execution_fallback_status_missing_or_malformed" in verdict.reason_codes
+
+
+@pytest.mark.parametrize("role", ["reference", "target", "replay"])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("fallback_or_degraded", True),
+        ("planner_runtime", {"readiness_status": "degraded"}),
+        ("planner_runtime", {"fallback_used": True}),
+        ("planner_runtime", {"availability_status": "fallback"}),
+    ],
+    ids=["summary-flag", "nested-degraded", "nested-fallback-flag", "nested-fallback-status"],
+)
+def test_canonical_fallback_and_degraded_signals_never_support_classification(
+    role: str, field: str, value: Any
+) -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    changed = {
+        "reference": reference,
+        "target": target,
+        "replay": replay,
+    }[role]
+    changed[field] = value
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict != PLANNER_SPECIFIC_FAILURE
+    if role == "reference":
+        assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert f"{role}_execution_fallback_or_degraded" in verdict.reason_codes
+
+
+@pytest.mark.parametrize("role", ["reference", "target", "replay"])
+def test_missing_fallback_status_cannot_establish_outcomes(role: str) -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    {
+        "reference": reference,
+        "target": target,
+        "replay": replay,
+    }[role].pop("fallback_or_degraded")
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict != PLANNER_SPECIFIC_FAILURE
+    if role == "reference":
+        assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert f"{role}_execution_provenance_incomplete" in verdict.reason_codes
 
 
 def test_execution_with_invalid_digest_is_not_used_as_feasibility_evidence() -> None:

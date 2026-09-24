@@ -1303,6 +1303,11 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 
 ## Benchmark Run Notes
 
+* [Issue #9656 historical benchmark hard-case mining](issue_9656_hard_case_mining.md)
+  records the checksum-verified Release 0.0.2 source slice, one-row scenario/config inputs, and
+  bounded replay comparisons. It is diagnostic-only; source collision-event/count contradictions
+  and revision-divergent replay mismatches are preserved, while rendering and #9652 corpus
+  admission remain downstream responsibilities.
 * [Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration](issue_6095_s10_discriminability_calibration.md)
   records the fail-closed, portable preflight for the frozen two-planner S10 (ten-seed) campaign. It is a
   configuration/provenance packet only; full SLURM execution remains required before any benchmark

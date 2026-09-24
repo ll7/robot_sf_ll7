@@ -477,6 +477,70 @@ def test_frontier_report_can_upgrade_historical_unknown_feasibility_once(tmp_pat
     assert second_report["case_frontier"]["confirmed_counterexamples_in_corpus"] == 2
 
 
+@pytest.mark.parametrize("replay_status", ["unavailable", "mismatch"])
+def test_frontier_report_does_not_count_historical_upgrade_without_verified_failure_replay(
+    tmp_path: Path, replay_status: str
+) -> None:
+    """Feasibility evidence alone cannot turn a historical case into a verified counterexample."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id="historical-unknown",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unsolved",
+            verdict="admissible_feasibility_unknown",
+            replay_status=replay_status,
+        )
+    )
+    upgraded = _observation(
+        tmp_path,
+        round_number=2,
+        case_id="historical-unknown",
+        origin_round=0,
+        origin_candidate_id=None,
+        planner_status="solved",
+        verdict="empirically_feasible",
+        replay_status="unavailable",
+    )
+    upgraded["admissibility_evidence_artifact"] = _artifact(
+        tmp_path, "historical-unreplayed-upgrade-proof.json", role="admissibility-evidence"
+    )
+    payload["rounds"][1]["case_observations"].append(upgraded)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    second = report["rounds"][1]
+    assert second["falsification"]["feasibility_upgrades_from_follow_up_case_ids"] == []
+    assert second["falsification"][
+        "feasibility_upgrades_without_verified_counterexample_case_ids"
+    ] == ["historical-unknown"]
+    assert second["falsification"]["verified_counterexample_case_ids"] == []
+    assert second["case_frontier"]["verified_counterexamples_cumulative"] == 1
+    assert second["case_frontier"]["confirmed_counterexamples_in_corpus"] == 1
+
+
+def test_frontier_report_rejects_case_origin_identity_changes(tmp_path: Path) -> None:
+    """Stable case IDs retain the same origin round and candidate across observations."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][1]["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=2,
+            case_id="case-001",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="solved",
+            verdict="empirically_feasible",
+            replay_status="verified",
+        )
+    )
+
+    with pytest.raises(FrontierReportError, match="changes its origin round or candidate"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 @pytest.mark.parametrize("target", ["candidate", "observation"])
 def test_frontier_report_requires_replay_role_for_verified_artifact(
     tmp_path: Path, target: str
@@ -490,6 +554,27 @@ def test_frontier_report_requires_replay_role_for_verified_artifact(
         first["case_observations"][0]["replay_artifact"]["role"] = "optimization"
 
     with pytest.raises(FrontierReportError, match="replay_artifact.role must be 'replay'"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "expected_role"),
+    [
+        ("origin_search_artifact", "falsification-search"),
+        ("corpus_artifact", "corpus"),
+    ],
+)
+def test_frontier_report_requires_typed_case_artifact_roles(
+    tmp_path: Path, field: str, expected_role: str
+) -> None:
+    """A checksummed artifact cannot substitute for a search or corpus source by relabeling."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"][0][field]["role"] = "optimization"
+
+    with pytest.raises(
+        FrontierReportError,
+        match=rf"{field}\.role must be '{expected_role}'",
+    ):
         build_frontier_report(payload, evidence_root=tmp_path)
 
 

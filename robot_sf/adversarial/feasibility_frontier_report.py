@@ -103,7 +103,7 @@ def build_frontier_report(
         case_id
         for case_id, state in historical_case_states.items()
         if state["admissibility_verdict"] in _CONFIRMED_FEASIBILITY_VERDICTS
-        and state["replay_status"] == "verified"
+        and state["verified_target_failure"]
     }
 
     for round_data in evidence["rounds"]:
@@ -127,10 +127,22 @@ def build_frontier_report(
         )
 
         observations = round_data["case_observations"]
-        feasibility_upgrades = [
-            observation["case_id"]
+        feasibility_upgrade_observations = [
+            observation
             for observation in observations
             if _is_followup_feasibility_upgrade(number, observation, current_case_verdicts)
+        ]
+        feasibility_upgrades = [
+            observation["case_id"]
+            for observation in feasibility_upgrade_observations
+            if _upgrade_has_verified_counterexample_evidence(observation, historical_case_states)
+        ]
+        unverified_feasibility_upgrades = [
+            observation["case_id"]
+            for observation in feasibility_upgrade_observations
+            if not _upgrade_has_verified_counterexample_evidence(
+                observation, historical_case_states
+            )
         ]
         verified_case_ids.extend(feasibility_upgrades)
         for case_id in feasibility_upgrades:
@@ -190,6 +202,9 @@ def build_frontier_report(
                     ),
                     "feasibility_upgrades_from_follow_up_case_ids": sorted(
                         set(feasibility_upgrades)
+                    ),
+                    "feasibility_upgrades_without_verified_counterexample_case_ids": sorted(
+                        set(unverified_feasibility_upgrades)
                     ),
                     "candidate_records": candidates,
                     "no_verified_counterexample_statement": no_discovery_statement,
@@ -728,6 +743,7 @@ def _validate_case_observation_origins(
     errors: list[str],
 ) -> None:
     latest_observations: dict[str, dict[str, Any]] = {}
+    case_origins: dict[str, tuple[int, Any]] = {}
     for round_data in rounds:
         if not isinstance(round_data, dict) or not isinstance(round_data.get("round_number"), int):
             continue
@@ -737,6 +753,7 @@ def _validate_case_observation_origins(
                 continue
             origin_round = observation.get("origin_round")
             case_id = observation.get("case_id")
+            _validate_case_origin_identity(current_round, observation, case_origins, errors)
             if isinstance(origin_round, int) and origin_round > 0:
                 _validate_discovered_case_observation(
                     current_round,
@@ -759,6 +776,28 @@ def _validate_case_observation_origins(
                 errors.append(f"round {current_round} case {case_id!r} has invalid origin_round")
             if isinstance(case_id, str):
                 latest_observations[case_id] = observation
+
+
+def _validate_case_origin_identity(
+    current_round: int,
+    observation: dict[str, Any],
+    case_origins: dict[str, tuple[int, Any]],
+    errors: list[str],
+) -> None:
+    case_id = observation.get("case_id")
+    origin_round = observation.get("origin_round")
+    if (
+        not isinstance(case_id, str)
+        or not isinstance(origin_round, int)
+        or isinstance(origin_round, bool)
+    ):
+        return
+    identity = (origin_round, observation.get("origin_candidate_id"))
+    previous_identity = case_origins.setdefault(case_id, identity)
+    if previous_identity != identity:
+        errors.append(
+            f"round {current_round} case {case_id!r} changes its origin round or candidate identity"
+        )
 
 
 def _validate_discovered_case_observation(
@@ -861,19 +900,36 @@ def _is_followup_feasibility_upgrade(
     return latest_verdicts.get(observation["case_id"]) == "admissible_feasibility_unknown"
 
 
-def _historical_case_states(rounds: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
-    """Return each pre-loop case's first persisted feasibility and replay state."""
-    states: dict[str, dict[str, str]] = {}
+def _upgrade_has_verified_counterexample_evidence(
+    observation: dict[str, Any], historical_case_states: dict[str, dict[str, Any]]
+) -> bool:
+    """Require historical replay of an observed target failure before upgrade credit."""
+    if observation["origin_round"] != 0:
+        # Discovered cases are admitted only after a complete failed evaluation and verified replay.
+        return True
+    state = historical_case_states.get(observation["case_id"])
+    return state is not None and state["verified_target_failure"]
+
+
+def _historical_case_states(rounds: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Return first feasibility plus any persisted replay-verified target failure."""
+    states: dict[str, dict[str, Any]] = {}
     for round_data in rounds:
         for observation in round_data["case_observations"]:
             if observation["origin_round"] == 0:
-                states.setdefault(
+                state = states.setdefault(
                     observation["case_id"],
                     {
                         "admissibility_verdict": observation["admissibility_verdict"],
                         "replay_status": observation["replay_status"],
+                        "verified_target_failure": False,
                     },
                 )
+                if observation["replay_status"] == "verified" and observation["planner_status"] in {
+                    "unsolved",
+                    "mixed",
+                }:
+                    state["verified_target_failure"] = True
     return states
 
 
@@ -1084,7 +1140,14 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         replay_status = observation.get("replay_status")
         if replay_status not in {"verified", "unavailable", "mismatch", "not_attempted", "unknown"}:
             errors.append(f"{obs_prefix}.replay_status is unsupported")
-        for key in ("origin_search_artifact", "corpus_artifact"):
+        expected_roles = {
+            "origin_search_artifact": "falsification-search",
+            "corpus_artifact": "corpus",
+        }
+        for key, expected_role in expected_roles.items():
+            _validate_artifact_role(
+                observation.get(key), f"{obs_prefix}.{key}", expected_role, errors
+            )
             _validate_artifact(
                 observation.get(key), f"{obs_prefix}.{key}", evidence_root, artifacts, errors
             )

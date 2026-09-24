@@ -50,8 +50,10 @@ relative paths inside the evidence bundle and carry a full source revision, sche
 SHA-256. Escaping paths, absent files, changed bytes, missing budgets, abbreviated source revisions,
 duplicate identities, and candidate-ledger/budget count mismatches fail closed. Candidate rows retain
 evaluation status, admissibility verdict, target-failure observation, replay result, corpus
-disposition, and stable case ID. Case
-observations link the discovery round and candidate to corpus and replay artifacts. A same-round
+disposition, and stable case ID. Case observations use the `falsification-search` role for their
+origin search artifact and the `corpus` role for their corpus artifact. A case ID's origin round and
+origin candidate stay unchanged across observations. Case observations link the discovery round and
+candidate to corpus and replay artifacts. A same-round
 observation must agree with its origin candidate's admissibility and replay status; it cannot mark a
 case solved when the search recorded its target failure. Later planner-status changes such as
 `unsolved` to `solved` are allowed. Later feasibility updates are limited to
@@ -60,7 +62,11 @@ complete evidence plus a checksummed artifact whose role is `admissibility-evide
 does not infer stronger feasibility from a replay alone. Transitions are checked against the latest
 recorded verdict: an unknown-to-confirmed upgrade counts once, repeated observations at the confirmed
 verdict remain in the corpus without repeated discovery credit, and verdict downgrades fail closed.
-A replay artifact used to claim verified replay must declare the `replay` role as well as pass its
+A historical unknown-feasibility case receives follow-up discovery credit only if a persisted
+historical observation has both a verified replay and an unsolved or mixed planner outcome. Otherwise
+its evidence-backed feasibility upgrade is retained in
+`feasibility_upgrades_without_verified_counterexample_case_ids` and is not counted as a verified
+counterexample. A replay artifact used to claim verified replay must declare the `replay` role as well as pass its
 path and digest checks. A stable case ID may be admitted only once; later verified repeats use
 `corpus_disposition=duplicate`, remain visible in candidate accounting, and do not count as new
 unique discoveries. Pre-loop historical confirmed cases are included in the known-corpus frontier,

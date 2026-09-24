@@ -928,6 +928,24 @@ def _selected_parameters(row: Mapping[str, Any]) -> dict[str, Any]:
     return dict(parameters) if isinstance(parameters, Mapping) else {}
 
 
+def _score_observation(score: Mapping[str, Any]) -> str:
+    expected = int(score.get("expected_episodes", 0))
+    valid = int(score.get("valid_episode_count", 0))
+    collisions = int(score.get("colliding_valid_episode_count", 0))
+    successes = int(score.get("success_count", 0))
+    near_miss_free = score.get("near_miss_free_fraction")
+    near_miss_text = "unknown" if near_miss_free is None else f"{near_miss_free:.3f}"
+    time_mean = score.get("time_to_goal_ideal_ratio_mean_success_only")
+    time_text = "unknown" if time_mean is None else f"{time_mean:.3f}"
+    comfort_mean = score.get("comfort_ped_force_q95_mean")
+    comfort_text = "unknown" if comfort_mean is None else f"{comfort_mean:.3f}"
+    return (
+        f"valid {valid}/{expected}; collision episodes {collisions}/{valid}; "
+        f"near-miss-free {near_miss_text}; successes {successes}/{valid}; "
+        f"successful time ratio {time_text}; mean episode p95 force {comfort_text}"
+    )
+
+
 def _write_report(path: Path, manifest: Mapping[str, Any]) -> None:
     methods = manifest["method_results"]
     selected = manifest["selected"]
@@ -937,6 +955,7 @@ def _write_report(path: Path, manifest: Mapping[str, Any]) -> None:
         f"# Planner optimizer bounded pilot: {manifest['run_id']}",
         "",
         f"- Source revision: `{manifest['source_revision']}`",
+        "- Evidence class: diagnostic finite-budget simulator pilot; not nominal or release benchmark evidence",
         f"- Baseline candidate: `{manifest['baseline_candidate']}`",
         f"- Training episodes per optimizer trial: {manifest['budget']['episodes_per_trial']}",
         f"- Trial budget: {manifest['budget']['trials_per_method']} per method, equal across Random and TPE",
@@ -957,7 +976,7 @@ def _write_report(path: Path, manifest: Mapping[str, Any]) -> None:
         "",
         "## Training results",
         "",
-        f"- Baseline: `{train['score']['selection_tuple']}` ({train['status']})",
+        f"- Baseline: `{train['score']['selection_tuple']}` ({train['status']}); {_score_observation(train['score'])}.",
     ]
     for method in ("random", "tpe"):
         result = methods[method]
@@ -968,7 +987,7 @@ def _write_report(path: Path, manifest: Mapping[str, Any]) -> None:
             )
         else:
             lines.append(
-                f"- {method.upper()} best trial `{best['trial_index']}`: `{best['score']['selection_tuple']}` ({best['status']}); parameters `{json.dumps(best['parameters'], sort_keys=True)}`"
+                f"- {method.upper()} best trial `{best['trial_index']}`: `{best['score']['selection_tuple']}` ({best['status']}); {_score_observation(best['score'])}; parameters `{json.dumps(best['parameters'], sort_keys=True)}`"
             )
         lines.append(
             f"  Invalid trials: {result['invalid_trial_count']} / {result['trial_count']}; runtime `{result['runtime_sec']:.3f}s`."
@@ -979,14 +998,14 @@ def _write_report(path: Path, manifest: Mapping[str, Any]) -> None:
             "## Frozen held-out comparison",
             "",
             f"- Selected method/config: `{selected['method']}` / `{selected['candidate_name']}`.",
-            f"- Baseline: `{heldout['baseline']['score']['selection_tuple']}` ({heldout['baseline']['status']}).",
-            f"- Selected: `{heldout['selected']['score']['selection_tuple']}` ({heldout['selected']['status']}).",
+            f"- Baseline: `{heldout['baseline']['score']['selection_tuple']}` ({heldout['baseline']['status']}); {_score_observation(heldout['baseline']['score'])}.",
+            f"- Selected: `{heldout['selected']['score']['selection_tuple']}` ({heldout['selected']['status']}); {_score_observation(heldout['selected']['score'])}.",
             f"- Training-set objective improvement over baseline: `{selected['improves_over_baseline']}`.",
             f"- Held-out objective improvement over baseline: `{heldout['selected_improves_over_baseline']}`.",
             "",
             "## Interpretation boundary",
             "",
-            "This is a small finite-budget simulator pilot on the listed scenarios and seeds. It demonstrates only the observed planner/config behavior on these rows; it does not establish global optimality, scenario feasibility for other inputs, or real-world safety. The checked-in suites are used as configured and no mathematical feasibility oracle is claimed.",
+            "The lexicographic improvement is limited to near-miss rate and force on this tiny pilot: task completion did not improve, and the training collision remained. Efficiency is unknown because no episode completed successfully. Three trials per method are too few to infer that one search method is better. This demonstrates only observed planner/config behavior on these exact rows; it does not establish global optimality, feasibility for other inputs, or real-world safety. No mathematical feasibility oracle is claimed.",
             "",
             f"Canonical config export: `{manifest['selected_candidate_config']}`.",
             f"Existing policy-search runner registry: `{manifest['candidate_registry_export']}`.",

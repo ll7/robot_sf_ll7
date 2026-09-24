@@ -1,5 +1,8 @@
 """Tests for the conservative scenario-admissibility adapter."""
 
+# evidence-writer-exempt: synthetic scenario YAML is written only under pytest tmp_path to prove
+# candidate artifact identity binding; no canonical evidence is published.
+
 from __future__ import annotations
 
 import hashlib

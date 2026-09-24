@@ -3,6 +3,11 @@
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 
+Issue #9652 versioned adversarial challenge corpus: fail-closed admission from the persisted #9645
+packet, explicit feasibility uncertainty and replay provenance, append-only planner observations,
+recomputed solved status, and deterministic regression-slice export:
+[adversarial_counterexample_corpus.md](adversarial_counterexample_corpus.md).
+
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA
 `09f6b1beeff71b4ee30deae7cc2504c0c7310729`) and the release/audit workflow around it.

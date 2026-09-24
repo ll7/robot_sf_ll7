@@ -250,7 +250,12 @@ def _robot_force_block_problems(metrics: dict[str, Any], prefix: str) -> list[st
     """Check finite reductions and declared zero-exposure unavailable values."""
     problems: list[str] = []
     count = metrics.get(f"{prefix}_exposed_ped_count")
-    if type(count) is not int or count < 0:
+    if (
+        type(count) not in (int, float)
+        or not math.isfinite(count)
+        or count < 0
+        or not float(count).is_integer()
+    ):
         problems.append(f"{prefix}_exposed_ped_count")
     for suffix in ROBOT_FORCE_UNCONDITIONAL:
         if suffix == "exposed_ped_count":

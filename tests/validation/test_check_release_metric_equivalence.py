@@ -172,7 +172,9 @@ def _force_row(*, count: int) -> dict[str, object]:
 
 def test_force_gate_accepts_zero_exposure_nulls_and_absent_pp_variant(tmp_path: Path) -> None:
     zero = _force_row(count=0)
+    zero["metrics"]["robot_force_exposed_ped_count"] = 0.0
     exposed = _force_row(count=1)
+    exposed["metrics"]["robot_force_exposed_ped_count"] = 1.0
     exposed["seed"] = 112
     _write_candidate(tmp_path, [zero, exposed])
 
@@ -200,3 +202,14 @@ def test_force_gate_rejects_nonfinite_and_partial_variant(tmp_path: Path) -> Non
         "robot_force_peak",
         "robot_force_pp_equiv_incomplete",
     ]
+
+
+def test_force_gate_rejects_fractional_exposed_count(tmp_path: Path) -> None:
+    row = _force_row(count=1)
+    row["metrics"]["robot_force_exposed_ped_count"] = 1.5
+    _write_candidate(tmp_path, [row])
+
+    report = scan_robot_force_metrics(tmp_path, NEW_SHA)
+
+    assert report["status"] == "invalid_robot_force_metrics"
+    assert report["examples"][0]["fields"] == ["robot_force_exposed_ped_count"]

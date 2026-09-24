@@ -462,3 +462,34 @@ benchmark_protocol:
 The manifest declares scenario classes, planner panel, metric layers, and claim rules required for
 AMMV benchmark comparison. This slice is descriptive: loading the manifest validates protocol shape,
 but does not execute scenarios, instantiate planners, or enforce CI/release gates.
+
+### Robot-attributable force metrics
+
+When force recording is enabled, `robot_force_*` measures the simulator's own robot-repulsion
+component, **not measured human discomfort**. Accelerations are in m/s² (unit mass), with
+inverse-cubic distance dependence and linear scaling by `force_multiplier`. The six reductions
+are total magnitude integral and integral per exposed pedestrian (m/s), peak and active-only
+mean (m/s²), time with any pedestrian above the reference (s), and exposed pedestrian count.
+Empty exposure gives zero total, peak, time and count; conditional means are undefined (NaN/null).
+Despawned NaN rows are excluded. Pedestrian identity is the stable simulation row, not proximity order.
+
+`robot_force_metadata` declares configured radii, activation, multiplier, SocialForce parameters,
+and the computed reference. The reference is the full pedestrian-pair force magnitude at contact
+(2 × pedestrian radius) and 1 m/s relative head-on speed. Current defaults give
+3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
+lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
+
+`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
+reductions and metadata; samples remain in memory for all force reductions. Existing
+post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
+inputs without a simulator, including explicitly supplied response multipliers. Reconstructing from
+post-integration legacy snapshots is a post-hoc estimate, not exact recorded-force parity.
+Absent optional fields produce no new metric keys and preserve legacy calculations.
+
+`robot_force_pp_equiv_*` is experimental: it evaluates the pedestrian-pair kernel with robot
+position and finite-difference velocity, reducing center distance by the robot/pedestrian radius
+difference (floored at zero for overlap). Velocity uses backward differences, with a forward
+first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
+or included automatically in the Social Navigation Quality Index. Its reductions use the same
+reference and units. Validation campaign evidence remains separate from release evaluation.

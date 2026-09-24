@@ -26,6 +26,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.adversarial.bundle import compute_effective_scenario_hash
+from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
 from robot_sf.benchmark.termination_reason import outcome_contradictions
 from robot_sf.cli_scenarios import validate_scenario_payload
 
@@ -366,14 +367,16 @@ def import_issue9656_candidates(
         if existing_import.get("candidate_ids") != expected_candidate_ids:
             raise CorpusError("duplicate #9656 import does not contain every source alias")
         expected_candidate_set = set(expected_candidate_ids)
+        existing_candidates = [
+            item
+            for item in corpus.get("historical_candidates", [])
+            if item["candidate_id"] in expected_candidate_set
+        ]
+        _verify_issue9656_duplicate_materialized_cases(source_rows, existing_candidates)
         _verify_existing_issue9656_candidate_artifacts(
             root,
             existing_import,
-            [
-                item
-                for item in corpus.get("historical_candidates", [])
-                if item["candidate_id"] in expected_candidate_set
-            ],
+            existing_candidates,
         )
         return corpus, {**existing_import, "decision": "duplicate"}
 
@@ -491,6 +494,8 @@ def _stage_issue9656_candidate(
     (candidate_dir / "maps").mkdir()
 
     source_case_sha = _sha256_file(source_case_path)
+    if source_case_sha != source_map.get("_materialized_case_sha256"):
+        raise CorpusError("#9656 materialized case changed after source validation")
     source_matrix_sha = _sha256_file(source_matrix)
     source_config_sha = _sha256_file(source_config)
     _copy_verified_source_file(
@@ -533,6 +538,7 @@ def _stage_issue9656_candidate(
             "normalized_matrix_sha256": _sha256_file(matrix_path),
             "normalized_config_sha256": _sha256_file(config_path),
             "map_receipt": map_receipt,
+            "source_binding": source_map["_source_binding"],
         },
     )
 
@@ -545,12 +551,15 @@ def _issue9656_candidate_record(
     source_record = source_case["source_record"]
     source = materialized_case.get("source", {})
     summary_receipts = context["summary_receipts"]
+    source_binding = context["source_binding"]
     replay_status = source_case["replay"]["status"]
     candidate_status = {
         "not_attempted": "pending_exact_replay",
         "unavailable_model_artifact": "blocked_unavailable_model_artifact",
         "mismatch_different_revision": "blocked_replay_revision_mismatch",
     }[replay_status]
+    if source_binding["status"] != "verified":
+        candidate_status = "blocked_source_provenance_mismatch"
     return {
         "schema_version": "adversarial-historical-candidate.v1",
         "candidate_id": context["candidate_id"],
@@ -566,10 +575,21 @@ def _issue9656_candidate_record(
             "campaign_id": source.get("campaign_id"),
             "campaign_source_revision": source.get("campaign_source_revision"),
             "row_git_hash": source.get("row_git_hash"),
+            "summary_source_revision": source_binding["summary_source_revision"],
+            "episode_git_hash": source_binding["episode_git_hash"],
+            "source_identity_binding_status": source_binding["status"],
+            "source_identity_binding_issues": source_binding["issues"],
             "episode_file": source_record["episode_file"],
             "episode_file_sha256": source_record["episode_file_sha256"],
             "line_number": source_record["line_number"],
-            "planner_config_hash": source.get("planner_config_hash"),
+            "materialized_planner_config_hash": source.get("planner_config_hash"),
+            "episode_planner_config_hash": source_binding["episode_planner_config_hash"],
+            "episode_scenario_algo_config_hash": source_binding[
+                "episode_scenario_algo_config_hash"
+            ],
+            "raw_planner_alias": source_case["planner_key"],
+            "episode_canonical_algorithm": source_binding["episode_canonical_algorithm"],
+            "materialized_canonical_algorithm": source_binding["materialized_canonical_algorithm"],
             "source_case_file_sha256": context["source_case_sha256"],
             "source_replay_matrix_sha256": context["source_matrix_sha256"],
             "source_planner_config_sha256": context["source_config_sha256"],
@@ -583,7 +603,12 @@ def _issue9656_candidate_record(
         "benchmark_eligible": source_case["benchmark_eligible"],
         "target_planner": {
             "planner_id": source_case["planner_key"],
-            "config_hash": source.get("planner_config_hash"),
+            "canonical_algorithm": source_binding["canonical_algorithm"],
+            "config_hash": (
+                source_binding["episode_planner_config_hash"]
+                if source_binding["status"] == "verified"
+                else None
+            ),
         },
         "criticality": dict(source_case["criticality"]),
         "replay_inputs": {
@@ -649,6 +674,63 @@ def _verify_issue9656_source_summary(
     }
 
 
+def _validate_issue9656_campaign_source(
+    summary: Mapping[str, Any], manifest: Mapping[str, Any]
+) -> dict[str, str]:
+    source = summary.get("source")
+    materialized_source = manifest.get("source")
+    required = (
+        "source_revision",
+        "source_campaign_id",
+        "bundle_sha256",
+        "matrix_path",
+        "matrix_sha256",
+    )
+    if not isinstance(source, dict) or not isinstance(materialized_source, dict):
+        raise CorpusError("#9656 source summary or materialized manifest lacks source identity")
+    revision = source.get("source_revision")
+    if (
+        not isinstance(revision, str)
+        or len(revision) != 40
+        or any(character not in "0123456789abcdef" for character in revision)
+        or not isinstance(source.get("source_campaign_id"), str)
+        or not source["source_campaign_id"].strip()
+        or not _is_sha256(source.get("bundle_sha256"))
+        or not _safe_bundle_relative_path(source.get("matrix_path"))
+        or not _is_sha256(source.get("matrix_sha256"))
+    ):
+        raise CorpusError("#9656 source summary has invalid campaign identity fields")
+    if any(materialized_source.get(key) != source.get(key) for key in required):
+        raise CorpusError("#9656 materialized manifest source identity differs from summary")
+    historical_matrix = _issue9656_historical_git_blob(revision, source["matrix_path"])
+    if hashlib.sha256(historical_matrix).hexdigest() != source["matrix_sha256"]:
+        raise CorpusError("#9656 source matrix digest does not match its campaign revision")
+    return {key: source[key] for key in required}
+
+
+def _issue9656_historical_git_blob(revision: str, relative_path: str) -> bytes:
+    """Read one path from a pinned local Git commit, without consulting the worktree file."""
+    if (
+        len(revision) != 40
+        or any(character not in "0123456789abcdef" for character in revision)
+        or not _safe_bundle_relative_path(relative_path)
+    ):
+        raise CorpusError("#9656 historical Git blob identity is invalid")
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{revision}:{relative_path}"],
+            cwd=_ROOT,
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise CorpusError(
+            f"#9656 historical Git blob is unavailable: {revision}:{relative_path}"
+        ) from exc
+    return result.stdout
+
+
 def _validate_issue9656_materialization(
     summary: Mapping[str, Any],
     materialized: Path,
@@ -657,6 +739,7 @@ def _validate_issue9656_materialization(
 ) -> list[tuple[dict[str, Any], dict[str, Any], Path, Path, Path, dict[str, Any]]]:
     if manifest.get("schema_version") != ISSUE_9656_SUMMARY_SCHEMA:
         raise CorpusError("#9656 materialized manifest schema differs from the source summary")
+    summary_source = _validate_issue9656_campaign_source(summary, manifest)
     summary_cases = summary.get("cases")
     manifest_cases = manifest.get("cases")
     selection = summary.get("selection")
@@ -676,7 +759,7 @@ def _validate_issue9656_materialization(
         anomalies.update(summary_case["criticality"]["anomalies"])
         rows.append(
             _validate_issue9656_materialized_case(
-                summary_case, manifest_case, materialized, campaign_root
+                summary_case, manifest_case, materialized, campaign_root, summary_source
             )
         )
     if dict(status_counts) != replay["status_counts"]:
@@ -774,6 +857,7 @@ def _validate_issue9656_materialized_case(
     manifest_case: dict[str, Any],
     materialized: Path,
     campaign_root: Path,
+    summary_source: Mapping[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], Path, Path, Path, dict[str, Any]]:
     case_id = summary_case["case_id"]
     replay_input = summary_case["replay_input"]
@@ -783,7 +867,10 @@ def _validate_issue9656_materialized_case(
     materialized_case = _read_json_object(case_file)
     if not _issue9656_case_document_matches(summary_case, manifest_case, materialized_case):
         raise CorpusError(f"#9656 materialized case does not bind summary row {case_id}")
-    _verify_issue9656_source_row(campaign_root, summary_case, materialized_case)
+    source_row = _verify_issue9656_source_row(campaign_root, summary_case, materialized_case)
+    source_binding = _issue9656_source_identity_binding(
+        summary_case, materialized_case, source_row, summary_source
+    )
     matrix_path = _safe_materialized_path(
         case_file.parent, replay_input.get("scenario_matrix_path"), label="scenario matrix"
     )
@@ -794,7 +881,9 @@ def _validate_issue9656_materialized_case(
     config_sha = replay_input.get("planner_config_sha256")
     if _sha256_file(matrix_path) != matrix_sha or _sha256_file(config_path) != config_sha:
         raise CorpusError(f"#9656 materialized replay input digest differs for {case_id}")
-    map_info = _issue9656_map_asset(matrix_path, summary_case)
+    map_info = _issue9656_map_asset(matrix_path, summary_case, summary_source["source_revision"])
+    map_info["_source_binding"] = source_binding
+    map_info["_materialized_case_sha256"] = _sha256_file(case_file)
     return summary_case, materialized_case, case_file, matrix_path, config_path, map_info
 
 
@@ -826,7 +915,7 @@ def _verify_issue9656_source_row(
     campaign_root: Path,
     summary_case: Mapping[str, Any],
     materialized_case: Mapping[str, Any],
-) -> None:
+) -> dict[str, Any]:
     source_ref = summary_case["source_record"]
     episode_path = _safe_materialized_path(
         campaign_root, source_ref.get("episode_file"), label="source episode file"
@@ -858,6 +947,82 @@ def _verify_issue9656_source_row(
         or row.get("algo") != summary_case.get("planner_key")
     ):
         raise CorpusError("#9656 materialized source row differs from campaign evidence")
+    return row
+
+
+def _issue9656_source_identity_binding(
+    summary_case: Mapping[str, Any],
+    materialized_case: Mapping[str, Any],
+    source_row: Mapping[str, Any],
+    summary_source: Mapping[str, Any],
+) -> dict[str, Any]:
+    source = materialized_case.get("source")
+    planner = materialized_case.get("planner")
+    if not isinstance(source, dict) or not isinstance(planner, dict):
+        raise CorpusError("#9656 materialized source identity is malformed")
+    metadata = source_row.get("algorithm_metadata")
+    planner_metadata = planner.get("algorithm_metadata")
+    scenario_params = source_row.get("scenario_params")
+    if not isinstance(metadata, dict) or not isinstance(planner_metadata, dict):
+        metadata = {}
+        planner_metadata = {}
+    if not isinstance(scenario_params, dict):
+        scenario_params = {}
+    summary_revision = summary_source["source_revision"]
+    episode_git_hash = source_row.get("git_hash")
+    # The materializer defines planner_config_hash from algorithm_metadata.config_hash;
+    # scenario_params.algo_config_hash is retained separately because the source can differ.
+    episode_config_hash = metadata.get("config_hash")
+    canonical_algorithm = canonical_algorithm_name(str(summary_case["planner_key"]))
+    expected = {
+        "campaign_source_revision": summary_revision,
+        "row_git_hash": episode_git_hash,
+        "episode_git_hash": summary_revision,
+        "planner_config_hash": episode_config_hash,
+        "materialized_planner_config_hash": episode_config_hash,
+        "campaign_id": summary_source["source_campaign_id"],
+        "bundle_sha256": summary_source["bundle_sha256"],
+        "scenario_matrix": summary_source["matrix_path"],
+        "scenario_matrix_sha256": summary_source["matrix_sha256"],
+        "planner_key": summary_case["planner_key"],
+        "episode_planner_key": summary_case["planner_key"],
+        "materialized_planner_key": summary_case["planner_key"],
+        "episode_canonical_algorithm": canonical_algorithm,
+        "materialized_canonical_algorithm": canonical_algorithm,
+    }
+    actual = {
+        "campaign_source_revision": source.get("campaign_source_revision"),
+        "row_git_hash": source.get("row_git_hash"),
+        "episode_git_hash": episode_git_hash,
+        "episode_planner_config_hash": episode_config_hash,
+        "planner_config_hash": source.get("planner_config_hash"),
+        "materialized_planner_config_hash": planner_metadata.get("config_hash"),
+        "campaign_id": source.get("campaign_id"),
+        "bundle_sha256": source.get("bundle_sha256"),
+        "scenario_matrix": source.get("scenario_matrix"),
+        "scenario_matrix_sha256": source.get("scenario_matrix_sha256"),
+        "planner_key": source.get("planner_key"),
+        "episode_planner_key": source_row.get("algo"),
+        "materialized_planner_key": planner.get("key"),
+        "episode_canonical_algorithm": metadata.get("canonical_algorithm"),
+        "materialized_canonical_algorithm": planner_metadata.get("canonical_algorithm"),
+    }
+    issues = sorted(field for field, value in expected.items() if actual[field] != value)
+    for field in ("episode_git_hash", "episode_planner_config_hash"):
+        value = actual[field]
+        if not isinstance(value, str) or not value.strip():
+            issues = sorted({*issues, field})
+    return {
+        "status": "verified" if not issues else "blocked",
+        "issues": issues,
+        "summary_source_revision": summary_revision,
+        "episode_git_hash": episode_git_hash,
+        "episode_planner_config_hash": episode_config_hash,
+        "episode_scenario_algo_config_hash": scenario_params.get("algo_config_hash"),
+        "canonical_algorithm": canonical_algorithm,
+        "episode_canonical_algorithm": metadata.get("canonical_algorithm"),
+        "materialized_canonical_algorithm": planner_metadata.get("canonical_algorithm"),
+    }
 
 
 def _validate_issue9656_setup_accounting(summary: Mapping[str, Any]) -> None:
@@ -896,7 +1061,29 @@ def _safe_materialized_path(root: Path, relative: Any, *, label: str) -> Path:
     return resolved
 
 
-def _issue9656_map_asset(matrix_path: Path, summary_case: Mapping[str, Any]) -> dict[str, Any]:
+def _issue9656_map_asset(
+    matrix_path: Path, summary_case: Mapping[str, Any], campaign_source_revision: str
+) -> dict[str, Any]:
+    map_path, relative = _issue9656_map_path(matrix_path, summary_case)
+    if not map_path.is_file():
+        raise CorpusError(f"#9656 current map file is unavailable: {relative.as_posix()}")
+    try:
+        current_bytes = map_path.read_bytes()
+    except OSError as exc:
+        raise CorpusError(f"#9656 current map file is unavailable: {relative.as_posix()}") from exc
+    historical_bytes = _issue9656_historical_git_blob(campaign_source_revision, relative.as_posix())
+    if current_bytes != historical_bytes:
+        raise CorpusError(f"#9656 map differs from campaign source revision: {relative.as_posix()}")
+    return {
+        "source_path": relative.as_posix(),
+        "source_sha256": hashlib.sha256(historical_bytes).hexdigest(),
+        "source_revision": campaign_source_revision,
+        "_source_bytes": historical_bytes,
+        "_repo_relative": relative.as_posix(),
+    }
+
+
+def _issue9656_map_path(matrix_path: Path, summary_case: Mapping[str, Any]) -> tuple[Path, Path]:
     try:
         matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as exc:
@@ -932,16 +1119,10 @@ def _issue9656_map_asset(matrix_path: Path, summary_case: Mapping[str, Any]) -> 
     if (
         not relative.parts
         or relative.parts[0] != "maps"
-        or not map_path.is_file()
         or not relative.as_posix().startswith("maps/svg_maps/")
     ):
         raise CorpusError("#9656 candidate map path must resolve to a repository map file")
-    return {
-        "source_path": relative.as_posix(),
-        "source_sha256": _sha256_file(map_path),
-        "_source_path": map_path,
-        "_repo_relative": relative.as_posix(),
-    }
+    return map_path, relative
 
 
 def _normalize_issue9656_replay_matrix(
@@ -955,20 +1136,20 @@ def _normalize_issue9656_replay_matrix(
         raise CorpusError("#9656 source replay matrix must be an object with scenarios")
     scenario = matrix["scenarios"][0]
     repo_relative = str(map_info["_repo_relative"])
-    source_map = map_info["_source_path"]
-    if not isinstance(source_map, Path):
-        raise CorpusError("#9656 map provenance path is malformed")
+    source_map = map_info.get("_source_bytes")
+    if not isinstance(source_map, bytes):
+        raise CorpusError("#9656 historical map bytes are unavailable")
     map_output = candidate_dir / Path(*PurePosixPath(repo_relative).parts)
-    _copy_verified_source_file(
-        source_map,
-        map_output,
-        expected_sha256=map_info["source_sha256"],
-    )
+    map_output.parent.mkdir(parents=True, exist_ok=True)
+    map_output.write_bytes(source_map)
+    if _sha256_file(map_output) != map_info["source_sha256"]:
+        raise CorpusError("#9656 copied historical map digest differs")
     scenario["map_file"] = (Path("..") / Path(*PurePosixPath(repo_relative).parts)).as_posix()
     matrix["map_search_paths"] = ["../maps/svg_maps"]
     map_receipt = [
         {
             "source_path": map_info["source_path"],
+            "source_revision": map_info["source_revision"],
             "source_sha256": map_info["source_sha256"],
             "stored_path": f"historical_candidates/{candidate_dir.name}/{repo_relative}",
             "stored_sha256": _sha256_file(map_output),
@@ -1078,6 +1259,26 @@ def _verify_existing_issue9656_candidate_artifacts(
                 corpus_root,
                 map_asset.get("stored_path"),
                 map_asset.get("stored_sha256"),
+            )
+
+
+def _verify_issue9656_duplicate_materialized_cases(
+    source_rows: Sequence[tuple[Any, ...]], candidates: Sequence[Mapping[str, Any]]
+) -> None:
+    candidates_by_alias = {candidate["source_case_id"]: candidate for candidate in candidates}
+    if len(candidates_by_alias) != len(source_rows):
+        raise CorpusError("duplicate #9656 import has missing materialized-case receipts")
+    for source_row in source_rows:
+        source_case, _materialized_case, case_path, *_artifacts = source_row
+        candidate = candidates_by_alias.get(source_case["case_id"])
+        stored_sha256 = (
+            candidate.get("source_provenance", {}).get("source_case_file_sha256")
+            if candidate is not None
+            else None
+        )
+        if not _is_sha256(stored_sha256) or _sha256_file(case_path) != stored_sha256:
+            raise CorpusError(
+                "duplicate #9656 import materialized case differs from its verified source"
             )
 
 

@@ -143,7 +143,8 @@
             "enum": [
               "pending_exact_replay",
               "blocked_unavailable_model_artifact",
-              "blocked_replay_revision_mismatch"
+              "blocked_replay_revision_mismatch",
+              "blocked_source_provenance_mismatch"
             ]
           },
           "source_replay_status": {

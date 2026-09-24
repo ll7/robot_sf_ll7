@@ -1,0 +1,92 @@
+{
+  "schema_version": "evidence_path_normalization.v1",
+  "source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+  "policy": "Only local source/input/output path fields were normalized. Scenario parameters, planner identity, metrics, events, and replay outcomes were preserved.",
+  "records": [
+    {
+      "path": "historical_issue_1501_failure_0002/replay_1.jsonl",
+      "source_sha256_before_path_normalization": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
+      "normalized_sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
+      "field_rewrites": {
+        "scenario_params.route_overrides_file": 1
+      }
+    },
+    {
+      "path": "historical_issue_1501_failure_0002/replay_1.provenance.json",
+      "source_sha256_before_path_normalization": "31182f37397f64e217ad465f0dfe364de982b53062d69baaf2375a9f6591e353",
+      "normalized_sha256": "65af70aa2739da46e90d75f2e7c4ed44bf444608219a884420870821c701e241",
+      "field_rewrites": {
+        "run.invocation": 1
+      }
+    },
+    {
+      "path": "historical_issue_1501_failure_0002/replay_2.jsonl",
+      "source_sha256_before_path_normalization": "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592",
+      "normalized_sha256": "0c9784aa651ba785f1cfe377e0d71bb8751145b93c99410c8f307eb440e63923",
+      "field_rewrites": {
+        "scenario_params.route_overrides_file": 1
+      }
+    },
+    {
+      "path": "historical_issue_1501_failure_0002/replay_2.provenance.json",
+      "source_sha256_before_path_normalization": "52421b34a1eb4dfaf77b0c5fbbf1faea976bafb6837d5026ea18567eebc38bc4",
+      "normalized_sha256": "b1b4cead87af7e66f96329192fc0bd406952223b9717d19fe433b15c95c38a8c",
+      "field_rewrites": {
+        "run.invocation": 1
+      }
+    },
+    {
+      "path": "representative_success/episode_records_original.jsonl",
+      "source_sha256_before_path_normalization": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
+      "normalized_sha256": "9a9a1372a686c25636fd96a8f30ee88a688799dd896cc09a77019841b26b7ec1",
+      "field_rewrites": {
+        "scenario_params.route_overrides_file": 1
+      }
+    },
+    {
+      "path": "representative_success/episode_records_original.provenance.json",
+      "source_sha256_before_path_normalization": "dac92b0fe9b96a5307ee65bf04d0d8ded33fc18a68c260577b455fe24637d357",
+      "normalized_sha256": "2fb08e7a4a02e0b53fba42e4518f4dcbd67f5654121d5c37f8340e9d69843e1b",
+      "field_rewrites": {
+        "inputs.schema_path.path": 1
+      }
+    },
+    {
+      "path": "representative_success/episode_records_replay.jsonl",
+      "source_sha256_before_path_normalization": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b",
+      "normalized_sha256": "e127d3c3325e24517a1ee42f9d9523d224d28badc80c307b52b21981b85a522e",
+      "field_rewrites": {
+        "scenario_params.route_overrides_file": 1
+      }
+    },
+    {
+      "path": "representative_success/episode_records_replay.provenance.json",
+      "source_sha256_before_path_normalization": "6a4751f8754b497c9d8e83b324e96a1d3eae7e8e060e485acce5286cb4ddee0d",
+      "normalized_sha256": "2822161e58cc724e2eaee4e570b0d48a212ef57093d0d49c6b7c3a0e8d176def",
+      "field_rewrites": {
+        "run.invocation": 1
+      }
+    },
+    {
+      "path": "smoke/corrected_success_smoke/episode_records.jsonl",
+      "source_sha256_before_path_normalization": "6dee284ba8c9b41441bd93ada3973da8a9a855a1501afef886c74f012aa15b2b",
+      "normalized_sha256": "dfc81385ec0dffd0be1d75abdf472599a3028c3efbeb434a4568b23e0c602b9e",
+      "field_rewrites": {
+        "scenario_params.route_overrides_file": 1
+      }
+    },
+    {
+      "path": "smoke/corrected_success_smoke/episode_records.provenance.json",
+      "source_sha256_before_path_normalization": "93e9c8a1261bf4ab2e62c47067e99a665d71f3b1a6ccb6bb02b3cdf8d16ccde1",
+      "normalized_sha256": "e20601a3e9cba6ed0da234ecf6857a94fd07d08acc7e72963b71782d08b5fc6e",
+      "field_rewrites": {
+        "inputs.schema_path.path": 1
+      }
+    }
+  ],
+  "validation": {
+    "jsonl_source_record_comparison": "all 5 normalized records equal their captured source records after excluding only the documented scenario_params.route_overrides_file field",
+    "provenance_source_record_comparison": "all 5 normalized provenance records equal their captured source records after excluding only the documented run.invocation and/or inputs.schema_path.path fields",
+    "candidate_parameters_metrics_events_and_outcomes_changed": false
+  }
+}

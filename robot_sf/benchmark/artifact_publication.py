@@ -1175,7 +1175,7 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     The bundle layout contains:
     - ``payload/``: exactly the selected compact evidence files.
     - ``evidence_bundle_manifest.json``: schema-tagged provenance + file index.
-    - ``checksums.sha256``: SHA-256 checksums for all payload files.
+    - ``checksums.sha256``: bundle-root-relative SHA-256 checksums for all payload files.
 
     Returns:
         Paths and totals describing the exported bundle artifacts.
@@ -1229,7 +1229,7 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
     checksums_path.write_text(
-        "".join(f"{entry.sha256}  {entry.path}\n" for entry in entries),
+        "".join(f"{entry.sha256}  payload/{entry.path}\n" for entry in entries),
         encoding="utf-8",
     )
 

@@ -1,0 +1,3426 @@
+{
+  "aggregates": [
+    {
+      "aggregation_note": "Seed/run medians and observed ranges are descriptive summaries, not confidence intervals.",
+      "available_manifest_count": 2,
+      "budget": 16,
+      "candidate_accounting": {
+        "attempted": 32,
+        "critical": 0,
+        "duplicate": 0,
+        "duplicate_rate_observed": 0.0,
+        "failed": 0,
+        "invalid": 0,
+        "invalid_rate_observed": 0.0,
+        "missing": 0,
+        "valid_total_minus_invalid_minus_failed": 32
+      },
+      "curve": [
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 1,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 2,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 3,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 4,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 5,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 6,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 7,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 8,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 9,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 10,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 11,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 12,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 13,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 14,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 15,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 16,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        }
+      ],
+      "final_best_objective": {
+        "interpretation": "descriptive only; no inferential test performed",
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 2
+      },
+      "method": "TPE",
+      "objective": "constraints_first_lexicographic_v1",
+      "run_count": 2,
+      "runtime_seconds": {
+        "max": null,
+        "median": null,
+        "min": null,
+        "n": 0,
+        "status": "not_recorded"
+      },
+      "sampler": "optuna",
+      "seed_count": 2,
+      "seeds": [
+        1101,
+        2202
+      ]
+    },
+    {
+      "aggregation_note": "Seed/run medians and observed ranges are descriptive summaries, not confidence intervals.",
+      "available_manifest_count": 2,
+      "budget": 16,
+      "candidate_accounting": {
+        "attempted": 32,
+        "critical": 0,
+        "duplicate": 0,
+        "duplicate_rate_observed": 0.0,
+        "failed": 0,
+        "invalid": 0,
+        "invalid_rate_observed": 0.0,
+        "missing": 0,
+        "valid_total_minus_invalid_minus_failed": 32
+      },
+      "curve": [
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 1,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 2,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 3,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 4,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 5,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 6,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 7,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 8,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 9,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 10,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 11,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 12,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 13,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 14,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 15,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        },
+        {
+          "aggregation": "descriptive_run_range",
+          "evaluation_index": 16,
+          "max_best_so_far": 0.0,
+          "median_best_so_far": 0.0,
+          "min_best_so_far": 0.0,
+          "n_available_runs": 2
+        }
+      ],
+      "final_best_objective": {
+        "interpretation": "descriptive only; no inferential test performed",
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 2
+      },
+      "method": "Random",
+      "objective": "constraints_first_lexicographic_v1",
+      "run_count": 2,
+      "runtime_seconds": {
+        "max": null,
+        "median": null,
+        "min": null,
+        "n": 0,
+        "status": "not_recorded"
+      },
+      "sampler": "random",
+      "seed_count": 2,
+      "seeds": [
+        1101,
+        2202
+      ]
+    }
+  ],
+  "claim_scope": "diagnostic_only_finite_search_budget",
+  "comparison": {
+    "path": "output/issue9645-pilot/comparison.json",
+    "schema_version": "adversarial-sampler-comparison.v3",
+    "sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
+  },
+  "figures": [
+    "convergence_constraints_first_lexicographic_v1.png"
+  ],
+  "limitations": [
+    "A finite search budget that finds no counterexample does not establish that none exists.",
+    "Seed/run aggregates are descriptive; observed min/max ranges are not confidence intervals.",
+    "No inferential test is performed, and small pilot seed counts do not support broad claims.",
+    "Search-level runtime remains unknown unless explicitly recorded in the comparison row or search manifest.",
+    "The current runner's legacy num_valid_candidates summary omits evaluator failures; this report derives valid as candidate rows minus invalid minus failed and retains the legacy field for audit.",
+    "A report built from fixtures demonstrates report behavior, not planner safety or empirical search performance."
+  ],
+  "objectives": [
+    "constraints_first_lexicographic_v1"
+  ],
+  "provenance": {
+    "search_manifest_count": 4,
+    "search_manifests": [
+      {
+        "config_sha256": "f174f22672aa05d222f7ce6bb20ecf64a042fb73dca9449dbaf7c44dc3e4ec38",
+        "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+        "run_id": "random:1101:16:constraints_first_lexicographic_v1:row1",
+        "sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13",
+        "status": "available"
+      },
+      {
+        "config_sha256": "a3e0978a698fa7d3696c101203b39a15702447906249e46f77d80ca2c7b9e6ea",
+        "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+        "run_id": "optuna:1101:16:constraints_first_lexicographic_v1:row2",
+        "sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0",
+        "status": "available"
+      },
+      {
+        "config_sha256": "84de14ba637674502970acd646e915dcc27b85ce454a897beb540af6e8e44162",
+        "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+        "run_id": "random:2202:16:constraints_first_lexicographic_v1:row3",
+        "sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c",
+        "status": "available"
+      },
+      {
+        "config_sha256": "7d91ed1a1a7c319bcba735813152b19ab1b202d018b7b4322fbe9e2261663e75",
+        "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+        "run_id": "optuna:2202:16:constraints_first_lexicographic_v1:row4",
+        "sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b",
+        "status": "available"
+      }
+    ],
+    "source_revision": {
+      "conflicting_runs": [],
+      "exact_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+      "observed_commit_shas": [
+        "58e516aa4f69ff3098bf518199f483006589758c"
+      ],
+      "runs_without_exact_revision": [],
+      "status": "consistent"
+    }
+  },
+  "random_vs_tpe": [
+    {
+      "ambiguous_random_seeds": [],
+      "ambiguous_tpe_seeds": [],
+      "budget": 16,
+      "inference_status": "not_performed",
+      "interpretation": "paired descriptive differences only; this report does not perform inferential tests",
+      "matched_seed_count": 2,
+      "objective": "constraints_first_lexicographic_v1",
+      "pairs": [
+        {
+          "random_final_best": 0.0,
+          "seed": 1101,
+          "tpe_final_best": 0.0,
+          "tpe_minus_random": 0.0
+        },
+        {
+          "random_final_best": 0.0,
+          "seed": 2202,
+          "tpe_final_best": 0.0,
+          "tpe_minus_random": 0.0
+        }
+      ],
+      "tpe_minus_random_max": 0.0,
+      "tpe_minus_random_median": 0.0,
+      "tpe_minus_random_min": 0.0,
+      "unavailable_matched_seeds": [],
+      "unmatched_random_seeds": [],
+      "unmatched_tpe_seeds": []
+    }
+  ],
+  "runs": [
+    {
+      "analysis_eligibility_unknown_count": 0,
+      "analysis_eligible_count": 16,
+      "analysis_ineligible_count": 0,
+      "artifact_status": "available",
+      "availability_status_counts": {
+        "available": 16
+      },
+      "best_analysis_eligible_objective_value": 0.0,
+      "best_objective_value": 0.0,
+      "budget": 16,
+      "comparison_row_index": 1,
+      "config_provenance": {
+        "config_sha256": "f174f22672aa05d222f7ce6bb20ecf64a042fb73dca9449dbaf7c44dc3e4ec38",
+        "files": [
+          {
+            "config_key": "scenario_template",
+            "declared_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "resolved_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+            "status": "available"
+          },
+          {
+            "config_key": "search_space_path",
+            "declared_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "resolved_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+            "status": "available"
+          }
+        ],
+        "search_space_sha256": "31423bbaddae7f655ef65cedd2a7a19cc2298e73e489367c09553bca03240c41",
+        "status": "available"
+      },
+      "critical_failure_counts": {},
+      "degraded_candidate_count": 0,
+      "duplicate_rate_observed": 0.0,
+      "evaluations": [
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.72650795007185,
+              "y": 2.7634464035651383
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1776745225240837,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.679114016953497,
+              "y": 3.9989662253098373
+            }
+          },
+          "candidate_sha256": "1f4a735527d1b104785438e64b705a8f6b43cae42feaadbb16bb7f65ceb37a9b",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "06ae946815f9f2e54d68a8d0328b25ad0b6d585838d3727bc24b6efc02ae2feb",
+          "error": null,
+          "evaluation_index": 1,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.23448967028336,
+              "y": 3.768981499778606
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1738672089065136,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.925459769182924,
+              "y": 2.829489253044335
+            }
+          },
+          "candidate_sha256": "b819596e6ec38eee7f513d60d66c678641d05a7f014d5612bd5df4ebbfbd3f64",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "807288841288dc8ddbe8c6d4917ad0b271ade34c4def78d9f93508e72f372d5b",
+          "error": null,
+          "evaluation_index": 2,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.623514772390243,
+              "y": 3.9978259302077017
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0212980222847872,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5975475119500455,
+              "y": 2.9608997783298023
+            }
+          },
+          "candidate_sha256": "f9b00125d9ff0854b42199e4728b5c7b457dbe1fd03a4e847f0c619d9f394199",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "aab67659eadeca436cb210c326e458496671a6176180b891635a5638619eab00",
+          "error": null,
+          "evaluation_index": 3,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.400100172892898,
+              "y": 2.537029281962014
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.198586325364027,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9019166073993516,
+              "y": 2.804874011130894
+            }
+          },
+          "candidate_sha256": "bc4d6ee19c46d1edef28d804bf094ac2806811cad073c0cf80d67348e9a9c9b2",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "4701c4102d1855b2b7ba60c2634f9885ec3f31350ca49970a523371ec083d4c5",
+          "error": null,
+          "evaluation_index": 4,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.86718869883111,
+              "y": 2.8549124736247737
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.360745609370679,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5527849776692535,
+              "y": 3.7269862432954293
+            }
+          },
+          "candidate_sha256": "3ff0564448f480894bdbf31d815c3d7e712c6c4ba456508554b2984961da3247",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "814e11a4a4ac37d136d895f3477aec9085a0fb797d3d1c2fffb3cdeee34efc8f",
+          "error": null,
+          "evaluation_index": 5,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.612605577197289,
+              "y": 3.311298917680998
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3170470279688717,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.526232998899053,
+              "y": 3.2084131509834473
+            }
+          },
+          "candidate_sha256": "ac2fdab81d2b9234afaf8cb2095f50989614dfb78a3db58f6cca62b25c37b785",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "9dfdc84565fdb1bb7165c6a9c4dbbf707acb6d7fbadcc2de6248eb1153bdc370",
+          "error": null,
+          "evaluation_index": 6,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.92753521599586,
+              "y": 3.21671663137811
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8741778221527993,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.6996620667955753,
+              "y": 3.708775018905925
+            }
+          },
+          "candidate_sha256": "3a717e45f8349a6b91899bdcc01ec3ee714312074561b1b5b964f5b8a0f9cd74",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "6ca4efb1b21f8e0be7ac1814d44c82a85d1656e182ba0f9b2e333890be6501e6",
+          "error": null,
+          "evaluation_index": 7,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.41548612136597,
+              "y": 3.072791880545024
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0210124475849514,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7864370638171017,
+              "y": 3.2610398451736593
+            }
+          },
+          "candidate_sha256": "c47d96f70c8e0a1fa81019076a1293db0ff6949bee84aca18d94a06fe8bfdf3a",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "e393eb5c5e3a48f75a5fa79364724393c4e6d17a0ceb0c868bc14f075362abb6",
+          "error": null,
+          "evaluation_index": 8,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.87942665758288,
+              "y": 2.5099872529711718
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8008244104414811,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5969979776066667,
+              "y": 3.772944401494831
+            }
+          },
+          "candidate_sha256": "e9551cf8b2575728b28b1d4b9def6ee87b7602f437edd5c2ea01b5d868ad434c",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "310593025e55a4cff9166b1f705109256fdca41b2446606c1bd3c0d43e296310",
+          "error": null,
+          "evaluation_index": 9,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.534063881228812,
+              "y": 2.6364736448466024
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8259235609870841,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.792865386468499,
+              "y": 3.443396779283013
+            }
+          },
+          "candidate_sha256": "6d46108dd5d729ce07cb7ae08b663a775cbc2ac8685b7eedecbeb361698756a2",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "4332fa932bb7ab1de8acdb5ee6e1cb0bfb615f8bf8d012697ba1ac817180a447",
+          "error": null,
+          "evaluation_index": 10,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.171058784603883,
+              "y": 3.4231701148049085
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0855276260335966,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5363346936190885,
+              "y": 3.5663189534183313
+            }
+          },
+          "candidate_sha256": "cb4031eecce1569a338160d1d015f30fdeaf7a9f4e10dd43ef1f1d704614b747",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "b084913b8f23370d16c0ea0cf361d00f2befffc8312e97203c5888f12e43e8e8",
+          "error": null,
+          "evaluation_index": 11,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.708793697614082,
+              "y": 2.930670735695343
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.125415734219581,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9934553299052076,
+              "y": 3.1091214015090674
+            }
+          },
+          "candidate_sha256": "c2165f15c8e903b818e9896fe9047e114469034e461cc1ffe9c05e15b6f9d217",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "2cf346d65563fd3f81b78fd6c7f71b0b4f42796caea4d38cbbb9cae16247e281",
+          "error": null,
+          "evaluation_index": 12,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.718661587694873,
+              "y": 3.8095763572152057
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.161218693300761,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.947461622338196,
+              "y": 3.648629944488273
+            }
+          },
+          "candidate_sha256": "a78024de9a9c37bd99a8f682455cf7c4ca8105084eee89e1bc5b92c38211efd1",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "5eeea52e17c41d2b48b1739c27520034f2917a2ea0c092444fdd8d23a94d1234",
+          "error": null,
+          "evaluation_index": 13,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.075452550786435,
+              "y": 3.9564283063979357
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8609916224326147,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.653856069756118,
+              "y": 3.3416408383294067
+            }
+          },
+          "candidate_sha256": "c1e831752de60ddf04a08f4023d4eb826ed7e1a0e16ee37280b277a210df16da",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "23e81ec24515c346a925ec40664ac3688f24d2ea3873bdf02d40d754514ac30e",
+          "error": null,
+          "evaluation_index": 14,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.920777718055239,
+              "y": 2.526916629470439
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.9798131968467398,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9683992003869597,
+              "y": 3.8549474489142637
+            }
+          },
+          "candidate_sha256": "e75a8a029afa634b69bd60b1746f52e284e4ebc20c419435ca72e7a1642e2e40",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "3f46ee46b5a77d9053ac975bac68ce358f692ae6621bd4723f66d0f35bc8824d",
+          "error": null,
+          "evaluation_index": 15,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.833713022271101,
+              "y": 2.9154143716640974
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8249002984215995,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9949558001893912,
+              "y": 3.711201233795176
+            }
+          },
+          "candidate_sha256": "8e19849bf799582bbe44185152673063ae6d1629cb7a20523ee51a6ce3eecde7",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "34c7db86fd0791b5b41818a71bf22aba693b6e4d921ba59f253d4d295c1c9833",
+          "error": null,
+          "evaluation_index": 16,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        }
+      ],
+      "execution_mode_counts": {
+        "native": 16
+      },
+      "expected_evaluations": 16,
+      "fallback_candidate_count": 0,
+      "first_critical_evaluation": null,
+      "invalid_rate_observed": 0.0,
+      "legacy_summary": {
+        "num_candidates": 16,
+        "num_failed_evaluations": 0,
+        "num_invalid_candidates": 0,
+        "num_valid_candidates": 16
+      },
+      "manifest_budget": 16,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "manifest_sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13",
+      "method": "Random",
+      "num_candidate_spec_duplicates": 0,
+      "num_candidates": 16,
+      "num_critical_candidates": 0,
+      "num_duplicate_candidates": 0,
+      "num_effective_scenario_duplicates": 0,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_missing_evaluations": 0,
+      "num_scored_valid_candidates": 16,
+      "num_scoreless_valid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "readiness_status_counts": {
+        "native": 16
+      },
+      "resolved_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "run_id": "random:1101:16:constraints_first_lexicographic_v1:row1",
+      "runtime_seconds": null,
+      "runtime_source": "not_recorded",
+      "sampler": "random",
+      "seed": 1101,
+      "source_revision": {
+        "environment": null,
+        "episode_records": [
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 1,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0000/episode_records.jsonl",
+            "sha256": "5a5608b8819dafc3766fd4a66ea5a4b77edffdaec247c052b2f22a1824ae8dc3",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 2,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0001/episode_records.jsonl",
+            "sha256": "fd757ec1066bd2a2a8b80c8f3bc4c4ae09349e8ccd46c5dfd8894e4557f30d3b",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 3,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0002/episode_records.jsonl",
+            "sha256": "8b7fd6b6f365610dcb0ce9cccf61dd3e01faff1df941fd2868296f01c44bd130",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 4,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0003/episode_records.jsonl",
+            "sha256": "d0f163d18de7603818fcb8d0cfb1871185c2c85db2adc2f01a12ec3351f04e72",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 5,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0004/episode_records.jsonl",
+            "sha256": "a6ef9029d4b7208f7053e8e197a8ff618a4360cb2be654e87f1dc5480e5675e3",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 6,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0005/episode_records.jsonl",
+            "sha256": "53584c4b586f2aa031524bd84d814930445f8ea9233bd0b3ce6e486f2282cb23",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 7,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0006/episode_records.jsonl",
+            "sha256": "9796c9f89f512f57d4c101d4b600a1c0befc10ed7ceefa1113e1a3f8d81cbaf2",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 8,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0007/episode_records.jsonl",
+            "sha256": "e8922b2cf62dbc462fb16a36a2485666a5209915a5bb3e5dbcd269d4ac80e789",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 9,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0008/episode_records.jsonl",
+            "sha256": "037e992b241b745c4482ba6b8ca4f757f897d978017fb33879c0ca9b8d1ad9cb",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 10,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0009/episode_records.jsonl",
+            "sha256": "28b2efe2e283ffebce3886be133b35be343614092d6b5629740c32e1720884dd",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 11,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0010/episode_records.jsonl",
+            "sha256": "a1c422c2a553017598731bd8669873e5ec72d7150eff457304f4129c10f424bf",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 12,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0011/episode_records.jsonl",
+            "sha256": "224eda922a6b3329ee085631a8cc8c649321492f6dd81f3103aa18df56419ebc",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 13,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0012/episode_records.jsonl",
+            "sha256": "5af855ee80ce54f402610b2b8e786a6fc0e9206a85cd4d6bf27f0a89eb8af834",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 14,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0013/episode_records.jsonl",
+            "sha256": "1fae12e439e1e66ebdb3327b93d0cc05674956144c2cc15a2895166169f90c30",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 15,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0014/episode_records.jsonl",
+            "sha256": "357ee6eb67c576c65306c7cd3ffd999bd41394d4fb2828c6cead8c02571c2f62",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 16,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0015/episode_records.jsonl",
+            "sha256": "c5e7ecfffdfd3a4eed8a70e4c5f8a0bd107d79bc07fe1cbcdc96f7dd3f62280c",
+            "status": "available"
+          }
+        ],
+        "exact_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+        "execution_context": null,
+        "observed_commit_shas": [
+          "58e516aa4f69ff3098bf518199f483006589758c"
+        ],
+        "status": "consistent_episode_records",
+        "unresolved_episode_provenance_count": 0
+      },
+      "warnings": []
+    },
+    {
+      "analysis_eligibility_unknown_count": 0,
+      "analysis_eligible_count": 16,
+      "analysis_ineligible_count": 0,
+      "artifact_status": "available",
+      "availability_status_counts": {
+        "available": 16
+      },
+      "best_analysis_eligible_objective_value": 0.0,
+      "best_objective_value": 0.0,
+      "budget": 16,
+      "comparison_row_index": 2,
+      "config_provenance": {
+        "config_sha256": "a3e0978a698fa7d3696c101203b39a15702447906249e46f77d80ca2c7b9e6ea",
+        "files": [
+          {
+            "config_key": "scenario_template",
+            "declared_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "resolved_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+            "status": "available"
+          },
+          {
+            "config_key": "search_space_path",
+            "declared_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "resolved_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+            "status": "available"
+          }
+        ],
+        "search_space_sha256": "31423bbaddae7f655ef65cedd2a7a19cc2298e73e489367c09553bca03240c41",
+        "status": "available"
+      },
+      "critical_failure_counts": {},
+      "degraded_candidate_count": 0,
+      "duplicate_rate_observed": 0.0,
+      "evaluations": [
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.6612492689737,
+              "y": 2.617116735421326
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2048460846167708,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.915544131882256,
+              "y": 3.7882604845437218
+            }
+          },
+          "candidate_sha256": "1108e55efb67a3b761d7b7d2e5ade3ebd67aa31f53449e3294f2066885653042",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "aeafd09490ccc955e6757cd30bf28bada57cc0a894b9a7ba38525b4484210957",
+          "error": null,
+          "evaluation_index": 1,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.320442569419885,
+              "y": 2.5962017466691036
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2598648566910722,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7586712667154556,
+              "y": 2.9739411629182353
+            }
+          },
+          "candidate_sha256": "8fc4eb6c3210c3822b6d1501f25b770944c30f4ac8ce1f662808df4346c997f8",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "44e133fbddc358c79aaac3ef1e5553e661e40462827646704427bd14c3460327",
+          "error": null,
+          "evaluation_index": 2,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.04585866178397,
+              "y": 3.4614558263205093
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3301351464930558,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7986306079767673,
+              "y": 2.5030881522539237
+            }
+          },
+          "candidate_sha256": "c5c4de76eb4a98d8c2b6195b50ef39f824f8daf15f72dd72b5fb2b0e8c137c93",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "63174e0b94ef4f4ebb03dd73bb58991f3cc32d04f76c77727619829fbea996d3",
+          "error": null,
+          "evaluation_index": 3,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.939831021148962,
+              "y": 3.2632419627591096
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0457783743049,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.597214033520785,
+              "y": 2.7576295874110777
+            }
+          },
+          "candidate_sha256": "47bb4454a9e2e7d42a5987fa5d965131ffb8e4f2b75fac4fbc7eed24068e449c",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "0a3f0f22e170b9f4ddb4d18cfb911b72d6846d8f380968d2964717867532fffe",
+          "error": null,
+          "evaluation_index": 4,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.754263593511254,
+              "y": 2.609988255971291
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.391865712219352,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.8136609881027246,
+              "y": 3.7906571436132888
+            }
+          },
+          "candidate_sha256": "ff595648e7ceff5f211501333351bd63568a707903a3ce805521536facd1c61f",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "0f08487de308b4eb0eb85bc2a22630319d9b099d81c1e001a7c513f3ec025bfa",
+          "error": null,
+          "evaluation_index": 5,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.949890518980723,
+              "y": 2.706341833142517
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.9337410959743841,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9788783029126513,
+              "y": 2.9344450972310274
+            }
+          },
+          "candidate_sha256": "33887899f0fefb050be51582295d43ae0e0cabb9b606fab48a303368832a5471",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "2c057ea577a8f8f7fa43ab19ee23ec3b697fdf23dfd3a23786e34f82747aee8c",
+          "error": null,
+          "evaluation_index": 6,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.702307889401329,
+              "y": 2.796773714164905
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.372804449517013,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5071338858349494,
+              "y": 2.5458231288930873
+            }
+          },
+          "candidate_sha256": "84281a87fe23fd0c1295d93546c3a3419589b260a719efaeca81144f24a48ba8",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "0c8deed3cd826d6c88105093673de0fc760ccb133574301c9f0f653e6b2b7fa5",
+          "error": null,
+          "evaluation_index": 7,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.364235286199715,
+              "y": 3.874265798202109
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0568485524187705,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.8805454402868853,
+              "y": 3.551210604808218
+            }
+          },
+          "candidate_sha256": "fcd2b5ec8403826b14b16515327cbaa17a11f895f6fd8e4dc61ae7e76c56e5b3",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "750190cf3145e48cad2bef0d1e19d1ffe5c65546227ae817b9127469b4fdf838",
+          "error": null,
+          "evaluation_index": 8,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.950247573191628,
+              "y": 3.491736454302443
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8293938682654677,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.805505220523666,
+              "y": 2.6240904006713137
+            }
+          },
+          "candidate_sha256": "297f970511e3e53b30b0bc885befed94d7e8fbeb0f47a19fbd81480449bbcd73",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "53098f7c44c6f19b1fe0a6097b18c9aac18d492a5f71adfd6f2f721fe400846e",
+          "error": null,
+          "evaluation_index": 9,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.817956805350372,
+              "y": 2.6730822050614855
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8500334643294503,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.6439467587494736,
+              "y": 3.380864409013612
+            }
+          },
+          "candidate_sha256": "7d5d3fa3b72dcfc01de84d24fb104f1c235639fb8392cd390015e1e726b40d4f",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "e79585291e97c45a15a065ee190141d076952c472d636d13fede7bc50d395fc8",
+          "error": null,
+          "evaluation_index": 10,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.010524628914596,
+              "y": 3.9874057526584927
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1728567394248461,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9926540462961375,
+              "y": 3.948529319228585
+            }
+          },
+          "candidate_sha256": "67cd5c24ffa7127297993d7fc05e5b0a425297fa99cd6c8dc86a9174e03d586f",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "f777ca3464396a4b9ffe277c60a773b33c6349bffbb938e592091852d12c7110",
+          "error": null,
+          "evaluation_index": 11,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.940541897016138,
+              "y": 2.942460284967311
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2147206189861954,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.697935545652856,
+              "y": 3.2404071617377403
+            }
+          },
+          "candidate_sha256": "2aaca9340c823dbcb5d605590301c2d2effc6db69220f807a5988a29810e314d",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "a8b7dd0228672b562f40d761a509fc33650922a19b471a663c64b167beba6baa",
+          "error": null,
+          "evaluation_index": 12,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.59205179784679,
+              "y": 2.507628295132591
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2386669982929823,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.889436719381893,
+              "y": 3.0552687093943014
+            }
+          },
+          "candidate_sha256": "26dafa806a132e3b779395a8524eeafde7c5a03bcd3f107030c653c6fb70d48e",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "15c290a894d63ddbf9c6ac602baaa534136510c73991e69382bb470600765754",
+          "error": null,
+          "evaluation_index": 13,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.338741846499712,
+              "y": 2.954088734240963
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1338580945833088,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7290244347317816,
+              "y": 3.616656097306585
+            }
+          },
+          "candidate_sha256": "0abc86e0f68f6a0970d838d46ffb44439223a6b6d7fd6c132f6cb91d7ea7fb3a",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "b537bf3c3b47ee7eb62742ff6b36ce3b0b315cee8b2d3a46b0a0aca95d907301",
+          "error": null,
+          "evaluation_index": 14,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.12476786653216,
+              "y": 3.0057077383792055
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2703284476726027,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.904956374276496,
+              "y": 3.2083184952886876
+            }
+          },
+          "candidate_sha256": "96a705aff7881add0aeb3c6105026500bde2310c7da525fdf585d91733ea1c06",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "58254941341dba4dbbf7a6e80727edfdf027082f077e9bfe3d502af6c0a1357c",
+          "error": null,
+          "evaluation_index": 15,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.309015576684747,
+              "y": 2.513455835764873
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0931799849043444,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.750082811057322,
+              "y": 3.9780755893165343
+            }
+          },
+          "candidate_sha256": "fb8ee12227a5e154e57cee0a1032f76aac2d15d21096cc56c91a0c04383321d6",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "cc68b8ee671f80fa49d1f3972d797329594366ab778c81a2456a052eee04ac9c",
+          "error": null,
+          "evaluation_index": 16,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        }
+      ],
+      "execution_mode_counts": {
+        "native": 16
+      },
+      "expected_evaluations": 16,
+      "fallback_candidate_count": 0,
+      "first_critical_evaluation": null,
+      "invalid_rate_observed": 0.0,
+      "legacy_summary": {
+        "num_candidates": 16,
+        "num_failed_evaluations": 0,
+        "num_invalid_candidates": 0,
+        "num_valid_candidates": 16
+      },
+      "manifest_budget": 16,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "manifest_sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0",
+      "method": "TPE",
+      "num_candidate_spec_duplicates": 0,
+      "num_candidates": 16,
+      "num_critical_candidates": 0,
+      "num_duplicate_candidates": 0,
+      "num_effective_scenario_duplicates": 0,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_missing_evaluations": 0,
+      "num_scored_valid_candidates": 16,
+      "num_scoreless_valid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "readiness_status_counts": {
+        "native": 16
+      },
+      "resolved_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "run_id": "optuna:1101:16:constraints_first_lexicographic_v1:row2",
+      "runtime_seconds": null,
+      "runtime_source": "not_recorded",
+      "sampler": "optuna",
+      "seed": 1101,
+      "source_revision": {
+        "environment": null,
+        "episode_records": [
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 1,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0000/episode_records.jsonl",
+            "sha256": "34f84b7c414f963a1af78ee0c8db0a69c142119c4d1ebb8fb0be915c0170d847",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 2,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0001/episode_records.jsonl",
+            "sha256": "0f9ad563110a2e7e941606ce2a4b7507a4c34ef24887ba3561de1a095612a37b",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 3,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0002/episode_records.jsonl",
+            "sha256": "d7d8d1b0b43c97ac6d2e9e5c51f793d524a0f06ad0d2adecc2f1312d1052ad21",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 4,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0003/episode_records.jsonl",
+            "sha256": "6611858cd492dd56a5cd146d6da6159991fca3e519c19bed00de4db8ebab3688",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 5,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0004/episode_records.jsonl",
+            "sha256": "679d218d404a35eee5372e33e3ed193dbee397c42a5af00a21b88efc755a5494",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 6,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0005/episode_records.jsonl",
+            "sha256": "129f88933ba632bebb134ddf4edf85babc8ef75d4a0a2f3f72c6139516d6f78a",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 7,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0006/episode_records.jsonl",
+            "sha256": "19608886d21a45b10ad776ad33f7ca0a5dea7143b2fde0cc77efd56c63552ac9",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 8,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0007/episode_records.jsonl",
+            "sha256": "36509fe895aed6b77c5072cad3df4a0735d1f5fb1f92baca2d13df18df0959b8",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 9,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0008/episode_records.jsonl",
+            "sha256": "3d05b55ed21e3c2237360e0b4df4d21aae3cca4910de043fe967c154c4d21812",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 10,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0009/episode_records.jsonl",
+            "sha256": "bfc441ff29d1ea5e4d7ac5790d49e9acbee4d3f3f2d82c45e5a56783028a8711",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 11,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/episode_records.jsonl",
+            "sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 12,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0011/episode_records.jsonl",
+            "sha256": "c48d75e4a850de8d73499ef8c8d13d96d87d982c45bcff0a194f3b4947ab00b8",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 13,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0012/episode_records.jsonl",
+            "sha256": "bbf8cee9675afbfb539ed108d689381316b628ed10da4b1fcd985bc51a6dc632",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 14,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0013/episode_records.jsonl",
+            "sha256": "4fbdc7f47876c2c7c59e093bd04429f553cf678cdb1fd31a650141b1f4e6685c",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 15,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0014/episode_records.jsonl",
+            "sha256": "7e597221cb9a56a2a3c9fab6a57e4837ed154c28a0a848b4176690b0fe9bb762",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 16,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0015/episode_records.jsonl",
+            "sha256": "65d8be5acb6889b55463e457dd25e5ca422022c7ef50063726993002d138e56d",
+            "status": "available"
+          }
+        ],
+        "exact_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+        "execution_context": null,
+        "observed_commit_shas": [
+          "58e516aa4f69ff3098bf518199f483006589758c"
+        ],
+        "status": "consistent_episode_records",
+        "unresolved_episode_provenance_count": 0
+      },
+      "warnings": []
+    },
+    {
+      "analysis_eligibility_unknown_count": 0,
+      "analysis_eligible_count": 16,
+      "analysis_ineligible_count": 0,
+      "artifact_status": "available",
+      "availability_status_counts": {
+        "available": 16
+      },
+      "best_analysis_eligible_objective_value": 0.0,
+      "best_objective_value": 0.0,
+      "budget": 16,
+      "comparison_row_index": 3,
+      "config_provenance": {
+        "config_sha256": "84de14ba637674502970acd646e915dcc27b85ce454a897beb540af6e8e44162",
+        "files": [
+          {
+            "config_key": "scenario_template",
+            "declared_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "resolved_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+            "status": "available"
+          },
+          {
+            "config_key": "search_space_path",
+            "declared_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "resolved_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+            "status": "available"
+          }
+        ],
+        "search_space_sha256": "31423bbaddae7f655ef65cedd2a7a19cc2298e73e489367c09553bca03240c41",
+        "status": "available"
+      },
+      "critical_failure_counts": {},
+      "degraded_candidate_count": 0,
+      "duplicate_rate_observed": 0.0,
+      "evaluations": [
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.162772802096952,
+              "y": 3.9410934655637857
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3145061841445713,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5083639352911393,
+              "y": 3.9651705858449855
+            }
+          },
+          "candidate_sha256": "9f8542b7cc1c9fca75aa9d5e11322799631507452837895a4de05c9ca26d4842",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "7e5b2f69c469913879df7c15bc6573ebdfd423f66f5ef7a7901e1b2733854953",
+          "error": null,
+          "evaluation_index": 1,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.753724994362406,
+              "y": 3.586750491193701
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.316417830129264,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.779987361150848,
+              "y": 3.842075581867051
+            }
+          },
+          "candidate_sha256": "eb5312255a738b7cfc9869723d1cd8ca5aa37dc71da96f93a91e9d0608f01532",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "5c3ca0af03d6117334dc4bc003e227311b0079c07c27bc729caffe3a6cd38e94",
+          "error": null,
+          "evaluation_index": 2,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.976051714030062,
+              "y": 2.6069192032802055
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.9268242947188624,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.6424614357467315,
+              "y": 3.027472188610746
+            }
+          },
+          "candidate_sha256": "f711bcbbe2a993bc0c881923a3d350d287349228c089e4b5fd8b2c9e3ad9bf81",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "09c8ddf03c4984500ac7c8325143817b8a1c70aeedd6288a32155e0afee35c37",
+          "error": null,
+          "evaluation_index": 3,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.253974875374317,
+              "y": 3.7035282667255873
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2159459796682552,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.929684444340069,
+              "y": 3.875021401786083
+            }
+          },
+          "candidate_sha256": "c32caa701ecf2a3d34be00ee0b64162a1ce9539f63c0997327ec037971c80bd9",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "b3e3dd90ff3ec6892de127d18d75fdcb40121b7ff83d193d01e1b059aa56433f",
+          "error": null,
+          "evaluation_index": 4,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.495124122841375,
+              "y": 2.5760836935600095
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1618495257084103,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.999050263073219,
+              "y": 3.562256214825575
+            }
+          },
+          "candidate_sha256": "4543b6bff195cd370f039581cbbdec10e985fc9ee1be895c30dd2919a35f57c0",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "99155a44fed0ae20f893b7f546c2dfefcc1d957133eeda6b326a9f053da84acf",
+          "error": null,
+          "evaluation_index": 5,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.425170939158465,
+              "y": 3.1343749350954857
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2761904860573214,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5170911864795738,
+              "y": 3.856840354683904
+            }
+          },
+          "candidate_sha256": "8fae5784a4f207ddffd186928a744e8d2e2ae0b53f6eecffcf4b0ec75b3c471a",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "15c470486d092cc97ef51f967f42f55ebeeb74ac918cc7aefff397414b6e59c9",
+          "error": null,
+          "evaluation_index": 6,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.962834709025651,
+              "y": 2.872749398633715
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3919266878774061,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.517250546199917,
+              "y": 3.0498899064592746
+            }
+          },
+          "candidate_sha256": "b09eee16f63f9d9023e3cd3e05d166f7127e33ea11e32c09b118ee7c36173916",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "eb24a90da396e7da3707b6aae2b10bc94074a589e999ffb23ee023378a0adb34",
+          "error": null,
+          "evaluation_index": 7,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.890208087102806,
+              "y": 3.6696582802957742
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.9912458001838036,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.732014324704884,
+              "y": 3.325493323195088
+            }
+          },
+          "candidate_sha256": "fb01ada7b742cfa9a4b7834ae59c8c988a1e6c2255b694b6c36ec1c367fbb22a",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "f7b1ca09bf7005d9e1c1558e93481d3befc63991c3d4e80c4219eb2401457326",
+          "error": null,
+          "evaluation_index": 8,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.331614315238557,
+              "y": 3.401430580121928
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.309993188273853,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9148292680266685,
+              "y": 3.1823485313433766
+            }
+          },
+          "candidate_sha256": "333fe4a25a648a1383190729e7668b2e8be2275fa244926dbc094ee6bd0e7476",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "2ae261311472d676109f8de8fc011597079b9032891b80822d7657c780e924f5",
+          "error": null,
+          "evaluation_index": 9,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.031669969031572,
+              "y": 2.9840596146823457
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.050188481983171,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.6842419032784197,
+              "y": 3.5130259257787904
+            }
+          },
+          "candidate_sha256": "474e8a5072bec7ee54324d48547bef0ddfa10b57a062b0cc226114e6fee6e3d5",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "da68e293b54153ee18d766bf007403bec9d3f0cfdd483ad2e41a1b1ca39e5a0d",
+          "error": null,
+          "evaluation_index": 10,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.607029742017315,
+              "y": 3.6391201676506544
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3871351417038889,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5275419741167204,
+              "y": 3.5979127790017085
+            }
+          },
+          "candidate_sha256": "8b7b5bcf1a4fb74b7db9579e67f7b3ed917df09e2e6f2607749276e9dd1ab0f1",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "d055c575a62ecce844b796fdc36a1cba0d2d0dea8e013bb4cae3ead4194221d4",
+          "error": null,
+          "evaluation_index": 11,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.853668608791783,
+              "y": 3.879558499382433
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.0891495277861318,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.8365487949153794,
+              "y": 2.9317750736112584
+            }
+          },
+          "candidate_sha256": "8505340c2afecdd8ed18a947894e33f82fc2c0848ebc968d80817e5352c3606a",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "d2ea81302d274e64af926f4e06794000f5983600467c80870430e99d435ee8e8",
+          "error": null,
+          "evaluation_index": 12,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.43048123315614,
+              "y": 3.8494701029314893
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3494699224833204,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.743595488708485,
+              "y": 2.67845528355665
+            }
+          },
+          "candidate_sha256": "ed96aada5d7d9b86bb9b20f16c900c1b10b442542952a7e044f2ec9ce0777f6d",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "285862d108df26f73208614674391acca1fd74bb1434900552b149e5a5dd3be2",
+          "error": null,
+          "evaluation_index": 13,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.862175234351234,
+              "y": 3.071307354179609
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.9282526643924705,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7407038755542743,
+              "y": 2.5351404660855312
+            }
+          },
+          "candidate_sha256": "aca6e57cd8a323e095edf1f4a75d3342b289f8c1c0b26712d9764105334152dd",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "3bc16036981bdadd9ae9d194dcf0d87a9b49f339671f679ac6507a4a75afdb89",
+          "error": null,
+          "evaluation_index": 14,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.098861243603785,
+              "y": 3.2856114058528387
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2647890213841548,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.8747669459767686,
+              "y": 3.0388921024942306
+            }
+          },
+          "candidate_sha256": "634fc4b0cf9c32b6b963cbcde85d46f12170e102b3a1f78af254efad0c4ceb3b",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "530b02f9d75e125cb6abdd0cf3f64c29a5efb75fa776e6a37b9e55346a52dfce",
+          "error": null,
+          "evaluation_index": 15,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.732750278560918,
+              "y": 2.6666465310783245
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8515066836810687,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.836415132383038,
+              "y": 3.714382676990641
+            }
+          },
+          "candidate_sha256": "c22df0f7b2639c305bd47b354f843275a97f97cb74aa68625b733236dff78e46",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "3e1c30b3ecec5123f0f935d79f9f12cec0773a7c068f1f32a092dc1ebc7e6506",
+          "error": null,
+          "evaluation_index": 16,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        }
+      ],
+      "execution_mode_counts": {
+        "native": 16
+      },
+      "expected_evaluations": 16,
+      "fallback_candidate_count": 0,
+      "first_critical_evaluation": null,
+      "invalid_rate_observed": 0.0,
+      "legacy_summary": {
+        "num_candidates": 16,
+        "num_failed_evaluations": 0,
+        "num_invalid_candidates": 0,
+        "num_valid_candidates": 16
+      },
+      "manifest_budget": 16,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "manifest_sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c",
+      "method": "Random",
+      "num_candidate_spec_duplicates": 0,
+      "num_candidates": 16,
+      "num_critical_candidates": 0,
+      "num_duplicate_candidates": 0,
+      "num_effective_scenario_duplicates": 0,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_missing_evaluations": 0,
+      "num_scored_valid_candidates": 16,
+      "num_scoreless_valid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "readiness_status_counts": {
+        "native": 16
+      },
+      "resolved_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "run_id": "random:2202:16:constraints_first_lexicographic_v1:row3",
+      "runtime_seconds": null,
+      "runtime_source": "not_recorded",
+      "sampler": "random",
+      "seed": 2202,
+      "source_revision": {
+        "environment": null,
+        "episode_records": [
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 1,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0000/episode_records.jsonl",
+            "sha256": "df0731a655d9de85a636c759df5cd490ddf8e457ebbda5837dd535949e4a8374",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 2,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0001/episode_records.jsonl",
+            "sha256": "e9e81b95d073c3afc7a8afb6001036f0ce47fe1de90b6a4a6a7b058cd0aff4d6",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 3,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0002/episode_records.jsonl",
+            "sha256": "3ccd6464d292593f5fb064256cdcb5b7c842305fd14d5ea8e66d29b23d17ea51",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 4,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0003/episode_records.jsonl",
+            "sha256": "a7812c2b475b1604ea3cda796c977285e101ae52114d418b3f4eb08d67c4a7c9",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 5,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0004/episode_records.jsonl",
+            "sha256": "0663cd167c642c0dc2efffdb24c5bb38a979a85b12b1a45ebb84ea1c642d2b82",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 6,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0005/episode_records.jsonl",
+            "sha256": "98204c97094d8cab790757a5ab9935a89d53a825ffb2e5a5962956a2a9ad483a",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 7,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0006/episode_records.jsonl",
+            "sha256": "2c7e47bf69dc0dc2d23eb575cb5ed1c0187ed76d3dc77b4eaaf052f27e6858b5",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 8,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0007/episode_records.jsonl",
+            "sha256": "d7de2c1b579db51ef83cf221cda6e082cab3aeddfacf472b306b902513cbbba6",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 9,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0008/episode_records.jsonl",
+            "sha256": "6f65a616b0b242501de15ee866bd77f08bb31e3ed946dcf9dff84c2d39a5fb05",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 10,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0009/episode_records.jsonl",
+            "sha256": "83b1a4a93d380731df944ddc3d4131c673962f9d2237d270b630804b89335142",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 11,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0010/episode_records.jsonl",
+            "sha256": "19a64982c299e9bb82ac754247f3162b89f64329e6e4ea28e0151b4c668bf2b3",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 12,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0011/episode_records.jsonl",
+            "sha256": "190df56bad20987c62f464c3f9e40226e61253dcdcb0b4982d7cf474f0ff47cb",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 13,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0012/episode_records.jsonl",
+            "sha256": "303be888223403f50f8cf500382577a9cecbf83bab02286041ccc4ff42f2587e",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 14,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0013/episode_records.jsonl",
+            "sha256": "3a0345e1696363d8c924beca7b290146bb3c398f69c993b60976b63af47a397f",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 15,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0014/episode_records.jsonl",
+            "sha256": "d1ffa6e9b7137e8d6615153544a58dc165460e542df03f237f93e2ca43c93b52",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 16,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0015/episode_records.jsonl",
+            "sha256": "1884640ac39e95fcda3558c02f50ef8068088b6f84b49d5f66bf290185ee0758",
+            "status": "available"
+          }
+        ],
+        "exact_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+        "execution_context": null,
+        "observed_commit_shas": [
+          "58e516aa4f69ff3098bf518199f483006589758c"
+        ],
+        "status": "consistent_episode_records",
+        "unresolved_episode_provenance_count": 0
+      },
+      "warnings": []
+    },
+    {
+      "analysis_eligibility_unknown_count": 0,
+      "analysis_eligible_count": 16,
+      "analysis_ineligible_count": 0,
+      "artifact_status": "available",
+      "availability_status_counts": {
+        "available": 16
+      },
+      "best_analysis_eligible_objective_value": 0.0,
+      "best_objective_value": 0.0,
+      "budget": 16,
+      "comparison_row_index": 4,
+      "config_provenance": {
+        "config_sha256": "7d91ed1a1a7c319bcba735813152b19ab1b202d018b7b4322fbe9e2261663e75",
+        "files": [
+          {
+            "config_key": "scenario_template",
+            "declared_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "resolved_path": "configs/scenarios/templates/crossing_ttc.yaml",
+            "sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+            "status": "available"
+          },
+          {
+            "config_key": "search_space_path",
+            "declared_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "resolved_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+            "sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+            "status": "available"
+          }
+        ],
+        "search_space_sha256": "31423bbaddae7f655ef65cedd2a7a19cc2298e73e489367c09553bca03240c41",
+        "status": "available"
+      },
+      "critical_failure_counts": {},
+      "degraded_candidate_count": 0,
+      "duplicate_rate_observed": 0.0,
+      "evaluations": [
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.182704519451251,
+              "y": 2.6531586364508044
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2111469855666197,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.75609045653073,
+              "y": 2.6232311998963507
+            }
+          },
+          "candidate_sha256": "ea53a3c107968c4825c0a62e3ed81aa1ef34e4171ee0c30cf208231505eade29",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "f171db842dd59f9644cde3dfe4f27566c39697ce87ab1f157e43c352d2ac9040",
+          "error": null,
+          "evaluation_index": 1,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.025912394557798,
+              "y": 3.3637062551287835
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3961449431675717,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7483197195493925,
+              "y": 2.6742202782130042
+            }
+          },
+          "candidate_sha256": "8d1f1d72e08958a4fc158a48a872596b9be8537f393c57cf831d9eea1e686c2e",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "bc8ea012d013447da66bf97f0319778dca02119f1ffc9419a8f21ee34f8ca8e5",
+          "error": null,
+          "evaluation_index": 2,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.261684239551494,
+              "y": 3.202236107963744
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1322797309210348,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9066396368299414,
+              "y": 3.1898454526100215
+            }
+          },
+          "candidate_sha256": "775c32ec2325b33fb7ca517193ebe236347d15a03c1958db7310ae31cff254c5",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "c3509b65b8b779ec73b668102926b9c18a3ac1f041f4804ba0827ece03a8d65f",
+          "error": null,
+          "evaluation_index": 3,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.560481874785474,
+              "y": 3.1966046803771135
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2806634075226426,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.6121733824424025,
+              "y": 3.7457658682577435
+            }
+          },
+          "candidate_sha256": "9750be628ca0471293c0ce95210b11e40721a85090dd011ff9f97ece33d519ff",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "efda5993c39d040b527d31ca840d18c5f3b97c899025e8ccaa2b5a372eab43f7",
+          "error": null,
+          "evaluation_index": 4,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.866396787316368,
+              "y": 3.614017129143953
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3463368417432644,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7221250768473433,
+              "y": 2.895288591770142
+            }
+          },
+          "candidate_sha256": "64169dc5b1ae8001df0f1e0207448f6950032e6d30f38f3c8b7328afa2a353a6",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "cdff6276d425727a3080507142aadca6aa9ebcf75cd7513303d30dc5cb341d4d",
+          "error": null,
+          "evaluation_index": 5,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.109065029334204,
+              "y": 3.1051404820980335
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1125669699450724,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.714499701073504,
+              "y": 2.6117541981066403
+            }
+          },
+          "candidate_sha256": "7d0bb163bcd02d5cae7fb428088962e0b5492e27ef6e63a70bc1ade96a4bf7ec",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "0eb77a229174f27bee5a3d2ea5726bba0ad541b958cc33d690704a8fde42c73f",
+          "error": null,
+          "evaluation_index": 6,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.236707131013931,
+              "y": 3.075789469198347
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8310231152627165,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9354161214087844,
+              "y": 2.906183006338697
+            }
+          },
+          "candidate_sha256": "fa70ed4b3b52a54f6fa8c5264c894c9133c07c35a7d1b554d8ed8da58db26832",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "6075eb3798a3425a1d97d2f3c0f88dbf0efc6660271dc62e8d0a0ac579db5b19",
+          "error": null,
+          "evaluation_index": 7,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.496904147129846,
+              "y": 3.4103388951401428
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8199610889408794,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.5574085309238455,
+              "y": 2.8027806923758622
+            }
+          },
+          "candidate_sha256": "9d442dc94c8bf809f993aca8a60262e8255556816d4ad6f2bfd9d7974d584466",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "1664053a631e15dfb4f6b6b95674e10a94f76d974c88bd27bc727bdb4aec65d9",
+          "error": null,
+          "evaluation_index": 8,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.791388307510644,
+              "y": 3.014529769735472
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.9151205174396385,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.71671741627497,
+              "y": 3.9864014040830082
+            }
+          },
+          "candidate_sha256": "653ddc0b247e600d77e85bd8539c9c24ea4be15f539cd9abf141f23a9b3bb4ac",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "3a3e1c7b1d0092a0c02c107796d288fd7dc15d086435696239cde43c1c4258cb",
+          "error": null,
+          "evaluation_index": 9,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.000279095523593,
+              "y": 2.735199508353562
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 0.8006913385556437,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.891499592083928,
+              "y": 3.2325945607933404
+            }
+          },
+          "candidate_sha256": "d2920755075bd92f45f53a42208dfa49cb04a211b47cea59280000fd5aa9a76a",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "f298b4f6dacf8b244b075b8b7b707b2f4b39a85e091b94a112a132c289d0e2c8",
+          "error": null,
+          "evaluation_index": 10,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.358326612224934,
+              "y": 3.9810226433708324
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.031880435854053,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.9950818496287246,
+              "y": 3.438479657927891
+            }
+          },
+          "candidate_sha256": "65bc3c06c294b76e663117605afa2390b83620662f01d9802d3b34233e38ce25",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "36433d2bad1b176ff1a967b231a5ac2cad26c5ea43bde15ff9976a47f8c5721a",
+          "error": null,
+          "evaluation_index": 11,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.060406207845322,
+              "y": 2.5372177803037275
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3903999743202105,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.80675530232631,
+              "y": 2.508108426305671
+            }
+          },
+          "candidate_sha256": "3904bb3d2a88fc648b0e9318da195b1c9aa355d06a90f0ce2351a81443f5cfe3",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "e40d564bb3d0234fb429bddf5e7c2dc22e4e24f49a0a161840ff8cb9ad26e0e1",
+          "error": null,
+          "evaluation_index": 12,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.285252055467303,
+              "y": 3.7583737771283103
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2416701267993953,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.8019630187370037,
+              "y": 2.72628408776131
+            }
+          },
+          "candidate_sha256": "1d4ea8f048e1a0e12c31df2178a9d0e67027770d188ca3a597f75f5983007efb",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "957b78545b623e0ce8f651eddc3eb712de81127aa295f4131ac6c473c12692b2",
+          "error": null,
+          "evaluation_index": 13,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 7.6471653305201395,
+              "y": 2.783446776119052
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.2355437007733638,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.6418316643998305,
+              "y": 3.0426302309592144
+            }
+          },
+          "candidate_sha256": "6eb43e632e41938cbe97674b8cd73d0b540398c5227502de00ac76f846d8c911",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "9eda5e60a72d712bb1ba52cfcd7de76b29b883c02d60c75a05b264a98d39d600",
+          "error": null,
+          "evaluation_index": 14,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.989137371943883,
+              "y": 3.4633402147288406
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.1136633326225456,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7992431939455327,
+              "y": 2.5120266292951725
+            }
+          },
+          "candidate_sha256": "287a87469b418da90d1e920e4ae4eec7be167de42f9a993e9fd1cfaeccbb9abe",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "5d2fef985b58e649c0477cfda94a1128146a6f4abbdf7652558be298d743d3a0",
+          "error": null,
+          "evaluation_index": 15,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        },
+        {
+          "analysis_eligible": true,
+          "availability_status": "available",
+          "best_so_far_analysis_eligible_objective": 0.0,
+          "best_so_far_objective": 0.0,
+          "candidate": {
+            "goal": {
+              "theta": 0.0,
+              "x": 8.281256515441214,
+              "y": 2.5039292260415476
+            },
+            "pedestrian_delay_s": 0.0,
+            "pedestrian_speed_mps": 1.3092138797856403,
+            "scenario_seed": 123,
+            "spawn_time_s": 0.0,
+            "start": {
+              "theta": 0.0,
+              "x": 2.7689321372054443,
+              "y": 2.7087174451536575
+            }
+          },
+          "candidate_sha256": "257886a88959074d90f1d352247e095c3815159a96994492558193dcc4a4bff5",
+          "critical": false,
+          "duplicate_basis": [],
+          "duplicate_of_evaluation": null,
+          "effective_scenario_hash": "d1de95f23af252d2677f931a29a64e99ae9eb374878fb48025dd2b9e791f60fc",
+          "error": null,
+          "evaluation_index": 16,
+          "execution_mode": "native",
+          "failure_type": "success",
+          "objective_value": 0.0,
+          "readiness_status": "native",
+          "status": "scored"
+        }
+      ],
+      "execution_mode_counts": {
+        "native": 16
+      },
+      "expected_evaluations": 16,
+      "fallback_candidate_count": 0,
+      "first_critical_evaluation": null,
+      "invalid_rate_observed": 0.0,
+      "legacy_summary": {
+        "num_candidates": 16,
+        "num_failed_evaluations": 0,
+        "num_invalid_candidates": 0,
+        "num_valid_candidates": 16
+      },
+      "manifest_budget": 16,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "manifest_sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b",
+      "method": "TPE",
+      "num_candidate_spec_duplicates": 0,
+      "num_candidates": 16,
+      "num_critical_candidates": 0,
+      "num_duplicate_candidates": 0,
+      "num_effective_scenario_duplicates": 0,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_missing_evaluations": 0,
+      "num_scored_valid_candidates": 16,
+      "num_scoreless_valid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_direction": "maximize",
+      "readiness_status_counts": {
+        "native": 16
+      },
+      "resolved_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "run_id": "optuna:2202:16:constraints_first_lexicographic_v1:row4",
+      "runtime_seconds": null,
+      "runtime_source": "not_recorded",
+      "sampler": "optuna",
+      "seed": 2202,
+      "source_revision": {
+        "environment": null,
+        "episode_records": [
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 1,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0000/episode_records.jsonl",
+            "sha256": "e6f46057e25fb908ca006eef30fbbe72a88c40850c9f20a035ac7f171b9c45f3",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 2,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0001/episode_records.jsonl",
+            "sha256": "79db78d67bb8a44e4fb82338e15d965feb9aecee13042e3f71330966963f9882",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 3,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0002/episode_records.jsonl",
+            "sha256": "28d2c178ac86c2286aa943d5b316dcff1de1fe9b48bdeebb3f8a851efcb22c8c",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 4,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0003/episode_records.jsonl",
+            "sha256": "6325b82cab5d9dfee988fb272992c70dfd2522d49a13357e5b56bfe6ba4f57e4",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 5,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0004/episode_records.jsonl",
+            "sha256": "a6043c6aaa6d01cd4a1600a6c832d21f17802e6ab7425ba0967553636dce223c",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 6,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0005/episode_records.jsonl",
+            "sha256": "3a95f10cd82718f2a750564f9f4aaac4ae0c92cef958bf69c5057640c6cb22b7",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 7,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0006/episode_records.jsonl",
+            "sha256": "8a88d4b73976b970fc66b5ec5efbf4eb1830fcdbb13f8c5c941e06e17cee8a0e",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 8,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0007/episode_records.jsonl",
+            "sha256": "859baf6772cb9261b631120a86a9a1cb7fd98d6cec35e148b113de14f61ac153",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 9,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0008/episode_records.jsonl",
+            "sha256": "ef9ceaa604a8f5aeb29218849ea3e5d061a716703b621815a782606d723aef2d",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 10,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0009/episode_records.jsonl",
+            "sha256": "dbad9f6f87687bf0f6c0c808aa6734b0376b80e43a198ab317a30d5de622912b",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 11,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0010/episode_records.jsonl",
+            "sha256": "292e9a10bb4d306ddd08e92891fcfc9be4efd3423f18ae613999c866e3e4e45f",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 12,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0011/episode_records.jsonl",
+            "sha256": "e8bb366f21f6f74338d6d6a07db891c9f288d117d5a9dab4071bd06670f2797e",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 13,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0012/episode_records.jsonl",
+            "sha256": "1dff92c2518384f0183c202dff4939a5b8c270fea05c0527fb4ef901c6c24b85",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 14,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0013/episode_records.jsonl",
+            "sha256": "4e3f0fc1e28fb5d63fc17a95bf5e06c9eb1e25edf6288fbfb8b97ea8a8a70550",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 15,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0014/episode_records.jsonl",
+            "sha256": "b3716b987c7ea4327a3ea4847b26275dd17b57e66ce7965528d8e01e611ef3fb",
+            "status": "available"
+          },
+          {
+            "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
+            "evaluation_index": 16,
+            "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0015/episode_records.jsonl",
+            "sha256": "24b163e7e0f001d261041615801c8a7e4f2497c8e765cd7abd166c6c28fa36a8",
+            "status": "available"
+          }
+        ],
+        "exact_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+        "execution_context": null,
+        "observed_commit_shas": [
+          "58e516aa4f69ff3098bf518199f483006589758c"
+        ],
+        "status": "consistent_episode_records",
+        "unresolved_episode_provenance_count": 0
+      },
+      "warnings": []
+    }
+  ],
+  "schema_version": "adversarial-search-convergence-report.v1"
+}

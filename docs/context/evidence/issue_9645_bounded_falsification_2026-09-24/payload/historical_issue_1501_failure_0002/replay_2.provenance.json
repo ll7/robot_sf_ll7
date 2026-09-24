@@ -5,7 +5,7 @@
     "run_id": "b2fad874cb264ecda4ff0b83e8b6aba3",
     "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
     "python_version": "3.13.14",
-    "invocation": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-9645-bounded-falsification-20260924/.venv/bin/robot_sf_bench run --matrix output/issue9645-historical-replay/failure_0002/bundle/scenario.yaml --out output/issue9645-historical-replay/failure_0002/replay_2.jsonl --algo goal --no-video --no-resume --structured-output json --external-log-noise suppress",
+    "invocation": "uv run robot_sf_bench run --matrix docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/scenario.yaml --out output/issue9645-portable-replay/historical_replay_2.jsonl --algo goal --no-video --no-resume --structured-output json --external-log-noise suppress",
     "benchmark_profile": "baseline-safe",
     "runner": "map_runner.run_map_batch",
     "protocol_version": "0.1.0",

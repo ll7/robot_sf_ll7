@@ -399,6 +399,51 @@ def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path:
     assert "1 known corpus case(s) were replay-verified again." in statement
 
 
+def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
+    tmp_path: Path,
+) -> None:
+    """A duplicate is a repeat only after its case was confirmed before this round."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"].append(
+        _observation(
+            tmp_path,
+            round_number=1,
+            case_id="historical-unknown-duplicate",
+            origin_round=0,
+            origin_candidate_id=None,
+            planner_status="unknown",
+            verdict="admissible_feasibility_unknown",
+            replay_status="unavailable",
+        )
+    )
+    repeat_replay = _artifact(tmp_path, "round-2-unknown-case-replay.json", role="replay")
+    second_search = payload["rounds"][1]["falsification"]
+    second_search["candidates"].append(
+        _candidate(
+            candidate_id="c-repeat-unknown",
+            evaluation_status="complete",
+            verdict="empirically_feasible",
+            failure=True,
+            replay_status="verified",
+            disposition="duplicate",
+            case_id="historical-unknown-duplicate",
+            replay_artifact=repeat_replay,
+        )
+    )
+    second_search["budget"]["candidate_limit"] += 1
+    second_search["budget"]["candidates_completed"] = len(second_search["candidates"])
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    second = report["rounds"][1]
+    assert second["falsification"]["repeated_verified_counterexample_case_ids"] == []
+    assert second["falsification"]["verified_counterexample_case_ids"] == []
+    assert second["case_frontier"]["current_unknown_feasibility_case_count"] == 2
+    assert (
+        "No new unique replay-verified"
+        in second["falsification"]["no_verified_counterexample_statement"]
+    )
+
+
 def test_frontier_report_rejects_re_admission_of_known_case(tmp_path: Path) -> None:
     """Known stable IDs use duplicate disposition instead of a second admission."""
     payload = _evidence(tmp_path)

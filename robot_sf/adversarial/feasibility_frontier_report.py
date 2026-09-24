@@ -99,6 +99,7 @@ def build_frontier_report(
 
     for round_data in evidence["rounds"]:
         number = round_data["round_number"]
+        confirmed_before_round = set(known_confirmed_case_ids)
         historical_confirmed_this_round = [
             case_id
             for case_id, state in historical_case_states.items()
@@ -125,6 +126,7 @@ def build_frontier_report(
             discovered_counterexamples,
             admitted_unknown_cases,
             current_case_verdicts,
+            confirmed_before_round,
         )
 
         observations = round_data["case_observations"]
@@ -1481,6 +1483,7 @@ def _classify_search_candidates(
     discovered_counterexamples: dict[str, int],
     admitted_unknown_cases: dict[str, int],
     current_case_verdicts: dict[str, str],
+    confirmed_before_round: set[str],
 ) -> tuple[list[str], list[str], list[str], list[str]]:
     verified: list[str] = []
     repeated: list[str] = []
@@ -1501,7 +1504,7 @@ def _classify_search_candidates(
                 else:
                     verified.append(case_id)
                     discovered_counterexamples[case_id] = round_number
-        elif _is_repeated_verified_counterexample(candidate):
+        elif _is_repeated_verified_counterexample(candidate) and case_id in confirmed_before_round:
             repeated.append(candidate["case_id"])
     return verified, repeated, admitted, unknown
 

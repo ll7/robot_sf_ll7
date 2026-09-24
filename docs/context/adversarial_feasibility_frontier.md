@@ -89,7 +89,9 @@ not infer dynamic feasibility from a planner failure. `structurally_invalid`,
 replay-verified target failure with `empirically_feasible` or `planner_specific_failure` status is
 counted as a confirmed counterexample. Admitted unknown-feasibility cases are tracked separately. A
 no-discovery statement counts unique newly confirmed cases, reports verified matches to known corpus
-cases, and remains qualified by the finite search budget.
+cases only when they were confirmed before the current round, and remains qualified by the finite
+search budget. A duplicate of an unknown-feasibility case is not reported as a verified repeat until
+persisted follow-up evidence confirms both feasibility and target-planner failure.
 
 Evaluation rows keep three canonical runtime axes separate: `execution_mode` is `native`, `adapter`,
 `mixed`, or `unknown`; `readiness_status` is `native`, `adapter`, `fallback`, or `degraded`; and

@@ -38,19 +38,6 @@ ADMISSIBILITY_VERDICTS = (
 _EXCLUSIONS = {STRUCTURALLY_INVALID, GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY}
 _CERT_PLAUSIBLE = "certificate_plausible"
 _CERT_CONFLICT = "certificate_conflict"
-_CERTIFICATE_STRUCTURAL_REASONS = {
-    "map_pool_empty",
-    "no_applicable_robot_routes",
-    "route_requires_at_least_two_waypoints",
-    "start_point_not_finite",
-    "goal_point_not_finite",
-}
-_CERTIFICATE_GEOMETRIC_REASONS = {
-    "start_outside_map_bounds",
-    "goal_outside_map_bounds",
-    "start_inside_static_obstacle",
-    "goal_inside_static_obstacle",
-}
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 _GIT_COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _CHECKPOINT_FREE_CLASSICAL_PLANNERS = frozenset({"goal", "social_force", "orca"})
@@ -127,6 +114,7 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         raise ValueError("case_id must be non-empty")
     if scenario_id is not None and (not isinstance(scenario_id, str) or not scenario_id.strip()):
         raise ValueError("scenario_id must be non-empty when provided")
+    execution_scenario_id = scenario_id
     reasons: list[str] = []
     evidence: dict[str, Any] = {}
     artifact_identity = _file_artifact_identity(scenario_artifact_path)
@@ -150,8 +138,6 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     cert_state, cert_valid, cert_assumptions = _certificate(
         cert, scenario_id, artifact_sha256, reasons
     )
-    if scenario_id is None and cert_valid and cert is not None:
-        scenario_id = cert["scenario_id"]
     predicate_state = _predicates(inputs["predicate_contract"], case_id, reasons)
     oracle_state, oracle_assumptions = _oracle(
         inputs["feasibility_evidence"],
@@ -164,7 +150,12 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     )
     runs = {
         role: _execution(
-            inputs[f"{role}_execution"], role, case_id, scenario_id, artifact_sha256, reasons
+            inputs[f"{role}_execution"],
+            role,
+            case_id,
+            execution_scenario_id,
+            artifact_sha256,
+            reasons,
         )
         for role in ("reference", "target", "replay")
     }
@@ -294,6 +285,9 @@ def _certificate_inputs_bound(
         Draft202012Validator(_load_schema("scenario_cert.v1.json")).iter_errors(cert)
     ):
         reasons.append("scenario_certificate_missing_or_malformed")
+        return False
+    if scenario_id is None:
+        reasons.append("scenario_certificate_identity_unbound")
         return False
     if scenario_id is not None and cert["scenario_id"] != scenario_id:
         reasons.append("scenario_certificate_identity_mismatch")
@@ -533,55 +527,100 @@ def _invalid_certificate_category(cert: Mapping[str, Any]) -> str | None:
     if not isinstance(routes, Sequence) or isinstance(routes, (str, bytes)):
         return None
     if not routes:
-        reasons = cert.get("reasons")
-        checks = cert.get("checks")
-        route_count = checks.get("route_count") if isinstance(checks, Mapping) else None
+        return _empty_route_inventory_category(cert)
+    if not _route_inventory_complete(cert) or not _certificate_reasons_match_routes(cert, routes):
+        return None
+    route_categories = [_invalid_certificate_route_category(route) for route in routes]
+    if None in route_categories or len(set(route_categories)) != 1:
+        return None
+    return route_categories[0]
+
+
+def _empty_route_inventory_category(cert: Mapping[str, Any]) -> str | None:
+    """Support only the v1 producer's explicit empty-route invalid certificates."""
+    reasons = cert.get("reasons")
+    checks = cert.get("checks")
+    route_count = checks.get("route_count") if isinstance(checks, Mapping) else None
+    return (
+        STRUCTURALLY_INVALID
+        if isinstance(route_count, int)
+        and not isinstance(route_count, bool)
+        and route_count == 0
+        and isinstance(reasons, list)
+        and len(reasons) == 1
+        and reasons[0] in {"map_pool_empty", "no_applicable_robot_routes"}
+        else None
+    )
+
+
+def _invalid_certificate_route_category(route: Any) -> str | None:
+    """Return one corroborated invalid category for a single route certificate."""
+    if not isinstance(route, Mapping):
+        return None
+    if route.get("classification") != "invalid" or route.get("benchmark_eligibility") != "excluded":
+        return None
+    reasons = route.get("reasons")
+    checks = route.get("checks")
+    if not isinstance(reasons, list) or not reasons or not isinstance(checks, Mapping):
+        return None
+    categories = {_invalid_reason_category(reason, checks) for reason in reasons}
+    return next(iter(categories)) if None not in categories and len(categories) == 1 else None
+
+
+def _invalid_reason_category(reason: Any, checks: Mapping[str, Any]) -> str | None:
+    if not isinstance(reason, str):
+        return None
+    if reason == "route_requires_at_least_two_waypoints":
+        waypoint_count = checks.get("waypoint_count")
         if (
-            isinstance(route_count, int)
-            and not isinstance(route_count, bool)
-            and route_count == 0
-            and isinstance(reasons, list)
-            and reasons
-            and all(
-                reason in {"map_pool_empty", "no_applicable_robot_routes"} for reason in reasons
-            )
+            isinstance(waypoint_count, int)
+            and not isinstance(waypoint_count, bool)
+            and waypoint_count < 2
+            and checks.get("start") is None
+            and checks.get("goal") is None
         ):
             return STRUCTURALLY_INVALID
         return None
-    if not _route_inventory_complete(cert):
-        return None
-
-    categories: set[str] = set()
-    for route in routes:
-        if not isinstance(route, Mapping):
-            return None
+    if reason in {"start_point_not_finite", "goal_point_not_finite"}:
+        endpoint = "start" if reason.startswith("start_") else "goal"
+        return (
+            STRUCTURALLY_INVALID
+            if _producer_point_check_is_nonfinite(checks.get(endpoint))
+            else None
+        )
+    waypoint_match = re.fullmatch(r"waypoint_(\d+)_not_finite", reason)
+    if waypoint_match is not None:
+        index = int(waypoint_match.group(1))
+        waypoint_count = checks.get("waypoint_count")
         if (
-            route.get("classification") != "invalid"
-            or route.get("benchmark_eligibility") != "excluded"
+            not isinstance(waypoint_count, int)
+            or isinstance(waypoint_count, bool)
+            or waypoint_count < 2
+            or index >= waypoint_count
         ):
             return None
-        reasons = route.get("reasons")
-        if not isinstance(reasons, list) or not reasons:
-            return None
-        route_categories = {_invalid_reason_category(reason) for reason in reasons}
-        if None in route_categories or len(route_categories) != 1:
-            return None
-        categories.update(route_categories)
-    return next(iter(categories)) if len(categories) == 1 else None
-
-
-def _invalid_reason_category(reason: Any) -> str | None:
-    if not isinstance(reason, str):
-        return None
-    if (
-        reason in _CERTIFICATE_STRUCTURAL_REASONS
-        or re.fullmatch(r"waypoint_\d+_not_finite", reason)
-        or reason.startswith("illegal_amv_infrastructure_traversal:")
-    ):
-        return STRUCTURALLY_INVALID
-    if reason in _CERTIFICATE_GEOMETRIC_REASONS:
-        return GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+        endpoint = "start" if index == 0 else "goal" if index == waypoint_count - 1 else None
+        if endpoint is not None and _producer_point_check_is_nonfinite(checks.get(endpoint)):
+            return STRUCTURALLY_INVALID
     return None
+
+
+def _producer_point_check_is_nonfinite(value: Any) -> bool:
+    """Recognize only malformed endpoint shapes the v1 producer can serialize."""
+    if not isinstance(value, list):
+        return False
+    if len(value) != 2:
+        return True
+    for coordinate in value:
+        if coordinate is None:
+            return True
+        if (
+            isinstance(coordinate, (int, float))
+            and not isinstance(coordinate, bool)
+            and not math.isfinite(coordinate)
+        ):
+            return True
+    return False
 
 
 def _predicates(contract: Any, case_id: str, reasons: list[str]) -> str | None:
@@ -613,7 +652,7 @@ def _oracle(
     cert_valid: bool,
     reasons: list[str],
 ) -> tuple[str | None, dict[str, Any]]:
-    report = _select_oracle_cell(source, case_id, scenario_id, artifact_sha256, reasons)
+    report = _select_oracle_cell(source, scenario_id, artifact_sha256, reasons)
     if report is None:
         return None, {}
     schema = report.get("schema_version")
@@ -636,7 +675,7 @@ def _oracle(
         not isinstance(source_id, str)
         or not source_id.strip()
         or source_id != nominal_id
-        or source_id != (scenario_id or case_id)
+        or source_id != scenario_id
     ):
         reasons.append("feasibility_oracle_identity_mismatch")
         return None, {}
@@ -717,13 +756,15 @@ def _oracle_proves_actor_free_rollout(
 
 def _select_oracle_cell(
     source: Any,
-    case_id: str,
     scenario_id: str | None,
     artifact_sha256: str | None,
     reasons: list[str],
 ) -> Mapping[str, Any] | None:
     if not isinstance(source, Mapping):
         reasons.append("feasibility_oracle_missing_or_malformed")
+        return None
+    if scenario_id is None:
+        reasons.append("feasibility_oracle_scenario_identity_unbound")
         return None
     if source.get("schema_version") != ISSUE_5574_REPORT_SCHEMA:
         if not _artifact_reference_matches(
@@ -732,7 +773,7 @@ def _select_oracle_cell(
             return None
         return source
     cells = source.get("cells")
-    expected = scenario_id or case_id
+    expected = scenario_id
     matches = (
         [
             cell
@@ -911,9 +952,9 @@ def _execution_binding_problem(
     }
     if not isinstance(source, Mapping) or not required.issubset(source):
         return f"{role}_execution_provenance_incomplete"
-    if source["case_id"] != case_id or (
-        scenario_id is not None and source["scenario_id"] != scenario_id
-    ):
+    if scenario_id is None:
+        return f"{role}_execution_scenario_identity_unbound"
+    if source["case_id"] != case_id or source["scenario_id"] != scenario_id:
         return f"{role}_execution_identity_mismatch"
     if not _execution_text_fields_valid(source):
         return f"{role}_execution_provenance_incomplete"

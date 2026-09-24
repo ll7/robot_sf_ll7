@@ -1,0 +1,35 @@
+schema: planner_optimizer_config.v1
+run_id: issue_9650_planner_optimizer_pilot_v1
+baseline_candidate: hybrid_rule_v3_fast_progress
+candidate_registry: docs/context/policy_search/candidate_registry.yaml
+
+search:
+  trials_per_method: 3
+  random_seed: 96501
+  tpe_seed: 96502
+  tpe_startup_trials: 1
+  parameters:
+    - name: max_linear_speed
+      type: float
+      low: 2.0
+      high: 3.0
+    - name: goal_progress_weight
+      type: float
+      low: 2.0
+      high: 8.0
+
+evaluation:
+  horizon: 120
+  dt: 0.1
+  workers: 1
+  benchmark_profile: experimental
+
+suites:
+  train:
+    scenario_matrix: configs/scenarios/sets/classic_cross_trap_subset.yaml
+    scenario_filter: [classic_cross_trap_high]
+    seeds: [101, 102]
+  heldout:
+    scenario_matrix: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+    scenario_filter: [classic_head_on_corridor_low]
+    seeds: [111, 112]

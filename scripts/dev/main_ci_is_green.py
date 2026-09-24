@@ -45,6 +45,7 @@ from scripts.dev._gh_rest import parse_json, run_gh_api
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
+DEFAULT_WORKFLOW_FILE = ".github/workflows/ci.yml"
 
 # Bounded pagination budget for the decisive-run REST search.  GitHub's
 # latest-main-wins concurrency can fill whole raw pages with ``cancelled``
@@ -449,8 +450,10 @@ def fetch_runs(
     a single window of ``limit`` runs (default 5) with the 30s CLI timeout, so
     the gate cannot become slow or expensive.  A cancellation-saturated window
     fails closed to ``stale``; use :func:`fetch_run_window` when the decisive
-    verdict behind such a flood is required.
+    verdict behind such a flood is required.  The default ``CI`` display name
+    is mapped to its workflow file path to avoid ambiguous name matches.
     """
+    workflow_selector = DEFAULT_WORKFLOW_FILE if workflow == DEFAULT_WORKFLOW else workflow
     proc = _gh(
         [
             "run",
@@ -460,7 +463,7 @@ def fetch_runs(
             "--branch",
             "main",
             "--workflow",
-            workflow,
+            workflow_selector,
             "--status",
             "completed",
             "--limit",

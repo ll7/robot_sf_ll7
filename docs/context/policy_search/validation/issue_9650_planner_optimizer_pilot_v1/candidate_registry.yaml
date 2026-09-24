@@ -1,0 +1,7 @@
+version: 1
+candidates:
+  issue_9650_planner_optimizer_pilot_v1_best_random:
+    candidate_config_path: best_candidate.yaml
+    status: experimental_spike
+    family: hybrid_rule_based
+    claim_scope: diagnostic_only

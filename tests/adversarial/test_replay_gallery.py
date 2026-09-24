@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +26,19 @@ def _candidate() -> dict[str, Any]:
     }
 
 
-def _episode(*, revision: str | None = "a" * 40) -> dict[str, Any]:
+def _episode(
+    *, revision: str | None = "a" * 40, config_hash: str = "test-algo-config"
+) -> dict[str, Any]:
     record: dict[str, Any] = {
         "episode_id": "test_episode",
         "scenario_id": "test_scenario",
         "seed": 7,
         "algo": "goal",
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "native"},
+            "config_hash": config_hash,
+        },
         "status": "failure",
         "termination_reason": "collision",
         "outcome": {
@@ -50,7 +59,12 @@ def _episode(*, revision: str | None = "a" * 40) -> dict[str, Any]:
     return record
 
 
-def _source_manifest(tmp_path: Path, *, source_revision: str | None = "a" * 40) -> Path:
+def _source_manifest(
+    tmp_path: Path,
+    *,
+    source_revision: str | None = "a" * 40,
+    manifest_revision: str | None = None,
+) -> Path:
     bundle = tmp_path / "candidate_0000"
     bundle.mkdir()
     scenario_path = bundle / "scenario.yaml"
@@ -80,7 +94,11 @@ def _source_manifest(tmp_path: Path, *, source_revision: str | None = "a" * 40) 
             {
                 "candidate": candidate,
                 "objective_value": 4.5,
-                "analysis_eligibility": {"eligible": True, "certificate_ok": True},
+                "analysis_eligibility": {
+                    "eligible": True,
+                    "certificate_ok": True,
+                    "execution_mode": "native",
+                },
                 "certification_status": {
                     "schema_version": "scenario_cert.v1",
                     "status": "passed",
@@ -91,7 +109,12 @@ def _source_manifest(tmp_path: Path, *, source_revision: str | None = "a" * 40) 
                     "status": "attributed",
                     "primary_failure": "collision",
                     "reasons": ["source episode records collision"],
-                    "details": {"termination_reason": "collision"},
+                    "details": {
+                        "termination_reason": "collision",
+                        "execution_mode": "native",
+                        "readiness_status": "native",
+                        "availability_status": "available",
+                    },
                 },
                 "effective_scenario_hash": replay_gallery.compute_effective_scenario_hash(
                     scenario, {}
@@ -102,30 +125,32 @@ def _source_manifest(tmp_path: Path, *, source_revision: str | None = "a" * 40) 
             }
         ],
     }
+    if manifest_revision is not None:
+        payload["source_revision"] = manifest_revision
     manifest_path = tmp_path / "search_manifest.json"
     manifest_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     return manifest_path
 
 
-def _replay_episode(*, revision: str | None = "a" * 40) -> dict[str, Any]:
-    record = _episode(revision=revision)
-    record["algorithm_metadata"] = {
-        "simulation_step_trace": {
-            "schema_version": "simulation-step-trace.v1",
-            "dt": 0.1,
-            "steps": [
-                {
-                    "time_s": 0.1,
-                    "robot": {"position": [1.0, 1.0], "heading": 0.0, "velocity": [1.0, 0.0]},
-                    "pedestrians": [{"position": [1.5, 1.0], "surface_clearance_m": 0.1}],
-                },
-                {
-                    "time_s": 0.2,
-                    "robot": {"position": [1.1, 1.0], "heading": 0.0, "velocity": [1.0, 0.0]},
-                    "pedestrians": [{"position": [1.6, 1.0], "surface_clearance_m": 0.1}],
-                },
-            ],
-        }
+def _replay_episode(
+    *, revision: str | None = "a" * 40, config_hash: str = "test-algo-config"
+) -> dict[str, Any]:
+    record = _episode(revision=revision, config_hash=config_hash)
+    record["algorithm_metadata"]["simulation_step_trace"] = {
+        "schema_version": "simulation-step-trace.v1",
+        "dt": 0.1,
+        "steps": [
+            {
+                "time_s": 0.1,
+                "robot": {"position": [1.0, 1.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+                "pedestrians": [{"position": [1.5, 1.0], "surface_clearance_m": 0.1}],
+            },
+            {
+                "time_s": 0.2,
+                "robot": {"position": [1.1, 1.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+                "pedestrians": [{"position": [1.6, 1.0], "surface_clearance_m": 0.1}],
+            },
+        ],
     }
     return record
 
@@ -155,15 +180,19 @@ def _install_fake_replay(
     monkeypatch: Any,
     *,
     revision: str | None = "a" * 40,
+    replay_config_hash: str = "test-algo-config",
     mismatch: bool = False,
     runner_summary: dict[str, Any] | None = None,
+    checkout_clean: bool = True,
+    checkout_revision: str | None = None,
+    rendered_map_paths: list[Path | None] | None = None,
 ) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
 
     def fake_run_batch(scenario_path: Path, **kwargs: Any) -> dict[str, Any]:
         calls.append({"scenario_path": scenario_path, **kwargs})
         scenarios = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"]
-        record = _replay_episode(revision=revision)
+        record = _replay_episode(revision=revision, config_hash=replay_config_hash)
         record["scenario_id"] = scenarios[0]["name"]
         if mismatch:
             record["outcome"]["collision_event"] = False
@@ -176,6 +205,9 @@ def _install_fake_replay(
     ) -> dict[str, Any]:
         assert episode_row.episode_id == "test_episode"
         assert outputs == ["still", "filmstrip", "trajectory"]
+        if rendered_map_paths is not None:
+            map_value = episode_row.raw.get("replay_map_path")
+            rendered_map_paths.append(Path(map_value) if map_value else None)
         out_dir.mkdir(parents=True, exist_ok=True)
         artifact = out_dir / "trajectory.png"
         artifact.write_bytes(b"fixture png")
@@ -188,6 +220,15 @@ def _install_fake_replay(
 
     monkeypatch.setattr(replay_gallery, "run_batch", fake_run_batch)
     monkeypatch.setattr(replay_gallery, "replay_episode_and_generate_figures", fake_render)
+    monkeypatch.setattr(
+        replay_gallery,
+        "_git_checkout_state",
+        lambda _root: {
+            "revision": checkout_revision or revision,
+            "clean": checkout_clean,
+            "dirty_paths": [] if checkout_clean else ["fixture-dirty.py"],
+        },
+    )
     return calls
 
 
@@ -223,6 +264,259 @@ def test_gallery_materializes_replays_compares_and_renders(
     assert (output_dir / case["case_manifest_path"]).is_file()
     assert (output_dir / "README.md").is_file()
     assert (output_dir / "gallery_manifest.json").is_file()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_disposition"),
+    [
+        ("availability_status", "fallback", "source_availability_fallback"),
+        ("availability_status", "degraded", "source_availability_degraded"),
+        ("availability_status", None, "source_availability_missing_or_malformed"),
+    ],
+)
+def test_gallery_excludes_source_rows_without_native_available_execution(
+    tmp_path: Path,
+    field: str,
+    value: str | None,
+    expected_disposition: str,
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    details = payload["candidates"][0]["failure_attribution"]["details"]
+    if value is None:
+        details.pop(field)
+    else:
+        details[field] = value
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"][expected_disposition] == 1
+
+
+def test_gallery_excludes_source_runtime_fallback_even_if_manifest_says_native(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    episode_path = Path(payload["candidates"][0]["episode_record_path"])
+    episode = _episode()
+    episode["algorithm_metadata"]["planner_runtime"] = {"fallback_used": True}
+    episode_path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_runtime_fallback_or_degraded"] == 1
+
+
+def test_gallery_does_not_verify_replay_from_a_dirty_checkout(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    _install_fake_replay(monkeypatch, checkout_clean=False)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "match"
+    assert case["verification_status"] == "outcome_reproduced_checkout_dirty"
+    assert case["source"]["gallery_checkout"]["dirty_paths"] == ["fixture-dirty.py"]
+
+
+def test_gallery_does_not_verify_replay_from_a_different_checkout_revision(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    _install_fake_replay(monkeypatch, revision="a" * 40, checkout_revision="b" * 40)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "match"
+    assert case["verification_status"] == "outcome_reproduced_checkout_revision_changed"
+
+
+def test_gallery_can_verify_episode_source_when_manifest_has_no_revision(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert "source_revision" not in payload
+    _install_fake_replay(monkeypatch, revision="a" * 40)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["source"]["manifest_revision"] is None
+    assert case["source"]["episode_revision"] == "a" * 40
+    assert case["verification_status"] == "verified"
+
+
+def test_gallery_uses_manifest_revision_when_episode_revision_is_missing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path, source_revision=None, manifest_revision="a" * 40)
+    _install_fake_replay(monkeypatch, revision="a" * 40)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["source"]["episode_revision"] is None
+    assert case["source"]["manifest_revision"] == "a" * 40
+    assert case["verification_status"] == "verified"
+
+
+def test_gallery_rejects_replay_with_different_planner_config_hash(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    _install_fake_replay(monkeypatch, replay_config_hash="different-config")
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "mismatch"
+    assert case["verification_status"] == "replay_input_mismatch"
+    assert case["replay"]["algorithm_config_binding"]["status"] == "mismatch"
+
+
+def test_gallery_passes_materialized_map_to_renderer_and_marks_external_map_unbound(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    candidate_row = payload["candidates"][0]
+    scenario_path = Path(candidate_row["scenario_yaml_path"])
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    map_path = tmp_path / "fixture-map.svg"
+    map_bytes = b"<svg xmlns='http://www.w3.org/2000/svg'></svg>\n"
+    map_path.write_bytes(map_bytes)
+    scenario = scenario_payload["scenarios"][0]
+    scenario["map_file"] = str(map_path)
+    scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
+        scenario, {}
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    rendered_maps: list[Path | None] = []
+    _install_fake_replay(monkeypatch, rendered_map_paths=rendered_maps)
+
+    output_dir = tmp_path / "gallery"
+    result = replay_gallery.build_replay_gallery(manifest, output_dir, video=False)
+
+    case = result["cases"][0]
+    rendered_map = rendered_maps[0]
+    assert rendered_map is not None and rendered_map.is_file()
+    assert rendered_map.read_bytes() == map_bytes
+    assert case["replay_match"] == "match"
+    assert case["verification_status"] == "outcome_reproduced_source_inputs_unbound"
+    assert case["rendering"]["map_context"] == {
+        "status": "provided",
+        "path": rendered_map.relative_to(output_dir).as_posix(),
+        "sha256": replay_gallery._sha256_file(rendered_map),
+    }
+
+
+def test_gallery_detects_materialized_map_bytes_changed_before_replay(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    candidate_row = payload["candidates"][0]
+    scenario_path = Path(candidate_row["scenario_yaml_path"])
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    map_path = tmp_path / "fixture-map.png"
+    map_path.write_bytes(b"source map bytes")
+    scenario = scenario_payload["scenarios"][0]
+    scenario["map_file"] = str(map_path)
+    scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
+        scenario, {}
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    materialize_scenario = replay_gallery._materialize_scenario
+
+    def tamper_materialized_map(source: Path, input_dir: Path, **kwargs: Any) -> dict[str, Any]:
+        materialization = materialize_scenario(source, input_dir, **kwargs)
+        for asset in materialization.get("assets", []):
+            if asset.get("field") == "map_file":
+                bundled_map = input_dir.parent / asset["bundle_path"]
+                bundled_map.write_bytes(bundled_map.read_bytes() + b"tampered")
+        return materialization
+
+    monkeypatch.setattr(replay_gallery, "_materialize_scenario", tamper_materialized_map)
+    _install_fake_replay(monkeypatch)
+
+    result = replay_gallery.build_replay_gallery(manifest, tmp_path / "gallery", video=False)
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "mismatch"
+    assert case["verification_status"] == "replay_input_mismatch"
+    assert any(
+        check.get("input") == "map_file"
+        and check.get("status") == "mismatch"
+        and "bundle_sha256" in check
+        for check in case["replay"]["source_input_binding"]["checks"]
+    )
+
+
+def test_tracked_source_file_binding_requires_matching_tracked_bytes(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    config = repo / "planner.json"
+    source_bytes = b'{"max_speed": 0.5}\n'
+    config.write_bytes(source_bytes)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "planner.json"], cwd=repo, check=True)
+
+    bound = replay_gallery._tracked_source_file_binding(
+        root=repo,
+        field="algo_config_path",
+        source_path="planner.json",
+        repository_relative=True,
+        expected_sha256=hashlib.sha256(source_bytes).hexdigest(),
+    )
+
+    assert bound["status"] == "bound"
+    config.write_bytes(b'{"max_speed": 0.4}\n')
+    mismatch = replay_gallery._tracked_source_file_binding(
+        root=repo,
+        field="algo_config_path",
+        source_path="planner.json",
+        repository_relative=True,
+        expected_sha256=hashlib.sha256(source_bytes).hexdigest(),
+    )
+    assert mismatch["status"] == "mismatch"
+
+
+def test_gallery_rejects_raw_category_difference_even_when_objective_projection_matches() -> None:
+    source = _episode()
+    replay = _episode()
+    for episode in (source, replay):
+        episode["outcome"].update(
+            route_complete=False,
+            collision_event=False,
+            timeout_event=False,
+        )
+        episode["metrics"].update(success=False, collisions=0)
+    replay["outcome"]["timeout_event"] = True
+    replay["termination_reason"] = "timeout"
+
+    matches, comparison = replay_gallery._outcomes_match(
+        source, replay, "constraints_first_lexicographic_v1", tolerance=1e-6
+    )
+
+    assert comparison["projection_matches"] is True
+    assert comparison["failure_attribution_matches"] is False
+    assert "outcome.timeout_event" in comparison["differences"]
+    assert "failure_attribution.primary_failure" in comparison["differences"]
+    assert matches is False
 
 
 def test_gallery_marks_requested_video_unavailable_when_runner_emits_none(
@@ -601,7 +895,12 @@ def test_gallery_does_not_present_successful_episodes_as_falsification_cases(
         "status": "attributed",
         "primary_failure": "success",
         "reasons": ["episode completed without an attributed failure"],
-        "details": {"termination_reason": "success"},
+        "details": {
+            "termination_reason": "success",
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
     }
     episode_path = Path(row["episode_record_path"])
     record = _episode()

@@ -65,6 +65,7 @@ def _certificate(
         route_checks.update(start=None, goal=None, waypoint_count=1)
     if classification == "geometrically_infeasible":
         route_checks["inflated_collision_free_path"] = False
+        route_checks["planner"] = {"path_status": "no_path"}
     if classification == "kinodynamically_infeasible":
         route_checks["kinodynamic"] = {
             "robot_model": "BicycleDriveSettings",
@@ -224,6 +225,46 @@ def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
     assert invalid_geometry.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "scenario_certificate_invalidity_unresolved" in invalid_geometry.reason_codes
     assert impossible.assumptions["scenario_certificate"]["settings"] == {"robot_radius_m": 0.4}
+
+
+def test_planner_exception_stays_unknown_and_retained() -> None:
+    """A planner exception must not masquerade as a completed no-path result."""
+
+    certificate = _certificate("unknown", eligibility="stress_only")
+    reason = "inflated_path_planner_error: injected planner failure"
+    certificate["reasons"] = [reason]
+    route = certificate["route_certificates"][0]
+    route["reasons"] = [reason]
+    route["checks"].update(inflated_collision_free_path=None, planner={"path_status": "error"})
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+
+
+@pytest.mark.parametrize(
+    ("reason", "path_status"),
+    [
+        ("no_inflated_collision_free_path: planner error", "no_path"),
+        ("no_inflated_collision_free_path: empty_path", "error"),
+    ],
+)
+def test_geometric_exclusion_requires_completed_no_path_evidence(
+    reason: str, path_status: str
+) -> None:
+    """A reason label and a contradictory planner status cannot exclude a candidate."""
+
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    route = certificate["route_certificates"][0]
+    route["reasons"] = [reason]
+    route["checks"]["planner"]["path_status"] = path_status
+    certificate["reasons"] = [reason]
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
 
 
 @pytest.mark.parametrize(

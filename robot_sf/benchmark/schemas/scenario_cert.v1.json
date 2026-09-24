@@ -61,7 +61,8 @@
         "kinodynamically_infeasible",
         "dynamically_overconstrained",
         "knife_edge",
-        "hard_but_solvable"
+        "hard_but_solvable",
+        "unknown"
       ]
     },
     "eligibility": {

@@ -20,6 +20,7 @@ from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.planner.classic_global_planner import (
     ClassicGlobalPlanner,
     ClassicPlannerConfig,
+    NoPathFoundError,
     PlanningError,
 )
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -43,6 +44,7 @@ KINODYNAMICALLY_INFEASIBLE = "kinodynamically_infeasible"
 DYNAMICALLY_OVERCONSTRAINED = "dynamically_overconstrained"
 KNIFE_EDGE = "knife_edge"
 HARD_BUT_SOLVABLE = "hard_but_solvable"
+UNKNOWN = "unknown"
 
 EXCLUDED_STATUSES = {
     INVALID,
@@ -52,6 +54,7 @@ EXCLUDED_STATUSES = {
 }
 
 _STATUS_SEVERITY = {
+    UNKNOWN: 55,
     INVALID: 60,
     GEOMETRICALLY_INFEASIBLE: 50,
     KINODYNAMICALLY_INFEASIBLE: 40,
@@ -438,9 +441,17 @@ def _check_geometric_feasibility(state: _RouteCertificationState) -> str | None:
         settings=state.settings,
     )
     if planned_path is None:
-        state.reasons.append(f"no_inflated_collision_free_path: {planner_error}")
-        state.checks["inflated_collision_free_path"] = False
-        return GEOMETRICALLY_INFEASIBLE
+        state.checks["planner"] = planner_info
+        if planner_info.get("path_status") == "no_path":
+            state.reasons.append("no_inflated_collision_free_path: empty_path")
+            state.checks["inflated_collision_free_path"] = False
+            return GEOMETRICALLY_INFEASIBLE
+        state.reasons.append(
+            "inflated_path_planner_error: "
+            f"{planner_error or 'planner returned no path without a no-path result'}"
+        )
+        state.checks["inflated_collision_free_path"] = None
+        return UNKNOWN
     planned_line, shortest_length, path_length_ratio = _planned_path_metrics(
         planned_path,
         direct_length,
@@ -723,6 +734,8 @@ def _benchmark_eligibility(status: str) -> str:
     """
     if status in EXCLUDED_STATUSES:
         return "excluded"
+    if status == UNKNOWN:
+        return "stress_only"
     if status == KNIFE_EDGE:
         return "stress_only"
     return "eligible"
@@ -1166,18 +1179,29 @@ def _plan_inflated_shortest_path(
     planner = ClassicGlobalPlanner(map_def, planner_config)
     try:
         path, info = planner.plan(start, goal, algorithm="a_star", allow_inflation_fallback=False)
+    except NoPathFoundError as exc:
+        return (
+            None,
+            {"algorithm": "a_star", "inflation_fallback": False, "path_status": "no_path"},
+            str(exc),
+        )
     except (PlanningError, ValueError, RuntimeError) as exc:
-        return None, {"algorithm": "a_star", "inflation_fallback": False}, str(exc)
-    if not path:
-        return None, {"algorithm": "a_star", "inflation_fallback": False}, "empty_path"
-    planner_info = {
+        return (
+            None,
+            {"algorithm": "a_star", "inflation_fallback": False, "path_status": "error"},
+            str(exc),
+        )
+    planner_info: dict[str, Any] = {
         "algorithm": "a_star",
         "cells_per_meter": settings.planner_cells_per_meter,
         "inflation_radius_m": robot_radius,
         "inflation_fallback": False,
+        "path_status": "no_path" if not path else "path_found",
     }
     if isinstance(info, Mapping):
         planner_info["raw_info"] = _sanitize_json_value(dict(info))
+    if not path:
+        return None, planner_info, None
     return [(float(x), float(y)) for x, y in path], planner_info, None
 
 

@@ -14,6 +14,7 @@ from robot_sf.adversarial.counterexample_corpus import (
     append_planner_evaluation,
     export_regression_slice,
     import_issue9645_packet,
+    import_issue9656_candidates,
     load_corpus,
     new_corpus,
     recompute_planner_status,
@@ -43,7 +44,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
             return 0
 
-        corpus = load_corpus(args.corpus, create=args.command == "import-9645")
+        corpus = load_corpus(
+            args.corpus,
+            create=args.command in {"import-9645", "import-9656-candidates"},
+        )
         if args.command == "import-9645":
             corpus, receipt = import_issue9645_packet(
                 args.payload,
@@ -53,6 +57,18 @@ def main(argv: list[str] | None = None) -> int:
             save_corpus(args.corpus, corpus)
             _write_json(receipt, args.output)
             return 2 if receipt["decision"] == "rejected" else 0
+        if args.command == "import-9656-candidates":
+            corpus, receipt = import_issue9656_candidates(
+                args.summary,
+                args.materialized_root,
+                args.evidence_root,
+                args.campaign_root,
+                corpus,
+                corpus_root=args.corpus_root,
+            )
+            save_corpus(args.corpus, corpus)
+            _write_json(receipt, args.output)
+            return 0
         if args.command == "record-evaluation":
             evaluation = _read_json_object(args.observation)
             append_planner_evaluation(corpus, evaluation)
@@ -103,6 +119,18 @@ def _build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--corpus", required=True)
     import_parser.add_argument("--corpus-root", required=True)
     import_parser.add_argument("--output")
+
+    historical_parser = subparsers.add_parser(
+        "import-9656-candidates",
+        help="append historical #9656 mined rows as pending replay candidates",
+    )
+    historical_parser.add_argument("--summary", required=True)
+    historical_parser.add_argument("--materialized-root", required=True)
+    historical_parser.add_argument("--evidence-root", required=True)
+    historical_parser.add_argument("--campaign-root", required=True)
+    historical_parser.add_argument("--corpus", required=True)
+    historical_parser.add_argument("--corpus-root", required=True)
+    historical_parser.add_argument("--output")
 
     evaluation_parser = subparsers.add_parser(
         "record-evaluation", help="append one complete or explicitly incomplete planner result"

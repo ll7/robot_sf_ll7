@@ -87,6 +87,11 @@ def _compact_episode(row: dict[str, Any], arm: str) -> tuple[dict[str, Any], boo
         "algo": arm,
         "steps": row["steps"],
         "metrics": metrics,
+        "scenario_params": {
+            "metadata": {
+                "archetype": row.get("scenario_params", {}).get("metadata", {}).get("archetype")
+            }
+        },
     }
     return compact, derived
 

@@ -50,6 +50,7 @@ def _episode(impulse: float, distance: float) -> dict:
         "steps": 10,
         "git_hash": SOURCE,
         "result_provenance": {"repo_commit": SOURCE},
+        "scenario_params": {"metadata": {"archetype": "bottleneck"}},
         "metrics": {
             "robot_force_impulse_total": impulse,
             "robot_force_peak": impulse,
@@ -89,6 +90,7 @@ def test_release_force_report_keeps_shared_algorithm_arms_separate(tmp_path: Pat
     assert len(report["sources"]) == 2
     cohorts = {row["cohort"] for row in report["correlations"]}
     assert {"planner:hybrid_a", "planner:hybrid_b"} <= cohorts
+    assert "family:bottleneck" in cohorts
     assert {row["arm"] for row in report["largest_rank_disagreements"]} == {
         "hybrid_a",
         "hybrid_b",

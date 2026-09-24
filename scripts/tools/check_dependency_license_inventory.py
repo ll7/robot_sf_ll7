@@ -4472,6 +4472,12 @@ _COMPARISON_STRING_LIST_FIELDS = (
     "structural_issues",
     "unrepresented_lock_packages",
 )
+_COMPARISON_OBSERVATION_STATUSES = frozenset(
+    {"not_installed", "duplicate_distribution_name", "observed"}
+)
+_COMPARISON_METADATA_BINDINGS = frozenset(
+    {"not_observed", "ambiguous_installed_metadata", "installed_distribution_not_artifact_bound"}
+)
 _COMPARISON_DYNAMIC_PROFILE_FIELDS = frozenset(
     {
         "package_ids",
@@ -4592,6 +4598,24 @@ def _comparison_package_shape_issues(report: dict[str, Any], *, report_name: str
             identities.add(package_id)
         if not isinstance(normalized_name, str) or not normalized_name:
             issues.append(f"{report_name} contains a package record without normalized_name")
+        observation_status = record.get("observation_status")
+        if (
+            not isinstance(observation_status, str)
+            or observation_status not in _COMPARISON_OBSERVATION_STATUSES
+        ):
+            issues.append(
+                f"{report_name} contains a package record with invalid or candidate-bound "
+                "observation_status"
+            )
+        metadata_binding = record.get("metadata_binding")
+        if (
+            not isinstance(metadata_binding, str)
+            or metadata_binding not in _COMPARISON_METADATA_BINDINGS
+        ):
+            issues.append(
+                f"{report_name} contains a package record with invalid or candidate-bound "
+                "metadata_binding"
+            )
     return issues
 
 
@@ -4745,6 +4769,243 @@ def _comparison_string_list_issues(report: Any, *, report_name: str) -> list[str
     return issues
 
 
+def _comparison_summary_integrity_issues(  # noqa: C901, PLR0912, PLR0915
+    report: Any, *, report_name: str
+) -> list[str]:
+    """Reconcile summary values with the report fields that retain their inputs."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        return [f"{report_name} has no summary object"]
+    issues: list[str] = []
+    expected: dict[str, Any] = {}
+
+    def expect(field: str, value: Any) -> None:
+        if summary.get(field) != value:
+            issues.append(f"{report_name} summary {field} differs from report contents")
+
+    profiles = report.get("profiles")
+    profile_rows = (
+        profiles
+        if isinstance(profiles, list) and all(isinstance(row, dict) for row in profiles)
+        else None
+    )
+    surface = report.get("surface")
+    selected_profile_ids: set[str] | None = None
+    if isinstance(surface, dict):
+        surface_profile_ids = surface.get("profile_ids")
+        if isinstance(surface_profile_ids, list) and all(
+            isinstance(profile_id, str) for profile_id in surface_profile_ids
+        ):
+            selected_profile_ids = set(surface_profile_ids)
+        else:
+            issues.append(f"{report_name} surface profile_ids cannot reconcile summary")
+    else:
+        issues.append(f"{report_name} surface cannot reconcile summary")
+
+    selected_package_ids: set[str] | None = None
+    profile_memberships: dict[str, set[str]] = {}
+    if profile_rows is not None:
+        expected["profile_count"] = len(profile_rows)
+        profile_package_ids: list[list[str]] = []
+        profile_rows_valid = True
+        for row in profile_rows:
+            profile_id = row.get("id")
+            package_ids = row.get("package_ids")
+            if not isinstance(profile_id, str):
+                profile_rows_valid = False
+                issues.append(f"{report_name} profile id cannot reconcile summary")
+            if not isinstance(package_ids, list) or not all(
+                isinstance(package_id, str) for package_id in package_ids
+            ):
+                profile_rows_valid = False
+                issues.append(f"{report_name} profile package_ids cannot reconcile summary")
+            else:
+                profile_package_ids.append(package_ids)
+                if len(package_ids) != len(set(package_ids)):
+                    profile_rows_valid = False
+                    issues.append(f"{report_name} profile package_ids contain duplicates")
+                if isinstance(profile_id, str):
+                    for package_id in package_ids:
+                        profile_memberships.setdefault(package_id, set()).add(profile_id)
+        if (
+            profile_rows_valid
+            and selected_profile_ids is not None
+            and len(profile_package_ids) == len(profile_rows)
+        ):
+            expected["selected_profile_count"] = sum(
+                row.get("id") in selected_profile_ids for row in profile_rows
+            )
+            expected["profile_membership_edge_count"] = sum(
+                len(package_ids) for package_ids in profile_package_ids
+            )
+            selected_package_ids = {
+                package_id
+                for row, package_ids in zip(profile_rows, profile_package_ids, strict=True)
+                if row.get("id") in selected_profile_ids
+                for package_id in package_ids
+            }
+
+    packages = report.get("packages")
+    package_rows = (
+        packages
+        if isinstance(packages, list) and all(isinstance(row, dict) for row in packages)
+        else None
+    )
+    if package_rows is not None:
+        expected["locked_package_count"] = len(package_rows)
+        if selected_package_ids is not None:
+            expected["selected_package_count"] = len(selected_package_ids)
+            expected["outside_selected_package_count"] = len(package_rows) - len(
+                selected_package_ids
+            )
+        package_ids = {
+            row.get("package_id") for row in package_rows if isinstance(row.get("package_id"), str)
+        }
+        unknown_profile_package_ids = set(profile_memberships) - package_ids
+        if unknown_profile_package_ids:
+            issues.append(f"{report_name} profile package_ids reference unknown package rows")
+        package_statuses = [row.get("license_status") for row in package_rows]
+        if all(isinstance(status, str) for status in package_statuses):
+            expected["license_status_counts"] = dict(sorted(Counter(package_statuses).items()))
+        else:
+            issues.append(f"{report_name} package license_status values cannot reconcile summary")
+        selected_profiles_valid = True
+        exact_statuses_valid = True
+        for row in package_rows:
+            package_id = row.get("package_id")
+            expected_profiles = (
+                profile_memberships.get(package_id, set())
+                if isinstance(package_id, str) and profile_rows is not None
+                else None
+            )
+            package_profiles = row.get("profiles")
+            if not isinstance(package_profiles, list) or not all(
+                isinstance(profile_id, str) for profile_id in package_profiles
+            ):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package profiles cannot reconcile summary")
+            elif len(package_profiles) != len(set(package_profiles)):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package profiles contain duplicates")
+            elif expected_profiles is not None and set(package_profiles) != expected_profiles:
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package profiles differ from profile rows")
+            selected_profiles = row.get("selected_profiles")
+            if not isinstance(selected_profiles, list) or not all(
+                isinstance(profile_id, str) for profile_id in selected_profiles
+            ):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package selected_profiles cannot reconcile summary")
+            elif len(selected_profiles) != len(set(selected_profiles)):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package selected_profiles contain duplicates")
+            elif expected_profiles is not None and selected_profile_ids is not None:
+                expected_selected_profiles = expected_profiles & selected_profile_ids
+                if set(selected_profiles) != expected_selected_profiles:
+                    selected_profiles_valid = False
+                    issues.append(
+                        f"{report_name} package selected_profiles differ from profile rows"
+                    )
+            exact_status = row.get("exact_policy_status")
+            if exact_status is not None and (
+                not isinstance(exact_status, str) or exact_status not in {"accepted", "blocked"}
+            ):
+                exact_statuses_valid = False
+                issues.append(f"{report_name} package exact_policy_status cannot reconcile summary")
+        if selected_profiles_valid:
+            expected["policy_pending_package_count"] = selected_policy_pending_package_count(
+                package_rows
+            )
+            if exact_statuses_valid:
+                expected["policy_exact_match_count"] = sum(
+                    bool(row.get("selected_profiles"))
+                    and row.get("exact_policy_status") == "accepted"
+                    for row in package_rows
+                )
+
+    dispositions = report.get("unrepresented_lock_package_dispositions")
+    disposition_rows = (
+        dispositions
+        if isinstance(dispositions, list) and all(isinstance(row, dict) for row in dispositions)
+        else None
+    )
+    if disposition_rows is not None:
+        expected["unrepresented_lock_package_count"] = len(disposition_rows)
+        expected["unrepresented_reviewed_exclusion_count"] = sum(
+            row.get("status") == "reviewed_exclusion" for row in disposition_rows
+        )
+        expected["unrepresented_unresolved_count"] = sum(
+            row.get("status") == "unresolved" for row in disposition_rows
+        )
+        reason_counts: Counter[str] = Counter()
+        reason_codes_valid = True
+        for row in disposition_rows:
+            reason_codes = row.get("reason_codes")
+            if not isinstance(reason_codes, list) or not all(
+                isinstance(reason_code, str) for reason_code in reason_codes
+            ):
+                reason_codes_valid = False
+                issues.append(f"{report_name} disposition reason_codes cannot reconcile summary")
+            else:
+                reason_counts.update(reason_codes)
+        if reason_codes_valid:
+            expected["unrepresented_reason_counts"] = dict(sorted(reason_counts.items()))
+        unrepresented = report.get("unrepresented_lock_packages")
+        if isinstance(unrepresented, list) and all(
+            isinstance(package_id, str) for package_id in unrepresented
+        ):
+            disposition_ids = [row.get("package_id") for row in disposition_rows]
+            if unrepresented != disposition_ids:
+                issues.append(f"{report_name} unrepresented package containers differ")
+
+    installed_not_locked = report.get("installed_not_locked")
+    if isinstance(installed_not_locked, list) and all(
+        isinstance(item, str) for item in installed_not_locked
+    ):
+        installed_names: set[str] = set()
+        installed_names_valid = True
+        for item in installed_not_locked:
+            name, separator, version = item.partition("==")
+            if not separator or not name or not version:
+                installed_names_valid = False
+                issues.append(f"{report_name} installed_not_locked values cannot reconcile summary")
+            else:
+                installed_names.add(_canonicalize_name(name))
+        if installed_names_valid and package_rows is not None:
+            locked_names = {
+                row.get("normalized_name")
+                for row in package_rows
+                if isinstance(row.get("normalized_name"), str)
+            }
+            expected["installed_not_locked_count"] = len(installed_names - locked_names)
+
+    structural_issues = report.get("structural_issues")
+    if isinstance(structural_issues, list) and all(
+        isinstance(issue, str) for issue in structural_issues
+    ):
+        expected["structural_issue_count"] = len(set(structural_issues))
+
+    failures = report.get("failures")
+    if isinstance(failures, list) and all(isinstance(failure, str) for failure in failures):
+        expected["unresolved_count"] = len(failures)
+        expected["status"] = "blocked" if failures else "complete"
+
+    policy = report.get("policy")
+    if isinstance(policy, dict):
+        policy_dispositions = policy.get("package_dispositions")
+        if isinstance(policy_dispositions, list):
+            expected["policy_exact_disposition_count"] = len(policy_dispositions)
+
+    # installed_distribution_count loses multiplicity when report observations are
+    # serialized, and policy_pending_component_count loses selected profile-component
+    # membership. Both remain type-checked by _comparison_summary_schema_issues.
+    for field, value in expected.items():
+        expect(field, value)
+    return sorted(set(issues))
+
+
 def _comparison_ordinary_surface_issues(report: Any, *, report_name: str) -> list[str]:
     """Reject candidate provenance when comparing ordinary inventories."""
     if not isinstance(report, dict):
@@ -4755,6 +5016,19 @@ def _comparison_ordinary_surface_issues(report: Any, *, report_name: str) -> lis
     summary = report.get("summary")
     if isinstance(summary, dict) and summary.get("candidate_bound") is True:
         issues.append(f"{report_name} summary candidate_bound is not allowed for comparison")
+    packages = report.get("packages")
+    if isinstance(packages, list):
+        for record in packages:
+            if not isinstance(record, dict):
+                continue
+            if record.get("observation_status") == "artifact_bound":
+                issues.append(
+                    f"{report_name} package observation_status is candidate-bound artifact evidence"
+                )
+            if record.get("metadata_binding") == "candidate_sbom_component_identity":
+                issues.append(
+                    f"{report_name} package metadata_binding is candidate-bound SBOM evidence"
+                )
     return issues
 
 
@@ -4771,6 +5045,7 @@ def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shap
         )
     )
     issues.extend(_comparison_summary_schema_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_summary_integrity_issues(baseline, report_name="comparison baseline"))
     issues.extend(_comparison_environment_issues(baseline, report_name="comparison baseline"))
     issues.extend(_comparison_string_list_issues(baseline, report_name="comparison baseline"))
     if baseline.get("schema_version") != SCHEMA_VERSION:
@@ -4828,8 +5103,14 @@ def _comparison_source_binding_issues(
     issues.extend(
         _comparison_summary_schema_issues(current, report_name="comparison current report")
     )
+    issues.extend(
+        _comparison_summary_integrity_issues(current, report_name="comparison current report")
+    )
     issues.extend(_comparison_environment_issues(current, report_name="comparison current report"))
     issues.extend(_comparison_string_list_issues(current, report_name="comparison current report"))
+    issues.extend(
+        _comparison_package_shape_issues(current, report_name="comparison current report")
+    )
     issues.extend(_comparison_ordinary_surface_issues(baseline, report_name="comparison baseline"))
     issues.extend(
         _comparison_ordinary_surface_issues(current, report_name="comparison current report")

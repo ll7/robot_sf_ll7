@@ -2161,8 +2161,15 @@ def test_compare_baseline_detects_new_removed_and_exclusion_changes(
         ]
         payload["unrepresented_lock_package_dispositions"] = [
             *payload["unrepresented_lock_package_dispositions"],
-            {"package_id": resolved_exclusion, "status": "reviewed_exclusion"},
+            {
+                "package_id": resolved_exclusion,
+                "status": "reviewed_exclusion",
+                "reason_codes": [],
+            },
         ]
+        payload["unrepresented_lock_packages"].append(resolved_exclusion)
+        payload["summary"]["unrepresented_lock_package_count"] += 1
+        payload["summary"]["unrepresented_reviewed_exclusion_count"] += 1
         from scripts.tools.check_dependency_license_inventory import _report_content_digest
 
         payload["report_content_sha256"] = _report_content_digest(payload)
@@ -2330,6 +2337,7 @@ def test_compare_baseline_policy_mismatch_fails_closed(
         ("extra_field", "unclassified"),
         ("failures", "failures"),
         ("packages", "package"),
+        ("unhashable_package_id", "package"),
         ("unrepresented_dispositions", "disposition"),
         ("unrepresented_status", "disposition status"),
         ("policy_dispositions", "policy disposition"),
@@ -2347,7 +2355,7 @@ def test_compare_baseline_digest_refreshed_malformed_shapes_fail_before_write(  
     """Refreshing a forged baseline digest cannot bypass structural validation."""
     baseline = _generate_baseline(tmp_path)
 
-    def mutate(payload: dict) -> None:
+    def mutate(payload: dict) -> None:  # noqa: C901
         if shape == "schema":
             payload["schema_version"] = "forged.inventory.v0"
         elif shape == "extra_field":
@@ -2356,6 +2364,8 @@ def test_compare_baseline_digest_refreshed_malformed_shapes_fail_before_write(  
             payload["failures"] = "not-a-list"
         elif shape == "packages":
             payload["packages"] = ["not-a-package-record"]
+        elif shape == "unhashable_package_id":
+            payload["packages"][0]["package_id"] = []
         elif shape == "unrepresented_dispositions":
             payload["unrepresented_lock_package_dispositions"] = "not-a-list"
         elif shape == "unrepresented_status":
@@ -2629,6 +2639,58 @@ def test_compare_baseline_rejects_candidate_bound_baseline_before_write(
     assert "candidate" in capsys.readouterr().err
 
 
+def test_compare_baseline_rejects_hidden_candidate_package_markers_before_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Clearing top-level candidate fields cannot hide candidate package observations."""
+    _write_inputs(tmp_path)
+    _write_canonical_generator(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    baseline = tmp_path / "candidate-baseline.json"
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--candidate-bundle",
+                str(bundle),
+                "--output",
+                str(baseline),
+            ]
+        )
+        == 0
+    )
+
+    def mutate(payload: dict) -> None:
+        payload["candidate_binding"] = None
+        payload["summary"]["candidate_bound"] = False
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert "candidate" in capsys.readouterr().err
+
+
 def test_compare_baseline_rejects_forged_candidate_metadata_before_write(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2772,6 +2834,47 @@ def test_compare_baseline_forged_summary_fails_before_write(
     )
     assert not current.exists()
     assert needle in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "field", ("locked_package_count", "profile_count", "license_status_counts")
+)
+def test_compare_baseline_forged_derivable_summary_fails_before_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], field: str
+) -> None:
+    """A refreshed baseline summary must agree with derivable report accounting."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        if field == "license_status_counts":
+            forged = dict(payload["summary"][field])
+            forged["forged_status"] = 1
+            payload["summary"][field] = forged
+        else:
+            payload["summary"][field] += 1
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert field in capsys.readouterr().err
 
 
 def test_compare_baseline_accepts_dependency_change_and_reports_added_package(

@@ -59,10 +59,16 @@ uv run python -m robot_sf.render.review_encode \
   full frame-order source index list with first/terminal frames and the same
   normalized crop provenance.
 - The printed `component-result.v1` envelope carries `complete`, `partial`,
-  `unavailable`, or `failed` with stable reason codes. Complete artifact
-  records contain `artifact_id`, relative `uri`, and the file SHA-256. A
-  handled non-complete CLI result exits nonzero; invalid CLI input exits with a
-  separate nonzero code.
+  `unavailable`, `failed`, or `cancelled` with stable reason codes. Cancellation
+  is available to programmatic callers through the optional `cancel` predicate
+  or event passed to `run`. It is checked during preflight and before source
+  loading; a request cancelled at that boundary returns `cancelled` with reason
+  `cancellation_requested_before_source_read` and publishes no artifacts.
+  Cancellation cannot interrupt an active source read, decoder, or encoder, and
+  the standalone CLI does not expose a cancellation hook.
+  Complete artifact records contain `artifact_id`, relative `uri`, and the file
+  SHA-256. A handled non-complete CLI result exits nonzero; invalid CLI input
+  exits with a separate nonzero code.
 
 ## Unavailable reasons and limits
 

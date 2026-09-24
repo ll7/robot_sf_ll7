@@ -34,7 +34,7 @@ from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
@@ -69,6 +69,7 @@ STATUS_COMPLETE = "complete"
 STATUS_PARTIAL = "partial"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_FAILED = "failed"
+STATUS_CANCELLED = "cancelled"
 
 SOURCE_FPS = "source_fps"
 SOURCE_FRAMES = "source_frames"
@@ -983,6 +984,11 @@ def _read_json(source: Path | Any, *, name: str | None = None) -> Any:
         raise _SourceLoadError(f"{source_name}: source_json_depth") from error
     except (OSError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise _SourceLoadError(f"{source_name}: source_unreadable") from error
+    except ValueError as error:
+        # Python's JSON decoder can raise ValueError when an integer token
+        # exceeds its configured digit limit; keep that parser failure inside
+        # the component result boundary instead of leaking it to direct callers.
+        raise _SourceLoadError(f"{source_name}: source_json_value") from error
 
 
 def _resolve_under(path_value: str, root: Path) -> Path | None:
@@ -1746,6 +1752,8 @@ def _prepare(
     request: ComponentRequest,
     root: Path,
     out_dir: Path,
+    *,
+    cancel: Callable[[], bool] | Any | None = None,
 ) -> tuple[_Prepared | None, ComponentResult | None]:
     """Validate configuration, capabilities, source bytes, and output preset.
 
@@ -1768,6 +1776,8 @@ def _prepare(
             f"unsupported_audio_policy: v1 output is silent, got {config['audio_policy']!r}",
         )
     env, encoder_error = _encoder_probe()
+    if _cancel_requested(cancel):
+        return None, _cancelled_result(request)
     if env is None or encoder_error is not None:
         return None, _unavailable(request, encoder_error or "missing_encoder_backend")
 
@@ -3002,6 +3012,38 @@ def _fallback_request(request: Any) -> ComponentRequest:
     )
 
 
+def _cancel_requested(cancel: Callable[[], bool] | Any | None) -> bool:
+    """Read a cooperative component cancellation predicate or event.
+
+    Returns:
+        Whether cancellation was requested.
+    """
+
+    if cancel is None:
+        return False
+    if callable(cancel):
+        try:
+            return bool(cancel())
+        except (TypeError, RuntimeError):
+            return False
+    is_set = getattr(cancel, "is_set", None)
+    return bool(is_set()) if callable(is_set) else bool(cancel)
+
+
+def _cancelled_result(request: ComponentRequest) -> ComponentResult:
+    """Build the stable no-artifact result for a pre-source-read cancellation.
+
+    Returns:
+        The schema-valid cancelled result.
+    """
+
+    return _build_result(
+        request,
+        STATUS_CANCELLED,
+        "cancellation_requested_before_source_read",
+    )
+
+
 def _run_admission(
     request: ComponentRequest, root: Path
 ) -> tuple[Path | None, ComponentResult | None]:
@@ -3027,23 +3069,38 @@ def _run_admission(
     return out_dir, None
 
 
-def run(request: ComponentRequest, base: Path | str = Path(".")) -> ComponentResult:
+def run(
+    request: ComponentRequest,
+    base: Path | str = Path("."),
+    *,
+    cancel: Callable[[], bool] | Any | None = None,
+) -> ComponentResult:
     """Execute one bounded source-backed review encode request.
 
+    Args:
+        request: Validated component request.
+        base: Root below which sources are read and outputs are published.
+        cancel: Optional boolean predicate, event, or callback checked during
+            preflight. Cancellation is cooperative and is only honored before
+            source loading begins; it cannot interrupt an active decoder or
+            encoder operation.
+
     Returns:
-        Complete, partial, unavailable, or failed component result.
+        Complete, partial, unavailable, failed, or cancelled component result.
     """
 
     safe_request = _fallback_request(request)
+    if not isinstance(request, ComponentRequest):
+        return _failure(safe_request, "request_invalid: expected ComponentRequest")
+    if _cancel_requested(cancel):
+        return _cancelled_result(request)
     root, root_error = _resolve_root(base)
     if root is None or root_error is not None:
         return _failure(safe_request, root_error or "unsafe_output_path: invalid base")
-    if not isinstance(request, ComponentRequest):
-        return _failure(safe_request, "request_invalid: expected ComponentRequest")
     out_dir, admission_result = _run_admission(request, root)
     if out_dir is None or admission_result is not None:
         return admission_result or _failure(request, "request_admission_failed")
-    prepared, early = _prepare(request, root, out_dir)
+    prepared, early = _prepare(request, root, out_dir, cancel=cancel)
     if prepared is None or early is not None:
         return early if early is not None else _failure(request, "prepare_failed")
     plan, plan_error = _plan_order(prepared)

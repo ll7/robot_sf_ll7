@@ -133,6 +133,57 @@ def test_descriptor_is_shared_contract_valid() -> None:
     assert "source-clip" in desc["optional_capabilities"]
 
 
+def test_cancelled_before_source_read_returns_valid_result_without_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pre-read cancellation request settles without loading inputs or reserving output."""
+
+    request = _request(tmp_path)
+    cancel = threading.Event()
+    cancel.set()
+
+    def unexpected_source_load(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("cancelled request must not read source data")
+
+    monkeypatch.setattr(review_encode, "_load_selected_source", unexpected_source_load)
+
+    result = run(request, base=tmp_path, cancel=cancel)
+
+    assert result.status == review_encode.STATUS_CANCELLED
+    assert result.reason == "cancellation_requested_before_source_read"
+    assert result.artifacts == ()
+    assert (
+        component_result_from_dict(result_payload(result)).status == review_encode.STATUS_CANCELLED
+    )
+    assert not (tmp_path / "out").exists()
+
+
+def test_cancelled_during_encoder_probe_is_honored_before_source_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cooperative cancellation arriving in preflight stops before the first source read."""
+
+    request = _request(tmp_path)
+    cancel = threading.Event()
+
+    def probe_then_cancel() -> tuple[dict[str, object], None]:
+        cancel.set()
+        return {}, None
+
+    def unexpected_source_load(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("cancelled request must not read source data")
+
+    monkeypatch.setattr(review_encode, "_encoder_probe", probe_then_cancel)
+    monkeypatch.setattr(review_encode, "_load_selected_source", unexpected_source_load)
+
+    result = run(request, base=tmp_path, cancel=cancel)
+
+    assert result.status == review_encode.STATUS_CANCELLED
+    assert result.reason == "cancellation_requested_before_source_read"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_fixture_plan_produces_expected_frame_order(tmp_path: Path) -> None:
     """Cuts, pauses, and a full-span speed edit preserve source frame identity."""
 
@@ -650,6 +701,31 @@ def test_deep_manifest_json_fails_closed_without_artifacts(tmp_path: Path) -> No
     assert result.status == review_encode.STATUS_FAILED
     assert result.reason == "manifest.json: source_json_depth"
     assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+def test_oversized_manifest_integer_fails_closed_without_artifacts(tmp_path: Path) -> None:
+    """Python's integer-token limit becomes a stable result rather than a raw exception."""
+
+    request = _request(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    serialized = json.dumps(manifest, sort_keys=True)
+    oversized_integer = '"source_fps": ' + "9" * 5_000
+    serialized = serialized.replace('"source_fps": 10', oversized_integer)
+    assert oversized_integer in serialized
+    manifest_path.write_text(serialized + "\n", encoding="utf-8")
+    request = replace(
+        request,
+        sources=(replace(request.sources[0], sha256=_sha256(manifest_path)),),
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == review_encode.STATUS_FAILED
+    assert result.reason == "manifest.json: source_json_value"
+    assert result.artifacts == ()
+    assert component_result_from_dict(result_payload(result)).status == review_encode.STATUS_FAILED
     assert not (tmp_path / "out").exists()
 
 

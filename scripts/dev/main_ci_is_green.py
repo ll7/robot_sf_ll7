@@ -57,7 +57,7 @@ REST_PAGE_SIZE = 100
 DEFAULT_MAX_PAGES = 10
 REST_RUN_TIMEOUT = 90
 DISPATCH_GATE_SCHEMA_VERSION = "main_ci_dispatch_gate.v1"
-DISPATCH_ACTIVE_STATUSES = frozenset({"queued", "in_progress", "requested", "pending"})
+DISPATCH_ACTIVE_STATUSES = frozenset({"queued", "in_progress", "requested", "pending", "waiting"})
 
 
 def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:

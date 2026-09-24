@@ -214,6 +214,35 @@ def test_dispatch_gate_waits_for_recorded_queued_aggregate_with_running_jobs() -
     }
 
 
+def test_dispatch_gate_waits_for_older_same_head_waiting_run() -> None:
+    """GitHub's waiting workflow-run status keeps an older run as matrix owner."""
+    sha = "g" * 40
+    decision = dispatch_gate_decision(
+        sha,
+        35730131902,
+        [
+            {
+                "databaseId": 35729609257,
+                "headSha": sha,
+                "status": "waiting",
+                "conclusion": None,
+            },
+            {
+                "databaseId": 35730131902,
+                "headSha": sha,
+                "status": "queued",
+                "conclusion": None,
+            },
+        ],
+    )
+
+    assert decision["action"] == "wait"
+    assert decision["action"] != "run_full_ci"
+    assert decision["reason"] == "older_same_head_run_active"
+    assert decision["owner_run_id"] == 35729609257
+    assert decision["current_run_id"] == 35730131902
+
+
 def test_dispatch_gate_observes_decisive_result_without_unlocking_matrix() -> None:
     """A follower may mirror exact-head evidence but cannot launch duplicate jobs."""
     sha = "b" * 40

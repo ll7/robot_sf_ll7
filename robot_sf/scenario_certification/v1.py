@@ -26,6 +26,7 @@ from robot_sf.planner.classic_global_planner import (
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
+from robot_sf.scenario_certification.input_identity import scenario_input_identity
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -134,15 +135,37 @@ def certify_scenario_file(
     ]
     if scenario_id is not None and not selected:
         raise ValueError(f"Scenario id '{scenario_id}' not found in {scenario_path}")
-    return [
-        certify_scenario(
+    certificates: list[ScenarioCertificate] = []
+    for scenario in selected:
+        selected_id = _scenario_id(scenario)
+        input_before = scenario_input_identity(scenario_path, scenario_id=selected_id)
+        certificate = certify_scenario(
             scenario,
             scenario_path=scenario_path,
             settings=settings,
             source_artifact_sha256=source_digest,
+            effective_input_sha256=input_before.get("effective_input_sha256"),
+            effective_input_identity_stable=False,
         )
-        for scenario in selected
-    ]
+        input_after = scenario_input_identity(scenario_path, scenario_id=selected_id)
+        input_stable = (
+            input_before.get("status") == "available"
+            and input_after.get("status") == "available"
+            and input_before.get("effective_input_sha256") is not None
+            and input_before.get("effective_input_sha256")
+            == input_after.get("effective_input_sha256")
+        )
+        certificates.append(
+            _bind_source_digest(
+                certificate,
+                source_digest,
+                effective_input_sha256=(
+                    input_before.get("effective_input_sha256") if input_stable else None
+                ),
+                effective_input_identity_stable=input_stable,
+            )
+        )
+    return certificates
 
 
 def certify_scenario(
@@ -151,6 +174,8 @@ def certify_scenario(
     scenario_path: Path,
     settings: CertificationSettings | None = None,
     source_artifact_sha256: str | object | None = _SOURCE_DIGEST_UNSET,
+    effective_input_sha256: str | object | None = _SOURCE_DIGEST_UNSET,
+    effective_input_identity_stable: bool = False,
 ) -> ScenarioCertificate:
     """Build a ``scenario_cert.v1`` certificate from a scenario-loader entry.
 
@@ -170,6 +195,20 @@ def certify_scenario(
     else:
         source_digest = None
     sid = _scenario_id(scenario)
+    if effective_input_sha256 is _SOURCE_DIGEST_UNSET:
+        input_identity = scenario_input_identity(scenario_path, scenario_id=sid)
+        effective_digest = input_identity.get("effective_input_sha256")
+        stable_input = (
+            not input_identity.get("requires_effective_input_binding", True)
+            and effective_digest is not None
+            and effective_digest == source_digest
+        )
+    elif isinstance(effective_input_sha256, str) and len(effective_input_sha256) == 64:
+        effective_digest = effective_input_sha256
+        stable_input = effective_input_identity_stable is True
+    else:
+        effective_digest = None
+        stable_input = False
     try:
         config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     except Exception as exc:  # noqa: BLE001 - certificate must fail closed on loader errors.
@@ -181,6 +220,8 @@ def certify_scenario(
                 reason=f"scenario_loader_error: {exc}",
             ),
             source_digest,
+            effective_input_sha256=effective_digest,
+            effective_input_identity_stable=stable_input,
         )
 
     map_defs = list(config.map_pool.map_defs.items())
@@ -193,6 +234,8 @@ def certify_scenario(
                 reason="map_pool_empty",
             ),
             source_digest,
+            effective_input_sha256=effective_digest,
+            effective_input_identity_stable=stable_input,
         )
 
     route_certs: list[RouteCertificate] = []
@@ -216,6 +259,8 @@ def certify_scenario(
                 reason="no_applicable_robot_routes",
             ),
             source_digest,
+            effective_input_sha256=effective_digest,
+            effective_input_identity_stable=stable_input,
         )
     return _bind_source_digest(
         _aggregate_scenario_certificate(
@@ -226,6 +271,8 @@ def certify_scenario(
             settings=cert_settings,
         ),
         source_digest,
+        effective_input_sha256=effective_digest,
+        effective_input_identity_stable=stable_input,
     )
 
 
@@ -243,7 +290,11 @@ def _scenario_source_sha256(scenario_path: Path) -> str | None:
 
 
 def _bind_source_digest(
-    certificate: ScenarioCertificate, source_digest: str | None
+    certificate: ScenarioCertificate,
+    source_digest: str | None,
+    *,
+    effective_input_sha256: str | None = None,
+    effective_input_identity_stable: bool = False,
 ) -> ScenarioCertificate:
     """Bind a certificate to the source artifact digest observed by its producer.
 
@@ -253,6 +304,8 @@ def _bind_source_digest(
     evidence = dict(certificate.evidence)
     if source_digest is not None:
         evidence["source_artifact_sha256"] = source_digest
+    evidence["effective_input_sha256"] = effective_input_sha256
+    evidence["effective_input_identity_stable"] = effective_input_identity_stable
     return replace(certificate, evidence=evidence)
 
 

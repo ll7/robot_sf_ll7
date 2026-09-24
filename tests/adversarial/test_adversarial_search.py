@@ -1254,16 +1254,40 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
         scenario_yaml_path: Path,
         candidate_dir: Path,
     ) -> CandidateEvaluation:
-        """Write one successful episode record and return candidate evaluation."""
+        """Write a provenance-complete planner episode and return its evaluation."""
         snqi = scores.pop(0)
+        route_complete = snqi > 0.5
+        scenario_id = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))["scenarios"][
+            0
+        ]["name"]
         record: dict[str, Any] = {
+            "version": "v1",
             "episode_id": f"episode-{candidate.scenario_seed}",
+            "scenario_id": scenario_id,
             "seed": candidate.scenario_seed,
-            "status": "success",
+            "algo": _config.policy,
+            "git_hash": "a" * 40,
+            "status": "success" if route_complete else "collision",
             "steps": 3,
-            "termination_reason": "success",
-            "outcome": {"route_complete": True, "collision": False, "timeout": False},
-            "metrics": {"snqi": snqi, "success": 1.0},
+            "termination_reason": "success" if route_complete else "collision",
+            "outcome": {
+                "route_complete": route_complete,
+                "collision_event": not route_complete,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
+            "algorithm_metadata": {
+                "algorithm": _config.policy,
+                "canonical_algorithm": _config.policy,
+                "baseline_category": "classical",
+                "execution_mode": "native",
+                "status": "ok",
+            },
+            "metrics": {
+                "snqi": snqi,
+                "success": float(route_complete),
+                "collisions": int(not route_complete),
+            },
         }
         episode_path = candidate_dir / "episode_records.jsonl"
         episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
@@ -1272,7 +1296,15 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
             candidate=candidate,
             certification_status=passed_status(),
             objective_value=None,
-            failure_attribution=attribution_from_episode_record(record),
+            failure_attribution=dataclasses.replace(
+                attribution_from_episode_record(record),
+                details={
+                    **attribution_from_episode_record(record).details,
+                    "execution_mode": "native",
+                    "readiness_status": "native",
+                    "availability_status": "available",
+                },
+            ),
             episode_record_path=episode_path,
             trajectory_csv_path=trajectory_path,
             scenario_yaml_path=scenario_yaml_path,
@@ -1297,6 +1329,21 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
     assert all(
         row["scenario_admissibility"]["search_disposition"] == "retain"
         and row["scenario_admissibility"]["verdict"] == "admissible_feasibility_unknown"
+        for row in manifest["candidates"]
+    )
+    assert [
+        row["scenario_admissibility"]["target_planner_outcome"] for row in manifest["candidates"]
+    ] == [
+        "route_completed",
+        "route_incomplete",
+    ]
+    assert all(
+        len(
+            row["scenario_admissibility"]["evidence"]["target_planner_observation"][
+                "episode_records_jsonl_sha256"
+            ]
+        )
+        == 64
         for row in manifest["candidates"]
     )
 
@@ -1349,6 +1396,28 @@ def test_search_applies_and_records_admissibility_rejection(
         "scenario_certificate_geometrically_infeasible"
     ]
     assert row["analysis_eligibility"]["eligible"] is False
+
+
+def test_evaluation_failure_is_recorded_as_unavailable_target_outcome(tmp_path: Path) -> None:
+    """An attempted but failed planner run is distinct from a pre-evaluation candidate."""
+    config = dataclasses.replace(_config(tmp_path, require_certification=False), budget=1)
+
+    def failed_evaluator(*_args: Any) -> CandidateEvaluation:
+        raise RuntimeError("fixture evaluation failure")
+
+    result = search.run_adversarial_search(
+        config,
+        evaluator=failed_evaluator,
+        certifier=lambda *_args: passed_status("certification passed"),
+        sampler=_SequenceSampler([_candidate(7)]),
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    observation = manifest["candidates"][0]["scenario_admissibility"]
+    assert observation["target_planner_outcome"] == "unavailable"
+    assert observation["evidence"]["target_planner_observation"]["reason_code"] == (
+        "target_evaluation_failed"
+    )
 
 
 def test_coordinate_refinement_sampler_improves_synthetic_objective(tmp_path: Path) -> None:

@@ -149,6 +149,10 @@ class GitHubTransportError(GitHubSyncError):
     """Raised when a provider response is malformed or transport is unavailable."""
 
 
+class GitHubCapabilityUnavailable(GitHubTransportError):
+    """Provider cannot perform the requested operation before a mutation starts."""
+
+
 class GitHubOutboxError(GitHubSyncError):
     """Raised when the durable outbox is malformed or has a stale CAS write."""
 
@@ -1648,6 +1652,18 @@ class GitHubSync:
                                 reason=reason,
                                 remote_write=remote_write,
                             )
+                        except GitHubCapabilityUnavailable as exc:
+                            reason = f"issue create capability unavailable: {exc}"
+                            entry = self._mark(entry, "failed", reason)
+                            self._mark_claim(claim, "failed", reason)
+                            return self._result(
+                                "unavailable",
+                                repository,
+                                finding,
+                                entry,
+                                reason=reason,
+                                remote_write="none",
+                            )
                         except Exception as exc:  # noqa: BLE001 - create outcome is inherently ambiguous.
                             reconciled, reconcile_error = self._search(repository, rendered.marker)
                             if (
@@ -1943,6 +1959,19 @@ class GitHubSync:
                         entry,
                         reason=reason,
                         remote_write=remote_write,
+                    )
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue update capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    if claim is not None:
+                        self._mark_claim(claim, "failed", reason)
+                    return self._result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        entry,
+                        reason=reason,
+                        remote_write="none",
                     )
                 except Exception as exc:  # noqa: BLE001 - update may have applied remotely.
                     reason = f"update outcome is ambiguous: {type(exc).__name__}: {exc}"
@@ -2533,6 +2562,21 @@ class GitHubSync:
                         exact_payload=True,
                     )
                     remote_write = "applied"
+                except GitHubCapabilityUnavailable as exc:
+                    reason = f"issue create capability unavailable: {exc}"
+                    entry = self._mark(entry, "failed", reason)
+                    self._mark_claim(claim, "failed", reason)
+                    return self._append_result(
+                        "unavailable",
+                        repository,
+                        finding,
+                        operation_id,
+                        entry,
+                        None,
+                        finding,
+                        reason=reason,
+                        remote_write="none",
+                    )
                 except Exception as exc:  # noqa: BLE001 - create outcome is ambiguous by definition.
                     reconciled, reconcile_error = self._search(repository, rendered.marker)
                     remote = (
@@ -2591,10 +2635,30 @@ class GitHubSync:
                             reason=reason,
                             remote_write="ambiguous",
                         )
+                    except GitHubTransportError as transport_error:
+                        reason = (
+                            "create outcome remains ambiguous after exact-marker recovery: "
+                            f"{type(transport_error).__name__}: {transport_error}"
+                        )
+                        entry = self._mark(entry, "ambiguous", reason)
+                        self._mark_claim(claim, "ambiguous", reason)
+                        return self._append_result(
+                            "ambiguous",
+                            repository,
+                            finding,
+                            operation_id,
+                            entry,
+                            remote,
+                            finding,
+                            reason=reason,
+                            remote_write="ambiguous",
+                        )
                     except GitHubSyncError as conflict:
                         return _stale(str(conflict), remote)
                     status = "reconciled"
-                    remote_write = "none"
+                    # Complete exact-marker readback confirms that this create
+                    # was accepted despite the lost provider response.
+                    remote_write = "applied"
 
                 # Persist the local receipt before the post-create reread.  A
                 # missing/transport-failed reread must not erase evidence that
@@ -4895,6 +4959,7 @@ __all__ = [
     "GITHUB_SYNC_SCHEMA_VERSION",
     "FindingEvidence",
     "GitHubAmbiguousCreate",
+    "GitHubCapabilityUnavailable",
     "GitHubConflictError",
     "GitHubFindingClaim",
     "GitHubIssue",

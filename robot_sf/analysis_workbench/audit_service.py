@@ -7266,6 +7266,13 @@ class AuditService:
             # outcome and must consume the reserved issue-write unit.
             return 1
         outcome = getattr(result, "remote_write", None)
+        # A synchronizer may complete its read-only preflight and return an
+        # explicit unavailable result when a callable provider seam is only an
+        # unsupported stub.  The send lease was acquired before that result
+        # was known, so settle the reservation from the explicit no-write
+        # outcome rather than from the terminal status or callable presence.
+        if getattr(result, "status", None) == "unavailable" and outcome == "none":
+            return 0
         if outcome in {"applied", "ambiguous"}:
             return 1
         if outcome == "none":

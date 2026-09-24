@@ -18,6 +18,8 @@ from email.message import Message
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 from scripts.tools.check_dependency_license_inventory import (
     _LEGACY_SUMMARY_CONTRACT_VERSION,
     SUMMARY_CONTRACT_VERSION,
@@ -44,7 +46,7 @@ from scripts.tools.check_dependency_license_inventory import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 
 class _Distribution:
@@ -2052,3 +2054,280 @@ def test_exact_policy_evidence_is_bound_into_report_freshness(tmp_path: Path) ->
     report_path = tmp_path / "report.json"
     report_path.write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
     assert check_report_freshness(root, report_path) == []
+
+
+def _write_canonical_generator(root: Path) -> None:
+    """Mirror the real generator into the fixture root for source binding."""
+    target = root / "scripts" / "tools" / "check_dependency_license_inventory.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tools"
+        / "check_dependency_license_inventory.py"
+    )
+    target.write_bytes(source.read_bytes())
+
+
+def _generate_baseline(root: Path, name: str = "baseline.json") -> Path:
+    """Generate a blocked fixture report usable as a comparison baseline."""
+    _write_inputs(root)
+    _write_canonical_generator(root)
+    baseline = root / name
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(root),
+                "--profile",
+                "core",
+                "--fail-on-unresolved",
+                "--output",
+                str(baseline),
+            ]
+        )
+        == 2
+    )
+    return baseline
+
+
+def _read_comparison(capsys: pytest.CaptureFixture[str]) -> dict:
+    out = capsys.readouterr().out
+    return json.loads(out[out.index("{") :])
+
+
+def _rewrite_baseline(baseline: Path, mutate: Callable[[dict], None]) -> None:
+    report = json.loads(baseline.read_text(encoding="utf-8"))
+    mutate(report)
+    baseline.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+
+def test_compare_baseline_self_comparison_preserves_blocked_exit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unchanged inventory compares clean without admitting the gate."""
+    baseline = _generate_baseline(tmp_path)
+    report = json.loads(baseline.read_text(encoding="utf-8"))
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--fail-on-unresolved",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(tmp_path / "current.json"),
+            ]
+        )
+        == 2
+    )
+    comparison = _read_comparison(capsys)
+    assert comparison["schema_version"] == "dependency_license_comparison.v1"
+    assert comparison["failures"]["new"] == []
+    assert comparison["failures"]["removed"] == []
+    assert comparison["failures"]["unchanged"] == sorted(report["failures"])
+    assert comparison["current"]["status"] == "blocked"
+    assert comparison["global_status_preserved"] == "blocked"
+
+
+def test_compare_baseline_detects_new_removed_and_exclusion_changes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Failure and reviewed-exclusion deltas surface by stable identity."""
+    baseline = _generate_baseline(tmp_path)
+    report = json.loads(baseline.read_text(encoding="utf-8"))
+    assert report["failures"], "fixture must stay blocked for the delta test"
+    # The baseline copy represents the older state: drop one live failure so
+    # the rebuild reports it as new, and add one synthetic resolved row so it
+    # reports as removed.
+    dropped_failure = sorted(report["failures"])[1]
+    resolved_failure = "synthetic resolved finding for comparison"
+    excluded_rows = [
+        row
+        for row in report["unrepresented_lock_package_dispositions"]
+        if row.get("status") == "reviewed_exclusion"
+    ]
+    assert excluded_rows, "fixture must carry a reviewed exclusion for the delta test"
+    live_exclusions = sorted(row["package_id"] for row in excluded_rows)
+    resolved_exclusion = "synthetic-resolved-tool@9.9.9#0000000000000000"
+
+    def mutate(payload: dict) -> None:
+        payload["failures"] = sorted(set(payload["failures"]) - {dropped_failure}) + [
+            resolved_failure
+        ]
+        payload["unrepresented_lock_package_dispositions"] = [
+            *payload["unrepresented_lock_package_dispositions"],
+            {"package_id": resolved_exclusion, "status": "reviewed_exclusion"},
+        ]
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(tmp_path / "current.json"),
+            ]
+        )
+        == 0
+    )
+    comparison = _read_comparison(capsys)
+    current = json.loads((tmp_path / "current.json").read_text(encoding="utf-8"))
+    # The rebuild against unchanged inputs reproduces the original failures,
+    # so the row dropped from the older baseline reports as new, the synthetic
+    # resolved row reports as removed, and the dropped exclusion stays removed.
+    assert current["failures"] == sorted(report["failures"])
+    assert comparison["failures"]["new"] == [dropped_failure]
+    assert comparison["failures"]["removed"] == [resolved_failure]
+    assert comparison["failures"]["unchanged"] == sorted(
+        set(report["failures"]) - {dropped_failure}
+    )
+    assert comparison["reviewed_exclusions"]["removed"] == [resolved_exclusion]
+    assert comparison["reviewed_exclusions"]["unchanged"] == live_exclusions
+    assert comparison["reviewed_exclusions"]["new"] == []
+
+
+def test_compare_baseline_generator_mismatch_fails_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A baseline from another generator revision cannot bind the comparison."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        for item in payload["repository_inputs"]:
+            if item.get("path") == "scripts/tools/check_dependency_license_inventory.py":
+                item["sha256"] = "0" * 64
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert "generator" in capsys.readouterr().err
+
+
+def test_compare_baseline_policy_mismatch_fails_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A baseline from another policy revision cannot bind the comparison."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        payload["policy"]["normalized_records_sha256"] = "1" * 64
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(tmp_path / "current.json"),
+            ]
+        )
+        == 1
+    )
+    assert "policy" in capsys.readouterr().err
+
+
+def test_compare_baseline_tampered_content_fails_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Editing a baseline without refreshing its digest fails closed."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        payload["failures"] = ["tampered finding"]
+
+    _rewrite_baseline(baseline, mutate)
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(tmp_path / "current.json"),
+            ]
+        )
+        == 1
+    )
+    assert "digest" in capsys.readouterr().err
+
+
+def test_compare_baseline_missing_file_and_missing_output_fail_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Missing baseline inputs and missing report output both fail closed."""
+    _write_inputs(tmp_path)
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(tmp_path / "absent.json"),
+                "--output",
+                str(tmp_path / "current.json"),
+            ]
+        )
+        == 1
+    )
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(tmp_path / "absent.json"),
+            ]
+        )
+        == 1
+    )
+    assert "output" in capsys.readouterr().err

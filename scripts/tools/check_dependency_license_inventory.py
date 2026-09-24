@@ -4186,11 +4186,9 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
     )
     effective_generator_path = generator_path
     if effective_generator_path is None:
-        effective_generator_path = (
-            repo_root / CANONICAL_GENERATOR
-            if candidate_bundle_path is not None
-            else Path(__file__).resolve()
-        )
+        # Always bind the canonical generator revision: manual dispatches and
+        # baseline comparisons must observe generator drift as stale evidence.
+        effective_generator_path = repo_root / CANONICAL_GENERATOR
     inputs, input_issues = _input_paths(
         repo_root,
         manifest,
@@ -4394,6 +4392,288 @@ def _reported_unresolved_count(report_path: Path) -> int:
     return value if isinstance(value, int) else 0
 
 
+COMPARISON_SCHEMA_VERSION = "dependency_license_comparison.v1"
+_COMPARISON_FINAL_STATUSES = ("blocked", "complete")
+
+
+def _comparison_string_set(value: Any) -> set[str]:
+    """Return the string elements of a report list for set comparison."""
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str)}
+
+
+def _comparison_package_names(
+    report: dict[str, Any],
+) -> tuple[dict[str, set[str]], list[str]]:
+    """Map normalized package names to their identity-key sets.
+
+    A version, source, or artifact change yields a new ``package_id``, so a
+    changed package surfaces as a removed identity plus an added identity
+    under one normalized name.
+    """
+    by_name: dict[str, set[str]] = {}
+    issues: list[str] = []
+    packages = report.get("packages")
+    if not isinstance(packages, list):
+        return by_name, ["report has no packages list"]
+    for record in packages:
+        if not isinstance(record, dict):
+            issues.append("report contains a non-object package record")
+            continue
+        package_id = record.get("package_id")
+        name = record.get("normalized_name")
+        if not isinstance(package_id, str) or not isinstance(name, str):
+            issues.append("report contains a package record without identity")
+            continue
+        by_name.setdefault(name, set()).add(package_id)
+    return by_name, issues
+
+
+def _comparison_reviewed_exclusion_ids(report: dict[str, Any]) -> tuple[set[str], list[str]]:
+    """Return reviewed-exclusion disposition identities for comparison."""
+    ids: set[str] = set()
+    issues: list[str] = []
+    rows = report.get("unrepresented_lock_package_dispositions")
+    if not isinstance(rows, list):
+        return ids, ["report has no unrepresented_lock_package_dispositions list"]
+    for row in rows:
+        if not isinstance(row, dict):
+            issues.append("report contains a non-object disposition row")
+            continue
+        if row.get("status") != "reviewed_exclusion":
+            continue
+        package_id = row.get("package_id")
+        if not isinstance(package_id, str):
+            issues.append("report contains a reviewed exclusion without identity")
+            continue
+        ids.add(package_id)
+    return ids, issues
+
+
+def _comparison_baseline_shape_issues(baseline: Any, baseline_path: Path) -> list[str]:
+    """Fail closed when the baseline report itself is malformed."""
+    issues: list[str] = []
+    if not isinstance(baseline, dict):
+        return [f"comparison baseline is not a JSON object: {baseline_path}"]
+    recorded = baseline.get(_REPORT_CONTENT_DIGEST_FIELD)
+    if not isinstance(recorded, str) or not _SHA256_RE.fullmatch(recorded):
+        issues.append("comparison baseline has no valid report_content_sha256")
+    elif recorded != _report_content_digest(baseline):
+        issues.append("comparison baseline content digest differs from recorded report")
+    summary = baseline.get("summary")
+    if not isinstance(summary, dict):
+        return sorted([*issues, "comparison baseline has no summary object"])
+    if summary.get("summary_contract_version") != SUMMARY_CONTRACT_VERSION:
+        issues.append("comparison baseline summary contract is not current")
+    unresolved = summary.get("unresolved_count")
+    if not isinstance(unresolved, int) or isinstance(unresolved, bool):
+        issues.append("comparison baseline has no integer summary unresolved_count")
+    if summary.get("status") not in _COMPARISON_FINAL_STATUSES:
+        issues.append("comparison baseline has no final summary status")
+    return sorted(set(issues))
+
+
+def _comparison_source_binding_issues(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    current_generator_sha256: str | None,
+) -> list[str]:
+    """Fail closed when the baseline is not source-bound to the current run."""
+    issues: list[str] = []
+    inputs = baseline.get("repository_inputs")
+    if not isinstance(inputs, list) or not inputs:
+        return ["comparison baseline has no repository_inputs digest list"]
+    recorded_paths = {item.get("path") for item in inputs if isinstance(item, dict)}
+    for canonical in (CANONICAL_PROFILE_MANIFEST, CANONICAL_POLICY):
+        if canonical not in recorded_paths:
+            issues.append(
+                f"comparison baseline was not generated from the canonical input: {canonical}"
+            )
+    generator_rows = [
+        item
+        for item in inputs
+        if isinstance(item, dict) and item.get("path") == CANONICAL_GENERATOR
+    ]
+    if not generator_rows:
+        issues.append("comparison baseline records no generator input")
+    elif current_generator_sha256 is None:
+        issues.append("comparison generator identity is unavailable")
+    elif generator_rows[0].get("sha256") != current_generator_sha256:
+        issues.append("comparison baseline generator differs from the current generator")
+    issues.extend(_comparison_policy_surface_issues(baseline, current))
+    return sorted(set(issues))
+
+
+def _comparison_policy_surface_issues(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+) -> list[str]:
+    """Fail closed when baseline policy content or profile surface differs."""
+    issues: list[str] = []
+    baseline_policy = baseline.get("policy")
+    current_policy = current.get("policy")
+    baseline_records = (
+        baseline_policy.get("normalized_records_sha256")
+        if isinstance(baseline_policy, dict)
+        else None
+    )
+    current_records = (
+        current_policy.get("normalized_records_sha256")
+        if isinstance(current_policy, dict)
+        else None
+    )
+    if not isinstance(baseline_records, str) or not isinstance(current_records, str):
+        issues.append("comparison baseline or current report has no policy record digest")
+    elif baseline_records != current_records:
+        issues.append("comparison baseline policy differs from the current policy")
+    baseline_surface = baseline.get("surface")
+    current_surface = current.get("surface")
+    baseline_ids = (
+        baseline_surface.get("profile_ids") if isinstance(baseline_surface, dict) else None
+    )
+    current_ids = current_surface.get("profile_ids") if isinstance(current_surface, dict) else None
+    if not isinstance(baseline_ids, list) or not isinstance(current_ids, list):
+        issues.append("comparison baseline or current report has no profile surface")
+    elif sorted(str(item) for item in baseline_ids) != sorted(str(item) for item in current_ids):
+        issues.append("comparison baseline profile surface differs from the current surface")
+    return sorted(set(issues))
+
+
+def _comparison_binding_issues(
+    baseline: Any,
+    *,
+    baseline_path: Path,
+    current: dict[str, Any],
+    current_generator_sha256: str | None,
+) -> list[str]:
+    """Fail closed when the baseline cannot source-bind the comparison.
+
+    Only the baseline side is bound: its content digest, summary contract,
+    canonical inputs, generator identity, policy content, and audited profile
+    surface must match the current run. Lockfile content is the measured
+    signal and must never fail binding.
+    """
+    issues = _comparison_baseline_shape_issues(baseline, baseline_path)
+    if issues or not isinstance(baseline, dict):
+        return issues
+    return _comparison_source_binding_issues(baseline, current, current_generator_sha256)
+
+
+def compare_license_inventories(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    *,
+    baseline_path: Path,
+) -> dict[str, Any]:
+    """Diff a source-bound baseline report against a current inventory."""
+    baseline_failures = _comparison_string_set(baseline.get("failures"))
+    current_failures = _comparison_string_set(current.get("failures"))
+    baseline_packages, _ = _comparison_package_names(baseline)
+    current_packages, _ = _comparison_package_names(current)
+    baseline_exclusions, _ = _comparison_reviewed_exclusion_ids(baseline)
+    current_exclusions, _ = _comparison_reviewed_exclusion_ids(current)
+    baseline_names = set(baseline_packages)
+    current_names = set(current_packages)
+    changed_names = sorted(
+        name
+        for name in baseline_names & current_names
+        if baseline_packages[name] != current_packages[name]
+    )
+    baseline_summary = baseline.get("summary")
+    current_summary = current.get("summary")
+    return {
+        "schema_version": COMPARISON_SCHEMA_VERSION,
+        "baseline": {
+            "path": str(baseline_path),
+            "report_content_sha256": baseline.get(_REPORT_CONTENT_DIGEST_FIELD),
+            "unresolved_count": (
+                baseline_summary.get("unresolved_count")
+                if isinstance(baseline_summary, dict)
+                else None
+            ),
+            "status": baseline_summary.get("status")
+            if isinstance(baseline_summary, dict)
+            else None,
+        },
+        "current": {
+            "unresolved_count": (
+                current_summary.get("unresolved_count")
+                if isinstance(current_summary, dict)
+                else None
+            ),
+            "status": current_summary.get("status") if isinstance(current_summary, dict) else None,
+        },
+        "failures": {
+            "new": sorted(current_failures - baseline_failures),
+            "removed": sorted(baseline_failures - current_failures),
+            "unchanged": sorted(baseline_failures & current_failures),
+        },
+        "reviewed_exclusions": {
+            "new": sorted(current_exclusions - baseline_exclusions),
+            "removed": sorted(baseline_exclusions - current_exclusions),
+            "unchanged": sorted(baseline_exclusions & current_exclusions),
+        },
+        "packages": {
+            "added": sorted(current_names - baseline_names),
+            "removed": sorted(baseline_names - current_names),
+            "changed": changed_names,
+        },
+        "global_status_preserved": (
+            current_summary.get("status") if isinstance(current_summary, dict) else None
+        ),
+    }
+
+
+def _validate_compare_args(args: argparse.Namespace) -> int:
+    """Fail closed when comparison flags combine with incompatible modes."""
+    if args.compare_baseline and (args.check_receipt or args.check_freshness):
+        print(
+            "FAIL: --compare-baseline applies to generated inventories, not check modes",
+            file=sys.stderr,
+        )
+        return 1
+    if args.compare_baseline and not args.output:
+        print(
+            "FAIL: --compare-baseline requires --output so the report and "
+            "the comparison stay separate artifacts",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _prepare_baseline_comparison(
+    repo_root: Path, compare_arg: Path, inventory: dict[str, Any]
+) -> tuple[dict[str, Any] | None, int]:
+    """Build the baseline comparison or fail closed before the report is written."""
+    baseline_path = _resolve_path(repo_root, compare_arg)
+    try:
+        baseline_report = _read_json(baseline_path)
+    except (OSError, ValueError) as exc:
+        print(f"FAIL: comparison baseline could not be read: {exc}", file=sys.stderr)
+        return None, 1
+    generator_path = repo_root / CANONICAL_GENERATOR
+    try:
+        generator_sha256: str | None = (
+            _sha256_file(generator_path) if generator_path.is_file() else None
+        )
+    except OSError as exc:
+        print(f"FAIL: comparison generator identity is unavailable: {exc}", file=sys.stderr)
+        return None, 1
+    binding_issues = _comparison_binding_issues(
+        baseline_report,
+        baseline_path=baseline_path,
+        current=inventory,
+        current_generator_sha256=generator_sha256,
+    )
+    if binding_issues:
+        for issue in binding_issues:
+            print(f"FAIL: {issue}", file=sys.stderr)
+        return None, 1
+    return compare_license_inventories(baseline_report, inventory, baseline_path=baseline_path), 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run inventory generation or freshness validation."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -4450,8 +4730,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Return exit code 2 when metadata, profile, provenance, or policy rows remain unresolved.",
     )
+    parser.add_argument(
+        "--compare-baseline",
+        type=Path,
+        help=(
+            "Compare the generated inventory against a source-bound baseline report and print "
+            "a dependency_license_comparison.v1 summary. Requires --output so the report and "
+            "the comparison stay separate artifacts; the comparison never changes the exit code."
+        ),
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
+    compare_error = _validate_compare_args(args)
+    if compare_error:
+        return compare_error
     candidate_bundle_path = (
         _resolve_path(repo_root, args.candidate_bundle) if args.candidate_bundle else None
     )
@@ -4521,6 +4813,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     # writer here would fail in that invocation because Python puts only the script
     # directory on ``sys.path``.  Durable checked-in evidence uses the shared writer
     # and review sidecar; this output is a local/CI artifact outside that tree.
+    comparison: dict[str, Any] | None = None
+    if args.compare_baseline:
+        comparison, comparison_exit = _prepare_baseline_comparison(
+            repo_root, args.compare_baseline, inventory
+        )
+        if comparison_exit:
+            return comparison_exit
+    return _emit_inventory_report(args, inventory, comparison)
+
+
+def _emit_inventory_report(
+    args: argparse.Namespace,
+    inventory: dict[str, Any],
+    comparison: dict[str, Any] | None,
+) -> int:
+    """Write the report, print the optional comparison, and set the exit code.
+
+    The comparison never changes the exit code: an unchanged failure is not
+    an admitted release, and a clean comparison never clears a blocked gate.
+    """
     marked_inventory = {"review_marker": _REVIEW_MARKER_JSON, **inventory}
     rendered = json.dumps(marked_inventory, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
@@ -4529,6 +4841,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"wrote {args.output}")
     else:
         print(rendered, end="")
+    if comparison is not None:
+        print(json.dumps(comparison, ensure_ascii=False, indent=2, sort_keys=True))
     if args.fail_on_unresolved and inventory["summary"]["unresolved_count"]:
         print(
             "FAIL: dependency license inventory remains blocked for "

@@ -11,8 +11,11 @@ research evidence packets. It is backed by `export_evidence_bundle` in
 The bundle writes:
 
 - `payload/` with exactly the selected compact files;
-- `evidence_bundle_manifest.json` with `schema_version: evidence_bundle.v1`;
-- `checksums.sha256` for all payload files.
+- `evidence_bundle_manifest.json` with `schema_version: evidence_bundle.v1`, payload-relative file
+  paths, and locations (repository-relative when written inside the repository, bundle-relative
+  otherwise);
+- `checksums.sha256` for all payload files using bundle-root-relative paths such as
+  `payload/summary.json`.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 

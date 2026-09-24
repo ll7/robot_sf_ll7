@@ -205,8 +205,13 @@ def test_read_codex_activity_projects_durable_status_without_authority_internals
     assert activity.operation.result_status == "complete"
     assert activity.operation.usage == {"tokens": 0, "compute": 0.0, "issue_writes": 0}
     assert activity.evidence
-    assert activity.events == ()
-    assert activity.activity_scope == "unavailable"
+    assert len(activity.events) == 2
+    assert activity.activity_scope == "durable_lifecycle"
+    assert [event["operation_id"] for event in activity.events] == [
+        "activity-start",
+        "activity-start",
+    ]
+    assert all(set(event) == {"message", "operation_id", "timestamp"} for event in activity.events)
 
     payload = activity.to_dict()
     serialized = json.dumps(payload)
@@ -223,13 +228,33 @@ def test_read_codex_activity_recovers_durable_status_after_service_restart(
 ) -> None:
     service, audit = _setup(tmp_path)
     route = _route()
-    client = AuditCodexClient(
-        service, inspector=_make_inspector(route), provider=FakeCodexProvider()
+    provider = FakeCodexProvider(
+        response={"message": "provider output is not a durable activity event"}
     )
-    started = client.start(audit, prompt="restart-safe status", operation_id="restart-read")
+    client = AuditCodexClient(service, inspector=_make_inspector(route), provider=provider)
+    started = client.start(
+        audit,
+        prompt="private prompt marker must not be projected",
+        operation_id="restart-read",
+    )
     assert started.status == "complete"
     assert started.session is not None
     codex_session_id = started.session.session_id
+    resumed = client.resume(
+        codex_session_id,
+        audit_token=audit.session_token,
+        operation_id="restart-resume",
+    )
+    assert resumed.status == "complete"
+    assert len(provider.calls) == 2
+    replay = client.resume(
+        codex_session_id,
+        audit_token=audit.session_token,
+        operation_id="restart-resume",
+    )
+    assert replay.receipt is not None and replay.receipt.replayed
+    assert len(provider.calls) == 2
+
     token = audit.session_token
     policy = audit.policy
     service.close()
@@ -241,6 +266,21 @@ def test_read_codex_activity_recovers_durable_status_after_service_restart(
         trusted_policy=policy,
     )
     try:
+        recovered_client = AuditCodexClient(
+            reopened, inspector=_make_inspector(route), provider=FakeCodexProvider()
+        )
+        recovered = recovered_client.recover_session(codex_session_id, audit_token=token)
+        assert recovered.status == "complete"
+        replay_after_restart = recovered_client.resume(
+            codex_session_id,
+            audit_token=token,
+            operation_id="restart-resume",
+        )
+        assert replay_after_restart.receipt is not None
+        assert replay_after_restart.receipt.replayed
+        assert recovered_client.provider is not None
+        assert recovered_client.provider.calls == []
+
         activity = reopened.read_codex_activity(
             audit.session_id,
             codex_session_id=codex_session_id,
@@ -248,10 +288,43 @@ def test_read_codex_activity_recovers_durable_status_after_service_restart(
         )
         assert activity.status == "complete"
         assert activity.operation is not None
-        assert activity.operation.operation_id == "restart-read"
-        assert activity.events == ()
-        assert activity.activity_scope == "unavailable"
-        assert "unavailable" in activity.events_reason
+        assert activity.operation.operation_id == "restart-resume"
+        assert activity.activity_scope == "durable_lifecycle"
+        assert "provider conversation events are not persisted" in activity.events_reason
+        events = [dict(event) for event in activity.events]
+        assert [event["operation_id"] for event in events] == [
+            "restart-read",
+            "restart-read",
+            "restart-resume",
+            "restart-resume",
+        ]
+        assert [event["timestamp"] for event in events] == sorted(
+            event["timestamp"] for event in events
+        )
+        assert all(set(event) == {"message", "operation_id", "timestamp"} for event in events)
+        serialized_events = json.dumps(events, sort_keys=True)
+        assert "provider output is not a durable activity event" not in serialized_events
+        assert "private prompt marker" not in serialized_events
+        assert "provider_session_id" not in serialized_events
+        assert "source_digest" not in serialized_events
+
+        recent = reopened.read_codex_activity(
+            audit.session_id,
+            codex_session_id=codex_session_id,
+            audit_token=token,
+            limit=2,
+        )
+        assert [event["operation_id"] for event in recent.events] == [
+            "restart-resume",
+            "restart-resume",
+        ]
+        with pytest.raises(AuditValidationError, match="between 1 and 64"):
+            reopened.read_codex_activity(
+                audit.session_id,
+                codex_session_id=codex_session_id,
+                audit_token=token,
+                limit=65,
+            )
     finally:
         reopened.close()
 
@@ -280,6 +353,13 @@ def test_read_codex_activity_rejects_stale_foreign_and_unknown_selectors(
     )
     assert foreign.status == "complete"
     assert foreign.session is not None
+
+    bound_activity = service.read_codex_activity(
+        audit,
+        codex_session_id=first.session.session_id,
+        audit_token=audit.session_token,
+    )
+    assert {event["operation_id"] for event in bound_activity.events} == {"bound-first"}
 
     with pytest.raises(AuditPolicyError):
         service.read_codex_activity(
@@ -350,6 +430,10 @@ def test_read_codex_activity_reports_inflight_operation_without_reservation_deta
     assert activity.operation.status == "inflight"
     assert activity.operation.result_status == ""
     assert activity.usage.to_dict() == {"tokens": 1, "compute": 1.0, "issue_writes": 0}
+    assert activity.activity_scope == "durable_lifecycle"
+    assert len(activity.events) == 1
+    assert activity.events[0]["operation_id"] == "activity-inflight"
+    assert "provider outcome remains unresolved" in activity.events[0]["message"]
     serialized = json.dumps(activity.to_dict())
     assert "reservation_id" not in serialized
     assert "request_digest" not in serialized

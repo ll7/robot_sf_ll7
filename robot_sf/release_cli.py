@@ -183,6 +183,8 @@ def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
             parser.add_argument("--publication-date", required=True)
             parser.add_argument("--expected-remote-metadata-sha256")
             parser.add_argument("--expected-remote-source-tag")
+            parser.add_argument("--expected-remote-source-sha")
+            parser.add_argument("--expected-remote-base-sha")
             parser.add_argument(
                 "--apply",
                 action="store_true",
@@ -406,6 +408,8 @@ def _handle_repair_draft_metadata(
         release_binding=release_binding,
         expected_remote_metadata_sha256=args.expected_remote_metadata_sha256,
         expected_remote_source_tag=args.expected_remote_source_tag,
+        expected_remote_source_sha=args.expected_remote_source_sha,
+        expected_remote_base_sha=args.expected_remote_base_sha,
         apply=args.apply,
         api_base=args.api_base,
     )

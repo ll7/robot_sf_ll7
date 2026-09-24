@@ -249,6 +249,8 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
         expected_remote_source_tag=(
             "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
         ),
+        expected_remote_source_sha="c" * 40,
+        expected_remote_base_sha="d" * 40,
         apply=True,
         api_base="https://example.test/api",
     )
@@ -309,6 +311,8 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
             "expected_remote_source_tag": (
                 "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
             ),
+            "expected_remote_source_sha": "c" * 40,
+            "expected_remote_base_sha": "d" * 40,
             "apply": True,
             "api_base": "https://example.test/api",
         },
@@ -345,6 +349,10 @@ def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
             "c" * 64,
             "--expected-remote-source-tag",
             "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate",
+            "--expected-remote-source-sha",
+            "c" * 40,
+            "--expected-remote-base-sha",
+            "d" * 40,
             "--apply",
         ]
     )
@@ -359,6 +367,8 @@ def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
         args.expected_remote_source_tag
         == "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
     )
+    assert args.expected_remote_source_sha == "c" * 40
+    assert args.expected_remote_base_sha == "d" * 40
     assert args.apply is True
 
 

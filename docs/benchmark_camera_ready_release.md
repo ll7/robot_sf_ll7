@@ -187,10 +187,11 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   --output-json output/benchmarks/camera_ready/<campaign_id>/reports/release_publish_plan.json
 ```
 
-Before step 2 creates a GitHub draft, run the passing pre-tag release doctor
-described in [`RELEASE.md`](RELEASE.md#publication). It checks that both the
-planned tag and release are unused, so save its JSON report and checksum before
-creating the draft. Also retain the exact local asset names, byte sizes, and
+After campaign evidence is frozen and before step 2 creates the GitHub draft,
+run the passing pre-tag release doctor described in
+[`RELEASE.md`](RELEASE.md#publication). It checks that both the planned tag and
+release are unused, so save its JSON report and checksum before creating the
+draft. Also retain the exact local asset names, byte sizes, and
 SHA-256 digests while the bundle is available; those values are the readback
 contract after the GitHub release is published. Preserve these small receipts
 with durable release evidence before removing the worktree; `output/` alone is
@@ -199,10 +200,11 @@ not durable.
 ```bash
 set -euo pipefail
 mkdir -p output/release
-CAMPAIGN_SUMMARY=output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json
-ARCHIVE_PATH="$(jq -r '.publication_bundle.archive_path' "$CAMPAIGN_SUMMARY")"
-CHECKSUMS_PATH="$(jq -r '.publication_bundle.checksums_path' "$CAMPAIGN_SUMMARY")"
-MANIFEST_PATH="$(jq -r '.publication_bundle.manifest_path' "$CAMPAIGN_SUMMARY")"
+PUBLISH_PLAN=output/benchmarks/camera_ready/<campaign_id>/reports/release_publish_plan.json
+ARCHIVE_PATH="$(jq -er '.archive_path' "$PUBLISH_PLAN")"
+CHECKSUMS_PATH="$(jq -er '.checksums_path' "$PUBLISH_PLAN")"
+MANIFEST_PATH="$(jq -er '.manifest_path' "$PUBLISH_PLAN")"
+test -f "$ARCHIVE_PATH" && test -f "$CHECKSUMS_PATH" && test -f "$MANIFEST_PATH"
 {
   wc -c -- "$ARCHIVE_PATH" "$CHECKSUMS_PATH" "$MANIFEST_PATH"
   sha256sum -- "$ARCHIVE_PATH" "$CHECKSUMS_PATH" "$MANIFEST_PATH"
@@ -210,6 +212,11 @@ MANIFEST_PATH="$(jq -r '.publication_bundle.manifest_path' "$CAMPAIGN_SUMMARY")"
 sha256sum output/release/github_assets_pre_tag.txt \
   > output/release/github_assets_pre_tag.txt.sha256
 ```
+
+Use the paths from the dry-run `release_publish_plan.json`, not the raw path
+strings in `campaign_summary.json`: the helper has already resolved each path
+against the validated campaign and repository roots and records the resulting
+absolute paths in its plan output.
 
 2. Execute asset upload into the draft (the draft does not yet materialize the
 Git tag):
@@ -272,12 +279,17 @@ The helper never reserves, uploads to, or publishes Zenodo. Use the direct
 Zenodo CLI for the reserved deposition after the bundle has passed the
 independent cold check:
 
+After the exact GitHub tag, source commit, release visibility, and three assets
+have passed readback above, reconcile the Zenodo draft before uploading files.
 If no deposition has been reserved for this release, run `reserve` exactly
-once. If the deposition already exists, skip `reserve` and use only its
-reviewed deposition ID and DOI-bound manifest; never create a replacement DOI
-to recover local state. Run the commands below as separate operator steps,
-pausing after the metadata preview to review its report before deciding whether
-to apply a repair.
+once. If it already exists, skip `reserve` and use only its reviewed deposition
+ID and DOI-bound manifest; never create a replacement DOI to recover local
+state. Preview and, when required, repair the empty draft's version/date and
+only explicitly reviewed source-provenance drift, then `recover` the local
+state. Upload the archive and both companions, run `verify`, publish once,
+then run `verify` and the anonymous `audit-published` check. Run the commands
+below as separate operator steps, pausing after metadata preview to inspect the
+complete before/after diff before deciding whether to apply a repair.
 
 ```bash
 set -euo pipefail
@@ -319,8 +331,13 @@ uv run robot-sf release zenodo repair-draft-metadata \
   --version "$VERSION" \
   --publication-date "$PUBLICATION_DATE"
 
-# Apply only after reviewing the preview's exact changed fields, old source
-# tag, and metadata digest. Any unrelated drift or non-empty draft is a stop.
+# Apply only after reviewing the preview's exact before/after metadata diff,
+# old source tag/SHA/base, and metadata digest. Any unrelated drift or
+# non-empty draft is a stop. If source SHA or base SHA differs from the
+# corresponding `*_after` value, pass its reviewed `*_before` value as shown.
+# Add `--expected-remote-source-sha <reviewed-preview-old-source-sha>` and/or
+# `--expected-remote-base-sha <reviewed-preview-old-base-sha>` to this command
+# only when the corresponding preview field is present and differs from `*_after`.
 uv run robot-sf release zenodo repair-draft-metadata \
   --token-file "$ZENODO_TOKEN_FILE" \
   --repository-root "$FROZEN_SOURCE_ROOT" \
@@ -381,11 +398,14 @@ uv run robot-sf release zenodo verify \
   --expected-publication-date "$PUBLICATION_DATE"
 ```
 
-The repair is limited to the explicitly supported stale source-description and
-source-identifier fields plus the Zenodo-only `version` and `publication_date`
-overlay. It does not edit the resolved metadata file or its copy inside the
-immutable archive. If the draft already matches, skip `--apply` and continue
-with `recover`. Record the exact preview and resulting metadata diff. Before
+The repair is limited to the source commit SHA, mainline base commit SHA, and
+release tag inside the exact structured provenance sentence, their matching
+source-tag and source-commit identifiers, plus the Zenodo-only `version` and
+`publication_date` overlay. It rejects changes to other identifiers, release
+identity, or scientific prose before any PUT. It does not edit the resolved
+metadata file or its copy inside the immutable archive. If the draft already
+matches, skip `--apply` and continue with `recover`. Record the exact preview
+and resulting metadata diff. Before
 upload, require the archive SHA-256 to match the frozen release identity and
 the GitHub asset digest, then verify the extracted payload with
 `sha256sum -c checksums.sha256`; stop on any mismatch. Use the reviewed tooling

@@ -274,6 +274,49 @@ def test_declared_route_count_must_match_before_certificate_can_reject() -> None
     assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
 
 
+@pytest.mark.parametrize("duplicate_identity", ["route_id", "spawn_goal_pair"])
+def test_duplicate_route_identities_cannot_exclude_or_prove_actor_free_rollout(
+    duplicate_identity: str,
+) -> None:
+    excluded_certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    positive_certificate = _certificate()
+    for certificate in (excluded_certificate, positive_certificate):
+        existing = certificate["route_certificates"][0]
+        duplicate = {
+            **existing,
+            "route_id": (existing["route_id"] if duplicate_identity == "route_id" else "route-1"),
+            "spawn_id": (
+                existing["spawn_id"] + 1
+                if duplicate_identity == "route_id"
+                else existing["spawn_id"]
+            ),
+            "checks": dict(existing["checks"]),
+            "evidence": dict(existing["evidence"]),
+            "reasons": list(existing["reasons"]),
+        }
+        certificate["checks"]["route_count"] = 2
+        certificate["route_certificates"].append(duplicate)
+
+    excluded = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=excluded_certificate,
+        feasibility_evidence=_oracle(
+            status="infeasible_by_construction", geometric=False, complete=False
+        ),
+    )
+    empirical = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=positive_certificate,
+        feasibility_evidence=_oracle_report(_oracle()),
+    )
+
+    for verdict in (excluded, empirical):
+        assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+        assert verdict.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_route_coverage_unresolved" in excluded.reason_codes
+    assert "oracle_success_not_bound_to_static_case_and_provenance" in empirical.reason_codes
+
+
 def test_oracle_exclusion_does_not_override_unresolved_mixed_route_certificate() -> None:
     certificate = _certificate("geometrically_infeasible", eligibility="excluded")
     certificate["checks"]["route_count"] = 2

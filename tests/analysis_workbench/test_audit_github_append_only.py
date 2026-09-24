@@ -73,6 +73,7 @@ class AppendOnlyProvider:
         self.comment_error: Exception | None = None
         self.comment_error_after_success = False
         self.tamper_comment_after_success = False
+        self.reconciled_comment_result = False
         self.next_number = 10
 
     def search_issues(self, repository: str, *, marker: str) -> SearchResult:
@@ -151,6 +152,9 @@ class AppendOnlyProvider:
             )
         if self.timeout_after_comment:
             raise TimeoutError("comment response lost after GitHub accepted POST")
+        if self.reconciled_comment_result:
+            self.reconciled_comment_result = False
+            return {"status": "reconciled", "comment": comment}
         return {"status": "created", "comment": comment}
 
     def update_issue(self, *_args: Any, **_kwargs: Any) -> None:
@@ -232,6 +236,24 @@ def test_timeout_after_comment_is_reconciled_without_duplicate(tmp_path: Path) -
     assert replay.status == "unchanged"
     assert len(provider.comment_calls) == 1
     assert provider.update_calls == 0
+
+
+def test_reconciled_comment_write_is_counted_as_a_possible_remote_write(
+    tmp_path: Path,
+) -> None:
+    provider = AppendOnlyProvider()
+    finding = _finding("comment-reconciled-write")
+    revised = replace(finding, observations=("reconciled revision",))
+    with GitHubOutbox(tmp_path) as outbox:
+        sync = GitHubSync(provider, outbox)
+        initial = sync.sync(REPOSITORY, finding, operation_id="reconciled-initial")
+        provider.reconciled_comment_result = True
+        result = sync.sync(REPOSITORY, revised, operation_id="reconciled-comment")
+
+    assert initial.status == "created"
+    assert result.status == "reconciled"
+    assert result.remote_write == "applied"
+    assert len(provider.comment_calls) == 1
 
 
 def test_append_only_conflicting_comment_readback_is_retained_not_raised(

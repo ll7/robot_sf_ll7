@@ -7,6 +7,7 @@ import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -19,12 +20,17 @@ from robot_sf.analysis_workbench.audit_github import (
     GitHubCapabilityUnavailable,
     GitHubConflictError,
     GitHubIssue,
+    GitHubOutbox,
+    GitHubPreflightConflict,
+    GitHubPreflightValidationError,
+    GitHubSync,
     SearchResult,
     render_finding_issue,
 )
 from robot_sf.analysis_workbench.audit_github_rest import (
     GitHubRESTProvider,
     HttpResponse,
+    auditor_request_marker,
 )
 from robot_sf.analysis_workbench.audit_mcp import (
     AuditMCPDispatcher,
@@ -164,6 +170,50 @@ class ServiceFakeProvider:
         )
 
 
+class AppendOnlyServiceFakeProvider(ServiceFakeProvider):
+    """Service fake exposing only immutable issue plus append-comment writes."""
+
+    def __init__(self, *, issues: list[GitHubIssue] | None = None) -> None:
+        """Initialize append-only comments and their deterministic receipts."""
+
+        super().__init__(issues=issues)
+        self.comment_calls: list[dict[str, Any]] = []
+        self.reconciled_comment_result = False
+
+    def append_auditor_comment(
+        self,
+        repository: str,
+        number: int,
+        *,
+        body: str,
+        request_digest: str,
+    ) -> dict[str, Any]:
+        """Append one immutable comment, optionally returning reconciliation."""
+
+        issue = self.get_issue(repository, number)
+        marker = auditor_request_marker(request_digest)
+        for comment in issue.comments:
+            if str(comment.get("body", "")).count(marker) == 1:
+                return {"status": "unchanged", "comment": comment}
+        comment = {
+            "id": 1000 + len(issue.comments),
+            "body": f"{marker}\n{body}",
+        }
+        self.comment_calls.append({"number": number, "body": body})
+        self.issues = [
+            replace(issue, comments=(*issue.comments, comment)) if item.number == number else item
+            for item in self.issues
+        ]
+        status = "reconciled" if self.reconciled_comment_result else "created"
+        self.reconciled_comment_result = False
+        return {"status": status, "comment": comment}
+
+    def update_issue_if_unchanged(self, *_args: Any, **_kwargs: Any) -> GitHubIssue:
+        """Reject the legacy body-CAS path so this fake cannot mask routing."""
+
+        raise AssertionError("append-only service fake attempted an issue-body update")
+
+
 def _setup(
     tmp_path: Path,
     provider: ServiceFakeProvider | None = None,
@@ -244,6 +294,53 @@ def _setup_known_source(
     return service, session, finding, commit.revision, fake
 
 
+def test_sync_classifies_canonical_preflight_conflicts_before_provider_io(tmp_path: Path) -> None:
+    finding = add_candidate(new_finding("preflight-boundary", "preflight symptom"), "episode-1")
+    provider = ServiceFakeProvider()
+    missing_record_store = SimpleNamespace(store=SimpleNamespace(get=lambda _finding_id: None))
+    stale_record = SimpleNamespace(record=replace(finding, title="stale title"), revision=0)
+    stale_record_store = SimpleNamespace(
+        store=SimpleNamespace(get=lambda _finding_id: stale_record)
+    )
+
+    with GitHubOutbox(tmp_path / "outbox") as outbox:
+        rejected_calls = (
+            # A requested canonical revision cannot be checked without an adapter.
+            (None, 0),
+            # Adapters without the shared AuditStore and stores missing a record fail closed.
+            (object(), None),
+            (missing_record_store, None),
+            # Existing canonical content must match the caller snapshot before provider I/O.
+            (stale_record_store, None),
+        )
+        for finding_store, expected_revision in rejected_calls:
+            with pytest.raises(GitHubPreflightConflict):
+                GitHubSync(provider, outbox, finding_store=finding_store).sync(
+                    REPOSITORY,
+                    finding,
+                    operation_id="canonical-preflight-conflict",
+                    expected_finding_revision=expected_revision,
+                )
+
+    assert provider.create_calls == []
+
+
+def test_sync_classifies_malformed_local_issue_link_before_provider_io(tmp_path: Path) -> None:
+    finding = add_candidate(new_finding("malformed-link", "preflight symptom"), "episode-1")
+    malformed_finding = replace(finding, github_issue={"repository": REPOSITORY, "number": "bad"})
+    provider = ServiceFakeProvider()
+
+    with GitHubOutbox(tmp_path / "outbox") as outbox:
+        with pytest.raises(GitHubPreflightValidationError):
+            GitHubSync(provider, outbox).sync(
+                REPOSITORY,
+                malformed_finding,
+                operation_id="malformed-local-link",
+            )
+
+    assert provider.create_calls == []
+
+
 def test_service_sync_uses_canonical_finding_and_durable_replay(tmp_path: Path) -> None:
     service, session, finding, revision, provider = _setup(tmp_path)
     try:
@@ -275,14 +372,63 @@ def test_service_sync_uses_canonical_finding_and_durable_replay(tmp_path: Path) 
         service.close()
 
 
-def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
+def test_service_append_only_reconciled_comment_consumes_reserved_write(
     tmp_path: Path,
 ) -> None:
-    class NoPostHTTP:
-        """Injected REST transport proving the unsupported path is read-only."""
+    provider = AppendOnlyServiceFakeProvider()
+    service, session, finding, revision, provider = _setup(
+        tmp_path,
+        provider=provider,
+        issue_write_budget=2,
+    )
+    try:
+        initial = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="append-service-initial",
+        )
+        assert initial.status == "committed"
+        assert initial.value is not None and initial.value.status == "created"
+        assert service.get_session(session).usage.issue_writes == 1
+
+        stored_record = service.store.get(finding.finding_id)
+        assert stored_record is not None and isinstance(stored_record.record, Finding)
+        revised = replace(stored_record.record, observations=("service append revision",))
+        revised_commit = service.finding_store.update(
+            revised,
+            operation_id="append-service-revision",
+            expected_revision=stored_record.revision,
+            actor="human",
+        )
+        provider.reconciled_comment_result = True
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised_commit.revision,
+            operation_id="append-service-comment",
+        )
+
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "reconciled"
+        assert result.value.remote_write == "applied"
+        assert len(provider.comment_calls) == 1
+        assert service.get_session(session).usage.issue_writes == 2
+    finally:
+        service.close()
+
+
+def test_service_rest_initial_create_uses_append_only_provider_without_patch(
+    tmp_path: Path,
+) -> None:
+    class InitialCreateHTTP:
+        """Injected REST transport proving service-backed initial publication."""
 
         def __init__(self) -> None:
             self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
 
         def request(
             self,
@@ -293,15 +439,41 @@ def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
             body: bytes | None,
             timeout: float,
         ) -> HttpResponse:
-            del headers, body, timeout
-            self.calls.append((method, url))
+            del headers, timeout
+            path = urlparse(url).path
+            self.calls.append((method, path))
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                number = 17
+                self.issue = {
+                    "repository": REPOSITORY,
+                    "number": number,
+                    "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                    "title": payload["title"],
+                    "body": payload["body"],
+                    "labels": [{"name": label} for label in payload["labels"]],
+                    "state": "open",
+                    "comments": 0,
+                    "updated_at": "2026-09-23T00:00:00Z",
+                }
+                return HttpResponse(201, self.issue)
             assert method == "GET"
-            return HttpResponse(
-                200,
-                {"total_count": 0, "incomplete_results": False, "items": []},
-            )
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return HttpResponse(200, self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
 
-    http = NoPostHTTP()
+    http = InitialCreateHTTP()
     provider = GitHubRESTProvider(
         http,
         allowed_repositories=(REPOSITORY,),
@@ -314,18 +486,211 @@ def test_service_rest_unsupported_create_is_unavailable_without_post_or_charge(
             finding_id=finding.finding_id,
             repository=REPOSITORY,
             expected_finding_revision=revision,
-            operation_id="rest-unsupported-create",
+            operation_id="rest-initial-create",
         )
 
-        assert result.status == "unavailable"
-        assert result.value is not None and result.value.status == "unavailable"
-        assert result.value.remote_write == "none"
-        assert result.value.outbox is not None
-        assert result.value.outbox.state == "failed"
-        assert [method for method, _url in http.calls] == ["GET"]
-        assert service.get_session(session).usage.issue_writes == 0
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "created"
+        assert result.value.remote_write == "applied"
+        assert result.value.outbox is not None and result.value.outbox.state == "succeeded"
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert [method for method, _path in http.calls].count("PATCH") == 0
+        assert service.get_session(session).usage.issue_writes == 1
         assert not service.authority.snapshot()["reservations"]
         assert not service._reservations
+
+    finally:
+        service.close()
+
+
+def test_service_rest_accepts_canonical_long_finding_id(tmp_path: Path) -> None:
+    class LongFindingHTTP:
+        """Transport proving canonical marker-safe IDs reach the REST POST."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, timeout
+            path = urlparse(url).path
+            self.calls.append((method, path))
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                number = 24
+                self.issue = {
+                    "repository": REPOSITORY,
+                    "number": number,
+                    "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                    "title": payload["title"],
+                    "body": payload["body"],
+                    "labels": [{"name": label} for label in payload["labels"]],
+                    "state": "open",
+                    "comments": 0,
+                    "updated_at": "2026-09-23T00:00:00Z",
+                }
+                return HttpResponse(201, self.issue)
+            assert method == "GET"
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return HttpResponse(200, self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
+
+    http = LongFindingHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, _finding, _revision, _provider = _setup(tmp_path, provider=provider)
+    long_finding = add_candidate(new_finding("f" * 129, "long finding"), "episode-long")
+    commit = service.finding_store.create(
+        long_finding,
+        operation_id="create-long-finding",
+        actor="human",
+    )
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=long_finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=commit.revision,
+            operation_id="rest-long-finding-id",
+        )
+
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "created"
+        assert result.value.remote_write == "applied"
+        assert http.issue is not None and ("finding_id=" + "f" * 129) in http.issue["body"]
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert [method for method, _path in http.calls].count("PATCH") == 0
+        assert service.get_session(session).usage.issue_writes == 1
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+
+    finally:
+        service.close()
+
+
+def test_service_rest_create_payload_conflict_charges_post_and_stops_retry(
+    tmp_path: Path,
+) -> None:
+    class MismatchedCreateHTTP:
+        """Transport returning a marker-compatible but immutable-mismatched issue."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.issue: dict[str, Any] | None = None
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> HttpResponse:
+            del headers, timeout
+            path = urlparse(url).path
+            self.calls.append((method, path))
+            if method == "POST":
+                assert body is not None
+                payload = json.loads(body.decode("utf-8"))
+                number = 23
+                self.issue = {
+                    "repository": REPOSITORY,
+                    "number": number,
+                    "html_url": f"https://github.com/{REPOSITORY}/issues/{number}",
+                    "title": f"{payload['title']} (provider mismatch)",
+                    "body": payload["body"],
+                    "labels": [{"name": label} for label in payload["labels"]],
+                    "state": "open",
+                    "comments": 0,
+                    "updated_at": "2026-09-23T00:00:00Z",
+                }
+                return HttpResponse(201, self.issue)
+            assert method == "GET"
+            if path == "/search/issues":
+                items = [self.issue] if self.issue is not None else []
+                return HttpResponse(
+                    200,
+                    {"total_count": len(items), "incomplete_results": False, "items": items},
+                )
+            if self.issue is not None:
+                issue_path = f"/repos/{REPOSITORY}/issues/{self.issue['number']}"
+                if path == issue_path:
+                    return HttpResponse(200, self.issue)
+                if path == f"{issue_path}/comments":
+                    return HttpResponse(200, [])
+            raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
+
+    http = MismatchedCreateHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+    )
+    service, session, finding, revision, _provider = _setup(tmp_path, provider=provider)
+    try:
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-create-payload-conflict",
+        )
+
+        assert result.status == "conflict"
+        assert result.value is not None and result.value.status == "conflict"
+        assert result.value.remote_write == "ambiguous"
+        assert result.value.outbox is not None and result.value.outbox.state == "conflict"
+        assert service._github_outbox is not None
+        claim = service._github_outbox.get_claim(REPOSITORY, finding.finding_id)
+        assert claim is not None and claim.state == "conflict"
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert [method for method, _path in http.calls].count("PATCH") == 0
+        assert service.get_session(session).usage.issue_writes == 1
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+
+        replay = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-create-payload-conflict",
+        )
+        assert replay.status == "conflict"
+        assert replay.operation is not None and replay.operation.replayed
+        assert [method for method, _path in http.calls].count("POST") == 1
+        assert service.get_session(session).usage.issue_writes == 1
+        replay_claim = service._github_outbox.get_claim(REPOSITORY, finding.finding_id)
+        assert replay_claim is not None and replay_claim.state == "conflict"
+        replay_entry = service._github_outbox.find_publication_kind(
+            REPOSITORY,
+            finding.finding_id,
+            "initial_issue",
+        )
+        assert replay_entry is not None and replay_entry.state == "conflict"
     finally:
         service.close()
 
@@ -418,25 +783,8 @@ def test_service_rest_post_timeout_is_accounted_after_readback(
                     return HttpResponse(200, [])
             raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
 
-    class RevisionAwareRESTProvider(GitHubRESTProvider):
-        """Injected reservation seam delegating the mutation to the REST adapter."""
-
-        def create_issue_with_finding_revision(
-            self,
-            repository: str,
-            *,
-            finding_id: str,
-            expected_finding_revision: int,
-            title: str,
-            body: str,
-            labels: tuple[str, ...],
-        ) -> Any:
-            assert finding_id
-            assert expected_finding_revision >= 0
-            return self.create_issue(repository, title=title, body=body, labels=labels)
-
     http = PostTimeoutHTTP()
-    provider = RevisionAwareRESTProvider(
+    provider = GitHubRESTProvider(
         http,
         allowed_repositories=(REPOSITORY,),
         api_base_url="https://api.github.test",
@@ -768,6 +1116,88 @@ def test_service_context_change_after_reservation_is_rejected_before_provider(
         assert result.status == "conflict"
         assert provider.create_calls == []
         assert service.get_session(session).usage.issue_writes == 0
+    finally:
+        service.close()
+
+
+def test_service_preflight_conflict_after_reservation_is_durable_and_uncharged(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    service, session, finding, revision, provider = _setup(tmp_path)
+    try:
+        build_sync = service._github_sync
+
+        def build_racing_sync(*args: Any, **kwargs: Any) -> Any:
+            delegate = build_sync(*args, **kwargs)
+
+            class RacingSync:
+                def sync(self, *sync_args: Any, **sync_kwargs: Any) -> Any:
+                    stored = service.store.get(finding.finding_id)
+                    assert stored is not None and isinstance(stored.record, Finding)
+                    service.finding_store.update(
+                        replace(stored.record, title="canonical finding raced preflight"),
+                        operation_id="canonical-preflight-race",
+                        expected_revision=stored.revision,
+                        actor="human",
+                    )
+                    return delegate.sync(*sync_args, **sync_kwargs)
+
+            return RacingSync()
+
+        monkeypatch.setattr(service, "_github_sync", build_racing_sync)
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="preflight-conflict-after-reservation",
+        )
+
+        assert result.status == "conflict"
+        assert result.operation is not None and result.operation.status == "conflict"
+        assert provider.create_calls == []
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+    finally:
+        service.close()
+
+
+def test_service_local_link_conflict_after_reservation_is_durable_and_uncharged(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    service, session, finding, revision, provider = _setup(tmp_path)
+    try:
+        build_sync = service._github_sync
+
+        def build_link_conflict_sync(*args: Any, **kwargs: Any) -> Any:
+            delegate = build_sync(*args, **kwargs)
+
+            class LinkConflictSync:
+                def sync(self, repository: str, value: Finding, **sync_kwargs: Any) -> Any:
+                    linked = replace(
+                        value,
+                        github_issue={"repository": "other/repo", "number": 17},
+                    )
+                    return delegate.sync(repository, linked, **sync_kwargs)
+
+            return LinkConflictSync()
+
+        monkeypatch.setattr(service, "_github_sync", build_link_conflict_sync)
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="link-conflict-after-reservation",
+        )
+
+        assert result.status == "conflict"
+        assert result.operation is not None and result.operation.status == "conflict"
+        assert provider.create_calls == []
+        assert service.get_session(session).usage.issue_writes == 0
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
     finally:
         service.close()
 

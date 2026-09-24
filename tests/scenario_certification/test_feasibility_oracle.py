@@ -130,6 +130,18 @@ def _scenario(
     }
 
 
+def _successful_rollout(steps: int, *, horizon: int = 500) -> dict[str, Any]:
+    """Return an explicit successful, non-fallback reference rollout record."""
+    return {
+        "steps": steps,
+        "horizon": horizon,
+        "status": "success",
+        "termination_reason": "success",
+        "fallback_or_degraded": False,
+        "outcome": {"route_complete": True},
+    }
+
+
 def _oracle_config(radii: tuple[float, ...] = (1.0, 0.5)) -> FeasibilityOracleConfig:
     return FeasibilityOracleConfig(scenario_path=_SCENARIO_PATH, envelope_radii_m=radii)
 
@@ -167,7 +179,7 @@ def test_oracle_reports_corridor_vs_envelope_margin_for_feasible_route() -> None
     """A feasible route reports corridor width, envelope diameter, and their margin."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"steps": 200, "horizon": 500, "outcome": {"route_complete": True}}
+        return _successful_rollout(200)
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -217,7 +229,12 @@ def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out()
     """A geometrically feasible route that times out is time-truncated."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"steps": 500, "horizon": 500, "termination_reason": "max_steps"}
+        return {
+            "steps": 500,
+            "horizon": 500,
+            "termination_reason": "max_steps",
+            "fallback_or_degraded": False,
+        }
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -234,11 +251,85 @@ def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out()
     assert verdict.completion.min_completion_steps is None
 
 
+def test_oracle_preserves_fallback_metadata_and_blocks_tainted_completion() -> None:
+    """A successful-looking fallback rollout remains blocked with its observation retained."""
+    record = _successful_rollout(200)
+    record["algorithm_metadata"] = {
+        "status": "ok",
+        "fallback_or_degraded": True,
+    }
+
+    verdict = run_feasibility_oracle(
+        _scenario(),
+        config=_oracle_config(),
+        envelope_radius_m=1.0,
+        episode_runner=lambda *_args: record,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert verdict.status == BLOCKED
+    assert verdict.feasible is None
+    assert verdict.completion.status == "blocked"
+    assert verdict.completion.route_completion_feasible is None
+    assert verdict.completion.observed_route_completion_feasible is True
+    assert verdict.completion.fallback_or_degraded is True
+    assert verdict.completion.fallback_marker == "algorithm_metadata.fallback_or_degraded=true"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_blocker"),
+    [
+        ("blocked_status", "inconsistent_rollout_completion_record"),
+        ("source_blocker", "inconsistent_rollout_completion_record"),
+        ("collision_termination", "inconsistent_rollout_completion_record"),
+        ("exceeds_horizon", "inconsistent_rollout_completion_record"),
+        ("mismatched_horizon", "inconsistent_rollout_completion_record"),
+        ("contradictory_flag", "inconsistent_rollout_completion_record"),
+        ("missing_fallback_state", "rollout_fallback_status_unavailable"),
+    ],
+)
+def test_oracle_blocks_contradictory_or_incompletely_bound_completion(
+    mutation: str, expected_blocker: str
+) -> None:
+    """Only a consistent successful record with explicit clean runtime status can pass."""
+    record = _successful_rollout(200)
+    if mutation == "blocked_status":
+        record["status"] = "blocked"
+    elif mutation == "source_blocker":
+        record["blocker"] = "reference_runtime_blocked"
+    elif mutation == "collision_termination":
+        record["termination_reason"] = "collision"
+    elif mutation == "exceeds_horizon":
+        record["steps"] = 501
+    elif mutation == "mismatched_horizon":
+        record["horizon"] = 499
+    elif mutation == "contradictory_flag":
+        record["route_complete"] = False
+    else:
+        record.pop("fallback_or_degraded")
+
+    verdict = run_feasibility_oracle(
+        _scenario(),
+        config=_oracle_config(),
+        envelope_radius_m=1.0,
+        episode_runner=lambda *_args: record,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert verdict.status == BLOCKED
+    assert verdict.feasible is None
+    assert verdict.completion.status == "blocked"
+    assert verdict.completion.route_completion_feasible is None
+    assert verdict.completion.blocker == expected_blocker
+    if mutation == "source_blocker":
+        assert verdict.completion.rollout_blocker == "reference_runtime_blocked"
+
+
 def test_oracle_corridor_margin_is_none_when_no_static_obstacles() -> None:
     """An empty obstacle set yields None corridor width (no clearance reported)."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 100}
+        return _successful_rollout(100)
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -260,7 +351,7 @@ def test_oracle_fails_closed_when_certifier_raises() -> None:
         raise RuntimeError("boom")
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 100}
+        return _successful_rollout(100)
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -304,7 +395,7 @@ def test_envelope_sweep_classifies_feasible_when_nominal_envelope_feasible() -> 
     """A nominal-feasible cell is classified feasible."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 200}
+        return _successful_rollout(200)
 
     verdict = run_envelope_sensitivity_sweep(
         _scenario(),
@@ -348,7 +439,7 @@ def test_envelope_sweep_classifies_envelope_sensitive_hard() -> None:
         return _certificate(VALID)
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 200}
+        return _successful_rollout(200)
 
     verdict = run_envelope_sensitivity_sweep(
         _scenario(),
@@ -369,7 +460,7 @@ def test_envelope_sweep_blocks_when_nominal_verdict_is_blocked() -> None:
         raise RuntimeError("cert boom")
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 200}
+        return _successful_rollout(200)
 
     verdict = run_envelope_sensitivity_sweep(
         _scenario(),
@@ -648,7 +739,7 @@ scenarios:
     )
 
     def runner(_scenario, _seed, _horizon, _algo):
-        return {"steps": 200, "outcome": {"route_complete": True}}
+        return _successful_rollout(200)
 
     report = build_issue_5574_feasibility_report(
         scenario_path,
@@ -680,7 +771,7 @@ def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> Non
             scenario_path,
             scenario_ids=("missing",),
             envelope_radii_m=(1.0, 0.5),
-            episode_runner=lambda *_args: {"steps": 1, "outcome": {"route_complete": True}},
+            episode_runner=lambda *_args: _successful_rollout(1),
             certifier=lambda _scenario, _path: _certificate(VALID),
         )
 

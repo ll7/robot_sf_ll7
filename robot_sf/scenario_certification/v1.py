@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 
 CERT_SCHEMA_VERSION = "scenario_cert.v1"
+_SOURCE_DIGEST_UNSET = object()
 
 VALID = "valid"
 INVALID = "invalid"
@@ -118,7 +119,14 @@ def certify_scenario_file(
         List of certificates in manifest order, or a single selected certificate.
     """
 
+    source_digest_before = _scenario_source_sha256(scenario_path)
     scenarios = load_scenarios(scenario_path)
+    source_digest_after = _scenario_source_sha256(scenario_path)
+    source_digest = (
+        source_digest_before
+        if source_digest_before is not None and source_digest_before == source_digest_after
+        else None
+    )
     selected = [
         scenario
         for scenario in scenarios
@@ -127,7 +135,12 @@ def certify_scenario_file(
     if scenario_id is not None and not selected:
         raise ValueError(f"Scenario id '{scenario_id}' not found in {scenario_path}")
     return [
-        certify_scenario(scenario, scenario_path=scenario_path, settings=settings)
+        certify_scenario(
+            scenario,
+            scenario_path=scenario_path,
+            settings=settings,
+            source_artifact_sha256=source_digest,
+        )
         for scenario in selected
     ]
 
@@ -137,6 +150,7 @@ def certify_scenario(
     *,
     scenario_path: Path,
     settings: CertificationSettings | None = None,
+    source_artifact_sha256: str | object | None = _SOURCE_DIGEST_UNSET,
 ) -> ScenarioCertificate:
     """Build a ``scenario_cert.v1`` certificate from a scenario-loader entry.
 
@@ -145,24 +159,40 @@ def certify_scenario(
     """
 
     cert_settings = settings or CertificationSettings()
+    if source_artifact_sha256 is _SOURCE_DIGEST_UNSET:
+        source_digest = _scenario_source_sha256(scenario_path)
+    elif (
+        isinstance(source_artifact_sha256, str)
+        and len(source_artifact_sha256) == 64
+        and all(char in "0123456789abcdef" for char in source_artifact_sha256.lower())
+    ):
+        source_digest = source_artifact_sha256
+    else:
+        source_digest = None
     sid = _scenario_id(scenario)
     try:
         config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     except Exception as exc:  # noqa: BLE001 - certificate must fail closed on loader errors.
-        return _invalid_scenario_certificate(
-            scenario,
-            scenario_id=sid,
-            source=scenario_path.as_posix(),
-            reason=f"scenario_loader_error: {exc}",
+        return _bind_source_digest(
+            _invalid_scenario_certificate(
+                scenario,
+                scenario_id=sid,
+                source=scenario_path.as_posix(),
+                reason=f"scenario_loader_error: {exc}",
+            ),
+            source_digest,
         )
 
     map_defs = list(config.map_pool.map_defs.items())
     if not map_defs:
-        return _invalid_scenario_certificate(
-            scenario,
-            scenario_id=sid,
-            source=scenario_path.as_posix(),
-            reason="map_pool_empty",
+        return _bind_source_digest(
+            _invalid_scenario_certificate(
+                scenario,
+                scenario_id=sid,
+                source=scenario_path.as_posix(),
+                reason="map_pool_empty",
+            ),
+            source_digest,
         )
 
     route_certs: list[RouteCertificate] = []
@@ -178,19 +208,52 @@ def certify_scenario(
         )
 
     if not route_certs:
-        return _invalid_scenario_certificate(
+        return _bind_source_digest(
+            _invalid_scenario_certificate(
+                scenario,
+                scenario_id=sid,
+                source=scenario_path.as_posix(),
+                reason="no_applicable_robot_routes",
+            ),
+            source_digest,
+        )
+    return _bind_source_digest(
+        _aggregate_scenario_certificate(
             scenario,
             scenario_id=sid,
             source=scenario_path.as_posix(),
-            reason="no_applicable_robot_routes",
-        )
-    return _aggregate_scenario_certificate(
-        scenario,
-        scenario_id=sid,
-        source=scenario_path.as_posix(),
-        route_certs=route_certs,
-        settings=cert_settings,
+            route_certs=route_certs,
+            settings=cert_settings,
+        ),
+        source_digest,
     )
+
+
+def _scenario_source_sha256(scenario_path: Path) -> str | None:
+    """Hash the exact scenario manifest bytes available at certification time.
+
+    Returns:
+        Lowercase SHA-256 digest, or ``None`` when the file cannot be read.
+    """
+    try:
+        source_bytes = scenario_path.read_bytes()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return hashlib.sha256(source_bytes).hexdigest()
+
+
+def _bind_source_digest(
+    certificate: ScenarioCertificate, source_digest: str | None
+) -> ScenarioCertificate:
+    """Bind a certificate to the source artifact digest observed by its producer.
+
+    Returns:
+        A certificate copy whose top-level evidence preserves the producer-time digest.
+    """
+    evidence = dict(certificate.evidence)
+    if source_digest is not None:
+        evidence["source_artifact_sha256"] = source_digest
+    return replace(certificate, evidence=evidence)
 
 
 def certify_map_definition(

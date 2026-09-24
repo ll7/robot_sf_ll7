@@ -44,6 +44,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
@@ -189,6 +190,10 @@ class CompletionMargin:
     termination_reason: str | None
     status: str
     blocker: str | None = None
+    fallback_or_degraded: bool | None = None
+    fallback_marker: str | None = None
+    observed_route_completion_feasible: bool | None = None
+    rollout_blocker: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -716,6 +721,79 @@ def _completion_margin(
 
     completed, termination = _rollout_route_complete(record)
     steps = _optional_int(record.get("steps"))
+    fallback_or_degraded, fallback_marker = _rollout_fallback_state(record)
+    raw_blocker = record.get("blocker") or record.get("route_follow_blocker")
+    rollout_blocker = (
+        raw_blocker.strip() if isinstance(raw_blocker, str) and raw_blocker.strip() else None
+    )
+    explicit_status = str(record.get("status") or "").strip().lower()
+    termination_status = str(termination or "").strip().lower()
+    record_horizon_value = record.get("horizon_steps", record.get("horizon"))
+    record_horizon = _optional_int(record_horizon_value)
+    completion_flags = _explicit_route_completion_flags(record)
+    flag_conflict = len(set(completion_flags)) > 1
+    horizon_conflict = (
+        horizon_steps is None
+        or horizon_steps <= 0
+        or record_horizon is None
+        or record_horizon != horizon_steps
+    )
+    success_terminations = {
+        "success",
+        "goal_reached",
+        "route_complete",
+        "completed",
+        "route_follow_reached_destination",
+    }
+    failure_statuses = {"failed", "failure", "collision", "error", "blocked"}
+    status_conflict = (
+        (
+            completed is True
+            and (
+                termination_status not in success_terminations
+                or explicit_status in failure_statuses
+                or rollout_blocker is not None
+                or horizon_conflict
+                or steps is None
+                or steps <= 0
+                or steps > horizon_steps
+            )
+        )
+        or (
+            completed is False
+            and (
+                termination_status in success_terminations
+                or explicit_status in {"passed", "success", "completed", "ok"}
+                or explicit_status in {"blocked", "error", "invalid"}
+                or rollout_blocker is not None
+                or horizon_conflict
+            )
+        )
+        or explicit_status in {"blocked", "error", "invalid"}
+        or flag_conflict
+    )
+    if status_conflict or fallback_or_degraded is not False:
+        blocker = (
+            "inconsistent_rollout_completion_record"
+            if status_conflict
+            else "rollout_fallback_or_degraded"
+            if fallback_or_degraded is True
+            else "rollout_fallback_status_unavailable"
+        )
+        return CompletionMargin(
+            route_completion_feasible=None,
+            min_completion_steps=None,
+            horizon_steps=horizon_steps,
+            completion_horizon_margin_steps=None,
+            kinematic_min_steps_lower_bound=kinematic_floor,
+            termination_reason=termination,
+            status="blocked",
+            blocker=blocker,
+            fallback_or_degraded=fallback_or_degraded,
+            fallback_marker=fallback_marker,
+            observed_route_completion_feasible=completed,
+            rollout_blocker=rollout_blocker,
+        )
     min_completion_steps = steps if completed and steps is not None else None
     completion_horizon_margin_steps: int | None
     if min_completion_steps is not None and horizon_steps is not None:
@@ -739,7 +817,51 @@ def _completion_margin(
         termination_reason=termination,
         status=status,
         blocker=None if completed is not None else "unknown_rollout_outcome",
+        fallback_or_degraded=fallback_or_degraded,
+        fallback_marker=fallback_marker,
+        observed_route_completion_feasible=completed,
+        rollout_blocker=rollout_blocker,
     )
+
+
+def _rollout_fallback_state(record: Mapping[str, Any]) -> tuple[bool | None, str | None]:
+    """Return canonical fallback state and marker location from a rollout record."""
+    marker = runtime_fallback_or_degraded_marker(record)
+    if marker is not None:
+        path, value = marker
+        return True, f"{path}={value}"
+    for view in (record, record.get("algorithm_metadata")):
+        if not isinstance(view, Mapping):
+            continue
+        for key in (
+            "fallback_or_degraded",
+            "fallback",
+            "fallback_triggered",
+            "degraded",
+            "fallback_used",
+        ):
+            value = view.get(key)
+            if isinstance(value, bool):
+                return value, None if not value else f"{key}=true"
+    return None, None
+
+
+def _explicit_route_completion_flags(record: Mapping[str, Any]) -> list[bool]:
+    """Collect explicit route/success booleans so contradictory runner fields fail closed.
+
+    Returns:
+        Explicit boolean values from the runner's outcome, root, and metrics mappings.
+    """
+    flags: list[bool] = []
+    views = (record.get("outcome"), record, record.get("metrics"))
+    for view in views:
+        if not isinstance(view, Mapping):
+            continue
+        for key in ("route_complete", "goal_reached", "success"):
+            flag = _bool_flag(view.get(key))
+            if flag is not None:
+                flags.append(flag)
+    return flags
 
 
 def _combine_into_verdict(
@@ -843,17 +965,32 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
         """Return the result of one actor-free diagnostic rollout run via ``_run_map_episode``."""
         scenario_payload = deepcopy(dict(scenario))
         scenario_payload["seeds"] = [int(seed)]
-        return _run_map_episode(
-            scenario_payload,
-            int(seed),
-            horizon=horizon,
-            dt=None,
-            record_forces=False,
-            snqi_weights=None,
-            snqi_baseline=None,
-            algo=algo,
-            scenario_path=config.scenario_path,
+        record = dict(
+            _run_map_episode(
+                scenario_payload,
+                int(seed),
+                horizon=horizon,
+                dt=None,
+                record_forces=False,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo=algo,
+                scenario_path=config.scenario_path,
+            )
         )
+        metadata = record.get("algorithm_metadata")
+        if (
+            algo == "goal"
+            and isinstance(metadata, Mapping)
+            and str(metadata.get("status", "")).strip().lower() == "ok"
+            and runtime_fallback_or_degraded_marker(metadata) is None
+            and _rollout_fallback_state(record)[0] is None
+        ):
+            record["algorithm_metadata"] = {
+                **dict(metadata),
+                "fallback_or_degraded": False,
+            }
+        return record
 
     return _run
 
@@ -1114,6 +1251,10 @@ def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
         "termination_reason": margin.termination_reason,
         "status": margin.status,
         "blocker": margin.blocker,
+        "fallback_or_degraded": margin.fallback_or_degraded,
+        "fallback_marker": margin.fallback_marker,
+        "observed_route_completion_feasible": margin.observed_route_completion_feasible,
+        "rollout_blocker": margin.rollout_blocker,
     }
 
 
@@ -1231,6 +1372,7 @@ def make_route_follow_episode_runner(
                 "algo": ROUTE_FOLLOW_ALGO,
                 "route_complete": None if status == "blocked" else route_complete,
                 "steps": result["steps_used"],
+                "horizon": max_steps,
                 "status": status,
                 "termination_reason": result["termination_reason"],
                 "collision_seen": result["collision_seen"],
@@ -1238,6 +1380,7 @@ def make_route_follow_episode_runner(
                 "waypoint_count": len(target_waypoints),
                 "stateful": result.get("stateful", True),
                 "route_follow_blocker": result.get("blocker"),
+                "fallback_or_degraded": False,
                 "route_follow_provenance": (
                     "single continuous episode; pose + remaining horizon preserved "
                     "across certified waypoints (issue #5636)"

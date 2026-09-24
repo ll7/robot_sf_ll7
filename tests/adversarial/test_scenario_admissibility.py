@@ -153,7 +153,9 @@ def _execution(
         "robot_model_sha256": "b" * 64,
         "simulator_config_sha256": "c" * 64,
         "planner_config_sha256": "d" * 64 if planner_id == "target" else "c" * 64,
-        "planner_checkpoint_sha256": "not_applicable",
+        "planner_checkpoint_sha256": (
+            "not_applicable" if planner_id in {"goal", "social_force", "orca"} else "d" * 64
+        ),
         "environment_sha256": "e" * 64,
         "source_commit": "f" * 40,
         "evidence_ref": f"artifacts/{planner_id}.json",
@@ -257,6 +259,53 @@ def test_top_level_impossibility_does_not_reject_a_case_with_another_usable_rout
     assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
 
 
+def test_oracle_exclusion_does_not_override_unresolved_mixed_route_certificate() -> None:
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    certificate["checks"]["route_count"] = 2
+    certificate["route_certificates"].append(
+        {
+            "route_id": "route-1",
+            "spawn_id": 1,
+            "goal_id": 0,
+            "classification": "valid",
+            "benchmark_eligibility": "eligible",
+            "reasons": [],
+            "checks": {"dynamic": {"single_pedestrian_count": 0}},
+            "evidence": {},
+        }
+    )
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=certificate,
+        feasibility_evidence=_oracle(
+            status="infeasible_by_construction", geometric=False, complete=False
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_route_coverage_unresolved" in verdict.reason_codes
+
+
+def test_oracle_exclusion_does_not_override_unresolved_invalid_certificate() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=_certificate(
+            "invalid",
+            eligibility="excluded",
+            route_reason="unrecognized invalidity reason",
+        ),
+        feasibility_evidence=_oracle(
+            status="infeasible_by_construction", geometric=False, complete=False
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_invalidity_unresolved" in verdict.reason_codes
+    assert "oracle_geometric_exclusion_route_coverage_unresolved" in verdict.reason_codes
+
+
 @pytest.mark.parametrize("status", ["blocked", "time_truncated"])
 def test_blocked_or_truncated_oracle_results_are_unknown(status: str) -> None:
     oracle = _oracle(status=status, complete=False)
@@ -334,6 +383,22 @@ def test_actor_free_oracle_success_requires_a_static_named_report() -> None:
     )
     assert dynamic.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert unbound.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+
+
+def test_actor_free_oracle_success_does_not_resolve_unknown_invalid_certificate() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=_certificate(
+            "invalid",
+            eligibility="excluded",
+            route_reason="unrecognized invalidity reason",
+        ),
+        feasibility_evidence=_oracle_report(_oracle()),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_invalidity_unresolved" in verdict.reason_codes
 
 
 def test_actor_free_oracle_uses_explicit_scenario_binding_for_stable_case_id() -> None:
@@ -523,6 +588,19 @@ def test_execution_with_invalid_digest_is_not_used_as_feasibility_evidence() -> 
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "reference_execution_provenance_incomplete" in verdict.reason_codes
+
+
+def test_not_applicable_checkpoint_provenance_is_limited_to_classical_planners() -> None:
+    classical = classify_scenario_admissibility(
+        "case-static", reference_execution=_execution("goal", route_complete=True)
+    )
+    learned = _execution("ppo", route_complete=True)
+    learned["planner_checkpoint_sha256"] = "not_applicable"
+    rejected = classify_scenario_admissibility("case-static", reference_execution=learned)
+
+    assert classical.verdict == EMPIRICALLY_FEASIBLE
+    assert rejected.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_provenance_incomplete" in rejected.reason_codes
 
 
 @pytest.mark.parametrize("field", ["planner_config_sha256", "planner_checkpoint_sha256"])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -42,9 +43,16 @@ from robot_sf.adversarial.scenario_admissibility import (
 )
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
+    runtime_fallback_or_degraded_marker,
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.termination_reason import (
+    TERMINATION_REASONS,
+    outcome_contradictions,
+    status_from_termination_reason,
+)
+from robot_sf.scenario_certification.input_identity import scenario_input_identity
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
 CandidateCertifier = Callable[[CandidateSpec, Path, bool], CertificationStatus]
@@ -53,6 +61,7 @@ ProductionCandidateEvaluator = Callable[[SearchConfig, CandidateSpec, int], Cand
 DEFAULT_SCHEMA_PATH = (
     Path(__file__).parent.parent / "benchmark" / "schemas" / "episode.schema.v1.json"
 )
+_NATIVE_EXECUTION_MODES = frozenset({"native", "native_command"})
 
 
 def _mark_missing_provenance(enriched: dict[str, Any], reason: str) -> dict[str, Any]:
@@ -333,6 +342,224 @@ def _admissibility_rejection_reason(payload: Mapping[str, Any]) -> str:
     return f"scenario admissibility rejected candidate: {reasons or 'explicit exclusion'}"
 
 
+def _post_evaluation_admissibility(
+    payload: Mapping[str, Any],
+    *,
+    config: SearchConfig,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path,
+    episode_record_path: Path | None,
+    failure_attribution: FailureAttribution | None,
+    evaluation_error: str | None = None,
+) -> dict[str, Any]:
+    """Attach a provenance-checked planner observation without changing feasibility."""
+    updated = dict(payload)
+    evidence = dict(updated.get("evidence", {}))
+    observation: dict[str, Any] = {
+        "status": "unavailable",
+        "reason_code": "target_planner_observation_unavailable",
+    }
+    target_outcome = "unavailable"
+    if evaluation_error is not None:
+        observation["reason_code"] = "target_evaluation_failed"
+        observation["evaluation_error"] = evaluation_error
+    elif episode_record_path is None:
+        observation["reason_code"] = "target_episode_record_path_missing"
+    else:
+        episode_path = Path(episode_record_path)
+        observation["episode_record_path"] = episode_path.as_posix()
+        expected_identity = evidence.get("scenario_artifact_identity")
+        scenario_id = _candidate_scenario_id(scenario_yaml_path)
+        try:
+            current_identity = scenario_input_identity(scenario_yaml_path, scenario_id=scenario_id)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            current_identity = {"status": "unavailable"}
+        observation["runtime_input_identity"] = {
+            "status": current_identity.get("status"),
+            "source_artifact_sha256": current_identity.get("source_artifact_sha256"),
+            "effective_input_sha256": current_identity.get("effective_input_sha256"),
+        }
+        if (
+            not isinstance(expected_identity, Mapping)
+            or current_identity.get("status") != "available"
+            or current_identity.get("source_artifact_sha256") != expected_identity.get("sha256")
+            or current_identity.get("effective_input_sha256")
+            != expected_identity.get("effective_input_sha256")
+        ):
+            observation["reason_code"] = (
+                "target_scenario_runtime_input_identity_changed_or_unavailable"
+            )
+            record = None
+            should_read_record = False
+        else:
+            should_read_record = True
+            record = None
+        try:
+            if should_read_record:
+                episode_bytes = episode_path.read_bytes()
+                observation["episode_records_jsonl_sha256"] = hashlib.sha256(
+                    episode_bytes
+                ).hexdigest()
+                record = read_first_jsonl_record(episode_path)
+        except (OSError, RuntimeError, ValueError):
+            record = None
+            observation["reason_code"] = "target_episode_record_missing_or_malformed"
+        if record is None:
+            observation.setdefault("reason_code", "target_episode_record_missing_or_malformed")
+        else:
+            reason_code, route_complete = _target_episode_observation_reason(
+                record,
+                config=config,
+                candidate=candidate,
+                scenario_yaml_path=scenario_yaml_path,
+                failure_attribution=failure_attribution,
+            )
+            observation.update(
+                {
+                    "episode_id": record.get("episode_id"),
+                    "scenario_id": record.get("scenario_id"),
+                    "planner_id": record.get("algo"),
+                    "seed": record.get("seed"),
+                    "source_commit": record.get("git_hash"),
+                    "termination_reason": record.get("termination_reason"),
+                    "route_complete": route_complete,
+                }
+            )
+            if reason_code is None and isinstance(route_complete, bool):
+                target_outcome = "route_completed" if route_complete else "route_incomplete"
+                observation.update(status="available", reason_code=None)
+            else:
+                observation["reason_code"] = reason_code or "target_episode_outcome_unavailable"
+    evidence["target_planner_observation"] = observation
+    updated["evidence"] = evidence
+    updated["target_planner_outcome"] = target_outcome
+    reason_codes = list(updated.get("reason_codes", []))
+    new_reason = (
+        "target_planner_outcome_observed"
+        if target_outcome in {"route_completed", "route_incomplete"}
+        else str(observation["reason_code"])
+    )
+    if new_reason not in reason_codes:
+        reason_codes.append(new_reason)
+    updated["reason_codes"] = reason_codes
+    validate_scenario_admissibility(updated)
+    return updated
+
+
+def _target_episode_observation_reason(  # noqa: C901 - fail-closed evidence checks stay explicit.
+    record: Mapping[str, Any],
+    *,
+    config: SearchConfig,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path,
+    failure_attribution: FailureAttribution | None,
+) -> tuple[str | None, bool | None]:
+    """Require a native, internally consistent episode matching the search candidate."""
+    details = failure_attribution.details if failure_attribution is not None else {}
+    outcome = record.get("outcome")
+    metadata = record.get("algorithm_metadata")
+    episode_id = record.get("episode_id")
+    scenario_id = _candidate_scenario_id(scenario_yaml_path)
+    route_complete = outcome.get("route_complete") if isinstance(outcome, Mapping) else None
+    termination = record.get("termination_reason")
+    if (
+        record.get("version") != "v1"
+        or not isinstance(record.get("metrics"), Mapping)
+        or not isinstance(record.get("seed"), int)
+        or isinstance(record.get("seed"), bool)
+    ):
+        return "target_episode_schema_fields_missing_or_malformed", None
+    if not isinstance(episode_id, str) or not episode_id.strip():
+        return "target_episode_identity_missing", None
+    if (
+        not isinstance(scenario_id, str)
+        or record.get("scenario_id") != scenario_id
+        or record.get("algo") != config.policy
+        or record.get("seed") != candidate.scenario_seed
+    ):
+        return "target_episode_identity_mismatch", None
+    if (
+        not isinstance(record.get("git_hash"), str)
+        or len(record["git_hash"]) not in {40, 64}
+        or any(character not in "0123456789abcdefABCDEF" for character in record["git_hash"])
+    ):
+        return "target_episode_source_revision_missing_or_malformed", None
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("status") != "ok"
+        or resolve_execution_mode(metadata) not in _NATIVE_EXECUTION_MODES
+    ):
+        return "target_episode_planner_provenance_not_native_or_unavailable", None
+    if (
+        not isinstance(details, Mapping)
+        or details.get("availability_status") != "available"
+        or details.get("readiness_status") != "native"
+        or details.get("execution_mode") != resolve_execution_mode(metadata)
+    ):
+        return "target_planner_runtime_availability_not_clean", None
+    if runtime_fallback_or_degraded_marker(dict(record)) is not None:
+        return "target_episode_fallback_or_degraded", None
+    if (
+        not isinstance(route_complete, bool)
+        or not isinstance(outcome.get("collision_event"), bool)
+        or not isinstance(outcome.get("timeout_event"), bool)
+    ):
+        return "target_episode_route_completion_missing_or_malformed", None
+    if termination not in TERMINATION_REASONS:
+        return "target_episode_termination_reason_missing_or_malformed", None
+    if record.get("status") != status_from_termination_reason(termination):
+        return "target_episode_status_termination_conflict", None
+    integrity = record.get("integrity")
+    contradictions = integrity.get("contradictions") if isinstance(integrity, Mapping) else None
+    if not isinstance(contradictions, list) or contradictions:
+        return "target_episode_integrity_unavailable_or_contradictory", None
+    if outcome_contradictions(termination_reason=termination, outcome=outcome):
+        return "target_episode_outcome_termination_conflict", None
+    if route_complete and termination != "success":
+        return "target_episode_outcome_termination_conflict", None
+    if not route_complete and termination in {"success", "error"}:
+        return "target_episode_outcome_termination_conflict", None
+    return None, route_complete
+
+
+def _store_post_evaluation_admissibility(
+    evaluation: CandidateEvaluation,
+    *,
+    initial_payload: Mapping[str, Any],
+    config: SearchConfig,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path,
+    candidate_dir: Path,
+    evaluation_error: str | None = None,
+) -> CandidateEvaluation:
+    """Save the target observation in both the manifest row and its candidate bundle."""
+    episode_path = evaluation.episode_record_path or (candidate_dir / "episode_records.jsonl")
+    admissibility = _post_evaluation_admissibility(
+        initial_payload,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_yaml_path,
+        episode_record_path=episode_path,
+        failure_attribution=evaluation.failure_attribution,
+        evaluation_error=evaluation_error,
+    )
+    attribution = evaluation.failure_attribution
+    if attribution is not None:
+        attribution = replace(
+            attribution,
+            details={
+                **attribution.details,
+                "scenario_admissibility": admissibility,
+            },
+        )
+        write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
+    return replace(
+        evaluation,
+        failure_attribution=attribution,
+        scenario_admissibility=admissibility,
+    )
+
+
 def run_adversarial_search(
     config: SearchConfig,
     *,
@@ -458,6 +685,14 @@ def run_adversarial_search(
             )
             score = objective(evaluation)
             evaluation = evaluation.with_objective(score)
+            evaluation = _store_post_evaluation_admissibility(
+                evaluation,
+                initial_payload=admissibility,
+                config=config,
+                candidate=candidate,
+                scenario_yaml_path=scenario_yaml_path,
+                candidate_dir=candidate_dir,
+            )
         except Exception as exc:  # noqa: BLE001 - evaluator failure records candidate attribution
             num_failed += 1
             error = repr(exc)
@@ -474,6 +709,15 @@ def run_adversarial_search(
                 bundle_path=candidate_dir,
                 error=error,
                 scenario_admissibility=admissibility,
+            )
+            evaluation = _store_post_evaluation_admissibility(
+                evaluation,
+                initial_payload=admissibility,
+                config=config,
+                candidate=candidate,
+                scenario_yaml_path=scenario_yaml_path,
+                candidate_dir=candidate_dir,
+                evaluation_error=error,
             )
         evaluations.append(evaluation)
         _observe_candidate(active_sampler, evaluation)
@@ -615,12 +859,20 @@ def production_candidate_evaluator(
                 scenario_admissibility=admissibility,
             )
             score = objective(evaluation)
-            return evaluation.with_objective(score)
+            evaluation = evaluation.with_objective(score)
+            return _store_post_evaluation_admissibility(
+                evaluation,
+                initial_payload=admissibility,
+                config=config,
+                candidate=candidate,
+                scenario_yaml_path=scenario_yaml_path,
+                candidate_dir=candidate_dir,
+            )
         except Exception as exc:  # noqa: BLE001 - evaluator failure records candidate attribution
             error = repr(exc)
             attribution = attribution_from_error(error)
             write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
-            return CandidateEvaluation(
+            evaluation = CandidateEvaluation(
                 candidate=candidate,
                 certification_status=certification_status,
                 objective_value=None,
@@ -631,6 +883,15 @@ def production_candidate_evaluator(
                 bundle_path=candidate_dir,
                 error=error,
                 scenario_admissibility=admissibility,
+            )
+            return _store_post_evaluation_admissibility(
+                evaluation,
+                initial_payload=admissibility,
+                config=config,
+                candidate=candidate,
+                scenario_yaml_path=scenario_yaml_path,
+                candidate_dir=candidate_dir,
+                evaluation_error=error,
             )
 
     return _evaluate

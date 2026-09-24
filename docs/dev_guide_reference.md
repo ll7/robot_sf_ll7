@@ -2715,6 +2715,25 @@ cancellation churn fills that window it fails closed to `stale` instead of
 reading further back. Callers that need the decisive verdict behind a
 cancelled-run flood use the paginated reader below.
 
+Manual CI recovery dispatches use a separate ownership gate before any full
+matrix job starts. GitHub can replace a pending run in a shared concurrency
+group even when `cancel-in-progress` is false, so each `workflow_dispatch` run
+has a unique workflow concurrency identity and the serialized
+`dispatch-ownership` job elects the oldest active run for the exact SHA on the
+branch selected for that manual dispatch. Its Actions API lookup is scoped to
+that branch, so dispatches on feature or release branches participate in the
+same election as dispatches on `main`; a missing or malformed branch fails
+closed. The gate does not coordinate runs on different branch names, even when
+those refs point to the same SHA. Followers wait for that owner: they mirror
+only a completed exact-head success/failure, or take ownership if the prior run
+becomes stale or cancelled. Set the `retry_failed` workflow input only for one justified retry;
+the run title is its idempotent receipt. Repeated ordinary watcher dispatches
+therefore cannot cancel the owner or start duplicate full matrices. The job-level
+election concurrency key is shared only by manual runs for the same SHA; push,
+pull-request, and merge-group bypass gates use their unique run IDs, so a manual
+follower cannot hold the election slot while waiting for a push gate that needs
+to bypass the election.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
@@ -3180,12 +3199,12 @@ the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown t
 the metadata block near the top of the issue body; YAML issue forms expose both fields as required
 dropdowns. Use exactly one value from each enum and add repository-relative paths under
 `linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
-without rewriting existing issue bodies or changing labels and project fields. Every template also
-collects the explicit relationship block described in
-[Explicit Issue Relationships](context/issue_relationships.md); set native Parent, Blocked by, and
-Blocking links after creation and use the bounded audit before any existing-issue migration.
+without rewriting existing issue bodies or changing labels and project fields. Templates point
+authors to the native Parent, Blocked by, and Blocking fields described in
+[Native GitHub Issue Relationships](context/issue_relationships.md); they do not duplicate links in
+issue bodies.
 
-The read-only migration audit is:
+To inspect legacy body declarations during a reviewed migration, use:
 `uv run python scripts/dev/audit_issue_relationships.py --issue 123 --format json`.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks

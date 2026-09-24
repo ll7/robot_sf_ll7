@@ -10,6 +10,8 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import rankdata, spearmanr
 
+from robot_sf.benchmark.metrics import EpisodeData, experimental_human_interaction_proxy_metrics
+
 FORCES = (
     "robot_force_impulse_total",
     "robot_force_peak",
@@ -27,6 +29,48 @@ def metric_value(row: dict, key: str) -> float | None:
     if key == "human_discomfort_exposure_m_s" and key not in metrics:
         return metrics.get("human_interaction_proxy", {}).get("canonical_reductions", {}).get(key)
     return metrics.get(key)
+
+
+def posthoc_discomfort(row: dict) -> float | None:
+    """Reuse the canonical proxy on recorded post-integration trajectories.
+
+    Reject radius/trace disagreement; never use pre-integration force positions
+    as a substitute for the trajectory metric's snapshots.
+    """
+    trace = row.get("algorithm_metadata", {}).get("simulation_step_trace", {})
+    steps = trace.get("steps")
+    model = row["metrics"].get("robot_force_metadata")
+    if not steps or model is None:
+        return None
+    actor_ids = sorted({ped["id"] for step in steps for ped in step["pedestrians"]})
+    indices = {actor: i for i, actor in enumerate(actor_ids)}
+    robot = np.asarray([step["robot"]["position"] for step in steps], dtype=float)
+    peds = np.full((len(steps), len(actor_ids), 2), np.nan)
+    robot_radius = model["prf_robot_radius_m"]
+    ped_radius = model["prf_ped_radius_m"]
+    for t, step in enumerate(steps):
+        if len({ped["id"] for ped in step["pedestrians"]}) != len(step["pedestrians"]):
+            raise ValueError("duplicate pedestrian trace identity")
+        for ped in step["pedestrians"]:
+            position = np.asarray(ped["position"], dtype=float)
+            clearance = np.linalg.norm(position - robot[t]) - robot_radius - ped_radius
+            if not np.isclose(clearance, ped["surface_clearance_m"], rtol=0, atol=1e-9):
+                raise ValueError("trace surface clearance disagrees with recorded radii")
+            peds[t, indices[ped["id"]]] = position
+    data = EpisodeData(
+        robot_pos=robot,
+        robot_vel=np.asarray([step["robot"]["velocity"] for step in steps], dtype=float),
+        robot_acc=np.zeros_like(robot),
+        peds_pos=peds,
+        ped_forces=np.zeros_like(peds),
+        goal=np.zeros(2),
+        dt=trace["dt"],
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
+    return experimental_human_interaction_proxy_metrics(
+        data, proxemic_radius_m=1.2, yield_speed_mps=0.15
+    )["human_discomfort_exposure_m_s"]
 
 
 def trace_evidence(row: dict) -> dict:
@@ -54,12 +98,30 @@ def trace_evidence(row: dict) -> dict:
     }
 
 
+def _prepare_comparators(rows: list[dict]) -> tuple[list[dict], int]:
+    """Add explicit post-hoc proxy values to copies, preserving producer rows."""
+    derived_count = 0
+    prepared = []
+    for row in rows:
+        if metric_value(row, "human_discomfort_exposure_m_s") is None:
+            derived = posthoc_discomfort(row)
+            if derived is not None:
+                row = {
+                    **row,
+                    "metrics": {**row["metrics"], "human_discomfort_exposure_m_s": derived},
+                }
+                derived_count += 1
+        prepared.append(row)
+    return prepared, derived_count
+
+
 def analyze(rows: list[dict]) -> dict:
     """Compute correlations and rank disagreements without fabricating missing observations.
 
     Returns:
         Diagnostic report with cohort sizes, nullable correlations, and 20 rank disagreements.
     """
+    rows, derived_count = _prepare_comparators(rows)
     identities = [(row["scenario_id"], row["seed"], row.get("algo")) for row in rows]
     if len(identities) != len(set(identities)):
         raise ValueError("duplicate scenario/seed/planner identity")
@@ -136,6 +198,15 @@ def analyze(rows: list[dict]) -> dict:
     return {
         "classification": "diagnostic_not_release_evaluation",
         "episodes": len(rows),
+        "posthoc_discomfort": {
+            "rows": derived_count,
+            "producer": "experimental_human_interaction_proxy_metrics",
+            "proxemic_radius_m": 1.2,
+            "yield_speed_mps": 0.15,
+            "trajectory_source": "simulation_step_trace.steps (post-integration)",
+            "radius_validation": "every recorded surface clearance agrees within 1e-9m",
+            "original_episode_files_modified": False,
+        },
         "correlations": correlations,
         "largest_rank_disagreements": disagreements,
     }

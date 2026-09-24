@@ -2,7 +2,11 @@
 
 import pytest
 
-from scripts.analysis.issue_9666_robot_force_validation import analyze, trace_evidence
+from scripts.analysis.issue_9666_robot_force_validation import (
+    analyze,
+    posthoc_discomfort,
+    trace_evidence,
+)
 
 
 def test_signed_distance_correlation_and_disagreements():
@@ -91,3 +95,31 @@ def test_serialized_nested_human_discomfort_is_used():
     assert correlation["n"] == 3
     assert correlation["spearman_rho"] == 1
     assert report["largest_rank_disagreements"][0]["metrics"]["human_discomfort_exposure_m_s"] == 0
+
+
+def test_posthoc_proxy_uses_recorded_clearance_and_rejects_radius_drift():
+    row = {
+        "metrics": {"robot_force_metadata": {"prf_robot_radius_m": 0.5, "prf_ped_radius_m": 0.3}},
+        "algorithm_metadata": {
+            "simulation_step_trace": {
+                "dt": 0.1,
+                "steps": [
+                    {
+                        "robot": {"position": [0, 0], "velocity": [0, 0]},
+                        "pedestrians": [
+                            {
+                                "id": "p0",
+                                "position": [distance, 0],
+                                "surface_clearance_m": clearance,
+                            }
+                        ],
+                    }
+                    for distance, clearance in ((1.3, 0.5), (1.8, 1.0))
+                ],
+            }
+        },
+    }
+    assert posthoc_discomfort(row) == pytest.approx(0.09)
+    row["metrics"]["robot_force_metadata"]["prf_robot_radius_m"] = 0.6
+    with pytest.raises(ValueError, match="surface clearance"):
+        posthoc_discomfort(row)

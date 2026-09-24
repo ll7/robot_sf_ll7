@@ -4,7 +4,8 @@ This checklist covers the approved S30/H600 benchmark-data release. It is a
 different release lane from the Robot SF software/package release: the
 benchmark-data tag identifies an immutable campaign contract, while the
 software tag identifies installable source. Do not infer a package version from
-the benchmark-data tag, or reuse a software-release DOI for benchmark data.
+the benchmark-data tag, or reuse a software-release Digital Object Identifier
+(DOI) for benchmark data.
 
 For the software-package lane, first build the immutable candidate with
 [`software_release_candidate.md`](./software_release_candidate.md), then follow
@@ -300,11 +301,16 @@ note.
 ## Publication
 
 Before campaign submission, run the fail-closed release doctor against the
-exact release worktree. Supply the private-ops packet and dissertation checkout
-when they are available:
+exact release worktree while the planned GitHub tag and release are still
+unused. Save its credential-free JSON output before the GitHub release is
+published; the doctor includes an unused-tag check and is a pre-tag gate, not a
+post-tag publishing check. Supply the private-ops packet and dissertation
+checkout when they are available:
 
 ```bash
-uv run robot-sf release doctor \
+set -euo pipefail
+mkdir -p output/release
+if ! uv run robot-sf release doctor \
   --repo "$PWD" \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --expected-release-sha <exact-release-sha> \
@@ -313,7 +319,15 @@ uv run robot-sf release doctor \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --private-launch-packet <private-ops-launch-packet> \
   --dissertation <dissertation-worktree> \
-  --token-file /home/luttkule/.config/robot-sf/zenodo.token
+  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
+  > output/release/release_doctor_pre_tag.json; then
+  echo "release doctor failed; do not create the GitHub release or tag" >&2
+  exit 2
+fi
+jq --exit-status '.status == "pass"' output/release/release_doctor_pre_tag.json \
+  > /dev/null
+sha256sum output/release/release_doctor_pre_tag.json \
+  > output/release/release_doctor_pre_tag.json.sha256
 ```
 
 For diagnostic local validation of an exact receipt whose checkpoint paths belong to another
@@ -324,7 +338,9 @@ registry bindings. This option does not rewrite the receipt and does not authori
 turn a diagnostic remap into benchmark evidence.
 
 The report must be `pass`. It prints stable status and identity data, never the
-credential. The release doctor verifies that each required workflow (`CI`, `CodeQL`)
+credential. Preserve the passing report and its checksum with the durable
+release evidence before removing the worktree; a copy only under disposable
+`output/` is not durable. The release doctor verifies that each required workflow (`CI`, `CodeQL`)
 possesses at least one complete successful run for the exact source SHA (`--expected-release-sha`).
 If subsequent historical runs or manual dispatches for that SHA were cancelled due to
 GitHub Actions moving-main concurrency, the completed green run provides valid exact-SHA evidence
@@ -332,6 +348,34 @@ and the doctor records supporting run IDs. If all runs for a required workflow a
 pending, or failed, the doctor fails closed and lists the blocking run IDs. To reconcile a
 blocking workflow run without altering workflow history, trigger a clean run for that exact ref
 (`gh workflow run <workflow>.yml --ref <ref>`) and allow it to finish.
+
+The saved `release_doctor_pre_tag.json` is the record of the unused-tag
+check. Do not rerun this doctor after the GitHub tag exists: its expected
+`tag_collision` failure only says that the pre-tag condition has changed. After
+publishing the GitHub release, verify the exact tag and its assets instead:
+
+```bash
+set -euo pipefail
+SOURCE_SHA=<full source SHA from the resolved release identity>
+RELEASE_TAG=<exact tag from the resolved release identity>
+
+git fetch --no-tags origin \
+  "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+test "$(git rev-parse "${RELEASE_TAG}^{commit}")" = "$SOURCE_SHA"
+gh release view "$RELEASE_TAG" --repo ll7/robot_sf_ll7 \
+  --json tagName,isDraft,assets \
+  --jq '{tagName,isDraft,assets:[.assets[] | {name,size,state,digest}]}'
+```
+
+Require the peeled tag commit to equal `SOURCE_SHA`, `isDraft` to be `false`,
+and exactly the expected archive, `checksums.sha256`, and
+`publication_manifest.json` assets. Each asset must be uploaded and its size
+and SHA-256 digest must match the local files recorded from the frozen release
+bundle. Stop before Zenodo upload on any difference. This readback replaces
+only the now-inapplicable unused-tag check; it does not replace the saved
+passing doctor report or weaken any other release gate. The detailed
+[camera-ready release guide](./benchmark_camera_ready_release.md) gives the
+end-to-end GitHub and Zenodo sequence.
 
 ### Preserved post-execution evidence
 
@@ -386,7 +430,11 @@ manifest before continuing. The direct CLI requires `--manifest` for every
 post-reservation `recover`, `upload`, `verify`, and irreversible `publish`
 operation and rejects an omitted binding before constructing an authenticated
 HTTP session. Do not run `publish` until the accepted 20,160-cell campaign
-bundle has passed independent cold verification.
+bundle has passed independent cold verification. The reserved version DOI is
+bound to the draft before publication and normally does not resolve through
+`doi.org` yet; resolver success is not a pre-publication gate. After Zenodo
+publication, check DOI resolution separately as described in the
+[camera-ready release guide](./benchmark_camera_ready_release.md#doi-resolution-after-publication).
 
 ### Immutable publication errata
 

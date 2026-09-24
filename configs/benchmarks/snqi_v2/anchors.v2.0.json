@@ -1,0 +1,17 @@
+{
+  "version": "SNQI-v2.0",
+  "status": "pending_calibration",
+  "anchors": {
+    "T": {
+      "lower": 0,
+      "upper": 3,
+      "type": "normative"
+    },
+    "N": {
+      "lower": 0,
+      "upper": 0.25,
+      "type": "normative"
+    }
+  },
+  "required_calibration": "14 frozen release arms x48 scenarios x dev seeds101/102 =1344 native episodes; F/J/K p95 and F decision not yet measured."
+}

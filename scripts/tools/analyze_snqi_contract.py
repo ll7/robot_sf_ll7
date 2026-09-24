@@ -39,7 +39,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         argparse.Namespace: Parsed argument namespace with threshold invariants checked.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--campaign-root", type=Path, required=True)
+    parser.add_argument("--campaign-root", type=Path)
+    parser.add_argument("--score-version", choices=["SNQI-v0", "SNQI-v2"], default="SNQI-v0")
+    parser.add_argument("--episodes", type=Path, nargs="+")
+    parser.add_argument("--anchors", type=Path)
+    parser.add_argument("--family", type=Path)
+    parser.add_argument("--reports-dir", type=Path)
+    parser.add_argument(
+        "--freeze-v2-anchors",
+        type=Path,
+        metavar="OUTPUT",
+        help="Derive anchors from the complete dev101/102 campaign; no scoring.",
+    )
     parser.add_argument("--weights", type=Path, default=None)
     parser.add_argument("--baseline", type=Path, default=None)
     parser.add_argument("--seed", type=int, default=123)
@@ -223,9 +234,39 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
             )
 
 
+def _analyze_v2(args: argparse.Namespace) -> int:
+    """Write the mandatory v2 report pair from raw episode records.
+
+    Returns:
+        Zero after successful report creation.
+    """
+    from robot_sf.benchmark.snqi.v2_reports import read_episode_files, write_v2_reports
+    from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec
+
+    if not all((args.episodes, args.weights, args.anchors, args.family, args.reports_dir)):
+        raise ValueError("SNQI-v2 requires --episodes --weights --anchors --family --reports-dir")
+    spec = load_snqi_v2_spec(args.weights, args.anchors, args.family)
+    episodes = read_episode_files(args.episodes)
+    spec.validate_evaluation_seeds([ep["seed"] for ep in episodes])
+    artifacts = write_v2_reports(episodes, spec, args.reports_dir)
+    print(json.dumps(artifacts, sort_keys=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run SNQI diagnostics for one campaign and write report artifacts."""
     args = _parse_args(argv)
+    if args.freeze_v2_anchors is not None:
+        from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+
+        if args.campaign_root is None:
+            raise ValueError("--freeze-v2-anchors requires --campaign-root")
+        freeze_campaign_anchors(args.campaign_root, args.freeze_v2_anchors)
+        return 0
+    if args.score_version == "SNQI-v2":
+        return _analyze_v2(args)
+    if args.campaign_root is None:
+        raise ValueError("legacy SNQI analysis requires --campaign-root")
     campaign_root = args.campaign_root.resolve()
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     if not summary_path.exists():

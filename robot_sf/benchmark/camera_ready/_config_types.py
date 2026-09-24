@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.latency.latency_stress import LatencyStressProfile
+    from robot_sf.benchmark.snqi.v2_spec import SnqiV2Spec
     from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
     from robot_sf.benchmark.tuning_run_provenance import TuningRunSpec
 
@@ -202,6 +203,7 @@ class CampaignConfig:
     bootstrap_seed: int = 123
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
+    snqi_v2_spec: SnqiV2Spec | None = None
     stop_on_failure: bool = False
     export_publication_bundle: bool = True
     include_videos_in_publication: bool = False

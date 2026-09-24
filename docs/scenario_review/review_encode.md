@@ -21,6 +21,19 @@ manifest declares `source_fps`, `source_frames`, `frame_paths`, and one SHA-256
 the manifest SHA-256. A `source-clip` reference is hashed before bounded
 decoding. A changed or mismatched source fails closed.
 
+Request JSON is read with a 4 MiB cap, config JSON with a 1 MiB cap, and frame
+manifests with a 4 MiB cap before snapshotting. Parsed JSON is limited to 64
+nested levels. Oversized or malformed JSON, including integer tokens rejected
+by the decoder, fails through the request/config validation or source-error
+envelope instead of leaking a parser exception.
+
+The API accepts an optional `cancelled` callback. It checks before preparation,
+again after the encoder probe and before source loading, and before output
+publication. A cancellation returns component status `cancelled`; it does not
+interrupt a decoder or encoder call already in progress. The callback must
+return a boolean and must not raise; callback exceptions propagate to the
+caller.
+
 When exactly one source family is required, that family is authoritative and
 an optional reference from the other family is ignored without decoding. Two
 required source families, or multiple unqualified source families, fail closed
@@ -59,7 +72,7 @@ uv run python -m robot_sf.render.review_encode \
   full frame-order source index list with first/terminal frames and the same
   normalized crop provenance.
 - The printed `component-result.v1` envelope carries `complete`, `partial`,
-  `unavailable`, or `failed` with stable reason codes. Complete artifact
+  `unavailable`, `failed`, or `cancelled` with stable reason codes. Complete artifact
   records contain `artifact_id`, relative `uri`, and the file SHA-256. A
   handled non-complete CLI result exits nonzero; invalid CLI input exits with a
   separate nonzero code.

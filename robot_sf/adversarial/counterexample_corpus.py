@@ -2986,6 +2986,8 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_planner_config_mismatch")
     if record.get("git_hash") != item.get("source_revision"):
         errors.append("replay_artifact_source_revision_mismatch")
+    if not _is_full_git_revision(item.get("source_revision")):
+        errors.append("replay_artifact_source_revision_invalid")
 
     artifact_outcome = record.get("outcome")
     if not isinstance(artifact_outcome, dict) or any(
@@ -3034,7 +3036,7 @@ def _validate_replay_event_projection(
 def _validate_replay_execution_evidence(
     item: Mapping[str, Any], record: Mapping[str, Any]
 ) -> list[str]:
-    errors = []
+    errors = _replay_episode_validity_errors(record)
     metadata = record.get("algorithm_metadata")
     metadata = metadata if isinstance(metadata, dict) else {}
     kinematics = metadata.get("planner_kinematics")
@@ -3080,6 +3082,27 @@ def _validate_replay_execution_evidence(
     elif item.get("fallback_or_degraded") is not actual_fallback_or_degraded:
         errors.append("replay_artifact_fallback_status_mismatch")
     return errors
+
+
+def _replay_episode_validity_errors(record: Mapping[str, Any]) -> list[str]:
+    if _replay_episode_is_invalid(record):
+        return ["replay_artifact_invalid_run"]
+    return []
+
+
+def _replay_episode_is_invalid(record: Mapping[str, Any]) -> bool:
+    status = record.get("status")
+    if not isinstance(status, str):
+        return True
+    event_ledger = record.get("event_ledger")
+    event_ledger = event_ledger if isinstance(event_ledger, dict) else {}
+    exact_events = event_ledger.get("exact_events")
+    exact_events = exact_events if isinstance(exact_events, dict) else {}
+    return (
+        status in {"invalid", "error"}
+        or record.get("termination_reason") == "error"
+        or exact_events.get("invalid_run") is not False
+    )
 
 
 def _replay_fallback_marker(record: Mapping[str, Any], metadata: Mapping[str, Any]) -> bool | None:
@@ -3186,8 +3209,15 @@ def _validate_replay_receipt_artifact_fields(
 
 def _validate_replay_receipt_case_fields(receipt: Mapping[str, Any]) -> list[str]:
     errors = []
-    if not isinstance(receipt.get("selected_event_identity"), dict):
+    selected_event_identity = receipt.get("selected_event_identity")
+    if not isinstance(selected_event_identity, dict):
         errors.append("replay_receipt_selected_event_identity_missing")
+    else:
+        episode_status = selected_event_identity.get("episode_status")
+        if not isinstance(episode_status, str) or not episode_status.strip():
+            errors.append("replay_receipt_episode_status_missing")
+        if not isinstance(selected_event_identity.get("invalid_run"), bool):
+            errors.append("replay_receipt_invalid_run_missing")
     if not isinstance(receipt.get("scenario_id"), str) or not receipt["scenario_id"].strip():
         errors.append("replay_receipt_scenario_id_missing")
     if not isinstance(receipt.get("scenario_seed"), int) or isinstance(
@@ -3207,12 +3237,19 @@ def _selected_event_identity(record: Mapping[str, Any]) -> dict[str, Any]:
         not isinstance(exact_events.get(key), bool) for key in event_fields
     ):
         raise CorpusError("replay episode exact event identities are incomplete")
+    if not isinstance(exact_events.get("invalid_run"), bool):
+        raise CorpusError("replay episode invalid-run event identity is missing")
+    episode_status = record.get("status")
+    if not isinstance(episode_status, str) or not episode_status.strip():
+        raise CorpusError("replay episode status is missing")
     return {
         "schema_version": ledger.get("schema_version"),
         "scenario_id": ledger.get("scenario_id"),
         "seed": ledger.get("seed"),
         "planner_id": ledger.get("planner"),
         "source_revision": ledger.get("software_commit"),
+        "episode_status": episode_status,
+        "invalid_run": exact_events["invalid_run"],
         "exact_events": {key: exact_events[key] for key in event_fields},
     }
 
@@ -3256,6 +3293,8 @@ def _validate_evaluation_execution_metadata(item: Mapping[str, Any]) -> list[str
 
 def _validate_complete_evaluation(item: Mapping[str, Any]) -> list[str]:
     errors = []
+    if not _is_full_git_revision(item.get("source_revision")):
+        errors.append("source_revision_invalid")
     if not _is_sha256(item.get("episode_sha256")):
         errors.append("episode_sha256_invalid")
     if (
@@ -3698,4 +3737,12 @@ def _is_sha256(value: Any) -> bool:
         isinstance(value, str)
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value.lower())
+    )
+
+
+def _is_full_git_revision(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
     )

@@ -27,7 +27,7 @@
   },
   "inputs": {
     "schema_path": {
-      "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-9645-bounded-falsification-20260924/robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
       "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
       "artifact_status": "available"
     },

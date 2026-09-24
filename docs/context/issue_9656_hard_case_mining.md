@@ -65,7 +65,9 @@ execution metadata, no nested fallback or degraded marker (including positive fa
 no canonical invalid-run state on either row, matching non-empty planner config hashes, and clean,
 unchanged checkout snapshots immediately before and after replay at the recorded revision.
 Nested runtime status values must be recognized available statuses; unknown or malformed values
-remain unavailable. Each `replay-checkout-snapshot.v1` snapshot must include its status-entry list,
+remain unavailable. Explicit `unavailable` markers must be booleans, and only literal `false` is
+accepted as available evidence; `true` and malformed values remain unavailable. Each
+`replay-checkout-snapshot.v1` snapshot must include its status-entry list,
 agree that `clean` is true exactly when that list is empty, and bind the list to its recorded
 porcelain SHA-256 digest. A dirty checkout, invalid-run row, unknown runtime status, moved `HEAD`,
 changed working-tree status digest, or unavailable/malformed snapshot blocks exact-match

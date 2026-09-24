@@ -940,7 +940,9 @@ def _availability_marker_issue(key: str, value: Any) -> str | None:
     if key not in {"availability", "availability_status", "available", "unavailable"}:
         return None
     if key == "unavailable":
-        return "unavailable" if value is True else None
+        if not isinstance(value, bool):
+            return "unavailable"
+        return "unavailable" if value else None
     if key == "available":
         return None if value is True else "unavailable"
     if key == "availability" and isinstance(value, dict):

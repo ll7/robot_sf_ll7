@@ -118,12 +118,12 @@ decision_summary: >-
   independently verifies config bytes, local commits, and source-manifest binding, so these four
   per-file `hash_without_artifact_path` findings are retained as explicit, diagnostic-only
   baseline debt for both the checked-in input and deterministic generated atlas.
-  Current-main reconciliation (issue #7634): the committed baseline already contains the
-  historical #7410 build receipt's one `artifact_hash_mismatch` finding, but its human companion
-  entry was dropped during a later baseline refresh. The receipt and adjacent review sidecar are
-  byte-stable and the recorded artifact hash matches; the generic linter resolves an embedded
-  verifier hash against the current source after a later builder refresh. Restore the explicit
-  baseline disposition without rewriting the frozen receipt or promoting any evidence claim.
+  Current-main reconciliation (issue #7634, repaired by #7696): the frozen #7410 build receipt
+  now reports four expected `artifact_hash_mismatch` findings because its embedded schema and
+  builder/verifier digests intentionally describe the historical producer tree. The baseline and
+  this companion record the same four findings. Preserve the receipt and adjacent review-sidecar
+  bytes; this is historical diagnostic provenance only, not package admission or a promoted
+  evidence claim.
   Receipt addendum (issue #8567; 2026-09-08): the compact diagnostic-only native counterfactual
   producer receipt adds one tracked evidence file. Its configuration identities use the registry's
   explicit `config_sha256` field, while raw smoke row and trace digests remain bound by the receipt's

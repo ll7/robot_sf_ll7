@@ -81,10 +81,27 @@ def _load_scenario_report(
         root = Path(scenario_path).expanduser().resolve(strict=True)
         if not root.is_file():
             return _unavailable(str(root), "scenario_manifest_not_a_file")
-        root_digest = _file_sha256(root)
-        if root_digest is None:
+        root_digest_before = _file_sha256(root)
+        if root_digest_before is None:
             return _unavailable(str(root), "scenario_manifest_unreadable")
-        return root, root_digest, load_scenarios_for_validation(root)
+        report = load_scenarios_for_validation(root)
+        root_digest_after = _file_sha256(root)
+        if root_digest_after != root_digest_before:
+            return _unavailable(str(root), "scenario_manifest_changed_during_load")
+        root_source = next(
+            (item for item in report.manifest_sources if item.path.resolve() == root),
+            None,
+        )
+        if root_source is not None and root_source.content_sha256 != root_digest_before:
+            return _unavailable(str(root), "scenario_manifest_changed_during_load")
+        for source in report.manifest_sources:
+            if source.content_sha256 is None:
+                return _unavailable(source.path.as_posix(), "scenario_manifest_read_digest_missing")
+            if _file_sha256(source.path) != source.content_sha256:
+                return _unavailable(
+                    source.path.as_posix(), "included_scenario_manifest_changed_during_load"
+                )
+        return root, root_digest_before, report
     except (OSError, RuntimeError, ValueError, TypeError):
         return _unavailable(str(scenario_path), "scenario_manifest_unavailable")
 
@@ -116,9 +133,14 @@ def _manifest_records(
         One identity record per manifest, or an unavailable payload.
     """
     records: list[dict[str, str | None]] = []
+    source_digests = {
+        item.path.resolve(): item.content_sha256
+        for item in manifest_sources
+        if getattr(item, "content_sha256", None) is not None
+    }
     manifests = {root, *(item.path.resolve() for item in manifest_sources)}
     for manifest in sorted(manifests, key=lambda value: value.as_posix()):
-        digest = _file_sha256(manifest)
+        digest = root_digest if manifest == root else source_digests.get(manifest)
         if digest is None:
             return _unavailable_with_root(
                 manifest, root_digest, "included_scenario_manifest_unreadable"
@@ -163,14 +185,18 @@ def _runtime_resource_records(
             digest = _file_sha256(resolved)
             if digest is None:
                 return _unavailable_with_root(resolved, root_digest, f"{role}_reference_unreadable")
-            records.append(
-                {
-                    "role": role,
-                    "scenario_id": sid,
-                    "sha256": digest,
-                    "path": _portable_path(resolved, root=root),
-                }
-            )
+            record: dict[str, str | None] = {
+                "role": role,
+                "scenario_id": sid,
+                "sha256": digest,
+                "path": _portable_path(resolved, root=root),
+            }
+            if key == "map_file":
+                map_id = scenario.get("map_id")
+                if isinstance(map_id, str) and map_id.strip():
+                    record["map_id"] = map_id.strip()
+                record["parser"] = _map_parser_for_path(resolved)
+            records.append(record)
     return records
 
 
@@ -210,7 +236,11 @@ def _effective_digest(records: list[dict[str, str | None]], root_digest: str) ->
         {
             "schema_version": SCENARIO_INPUT_IDENTITY_SCHEMA,
             "files": [
-                {key: record[key] for key in ("role", "scenario_id", "sha256")}
+                {
+                    key: record[key]
+                    for key in ("role", "scenario_id", "sha256", "path", "map_id", "parser")
+                    if key in record
+                }
                 for record in records
             ],
         },
@@ -218,6 +248,20 @@ def _effective_digest(records: list[dict[str, str | None]], root_digest: str) ->
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest(), True
+
+
+def _map_parser_for_path(path: Path) -> str:
+    """Name the runtime parser selected by the resolved map file suffix.
+
+    Returns:
+        Parser identity matching the scenario loader's suffix dispatch.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".svg":
+        return "svg"
+    if suffix in {".json", ".yaml", ".yml"}:
+        return "legacy_serialized_map"
+    return "unsupported"
 
 
 def _unavailable_with_root(path: Path, root_digest: str, reason_code: str) -> dict[str, Any]:

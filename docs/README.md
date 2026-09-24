@@ -27,6 +27,8 @@ has its own index so you never fall straight into issue-specific context notes.
   scenario certification, release protocol, provenance discipline.
 - 🧭 **[Feasibility-First Scenario Search](./feasibility_first_scenario_search.md)** — fixture-only
   rejection accounting and deterministic risk-feature ordering for adversarial research.
+- 🧪 **[Adversarial replay gallery](./adversarial_replay_gallery.md)** — materialize, replay-check,
+  and visualize a bounded set of attributed falsification cases.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
 - 📝 **[Scenario review contracts](./scenario_review/README.md)** — versioned review bundles,

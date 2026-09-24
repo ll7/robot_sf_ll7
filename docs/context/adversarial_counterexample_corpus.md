@@ -33,7 +33,11 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9
 Rejected admission attempts are persisted in the corpus and cause the import
 command to exit nonzero. The importer binds both current replay JSONL files,
 their provenance, the scenario and route inputs, the archived source record,
-the historical search source snapshots, and the #9645 accounting packet.
+the historical search source snapshots, and the #9645 accounting packet. It
+checks the packet's outer file inventory and checksum sidecar, compares the
+source-hash receipt with run metadata, and verifies each consumed payload file
+before admission. The corpus retains the outer manifest and checksum sidecar
+digests alongside the copied accounting evidence.
 
 The #1501 raw historical episode and original search manifest were not
 archived. The case therefore records the historical source revision as lineage,

@@ -1,0 +1,27 @@
+{
+  "claim_boundary": "diagnostic_only_finite_search_budget_no_planner_safety_or_search_coverage_claim",
+  "comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d",
+  "outputs": [
+    {
+      "path": "convergence_report.json",
+      "sha256": "3bc5b4f56f8161b395ceec01b635b66ee56b44c8409f2bc6fe8e605185eb7818",
+      "size_bytes": 133101
+    },
+    {
+      "path": "convergence_report.md",
+      "sha256": "0a6ce16639699e4c0e3a4e8cb6ee187a01180a2610aac93fab3b70e12c1391e3",
+      "size_bytes": 4193
+    },
+    {
+      "path": "convergence_constraints_first_lexicographic_v1.png",
+      "sha256": "1ed3edb2685a799af0eaeb6f1829032c9b3e8d66c566cfeae7936cfbf38496d1",
+      "size_bytes": 53149
+    }
+  ],
+  "report_command": "uv run python scripts/tools/report_falsification_search.py --comparison docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json --output-dir output/issue9645-falsification-report --repo-root .",
+  "report_generator_branch": "issue-9646-falsification-report",
+  "report_generator_commit": "1459906ef1d9c58525a79f4e701e5be692a2480b",
+  "reproduction_command": "uv run python scripts/tools/report_falsification_search.py --comparison docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json --output-dir output/issue9645-falsification-report --repo-root .",
+  "schema_version": "issue_9645_report_build_provenance.v1",
+  "source_search_commit": "58e516aa4f69ff3098bf518199f483006589758c"
+}

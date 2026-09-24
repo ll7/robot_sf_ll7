@@ -56,7 +56,20 @@
           "new_counterexamples_admitted": {"type": "integer", "minimum": 0},
           "evidence_tier": {"type": "string", "minLength": 1},
           "source_files": {"type": "array", "items": {"type": "object"}},
-          "manifest_files": {"type": "array", "items": {"type": "object"}}
+          "manifest_files": {"type": "array", "items": {"type": "object"}},
+          "bundle_receipts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["source_path", "path", "sha256"],
+              "properties": {
+                "source_path": {"type": "string", "minLength": 1},
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              },
+              "additionalProperties": false
+            }
+          }
         },
         "additionalProperties": true
       }

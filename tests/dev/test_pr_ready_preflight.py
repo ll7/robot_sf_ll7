@@ -1143,34 +1143,80 @@ def _verify_subreaper_receipt(receipt: Path) -> bool:
     )
 
 
+def _send_subreaper_report(
+    pipe_w: int, report: dict[str, object], env: dict[str, str], stdout: str, stderr: str
+) -> None:
+    """Send a bounded diagnostic without copying environment credentials to pytest."""
+    secrets = tuple(
+        value
+        for key, value in {**os.environ, **env}.items()
+        if value and any(word in key.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "KEY"))
+    )
+
+    def redact(value: str) -> str:
+        for secret in secrets:
+            value = value.replace(secret, "<redacted>")
+        return value[:4000]
+
+    report["stdout"] = redact(stdout)
+    report["stderr"] = redact(stderr)
+    for field in ("error", "cleanup_error"):
+        if field in report:
+            report[field] = redact(str(report[field]))
+    os.write(pipe_w, json.dumps(report, sort_keys=True).encode() + b"\n")
+    os.close(pipe_w)
+
+
 def _run_subreaper_pr_ready_child(
     preflight_repo: Path, env: dict[str, str], ready: Path, receipt: Path, pipe_w: int
 ) -> None:
-    """Execute readiness under subreaper, verify receipt, and signal reaped count."""
+    """Execute readiness under subreaper and report the original failing stage."""
     import ctypes
 
-    libc = ctypes.CDLL(None)
-    PR_SET_CHILD_SUBREAPER = 36
-    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
-        os._exit(2)
-    pr_ready_proc = _start_pr_ready(preflight_repo, env_overrides=env)
+    stage = "enable subreaper"
+    pr_ready_proc: subprocess.Popen[str] | None = None
+    report: dict[str, object] = {"status": "failed"}
+    stdout = stderr = ""
     try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(36, 1, 0, 0, 0) != 0:
+            raise OSError(ctypes.get_errno(), "PR_SET_CHILD_SUBREAPER failed")
+        stage = "start readiness"
+        pr_ready_proc = _start_pr_ready(preflight_repo, env_overrides=env)
+        stage = "wait for core marker"
         _wait_for_marker(ready, pr_ready_proc, timeout=10.0)
+        stage = "send SIGTERM"
         os.kill(pr_ready_proc.pid, signal.SIGTERM)
-        _ = _collect_process(pr_ready_proc, timeout=5.0)
-        if pr_ready_proc.returncode != 143 or not _verify_subreaper_receipt(receipt):
-            os._exit(3)
-        reaped_count = _reap_zombie_descendants()
-        os.write(pipe_w, f"ok:{reaped_count}\n".encode())
-        os.close(pipe_w)
-        os._exit(0)
+        stage = "collect readiness"
+        stdout, stderr = _collect_process(pr_ready_proc, timeout=5.0)
+        stage = "verify termination receipt"
+        assert pr_ready_proc.returncode == 143, f"readiness exit={pr_ready_proc.returncode}"
+        assert _verify_subreaper_receipt(receipt), "termination receipt did not verify cleanup"
+        report["status"] = "ok"
+    except BaseException as exc:
+        report["stage"] = stage
+        report["error"] = f"{type(exc).__name__}: {exc}"
     finally:
-        _stop_process_group(pr_ready_proc, signal.SIGKILL)
-        try:
-            _collect_process(pr_ready_proc, timeout=1.0)
-        except Exception:
-            pass
-        os._exit(9)
+        if pr_ready_proc is not None:
+            _stop_process_group(pr_ready_proc, signal.SIGKILL)
+            try:
+                if pr_ready_proc.poll() is None:
+                    stdout, stderr = _collect_process(pr_ready_proc, timeout=1.0)
+            except Exception as exc:
+                report["cleanup_error"] = f"{type(exc).__name__}: {exc}"
+                report["status"] = "failed"
+            report["readiness_exit"] = pr_ready_proc.returncode
+        report["reaped_count"] = _reap_zombie_descendants()
+        report["receipt_exists"] = receipt.is_file()
+        if receipt.is_file():
+            try:
+                payload = json.loads(receipt.read_text(encoding="utf-8"))
+                report["receipt_cleanup"] = payload.get("cleanup")
+                report["receipt_process"] = payload.get("process")
+            except (OSError, ValueError) as exc:
+                report["receipt_error"] = f"{type(exc).__name__}: {exc}"
+        _send_subreaper_report(pipe_w, report, env, stdout, stderr)
+        os._exit(0 if report["status"] == "ok" else 9)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_CHILD_SUBREAPER is Linux-specific")
@@ -1197,14 +1243,60 @@ def test_pr_ready_sigterm_under_subreaper_verifies_zombie_cleanup(
 
     os.close(pipe_w)
     try:
-        data = os.read(pipe_r, 64).decode("utf-8").strip()
+        with os.fdopen(pipe_r, "rb") as stream:
+            data = stream.read().decode("utf-8").strip()
     finally:
-        os.close(pipe_r)
         _, status = os.waitpid(harness_pid, 0)
 
     exit_code = os.waitstatus_to_exitcode(status)
-    assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}"
-    assert data.startswith("ok:"), f"unexpected harness output: {data}"
+    report = json.loads(data) if data else {"status": "no report"}
+    assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}: {report}"
+    assert report["status"] == "ok", report
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_CHILD_SUBREAPER is Linux-specific")
+def test_subreaper_harness_reports_start_failure_without_masking_stage(tmp_path: Path) -> None:
+    """The forked harness preserves its first failure after mandatory cleanup."""
+    pipe_r, pipe_w = os.pipe()
+    harness_pid = os.fork()
+    if harness_pid == 0:
+        os.close(pipe_r)
+        _run_subreaper_pr_ready_child(
+            tmp_path / "missing-repo",
+            {"PR_READY_TOKEN": "private-test-token"},
+            tmp_path / "ready",
+            tmp_path / "receipt",
+            pipe_w,
+        )
+
+    os.close(pipe_w)
+    try:
+        with os.fdopen(pipe_r, "rb") as stream:
+            report = json.loads(stream.read())
+    finally:
+        _, status = os.waitpid(harness_pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 9
+    assert report["stage"] == "start readiness"
+    assert report["error"].startswith("FileNotFoundError:")
+    assert report["receipt_exists"] is False
+    assert "private-test-token" not in json.dumps(report)
+
+
+def test_subreaper_report_redacts_credentials() -> None:
+    pipe_r, pipe_w = os.pipe()
+    _send_subreaper_report(
+        pipe_w,
+        {"error": "failure private-test-token"},
+        {"PR_READY_TOKEN": "private-test-token"},
+        "stdout private-test-token",
+        "stderr private-test-token",
+    )
+    with os.fdopen(pipe_r, "rb") as stream:
+        report = json.loads(stream.read())
+    assert "private-test-token" not in json.dumps(report)
+    assert report["error"] == "failure <redacted>"
+    assert report["stdout"] == "stdout <redacted>"
+    assert report["stderr"] == "stderr <redacted>"
 
 
 @pytest.mark.skipif(

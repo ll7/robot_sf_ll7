@@ -99,6 +99,37 @@ Use the resolved identity as `--manifest` for future runner and doctor checks. S
 for the template slots and fail-closed rules. These commands do not reserve a
 DOI, create a tag, publish a release, or submit a campaign.
 
+### 0.0.8 post-run bundle finalization
+
+The 0.0.8 campaign template
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml`
+sets `export_publication_bundle: false`. The release runner first produces an
+accepted, unpublished 20,160-row campaign. The old-metric equivalence and
+robot-force reports need those completed episode rows, so bundle export is a
+separate step. After the source, DOI coordinates, launch packet, and campaign
+have passed their own gates, run from the same clean source commit:
+
+```bash
+uv run python scripts/tools/finalize_benchmark_data_v008.py \
+  --producer-root output/benchmarks/camera_ready/<accepted_campaign_id> \
+  --candidate-root output/benchmarks/camera_ready/<new_publication_candidate_id> \
+  --resolved-identity output/release/release_identity.resolved.json \
+  --baseline-archive <frozen_0.0.7_archive_path> \
+  --expected-source-sha <exact_0.0.8_source_sha>
+```
+
+The finalizer refuses an already-published producer and checks the frozen
+0.0.7 archive SHA-256. It copies the producer, saves its release result, runs
+the 20,160-row predecessor equivalence and robot-force gates, repeats full
+release acceptance on the candidate, then exports and preflights the bundle.
+Failed gates leave the candidate marked invalid and preserve the producer.
+Its sibling `*.finalization_receipt.json` records the source and output hashes;
+promote the archive, both gate reports, gate logs, and receipt to durable
+storage before any publication decision. Bundle creation is a reviewable
+candidate step; tagging, Zenodo publication, and DOI creation require the
+author's explicit go recorded on issue #9668. The canonical 0.0.8 campaign
+itself also waits for that go because its resolved identity requires the DOI.
+
 ## Preflight
 
 Run:

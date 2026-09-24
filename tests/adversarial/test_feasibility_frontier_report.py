@@ -40,6 +40,119 @@ def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:
     }
 
 
+def _write_source_artifact(
+    root: Path,
+    reference: dict[str, Any],
+    payload: dict[str, Any],
+    *,
+    schema_version: str,
+) -> None:
+    content = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    path = root / reference["path"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    reference["sha256"] = hashlib.sha256(content).hexdigest()
+    reference["source_revision"] = payload["source_revision"]
+    reference["schema_version"] = schema_version
+
+
+def _refresh_source_artifacts(evidence: dict[str, Any], root: Path) -> None:
+    """Re-emit fixture source bytes after intentional fixture edits."""
+    rounds = evidence["rounds"]
+    for round_data in rounds:
+        round_number = round_data["round_number"]
+        source_revision = round_data["source_revision"]
+        planner = round_data["planner"]
+        common = {
+            "experiment_id": evidence["experiment_id"],
+            "round_number": round_number,
+            "source_revision": source_revision,
+        }
+        _write_source_artifact(
+            root,
+            round_data["optimization"]["artifact"],
+            {
+                **common,
+                "schema_version": frontier_module._OPTIMIZER_SELECTION_SCHEMA,
+                "selected_planner_id": planner["planner_id"],
+                "selected_config_identity_sha256": planner["config_identity_sha256"],
+            },
+            schema_version=frontier_module._OPTIMIZER_SELECTION_SCHEMA,
+        )
+        candidates = round_data["falsification"]["candidates"]
+        _write_source_artifact(
+            root,
+            round_data["falsification"]["artifact"],
+            {
+                **common,
+                "schema_version": frontier_module._FALSIFICATION_SOURCE_SCHEMA,
+                "target_planner_id": planner["planner_id"],
+                "target_config_identity_sha256": planner["config_identity_sha256"],
+                "candidate_records": [
+                    {
+                        field: candidate.get(field)
+                        for field in frontier_module._SEARCH_CANDIDATE_SOURCE_FIELDS
+                    }
+                    for candidate in candidates
+                ],
+            },
+            schema_version=frontier_module._FALSIFICATION_SOURCE_SCHEMA,
+        )
+        for set_name, evaluation in round_data["evaluation_sets"].items():
+            expected_ids = evaluation.get("expected_episode_ids")
+            if not isinstance(expected_ids, list):
+                expected_ids = []
+            else:
+                expected_ids = list(expected_ids)
+            expected_id_set = set(expected_ids)
+            for row in evaluation["episodes"]:
+                record_id = row.get("record_id")
+                if isinstance(record_id, str) and record_id not in expected_id_set:
+                    expected_ids.append(record_id)
+                    expected_id_set.add(record_id)
+            evaluation["expected_episode_ids"] = expected_ids
+            _write_source_artifact(
+                root,
+                evaluation["artifact"],
+                {
+                    **common,
+                    "schema_version": frontier_module._EVALUATION_SOURCE_SCHEMA,
+                    "evaluation_set": set_name,
+                    "planner_id": planner["planner_id"],
+                    "config_identity_sha256": planner["config_identity_sha256"],
+                    "expected_episode_ids": expected_ids,
+                    "episodes": [
+                        {
+                            field: row.get(field)
+                            for field in frontier_module._EVALUATION_ROW_SOURCE_FIELDS
+                        }
+                        for row in evaluation["episodes"]
+                    ],
+                },
+                schema_version=frontier_module._EVALUATION_SOURCE_SCHEMA,
+            )
+
+    for round_data in rounds:
+        for observation in round_data["case_observations"]:
+            origin_round = observation.get("origin_round")
+            if not isinstance(origin_round, int) or origin_round < 1 or origin_round > len(rounds):
+                continue
+            origin_data = rounds[origin_round - 1]
+            observation["origin_search_artifact"] = origin_data["falsification"]["artifact"]
+            candidate = next(
+                (
+                    item
+                    for item in origin_data["falsification"]["candidates"]
+                    if item.get("candidate_id") == observation.get("origin_candidate_id")
+                    and item.get("case_id") == observation.get("case_id")
+                    and item.get("corpus_disposition") == "admitted"
+                ),
+                None,
+            )
+            if candidate is not None:
+                observation["replay_artifact"] = candidate.get("replay_artifact")
+
+
 def _episode(
     record_id: str,
     *,
@@ -310,7 +423,7 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
 
 
 def _evidence(root: Path) -> dict[str, Any]:
-    return {
+    evidence = {
         "schema_version": INPUT_SCHEMA_VERSION,
         "evidence_kind": "synthetic_fixture",
         "experiment_id": "fixture-two-round-loop",
@@ -319,6 +432,8 @@ def _evidence(root: Path) -> dict[str, Any]:
         "scenario_space_id": "crossing-gap-v1",
         "rounds": [_round(root, 1), _round(root, 2)],
     }
+    _refresh_source_artifacts(evidence, root)
+    return evidence
 
 
 def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
@@ -332,6 +447,8 @@ def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
     first, second = report["rounds"]
     assert report["evidence_kind"] == "synthetic_fixture"
     assert first["evaluation_sets"]["held_out"]["success_rate"] == 0.5
+    assert first["evaluation_sets"]["held_out"]["identity_accounting_status"] == "verified"
+    assert len(first["evaluation_sets"]["held_out"]["expected_episode_ids_sha256"]) == 64
     assert first["evaluation_sets"]["held_out"]["eligible_episode_count"] == 2
     assert first["evaluation_sets"]["held_out"]["readiness_status_counts"]["fallback"] == 1
     assert second["evaluation_sets"]["held_out"]["success_rate"] == 1.0
@@ -389,6 +506,7 @@ def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path:
     second_search["budget"]["candidate_limit"] = 5
     second_search["budget"]["candidates_completed"] = len(second_search["candidates"])
 
+    _refresh_source_artifacts(payload, tmp_path)
     report = build_frontier_report(payload, evidence_root=tmp_path)
     second = report["rounds"][1]
     assert second["falsification"]["verified_counterexample_case_ids"] == []
@@ -433,6 +551,7 @@ def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
     second_search["budget"]["candidate_limit"] += 1
     second_search["budget"]["candidates_completed"] = len(second_search["candidates"])
 
+    _refresh_source_artifacts(payload, tmp_path)
     report = build_frontier_report(payload, evidence_root=tmp_path)
     second = report["rounds"][1]
     assert second["falsification"]["repeated_verified_counterexample_case_ids"] == []
@@ -624,6 +743,7 @@ def test_frontier_report_credits_historical_upgrade_when_replay_evidence_arrives
         ),
     ]
     payload["rounds"].append(third)
+    _refresh_source_artifacts(payload, tmp_path)
 
     report = build_frontier_report(payload, evidence_root=tmp_path)
     first_report, second, third_report = report["rounds"]
@@ -798,6 +918,142 @@ def test_frontier_report_rejects_missing_provenance_and_artifact_digest_mismatch
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("artifact_kind", "payload_field", "message"),
+    [
+        ("optimization", "selected_planner_id", "selected planner does not match"),
+        ("optimization", "selected_config_identity_sha256", "selected config does not match"),
+        ("falsification", "target_planner_id", "target planner does not match"),
+        ("falsification", "target_config_identity_sha256", "target config does not match"),
+    ],
+)
+def test_frontier_report_binds_planner_identity_to_optimization_and_search_sources(
+    tmp_path: Path, artifact_kind: str, payload_field: str, message: str
+) -> None:
+    """Checksummed optimizer/search identities must name the declared round planner."""
+    payload = _evidence(tmp_path)
+    artifact_ref = payload["rounds"][0][artifact_kind]["artifact"]
+    source_path = tmp_path / artifact_ref["path"]
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source[payload_field] = "d" * 64
+    schema = (
+        frontier_module._OPTIMIZER_SELECTION_SCHEMA
+        if artifact_kind == "optimization"
+        else frontier_module._FALSIFICATION_SOURCE_SCHEMA
+    )
+    _write_source_artifact(tmp_path, artifact_ref, source, schema_version=schema)
+
+    with pytest.raises(FrontierReportError, match=message):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_binds_evaluation_source_to_round_planner_config(tmp_path: Path) -> None:
+    """A checksummed evaluation from another planner configuration is not this round's score."""
+    payload = _evidence(tmp_path)
+    evaluation_ref = payload["rounds"][0]["evaluation_sets"]["held_out"]["artifact"]
+    source_path = tmp_path / evaluation_ref["path"]
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source["config_identity_sha256"] = "d" * 64
+    _write_source_artifact(
+        tmp_path,
+        evaluation_ref,
+        source,
+        schema_version=frontier_module._EVALUATION_SOURCE_SCHEMA,
+    )
+
+    with pytest.raises(FrontierReportError, match="artifact config does not match"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_search_candidate_rows_not_bound_to_source(
+    tmp_path: Path,
+) -> None:
+    """Candidate outcomes cannot be edited independently of their hashed search source."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["falsification"]["candidates"][0]["target_failure_observed"] = False
+
+    with pytest.raises(FrontierReportError, match="do not match the checksummed search source"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_binds_evaluation_metrics_and_ids_to_checksums(tmp_path: Path) -> None:
+    """Same-size row substitutions and metric edits cannot pass count-only accounting."""
+    payload = _evidence(tmp_path)
+    evaluation = payload["rounds"][0]["evaluation_sets"]["held_out"]
+    evaluation["episodes"][0]["success"] = False
+    with pytest.raises(
+        FrontierReportError, match="rows do not match the checksummed evaluation source"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+    payload = _evidence(tmp_path)
+    evaluation = payload["rounds"][0]["evaluation_sets"]["held_out"]
+    evaluation["episodes"][0]["record_id"] = "substituted-same-count-episode"
+    with pytest.raises(FrontierReportError, match="identity accounting unknown"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+    payload = _evidence(tmp_path)
+    evaluation_ref = payload["rounds"][0]["evaluation_sets"]["held_out"]["artifact"]
+    source_path = tmp_path / evaluation_ref["path"]
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source["expected_episode_ids"][1] = "substituted-source-episode"
+    _write_source_artifact(
+        tmp_path,
+        evaluation_ref,
+        source,
+        schema_version=frontier_module._EVALUATION_SOURCE_SCHEMA,
+    )
+    with pytest.raises(FrontierReportError, match="identity accounting unknown"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_fails_closed_when_evaluation_source_has_no_episode_ids(
+    tmp_path: Path,
+) -> None:
+    """Missing canonical episode identities remain explicitly unknown, not count-complete."""
+    payload = _evidence(tmp_path)
+    del payload["rounds"][0]["evaluation_sets"]["held_out"]["expected_episode_ids"]
+
+    with pytest.raises(FrontierReportError, match="identity accounting unknown"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_preserves_missing_expected_episode_identities(tmp_path: Path) -> None:
+    """Known missing episodes stay identified and make row accounting incomplete."""
+    payload = _evidence(tmp_path)
+    evaluation = payload["rounds"][0]["evaluation_sets"]["held_out"]
+    evaluation["episodes"].pop(1)
+    _refresh_source_artifacts(payload, tmp_path)
+
+    summary = build_frontier_report(payload, evidence_root=tmp_path)["rounds"][0][
+        "evaluation_sets"
+    ]["held_out"]
+    assert summary["identity_accounting_status"] == "verified"
+    assert summary["accounting_complete"] is False
+    assert summary["missing_record_count"] == 1
+    assert summary["missing_record_ids"] == ["held_out-1-2"]
+
+
+@pytest.mark.parametrize("artifact_field", ["origin_search_artifact", "replay_artifact"])
+def test_frontier_report_binds_case_observation_refs_to_origin_evidence(
+    tmp_path: Path, artifact_field: str
+) -> None:
+    """Valid artifacts from another round/case cannot be substituted as origin evidence."""
+    payload = _evidence(tmp_path)
+    observation = payload["rounds"][1]["case_observations"][0]
+    if artifact_field == "origin_search_artifact":
+        observation[artifact_field] = payload["rounds"][1]["falsification"]["artifact"]
+        message = "origin search artifact does not match"
+    else:
+        observation[artifact_field] = payload["rounds"][1]["falsification"]["candidates"][0][
+            "replay_artifact"
+        ]
+        message = "replay artifact does not match its origin candidate"
+
+    with pytest.raises(FrontierReportError, match=message):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_rejects_missing_budget_and_incomplete_candidate_ledger(
     tmp_path: Path,
 ) -> None:
@@ -931,6 +1187,7 @@ def test_frontier_report_uses_canonical_execution_readiness_and_availability_axe
     )
     evaluation["expected_episode_count"] = len(rows)
 
+    _refresh_source_artifacts(payload, tmp_path)
     summary = build_frontier_report(payload, evidence_root=tmp_path)["rounds"][0][
         "evaluation_sets"
     ]["held_out"]
@@ -957,6 +1214,7 @@ def test_frontier_report_uses_separate_outcome_denominators(tmp_path: Path) -> N
     rows[1]["success"] = None
     rows[1]["collision"] = True
 
+    _refresh_source_artifacts(payload, tmp_path)
     summary = build_frontier_report(payload, evidence_root=tmp_path)["rounds"][0][
         "evaluation_sets"
     ]["held_out"]
@@ -1057,6 +1315,7 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
             )
         ]
         payload["rounds"].append(third)
+        _refresh_source_artifacts(payload, tmp_path)
         report = build_frontier_report(payload, evidence_root=tmp_path)
         second = report["rounds"][1]
         third_report = report["rounds"][2]
@@ -1157,6 +1416,7 @@ def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified
             evaluation["episodes"][0]["success"] = True
             evaluation["episodes"][1]["success"] = False
 
+    _refresh_source_artifacts(payload, tmp_path)
     report = build_frontier_report(payload, evidence_root=tmp_path)
     assert [
         item["case_frontier"]["verified_counterexamples_cumulative"] for item in report["rounds"]

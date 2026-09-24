@@ -14,6 +14,7 @@ import math
 import os
 import re
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -59,6 +60,31 @@ _CORPUS_DISPOSITIONS = {
     "unknown",
 }
 _EVALUATION_SETS = ("fixed", "regression", "held_out")
+_OPTIMIZER_SELECTION_SCHEMA = "frontier-optimizer-selection.v1"
+_FALSIFICATION_SOURCE_SCHEMA = "frontier-falsification-source.v1"
+_EVALUATION_SOURCE_SCHEMA = "frontier-evaluation-source.v1"
+_SEARCH_CANDIDATE_SOURCE_FIELDS = (
+    "candidate_id",
+    "case_id",
+    "evaluation_status",
+    "admissibility_verdict",
+    "target_failure_observed",
+    "replay_status",
+    "corpus_disposition",
+    "replay_artifact",
+)
+_EVALUATION_ROW_SOURCE_FIELDS = (
+    "record_id",
+    "evidence_status",
+    "execution_mode",
+    "readiness_status",
+    "availability_status",
+    "eligible",
+    "success",
+    "collision",
+    "minimum_clearance",
+    "ped_force_q95",
+)
 _STOP_REASONS = {
     "budget_exhausted",
     "no_new_admissible_counterexample",
@@ -71,6 +97,14 @@ _STOP_REASONS = {
 
 class FrontierReportError(ValueError):
     """Raised when persisted evidence cannot support a trustworthy report."""
+
+
+@dataclass(frozen=True)
+class _EvaluationSetContext:
+    experiment_id: Any
+    round_number: int
+    set_name: str
+    planner: dict[str, Any]
 
 
 def build_frontier_report(
@@ -368,7 +402,10 @@ def render_frontier_markdown(
                 f"  - `{set_name}`: {summary['eligible_episode_count']}/"
                 f"{summary['expected_episode_count']} expected rows benchmark-eligible; "
                 f"{summary['reported_episode_count']} reported, "
-                f"{summary['missing_record_count']} expected rows missing, "
+                f"identity accounting `{summary['identity_accounting_status']}` "
+                f"(ID manifest SHA-256 `{summary['expected_episode_ids_sha256'][:12]}`); "
+                f"{summary['missing_record_count']} expected rows missing "
+                f"`{summary['missing_record_ids']}`, "
                 f"{summary['unexpected_record_count']} unexpected; "
                 f"{_format_rate(summary)} success; {_format_collision_rate(summary)} collision; "
                 f"evidence statuses `{summary['evidence_status_counts']}`, execution modes "
@@ -703,7 +740,7 @@ def write_frontier_report(
     return report
 
 
-def _validate_evidence(
+def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence diagnostics.
     evidence: dict[str, Any], evidence_root: Path, artifacts: dict[str, dict[str, str]]
 ) -> None:
     errors: list[str] = []
@@ -732,6 +769,7 @@ def _validate_evidence(
         errors.append("round_number values must be contiguous and start at 1")
 
     round_candidates: dict[int, dict[str, dict[str, Any]]] = {}
+    round_search_artifacts: dict[int, Any] = {}
     for round_data in rounds:
         if not isinstance(round_data, dict):
             errors.append("each round must be an object")
@@ -740,9 +778,18 @@ def _validate_evidence(
         if not isinstance(number, int) or isinstance(number, bool) or number < 1:
             errors.append("round_number must be a positive integer")
             continue
-        _validate_round(round_data, number, evidence_root, artifacts, errors)
+        _validate_round(
+            round_data,
+            number,
+            evidence.get("experiment_id"),
+            evidence_root,
+            artifacts,
+            errors,
+        )
         falsification = round_data.get("falsification")
         candidates = falsification.get("candidates", []) if isinstance(falsification, dict) else []
+        if isinstance(falsification, dict):
+            round_search_artifacts[number] = falsification.get("artifact")
         round_candidates[number] = {
             item.get("case_id"): item
             for item in candidates
@@ -752,7 +799,7 @@ def _validate_evidence(
         }
 
     _validate_case_dispositions(rounds, errors)
-    _validate_case_observation_origins(rounds, round_candidates, errors)
+    _validate_case_observation_origins(rounds, round_candidates, round_search_artifacts, errors)
 
     if errors:
         raise FrontierReportError("invalid frontier evidence:\n- " + "\n- ".join(errors))
@@ -761,6 +808,7 @@ def _validate_evidence(
 def _validate_case_observation_origins(
     rounds: list[Any],
     round_candidates: dict[int, dict[str, dict[str, Any]]],
+    round_search_artifacts: dict[int, Any],
     errors: list[str],
 ) -> None:
     latest_observations: dict[str, dict[str, Any]] = {}
@@ -781,6 +829,7 @@ def _validate_case_observation_origins(
                     origin_round,
                     observation,
                     round_candidates,
+                    round_search_artifacts,
                     latest_observations,
                     errors,
                 )
@@ -826,6 +875,7 @@ def _validate_discovered_case_observation(
     origin_round: int,
     observation: dict[str, Any],
     round_candidates: dict[int, dict[str, dict[str, Any]]],
+    round_search_artifacts: dict[int, Any],
     latest_observations: dict[str, dict[str, Any]],
     errors: list[str],
 ) -> None:
@@ -846,6 +896,19 @@ def _validate_discovered_case_observation(
             "its discovery record"
         )
         return
+    expected_search = round_search_artifacts.get(origin_round)
+    if not _same_artifact_reference(observation.get("origin_search_artifact"), expected_search):
+        errors.append(
+            f"round {current_round} case {case_id!r} origin search artifact does not match "
+            f"round {origin_round}'s checksummed falsification source"
+        )
+    if not _same_artifact_reference(
+        observation.get("replay_artifact"), origin_candidate.get("replay_artifact")
+    ):
+        errors.append(
+            f"round {current_round} case {case_id!r} replay artifact does not match "
+            "its origin candidate replay"
+        )
     if current_round == origin_round:
         _validate_same_round_case_observation(current_round, observation, origin_candidate, errors)
         return
@@ -856,6 +919,16 @@ def _validate_discovered_case_observation(
         else origin_candidate.get("admissibility_verdict")
     )
     _validate_followup_case_observation(current_round, observation, previous_verdict, errors)
+
+
+def _same_artifact_reference(left: Any, right: Any) -> bool:
+    """Compare the complete stable identity of two declared artifact references."""
+    fields = ("path", "sha256", "source_revision", "role", "schema_version")
+    return (
+        isinstance(left, dict)
+        and isinstance(right, dict)
+        and all(left.get(field) == right.get(field) for field in fields)
+    )
 
 
 def _validate_same_round_case_observation(
@@ -983,6 +1056,7 @@ def _historical_case_states(rounds: list[dict[str, Any]]) -> dict[str, dict[str,
 def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local blocker for diagnosis.
     data: dict[str, Any],
     number: int,
+    experiment_id: Any,
     evidence_root: Path,
     artifacts: dict[str, dict[str, str]],
     errors: list[str],
@@ -1025,13 +1099,36 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         completed_key="proposals_completed",
         errors=errors,
     )
-    _validate_artifact(
+    optimization_source = _validate_artifact(
         optimization.get("artifact"),
         f"{prefix}.optimization.artifact",
         evidence_root,
         artifacts,
         errors,
+        parse_json=True,
     )
+    _validate_source_identity(
+        optimization_source,
+        optimization.get("artifact"),
+        expected_schema=_OPTIMIZER_SELECTION_SCHEMA,
+        experiment_id=experiment_id,
+        round_number=number,
+        source_revision=data.get("source_revision"),
+        prefix=f"{prefix}.optimization.artifact",
+        errors=errors,
+    )
+    if isinstance(optimization_source, dict):
+        if optimization_source.get("selected_planner_id") != planner.get("planner_id"):
+            errors.append(
+                f"{prefix}.optimization artifact selected planner does not match round planner"
+            )
+        if not _same_text_identity(
+            optimization_source.get("selected_config_identity_sha256"),
+            planner.get("config_identity_sha256"),
+        ):
+            errors.append(
+                f"{prefix}.optimization artifact selected config does not match round planner"
+            )
 
     falsification = data.get("falsification")
     if not isinstance(falsification, dict):
@@ -1061,13 +1158,36 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         completed_key="candidates_completed",
         errors=errors,
     )
-    _validate_artifact(
+    falsification_source = _validate_artifact(
         falsification.get("artifact"),
         f"{prefix}.falsification.artifact",
         evidence_root,
         artifacts,
         errors,
+        parse_json=True,
     )
+    _validate_source_identity(
+        falsification_source,
+        falsification.get("artifact"),
+        expected_schema=_FALSIFICATION_SOURCE_SCHEMA,
+        experiment_id=experiment_id,
+        round_number=number,
+        source_revision=data.get("source_revision"),
+        prefix=f"{prefix}.falsification.artifact",
+        errors=errors,
+    )
+    if isinstance(falsification_source, dict):
+        if falsification_source.get("target_planner_id") != planner.get("planner_id"):
+            errors.append(
+                f"{prefix}.falsification artifact target planner does not match round planner"
+            )
+        if not _same_text_identity(
+            falsification_source.get("target_config_identity_sha256"),
+            planner.get("config_identity_sha256"),
+        ):
+            errors.append(
+                f"{prefix}.falsification artifact target config does not match round planner"
+            )
     candidates = falsification.get("candidates")
     if not isinstance(candidates, list):
         errors.append(f"{prefix}.falsification.candidates must be an array")
@@ -1146,16 +1266,29 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 f"{prefix}.falsification candidate records ({len(candidates)}) do not match "
                 f"completed evaluations ({budget['candidates_completed']})"
             )
+    if isinstance(falsification_source, dict) and falsification_source.get(
+        "candidate_records"
+    ) != _source_projection(candidates, _SEARCH_CANDIDATE_SOURCE_FIELDS):
+        errors.append(
+            f"{prefix}.falsification candidates do not match the checksummed search source"
+        )
 
     evaluation_sets = data.get("evaluation_sets")
     if not isinstance(evaluation_sets, dict):
         errors.append(f"{prefix}.evaluation_sets must be an object")
         evaluation_sets = {}
     for set_name in _EVALUATION_SETS:
+        evaluation_context = _EvaluationSetContext(
+            experiment_id=experiment_id,
+            round_number=number,
+            set_name=set_name,
+            planner=planner,
+        )
         _validate_evaluation_set(
             evaluation_sets.get(set_name),
             f"{prefix}.evaluation_sets.{set_name}",
             f"{set_name}-evaluation",
+            evaluation_context,
             evidence_root,
             artifacts,
             errors,
@@ -1244,10 +1377,14 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
     value: Any,
     prefix: str,
     expected_artifact_role: str,
+    context: _EvaluationSetContext,
     evidence_root: Path,
     artifacts: dict[str, dict[str, str]],
     errors: list[str],
 ) -> None:
+    experiment_id = context.experiment_id
+    round_number = context.round_number
+    planner = context.planner
     if not isinstance(value, dict):
         errors.append(f"{prefix} must be an object")
         return
@@ -1257,9 +1394,47 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
     _validate_artifact_role(
         value.get("artifact"), f"{prefix}.artifact", expected_artifact_role, errors
     )
-    _validate_artifact(
-        value.get("artifact"), f"{prefix}.artifact", evidence_root, artifacts, errors
+    source = _validate_artifact(
+        value.get("artifact"),
+        f"{prefix}.artifact",
+        evidence_root,
+        artifacts,
+        errors,
+        parse_json=True,
     )
+    _validate_source_identity(
+        source,
+        value.get("artifact"),
+        expected_schema=_EVALUATION_SOURCE_SCHEMA,
+        experiment_id=experiment_id,
+        round_number=round_number,
+        source_revision=planner.get("source_revision"),
+        prefix=f"{prefix}.artifact",
+        errors=errors,
+    )
+    expected_ids = value.get("expected_episode_ids")
+    if (
+        not isinstance(expected_ids, list)
+        or (
+            isinstance(expected, int)
+            and not isinstance(expected, bool)
+            and expected > 0
+            and not expected_ids
+        )
+        or any(not isinstance(item, str) or not item for item in expected_ids)
+        or len(expected_ids) != len(set(expected_ids))
+    ):
+        errors.append(
+            f"{prefix} identity accounting unknown: expected_episode_ids must be an array "
+            "of unique stable IDs"
+        )
+        expected_ids = []
+    if (
+        isinstance(expected, int)
+        and not isinstance(expected, bool)
+        and expected != len(expected_ids)
+    ):
+        errors.append(f"{prefix}.expected_episode_count does not match expected_episode_ids")
     episodes = value.get("episodes")
     if not isinstance(episodes, list):
         errors.append(f"{prefix}.episodes must be an array")
@@ -1290,13 +1465,58 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912 - preserve independent row-
             if episode.get(field) not in (True, False, None):
                 errors.append(f"{row_prefix}.{field} must be boolean or null")
         for field in ("minimum_clearance", "ped_force_q95"):
-            value = episode.get(field)
-            if value is not None and (
-                not isinstance(value, (int, float))
-                or isinstance(value, bool)
-                or not math.isfinite(value)
+            metric_value = episode.get(field)
+            if metric_value is not None and (
+                not isinstance(metric_value, (int, float))
+                or isinstance(metric_value, bool)
+                or not math.isfinite(metric_value)
             ):
                 errors.append(f"{row_prefix}.{field} must be a finite number or null")
+    _validate_evaluation_source_rows(source, value, episodes, context, prefix, errors)
+
+
+def _validate_evaluation_source_rows(
+    source: Any,
+    value: dict[str, Any],
+    episodes: list[Any],
+    context: _EvaluationSetContext,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(source, dict):
+        errors.append(f"{prefix} identity accounting unknown: checksummed source is unavailable")
+        return
+    if source.get("evaluation_set") != context.set_name:
+        errors.append(f"{prefix}.artifact evaluation_set does not match its report section")
+    if source.get("planner_id") != context.planner.get("planner_id"):
+        errors.append(f"{prefix}.artifact planner does not match the round planner")
+    if not _same_text_identity(
+        source.get("config_identity_sha256"),
+        context.planner.get("config_identity_sha256"),
+    ):
+        errors.append(f"{prefix}.artifact config does not match the round planner")
+    expected_ids = value.get("expected_episode_ids")
+    if source.get("expected_episode_ids") != expected_ids:
+        errors.append(
+            f"{prefix} identity accounting unknown: expected episode IDs do not match "
+            "the checksummed evaluation source"
+        )
+    source_rows = source.get("episodes")
+    row_projection = _source_projection(episodes, _EVALUATION_ROW_SOURCE_FIELDS)
+    if source_rows != row_projection:
+        errors.append(f"{prefix} rows do not match the checksummed evaluation source")
+    observed_ids = [episode.get("record_id") for episode in episodes if isinstance(episode, dict)]
+    expected_id_set = (
+        {item for item in expected_ids if isinstance(item, str)}
+        if isinstance(expected_ids, list)
+        else set()
+    )
+    unexpected_ids = [record_id for record_id in observed_ids if record_id not in expected_id_set]
+    if unexpected_ids:
+        errors.append(
+            f"{prefix} identity accounting unknown: unexpected evaluation row IDs "
+            f"{unexpected_ids} are absent from expected_episode_ids"
+        )
 
 
 def _validate_budget(
@@ -1334,33 +1554,74 @@ def _validate_seeds(value: Any, prefix: str, errors: list[str]) -> None:
         errors.append(f"{prefix} must not contain duplicate seeds")
 
 
-def _validate_artifact(
+def _source_projection(rows: Any, fields: tuple[str, ...]) -> list[dict[str, Any]] | None:
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        return None
+    return [{field: row.get(field) for field in fields} for row in rows]
+
+
+def _same_text_identity(left: Any, right: Any) -> bool:
+    return isinstance(left, str) and isinstance(right, str) and left.lower() == right.lower()
+
+
+def _validate_source_identity(
+    payload: Any,
+    artifact: Any,
+    *,
+    expected_schema: str,
+    experiment_id: Any,
+    round_number: int,
+    source_revision: Any,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    if payload.get("schema_version") != expected_schema:
+        errors.append(f"{prefix} content schema_version must be {expected_schema!r}")
+    if not isinstance(artifact, dict) or artifact.get("schema_version") != expected_schema:
+        errors.append(f"{prefix}.schema_version must be {expected_schema!r}")
+    if payload.get("experiment_id") != experiment_id:
+        errors.append(f"{prefix} experiment_id does not match the evidence bundle")
+    if payload.get("round_number") != round_number:
+        errors.append(f"{prefix} round_number does not match its enclosing round")
+    if not _same_text_identity(payload.get("source_revision"), source_revision):
+        errors.append(f"{prefix} source_revision does not match the enclosing round")
+    if not isinstance(artifact, dict) or not _same_text_identity(
+        artifact.get("source_revision"), source_revision
+    ):
+        errors.append(f"{prefix}.source_revision does not match the enclosing round")
+
+
+def _validate_artifact(  # noqa: C901, PLR0912 - preserve path/hash/schema findings in one validation pass.
     value: Any,
     prefix: str,
     evidence_root: Path,
     artifacts: dict[str, dict[str, str]],
     errors: list[str],
-) -> None:
+    *,
+    parse_json: bool = False,
+) -> Any | None:
     if not isinstance(value, dict):
         errors.append(f"{prefix} must be an artifact reference object")
-        return
+        return None
     relative_path = value.get("path")
     if not isinstance(relative_path, str) or not relative_path.strip():
         errors.append(f"{prefix}.path is missing")
-        return
+        return None
     posix_path = PurePosixPath(relative_path)
     if posix_path.is_absolute() or ".." in posix_path.parts:
         errors.append(f"{prefix}.path must stay relative to the evidence bundle")
-        return
+        return None
     actual_path = (evidence_root / Path(*posix_path.parts)).resolve()
     try:
         actual_path.relative_to(evidence_root)
     except ValueError:
         errors.append(f"{prefix}.path resolves outside the evidence bundle")
-        return
+        return None
     if not actual_path.is_file():
         errors.append(f"{prefix}.path does not exist: {relative_path}")
-        return
+        return None
     expected_sha = value.get("sha256")
     _require_sha(expected_sha, f"{prefix}.sha256", _SHA256, errors)
     source_revision = value.get("source_revision")
@@ -1368,11 +1629,32 @@ def _validate_artifact(
     _require_text(value, "role", errors, prefix)
     _require_text(value, "schema_version", errors, prefix)
     if not isinstance(expected_sha, str) or not _SHA256.fullmatch(expected_sha):
-        return
-    actual_sha = _sha256_file(actual_path)
+        return None
+    payload: Any | None = None
+    content: bytes | None = None
+    try:
+        if parse_json:
+            content = actual_path.read_bytes()
+            actual_sha = hashlib.sha256(content).hexdigest()
+        else:
+            actual_sha = _sha256_file(actual_path)
+    except OSError as exc:
+        errors.append(f"{prefix} could not read artifact: {exc}")
+        return None
     if actual_sha.lower() != expected_sha.lower():
         errors.append(f"{prefix}.sha256 does not match {relative_path}")
-        return
+        return None
+    if parse_json and content is not None:
+        try:
+            payload = json.loads(content)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            errors.append(f"{prefix} could not parse artifact JSON: {exc}")
+            return None
+        if not isinstance(payload, dict):
+            errors.append(f"{prefix} JSON artifact must contain an object")
+            payload = None
+        elif value.get("schema_version") != payload.get("schema_version"):
+            errors.append(f"{prefix}.schema_version does not match the artifact content")
     artifact = {
         "path": relative_path,
         "sha256": actual_sha,
@@ -1385,6 +1667,7 @@ def _validate_artifact(
         errors.append(f"artifact {relative_path!r} has inconsistent provenance declarations")
     else:
         artifacts[relative_path] = artifact
+    return payload
 
 
 def _validate_artifact_role(value: Any, prefix: str, expected_role: str, errors: list[str]) -> None:
@@ -1413,16 +1696,29 @@ def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:
     collision_count = sum(row["collision"] for row in collision_rows)
     reported_count = len(data["episodes"])
     expected_count = data["expected_episode_count"]
+    expected_ids = data["expected_episode_ids"]
+    reported_ids = {row["record_id"] for row in data["episodes"]}
+    missing_ids = [record_id for record_id in expected_ids if record_id not in reported_ids]
+    expected_id_set = set(expected_ids)
+    unexpected_ids = [
+        row["record_id"] for row in data["episodes"] if row["record_id"] not in expected_id_set
+    ]
     return {
         "expected_episode_count": expected_count,
+        "expected_episode_ids_sha256": hashlib.sha256(
+            json.dumps(expected_ids, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
         "reported_episode_count": reported_count,
-        "missing_record_count": max(0, expected_count - reported_count),
-        "unexpected_record_count": max(0, reported_count - expected_count),
+        "missing_record_count": len(missing_ids),
+        "missing_record_ids": missing_ids,
+        "unexpected_record_count": len(unexpected_ids),
+        "unexpected_record_ids": unexpected_ids,
         "eligible_episode_count": len(eligible_rows),
         "success_denominator": len(success_rows),
         "collision_denominator": len(collision_rows),
         "excluded_episode_count": reported_count - len(eligible_rows),
-        "accounting_complete": reported_count == expected_count,
+        "accounting_complete": not missing_ids and not unexpected_ids,
+        "identity_accounting_status": "verified",
         "evidence_status_counts": dict(sorted(statuses.items())),
         "execution_mode_counts": dict(sorted(execution_modes.items())),
         "readiness_status_counts": dict(sorted(readiness_statuses.items())),

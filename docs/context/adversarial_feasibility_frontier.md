@@ -57,10 +57,12 @@ evaluation status, admissibility verdict, target-failure observation, replay res
 disposition, and stable case ID. Case observations use the `falsification-search` role for their
 origin search artifact and the `corpus` role for their corpus artifact. A case ID's origin round and
 origin candidate stay unchanged across observations. Case observations link the discovery round and
-candidate to corpus and replay artifacts. A same-round
-observation must agree with its origin candidate's admissibility and replay status; it cannot mark a
-case solved when the search recorded its target failure. Later planner-status changes such as
-`unsolved` to `solved` are allowed. Later feasibility updates are limited to
+candidate to corpus and replay artifacts. For non-historical cases, the search reference must be the
+origin round's exact checksummed search artifact, and the replay reference must be the replay artifact
+in that admitted origin candidate. An artifact from another round or case is not interchangeable.
+A same-round observation must agree with its origin candidate's admissibility and replay status; it
+cannot mark a case solved when the search recorded its target failure. Later planner-status changes,
+such as `unsolved` to `solved`, are allowed. Later feasibility updates are limited to
 `admissible_feasibility_unknown` → `empirically_feasible` or `planner_specific_failure`, and require
 complete evidence plus a checksummed artifact whose role is `admissibility-evidence`. The report
 does not infer stronger feasibility from a replay alone. Transitions are checked against the latest
@@ -102,6 +104,26 @@ is `native` or `adapter`, availability is `available`, and execution mode is res
 eligible rows with that outcome recorded. Fallback/degraded, failed, partial, missing, unknown, and
 ineligible rows remain in status counts and excluded-record lists. Missing expected rows and missing
 outcomes are reported separately; neither is synthesized as a success or failure.
+
+The optimizer artifact content uses `frontier-optimizer-selection.v1` and records its experiment,
+round, source revision, selected planner ID, and selected config SHA-256. The search artifact uses
+`frontier-falsification-source.v1` and records the same round identity, target planner/config, and the
+complete candidate ledger fields consumed by the report. The selected optimizer identity and search
+target must match the enclosing round planner/configuration, and the report's candidate rows must
+match that checksummed search ledger.
+
+Each evaluation artifact uses `frontier-evaluation-source.v1`. It records the experiment, round,
+source revision, evaluation-set name, planner/config identity, ordered `expected_episode_ids`, and
+the complete normalized episode rows consumed by the report. The outer evaluation set repeats the
+expected IDs and rows; both must match the checksummed source exactly, and `expected_episode_count`
+must equal the number of unique IDs. Reported rows must use IDs in that expected set; known expected
+IDs with no reported row remain visible as missing. If canonical source artifacts do not expose
+stable episode IDs, identity accounting is `unknown` and report generation fails closed. A count
+match alone cannot establish which episodes were evaluated. Successful summaries expose
+`identity_accounting_status: verified` and a digest of the ordered expected-ID manifest; the
+checksummed evaluation source remains the owner of the full ID list. These normalized envelopes are
+a fixture-first #9654 input contract; adapters from future #9653 artifacts must prove the same
+identity bindings rather than filling summary fields independently.
 
 ## Evidence limits and integration
 

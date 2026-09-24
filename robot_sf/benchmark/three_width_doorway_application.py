@@ -248,7 +248,9 @@ def _validate_planner_config(planner: Mapping[str, Any]) -> None:
         raise ValueError("planner_protocol.algo_config must retain the frozen planner settings")
 
 
-def _validate_expected_rows(planner: Mapping[str, Any], roster: list[str], seeds: list[int]) -> None:
+def _validate_expected_rows(
+    planner: Mapping[str, Any], roster: list[str], seeds: list[int]
+) -> None:
     """Require the preregistered Cartesian product without missing cells."""
     if _positive_int(planner.get("expected_rows"), field="planner_protocol.expected_rows") != (
         3 * len(roster) * len(seeds)
@@ -298,13 +300,17 @@ def _validate_application_protocol(
 
 
 def _validate_application_execution(execution: Any) -> None:
-    """Require un-authorized campaign execution gates."""
+    """Bind execution authority to the author's recorded 0.0.8 decision."""
     if not isinstance(execution, dict):
         raise ValueError("execution must be a mapping")
-    if execution.get("production_campaign_authorized") is not False:
-        raise ValueError("production campaign authorization must remain false")
-    if execution.get("slurm_submission_authorized") is not False:
-        raise ValueError("Slurm submission authorization must remain false")
+    if execution.get("production_campaign_authorized") is not True:
+        raise ValueError("production campaign requires the author's execution decision")
+    if execution.get("slurm_submission_authorized") is not True:
+        raise ValueError("Slurm submission requires the author's execution decision")
+    if execution.get("authorization_source") != (
+        "https://github.com/ll7/diss/issues/2669#issuecomment-5811968439"
+    ):
+        raise ValueError("doorway execution authority must name the recorded author decision")
 
 
 def load_three_width_manifest(path: Path) -> dict[str, Any]:
@@ -1026,8 +1032,11 @@ def run_three_width_preflight(
             "planner_roster": list(resolved["planner_roster"]),
             "planner_seeds": list(resolved["planner_seeds"]),
             "horizon_steps": resolved["horizon_steps"],
-            "production_campaign_authorized": False,
-            "slurm_submission_authorized": False,
+            "production_campaign_authorized": manifest["execution"][
+                "production_campaign_authorized"
+            ],
+            "slurm_submission_authorized": manifest["execution"]["slurm_submission_authorized"],
+            "authorization_source": manifest["execution"]["authorization_source"],
         },
         "checks": {
             "baseline_passes": all(baseline_checks.values()),

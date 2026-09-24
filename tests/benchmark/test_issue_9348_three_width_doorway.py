@@ -15,6 +15,7 @@ import yaml
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.three_width_doorway_application import (
     DoorwayPairingSession,
+    _validate_application_execution,
     build_pair_manifest,
     build_pair_receipt,
     check_pair_receipts,
@@ -88,6 +89,22 @@ def test_manifest_pins_three_width_tiers() -> None:
     assert tuple(resolved["planner_roster"]) == ("goal", "social_force")
     assert tuple(resolved["planner_seeds"]) == (225, 226, 227)
     assert manifest["planner_protocol"]["expected_rows"] == 18
+    assert manifest["execution"] == {
+        "production_campaign_authorized": True,
+        "slurm_submission_authorized": True,
+        "authorization_source": "https://github.com/ll7/diss/issues/2669#issuecomment-5811968439",
+        "evidence_admission": "not_started",
+        "baseline_map_must_remain_unchanged": True,
+    }
+
+
+def test_doorway_execution_requires_recorded_author_decision() -> None:
+    """Execution authority cannot be inferred from a boolean without the author record."""
+    execution = load_three_width_manifest(_MANIFEST)["execution"]
+    with pytest.raises(ValueError, match="recorded author decision"):
+        _validate_application_execution({**execution, "authorization_source": "ll7/diss#2669"})
+    with pytest.raises(ValueError, match="author's execution decision"):
+        _validate_application_execution({**execution, "slurm_submission_authorized": False})
 
 
 def test_matrix_has_three_positive_clearance_widths(tmp_path: Path) -> None:
@@ -332,5 +349,10 @@ def test_conservative_grid_result_is_reported_without_changing_frozen_widths(
     )
     assert report["checks"]["all_widths_positive_clearance"] is True
     assert report["checks"]["nominal_grid_route_feasible_for_every_variant"] is False
+    assert report["protocol"]["production_campaign_authorized"] is True
+    assert report["protocol"]["slurm_submission_authorized"] is True
+    assert report["protocol"]["authorization_source"] == (
+        "https://github.com/ll7/diss/issues/2669#issuecomment-5811968439"
+    )
     assert report["execution"]["confirmation_ready"] is False
     assert report["go"] is True  # The diagnostic geometry preflight ran, not the campaign.

@@ -69,7 +69,8 @@ planner_protocol:
   fallback_policy: record_unavailable_or_degraded; never silently coerce a cell into valid planner evidence
 
 execution:
-  production_campaign_authorized: false
-  slurm_submission_authorized: false
+  production_campaign_authorized: true
+  slurm_submission_authorized: true
+  authorization_source: https://github.com/ll7/diss/issues/2669#issuecomment-5811968439
   evidence_admission: not_started
   baseline_map_must_remain_unchanged: true

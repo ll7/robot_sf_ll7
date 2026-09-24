@@ -4,6 +4,12 @@ Source: ll7/robot_sf_ll7#9348 and the merged ll7/diss#2669 protocol at
 `docs/context/research/2026-09-21_doorway_width_protocol_2669.md`. This records the application
 configuration for the 0.0.8 campaign; it reports no comparison result.
 
+The author [approved execution as part of release 0.0.8 on 2026-09-24](https://github.com/ll7/diss/issues/2669#issuecomment-5811968439).
+The preregistration's earlier no-execution line applied to writing that protocol,
+before this decision. Slurm submission remains subject to the frozen source,
+paired-reset receipts and campaign preflight below; authorization alone does not
+make any row valid comparison evidence.
+
 ## Geometry and source
 
 The historical SVG at `maps/svg_maps/francis2023/francis2023_narrow_doorway.svg`

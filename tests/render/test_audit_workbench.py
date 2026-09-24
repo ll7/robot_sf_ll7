@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -14,6 +16,7 @@ import pytest
 from robot_sf.analysis_workbench.audit_contracts import Annotation
 from robot_sf.analysis_workbench.audit_store import StoredRecord
 from robot_sf.analysis_workbench.review_contracts import SourceRef
+from robot_sf.evidence.environment_manifest import RedactionContext, sanitize_text
 from robot_sf.render.audit_workbench import (
     AuditWorkbenchConflictError,
     AuditWorkbenchError,
@@ -3938,13 +3941,83 @@ def test_document_and_offline_assets_mark_fixture_boundary(tmp_path: Path) -> No
     assert (tmp_path / "audit" / "components" / "review_panels" / "review_panels.js").is_file()
 
 
-def test_browser_controller_runtime_covers_normal_and_missing_media_cases() -> None:
-    """Execute the dependency-free DOM harness used by the fixture UI slice."""
+def _safe_node_excerpt(output: str, *, limit: int = 2048) -> str:
+    """Keep a useful failure excerpt without echoing credentials into CI logs."""
+    for key, value in os.environ.items():
+        if re.search(r"token|secret|password|api_?key|credential|authorization", key, re.I):
+            if len(value) >= 8:
+                output = output.replace(value, "<redacted>")
+    output = output.replace(_FakeSession.session_token, "<redacted>")
+    output = re.sub(r"(?i)\b(bearer\s+)\S+", r"\1<redacted>", output)
+    output, _ = sanitize_text(output, RedactionContext(home=str(Path.home())))
+    if len(output) > limit:
+        return f"{output[:limit]}\n[truncated]"
+    return output or "<empty>"
+
+
+def _run_browser_controller_harness() -> subprocess.CompletedProcess[str]:
+    """Execute the dependency-free DOM harness and retain bounded failure detail."""
     completed = subprocess.run(
         ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if completed.returncode:
+        try:
+            version = subprocess.run(
+                ["node", "--version"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            version = "unavailable"
+        pytest.fail(
+            f"Node DOM harness exit={completed.returncode}, version={_safe_node_excerpt(version)}\n"
+            f"stdout:\n{_safe_node_excerpt(completed.stdout)}\n"
+            f"stderr:\n{_safe_node_excerpt(completed.stderr)}",
+            pytrace=False,
+        )
+    return completed
+
+
+def test_browser_controller_runtime_covers_normal_and_missing_media_cases() -> None:
+    """The DOM harness exercises both normal and missing-media paths."""
+    completed = _run_browser_controller_harness()
 
     assert "audit_workbench_runtime: ok" in completed.stdout
+
+
+def test_browser_controller_runtime_failure_reports_redacted_bounded_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing Node assertion preserves its exit and clue without leaking credentials."""
+    secret = "test-secret-value-should-not-appear"
+    monkeypatch.setenv("GITHUB_TOKEN", secret)
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert kwargs["capture_output"] is True and kwargs["text"] is True
+        if args == ["node", "--version"]:
+            return subprocess.CompletedProcess(args, 0, "v22.20.0\n", "")
+        return subprocess.CompletedProcess(
+            args,
+            7,
+            f"stdout token={secret} " + "x" * 2500,
+            "AssertionError [ERR_ASSERTION] at harness.mjs:42\n"
+            f"Authorization: Bearer {secret}\n"
+            f"fixture={_FakeSession.session_token}\n" + "y" * 2500,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(pytest.fail.Exception) as failure:
+        _run_browser_controller_harness()
+
+    message = str(failure.value)
+    assert "exit=7" in message and "version=v22.20.0" in message
+    assert "AssertionError [ERR_ASSERTION]" in message
+    assert message.count("[truncated]") == 2
+    assert secret not in message and _FakeSession.session_token not in message
+    assert calls == [
+        ["node", str(Path(__file__).with_name("audit_workbench_runtime.mjs"))],
+        ["node", "--version"],
+    ]

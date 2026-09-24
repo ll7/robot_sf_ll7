@@ -23,10 +23,10 @@ CONFIG_SHA256 = {
     "headon_group": "fe3ee17279a74b1ef541f68f746bc265e7b32bb29a711e862081f9f5ee1e277e",
     "doorway": "bae73148b125af5652726a12dced5d64a3e108e9783894293da2d44e7f513fb0",
 }
-EFFECTIVE_HASH = {"headon_group": "c013f96aae21ada2", "doorway": "fa98965443316b1a"}
+EFFECTIVE_HASH = {"headon_group": "b195d55f16871ba2", "doorway": "a30c4555ce8a3f0a"}
 DIAGNOSTIC_CONFIG = {
-    "headon_group": "configs/benchmarks/issue_9671_trace_headon_group_v007.yaml",
-    "doorway": "configs/benchmarks/issue_9671_trace_doorway_v007.yaml",
+    "headon_group": "output/benchmarks/issue9671/inputs/issue_9671_trace_headon_group_v007.yaml",
+    "doorway": "output/benchmarks/issue9671/inputs/issue_9671_trace_doorway_v007.yaml",
 }
 FROZEN_INPUT_SHA256 = {
     "robot_sf/benchmark/schemas/episode.schema.v1.json": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",

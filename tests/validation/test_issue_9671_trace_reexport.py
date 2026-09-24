@@ -268,6 +268,30 @@ def test_rejects_unbound_config_bytes(tmp_path: Path) -> None:
         )
 
 
+def test_rejects_unstaged_config_invocation(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    configs, manifests, digests, effective = _bindings(tmp_path, [113])
+    traces = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
+    manifest = json.loads(manifests["headon_group"].read_text())
+    manifest["invoked_command"] = manifest["invoked_command"].replace(
+        checker.DIAGNOSTIC_CONFIG["headon_group"],
+        "configs/benchmarks/issue_9671_trace_headon_group_v007.yaml",
+    )
+    manifests["headon_group"].write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="campaign manifest identity mismatch"):
+        check(
+            archive,
+            [traces],
+            configs,
+            manifests,
+            expected={("ppo", "classic_doorway_medium", 113)},
+            expected_archive_sha256=None,
+            expected_config_sha256=digests,
+            expected_effective_hash=effective,
+        )
+
+
 def test_rejects_mixed_trace_bytes_without_matching_producer_manifest(tmp_path: Path) -> None:
     archive = tmp_path / "release.tar.gz"
     _archive(archive, [_row(113, "collision", trace=False)])

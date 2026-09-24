@@ -22,6 +22,12 @@ configuration or its 20,160 rows.
 Both diagnostic configs turn on force, planner-decision, and simulation-step recording. Their
 worker count is one; the release used its campaign execution context. Accordingly, outcome
 differences are findings, and per-step values are diagnostic observations from the rerun context.
+The frozen execution worktree stays Git-clean: the two tracked PR config bytes are hydrated at
+`output/benchmarks/issue9671/inputs/` from config-origin commit `cb1d650a`, then checked against
+their SHA-256 values above before preflight and run. `output/` is transient; the tracked PR and
+packet provide the durable source. Staging changes the runner's effective config hashes to
+`b195d55f16871ba2` (head-on/group) and `a30c4555ce8a3f0a` (doorway), while the config bytes and
+scientific parameters remain identical. The validator binds those staged path identities and hashes.
 The configs were derived from the later #9431 trace input, then constrained against the frozen
 archive and release's versioned scenario/planner settings. The config bytes are not claimed to
 exist at frozen commit `07f7e8d`.
@@ -64,7 +70,11 @@ change this frozen-source trace record.
 
 ## Status
 
-Both configuration preflights passed on the SSH development host on 2026-09-24. No #9671
+Both staged-configuration preflights passed on the SSH development host on 2026-09-24. A first
+canonical submission attempt stopped before `sbatch`: the clean-source guard rejected untracked
+config files inside the frozen worktree. Those exact bytes were then staged under ignored `output/`
+from the tracked PR source, verified by SHA-256, and the frozen worktree returned to a clean Git
+state. No #9671
 Slurm job or trace-result checksum is claimed here until its submission and cold readback are
 recorded. The 0.0.7 archive SHA above was rechecked locally. The legacy three-context Table 8.3
 numbers concern the earlier 0.0.3 source and must be re-measured or relabelled before being

@@ -65,6 +65,15 @@ denominator rule. The gate records counts of zero-exposure and absent-variant ro
 invalid examples. This implements the denominator-aware correction recorded on issue #9668;
 `null` is a declared unavailable value, not a finite measurement.
 
+Diagnostic-only check: the force-field gate passed on all 384 source
+`71464357ca89e6578ee593a15167bd1eda612d99` rows retrieved from Slurm job `15754`
+for issue #9666. It found 91 zero-exposure rows and four rows where the optional
+pedestrian–pedestrian-equivalent variant was absent; the four rows had too few time samples
+for that variant. The metric layer serializes exposed-pedestrian counts as whole-valued JSON
+floats such as `0.0`, so the gate checks finiteness and integrality instead of Python's
+integer type. This narrow source/row-shape check does not establish 0.0.8 equivalence or
+the full-campaign result.
+
 The gate's archive self-test on the actual 0.0.7 bundle paired all 20,160 rows with zero
 mismatches and zero scientific-manifest differences. It found the historical
 `min_separation_corrupted_m` field is NaN (not a number) on every row;

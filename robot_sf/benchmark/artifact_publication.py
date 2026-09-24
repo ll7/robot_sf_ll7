@@ -207,6 +207,21 @@ def _to_repo_relative(path: Path) -> str:
         return resolved.name
 
 
+def _evidence_payload_location(bundle_dir: Path, payload_path: str) -> str:
+    """Return a durable location for one evidence payload entry.
+
+    Repository-local bundles use their repository-relative path. Bundles built
+    outside the repository use a bundle-root-relative payload path instead.
+    """
+    bundle_root = bundle_dir.resolve()
+    repository_root = get_repository_root().resolve()
+    try:
+        bundle_relative = bundle_root.relative_to(repository_root)
+    except ValueError:
+        bundle_relative = Path()
+    return (bundle_relative / "payload" / Path(payload_path)).as_posix()
+
+
 def list_publication_files(run_dir: Path, *, include_videos: bool = True) -> list[Path]:
     """Return sorted run-relative file paths eligible for publication export.
 
@@ -1229,7 +1244,7 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
     checksums_path.write_text(
-        "".join(f"{entry.sha256}  {entry.path}\n" for entry in entries),
+        "".join(f"{entry.sha256}  payload/{entry.path}\n" for entry in entries),
         encoding="utf-8",
     )
 
@@ -1247,7 +1262,13 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
             "paper_or_benchmark_claim": "not_established_by_bundle_alone",
         },
         "totals": {"file_count": len(entries), "total_bytes": total_bytes},
-        "files": [asdict(entry) for entry in entries],
+        "files": [
+            {
+                **asdict(entry),
+                "location": _evidence_payload_location(bundle_dir, entry.path),
+            }
+            for entry in entries
+        ],
     }
     if artifact_badging is not None:
         validate_artifact_badging_block(artifact_badging)

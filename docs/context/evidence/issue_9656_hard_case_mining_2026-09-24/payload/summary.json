@@ -1,5 +1,6 @@
 {
   "artifact_disposition": {
+    "local_cache_root_placeholder": "Set ISSUE9656_LOCAL_ROOT to the ignored local cache directory containing the preserved source and replay artifacts.",
     "release_bundle": "durable_public_release",
     "replay_episode_files": "ignored_local_cache; output SHA-256 values retained in summary; hashes were first captured during resume because original replay receipts had no output hashes, then verified on later copies",
     "showcase_and_case_materialization_outputs": "ignored_reproducible_local_cache",
@@ -287,9 +288,9 @@
           "robot_sf_bench",
           "run",
           "--matrix",
-          "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -301,7 +302,7 @@
           "--algo",
           "orca",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -313,7 +314,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -386,7 +387,7 @@
         "execution_mode": "adapter",
         "execution_mode_source": "adapter",
         "replay_malformed_line_count": 0,
-        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml",
+        "replay_matrix_path": "${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml",
         "replay_matrix_sha256": "37393c622cd09c0e20905def2e8a2cf71facad40692eacb9f3fec078f5236aae",
         "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
         "replay_row_count": 1,
@@ -669,9 +670,9 @@
           "robot_sf_bench",
           "run",
           "--matrix",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -683,7 +684,7 @@
           "--algo",
           "goal",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -695,7 +696,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -768,7 +769,7 @@
         "execution_mode": "native",
         "execution_mode_source": "native",
         "replay_malformed_line_count": 0,
-        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml",
+        "replay_matrix_path": "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml",
         "replay_matrix_sha256": "a1472c3ab99f4cb47e270e21fbc7279b44cebb4f9360e9118dcfc8b6941f82b4",
         "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
         "replay_row_count": 1,
@@ -1023,9 +1024,9 @@
           "robot_sf_bench",
           "run",
           "--matrix",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -1037,7 +1038,7 @@
           "--algo",
           "orca",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -1049,7 +1050,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -1122,7 +1123,7 @@
         "execution_mode": "adapter",
         "execution_mode_source": "adapter",
         "replay_malformed_line_count": 0,
-        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml",
+        "replay_matrix_path": "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml",
         "replay_matrix_sha256": "679b86b70a3418fe8a182edbc84cef430ab3f2159fbc944a80808ae848e1e358",
         "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
         "replay_row_count": 1,
@@ -1804,9 +1805,9 @@
           "robot_sf_bench",
           "run",
           "--matrix",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -1818,7 +1819,7 @@
           "--algo",
           "goal",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -1830,7 +1831,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -1903,7 +1904,7 @@
         "execution_mode": "native",
         "execution_mode_source": "native",
         "replay_malformed_line_count": 0,
-        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml",
+        "replay_matrix_path": "${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml",
         "replay_matrix_sha256": "3ba4e8f959f88cff9259835e6622d7f404d679e69210d3a472f2aaa5a1d34cc2",
         "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
         "replay_row_count": 1,
@@ -2730,7 +2731,7 @@
           "--scenario-id",
           "francis2023_accompanying_peer",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -2742,7 +2743,7 @@
           "--algo",
           "orca",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -2754,7 +2755,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_accompanying_peer --out output/issue9656_hard_case_mining/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_accompanying_peer --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "planner_key": "orca",
         "replay_row_count": 0,
         "return_code": 2,
@@ -2774,7 +2775,7 @@
           "--scenario-id",
           "francis2023_circular_crossing",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-4a01770a7c387ea0/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-4a01770a7c387ea0/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -2786,7 +2787,7 @@
           "--algo",
           "goal",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-4a01770a7c387ea0/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-4a01770a7c387ea0/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -2798,7 +2799,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_circular_crossing --out output/issue9656_hard_case_mining/replay_limit_5/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_5/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_circular_crossing --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "planner_key": "goal",
         "replay_row_count": 0,
         "return_code": 2,
@@ -2818,7 +2819,7 @@
           "--scenario-id",
           "francis2023_circular_crossing",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -2830,7 +2831,7 @@
           "--algo",
           "orca",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -2842,7 +2843,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_circular_crossing --out output/issue9656_hard_case_mining/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_circular_crossing --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "planner_key": "orca",
         "replay_row_count": 0,
         "return_code": 2,
@@ -2862,7 +2863,7 @@
           "--scenario-id",
           "francis2023_accompanying_peer",
           "--out",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-b08371fb5cd09502/replay/episodes.jsonl",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-b08371fb5cd09502/replay/episodes.jsonl",
           "--base-seed",
           "111",
           "--repeats",
@@ -2874,7 +2875,7 @@
           "--algo",
           "goal",
           "--algo-config",
-          "output/issue9656_hard_case_mining/replay_limit_5/cases/case-b08371fb5cd09502/replay/planner_config.yaml",
+          "${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-b08371fb5cd09502/replay/planner_config.yaml",
           "--benchmark-profile",
           "baseline-safe",
           "--workers",
@@ -2886,7 +2887,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_accompanying_peer --out output/issue9656_hard_case_mining/replay_limit_5/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_5/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix configs/scenarios/classic_interactions_francis2023.yaml --scenario-id francis2023_accompanying_peer --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_5/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "planner_key": "goal",
         "replay_row_count": 0,
         "return_code": 2,
@@ -2915,10 +2916,10 @@
     "scheduled_jobs_total": 12,
     "status": "runner_failed_no_episode_output"
   },
-  "materializer_revision": "a752661b3518a0d5776b785516dec614e7035f27",
+  "materializer_revision": "0a5f73283b98279900797b75d20adf6d4676086b",
   "replay": {
     "attempted": 4,
-    "materializer_revision": "a752661b3518a0d5776b785516dec614e7035f27",
+    "materializer_revision": "0a5f73283b98279900797b75d20adf6d4676086b",
     "maximum_allowed": 5,
     "new_attempted": 0,
     "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
@@ -2944,8 +2945,9 @@
   },
   "reproduction_commands": {
     "bounded_new_replays": "Use the same materializer command with --replay-limit 4 and a fresh --out-dir. It will execute no more than four eligible single-seed cases; this historical receipt instead reused four previously executed cases.",
-    "materialize_without_new_replay": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary output/issue9656_hard_case_mining/showcase/showcase_summary.json --campaign-root output/issue9656_hard_case_mining/showcase/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload --bundle output/issue9656_hard_case_mining/showcase/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir output/issue9656_hard_case_mining/slice --replay-limit 0",
-    "showcase": "uv run python scripts/tools/benchmark_showcase.py --bundle-url https://github.com/ll7/robot_sf_ll7/releases/download/0.0.2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz --sha256 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90 --out-dir output/issue9656_hard_case_mining/showcase --top-k 15 --render-limit 0"
+    "local_cache_root": "Replace ${ISSUE9656_LOCAL_ROOT} in local artifact paths with the directory containing the preserved source and replay artifacts.",
+    "materialize_without_new_replay": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary ${ISSUE9656_LOCAL_ROOT}/showcase/showcase_summary.json --campaign-root ${ISSUE9656_LOCAL_ROOT}/showcase/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload --bundle ${ISSUE9656_LOCAL_ROOT}/showcase/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir ${ISSUE9656_LOCAL_ROOT}/slice --replay-limit 0",
+    "showcase": "uv run python scripts/tools/benchmark_showcase.py --bundle-url https://github.com/ll7/robot_sf_ll7/releases/download/0.0.2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz --sha256 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90 --out-dir ${ISSUE9656_LOCAL_ROOT}/showcase --top-k 15 --render-limit 0"
   },
   "schema_version": "benchmark-hard-case-slice.v1",
   "selection": {
@@ -3029,11 +3031,18 @@
     "bundle_name": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz",
     "bundle_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
     "bundle_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz",
-    "campaign_id": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316",
     "embedded_checksums_status": "passed",
     "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
     "matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
     "showcase_tool_revision": "477f14c1b4b052ad407a34a71caace6618a75eeb",
+    "showcase_tool_source_files_sha256": {
+      "scripts/replay_episode_figure.py": "9274f0bfba7cdc5b9b68bbbddcf7f87731a97d0757748dff4c4b941f446558b9",
+      "scripts/tools/analyze_camera_ready_campaign.py": "16ebb65e69f682d9bcef5846422f72f8582a040a5e073e01fa7ba53875c71bcb",
+      "scripts/tools/benchmark_showcase.py": "626e5480a0daaa9d0b46e6dd6af6a833247e0a0aed072c0eb8e4724db96a6eb9"
+    },
+    "showcase_tool_source_snapshot_revision": "0a5f73283b98279900797b75d20adf6d4676086b",
+    "showcase_tool_source_snapshot_status": "verified_file_hash_match",
+    "source_campaign_id": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316",
     "source_files_verified": [
       "campaign_manifest.json",
       "preflight/preview_scenarios.json",

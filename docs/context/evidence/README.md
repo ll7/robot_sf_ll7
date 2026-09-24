@@ -63,8 +63,10 @@ Each bundle writes:
 
 - `payload/`: exactly the selected compact files;
 - `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
-  claim boundary, source root, file index, sizes, SHA-256 hash checksums, and policy caveats;
-- `checksums.sha256`: checksum lines for every payload file.
+  claim boundary, source root, file index, sizes, payload locations, SHA-256 hashes, and policy
+  caveats. File-entry `path` values are relative to `payload/`; `location` is repository-relative
+  when the bundle is written inside the repository and bundle-relative otherwise;
+- `checksums.sha256`: bundle-root-relative checksum paths such as `payload/summary.json`.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 

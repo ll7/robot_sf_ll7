@@ -282,6 +282,7 @@ def _append_episode_evaluation(
     config_identity: str,
     execution_mode: str,
     outcome: dict[str, bool] | None = None,
+    termination_reason: str | None = None,
     degraded: bool = False,
 ) -> dict[str, object]:
     """Append a fixture observation whose receipt is derived from its stored JSONL row."""
@@ -307,13 +308,23 @@ def _append_episode_evaluation(
         "invalid_run": False,
     }
     record["event_ledger"]["software_commit"] = record["git_hash"]
-    if selected_outcome["route_complete"]:
-        record["termination_reason"] = "success"
-        record["status"] = "success"
-        record["metrics"]["success"] = 1
-        record["metrics"]["collisions"] = 0
-        record["metrics"]["total_collision_count"] = 0
-        record["event_ledger"]["reconciliation"]["collision_metric_value"] = 0
+    if termination_reason is None:
+        if selected_outcome["route_complete"]:
+            termination_reason = "success"
+        elif selected_outcome["collision_event"]:
+            termination_reason = "collision"
+        elif selected_outcome["timeout_event"]:
+            termination_reason = "truncated"
+    if termination_reason is not None:
+        record["termination_reason"] = termination_reason
+        record["status"] = counterexample_corpus.status_from_termination_reason(termination_reason)
+    record["metrics"]["success"] = int(selected_outcome["route_complete"])
+    collision_count = int(selected_outcome["collision_event"])
+    record["metrics"]["collisions"] = collision_count
+    record["metrics"]["total_collision_count"] = collision_count
+    if collision_count == 0:
+        record["event_ledger"]["collision_events"] = []
+    record["event_ledger"]["reconciliation"]["collision_metric_value"] = collision_count
     if degraded:
         record["integrity"]["effective_view"]["degraded"] = True
     else:
@@ -1038,6 +1049,116 @@ def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Pa
     )
     assert incomplete_row["episode_sha256"] is None
     validate_corpus(corpus)
+
+
+@pytest.mark.parametrize("episode_status", ["failure", "placeholder"])
+def test_status_termination_mismatch_cannot_recompute_solved(
+    tmp_path: Path, episode_status: str
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    planner_id = f"status-mismatch-{episode_status}"
+    config_identity = f"config-{episode_status}"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=planner_id,
+        config_identity=config_identity,
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
+    row = next(item for item in corpus["planner_evaluations"] if item["planner_id"] == planner_id)
+    artifact = corpus_root / row["replay_receipt"]["artifact_path"]
+    record = json.loads(artifact.read_text(encoding="utf-8"))
+    record["status"] = episode_status
+    artifact.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    row["episode_sha256"] = artifact_sha256
+    row["replay_receipt"].update(
+        {
+            "episode_sha256": artifact_sha256,
+            "artifact_sha256": artifact_sha256,
+            "selected_event_identity": counterexample_corpus._selected_event_identity(record),
+        }
+    )
+    _refresh_evaluation_id(row)
+
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+
+    assert status["status_counts"]["solved"] == 0
+    assert status["status_counts"]["unsolved"] == 0
+    assert status["status_counts"]["unknown"] == 1
+    assert "replay_artifact_status_termination_mismatch" in status["cases"][0]["reason_codes"]
+    with pytest.raises(CorpusError, match="replay_artifact_status_termination_mismatch"):
+        create_planner_replay_receipt(
+            row,
+            corpus["cases"][0],
+            artifact_path=row["replay_receipt"]["artifact_path"],
+            corpus_root=corpus_root,
+        )
+
+
+@pytest.mark.parametrize(
+    ("termination_reason", "episode_status", "outcome", "expected_status"),
+    [
+        (
+            "success",
+            "success",
+            {"collision_event": False, "route_complete": True, "timeout_event": False},
+            "solved",
+        ),
+        (
+            "collision",
+            "collision",
+            {"collision_event": True, "route_complete": False, "timeout_event": False},
+            "unsolved",
+        ),
+        (
+            "max_steps",
+            "failure",
+            {"collision_event": False, "route_complete": False, "timeout_event": False},
+            "unsolved",
+        ),
+    ],
+)
+def test_canonical_episode_status_controls_remain_classifiable(
+    tmp_path: Path,
+    termination_reason: str,
+    episode_status: str,
+    outcome: dict[str, bool],
+    expected_status: str,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    planner_id = f"canonical-status-{episode_status}"
+    config_identity = f"config-{episode_status}"
+    _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=planner_id,
+        config_identity=config_identity,
+        execution_mode="native",
+        outcome=outcome,
+        termination_reason=termination_reason,
+    )
+
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+
+    assert status["status_counts"][expected_status] == 1
+    assert status["status_counts"]["unknown"] == 0
+    assert status["cases"][0]["reason_codes"] == []
+    row = next(item for item in corpus["planner_evaluations"] if item["planner_id"] == planner_id)
+    record = json.loads((corpus_root / row["replay_receipt"]["artifact_path"]).read_text())
+    assert record["status"] == episode_status
+    assert record["termination_reason"] == termination_reason
 
 
 def test_complete_evaluation_with_unknown_revision_stays_unknown(tmp_path: Path) -> None:

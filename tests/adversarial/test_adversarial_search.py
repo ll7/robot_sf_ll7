@@ -2969,6 +2969,29 @@ def test_certification_adapter_preserves_worst_file_api_eligibility(
     assert status.reason == "knife-edge clearance"
 
 
+def test_unknown_certificate_remains_searchable_but_stress_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Unknown feasibility is retained by candidate screening without benchmark promotion."""
+    fake_module = types.ModuleType("robot_sf.scenario_certification")
+    certificate = object()
+    fake_module.certify_scenario_file = lambda *_args, **_kwargs: [certificate]
+    fake_module.certificate_to_dict = lambda _certificate: {
+        "classification": "unknown",
+        "benchmark_eligibility": None,
+        "reasons": ["planner error"],
+    }
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
+
+    status = certification.certify_candidate(
+        _candidate(8), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+
+    assert status.passed
+    assert status.details["certificates"][0]["classification"] == "unknown"
+    assert status.details["certificates"][0]["benchmark_eligibility"] is None
+
+
 def test_objective_registry_and_fallback_scoring(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

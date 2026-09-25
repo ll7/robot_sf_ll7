@@ -247,7 +247,9 @@ def _algorithm_metadata_runtime_marker(
 
     Guarded PPO's safe Risk-DWA shield command is a declared component of that composite
     planner.  Its exact ``fallback_safe`` counters are therefore native intervention telemetry;
-    best-effort and uncertainty fallbacks remain forbidden.
+    the exact ``stop_best_effort`` label remains forbidden and its counters are valid only at
+    zero; positive or malformed values, plus other best-effort and uncertainty fallbacks, remain
+    forbidden.
 
     Returns:
         The first forbidden runtime marker, if present.

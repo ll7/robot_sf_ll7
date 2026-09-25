@@ -1085,6 +1085,78 @@ def test_guarded_ppo_safe_shield_state_remains_admitted() -> None:
 
 
 @pytest.mark.parametrize(
+    ("metadata_patch", "expected_status", "expected_marker"),
+    [
+        (
+            {"guard_stats": {"stop_best_effort": 0}},
+            "valid",
+            None,
+        ),
+        (
+            {"guard_stats": {"stop_best_effort": 1}},
+            "invalid",
+            ("guard_stats.stop_best_effort", "1"),
+        ),
+        (
+            {"guard_stats": {"stop_best_effort": "1"}},
+            "invalid",
+            ("guard_stats.stop_best_effort", "invalid"),
+        ),
+        (
+            {"shield_stats": {"decision_counts": {"stop_best_effort": 1}}},
+            "invalid",
+            ("shield_stats.decision_counts.stop_best_effort", "1"),
+        ),
+        (
+            {"shield_stats": {"decision_counts": {"stop_best_effort": "1"}}},
+            "invalid",
+            ("shield_stats.decision_counts.stop_best_effort", "invalid"),
+        ),
+        (
+            {"shield_stats": {"last_decision": {"decision_label": "stop_best_effort"}}},
+            "invalid",
+            ("shield_stats.last_decision.decision_label", "stop_best_effort"),
+        ),
+    ],
+)
+def test_full_release_handles_stop_best_effort_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    metadata_patch: dict[str, Any],
+    expected_status: str,
+    expected_marker: tuple[str, str] | None,
+) -> None:
+    """Full release rejects stop-best-effort evidence but admits an explicit zero count."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs" / "planner_11__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"].update(metadata_patch)
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == expected_status, result["blockers"]
+    if expected_marker is None:
+        assert result["blockers"] == []
+    else:
+        marker_path, marker_value = expected_marker
+        assert result["forbidden_status_counts"][marker_value] == 1
+        assert any(marker_path in blocker for blocker in result["blockers"])
+
+
+@pytest.mark.parametrize(
     ("metadata_container", "metadata"),
     tuple(
         (container, metadata)

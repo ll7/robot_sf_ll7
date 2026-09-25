@@ -1877,10 +1877,9 @@ def _producer_selected_map_binding(  # noqa: C901 - each provenance guard is exp
         or selected_role not in {"map_file", "default_map_pool"}
     ):
         return "unavailable", None
-    identity_path = identity.get("path")
     files = identity.get("files")
     scenario_id = episode.get("scenario_id")
-    if not isinstance(identity_path, str) or not isinstance(files, list):
+    if not isinstance(files, list):
         return "unavailable", None
     if not isinstance(scenario_id, str) or not scenario_id.strip():
         return "unavailable", None
@@ -1893,11 +1892,6 @@ def _producer_selected_map_binding(  # noqa: C901 - each provenance guard is exp
     ]
     if not candidate_records:
         return "unavailable", None
-    try:
-        candidate_root = Path(identity_path).expanduser().resolve().parent
-        selected_resolved_path = Path(selected_path).expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        return "unavailable", None
     matching_records: list[Mapping[str, Any]] = []
     for record in candidate_records:
         expected_sha256 = record.get("sha256")
@@ -1908,29 +1902,22 @@ def _producer_selected_map_binding(  # noqa: C901 - each provenance guard is exp
             not isinstance(expected_sha256, str)
             or expected_sha256.lower() != selected_sha256.lower()
             or expected_role != selected_role
-            or (isinstance(expected_map_id, str) and expected_map_id != map_id)
+            or expected_map_id != map_id
             or not isinstance(expected_path, str)
             or not expected_path.strip()
         ):
             continue
-        try:
-            path = Path(expected_path)
-            expected_resolved_path = (
-                path.resolve() if path.is_absolute() else (candidate_root / path).resolve()
-            )
-        except (OSError, RuntimeError, ValueError):
-            continue
-        if expected_resolved_path == selected_resolved_path:
-            matching_records.append(record)
-    if len(matching_records) != 1:
+        matching_records.append(record)
+    if not matching_records:
         return "mismatch", None
     return (
         "valid",
         {
             "map_id": map_id,
-            "path": selected_resolved_path.as_posix(),
+            "path": selected_path,
             "sha256": selected_sha256.lower(),
             "source_role": selected_role,
+            "matching_resource_count": len(matching_records),
         },
     )
 

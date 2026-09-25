@@ -27,6 +27,7 @@ from robot_sf.adversarial.qd import (
     QDSearchResult,
     compare_qd_vs_single_objective,
     default_behavior_descriptor,
+    qd_candidate_case_id,
     run_map_elites,
     write_qd_archive,
 )
@@ -127,10 +128,16 @@ def _candidates(count: int) -> list[CandidateSpec]:
     ]
 
 
-def _admissibility_payload(verdict: str, disposition: str) -> dict[str, Any]:
+def _admissibility_payload(
+    candidate: CandidateSpec,
+    verdict: str,
+    disposition: str,
+    *,
+    case_id: str | None = None,
+) -> dict[str, Any]:
     return {
         "schema_version": "scenario_admissibility.v1",
-        "case_id": "fixture-candidate",
+        "case_id": case_id or qd_candidate_case_id(candidate),
         "scenario_id": "fixture-scenario",
         "verdict": verdict,
         "target_planner_outcome": "not_evaluated",
@@ -276,8 +283,8 @@ def test_qd_precheck_rejects_before_calling_evaluator(tmp_path: Path) -> None:
     result = run_map_elites(
         config,
         evaluator=evaluator_must_not_run,
-        admissibility_precheck=lambda _config, _candidate: _admissibility_payload(
-            "geometric_or_kinodynamic_impossibility", "reject"
+        admissibility_precheck=lambda _config, candidate: _admissibility_payload(
+            candidate, "geometric_or_kinodynamic_impossibility", "reject"
         ),
     )
 
@@ -308,8 +315,8 @@ def test_qd_unknown_precheck_continues_to_evaluator(tmp_path: Path) -> None:
     result = run_map_elites(
         config,
         evaluator=_FakeEvaluator([evaluation]),
-        admissibility_precheck=lambda _config, _candidate: _admissibility_payload(
-            "admissible_feasibility_unknown", "retain"
+        admissibility_precheck=lambda _config, candidate: _admissibility_payload(
+            candidate, "admissible_feasibility_unknown", "retain"
         ),
     )
 
@@ -319,6 +326,38 @@ def test_qd_unknown_precheck_continues_to_evaluator(tmp_path: Path) -> None:
     assert result.admissibility_records[0]["status"] == "available"
     assert result.admissibility_records[0]["scenario_admissibility"]["verdict"] == (
         "admissible_feasibility_unknown"
+    )
+
+
+def test_qd_mismatched_precheck_case_id_is_unknown_and_evaluated(tmp_path: Path) -> None:
+    """A valid reject for a different candidate cannot suppress this evaluation."""
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+    evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        temp_root=tmp_path,
+    )
+    result = run_map_elites(
+        config,
+        evaluator=_FakeEvaluator([evaluation]),
+        admissibility_precheck=lambda _config, candidate: _admissibility_payload(
+            candidate,
+            "geometric_or_kinodynamic_impossibility",
+            "reject",
+            case_id="verdict-for-a-different-candidate",
+        ),
+    )
+
+    assert result.num_proposed == 1
+    assert result.num_evaluated == 1
+    assert result.num_admissibility_rejected == 0
+    assert result.admissibility_records[0]["status"] == "invalid"
+    assert result.admissibility_records[0]["reason_code"] == (
+        "admissibility_candidate_identity_mismatch"
     )
 
 
@@ -442,7 +481,7 @@ def test_run_map_elites_is_reproducible(tmp_path: Path) -> None:
 
 
 def test_compare_qd_vs_single_objective(tmp_path: Path) -> None:
-    """Equal-budget comparison reports QD coverage vs single-objective diversity."""
+    """Equal-proposal-budget comparison reports QD coverage and both evaluator counts."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
     config = QDSearchConfig(
         search_space=_space(),
@@ -473,14 +512,71 @@ def test_compare_qd_vs_single_objective(tmp_path: Path) -> None:
     report_path = tmp_path / "comparison.json"
     report_path.write_text(json.dumps(report.to_json(), indent=2), encoding="utf-8")
     loaded = json.loads(report_path.read_text(encoding="utf-8"))
-    assert loaded["comparison_type"] == "equal_budget_qd_vs_single_objective"
+    assert loaded["comparison_type"] == "equal_proposal_budget_qd_vs_single_objective"
+    assert loaded["budget_basis"] == "proposed_candidate_slots"
+    assert loaded["rows"]["map_elites"]["num_evaluated"] == 12
+    assert loaded["rows"]["single_objective"]["num_evaluated"] == 12
+
+
+def test_comparison_reports_proposal_budget_when_qd_precheck_skips_evaluation(
+    tmp_path: Path,
+) -> None:
+    """The report exposes different evaluator counts under equal proposal budgets."""
+    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
+    config = QDSearchConfig(search_space=_space(), objective="worst_case_snqi", grid=grid, budget=2)
+    queued_evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        cert_status=passed_status("synthetic fixture"),
+        temp_root=tmp_path / "qd",
+    )
+    precheck_calls = 0
+
+    def reject_first_candidate(_config: QDSearchConfig, candidate: CandidateSpec) -> dict[str, Any]:
+        nonlocal precheck_calls
+        precheck_calls += 1
+        if precheck_calls == 1:
+            return _admissibility_payload(
+                candidate, "geometric_or_kinodynamic_impossibility", "reject"
+            )
+        return _admissibility_payload(candidate, "admissible_feasibility_unknown", "retain")
+
+    qd_result = run_map_elites(
+        config,
+        evaluator=_FakeEvaluator([queued_evaluation]),
+        admissibility_precheck=reject_first_candidate,
+    )
+    baseline = _spanning_evaluations(2, temp_root=tmp_path / "single")
+    report = compare_qd_vs_single_objective(
+        qd_result=qd_result,
+        single_objective_evaluations=baseline,
+        budget=2,
+        grid=grid,
+    ).to_json()
+
+    assert qd_result.num_proposed == 2
+    assert qd_result.num_evaluated == 1
+    assert report["budget_basis"] == "proposed_candidate_slots"
+    assert report["rows"]["map_elites"]["budget"] == 2
+    assert report["rows"]["map_elites"]["num_evaluated"] == 1
+    assert report["rows"]["single_objective"]["num_evaluated"] == 2
+
+    with pytest.raises(ValueError, match="proposal counts"):
+        compare_qd_vs_single_objective(
+            qd_result=qd_result,
+            single_objective_evaluations=baseline[:1],
+            budget=2,
+            grid=grid,
+        )
 
 
 def test_qd_finds_more_distinct_modes_than_single_objective_baseline(tmp_path: Path) -> None:
     """QD must expose more distinct synthetic failure mechanisms than the SO baseline.
 
     The single-objective baseline here converges on one failure mode at this budget
-    while MAP-Elites spreads across the grid; this is the core QD claim at equal budget.
+    while MAP-Elites spreads across the grid; this is the core QD claim at equal proposals.
     """
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
     config = QDSearchConfig(
@@ -571,7 +667,12 @@ def test_single_objective_comparison_uses_archive_admission(tmp_path: Path) -> N
         bundle_index=3,
         temp_root=tmp_path,
     )
-    empty_qd = QDSearchResult(archive=QDArchive(grid=grid), num_evaluated=0, num_admitted=0)
+    empty_qd = QDSearchResult(
+        archive=QDArchive(grid=grid),
+        num_proposed=4,
+        num_evaluated=0,
+        num_admitted=0,
+    )
     report = compare_qd_vs_single_objective(
         qd_result=empty_qd,
         single_objective_evaluations=[valid, failed, nonfinite, out_of_grid],

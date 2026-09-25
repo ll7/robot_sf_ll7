@@ -11,10 +11,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.planner.socnav import (
-    SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
     SOCIAL_FORCE_PLANNER_LEGACY_V1,
     SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
     SocialForcePlannerAdapter,
@@ -234,10 +234,9 @@ def test_v2_metadata_names_the_geometry_convention() -> None:
     assert law["applied"] is True
 
 
-V2_CONFIG = {
-    "social_force_goal_approach_version": SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
-    "social_force_planner_version": V2,
-}
+V2_CONFIG_PATH = Path("configs/algos/social_force_resolution_independent_v2.yaml")
+V2_CONFIG = yaml.safe_load(V2_CONFIG_PATH.read_text(encoding="utf-8"))
+RELEASE_MATRIX = Path("configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml")
 
 
 def _run(scenario_path: Path, scenario_id: str, seed: int, positions: list | None = None) -> dict:
@@ -302,3 +301,15 @@ def test_group_crossing_seed_22_makes_monotone_progress_and_reaches_goal() -> No
     final_position = positions[-1]
     distances = [float(np.linalg.norm(positions[i] - final_position)) for i in range(0, 101, 10)]
     assert all(later < earlier for earlier, later in pairwise(distances))
+
+
+@pytest.mark.slow
+def test_release_matrix_bottleneck_low_seed_112_enters_goal_zone() -> None:
+    """The shipped v2 config completes under goal_zone_entry_v1.
+
+    With terminal_goal_v1 enabled the robot stopped 1.75 m before the final
+    waypoint, outside the goal zone, and timed out on this seed.
+    """
+    assert V2_CONFIG == {"social_force_planner_version": V2}
+    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", 112)
+    assert record["outcome"]["route_complete"] is True

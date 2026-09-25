@@ -1,0 +1,13 @@
+# Social-force planner with the resolution-independent obstacle term and
+# speed-limited commands (issue #9724).
+#
+# The historical planner (grid_cell_sum_v1) remains the default when the
+# selector is absent, so earlier campaigns stay reproducible.
+#
+# terminal_goal_v1 (#9428) is deliberately NOT enabled here. It switched off the
+# v1 per-cell wall force near the final goal to break a limit cycle that the v2
+# obstacle term no longer produces, and it stops the robot 1.75 m before the
+# final waypoint. Under goal_zone_entry_v1 that stop can leave the robot
+# outside the goal zone: in a 10-scenario x 3-seed diagnostic all 7 v2 timeouts
+# were such stops, and all 7 completed without terminal_goal_v1.
+social_force_planner_version: resolution_independent_v2

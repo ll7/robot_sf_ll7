@@ -604,11 +604,11 @@ class SearchConfig:
     workers: int = 1
     record_forces: bool = True
     require_certification: bool = False
-    apply_admissibility_filter: bool = False
     benchmark_profile: str = "baseline-safe"
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     warm_start: tuple[WarmStartCandidate, ...] = ()
+    apply_admissibility_filter: bool = False
 
     @classmethod
     def from_files(

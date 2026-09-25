@@ -93,6 +93,14 @@ family split, candidate space, budget, objective, gates, denominator, inference,
 evidence boundary are unchanged. This outcome-free implementation/provenance refresh does not
 authorize a campaign, transfer, or promotion.
 
+## Outcome-free positional-compatibility provenance refresh (2026-09-25)
+
+The new filter option now follows all pre-existing `SearchConfig` fields, preserving the generated
+constructor's positional argument order while keeping the filter disabled by default. The
+adversarial-config source hash and derived contract hash were refreshed; the frozen design and all
+768 scheduled identities remain unchanged. No outcome was generated or read, and no campaign is
+authorized by this compatibility repair.
+
 ## The claim under test (frozen, falsifiable)
 
 > Under a frozen family-disjoint design and matched candidate (64 per search seed per

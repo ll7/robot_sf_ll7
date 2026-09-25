@@ -157,6 +157,34 @@ def _config(
     )
 
 
+def test_search_config_preserves_legacy_positional_benchmark_profile(tmp_path: Path) -> None:
+    """The explicit filter option must not shift existing positional arguments."""
+    base = _config(tmp_path)
+    config = SearchConfig(
+        base.policy,
+        base.scenario_template,
+        base.search_space_path,
+        base.search_space,
+        base.objective,
+        base.output_dir,
+        base.budget,
+        base.seed,
+        base.algo_config_path,
+        base.horizon,
+        base.dt,
+        base.workers,
+        base.record_forces,
+        base.require_certification,
+        "legacy-profile",
+        base.snqi_weights_path,
+        base.snqi_baseline_path,
+        base.warm_start,
+    )
+
+    assert config.benchmark_profile == "legacy-profile"
+    assert config.apply_admissibility_filter is False
+
+
 class _SequenceSampler:
     """Sampler that returns a prepared candidate sequence."""
 

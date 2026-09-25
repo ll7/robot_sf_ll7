@@ -9,7 +9,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from robot_sf.training.scenario_loader import resolve_map_id
+from robot_sf.training.scenario_loader import (
+    RouteOverrideSnapshot,
+    capture_route_override_snapshot,
+    resolve_map_id,
+    resolve_route_override_path,
+)
 
 EPISODE_INPUT_IDENTITY_SCHEMA = "benchmark-episode-case-input-identity.v1"
 _PROVENANCE_ONLY_SCENARIO_METADATA = "adversarial_candidate"
@@ -45,6 +50,7 @@ def capture_episode_input_identity(
     scenario_path: str | Path,
     seed: int,
     run_id: str,
+    route_override_snapshot: RouteOverrideSnapshot | None = None,
 ) -> dict[str, Any]:
     """Capture scenario, route, and resolved map digests before simulation.
 
@@ -53,7 +59,10 @@ def capture_episode_input_identity(
         required file cannot be resolved or read.
     """
     source = Path(scenario_path).expanduser().resolve()
-    route_digest, route_reasons = _capture_route_digest(scenario, source)
+    snapshot = route_override_snapshot or capture_route_override_snapshot(
+        scenario, scenario_path=source
+    )
+    route_digest, route_reasons = _route_snapshot_identity(scenario, source, snapshot)
     map_assets, map_reasons = _capture_map_assets(scenario, source)
     reasons = list(route_reasons) + list(map_reasons)
     try:
@@ -105,19 +114,46 @@ def reconcile_consumed_map_identity(
     return reconciled
 
 
-def _capture_route_digest(
-    scenario: Mapping[str, Any], source: Path
+def reconcile_consumed_route_identity(
+    identity: Mapping[str, Any], *, consumed_route_overrides_sha256: str | None
+) -> dict[str, Any]:
+    """Reconcile parsed route override bytes with the captured episode identity.
+
+    Returns:
+        A copied identity marked unavailable if consumed route bytes are missing or differ.
+    """
+    reconciled = dict(identity)
+    if reconciled.get("status") != "bound":
+        return reconciled
+    if (
+        not isinstance(consumed_route_overrides_sha256, str)
+        or reconciled.get("route_overrides_sha256") != consumed_route_overrides_sha256
+    ):
+        reconciled["status"] = "unavailable"
+        reconciled["reason_codes"] = sorted(
+            set(reconciled.get("reason_codes", []))
+            | {"parsed_route_bytes_differ_from_captured_route_asset"}
+        )
+    return reconciled
+
+
+def _route_snapshot_identity(
+    scenario: Mapping[str, Any], source: Path, snapshot: RouteOverrideSnapshot
 ) -> tuple[str | None, list[str]]:
     reference = scenario.get("route_overrides_file")
     if not isinstance(reference, str) or not reference.strip():
-        return None, ["route_overrides_not_declared"]
-    path = Path(reference).expanduser()
-    if not path.is_absolute():
-        path = source.parent / path
+        if snapshot.path is None and snapshot.source_bytes is None:
+            return None, [snapshot.reason or "route_overrides_not_declared"]
+        return None, ["route_overrides_snapshot_path_mismatch"]
+    if snapshot.path is None or snapshot.source_bytes is None or snapshot.sha256 is None:
+        return None, [snapshot.reason or "route_overrides_unavailable"]
     try:
-        return _sha256_file(path.resolve(strict=True)), []
+        expected_path = resolve_route_override_path(reference, scenario_path=source)
     except (OSError, RuntimeError, ValueError):
         return None, ["route_overrides_unavailable"]
+    if snapshot.path != expected_path:
+        return None, ["route_overrides_snapshot_path_mismatch"]
+    return snapshot.sha256, []
 
 
 def _capture_map_assets(
@@ -178,5 +214,6 @@ __all__ = [
     "EPISODE_INPUT_IDENTITY_SCHEMA",
     "capture_episode_input_identity",
     "reconcile_consumed_map_identity",
+    "reconcile_consumed_route_identity",
     "scenario_semantic_sha256",
 ]

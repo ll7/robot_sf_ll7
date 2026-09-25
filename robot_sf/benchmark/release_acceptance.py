@@ -41,9 +41,9 @@ from robot_sf.benchmark.effective_algorithm_branches import (
     enumerate_effective_branches,
 )
 from robot_sf.benchmark.fallback_policy import (
-    is_verified_guarded_ppo,
-    runtime_fallback_or_degraded_marker,
+    algorithm_metadata_runtime_marker as _canonical_algorithm_metadata_runtime_marker,
 )
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
 from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
@@ -113,9 +113,6 @@ _RUNTIME_METADATA_CONTAINERS = frozenset(
         "runtime",
         "runtime_metadata",
     }
-)
-_DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
-    {"config", "planner_contract", "safety_shield_contract"}
 )
 
 
@@ -243,63 +240,13 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
 def _algorithm_metadata_runtime_marker(
     metadata: Mapping[str, Any], *, expected_algorithm: str | None = None
 ) -> tuple[str, str] | None:
-    """Scan runtime-bearing algorithm metadata without treating config as execution evidence.
-
-    Guarded PPO's safe Risk-DWA shield command is a declared component of that composite
-    planner.  Its exact ``fallback_safe`` counters are therefore native intervention telemetry;
-    the exact ``stop_best_effort`` label remains forbidden and its counters are valid only at
-    zero; positive or malformed values, plus other best-effort and uncertainty fallbacks, remain
-    forbidden.
+    """Keep the historical private entry point over the canonical metadata scanner.
 
     Returns:
         The first forbidden runtime marker, if present.
     """
-
-    def _is_valid_native_counter(value: Any) -> bool:
-        if not isinstance(value, int) or isinstance(value, bool):
-            return False
-        return value >= 0
-
-    runtime_view: dict[str, Any] = {
-        str(key): value
-        for key, value in metadata.items()
-        if str(key) not in _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS
-    }
-    guarded_ppo_identity = is_verified_guarded_ppo(metadata, expected_algorithm=expected_algorithm)
-    if guarded_ppo_identity:
-        guard_stats = metadata.get("guard_stats")
-        if isinstance(guard_stats, Mapping):
-            if "fallback_safe" in guard_stats and not _is_valid_native_counter(
-                guard_stats["fallback_safe"]
-            ):
-                return "guard_stats.fallback_safe", "invalid"
-            runtime_view["guard_stats"] = {
-                str(key): value
-                for key, value in guard_stats.items()
-                if key != "fallback_safe" or not _is_valid_native_counter(value)
-            }
-        shield_stats = metadata.get("shield_stats")
-        if isinstance(shield_stats, Mapping):
-            shield_view = dict(shield_stats)
-            decision_counts = shield_stats.get("decision_counts")
-            if isinstance(decision_counts, Mapping):
-                if "fallback_safe" in decision_counts and not _is_valid_native_counter(
-                    decision_counts["fallback_safe"]
-                ):
-                    return "shield_stats.decision_counts.fallback_safe", "invalid"
-                shield_view["decision_counts"] = {
-                    str(key): value
-                    for key, value in decision_counts.items()
-                    if key != "fallback_safe" or not _is_valid_native_counter(value)
-                }
-            last_decision = shield_stats.get("last_decision")
-            if isinstance(last_decision, Mapping):
-                shield_view["last_decision"] = {
-                    str(key): value for key, value in last_decision.items()
-                }
-            runtime_view["shield_stats"] = shield_view
-    return runtime_fallback_or_degraded_marker(
-        runtime_view, expected_algorithm=expected_algorithm, algorithm_metadata=metadata
+    return _canonical_algorithm_metadata_runtime_marker(
+        metadata, expected_algorithm=expected_algorithm
     )
 
 

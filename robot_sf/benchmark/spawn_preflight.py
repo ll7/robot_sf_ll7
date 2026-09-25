@@ -33,7 +33,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.sim.spawn_validation import reset_spawn_clearance
 from robot_sf.training.scenario_loader import load_scenarios
 
-DEFAULT_MATRIX = Path("configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml")
+DEFAULT_MATRIX = Path("configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml")
 
 
 def _parse_seeds(text: str) -> list[int]:

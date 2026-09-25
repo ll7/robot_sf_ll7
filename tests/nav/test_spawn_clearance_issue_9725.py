@@ -89,20 +89,23 @@ def test_sample_route_with_radius_clears_walls(corridor_map) -> None:
         assert clearance >= SPAWN_CLEARANCE_MARGIN_M - 1e-9
 
 
-def test_corridor_spawn_zone_geometry_clears_wall(corridor_map) -> None:
-    """The corridor spawn zone itself keeps robot radius plus margin from the wall."""
-    for zone in corridor_map.robot_spawn_zones:
-        for corner in zone:
-            assert robot_obstacle_clearance(corridor_map, corner, ROBOT_RADIUS) >= (
-                SPAWN_CLEARANCE_MARGIN_M - 1e-9
-            )
+def test_corridor_map_itself_is_unchanged_and_violates_clearance(corridor_map) -> None:
+    """The corridor map keeps its geometry; only the sampler enforces clearance.
+
+    Part of the spawn zone lies within the robot radius of the wall, which is exactly
+    why the padded sampler is needed (mechanism C).
+    """
+    corners = [c for zone in corridor_map.robot_spawn_zones for c in zone]
+    assert min(robot_obstacle_clearance(corridor_map, c, ROBOT_RADIUS) for c in corners) < 0.0
 
 
 def test_station_platform_ped_spawn_zones_avoid_robot_spawn_zone() -> None:
-    """No pedestrian route spawns inside the padded robot spawn zone (mechanism B)."""
+    """The successor station map spawns no route inside the padded robot zone (mechanism B)."""
     from shapely.geometry import Polygon
 
-    map_def = convert_map(str(MAPS / "classic_station_platform.svg"))
+    map_def = convert_map(
+        str(MAPS.parent / "successor_svg_maps" / "classic_station_platform_v2.svg")
+    )
 
     def rect(zone):
         a, b, c = zone
@@ -179,29 +182,50 @@ def test_respawn_excludes_robot_footprint() -> None:
     assert behavior.respawn_overlap_events == []
 
 
-def test_respawn_records_event_when_zone_is_fully_covered() -> None:
-    """If the robot covers the whole spawn zone, the fallback respawn is recorded."""
-    behavior, _groups, gid, _states, _exclusion = _route_behavior((2.7, 1.3))
+def test_respawn_records_event_and_keeps_legacy_sample_when_zone_is_fully_covered() -> None:
+    """If the robot covers the whole spawn zone, the first (legacy) sample is kept."""
+    behavior, _groups, gid, states, _exclusion = _route_behavior((2.7, 1.3))
     behavior.robot_exclusion_radius = 10.0
     np.random.seed(0)
+    legacy = sample_zone(((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)), 2)
+    np.random.seed(0)
     behavior.respawn_group_at_start(gid)
+    assert [tuple(row) for row in states[:, 0:2]] == legacy
     assert len(behavior.respawn_overlap_events) == 1
+    assert behavior.respawn_overlap_events[0]["ped_rows"] == [0, 1]
+    behavior.reset()
+    assert behavior.respawn_overlap_events == []
+
+
+def test_respawn_keeps_random_stream_when_legacy_sample_is_clear() -> None:
+    """A respawn far from the robot is identical to the unguarded one, draws included."""
+    behavior, _groups, gid, states, _exclusion = _route_behavior((100.0, 100.0))
+    np.random.seed(5)
+    legacy = sample_zone(((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)), 2)
+    after_legacy = np.random.uniform()
+    np.random.seed(5)
+    behavior.respawn_group_at_start(gid)
+    assert [tuple(row) for row in states[:, 0:2]] == legacy
+    assert np.random.uniform() == after_legacy
+
+
+def test_reset_respawn_does_not_use_stale_robot_pose() -> None:
+    """Reset-time respawns skip the robot guard; the simulator relocates after sampling."""
+    behavior, _groups, _gid, _states, _exclusion = _route_behavior((2.7, 1.3))
+    behavior.robot_exclusion_radius = 10.0
+    behavior.reset_at_start = True
     behavior.reset()
     assert behavior.respawn_overlap_events == []
 
 
 def test_spawn_validity_marks_overlap_invalid() -> None:
-    """Reset overlap or a collision after a respawn overlap marks the row invalid."""
-    clean = build_spawn_validity({"overlap": False}, [], ped_collision_seen=True)
+    """Reset overlap marks the row invalid unless the route was completed."""
+    clean = build_spawn_validity({"overlap": False}, [])
     assert clean["invalid_run"] is False and clean["invalid_reason"] is None
-    reset = build_spawn_validity({"overlap": True}, [], ped_collision_seen=False)
+    reset = build_spawn_validity({"overlap": True}, [])
     assert reset["invalid_run"] is True and reset["invalid_reason"] == "spawn_overlap"
-    respawn = build_spawn_validity({"overlap": False}, [{"group_id": 0}], ped_collision_seen=True)
-    assert respawn["invalid_run"] is True
-    no_collision = build_spawn_validity(
-        {"overlap": False}, [{"group_id": 0}], ped_collision_seen=False
-    )
-    assert no_collision["invalid_run"] is False
+    unmatched = build_spawn_validity({"overlap": False}, [{"group_id": 0, "ped_rows": [1]}])
+    assert unmatched["invalid_run"] is False
     assert record_has_spawn_overlap({"spawn_validity": reset})
     assert not record_has_spawn_overlap({"spawn_validity": clean})
     assert not record_has_spawn_overlap({})
@@ -212,7 +236,7 @@ def test_spawn_overlap_rows_are_ledger_invalid_and_excluded_from_rates() -> None
     from robot_sf.benchmark.aggregate import compute_aggregates
     from robot_sf.benchmark.event_ledger import build_event_ledger
 
-    invalid = build_spawn_validity({"overlap": True}, [], ped_collision_seen=True)
+    invalid = build_spawn_validity({"overlap": True}, [])
     overlap_row = {
         "episode_id": "overlap",
         "scenario_id": "scenario",
@@ -229,7 +253,7 @@ def test_spawn_overlap_rows_are_ledger_invalid_and_excluded_from_rates() -> None
         "termination_reason": "success",
         "outcome": {"collision_event": False, "route_complete": True, "timeout_event": False},
         "metrics": {"success": 1.0, "collisions": 0.0},
-        "spawn_validity": build_spawn_validity({"overlap": False}, [], ped_collision_seen=False),
+        "spawn_validity": build_spawn_validity({"overlap": False}, []),
     }
     ledger = build_event_ledger(overlap_row)
     assert ledger["exact_events"]["invalid_run"] is True

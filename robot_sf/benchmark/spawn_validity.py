@@ -3,8 +3,9 @@
 Every episode record carries ``spawn_validity``: the reset clearance between the
 robot and pedestrians and between the robot and the static map, plus any
 route-end respawn that could not avoid the robot footprint. A row whose reset is
-already in contact, or whose pedestrian collision follows such a respawn, is
-marked ``invalid_run`` with reason ``spawn_overlap``. The event ledger mirrors the
+already in contact, or whose robot collides with a respawned pedestrian within one
+second of that respawn, is marked ``invalid_run`` with reason ``spawn_overlap``
+(unless the route was completed). The event ledger mirrors the
 flag and aggregation excludes these rows from rates, because the outcome is a
 simulator spawn defect rather than planner behaviour.
 """
@@ -19,11 +20,58 @@ from robot_sf.nav.spawn_clearance import SPAWN_OVERLAP_INVALID_REASON
 SPAWN_VALIDITY_SCHEMA_VERSION = "spawn_validity.v1"
 
 
+#: A pedestrian collision counts as caused by a respawn only this soon after it (seconds).
+RESPAWN_COLLISION_WINDOW_S = 1.0
+
+
+def _respawn_collisions(
+    respawn_events: Sequence[Mapping[str, Any]],
+    collision_events: Sequence[Mapping[str, Any]],
+    dt_seconds: float,
+) -> list[dict[str, Any]]:
+    """Match pedestrian collisions to respawn overlaps of the same pedestrian.
+
+    A collision is attributed to a respawn when its partner is one of the respawned
+    group's pedestrian rows and it happens within ``RESPAWN_COLLISION_WINDOW_S`` after
+    the respawn step.
+
+    Returns:
+        One record per attributed collision.
+    """
+    matches: list[dict[str, Any]] = []
+    if dt_seconds <= 0.0:
+        return matches
+    for collision in collision_events:
+        if collision.get("collision_partner_type") != "pedestrian":
+            continue
+        try:
+            partner = int(str(collision.get("collision_partner_id")))
+            collision_time = float(collision.get("collision_time"))
+        except (TypeError, ValueError):
+            continue
+        for event in respawn_events:
+            rows = {int(row) for row in event.get("ped_rows", [])}
+            respawn_time = float(event.get("step", 0)) * dt_seconds
+            elapsed = collision_time - respawn_time
+            if partner in rows and -dt_seconds <= elapsed <= RESPAWN_COLLISION_WINDOW_S + 1.0e-9:
+                matches.append(
+                    {
+                        "group_id": event.get("group_id"),
+                        "ped_row": partner,
+                        "respawn_time_s": respawn_time,
+                        "collision_time_s": collision_time,
+                    }
+                )
+    return matches
+
+
 def build_spawn_validity(
     reset_clearance: Mapping[str, Any] | None,
     respawn_overlap_events: Sequence[Mapping[str, Any]] | None,
     *,
-    ped_collision_seen: bool,
+    collision_events: Sequence[Mapping[str, Any]] | None = None,
+    dt_seconds: float = 0.1,
+    route_complete: bool = False,
 ) -> dict[str, Any]:
     """Return the per-episode spawn-validity block.
 
@@ -31,22 +79,26 @@ def build_spawn_validity(
         reset_clearance: Output of ``reset_spawn_clearance`` right after reset, or
             ``None`` when it could not be measured.
         respawn_overlap_events: Route-end respawns that landed inside a robot footprint.
-        ped_collision_seen: Whether the episode recorded a robot-pedestrian collision.
+        collision_events: Typed collision events of the episode.
+        dt_seconds: Simulation step length used to time respawn events.
+        route_complete: Whether the robot completed its route. A completed route is
+            never marked invalid: no collision was counted, so no rate is distorted,
+            and the ledger keeps ``goal_reached`` and ``invalid_run`` exclusive.
 
     Returns:
         JSON-serializable spawn-validity block.
     """
     events = [dict(event) for event in respawn_overlap_events or []]
     reset_overlap = bool(reset_clearance.get("overlap")) if reset_clearance else False
-    respawn_collision = bool(events) and bool(ped_collision_seen)
-    invalid = reset_overlap or respawn_collision
+    respawn_collisions = _respawn_collisions(events, collision_events or [], float(dt_seconds))
+    invalid = (reset_overlap or bool(respawn_collisions)) and not route_complete
     return {
         "schema_version": SPAWN_VALIDITY_SCHEMA_VERSION,
         "reset_clearance": dict(reset_clearance) if reset_clearance else None,
         "reset_clearance_status": "available" if reset_clearance else "unavailable",
         "reset_overlap": reset_overlap,
         "respawn_overlap_events": events,
-        "respawn_overlap_collision": respawn_collision,
+        "respawn_overlap_collisions": respawn_collisions,
         "invalid_run": invalid,
         "invalid_reason": SPAWN_OVERLAP_INVALID_REASON if invalid else None,
     }
@@ -63,6 +115,7 @@ def record_has_spawn_overlap(record: Mapping[str, Any]) -> bool:
 
 
 __all__ = [
+    "RESPAWN_COLLISION_WINDOW_S",
     "SPAWN_VALIDITY_SCHEMA_VERSION",
     "build_spawn_validity",
     "record_has_spawn_overlap",

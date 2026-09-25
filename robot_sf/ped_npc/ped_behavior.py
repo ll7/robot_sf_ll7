@@ -167,6 +167,8 @@ class FollowRouteBehavior:
     """Centre distance (robot radius + ped radius + margin) respawns keep from each robot."""
     respawn_overlap_events: list[dict] = field(default_factory=list)
     """Respawns that could not avoid a robot footprint during the current episode."""
+    step_count: int = 0
+    """Behavior steps taken in the current episode; respawn events record it."""
 
     def __post_init__(self):
         """
@@ -222,6 +224,7 @@ class FollowRouteBehavior:
         has reached its destination, it is respawned at the start of its route. If the
         group has reached a waypoint, it is redirected to the current waypoint.
         """
+        self.step_count += 1
         for gid, nav in self.navigators.items():
             group_pos = self.groups.group_centroid(gid)
             nav.update_position(group_pos)
@@ -243,37 +246,48 @@ class FollowRouteBehavior:
         the PedestrianBehavior protocol interface.
 
         However, if reset_at_start is True, all groups will be immediately respawned at
-        the start.
+        the start. These reset respawns run before the new robot start is sampled, so
+        they are not guarded against the (stale) robot pose; the simulator moves any
+        pedestrian that overlaps the new robot start right after it is sampled.
         """
         self.respawn_overlap_events = []
+        self.step_count = 0
         if self.reset_at_start:
             for gid in self.navigators.keys():
-                self.respawn_group_at_start(gid)
+                self.respawn_group_at_start(gid, guard_robot=False)
 
-    def respawn_group_at_start(self, gid: int) -> None:
+    def respawn_group_at_start(self, gid: int, *, guard_robot: bool = True) -> None:
         """
         Respawn a group at the start of its route.
 
         The group is repositioned to the spawn zone of its route (avoiding obstacles
-        when provided, and the current robot footprints when a robot pose provider is
-        bound), and it is redirected to the first waypoint of its route.
+        when provided), and it is redirected to the first waypoint of its route.
         The waypoint ID of its navigator is reset to 0.
 
-        The draws match the unguarded call, so a respawn that already cleared the robot
-        is unchanged. If the robot covers the whole spawn zone, the legacy sample is
-        used and the event is recorded in ``respawn_overlap_events`` (issue #9725).
+        When a robot pose provider is bound and ``guard_robot`` is true, the legacy
+        spawn sample is drawn first; if it clears every robot footprint it is used
+        unchanged, so the random stream is identical to the unguarded behavior. Only a
+        sample that lands inside a footprint is replaced by a guarded resample. If the
+        robot covers the whole spawn zone, the first (legacy) sample is kept and the
+        event is recorded in ``respawn_overlap_events`` (issue #9725).
 
         Parameters
         ----------
         gid : int
             The ID of the group to respawn.
+        guard_robot : bool
+            Whether to keep the respawn clear of the current robot footprints.
         """
         nav = self.navigators[gid]
         num_peds = self.groups.group_size(gid)
         spawn_zone = self.route_assignments[gid].spawn_zone
-        robot_exclusions = self._robot_exclusions()
-        spawn_positions = None
-        if robot_exclusions:
+        spawn_positions = sample_zone(
+            spawn_zone,
+            num_peds,
+            obstacle_polygons=self.obstacle_polygons,
+        )
+        robot_exclusions = self._robot_exclusions() if guard_robot else []
+        if robot_exclusions and _any_inside(spawn_positions, robot_exclusions):
             try:
                 spawn_positions = sample_zone(
                     spawn_zone,
@@ -284,29 +298,28 @@ class FollowRouteBehavior:
             except RuntimeError:
                 logger.warning(
                     "Route group {gid} respawn could not avoid the robot footprint; "
-                    "using the unguarded spawn sample (issue #9725).",
+                    "keeping the unguarded spawn sample (issue #9725).",
                     gid=gid,
                 )
-        if spawn_positions is None:
-            spawn_positions = sample_zone(
-                spawn_zone,
-                num_peds,
-                obstacle_polygons=self.obstacle_polygons,
-            )
-            if robot_exclusions and any(
-                zone.intersects(ShapelyPoint(pt))
-                for pt in spawn_positions
-                for zone in robot_exclusions
-            ):
                 self.respawn_overlap_events.append(
                     {
                         "group_id": int(gid),
+                        "ped_rows": sorted(
+                            int(pid) + int(self.global_ped_offset)
+                            for pid in self.groups.groups[gid]
+                        ),
+                        "step": int(self.step_count),
                         "positions": [list(map(float, p)) for p in spawn_positions],
                     }
                 )
         self.groups.reposition_group(gid, spawn_positions)
         self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0
+
+
+def _any_inside(points: list[Vec2D], zones: list["PreparedGeometry"]) -> bool:
+    """Return whether any point intersects any prepared zone."""
+    return any(zone.intersects(ShapelyPoint(pt)) for pt in points for zone in zones)
 
 
 @dataclass

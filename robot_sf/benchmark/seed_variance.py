@@ -19,6 +19,7 @@ from robot_sf.benchmark.aggregate import (
     observation_track_group_label,
 )
 from robot_sf.benchmark.grouping import resolve_report_group_key
+from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -386,6 +387,9 @@ def build_seed_variability_rows(
     ] = defaultdict(lambda: defaultdict(list))
 
     for record in records:
+        if record_has_spawn_overlap(record):
+            # Issue #9725: spawn-overlap rows are simulator defects, not seed variance.
+            continue
         scenario_id = str(record.get("scenario_id") or "unknown")
         planner_key = str(
             record.get("planner_key")

@@ -24,24 +24,35 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MATRIX = REPO_ROOT / DEFAULT_MATRIX
+# The v1 matrix keeps the original station-platform map; the code-level fixes alone
+# (respawn exclusion, reset relocation, padded robot start) must also hold there.
+MATRIX_V1 = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
 
 # (scenario, seed, zero-action steps to survive). Station cells also cover the
 # route-end respawn window (steps 5-16 in the release rows).
 CELLS = [
-    ("francis2023_circular_crossing", 111, 1),
-    ("classic_cross_trap_high", 111, 1),
-    ("classic_head_on_corridor_low", 116, 1),
-    ("classic_station_platform_medium", 115, 20),
-    ("classic_station_platform_medium", 118, 20),
-    ("classic_station_platform_medium", 112, 20),
-    ("classic_station_platform_medium", 131, 20),
+    ("v2", "francis2023_circular_crossing", 111, 1),
+    ("v2", "classic_cross_trap_high", 111, 1),
+    ("v2", "classic_head_on_corridor_low", 116, 1),
+    ("v2", "classic_station_platform_medium", 115, 20),
+    ("v2", "classic_station_platform_medium", 118, 20),
+    ("v2", "classic_station_platform_medium", 112, 20),
+    ("v2", "classic_station_platform_medium", 131, 20),
+    ("v1", "classic_head_on_corridor_low", 116, 1),
+    ("v1", "classic_station_platform_medium", 115, 20),
+    ("v1", "classic_station_platform_medium", 118, 20),
+    ("v1", "classic_station_platform_medium", 112, 20),
+    ("v1", "classic_station_platform_medium", 131, 20),
 ]
 
 
 @pytest.fixture(scope="module")
-def scenarios() -> dict[str, dict]:
-    """Load the release scenario matrix once."""
-    return {str(row["name"]): dict(row) for row in load_scenarios(MATRIX)}
+def scenarios() -> dict[str, dict[str, dict]]:
+    """Load both release scenario matrices once."""
+    return {
+        label: {str(row["name"]): dict(row) for row in load_scenarios(path)}
+        for label, path in (("v2", MATRIX), ("v1", MATRIX_V1))
+    }
 
 
 def _collided(info: dict) -> bool:
@@ -53,12 +64,15 @@ def _collided(info: dict) -> bool:
     )
 
 
-@pytest.mark.parametrize(("name", "seed", "steps"), CELLS)
-def test_formerly_defective_cell_starts_clear(scenarios, name: str, seed: int, steps: int) -> None:
+@pytest.mark.parametrize(("matrix", "name", "seed", "steps"), CELLS)
+def test_formerly_defective_cell_starts_clear(
+    scenarios, matrix: str, name: str, seed: int, steps: int
+) -> None:
     """The reset is clear of pedestrians and walls, and zero-action steps do not collide."""
-    scenario = _scenario_with_episode_seed_defaults(scenarios[name], seed=seed)
+    scenario = _scenario_with_episode_seed_defaults(scenarios[matrix][name], seed=seed)
+    path = MATRIX if matrix == "v2" else MATRIX_V1
     env = make_robot_env(
-        config=build_env_config(scenario, scenario_path=MATRIX), seed=seed, debug=False
+        config=build_env_config(scenario, scenario_path=path), seed=seed, debug=False
     )
     try:
         env.reset(seed=seed)

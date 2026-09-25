@@ -146,6 +146,16 @@ def _pedestrian_blocked_geometry(map_def: MapDefinition, ped_radius: float) -> P
     return cache[key]
 
 
+def _wall_geometry(map_def: MapDefinition) -> PreparedGeometry:
+    """Return cached unbuffered wall segments and obstacle interiors for line-of-sight checks."""
+    cached: PreparedGeometry | None = getattr(map_def, "_ped_relocation_wall_cache", None)
+    if cached is None:
+        parts: list[Any] = [*_obstacle_lines(map_def), *_obstacle_polygons(map_def)]
+        cached = prep(unary_union(parts)) if parts else prep(Point(1.0e9, 1.0e9))
+        map_def._ped_relocation_wall_cache = cached  # type: ignore[attr-defined]
+    return cached
+
+
 def relocate_overlapping_pedestrians(
     ped_xy: Sequence[Vec2D],
     ped_radius: float,
@@ -161,8 +171,8 @@ def relocate_overlapping_pedestrians(
     ``robot_radius + ped_radius + margin`` to a robot centre. Each such pedestrian is
     moved along the ray from the robot through its current position, to the
     nearest point on the exclusion circle; if that point is blocked (walls, other
-    pedestrians, other robots), rotated rays and slightly larger radii are tried
-    in a fixed order. No random numbers are drawn, so the global RNG stream and
+    pedestrians with margin, other robots, or a wall between the old and new
+    position), rotated rays and slightly larger radii are tried in a fixed order. No random numbers are drawn, so the global RNG stream and
     every non-overlapping spawn stay unchanged.
 
     Args:
@@ -180,6 +190,7 @@ def relocate_overlapping_pedestrians(
     positions: list[Vec2D] = [(float(p[0]), float(p[1])) for p in ped_xy]
     movable = set(range(len(positions)) if rows is None else rows)
     blocked = _pedestrian_blocked_geometry(map_def, ped_radius)
+    walls = _wall_geometry(map_def)
     for row in range(len(positions)):
         hit = _overlapping_robot(positions[row], robots, ped_radius, margin)
         if hit is None:
@@ -191,7 +202,15 @@ def relocate_overlapping_pedestrians(
             (
                 candidate
                 for candidate in _relocation_candidates(positions[row], hit, ped_radius, margin)
-                if _is_clear(candidate, row, positions, robots, ped_radius, margin, blocked)
+                if _is_clear(
+                    candidate,
+                    row,
+                    positions,
+                    robots,
+                    ped_radius,
+                    margin,
+                    (blocked, walls),
+                )
             ),
             None,
         )
@@ -248,15 +267,25 @@ def _is_clear(
     robots: Sequence[tuple[Vec2D, float]],
     ped_radius: float,
     margin: float,
-    blocked: PreparedGeometry,
+    geometry: tuple[PreparedGeometry, PreparedGeometry],
 ) -> bool:
-    """Return whether a relocation candidate clears robots, walls, and other pedestrians."""
+    """Return whether a relocation candidate is a clear, reachable position.
+
+    The candidate must clear every robot exclusion circle, keep the pedestrian radius
+    from walls and bounds, keep two pedestrian radii plus the margin from every other
+    pedestrian, and be reachable in a straight line from the original position without
+    crossing a wall (so a pedestrian is never moved through a wall).
+    """
+    blocked, walls = geometry
     if _overlapping_robot(candidate, robots, ped_radius, margin) is not None:
         return False
     if blocked.intersects(Point(candidate)):
         return False
+    if walls.intersects(LineString([positions[row], candidate])):
+        return False
+    spacing = 2.0 * float(ped_radius) + float(margin)
     return all(
-        other == row or dist(candidate, other_xy) >= 2.0 * float(ped_radius)
+        other == row or dist(candidate, other_xy) >= spacing
         for other, other_xy in enumerate(positions)
     )
 

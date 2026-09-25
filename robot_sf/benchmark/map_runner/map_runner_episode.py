@@ -4826,7 +4826,9 @@ def _finalize_assembled_record_provenance(  # noqa: PLR0913
     record["spawn_validity"] = build_spawn_validity(
         loop_result.reset_spawn_clearance,
         loop_result.respawn_overlap_events,
-        ped_collision_seen=loop_result.ped_collision_seen,
+        collision_events=loop_result.collision_events,
+        dt_seconds=float(ctx.config.sim_config.time_per_step_in_secs),
+        route_complete=loop_result.reached_goal_step is not None,
     )
     _finalize_record_provenance(
         record,

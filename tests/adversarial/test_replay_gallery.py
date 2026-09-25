@@ -83,6 +83,16 @@ def _certification_status(
     }
 
 
+def _bind_certificate_to_scenario(status: dict[str, Any], scenario_path: Path) -> dict[str, Any]:
+    """Mirror canonical source and loader-mapping evidence in a file-backed receipt."""
+    certificates = status["details"]["certificates"]
+    certificate = certificates[0]
+    loaded = replay_gallery.scenario_loader.load_scenarios(scenario_path)
+    certificate["source"] = str(scenario_path)
+    certificate["evidence"]["scenario_fingerprint"] = replay_gallery._fingerprint_mapping(loaded[0])
+    return status
+
+
 @pytest.fixture(autouse=True)
 def _temporary_checkout_root(tmp_path: Path, monkeypatch: Any) -> None:
     """Keep output-boundary tests and all generated bundles inside pytest's temp tree."""
@@ -146,6 +156,9 @@ def _source_manifest(
         yaml.safe_dump({"scenarios": [scenario]}, sort_keys=False),
         encoding="utf-8",
     )
+    certification_status = _bind_certificate_to_scenario(
+        _certification_status(_scenario_certificate()), scenario_path
+    )
     episode_path = bundle / "episode_records.jsonl"
     episode_path.write_text(json.dumps(_episode(revision=source_revision)) + "\n", encoding="utf-8")
     payload = {
@@ -167,7 +180,7 @@ def _source_manifest(
                     "certificate_ok": True,
                     "execution_mode": "native",
                 },
-                "certification_status": _certification_status(_scenario_certificate()),
+                "certification_status": certification_status,
                 "failure_attribution": {
                     "status": "attributed",
                     "primary_failure": "collision",
@@ -240,7 +253,7 @@ def _runner_summary(
     return summary
 
 
-def _install_fake_replay(
+def _install_fake_replay(  # noqa: PLR0913 - fixture knobs keep synthetic replay cases explicit
     monkeypatch: Any,
     *,
     revision: str | None = "a" * 40,
@@ -250,6 +263,7 @@ def _install_fake_replay(
     checkout_clean: bool = True,
     checkout_revision: str | None = None,
     rendered_map_paths: list[Path | None] | None = None,
+    vary_runtime_receipts: bool = False,
 ) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
 
@@ -264,11 +278,35 @@ def _install_fake_replay(
         scenarios = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"]
         record = _replay_episode(revision=revision, config_hash=replay_config_hash)
         record["scenario_id"] = scenarios[0]["name"]
+        if vary_runtime_receipts:
+            run_number = len(calls)
+            record["provenance"] = {
+                "run_id": f"episode-run-{run_number}",
+                "runtime_sec": float(run_number),
+                "invocation": f"runner --nonce {run_number}",
+            }
         if mismatch:
             record["outcome"]["collision_event"] = False
             record["metrics"]["collisions"] = 0
         kwargs["out_path"].write_text(json.dumps(record) + "\n", encoding="utf-8")
-        return runner_summary or _runner_summary()
+        summary = runner_summary or _runner_summary()
+        if vary_runtime_receipts:
+            run_number = len(calls)
+            summary = dict(summary)
+            summary["out_path"] = str(kwargs["out_path"])
+            summary["batch_runtime_sec"] = float(run_number)
+            summary["provenance"] = {
+                "run_id": f"runner-run-{run_number}",
+                "invocation": f"runner --out {kwargs['out_path']} --nonce {run_number}",
+                "result_manifest_path": f"{kwargs['out_path']}.manifest.json",
+                "config_identity": {
+                    "scenario_path": str(scenario_path),
+                    "schema_path": str(kwargs["schema_path"]),
+                    "scenario_matrix_hash": f"matrix-{run_number}",
+                },
+            }
+            summary["benchmark_availability"] = availability_payload(summary)
+        return summary
 
     def fake_render(
         episode_row: Any, outputs: list[str], out_dir: Path, **kwargs: Any
@@ -424,12 +462,17 @@ def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certifi
     """The smoke fixture passes current certificate checks without claiming dynamic feasibility."""
     repo_root = Path(__file__).resolve().parents[2]
     fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    scenario_path = fixture_root / "scenario.yaml"
     manifest = json.loads((fixture_root / "manifest.json").read_text(encoding="utf-8"))
     candidate = manifest["candidates"][0]
     certificate_status = candidate["certification_status"]
     certificate, error = replay_gallery._validated_scenario_certificate(
         certificate_status,
         expected_scenario_id="crossing_ttc_template_adversarial_0008",
+        loaded_scenario=replay_gallery.scenario_loader.load_scenarios(scenario_path)[0],
+        scenario_path=scenario_path,
+        root=repo_root,
+        source_root=repo_root,
     )
     provenance = json.loads(
         (fixture_root / "scenario_certification_provenance.json").read_text(encoding="utf-8")
@@ -460,6 +503,10 @@ def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certifi
     historical_certificate, historical_error = replay_gallery._validated_scenario_certificate(
         historical_status,
         expected_scenario_id="crossing_ttc_template_adversarial_0008",
+        loaded_scenario=replay_gallery.scenario_loader.load_scenarios(scenario_path)[0],
+        scenario_path=scenario_path,
+        root=repo_root,
+        source_root=repo_root,
     )
     assert historical_certificate is None
     assert historical_error == "certificate_structurally_invalid"
@@ -780,6 +827,9 @@ def test_gallery_passes_materialized_map_to_renderer_and_marks_external_map_unbo
     scenario = scenario_payload["scenarios"][0]
     scenario["map_file"] = str(map_path)
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["certification_status"] = _bind_certificate_to_scenario(
+        candidate_row["certification_status"], scenario_path
+    )
     candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
         scenario, {}
     )
@@ -833,6 +883,9 @@ def test_gallery_materializes_map_id_registry_and_pins_runner_resolution(
     scenario = scenario_payload["scenarios"][0]
     scenario["map_id"] = "classic_cross_trap"
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["certification_status"] = _bind_certificate_to_scenario(
+        candidate_row["certification_status"], scenario_path
+    )
     candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
         scenario, {}
     )
@@ -882,6 +935,22 @@ def test_gallery_materializes_map_id_registry_and_pins_runner_resolution(
     assert case["rendering"]["map_context"]["reason"] == (
         "existing_renderer_cannot_decode_map_overlay"
     )
+
+    second_output = tmp_path / "output" / "gallery-second"
+    second_result = replay_gallery.build_replay_gallery(
+        manifest, second_output, render=False, video=False
+    )
+    second_case = second_result["cases"][0]
+    second_resolution = second_case["materialization"]["map_resolution"]
+    second_registry = (
+        second_output
+        / "cases"
+        / second_case["case_id"]
+        / second_resolution["runner_registry_bundle_path"]
+    )
+    assert case["case_id"] == second_case["case_id"]
+    assert resolution["runner_registry_sha256"] == second_resolution["runner_registry_sha256"]
+    assert runner_registry.read_bytes() == second_registry.read_bytes()
 
     previous_registry = os.environ.get("ROBOT_SF_MAP_REGISTRY")
     monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(runner_registry))
@@ -1144,6 +1213,9 @@ def test_gallery_detects_materialized_map_bytes_changed_before_replay(
     scenario = scenario_payload["scenarios"][0]
     scenario["map_file"] = str(map_path)
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["certification_status"] = _bind_certificate_to_scenario(
+        candidate_row["certification_status"], scenario_path
+    )
     candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
         scenario, {}
     )
@@ -1189,6 +1261,9 @@ def test_gallery_detects_map_bytes_changed_after_candidate_selection(
     scenario = scenario_payload["scenarios"][0]
     scenario["map_file"] = str(map_path)
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["certification_status"] = _bind_certificate_to_scenario(
+        candidate_row["certification_status"], scenario_path
+    )
     candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
         scenario, {}
     )
@@ -1675,6 +1750,9 @@ def test_gallery_rejects_route_overrides_changed_after_selection_before_replay(
     route_path.write_text(yaml.safe_dump(route_payload), encoding="utf-8")
     scenario["route_overrides_file"] = str(route_path)
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    payload["candidates"][0]["certification_status"] = _bind_certificate_to_scenario(
+        payload["candidates"][0]["certification_status"], scenario_path
+    )
     payload["candidates"][0]["effective_scenario_hash"] = (
         replay_gallery.compute_effective_scenario_hash(scenario, route_payload)
     )
@@ -1702,6 +1780,83 @@ def test_gallery_rejects_route_overrides_changed_after_selection_before_replay(
     )
     assert case["materialization"]["selection_binding"]["status"] == "mismatch"
     assert calls == []
+
+
+def test_gallery_rejects_route_input_drift_before_certificate_selection(tmp_path: Path) -> None:
+    """A valid scenario fingerprint cannot hide route bytes that differ from the search hash."""
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    candidate_row = payload["candidates"][0]
+    scenario_path = Path(candidate_row["scenario_yaml_path"])
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    scenario = scenario_payload["scenarios"][0]
+    route_path = scenario_path.parent / "route-overrides.yaml"
+    original_route = {"route": {"waypoints": [[1.0, 1.0], [2.0, 2.0]]}}
+    route_path.write_text(yaml.safe_dump(original_route), encoding="utf-8")
+    scenario["route_overrides_file"] = str(route_path)
+    scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["certification_status"] = _bind_certificate_to_scenario(
+        candidate_row["certification_status"], scenario_path
+    )
+    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
+        scenario, original_route
+    )
+    route_path.write_text(
+        yaml.safe_dump({"route": {"waypoints": [[1.0, 1.0], [3.0, 3.0]]}}),
+        encoding="utf-8",
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"] == {"effective_scenario_hash_missing_or_mismatch": 1}
+
+
+def test_gallery_rechecks_route_bytes_against_selection_snapshot(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Route bytes changing after hashing cannot retain the bound static certificate."""
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    candidate_row = payload["candidates"][0]
+    scenario_path = Path(candidate_row["scenario_yaml_path"])
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    scenario = scenario_payload["scenarios"][0]
+    route_path = scenario_path.parent / "route-overrides.yaml"
+    original_route = {"route": {"waypoints": [[1.0, 1.0], [2.0, 2.0]]}}
+    changed_route = {"route": {"waypoints": [[1.0, 1.0], [3.0, 3.0]]}}
+    route_path.write_text(yaml.safe_dump(original_route), encoding="utf-8")
+    scenario["route_overrides_file"] = str(route_path)
+    scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    candidate_row["certification_status"] = _bind_certificate_to_scenario(
+        candidate_row["certification_status"], scenario_path
+    )
+    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
+        scenario, original_route
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    original_hash = replay_gallery._source_effective_scenario_hash
+
+    def mutate_route_after_snapshot(*args: Any, **kwargs: Any) -> Any:
+        snapshot = original_hash(*args, **kwargs)
+        route_path.write_text(yaml.safe_dump(changed_route), encoding="utf-8")
+        return snapshot
+
+    monkeypatch.setattr(
+        replay_gallery, "_source_effective_scenario_hash", mutate_route_after_snapshot
+    )
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"] == {
+        "scenario_route_overrides_changed_during_selection": 1
+    }
 
 
 def test_gallery_deduplicates_identical_effective_scenarios(tmp_path: Path) -> None:
@@ -1775,6 +1930,77 @@ def test_gallery_repeated_fixture_runs_have_byte_stable_manifests(
     ).read_bytes()
 
 
+def test_gallery_manifest_limits_repeat_run_variation_to_declared_receipt_fields(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Run receipts may vary while case identity and relative paths remain stable."""
+    manifest = _source_manifest(tmp_path)
+    _install_fake_replay(monkeypatch, vary_runtime_receipts=True)
+
+    first_dir = tmp_path / "output" / "gallery_one"
+    second_dir = tmp_path / "output" / "gallery_two"
+    replay_gallery.build_replay_gallery(manifest, first_dir, video=False)
+    replay_gallery.build_replay_gallery(manifest, second_dir, video=False)
+    first_path = first_dir / "gallery_manifest.json"
+    second_path = second_dir / "gallery_manifest.json"
+    first = json.loads(first_path.read_text(encoding="utf-8"))
+    second = json.loads(second_path.read_text(encoding="utf-8"))
+
+    variable_paths = first["reproducibility"]["variable_json_paths"]
+    assert variable_paths == second["reproducibility"]["variable_json_paths"]
+    assert first["cases"][0]["case_id"] == second["cases"][0]["case_id"]
+    assert first["cases"][0]["replay"]["summary"]["out_path"] == ("replay/episode_records.jsonl")
+    assert second["cases"][0]["replay"]["summary"]["out_path"] == ("replay/episode_records.jsonl")
+    assert (
+        first["cases"][0]["replay"]["summary"]["provenance"]["config_identity"]["scenario_path"]
+        == "inputs/scenario.yaml"
+    )
+    assert (
+        first["cases"][0]["replay"]["summary"]["provenance"]["result_manifest_path"]
+        == "replay/episode_records.jsonl.manifest.json"
+    )
+    assert str(first_dir) not in first["cases"][0]["replay"]["summary"]["provenance"]["invocation"]
+    assert (
+        first["cases"][0]["replay"]["episode_record_sha256"]
+        != second["cases"][0]["replay"]["episode_record_sha256"]
+    )
+    assert (
+        first["cases"][0]["replay"]["summary"]["batch_runtime_sec"]
+        != second["cases"][0]["replay"]["summary"]["batch_runtime_sec"]
+    )
+    assert (
+        first["cases"][0]["replay"]["summary"]["provenance"]["run_id"]
+        != second["cases"][0]["replay"]["summary"]["provenance"]["run_id"]
+    )
+
+    def without_documented_variable_paths(payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = json.loads(json.dumps(payload))
+        for path in variable_paths:
+            parts = path.split(".")
+
+            def remove(node: Any, index: int) -> None:
+                token = parts[index]
+                wildcard = token.endswith("[*]")
+                key = token[:-3] if wildcard else token
+                if not isinstance(node, dict) or key not in node:
+                    return
+                if index == len(parts) - 1:
+                    node.pop(key, None)
+                    return
+                child = node[key]
+                if wildcard:
+                    if isinstance(child, list):
+                        for item in child:
+                            remove(item, index + 1)
+                else:
+                    remove(child, index + 1)
+
+            remove(normalized, 0)
+        return normalized
+
+    assert without_documented_variable_paths(first) == without_documented_variable_paths(second)
+
+
 def test_gallery_requires_candidate_parameters_to_match_generated_scenario(
     tmp_path: Path,
 ) -> None:
@@ -1802,6 +2028,9 @@ def test_gallery_rejects_candidate_fields_the_objective_adapter_cannot_reconstru
     scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
     scenario_payload["scenarios"][0]["metadata"]["adversarial_candidate"] = row["candidate"]
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
+    row["certification_status"] = _bind_certificate_to_scenario(
+        row["certification_status"], scenario_path
+    )
     manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
     result = replay_gallery.build_replay_gallery(
@@ -1919,6 +2148,18 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
             "certificate_scenario_id_mismatch",
         ),
         (
+            lambda receipt: receipt["details"]["certificates"][0].update(
+                source="some/other/scenario.yaml"
+            ),
+            "certificate_source_mismatch",
+        ),
+        (
+            lambda receipt: receipt["details"]["certificates"][0]["evidence"].update(
+                scenario_fingerprint="0" * 16
+            ),
+            "certificate_scenario_fingerprint_mismatch",
+        ),
+        (
             lambda receipt: receipt["details"]["certificates"][0]["checks"].update(route_count=2),
             "certificate_incomplete",
         ),
@@ -1948,6 +2189,8 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
         "missing-status-schema",
         "invalid-status-schema",
         "wrong-id",
+        "wrong-source",
+        "wrong-scenario-fingerprint",
         "incomplete",
         "top-level-eligibility-mismatch",
         "top-level-classification-not-worst-route",
@@ -1992,27 +2235,22 @@ def test_gallery_keeps_unbound_or_incomplete_certificates_out_of_selection(
         ),
     ],
 )
-def test_feasibility_verdict_preserves_certificate_strength(
+def test_feasibility_verdict_does_not_promote_an_unbound_certificate(
     certificate: dict[str, Any], expected: str
 ) -> None:
-    verdict = replay_gallery._feasibility_verdict(certificate, scenario_id="test_scenario")
+    verdict = replay_gallery._feasibility_verdict(certificate)
 
-    assert verdict["status"] == expected
+    assert expected in {"admissible_by_source_certificate", "stress_only", "unknown"}
+    assert verdict["status"] == "unknown"
     assert verdict["source_certificate"] == certificate
-    if expected == "unknown":
-        assert verdict["reason"] in {
-            "certificate_status_not_passed",
-            "certificate_status_schema_invalid",
-            "certificate_list_incomplete_or_ambiguous",
-            "certificate_status_missing_or_malformed",
-        }
+    assert verdict["reason"] == "certificate_not_bound_to_loaded_scenario"
 
 
 def test_certificate_classification_rejects_malformed_entries_without_inventing_a_verdict() -> None:
     assert replay_gallery._certification_classification(None) is None
     assert (
         replay_gallery._certification_classification(_certification_status(_scenario_certificate()))
-        == "valid"
+        is None
     )
     malformed_entries = _certification_status(_scenario_certificate())
     malformed_entries["details"]["certificates"].append(None)

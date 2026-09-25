@@ -99,11 +99,16 @@ resolved map registry and map SVG digests are recorded beside the certificate pr
 
 The selector requires an analysis-eligible row and a passed `scenario_cert.v1` receipt containing
 exactly one certificate that validates against the canonical schema, matches the candidate
-scenario's name/id, and has complete route accounting (`checks.route_count` equals the non-empty
-`route_certificates` list). Top-level eligibility, route eligibility, and the all-routes check must
-agree with their classifications; a `valid` or `hard_but_solvable` classification is admissible
-only when every route is benchmark-eligible. Missing, failed, malformed, incomplete, ambiguous, or
-scenario-mismatched certificates remain in candidate accounting and do not establish admissibility.
+scenario's name/id, names that exact scenario file in `source`, and has an
+`evidence.scenario_fingerprint` matching the canonical loader-normalized scenario mapping. It also
+has complete route accounting (`checks.route_count` equals the non-empty `route_certificates` list).
+Top-level eligibility, route eligibility, and the all-routes check must agree with their
+classifications; a `valid` or `hard_but_solvable` classification is admissible only when every route
+is benchmark-eligible. Missing, failed, malformed, incomplete, ambiguous, source-mismatched, or
+scenario-fingerprint-mismatched certificates remain in candidate accounting and do not establish
+admissibility. The recomputed effective-scenario hash, captured and rechecked route-override bytes,
+and map-byte checks bind the referenced inputs against the same selection snapshot; drift from the
+search manifest stays in accounting.
 The selector also requires a finite objective, one unambiguous source episode, a
 one-scenario YAML input, matching scenario and seed identity, candidate parameters matching the
 generated scenario metadata, and a recomputed effective-scenario hash matching the search manifest.
@@ -182,3 +187,18 @@ A replay at a changed revision is evidence that the reported outcome was reprodu
 not an exact-source replay. The gallery does not infer a search method from file names, reconstruct
 missing models, admit cases into the regression corpus, or establish real-world safety. A run with
 zero selected cases is a valid result when no eligible attributed failures were present.
+
+## Manifest reproducibility
+
+`gallery_manifest.json` carries a machine-readable `reproducibility` block. Paths under the case,
+gallery output, and repository roots are rendered relative to those roots. The derived map registry
+uses a bundle-relative map path, so its bytes and digest do not depend on the chosen output directory.
+Case IDs, bundle-relative artifact names, source input digests, and replay comparison fields are
+stable for the same input manifest and code revision.
+
+The block lists the only JSON paths that may vary in a repeated run: measured batch runtime,
+runner-generated run ID, captured invocation, a scenario-matrix hash that may include the resolved
+output-local map path, and the digest of the exact replay episode record. The episode record itself
+is preserved byte-for-byte; these fields are execution provenance and are not normalized out of its
+digest. Compare manifests after removing only the listed variable paths. Other fields, including
+case IDs and relative output names, remain part of the stable comparison.

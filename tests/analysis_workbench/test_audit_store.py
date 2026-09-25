@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -723,7 +724,11 @@ def test_validated_snapshot_rechecks_exact_bytes_and_recovers_tail(tmp_path) -> 
         journal = store.canonical_path
         original = journal.read_bytes()
         # A same-size rewrite must not be accepted using size or timestamp metadata.
+        original_stat = journal.stat()
         journal.write_bytes(original.replace(b"op-a", b"op-b"))
+        os.utime(journal, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+        assert journal.stat().st_size == original_stat.st_size
+        assert journal.stat().st_mtime_ns == original_stat.st_mtime_ns
         with pytest.raises(AuditCorruptionError, match="request_digest"):
             store.history("a")
         journal.write_bytes(original)

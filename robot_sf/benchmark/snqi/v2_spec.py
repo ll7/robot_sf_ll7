@@ -245,7 +245,7 @@ def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
         if (
             not isinstance(counts, dict)
             or not counts
-            or not set(counts) <= {"native", "adapter"}
+            or not set(counts) <= {"native", "adapter", "mixed"}
             or any(type(count) is not int or count <= 0 for count in counts.values())
             or sum(counts.values()) != 96
         ):

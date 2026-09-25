@@ -64,6 +64,8 @@ Declared kinematic command adapters are legitimate members of the frozen roster
 They are distinct from fallback or degraded policy execution, which is rejected.
 Calibration records `benchmark_execution: nonfallback` and each arm's actual
 `command_mode_counts` over its 96 episodes; it never relabels adapter commands as native.
+The census also preserves the registry's `mixed` command mode (for example, guarded PPO),
+which combines native and adapted commands and does not itself imply policy fallback.
 
 `v2_calibration.derive_calibration_anchors` requires every one of the 1,344 unique
 arm/scenario/seed combinations. It computes episode-level Spearman correlation

@@ -566,18 +566,21 @@ def test_calibration_switch_requires_full_pp_coverage():
 
 
 @pytest.mark.parametrize("adapter_count", [1, 1344])
-def test_calibration_records_actual_command_modes_without_relabeling(adapter_count, spec_files):
+@pytest.mark.parametrize("command_mode", ["adapter", "mixed"])
+def test_calibration_records_actual_command_modes_without_relabeling(
+    adapter_count, command_mode, spec_files
+):
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
 
     rows, kwargs = calibration_records()
     for row in rows[:adapter_count]:
-        row["algorithm_metadata"]["planner_kinematics"] = {"execution_mode": "adapter"}
+        row["algorithm_metadata"]["planner_kinematics"] = {"execution_mode": command_mode}
     anchors = derive_calibration_anchors(rows, **kwargs)
     document = anchors["calibration"]
     assert "execution_mode" not in document
     assert document["benchmark_execution"] == "nonfallback"
     census = document["command_mode_counts"]
-    assert sum(counts.get("adapter", 0) for counts in census.values()) == adapter_count
+    assert sum(counts.get(command_mode, 0) for counts in census.values()) == adapter_count
     assert sum(counts.get("native", 0) for counts in census.values()) == 1344 - adapter_count
     assert all(sum(counts.values()) == 96 for counts in census.values())
     spec_files[1].write_text(json.dumps(anchors))

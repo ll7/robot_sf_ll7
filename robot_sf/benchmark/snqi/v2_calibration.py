@@ -242,8 +242,10 @@ def _validate_calibration_episode(episode: Mapping[str, Any]) -> None:
     if episode.get("status") not in {"success", "collision", "failure"}:
         raise ValueError("SNQI-v2 calibration rejects invalid episode execution status")
     mode = resolve_execution_mode(episode.get("algorithm_metadata"))
-    if mode not in {"native", "adapter"}:
-        raise ValueError("SNQI-v2 calibration requires explicit native or adapter command mode")
+    if mode not in {"native", "adapter", "mixed"}:
+        raise ValueError(
+            "SNQI-v2 calibration requires explicit native, adapter or mixed command mode"
+        )
     params = episode.get("scenario_params", {})
     if (
         episode.get("horizon") != 600

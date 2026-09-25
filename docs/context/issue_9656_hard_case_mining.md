@@ -64,6 +64,10 @@ An `exact_match` also requires an eligible source case, successful and available
 execution metadata, no nested fallback or degraded marker (including positive fallback counters),
 no canonical invalid-run state on either row, matching non-empty planner config hashes, and clean,
 unchanged checkout snapshots immediately before and after replay at the recorded revision.
+The scenario map and each configured model/checkpoint input must also resolve to a regular file in
+the recorded Git tree, and the bytes visible to replay must match that tree entry. External,
+ignored, untracked, transformed, missing, or otherwise unverified runtime inputs leave exact replay
+identity unavailable.
 Nested runtime status values must be recognized available statuses; unknown or malformed values
 remain unavailable. Explicit `unavailable` markers must be booleans, and only literal `false` is
 accepted as available evidence; `true` and malformed values remain unavailable. Each

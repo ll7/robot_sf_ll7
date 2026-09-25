@@ -76,6 +76,9 @@ SHOWCASE_METRIC_GROUPS = {
 SUPPORTED_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 SUCCESSFUL_EXECUTION_STATUSES = frozenset({"ok", "success", "passed", "complete", "completed"})
 AVAILABLE_EXECUTION_STATUSES = SUCCESSFUL_EXECUTION_STATUSES | {"available"}
+RUNTIME_MODEL_PATH_KEYS = frozenset(
+    {"model_path", "checkpoint_path", "predictive_foresight_checkpoint_path"}
+)
 FAILED_EXECUTION_STATUSES = frozenset(
     {
         "blocked",
@@ -620,6 +623,189 @@ def _scenario_map_path(params: dict[str, Any], matrix: Path) -> Path | None:
     return next((path.resolve() for path in candidates if path.is_file()), None)
 
 
+def _git_tree_file_identity(revision: str, path: Path, *, kind: str) -> dict[str, Any]:
+    """Bind a runtime file to a regular file in a recorded Git tree."""
+    try:
+        relative_path = path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+    except (OSError, RuntimeError, ValueError):
+        return {"kind": kind, "status": "unavailable", "reason": "outside_repository"}
+    if not relative_path or relative_path == ".":
+        return {"kind": kind, "status": "unavailable", "reason": "invalid_repository_path"}
+    try:
+        entry = subprocess.run(
+            ["git", "ls-tree", "-z", revision, "--", relative_path],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+        records = [record for record in entry.split(b"\0") if record]
+        if len(records) != 1:
+            return {"kind": kind, "status": "unavailable", "reason": "not_in_source_tree"}
+        metadata, recorded_path = records[0].split(b"\t", 1)
+        mode, object_type, object_id = metadata.decode("ascii").split()
+        if recorded_path.decode("utf-8", errors="strict") != relative_path:
+            return {"kind": kind, "status": "unavailable", "reason": "tree_path_mismatch"}
+        if mode not in {"100644", "100755"} or object_type != "blob":
+            return {"kind": kind, "status": "unavailable", "reason": "not_regular_git_file"}
+        blob = subprocess.run(
+            ["git", "cat-file", "blob", object_id],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+        runtime_bytes = path.read_bytes()
+    except (OSError, subprocess.CalledProcessError, UnicodeError, ValueError):
+        return {"kind": kind, "status": "unavailable", "reason": "git_tree_lookup_failed"}
+    if runtime_bytes != blob:
+        return {
+            "kind": kind,
+            "status": "unavailable",
+            "reason": "runtime_bytes_differ_from_source_tree",
+            "path": relative_path,
+        }
+    return {
+        "kind": kind,
+        "status": "verified",
+        "path": relative_path,
+        "git_blob_oid": object_id,
+        "sha256": hashlib.sha256(runtime_bytes).hexdigest(),
+    }
+
+
+def _runtime_model_paths(config: dict[str, Any]) -> list[tuple[str, str]]:
+    """Collect recognized model/checkpoint paths wherever they occur in config."""
+    found: list[tuple[str, str]] = []
+    stack: list[Any] = [config]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            for key, value in current.items():
+                if key in RUNTIME_MODEL_PATH_KEYS and isinstance(value, str) and value:
+                    found.append((key, value))
+                if isinstance(value, dict | list):
+                    stack.append(value)
+        elif isinstance(current, list):
+            stack.extend(current)
+    return sorted(set(found))
+
+
+def _scenario_map_runtime_path(params: dict[str, Any], matrix: Path | None) -> Path | None:
+    map_value = params.get("map_file")
+    if not isinstance(map_value, str) or not map_value:
+        return None
+    try:
+        if Path(map_value).is_absolute():
+            map_path = Path(map_value).resolve()
+        elif matrix is not None:
+            map_path = _scenario_map_path(params, matrix)
+        else:
+            candidate = (REPO_ROOT / map_value).resolve()
+            map_path = candidate if candidate.is_file() else None
+        return map_path if map_path is not None and map_path.is_file() else None
+    except (OSError, RuntimeError):
+        return None
+
+
+def _model_runtime_asset_identities(config: dict[str, Any], revision: str) -> list[dict[str, Any]]:
+    assets = []
+    for key, value in _runtime_model_paths(config):
+        try:
+            model_path = Path(value)
+            if not model_path.is_absolute():
+                model_path = REPO_ROOT / model_path
+            if not model_path.is_file():
+                raise FileNotFoundError(value)
+            model_identity = _git_tree_file_identity(revision, model_path.resolve(), kind=key)
+        except (OSError, RuntimeError):
+            assets.append(
+                {"kind": key, "status": "unavailable", "reason": "runtime_file_unavailable"}
+            )
+            continue
+        assets.append(model_identity)
+    return assets
+
+
+def _runtime_input_identity(
+    row: dict[str, Any], revision: Any, *, matrix: Path | None
+) -> dict[str, Any]:
+    """Verify scenario-map and configured model inputs against one Git tree."""
+    if not isinstance(revision, str) or not revision:
+        return {"status": "unavailable", "reason": "revision_unavailable", "assets": []}
+    params = row.get("scenario_params")
+    if not isinstance(params, dict):
+        return {"status": "unavailable", "reason": "scenario_parameters_unavailable", "assets": []}
+    map_path = _scenario_map_runtime_path(params, matrix)
+    if map_path is None:
+        return {"status": "unavailable", "reason": "scenario_map_file_unavailable", "assets": []}
+
+    assets = [_git_tree_file_identity(revision, map_path, kind="scenario_map")]
+    config = _config_snapshot(row)
+    if config is None:
+        return {
+            "status": "unavailable",
+            "reason": "planner_configuration_unavailable",
+            "assets": assets,
+        }
+    assets.extend(_model_runtime_asset_identities(config, revision))
+    assets.sort(key=lambda item: (str(item.get("kind")), str(item.get("path", ""))))
+    if any(asset.get("status") != "verified" for asset in assets):
+        return {
+            "status": "unavailable",
+            "reason": "runtime_asset_not_source_bound",
+            "assets": assets,
+        }
+    return {"status": "verified", "revision": revision, "assets": assets}
+
+
+def _matching_runtime_input_identity(
+    source_row: dict[str, Any],
+    replay_row: dict[str, Any],
+    source_revision: Any,
+    replay_revision: Any,
+    *,
+    source_matrix: Path | None,
+    replay_matrix: Path | None,
+) -> dict[str, Any]:
+    source_identity = _runtime_input_identity(source_row, source_revision, matrix=source_matrix)
+    replay_identity = _runtime_input_identity(replay_row, replay_revision, matrix=replay_matrix)
+    result: dict[str, Any] = {
+        "status": "unavailable",
+        "source": source_identity,
+        "replay": replay_identity,
+    }
+    if source_identity.get("status") != "verified" or replay_identity.get("status") != "verified":
+        return result
+    if source_identity["assets"] != replay_identity["assets"]:
+        result["status"] = "mismatch"
+        return result
+    result["status"] = "verified_git_tree_match"
+    return result
+
+
+def _exact_match_runtime_input_status(
+    source_row: dict[str, Any],
+    replay_row: dict[str, Any],
+    source_revision: Any,
+    replay_revision: Any,
+    *,
+    source_matrix: Path | None,
+    replay_matrix: Path | None,
+) -> tuple[str, dict[str, Any]]:
+    identity = _matching_runtime_input_identity(
+        source_row,
+        replay_row,
+        source_revision,
+        replay_revision,
+        source_matrix=source_matrix,
+        replay_matrix=replay_matrix,
+    )
+    status = {
+        "verified_git_tree_match": "exact_match",
+        "mismatch": "runtime_input_identity_mismatch",
+    }.get(identity["status"], "unavailable_runtime_input_identity")
+    return status, identity
+
+
 def _materialize_replay_matrix(row: dict[str, Any], matrix: Path, input_dir: Path) -> Path:
     params = row.get("scenario_params")
     if not isinstance(params, dict):
@@ -856,6 +1042,8 @@ def _run_replay(
             row,
             actual,
             replay_revision,
+            source_matrix=matrix,
+            replay_matrix=replay_matrix,
             replay_checkout_clean=checkout_fields["replay_checkout_clean"],
             replay_checkout_stability_status=checkout_fields["replay_checkout_stability_status"],
         )
@@ -1126,6 +1314,8 @@ def _classify_replay_row(
     replay_row: dict[str, Any],
     replay_revision: Any,
     *,
+    source_matrix: Path | None = None,
+    replay_matrix: Path | None = None,
     replay_checkout_clean: bool | None,
     replay_checkout_stability_status: str | None = None,
 ) -> dict[str, Any]:
@@ -1207,9 +1397,18 @@ def _classify_replay_row(
             else "incomplete_different_revision"
         )
     else:
-        result["status"] = (
-            "exact_match" if comparison["overall"] == "match" else "incomplete_same_revision"
-        )
+        result["status"] = "incomplete_same_revision"
+        if comparison["overall"] == "match":
+            runtime_status, runtime_input_identity = _exact_match_runtime_input_status(
+                source_row,
+                replay_row,
+                source_revision,
+                replay_revision,
+                source_matrix=source_matrix,
+                replay_matrix=replay_matrix,
+            )
+            result["runtime_input_identity"] = runtime_input_identity
+            result["status"] = runtime_status
         if result["status"] == "exact_match":
             result["status"] = _exact_match_checkout_status(
                 replay_checkout_clean, replay_checkout_stability_status
@@ -1419,6 +1618,7 @@ def _annotate_reused_replay_classification(
     row: dict[str, Any],
     case_dir: Path,
     *,
+    matrix: Path,
     prior_checksum_verified: bool,
     manifest_receipt_matches: bool,
 ) -> None:
@@ -1481,6 +1681,12 @@ def _annotate_reused_replay_classification(
         row,
         replay_rows[0],
         replay.get("replay_revision"),
+        source_matrix=matrix,
+        replay_matrix=(
+            case_dir / "replay_input" / "replay_matrix.yaml"
+            if (case_dir / "replay_input" / "replay_matrix.yaml").is_file()
+            else matrix
+        ),
         replay_checkout_clean=replay_checkout_clean,
         replay_checkout_stability_status=checkout_stability,
     )
@@ -1631,6 +1837,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                         case,
                         row,
                         case_dir,
+                        matrix=matrix,
                         prior_checksum_verified=(
                             previous_replay.get("episode_output_checksum_status") == "verified"
                             and previous_replay.get("episode_output_checksum_origin")

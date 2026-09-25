@@ -670,8 +670,8 @@ def test_legacy_empty_path_without_producer_status_stays_unknown() -> None:
     assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
 
 
-def test_legacy_certificate_identity_is_bound_by_adapter_inputs() -> None:
-    """The adapter validates v1 certificates that lack producer-only digest fields."""
+def test_legacy_certificate_current_identity_does_not_attest_generation() -> None:
+    """Current adapter identity cannot attest a legacy certificate's generation inputs."""
 
     certificate = _certificate(include_producer_identity=False)
     verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
@@ -682,7 +682,8 @@ def test_legacy_certificate_identity_is_bound_by_adapter_inputs() -> None:
     assert binding["source_artifact_sha256"] == _SCENARIO_ARTIFACT_SHA256
     assert binding["effective_input_sha256"] == _SCENARIO_EFFECTIVE_INPUT_SHA256
     assert binding["producer_fields_present"] is False
-    assert "scenario_certificate_effective_input_identity_bound_by_adapter" in (
+    assert binding["effective_input_generation_bound"] is False
+    assert "scenario_certificate_effective_input_identity_generation_unbound" in (
         verdict.reason_codes
     )
 
@@ -1388,8 +1389,8 @@ def test_oracle_report_producer_digest_rejects_stale_same_path_report(tmp_path: 
     )
 
 
-def test_legacy_certificate_output_is_bound_by_adapter_identity(tmp_path: Path) -> None:
-    """Legacy v1 output stays unchanged while #9651 binds it to current candidate inputs."""
+def test_legacy_certificate_output_keeps_external_closure_unknown(tmp_path: Path) -> None:
+    """Legacy v1 output stays unknown when closure identity is only adapter-time."""
     scenario_path = tmp_path / "case_static.yaml"
     map_path = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
     original_bytes = f"""scenarios:
@@ -1424,6 +1425,101 @@ def test_legacy_certificate_output_is_bound_by_adapter_identity(tmp_path: Path) 
     assert binding["source_artifact_sha256"] == hashlib.sha256(original_bytes).hexdigest()
     assert binding["effective_input_sha256"] == identity["effective_input_sha256"]
     assert binding["producer_fields_present"] is False
+    assert binding["effective_input_generation_bound"] is False
+    assert "scenario_certificate_effective_input_identity_generation_unbound" in (
+        verdict.reason_codes
+    )
+
+
+def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: Path) -> None:
+    """A genuine legacy cert cannot exclude a changed map under the same root manifest."""
+    scenario_path = tmp_path / "scenario.yaml"
+    map_path = tmp_path / "map.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "case-static",
+                        "map_file": map_path.name,
+                        "simulation_config": {"max_episode_steps": 100, "ped_density": 0.0},
+                        "robot_config": {
+                            "type": "bicycle_drive",
+                            "radius": 0.4,
+                            "wheelbase": 4.0,
+                            "max_steer": 0.5,
+                        },
+                        "seeds": [19],
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    def map_payload(*, straight_route: bool) -> dict[str, Any]:
+        """Return a serialized map with either a tight turn or straight route."""
+        if straight_route:
+            waypoints = [[2, 2], [7, 6]]
+            goal_zone = [[6.8, 5.8], [7.2, 5.8], [7.2, 6.2]]
+        else:
+            waypoints = [[2, 2], [3, 2], [3, 3]]
+            goal_zone = [[2.8, 2.8], [3.2, 2.8], [3.2, 3.2]]
+        return {
+            "x_margin": [0, 12],
+            "y_margin": [0, 8],
+            "obstacles": [],
+            "robot_spawn_zones": [
+                [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]],
+                [[9.8, 6.8], [10.2, 6.8], [10.2, 7.2]],
+            ],
+            "robot_goal_zones": [
+                [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]],
+                goal_zone,
+            ],
+            "ped_spawn_zones": [],
+            "ped_goal_zones": [],
+            "ped_crowded_zones": [],
+            "robot_routes": [{"spawn_id": 0, "goal_id": 1, "waypoints": waypoints}],
+            "ped_routes": [],
+        }
+
+    map_path.write_text(yaml.safe_dump(map_payload(straight_route=False)), encoding="utf-8")
+    legacy_certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    )
+    assert legacy_certificate["classification"] == "kinodynamically_infeasible"
+    assert legacy_certificate["benchmark_eligibility"] == "excluded"
+    assert "effective_input_sha256" not in legacy_certificate["evidence"]
+    root_manifest_bytes = scenario_path.read_bytes()
+
+    map_path.write_text(yaml.safe_dump(map_payload(straight_route=True)), encoding="utf-8")
+    from robot_sf.training import scenario_loader
+
+    scenario_loader._load_map_definition.cache_clear()
+    current_certificate = certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    verdict = _classify_scenario_admissibility(
+        "case-static",
+        scenario_artifact_path=scenario_path,
+        scenario_id="case-static",
+        scenario_certificate=legacy_certificate,
+    )
+
+    assert scenario_path.read_bytes() == root_manifest_bytes
+    assert current_certificate.classification == "hard_but_solvable"
+    assert current_certificate.benchmark_eligibility == "eligible"
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_effective_input_identity_generation_unbound" in (
+        verdict.reason_codes
+    )
+    assert (
+        verdict.assumptions["scenario_certificate"]["identity_binding"][
+            "effective_input_generation_bound"
+        ]
+        is False
+    )
 
 
 def test_present_certificate_producer_digest_must_match_adapter_identity() -> None:

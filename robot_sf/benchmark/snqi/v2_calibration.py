@@ -20,6 +20,7 @@ from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
     summarize_benchmark_availability,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.snqi.v2_reports import read_episode_files, validate_episode_execution
 from robot_sf.benchmark.snqi.v2_spec import (
     PP_EQUIV_FORCE,
@@ -153,11 +154,12 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
         key = str(path.relative_to(campaign_root.resolve()))
         if key in hashes:
             raise ValueError("SNQI-v2 calibration duplicate episode source")
-        hashes[key] = hashlib.sha256(path.read_bytes()).hexdigest()
+        hashes[key] = sha256_file(path)
         for record in read_episode_files([path]):
             if record.get("git_hash") != manifest["git"]["commit"]:
                 raise ValueError("SNQI-v2 calibration record source commit mismatch")
-            records.append({**record, "planner_key": entry["planner"]["key"]})
+            records.append(_compact_calibration_record(record, entry["planner"]["key"]))
+            del record
     digest = hashlib.sha256(
         json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -181,6 +183,45 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False) + "\n")
     temporary.replace(output_path)
     return document
+
+
+def _compact_calibration_record(record: Mapping[str, Any], arm: str) -> dict[str, Any]:
+    """Validate raw execution before retaining only scalar calibration inputs.
+
+    Force samples and simulation traces remain in the hashed source files; their
+    decoded payloads must not accumulate over the complete development grid.
+
+    Returns:
+        Validated scalar inputs with the arm identity and actual command mode.
+    """
+    _validate_calibration_episode(record)
+    metrics = record["metrics"]
+    return {
+        **{key: record.get(key) for key in ("scenario_id", "seed", "status", "horizon", "steps")},
+        "planner_key": arm,
+        "scenario_params": {
+            key: record["scenario_params"][key]
+            for key in ("run_horizon", "run_dt", "record_forces")
+        },
+        "algorithm_metadata": {
+            "execution_mode": resolve_execution_mode(record["algorithm_metadata"])
+        },
+        "metrics": {
+            **{
+                key: metrics.get(key)
+                for key in (
+                    SIMULATED_FORCE,
+                    PP_EQUIV_FORCE,
+                    "near_misses",
+                    "jerk_mean",
+                    "curvature_mean",
+                )
+            },
+            "robot_force_metadata": {
+                "sample_timing": metrics["robot_force_metadata"]["sample_timing"]
+            },
+        },
+    }
 
 
 def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) -> None:

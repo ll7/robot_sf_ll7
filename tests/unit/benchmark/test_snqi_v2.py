@@ -597,11 +597,36 @@ def test_calibration_rejects_fallback_or_degraded_adapter(marker):
         derive_calibration_anchors(rows, **kwargs)
 
 
-def test_freeze_calibration_archive_binds_files_and_source(tmp_path):
+def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch):
     import hashlib
+    import weakref
 
+    from robot_sf.benchmark.snqi import v2_calibration
     from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
 
+    class Payload(list):
+        """Weak-referenceable decoded force payload for retention proof."""
+
+    refs = []
+    original_reader = v2_calibration.read_episode_files
+    original_derive = v2_calibration.derive_calibration_anchors
+
+    def read_with_payload(paths):
+        for record in original_reader(paths):
+            payload = Payload([1.0] * 1000)
+            refs.append(weakref.ref(payload))
+            record["metrics"]["robot_force_samples"] = payload
+            yield record
+
+    def derive_without_retained_payloads(records, **kwargs):
+        assert refs and not any(ref() is not None for ref in refs)
+        assert all("robot_force_samples" not in row["metrics"] for row in records)
+        return original_derive(records, **kwargs)
+
+    monkeypatch.setattr(v2_calibration, "read_episode_files", read_with_payload)
+    monkeypatch.setattr(
+        v2_calibration, "derive_calibration_anchors", derive_without_retained_payloads
+    )
     rows, kwargs = calibration_records()
     (tmp_path / "reports").mkdir()
     (tmp_path / "preflight").mkdir()
@@ -641,7 +666,22 @@ def test_freeze_calibration_archive_binds_files_and_source(tmp_path):
         )
     (tmp_path / "reports/campaign_summary.json").write_text(json.dumps({"runs": runs}))
     output = tmp_path / "anchors.json"
-    document = freeze_campaign_anchors(tmp_path, output)
+    original_read_bytes = Path.read_bytes
+
+    def reject_whole_episode_file_read(path):
+        assert path.suffix != ".jsonl", "episode file hashes must stream"
+        return original_read_bytes(path)
+
+    with monkeypatch.context() as scope:
+        scope.setattr(Path, "read_bytes", reject_whole_episode_file_read)
+        document = freeze_campaign_anchors(tmp_path, output)
+    expected = original_derive(rows, **kwargs)
+    assert document["anchors"] == expected["anchors"]
+    assert document["force_decision"] == expected["force_decision"]
+    assert (
+        document["calibration"]["command_mode_counts"]
+        == expected["calibration"]["command_mode_counts"]
+    )
     assert json.loads(output.read_text()) == document
     hashes = document["calibration"]["episode_files_sha256"]
     assert len(hashes) == 14
@@ -653,6 +693,14 @@ def test_freeze_calibration_archive_binds_files_and_source(tmp_path):
     path.write_text(path.read_text().replace(kwargs["source_commit"], "c" * 40))
     before = output.read_bytes()
     with pytest.raises(ValueError, match="source commit mismatch"):
+        freeze_campaign_anchors(tmp_path, output)
+    assert output.read_bytes() == before
+    corrupted = [json.loads(line) for line in path.read_text().splitlines()]
+    for row in corrupted:
+        row["git_hash"] = kwargs["source_commit"]
+    corrupted[0]["algorithm_metadata"]["planner_runtime"] = {"fallback_triggered": True}
+    path.write_text("".join(json.dumps(row) + "\n" for row in corrupted))
+    with pytest.raises(ValueError, match="fallback/degraded"):
         freeze_campaign_anchors(tmp_path, output)
     assert output.read_bytes() == before
 

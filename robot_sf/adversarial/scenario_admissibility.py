@@ -1384,6 +1384,7 @@ def _episode_store_binding(
         auxiliary_reason, auxiliary_binding = _replay_auxiliary_binding(
             sidecar=sidecar,
             source=source,
+            source_store_path=store_path,
             store_sha256=store_sha256,
             result_artifact=replay_result_artifact,
         )
@@ -1410,6 +1411,7 @@ def _replay_auxiliary_binding(
     *,
     sidecar: Mapping[str, Any],
     source: Mapping[str, Any],
+    source_store_path: Path,
     store_sha256: str,
     result_artifact: _ReplayResultArtifact | None,
 ) -> tuple[str | None, dict[str, Any]]:
@@ -1420,7 +1422,11 @@ def _replay_auxiliary_binding(
     if result_artifact is None:
         return "target_planner_result_missing_or_malformed", {"status": "unavailable"}
     result_reason, result_binding = _target_planner_replay_result_binding(
-        result_artifact.payload, source=source, store_sha256=store_sha256
+        result_artifact.payload,
+        source=source,
+        source_store_path=source_store_path,
+        store_sha256=store_sha256,
+        result_path=result_artifact.path,
     )
     return result_reason, {
         "target_planner_replay_result_path": result_artifact.path.as_posix(),
@@ -1510,6 +1516,7 @@ def _episode_row_binding_problem(
     episode: Mapping[str, Any],
     source: Mapping[str, Any],
     *,
+    expected_episode_id: Any = None,
     compare_route_outcome: bool = True,
 ) -> str | None:
     """Check source episode identity, clean runtime status, and route outcome against its row."""
@@ -1517,14 +1524,22 @@ def _episode_row_binding_problem(
     integrity = episode.get("integrity")
     metadata = episode.get("algorithm_metadata")
     termination = episode.get("termination_reason")
+    expected_id = source.get("episode_id") if expected_episode_id is None else expected_episode_id
     if (
-        episode.get("episode_id") != source.get("episode_id")
+        episode.get("episode_id") != expected_id
         or episode.get("scenario_id") != source.get("scenario_id")
         or episode.get("seed") != source.get("seed")
         or episode.get("algo") != source.get("planner_id")
         or episode.get("git_hash") != source.get("source_commit")
     ):
         return "episode_identity_mismatch"
+    episode_horizon = episode.get("horizon")
+    if (
+        not isinstance(episode_horizon, int)
+        or isinstance(episode_horizon, bool)
+        or episode_horizon != source.get("horizon_steps")
+    ):
+        return "episode_horizon_mismatch"
     if (
         not isinstance(outcome, Mapping)
         or type(outcome.get("route_complete")) is not bool
@@ -1581,9 +1596,11 @@ def _target_planner_replay_result_binding(
     result: Mapping[str, Any] | None,
     *,
     source: Mapping[str, Any],
+    source_store_path: Path,
     store_sha256: str,
+    result_path: Path,
 ) -> tuple[str | None, dict[str, Any]]:
-    """Bind a separate target-planner replay result to its original execution context."""
+    """Bind a target-planner replay result to its separate canonical output episode."""
     binding: dict[str, Any] = {
         "schema_version": result.get("schema_version") if isinstance(result, Mapping) else None,
         "episode_id": result.get("episode_id") if isinstance(result, Mapping) else None,
@@ -1617,12 +1634,106 @@ def _target_planner_replay_result_binding(
     if result.get("run_status") != "ok" or result.get("fallback_or_degraded") is not False:
         binding["status"] = "runtime_unavailable_or_degraded"
         return "target_planner_result_runtime_unavailable_or_degraded", binding
+    replay_reason, replay_binding = _target_replay_episode_binding(
+        result,
+        source=source,
+        source_store_path=source_store_path,
+        result_path=result_path,
+    )
+    binding["replay_episode_binding"] = replay_binding
+    binding["run_context_binding"] = replay_binding.get("run_context_binding", {})
+    if replay_reason is not None:
+        binding["status"] = "replay_episode_invalid"
+        return replay_reason, binding
+    binding["status"] = "valid"
+    return None, binding
+
+
+def _target_replay_episode_binding(
+    result: Mapping[str, Any],
+    *,
+    source: Mapping[str, Any],
+    source_store_path: Path,
+    result_path: Path,
+) -> tuple[str | None, dict[str, Any]]:
+    """Validate the distinct canonical episode store produced by target replay."""
+    replay_store_path = _resolve_evidence_path(
+        result.get("replay_episodes_jsonl_path"),
+        evidence_root=None,
+        relative_to=result_path.parent,
+    )
+    if replay_store_path is None:
+        return "target_planner_result_replay_episode_store_missing_or_unreadable", {
+            "status": "unavailable"
+        }
+    try:
+        replay_store_bytes = replay_store_path.read_bytes()
+    except OSError:
+        return "target_planner_result_replay_episode_store_missing_or_unreadable", {
+            "status": "unavailable",
+            "replay_episode_store_path": replay_store_path.as_posix(),
+        }
+    replay_store_sha256 = hashlib.sha256(replay_store_bytes).hexdigest()
+    binding = {
+        "status": "checked",
+        "replay_episode_store_path": replay_store_path.as_posix(),
+        "replay_episode_store_sha256": replay_store_sha256,
+        "replay_episode_id": result.get("replay_episode_id"),
+    }
+    if result.get("replay_episodes_jsonl_sha256", "").lower() != replay_store_sha256.lower():
+        return "target_planner_result_replay_episode_store_digest_mismatch", binding
+    if replay_store_path.resolve() == source_store_path.resolve():
+        return "target_planner_result_replay_episode_store_not_distinct", binding
+    replay_episode, parse_reason = _episode_row_for_binding(
+        replay_store_bytes, episode_id=result.get("replay_episode_id")
+    )
+    if replay_episode is None:
+        return "target_planner_result_replay_episode_" + parse_reason, binding
+    row_reason = _episode_row_binding_problem(
+        replay_episode,
+        source,
+        expected_episode_id=result.get("replay_episode_id"),
+    )
+    if row_reason is not None:
+        return "target_planner_result_replay_" + row_reason, binding
+    replay_outcome = replay_episode.get("outcome")
+    if replay_outcome.get("route_complete") is not result.get(
+        "route_complete"
+    ) or replay_episode.get("termination_reason") != result.get("termination_reason"):
+        return "target_planner_result_replay_episode_outcome_mismatch", binding
+    context_reason, context_binding = _target_replay_episode_context_binding(
+        result, replay_episode, source
+    )
+    binding.update(context_binding)
+    if context_reason is not None:
+        return context_reason, binding
+    binding["status"] = "valid"
+    return None, binding
+
+
+def _target_replay_episode_context_binding(
+    result: Mapping[str, Any],
+    replay_episode: Mapping[str, Any],
+    source: Mapping[str, Any],
+) -> tuple[str | None, dict[str, Any]]:
+    """Bind result and replay-row contexts to one normalized execution context."""
+    binding: dict[str, Any] = {}
+    replay_context = _context_mapping_binding(replay_episode.get("execution_context"), source)
+    binding["replay_episode_context_binding"] = replay_context
+    if replay_context["status"] != "valid":
+        return (
+            "target_planner_result_replay_episode_run_context_" + replay_context["status"],
+            binding,
+        )
     context = _context_mapping_binding(result.get("execution_context"), source)
     binding["run_context_binding"] = context
     if context["status"] != "valid":
-        binding["status"] = "run_context_" + context["status"]
         return "target_planner_result_run_context_" + context["status"], binding
-    binding["status"] = "valid"
+    if any(
+        result["execution_context"].get(key) != replay_episode["execution_context"].get(key)
+        for key in _RUN_CONTEXT_FIELDS
+    ):
+        return "target_planner_result_replay_episode_run_context_mismatch", binding
     return None, binding
 
 

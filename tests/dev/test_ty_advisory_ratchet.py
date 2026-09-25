@@ -211,6 +211,17 @@ def test_baseline_payload_records_exclusion_and_sibling_issues() -> None:
     assert "Cannot resolve imported module" in payload["exclusion"]["rule"]
 
 
+def test_tool_version_drift_requires_rebaseline() -> None:
+    """A known tool-version mismatch is classified as baseline drift."""
+    baseline = {"ty_version": "ty 0.0.58", "modules": {}}
+    diagnostic = tyratchet.tool_version_drift(baseline, "ty 0.0.59")
+    assert diagnostic is not None
+    assert "baseline/toolchain version mismatch" in diagnostic
+    assert "ty 0.0.58" in diagnostic
+    assert "ty 0.0.59" in diagnostic
+    assert "Re-baseline" in diagnostic
+
+
 def test_pinned_ty_command_matches_committed_baseline() -> None:
     """The live ratchet pin must agree with the version recorded in its baseline."""
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
@@ -286,6 +297,46 @@ def test_cli_check_fails_on_clean_module_regression(tmp_path: Path) -> None:
     assert "robot_sf/nav" in res.stderr
 
 
+def test_cli_check_reports_version_drift_before_per_module_regression(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tool drift suppresses misleading per-module regression output."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    report = repo / "report.json"
+    report.write_text(json.dumps([_finding("robot_sf/nav/a.py")]) + "\n", encoding="utf-8")
+    baseline = repo / "baseline.json"
+    tyratchet.write_json(
+        baseline,
+        {
+            "schema_version": tyratchet.SCHEMA_VERSION,
+            "ty_version": "ty 0.0.58",
+            "modules": {},
+        },
+    )
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.59")
+
+    result = tyratchet.main(
+        [
+            "--root",
+            str(repo),
+            "--check",
+            "--ty-output",
+            str(report),
+            "--baseline",
+            str(baseline),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "ty advisory ratchet DRIFT" in captured.err
+    assert "Re-baseline" in captured.err
+    assert "Per-module regression comparison skipped" in captured.err
+    assert "clean module regressed" not in captured.err
+    assert "downward ratchet violated" not in captured.err
+
+
 # --------------------------------------------------------------------------- #
 # Acceptance criteria against the committed baseline
 # --------------------------------------------------------------------------- #
@@ -300,13 +351,14 @@ def test_committed_baseline_exists_and_is_valid() -> None:
     assert "general_findings" in data["summary"]
 
 
-def test_worked_example_module_robot_sf_data_is_driven_to_zero() -> None:
-    """Acceptance: the worked-example module was cleared and removed from baseline."""
+def test_refreshed_baseline_records_current_robot_sf_data_findings() -> None:
+    """The refreshed canonical baseline records the current module findings."""
     data = json.loads(BASELINE.read_text(encoding="utf-8"))
-    assert "robot_sf/data" not in data["modules"], (
-        "robot_sf/data should have been driven to zero and removed from the ty "
-        "baseline as the #5004 worked example"
-    )
+    assert data["modules"]["robot_sf/data"] == {
+        "general": 7,
+        "optional_import_excluded": 0,
+        "total": 7,
+    }, "robot_sf/data must match the current canonical ty scan in the refreshed baseline"
 
 
 def test_committed_baseline_reproduces_from_fixture() -> None:

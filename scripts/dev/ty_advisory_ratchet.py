@@ -344,6 +344,29 @@ def load_baseline(path: Path) -> dict[str, Any]:
     return data
 
 
+def tool_version_drift(baseline: dict[str, Any], current_ty_version: str | None) -> str | None:
+    """Return a diagnostic when the scan tool differs from the baseline tool.
+
+    A missing current version is left unclassified because offline fixture
+    checks may not have a ``uvx`` executable available to identify the tool.
+    When both sides are known, a mismatch invalidates per-module comparisons:
+    findings from different ``ty`` releases are not evidence of a per-PR
+    regression.
+    """
+    if current_ty_version is None:
+        return None
+    baseline_ty_version = baseline.get("ty_version")
+    if baseline_ty_version == current_ty_version:
+        return None
+    recorded = baseline_ty_version or "<missing>"
+    return (
+        "baseline/toolchain version mismatch: baseline records "
+        f"{recorded!r}, but the current scan uses {current_ty_version!r}. "
+        "Re-baseline with the current pinned tool before interpreting "
+        "per-module findings."
+    )
+
+
 def _detect_ty_version(repo_root: Path) -> str | None:
     """Best-effort detect the ty version for baseline provenance."""
     try:
@@ -525,9 +548,23 @@ def _print_aggregate(findings: list[dict[str, Any]]) -> None:
 
 
 def _report_check(
-    payload: dict[str, Any], baseline: dict[str, Any], failures: list[str], notices: list[str]
+    payload: dict[str, Any],
+    baseline: dict[str, Any],
+    failures: list[str],
+    notices: list[str],
+    *,
+    version_drift: str | None = None,
 ) -> int:
     """Print the ``--check`` ratchet result and return the exit code."""
+    if version_drift:
+        print(f"ty advisory ratchet DRIFT: {version_drift}", file=sys.stderr)
+        print(
+            "Per-module regression comparison skipped until the baseline is "
+            "regenerated with the matching tool version.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(
         f"ty advisory ratchet: general={payload['summary']['general_findings']} "
         f"(baseline general={sum(int(m.get('general', 0)) for m in baseline.get('modules', {}).values())}), "
@@ -597,6 +634,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     baseline = load_baseline(baseline_path)
+    version_drift = tool_version_drift(baseline, payload.get("ty_version"))
+    if version_drift:
+        return _report_check(
+            payload,
+            baseline,
+            [],
+            [],
+            version_drift=version_drift,
+        )
     failures, notices = check_against_baseline(findings, baseline)
     return _report_check(payload, baseline, failures, notices)
 

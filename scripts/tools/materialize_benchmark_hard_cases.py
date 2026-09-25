@@ -116,6 +116,21 @@ RUNTIME_DEFAULT_MODEL_REFERENCES = {
     "prediction": frozenset({"predictive_model_id", "predictive_checkpoint_path"}),
     "sacadrl": frozenset({"sacadrl_model_id", "sacadrl_checkpoint_path"}),
 }
+CROWDNAV_HEIGHT_DEFAULT_REPO_ROOT = "output/repos/CrowdNav_HEIGHT"
+CROWDNAV_HEIGHT_DEFAULT_MODEL_DIR = (
+    "output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT"
+)
+CROWDNAV_HEIGHT_DEFAULT_CHECKPOINT_NAME = "237800.pt"
+CROWDNAV_HEIGHT_REPO_ASSET_KIND = "crowdnav_height_upstream_repo"
+CROWDNAV_HEIGHT_CONFIG_ASSET_KIND = "crowdnav_height_config"
+CROWDNAV_HEIGHT_CHECKPOINT_ASSET_KIND = "crowdnav_height_checkpoint"
+CROWDNAV_HEIGHT_ASSET_KINDS = frozenset(
+    {
+        CROWDNAV_HEIGHT_REPO_ASSET_KIND,
+        CROWDNAV_HEIGHT_CONFIG_ASSET_KIND,
+        CROWDNAV_HEIGHT_CHECKPOINT_ASSET_KIND,
+    }
+)
 FAILED_EXECUTION_STATUSES = frozenset(
     {
         "blocked",
@@ -802,9 +817,85 @@ def _runtime_input_descriptors(
     model_descriptors, model_unresolved = _runtime_model_input_descriptors(config, row)
     descriptors.extend(model_descriptors)
     unresolved.extend(model_unresolved)
+    if row.get("algo") == "crowdnav_height":
+        descriptors.extend(_crowdnav_height_input_specs(config))
     return sorted(
         descriptors, key=lambda item: (item["kind"], item["name"], item["reference"])
     ), unresolved
+
+
+def _crowdnav_height_input_specs(config: dict[str, Any]) -> list[dict[str, str]]:
+    """Describe the effective HEIGHT repo, checkpoint config, and default/model checkpoint."""
+    repo_root = str(config.get("repo_root", CROWDNAV_HEIGHT_DEFAULT_REPO_ROOT))
+    model_dir = Path(str(config.get("model_dir", CROWDNAV_HEIGHT_DEFAULT_MODEL_DIR)))
+    checkpoint_name = str(config.get("checkpoint_name", CROWDNAV_HEIGHT_DEFAULT_CHECKPOINT_NAME))
+    config_path = model_dir / "configs" / "config.py"
+    checkpoint_path = model_dir / "checkpoints" / checkpoint_name
+    return [
+        {
+            "kind": CROWDNAV_HEIGHT_REPO_ASSET_KIND,
+            "name": "git",
+            "reference": repo_root,
+        },
+        {
+            "kind": CROWDNAV_HEIGHT_CONFIG_ASSET_KIND,
+            "name": config_path.name,
+            "reference": str(config_path),
+        },
+        {
+            "kind": CROWDNAV_HEIGHT_CHECKPOINT_ASSET_KIND,
+            "name": checkpoint_path.name,
+            "reference": str(checkpoint_path),
+        },
+    ]
+
+
+def _resolved_external_path(reference: str) -> Path:
+    path = Path(reference)
+    return (path if path.is_absolute() else REPO_ROOT / path).resolve()
+
+
+def _crowdnav_height_repo_identity(reference: str) -> dict[str, Any]:
+    repo_path = _resolved_external_path(reference)
+    try:
+        revision = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(repo_path), "status", "--porcelain", "--untracked-files=all"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError, UnicodeError):
+        return {"status": "unavailable", "reason": "crowdnav_height_repo_identity_unavailable"}
+    if re.fullmatch(r"[0-9a-f]{40,64}", revision) is None:
+        return {"status": "unavailable", "reason": "crowdnav_height_repo_revision_malformed"}
+    if status:
+        return {"status": "unavailable", "reason": "crowdnav_height_repo_dirty"}
+    return {
+        "status": "verified",
+        "name": f"commit-{revision}",
+        "sha256": hashlib.sha256(revision.encode("ascii")).hexdigest(),
+    }
+
+
+def _crowdnav_height_runtime_asset_identity(descriptor: dict[str, str]) -> dict[str, Any]:
+    kind = descriptor["kind"]
+    if kind == CROWDNAV_HEIGHT_REPO_ASSET_KIND:
+        return _crowdnav_height_repo_identity(descriptor["reference"])
+    try:
+        path = _resolved_external_path(descriptor["reference"])
+        if not path.is_file():
+            return {"status": "unavailable", "reason": "crowdnav_height_runtime_file_missing"}
+        return {"status": "verified", "name": descriptor["name"], "sha256": _sha256(path)}
+    except (OSError, RuntimeError, ValueError):
+        return {"status": "unavailable", "reason": "crowdnav_height_runtime_file_unavailable"}
 
 
 def _runtime_model_input_descriptors(
@@ -875,7 +966,61 @@ def _source_runtime_input_references(
 
     expected = [("scenario_map", Path(map_value).name, map_value)]
     model_expected, unresolved = _source_model_input_references(config, row, raw_assets)
+    if row.get("algo") == "crowdnav_height":
+        crowdnav_expected, crowdnav_unresolved = _source_crowdnav_height_references(
+            config, raw_assets
+        )
+        model_expected.extend(crowdnav_expected)
+        unresolved.extend(crowdnav_unresolved)
     return sorted(expected + model_expected), unresolved
+
+
+def _source_crowdnav_height_references(
+    config: dict[str, Any], raw_assets: Any
+) -> tuple[list[tuple[str, str, str]], list[dict[str, Any]]]:
+    specs = _crowdnav_height_input_specs(config)
+    expected: list[tuple[str, str, str]] = []
+    unresolved: list[dict[str, Any]] = []
+    assets = raw_assets if isinstance(raw_assets, list) else []
+    for spec in specs:
+        if spec["kind"] == CROWDNAV_HEIGHT_REPO_ASSET_KIND:
+            matching = [
+                asset
+                for asset in assets
+                if isinstance(asset, dict)
+                and asset.get("kind") == spec["kind"]
+                and asset.get("reference") == spec["reference"]
+            ]
+            if len(matching) != 1:
+                unresolved.append(
+                    {
+                        "kind": spec["kind"],
+                        "reason": "crowdnav_height_source_repo_identity_missing",
+                        "reference": spec["reference"],
+                    }
+                )
+                continue
+            name = matching[0].get("name")
+            digest = matching[0].get("sha256")
+            commit_match = (
+                re.fullmatch(r"commit-([0-9a-f]{40,64})", name) if isinstance(name, str) else None
+            )
+            if (
+                commit_match is None
+                or digest != hashlib.sha256(commit_match[1].encode("ascii")).hexdigest()
+            ):
+                unresolved.append(
+                    {
+                        "kind": spec["kind"],
+                        "reason": "crowdnav_height_source_repo_identity_invalid",
+                        "reference": spec["reference"],
+                    }
+                )
+                continue
+            expected.append((spec["kind"], name, spec["reference"]))
+        else:
+            expected.append((spec["kind"], spec["name"], spec["reference"]))
+    return expected, unresolved
 
 
 def _source_model_input_references(
@@ -1069,6 +1214,19 @@ def _runtime_input_identity(
         }
     assets = []
     for descriptor in descriptors:
+        if descriptor["kind"] in CROWDNAV_HEIGHT_ASSET_KINDS:
+            external_identity = _crowdnav_height_runtime_asset_identity(descriptor)
+            asset = {
+                "kind": descriptor["kind"],
+                "name": external_identity.get("name", descriptor["name"]),
+                "reference": descriptor["reference"],
+                "status": external_identity.get("status"),
+                "sha256": external_identity.get("sha256"),
+            }
+            if external_identity.get("reason"):
+                asset["reason"] = external_identity["reason"]
+            assets.append(asset)
+            continue
         path_value = descriptor["reference"]
         if descriptor["kind"] == "scenario_map":
             params = row.get("scenario_params")

@@ -1,10 +1,10 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-25T18:45:21.130296Z",
+  "created_at_utc": "2026-09-25T19:02:39.180590Z",
   "bundle_name": "issue_9645_objective_coverage_review_2026-09-25",
   "source_root": "docs/context",
-  "command": "Post-review audit of the checksum-covered #9645 candidate_evaluations.csv and four search manifests, plus the fail-closed objective v2 regression tests; no simulator or search rerun.",
-  "commit": "4d14ee2dbb6fe811cf1be5ffcb98690ab4052987",
+  "command": "Post-review #9645 source audit: preserve the checksum-authentic archived comparison output, flag its #5326 CPU-synthetic label anomaly, and use corrected empirical pilot report; no search or simulator rerun.",
+  "commit": "e7dac0252",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence_and_not_a_safety_claim",
   "policy": {
     "large_raw_artifacts": "excluded",
@@ -13,13 +13,13 @@
   },
   "totals": {
     "file_count": 1,
-    "total_bytes": 5485
+    "total_bytes": 6159
   },
   "files": [
     {
       "path": "issue_9645_bounded_falsification.md",
-      "size_bytes": 5485,
-      "sha256": "cbb0e84e541820c5686e23cbbd826c4eb0a21542709debde0b5fa0746b4d9702",
+      "size_bytes": 6159,
+      "sha256": "9c7743ec77e85728daf2f989359e6a8818af5248bca5943fba9d0f0b039fe69f",
       "kind": "misc"
     }
   ]

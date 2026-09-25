@@ -339,6 +339,79 @@ def test_gallery_excludes_source_runtime_fallback_even_if_manifest_says_native(
     assert result["summary"]["dispositions"]["source_runtime_fallback_or_degraded"] == 1
 
 
+@pytest.mark.parametrize("decision_label", ["ppo_clear", "ppo_safe"])
+def test_gallery_accepts_normal_guard_decision_with_fallback_controller_state(
+    decision_label: str,
+) -> None:
+    record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_runtime": {
+                "last_decision": {
+                    "schema_version": "shield-decision.v1",
+                    "decision_label": decision_label,
+                    "fallback_controller_state": {
+                        "policy": "RiskDWAPlannerAdapter",
+                        "prior_available": False,
+                        "action_adaptation": {
+                            "mode": "direct_policy_command",
+                            "residual_clipped": False,
+                        },
+                    },
+                }
+            },
+        }
+    }
+
+    assert replay_gallery._runtime_algorithm_fallback_marker(record) is None
+
+
+def test_gallery_rejects_active_guard_fallback_decision() -> None:
+    record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_runtime": {
+                "last_decision": {
+                    "schema_version": "shield-decision.v1",
+                    "decision_label": "fallback_safe",
+                    "fallback_controller_state": {"policy": "RiskDWAPlannerAdapter"},
+                }
+            },
+        }
+    }
+
+    assert replay_gallery._runtime_algorithm_fallback_marker(record) == (
+        "planner_runtime.last_decision.fallback_used",
+        "true",
+    )
+
+
+@pytest.mark.parametrize("marker", [("fallback", True), ("degraded", True)])
+def test_gallery_preserves_explicit_markers_inside_fallback_controller_state(
+    marker: tuple[str, bool],
+) -> None:
+    record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_runtime": {
+                "last_decision": {
+                    "schema_version": "shield-decision.v1",
+                    "decision_label": "ppo_safe",
+                    "fallback_controller_state": {
+                        "policy": "RiskDWAPlannerAdapter",
+                        marker[0]: marker[1],
+                    },
+                }
+            },
+        }
+    }
+
+    assert replay_gallery._runtime_algorithm_fallback_marker(record) == (
+        f"planner_runtime.last_decision.controller_state.{marker[0]}",
+        "true",
+    )
+
+
 def test_gallery_does_not_treat_unavailable_diagnostic_metrics_as_runtime_fallback(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

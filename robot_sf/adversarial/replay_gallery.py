@@ -2462,21 +2462,32 @@ def _runtime_algorithm_fallback_marker(record: dict[str, Any]) -> tuple[str, str
 
 
 def _without_unavailable_diagnostic_statuses(value: Any, *, path: tuple[str, ...] = ()) -> Any:
-    """Drop unsupported diagnostic statuses while retaining every runtime marker.
+    """Normalize diagnostic and shield metadata before checking runtime markers.
 
     The canonical episode metadata includes status-bearing diagnostic products
     such as paired metric coverage and step-trace reset metadata. Their
     ``unavailable`` status does not describe planner execution. Keep all other
     fields, including any explicit fallback or degraded markers in those
-    products, for the shared runtime marker check.
+    products, for the shared runtime marker check. A shield's structured
+    ``fallback_controller_state`` is controller context, not itself proof that
+    fallback ran; unwrap mapping-valued state under a decision record so
+    explicit nested flags remain visible. Guarded-PPO fallback decision labels
+    are promoted to the canonical ``fallback_used`` marker.
     """
     if isinstance(value, dict):
         normalized_path = tuple(part.lower() for part in path)
+        decision_record = normalized_path[-1:] == ("last_decision",)
         diagnostic_status = any(
             part in {"paired_effect_metric_producer", "simulation_step_trace"}
             for part in normalized_path
         )
         result: dict[str, Any] = {}
+        decision_label = value.get("decision_label")
+        normalized_decision_label = (
+            decision_label.strip().lower().replace("-", "_")
+            if isinstance(decision_label, str)
+            else ""
+        )
         for raw_key, item in value.items():
             key = str(raw_key)
             if (
@@ -2486,7 +2497,21 @@ def _without_unavailable_diagnostic_statuses(value: Any, *, path: tuple[str, ...
                 and item.strip().lower().replace("-", "_") in {"unavailable", "not_available"}
             ):
                 continue
+            if decision_record and key == "fallback_controller_state" and isinstance(item, dict):
+                controller_state = _without_unavailable_diagnostic_statuses(
+                    item, path=(*path, "controller_state")
+                )
+                if "controller_state" in result:
+                    result["controller_state"] = [result["controller_state"], controller_state]
+                else:
+                    result["controller_state"] = controller_state
+                continue
             result[key] = _without_unavailable_diagnostic_statuses(item, path=(*path, key))
+        if decision_record and (
+            normalized_decision_label.startswith("fallback_")
+            or normalized_decision_label.startswith("uncertainty_fallback_")
+        ):
+            result["fallback_used"] = True
         return result
     if isinstance(value, list):
         return [

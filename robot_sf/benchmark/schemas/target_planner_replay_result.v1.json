@@ -13,6 +13,9 @@
     "planner_id",
     "source_commit",
     "source_episodes_jsonl_sha256",
+    "replay_episode_id",
+    "replay_episodes_jsonl_path",
+    "replay_episodes_jsonl_sha256",
     "run_status",
     "fallback_or_degraded",
     "route_complete",
@@ -29,12 +32,15 @@
     "planner_id": {"type": "string", "minLength": 1},
     "source_commit": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"},
     "source_episodes_jsonl_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "replay_episode_id": {"type": "string", "minLength": 1},
+    "replay_episodes_jsonl_path": {"type": "string", "minLength": 1},
+    "replay_episodes_jsonl_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
     "run_status": {"const": "ok"},
     "fallback_or_degraded": {"const": false},
     "route_complete": {"type": "boolean"},
     "termination_reason": {
       "type": "string",
-      "enum": ["success", "collision", "terminated", "truncated", "max_steps", "error"]
+      "enum": ["success", "collision", "terminated", "truncated", "max_steps"]
     },
     "replay_command": {"type": "string", "minLength": 1},
     "execution_context": {

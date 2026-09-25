@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock
 
@@ -27,6 +29,40 @@ if TYPE_CHECKING:
 _REVISION = "a" * 40
 _CONFIG = "b" * 64
 _EXPERIMENT_ID = "fixture-two-round-loop"
+
+
+def test_report_import_and_clear_optional_renderer_error_without_matplotlib() -> None:
+    script = r"""
+import sys
+from importlib.abc import MetaPathFinder
+from pathlib import Path
+
+class DenyMatplotlib(MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "matplotlib" or fullname.startswith("matplotlib."):
+            raise ModuleNotFoundError("matplotlib deliberately unavailable")
+        return None
+
+sys.meta_path.insert(0, DenyMatplotlib())
+from robot_sf.adversarial.feasibility_frontier_report import (
+    FrontierReportError,
+    write_frontier_figure,
+)
+try:
+    write_frontier_figure({}, Path("unused"))
+except FrontierReportError as exc:
+    assert "matplotlib is required" in str(exc)
+else:
+    raise AssertionError("missing matplotlib should produce FrontierReportError")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:

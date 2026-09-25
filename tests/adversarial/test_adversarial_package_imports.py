@@ -35,6 +35,15 @@ def test_adversarial_search_reexport_is_lazy() -> None:
         getattr(adversarial, missing_name)
 
 
+def test_public_adversarial_reexports_resolve_on_demand() -> None:
+    """Existing package-level helper names remain available through lazy exports."""
+
+    from robot_sf.adversarial import CandidateSpec, RandomCandidateSampler
+
+    assert CandidateSpec.__name__ == "CandidateSpec"
+    assert RandomCandidateSampler.__name__ == "RandomCandidateSampler"
+
+
 def test_adversarial_search_import_does_not_require_torch() -> None:
     """Search import stays available without optional CrowdNav HEIGHT torch dependency."""
 

@@ -15,13 +15,11 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
 
-from robot_sf.benchmark.figures.export import save_publication_figure
-from robot_sf.benchmark.figures.provenance import build_provenance
-from robot_sf.benchmark.figures.style import planner_color, publication_style
 from robot_sf.common.optional_import import try_import
 
 INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v3"
@@ -111,6 +109,28 @@ _STOP_REASONS = {
 
 class FrontierReportError(ValueError):
     """Raised when persisted evidence cannot support a trustworthy report."""
+
+
+def planner_color(key: str) -> str:
+    """Load the shared figure palette only when rendering needs it."""
+    return import_module("robot_sf.benchmark.figures.style").planner_color(key)
+
+
+def publication_style(*, size: str) -> Any:
+    """Load the shared publication style only when rendering needs it."""
+    return import_module("robot_sf.benchmark.figures.style").publication_style(size=size)
+
+
+def build_provenance(**kwargs: Any) -> dict[str, Any]:
+    """Load the shared figure provenance helper only when rendering needs it."""
+    return import_module("robot_sf.benchmark.figures.provenance").build_provenance(**kwargs)
+
+
+def save_publication_figure(*args: Any, **kwargs: Any) -> list[Path]:
+    """Load the shared figure writer only when rendering needs it."""
+    return import_module("robot_sf.benchmark.figures.export").save_publication_figure(
+        *args, **kwargs
+    )
 
 
 @dataclass(frozen=True)

@@ -148,11 +148,16 @@ def _analysis_eligibility(item: dict[str, Any]) -> bool | None:
 
 
 def _analysis_evidence_eligible(item: dict[str, Any], *, status: str) -> bool:
-    """Require explicit analysis eligibility and non-degraded scored evidence."""
+    """Require the canonical native, scored, trace-bound eligibility evidence."""
     return (
-        status in {"scored", "scoreless"}
+        status == "scored"
         and _analysis_eligibility(item) is True
+        and _execution_mode(item) == "native"
         and _execution_risk_mode(item) is None
+        and isinstance(item.get("episode_record_path"), str)
+        and bool(item["episode_record_path"].strip())
+        and isinstance(item.get("effective_scenario_hash"), str)
+        and bool(item["effective_scenario_hash"].strip())
     )
 
 
@@ -1203,6 +1208,24 @@ def _pair_seed_runs(
                 }
             )
             continue
+        random_missing = random_run["num_missing_budgeted_evaluations"]
+        tpe_missing = tpe_run["num_missing_budgeted_evaluations"]
+        if random_missing or tpe_missing:
+            ineligible.append(
+                {
+                    "seed": seed,
+                    "reason_codes": ["incomplete_budgeted_evaluations"],
+                    "random_reason_codes": (
+                        ["incomplete_budgeted_evaluations"] if random_missing else []
+                    ),
+                    "tpe_reason_codes": (
+                        ["incomplete_budgeted_evaluations"] if tpe_missing else []
+                    ),
+                    "random_missing_budgeted_evaluations": random_missing,
+                    "tpe_missing_budgeted_evaluations": tpe_missing,
+                }
+            )
+            continue
         random_score = random_run["best_analysis_eligible_objective_value"]
         tpe_score = tpe_run["best_analysis_eligible_objective_value"]
         if random_score is None or tpe_score is None:
@@ -1417,7 +1440,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "Budget-limited summaries use only the first B comparison-indexed candidate rows. Extra rows remain in JSON audit history and cannot alter best-so-far values or paired deltas.",
             "",
-            "Observed best and critical counts retain raw candidate evidence. Eligible best/critical summaries require an explicit `analysis_eligibility.eligible=true` and exclude fallback/degraded execution; unknown eligibility is not promoted.",
+            "Observed best and critical counts retain raw candidate evidence. Eligible best/critical summaries require a scored objective, native execution, a recorded trace path and effective-scenario hash, an explicit `analysis_eligibility.eligible=true` receipt, and no fallback/degraded execution; contradictory or incomplete evidence stays ineligible.",
             "",
             "Valid candidates within B are derived as `candidate rows within B - invalid - failed`; scoreless valid evaluations remain in that count. Missing and over-budget attempts remain explicit.",
             "",

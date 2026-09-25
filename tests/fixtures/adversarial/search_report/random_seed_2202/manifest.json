@@ -26,10 +26,14 @@
         "status": "passed"
       },
       "effective_scenario_hash": "shared-hash",
-      "episode_record_path": null,
+      "episode_record_path": "tests/fixtures/adversarial/search_report/records/episode.jsonl",
       "error": null,
       "failure_attribution": {
-        "details": {},
+        "details": {
+          "availability_status": "available",
+          "execution_mode": "native",
+          "readiness_status": "native"
+        },
         "primary_failure": "success",
         "reasons": [],
         "status": "attributed"
@@ -102,10 +106,14 @@
         "status": "passed"
       },
       "effective_scenario_hash": "shared-hash",
-      "episode_record_path": null,
+      "episode_record_path": "tests/fixtures/adversarial/search_report/records/episode.jsonl",
       "error": null,
       "failure_attribution": {
-        "details": {},
+        "details": {
+          "availability_status": "available",
+          "execution_mode": "native",
+          "readiness_status": "native"
+        },
         "primary_failure": "near_miss",
         "reasons": [],
         "status": "attributed"

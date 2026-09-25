@@ -37,13 +37,17 @@ mismatch therefore cannot inflate the within-budget missing count.
 
 Search curves maximize the objective recorded by the runner and carry the prior best score across
 invalid, failed, or scoreless attempts. Solid curves summarize only candidates with explicit
-`analysis_eligibility.eligible=true` and no fallback/degraded execution; dashed curves show all
-observed scored outcomes. Both curves stop at the comparison-indexed budget, and missing budget
+`analysis_eligibility.eligible=true` that agrees with the canonical scored, native-execution,
+trace-path, and effective-scenario-hash requirements, with no fallback/degraded execution; dashed
+curves show all observed scored outcomes. Both curves stop at the comparison-indexed budget, and missing budget
 slots remain explicit rather than being drawn as completed evaluations. A budget panel without
 scored observations is labeled, so an empty curve is not mistaken for a zero-valued result. Runs
 whose comparison row disagrees with manifest objective, seed, or budget are retained but excluded from aggregates. A
 Random/TPE seed pair additionally requires the same normalized scenario/search/planner configuration
-fingerprint and eligible scores from both runs; exclusion reasons are retained in JSON. Runtime is
+fingerprint, eligible scores from both runs, and no missing within-budget evaluations; exclusions
+retain per-method reason codes and missing-slot counts in JSON. Invalid and failed attempts remain
+accounted as attempted slots, while unrecorded within-budget slots cannot contribute to a matched
+best-of-budget delta. Runtime is
 read only from an explicit runtime field; it remains `null` / “Not recorded” when the source
 artifacts do not contain search-level duration. Planner-step runtime and file timestamps are not
 substitutes for search runtime.

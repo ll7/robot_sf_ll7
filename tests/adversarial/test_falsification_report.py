@@ -85,8 +85,8 @@ def test_report_derives_candidate_accounting_and_preserves_legacy_summary() -> N
     assert random_1101["evaluations"][0]["execution_mode"] == "native"
     assert random_1101["evaluations"][0]["readiness_status"] == "native"
     assert random_1101["evaluations"][0]["availability_status"] == "available"
-    assert random_1101["execution_mode_counts"] == {"native": 1, "unknown": 3}
-    assert random_1101["availability_status_counts"] == {"available": 1, "unknown": 3}
+    assert random_1101["execution_mode_counts"] == {"native": 2, "unknown": 2}
+    assert random_1101["availability_status_counts"] == {"available": 2, "unknown": 2}
 
 
 def test_report_keeps_missing_scoreless_duplicate_and_degraded_attempts_visible() -> None:
@@ -130,6 +130,38 @@ def test_runtime_comes_only_from_search_manifest_evidence() -> None:
     )
 
 
+@pytest.mark.parametrize("inconsistency", ["adapter", "scoreless", "missing_trace", "missing_hash"])
+def test_analysis_eligibility_receipt_cannot_override_canonical_evidence(
+    tmp_path: Path, inconsistency: str
+) -> None:
+    def contradict_eligibility(manifest: dict[str, Any]) -> None:
+        candidate = manifest["candidates"][0]
+        candidate["analysis_eligibility"]["eligible"] = True
+        details = candidate["failure_attribution"].setdefault("details", {})
+        details["execution_mode"] = "native"
+        candidate["episode_record_path"] = (
+            "tests/fixtures/adversarial/search_report/records/episode.jsonl"
+        )
+        candidate["effective_scenario_hash"] = "bound-scenario-hash"
+        if inconsistency == "adapter":
+            details["execution_mode"] = "adapter"
+        elif inconsistency == "scoreless":
+            candidate["objective_value"] = None
+        elif inconsistency == "missing_trace":
+            candidate["episode_record_path"] = None
+        else:
+            candidate["effective_scenario_hash"] = None
+
+    report = _report_with_manifest(tmp_path, row_index=0, mutate=contradict_eligibility)
+    random_1101 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 1101
+    )
+    evaluation = random_1101["evaluations"][0]
+
+    assert evaluation["analysis_eligible"] is True
+    assert evaluation["analysis_evidence_eligible"] is False
+
+
 def test_random_tpe_comparison_is_seed_matched_and_descriptive_only() -> None:
     report = _report()
     comparison = next(
@@ -138,11 +170,16 @@ def test_random_tpe_comparison_is_seed_matched_and_descriptive_only() -> None:
         if item["objective"] == "constraints_first_lexicographic_v1" and item["budget"] == 4
     )
 
-    assert comparison["matched_seed_count"] == 2
-    assert [item["seed"] for item in comparison["pairs"]] == [1101, 2202]
+    assert comparison["matched_seed_count"] == 1
+    assert [item["seed"] for item in comparison["pairs"]] == [2202]
+    incomplete = next(
+        item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 1101
+    )
+    assert incomplete["reason_codes"] == ["incomplete_budgeted_evaluations"]
+    assert incomplete["tpe_missing_budgeted_evaluations"] == 2
     assert comparison["inference_status"] == "not_performed"
-    assert comparison["tpe_minus_random_median"] == pytest.approx(0.25)
-    assert comparison["tpe_minus_random_min"] == pytest.approx(0.1)
+    assert comparison["tpe_minus_random_median"] == pytest.approx(0.4)
+    assert comparison["tpe_minus_random_min"] == pytest.approx(0.4)
     assert comparison["tpe_minus_random_max"] == pytest.approx(0.4)
     assert report["provenance"]["source_revision"]["status"] == "unknown"
     assert report["provenance"]["source_revision"]["exact_source_revision"] is None
@@ -199,8 +236,8 @@ def test_cli_writes_machine_readable_summary_table_and_figure(
     markdown = (output / "falsification_report.md").read_text(encoding="utf-8")
     assert "Observed best and critical counts retain raw candidate evidence" in markdown
     assert "analysis_eligibility.eligible=true" in markdown
-    assert "native: 1, unknown: 3" in markdown
-    assert "available: 1, unknown: 3" in markdown
+    assert "native: 2, unknown: 2" in markdown
+    assert "available: 2, unknown: 2" in markdown
     assert "Not performed; descriptive only" in markdown
     assert (output / "convergence_constraints_first_lexicographic_v1.png").is_file()
 

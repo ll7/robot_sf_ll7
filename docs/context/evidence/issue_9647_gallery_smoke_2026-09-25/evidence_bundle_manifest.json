@@ -13,19 +13,19 @@
   },
   "totals": {
     "file_count": 2,
-    "total_bytes": 19602
+    "total_bytes": 20816
   },
   "files": [
     {
       "path": "receipt.md",
-      "size_bytes": 1975,
-      "sha256": "01794ff07eb821a6164c40f121a892d18839161670a2bc0eb70d1ae703fa0840",
+      "size_bytes": 2704,
+      "sha256": "8ebb694338dd880c550ef3228e4ad489b186971c593c3afe4f32572040b90d24",
       "kind": "misc"
     },
     {
       "path": "summary.json",
-      "size_bytes": 17627,
-      "sha256": "13c902624b9d76caa591fc3d739efcad268de8efd3f84c58e897aa05bc9a2f35",
+      "size_bytes": 18112,
+      "sha256": "27ef0231b943bd9c829782298b9cd2a1770377dbea55f942abaebb5e21b57cda",
       "kind": "aggregates"
     }
   ]

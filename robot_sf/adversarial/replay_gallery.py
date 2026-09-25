@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -36,10 +37,12 @@ from robot_sf.benchmark.fallback_policy import (
     runtime_fallback_or_degraded_marker,
 )
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.training import scenario_loader
 
 GALLERY_SCHEMA_VERSION = "adversarial-replay-gallery.v1"
 SEARCH_MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
 _REVISION_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+_MAX_PED_TRACK_SPEED_MPS = 12.0
 _ADMISSIBLE_CLASSIFICATIONS = frozenset({"valid", "hard_but_solvable"})
 _CANONICAL_OUTCOME_FIELDS = (
     "route_complete",
@@ -107,10 +110,10 @@ def build_replay_gallery(
 
     source_manifest = Path(manifest_path).expanduser().resolve()
     root = _repository_root()
+    destination = _validated_output_directory(output_dir, root=root)
     source_root = _source_repository_root(source_manifest, root)
     payload = _load_search_manifest(source_manifest)
     checkout_state = _git_checkout_state(root)
-    destination = Path(output_dir).expanduser().resolve()
     source_manifest_sha256 = _sha256_file(source_manifest)
     source_revision = _manifest_revision(payload)
     config = payload.get("config")
@@ -239,6 +242,24 @@ def build_replay_gallery(
     return result
 
 
+def _validated_output_directory(output_dir: str | Path, *, root: Path) -> Path:
+    """Require gallery output to stay below this checkout's ignored output/ tree."""
+    destination = Path(output_dir).expanduser().resolve()
+    output_boundary = root / "output"
+    if output_boundary.is_symlink():
+        raise ValueError("repository output/ must not be a symlink")
+    output_root = output_boundary.resolve()
+    try:
+        relative = destination.relative_to(output_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"gallery output must be inside the repository ignored output/ directory: {output_root}"
+        ) from exc
+    if not relative.parts:
+        raise ValueError("gallery output must be a new child directory inside output/")
+    return destination
+
+
 def _load_search_manifest(path: Path) -> dict[str, Any]:
     """Load one manifest with the supported adversarial search schema version."""
     try:
@@ -255,7 +276,7 @@ def _load_search_manifest(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-disposition gates together
+def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validation gates together
     *,
     index: int,
     raw_candidate: Any,
@@ -325,6 +346,16 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         return None, _accounting_row(
             index, candidate_payload, scenario_error or "scenario_identity_unavailable"
         )
+    map_id_snapshot, map_id_error = _snapshot_map_id_input(
+        scenario_identity,
+        scenario_path=scenario_path,
+        episode_path=episode_path,
+        source_record=source_record,
+        root=root,
+        source_root=source_root,
+    )
+    if map_id_error is not None:
+        return None, _accounting_row(index, candidate_payload, map_id_error)
     map_file_declared, map_file_sha256, map_file_error = _scenario_file_binding(
         scenario_identity,
         "map_file",
@@ -407,6 +438,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912 - keep the ordered row-dispositio
         "scenario_sha256": scenario_sha256,
         "map_file_declared": map_file_declared,
         "map_file_sha256": map_file_sha256,
+        "map_id_snapshot": map_id_snapshot,
         "effective_scenario_hash": effective_hash,
         "dedupe_key": dedupe_key,
         "mechanism_cluster": mechanism_cluster,
@@ -454,6 +486,7 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         case_dir / "inputs",
         root=context.root,
         source_root=selected["source_root"],
+        selected_map_id_snapshot=selected.get("map_id_snapshot"),
     )
     try:
         source_episode_bytes = selected["episode_path"].read_bytes()
@@ -482,7 +515,9 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
     if materialization["status"] != "materialized":
         result["verification_status"] = "not_replayed_inputs_unavailable"
         return _complete_case(result, case_dir, context.output_dir)
-    selection_error, selection_binding = _materialized_selection_binding(selected, materialization)
+    selection_error, selection_binding = _materialized_selection_binding(
+        selected, materialization, case_dir=case_dir
+    )
     result["materialization"]["selection_binding"] = selection_binding
     if selection_error is not None:
         result["verification_status"] = selection_error
@@ -515,6 +550,11 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         episode_records,
         runner_config,
         context,
+        map_registry_path=(
+            case_dir / materialization["runner_map_registry_path"]
+            if isinstance(materialization.get("runner_map_registry_path"), str)
+            else None
+        ),
     )
     if replay_error is not None:
         result["verification_status"] = "replay_execution_failed"
@@ -557,8 +597,8 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
     return _complete_case(result, case_dir, context.output_dir)
 
 
-def _materialized_selection_binding(
-    selected: dict[str, Any], materialization: dict[str, Any]
+def _materialized_selection_binding(  # noqa: C901 - preserve ordered snapshot checks
+    selected: dict[str, Any], materialization: dict[str, Any], *, case_dir: Path
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind source and effective scenario inputs again at the replay boundary."""
     source_digest = selected["scenario_sha256"]
@@ -602,6 +642,74 @@ def _materialized_selection_binding(
                 "selected_source_sha256": selected_map_sha256,
                 "materialized_source_sha256": materialized_map_sha256,
             }
+    map_id_snapshot = selected.get("map_id_snapshot")
+    if isinstance(map_id_snapshot, dict):
+        resolution = materialization.get("map_resolution")
+        if not isinstance(resolution, dict) or resolution.get("status") != "materialized":
+            return "not_replayed_map_id_input_unavailable", {
+                "status": "unavailable",
+                "reason": "materialized_map_id_resolution_missing",
+            }
+        if (
+            resolution.get("map_id") != map_id_snapshot.get("map_id")
+            or resolution.get("source_registry_sha256") != map_id_snapshot.get("registry_sha256")
+            or resolution.get("resolved_map_sha256") != map_id_snapshot.get("map_sha256")
+        ):
+            return "not_replayed_map_id_input_changed_after_selection", {
+                "status": "mismatch",
+                "selected_map_id": map_id_snapshot.get("map_id"),
+                "materialized_map_id": resolution.get("map_id"),
+            }
+        runner_registry_bundle_path = resolution.get("runner_registry_bundle_path")
+        runner_registry_sha256 = resolution.get("runner_registry_sha256")
+        if (
+            not isinstance(runner_registry_bundle_path, str)
+            or materialization.get("runner_map_registry_path") != runner_registry_bundle_path
+            or not isinstance(runner_registry_sha256, str)
+        ):
+            return "not_replayed_map_id_input_unavailable", {
+                "status": "mismatch",
+                "reason": "runner_map_registry_path_or_digest_mismatch",
+            }
+        for field in ("resolved_map_id", "map_registry_source", "runner_map_registry"):
+            asset = next(
+                (
+                    item
+                    for item in materialization.get("assets", [])
+                    if isinstance(item, dict) and item.get("field") == field
+                ),
+                None,
+            )
+            if not isinstance(asset, dict):
+                return "not_replayed_map_id_input_unavailable", {
+                    "status": "unavailable",
+                    "reason": f"{field}_asset_missing",
+                }
+            expected_sha256 = {
+                "resolved_map_id": map_id_snapshot.get("map_sha256"),
+                "map_registry_source": map_id_snapshot.get("registry_sha256"),
+                "runner_map_registry": runner_registry_sha256,
+            }[field]
+            if asset.get("source_sha256") != expected_sha256 or (
+                field == "runner_map_registry"
+                and asset.get("bundle_path") != runner_registry_bundle_path
+            ):
+                return "not_replayed_map_id_input_changed_after_selection", {
+                    "status": "mismatch",
+                    "reason": f"{field}_selected_digest_or_path_mismatch",
+                }
+            bundle_check = _bundled_input_binding(
+                case_dir=case_dir,
+                field=field,
+                bundle_path=asset.get("bundle_path"),
+                expected_sha256=asset.get("source_sha256"),
+            )
+            if bundle_check.get("status") != "bound":
+                return "not_replayed_map_id_input_changed_after_selection", {
+                    "status": bundle_check.get("status"),
+                    "reason": bundle_check.get("reason") or "bundled_map_input_changed",
+                    "input": field,
+                }
     return None, {
         "status": "bound",
         "source_scenario_sha256": source_digest,
@@ -671,8 +779,14 @@ def _run_one_episode(
     episode_records: Path,
     runner_config: dict[str, Any],
     context: _ReplayContext,
+    *,
+    map_registry_path: Path | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Run one canonical replay and turn execution errors into explicit case data."""
+    previous_registry = os.environ.get("ROBOT_SF_MAP_REGISTRY")
+    if map_registry_path is not None:
+        os.environ["ROBOT_SF_MAP_REGISTRY"] = str(map_registry_path.resolve())
+        scenario_loader._load_map_registry.cache_clear()
     try:
         replay_summary = run_batch(
             scenario_path,
@@ -696,6 +810,13 @@ def _run_one_episode(
         )
     except Exception as exc:  # noqa: BLE001 - preserve per-candidate failures in the bundle
         return None, f"{type(exc).__name__}: {exc}"
+    finally:
+        if map_registry_path is not None:
+            if previous_registry is None:
+                os.environ.pop("ROBOT_SF_MAP_REGISTRY", None)
+            else:
+                os.environ["ROBOT_SF_MAP_REGISTRY"] = previous_registry
+            scenario_loader._load_map_registry.cache_clear()
     return replay_summary, None
 
 
@@ -909,8 +1030,188 @@ def _replay_record_availability(record: dict[str, Any]) -> str | None:
     return None
 
 
+def _snapshot_map_id_input(  # noqa: C901, PLR0912 - keep source and map snapshot gates explicit
+    scenario: dict[str, Any],
+    *,
+    scenario_path: Path,
+    episode_path: Path,
+    source_record: dict[str, Any],
+    root: Path,
+    source_root: Path,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Capture map_id registry and map bytes before candidate selection completes."""
+    raw_map_id = scenario.get("map_id")
+    if raw_map_id is None:
+        return None, None
+    if not isinstance(raw_map_id, str) or not raw_map_id.strip():
+        return None, "scenario_map_id_invalid"
+
+    registry_override = os.environ.get("ROBOT_SF_MAP_REGISTRY")
+    registry_path = scenario_loader._resolve_map_registry_path()
+    if registry_path is None:
+        return None, "scenario_map_registry_unavailable"
+    registry_path = registry_path.expanduser().resolve()
+    try:
+        required_profile = scenario_loader._resolve_required_map_profile(
+            scenario, source=scenario_path
+        )
+    except ValueError as exc:
+        return None, f"scenario_map_profile_invalid: {exc}"
+    try:
+        registry_bytes = registry_path.read_bytes()
+        registry_payload = yaml.safe_load(registry_bytes.decode("utf-8"))
+        if not isinstance(registry_payload, dict):
+            return None, "scenario_map_registry_invalid_shape"
+        scenario_loader._validate_catalog_header(registry_payload, registry_path=registry_path)
+        map_registry = {}
+        for resolved_map_id, row in scenario_loader._iter_map_registry_entries(
+            registry_payload, registry_path=registry_path
+        ):
+            scenario_loader._register_map_entry(
+                map_registry,
+                map_id=resolved_map_id,
+                row=row,
+                registry_path=registry_path,
+            )
+        map_path = scenario_loader._resolve_map_id(
+            raw_map_id.strip(),
+            map_registry=map_registry,
+            source=scenario_path,
+            required_profile=required_profile,
+        ).resolve()
+        map_bytes = map_path.read_bytes()
+        registry_bytes_after = registry_path.read_bytes()
+        map_bytes_after = map_path.read_bytes()
+    except (OSError, ValueError, TypeError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        return None, f"scenario_map_id_resolution_failed: {type(exc).__name__}: {exc}"
+    if registry_bytes != registry_bytes_after or map_bytes != map_bytes_after:
+        return None, "scenario_map_registry_or_map_changed_during_selection"
+    if os.environ.get("ROBOT_SF_MAP_REGISTRY") != registry_override:
+        return None, "scenario_map_registry_environment_changed_during_selection"
+
+    entries = registry_payload.get("maps", registry_payload)
+    if isinstance(entries, list):
+        selected_registry_row = next(
+            (
+                dict(entry)
+                for entry in entries
+                if isinstance(entry, dict)
+                and (entry.get("map_id") or entry.get("id")) == raw_map_id.strip()
+            ),
+            None,
+        )
+    elif isinstance(entries, dict):
+        raw_entry = entries.get(raw_map_id.strip())
+        selected_registry_row = (
+            {"map_id": raw_map_id.strip(), "path": raw_entry}
+            if isinstance(raw_entry, str)
+            else None
+        )
+    else:
+        selected_registry_row = None
+    if selected_registry_row is None:
+        return None, "scenario_map_registry_entry_not_materializable"
+
+    source_episode_map_binding: dict[str, Any] = {
+        "status": "unknown",
+        "reason": "source_episode_map_file_missing",
+    }
+    scenario_params = source_record.get("scenario_params")
+    raw_source_map = scenario_params.get("map_file") if isinstance(scenario_params, dict) else None
+    if isinstance(raw_source_map, str) and raw_source_map.strip():
+        source_episode_map = _resolve_referenced_file(
+            raw_source_map, episode_path.parent, source_root, root
+        )
+        if source_episode_map is None or not source_episode_map.is_file():
+            source_episode_map_binding = {
+                "status": "unknown",
+                "reason": "source_episode_map_file_unresolvable",
+            }
+        else:
+            try:
+                source_episode_map_sha256 = _sha256_file(source_episode_map)
+            except OSError:
+                source_episode_map_sha256 = None
+            source_episode_map_binding = {
+                "status": (
+                    "bound"
+                    if source_episode_map_sha256 == hashlib.sha256(map_bytes).hexdigest()
+                    else "mismatch"
+                    if source_episode_map_sha256 is not None
+                    else "unknown"
+                ),
+                "source_path": _display_path(source_episode_map, source_root),
+                "source_path_repository_relative": _is_repository_relative_path(
+                    source_episode_map, source_root
+                ),
+                "source_sha256": source_episode_map_sha256,
+                "resolved_map_sha256": hashlib.sha256(map_bytes).hexdigest(),
+            }
+
+    return {
+        "map_id": raw_map_id.strip(),
+        "required_profile": required_profile,
+        "registry_path": registry_path,
+        "registry_path_display": _display_path(registry_path, source_root),
+        "registry_path_repository_relative": _is_repository_relative_path(
+            registry_path, source_root
+        ),
+        "registry_sha256": hashlib.sha256(registry_bytes).hexdigest(),
+        "registry_bytes": registry_bytes,
+        "registry_row": selected_registry_row,
+        "registry_override_used": bool(registry_override),
+        "source_registry_binding": _source_recorded_map_registry_binding(
+            source_record,
+            registry_sha256=hashlib.sha256(registry_bytes).hexdigest(),
+        ),
+        "map_path": map_path,
+        "map_path_display": _display_path(map_path, source_root),
+        "map_path_repository_relative": _is_repository_relative_path(map_path, source_root),
+        "map_sha256": hashlib.sha256(map_bytes).hexdigest(),
+        "map_bytes": map_bytes,
+        "source_episode_map_binding": source_episode_map_binding,
+    }, None
+
+
+def _source_recorded_map_registry_binding(
+    source_record: dict[str, Any], *, registry_sha256: str
+) -> dict[str, Any]:
+    """Check any registry digest attested by the source episode or its provenance."""
+    containers: list[dict[str, Any]] = [source_record]
+    for key in ("provenance", "scenario_params", "algorithm_metadata"):
+        value = source_record.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+            nested = value.get("provenance")
+            if isinstance(nested, dict):
+                containers.append(nested)
+    for container in containers:
+        registry = container.get("map_registry")
+        registry_info = registry if isinstance(registry, dict) else {}
+        recorded_sha256 = container.get("map_registry_sha256") or registry_info.get("sha256")
+        if not isinstance(recorded_sha256, str):
+            continue
+        if recorded_sha256.lower() != registry_sha256.lower():
+            return {
+                "status": "mismatch",
+                "reason": "source_episode_map_registry_digest_differs",
+                "source_sha256": recorded_sha256,
+                "resolved_sha256": registry_sha256,
+            }
+        return {"status": "bound", "source_sha256": recorded_sha256}
+    return {
+        "status": "unknown",
+        "reason": "source_episode_map_registry_digest_missing",
+    }
+
+
 def _materialize_scenario(  # noqa: C901 - ordered fail-closed provenance gates
-    source: Path, input_dir: Path, *, root: Path, source_root: Path
+    source: Path,
+    input_dir: Path,
+    *,
+    root: Path,
+    source_root: Path,
+    selected_map_id_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Copy a generated scenario and its declared file inputs into a stable bundle."""
     try:
@@ -928,6 +1229,7 @@ def _materialize_scenario(  # noqa: C901 - ordered fail-closed provenance gates
     copied_assets: list[dict[str, str]] = []
     effective_hashes: list[str] = []
     referenced_asset_bytes: dict[tuple[int, str], bytes] = {}
+    map_id_materialization: dict[str, Any] | None = None
     for scenario_index, scenario in enumerate(payload["scenarios"]):
         if not isinstance(scenario, dict):
             return {"status": "unavailable", "reason": f"scenario_{scenario_index}_invalid"}
@@ -941,6 +1243,25 @@ def _materialize_scenario(  # noqa: C901 - ordered fail-closed provenance gates
             }
         if route_bytes is not None:
             referenced_asset_bytes[(scenario_index, "route_overrides_file")] = route_bytes
+        if scenario.get("map_id") is not None:
+            if selected_map_id_snapshot is None:
+                return {
+                    "status": "unavailable",
+                    "reason": "scenario_map_id_input_not_snapshotted",
+                }
+            if scenario.get("map_id") != selected_map_id_snapshot.get("map_id"):
+                return {"status": "unavailable", "reason": "scenario_map_id_changed"}
+            map_id_materialization, map_error = _materialize_map_id_input(
+                selected_map_id_snapshot,
+                assets_dir=assets_dir,
+                input_dir=input_dir,
+            )
+            if map_error is not None or map_id_materialization is None:
+                return {
+                    "status": "unavailable",
+                    "reason": map_error or "scenario_map_id_materialization_failed",
+                }
+            copied_assets.extend(map_id_materialization["assets"])
         try:
             effective_hashes.append(compute_effective_scenario_hash(scenario, route_payload))
         except (TypeError, ValueError):
@@ -973,7 +1294,132 @@ def _materialize_scenario(  # noqa: C901 - ordered fail-closed provenance gates
         "source_scenario_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "effective_scenario_hash": effective_hashes[0] if len(effective_hashes) == 1 else None,
         "assets": copied_assets,
+        "map_resolution": (
+            map_id_materialization["receipt"]
+            if map_id_materialization is not None
+            else _implicit_map_resolution_status(payload["scenarios"])
+        ),
+        "runner_map_registry_path": (
+            map_id_materialization["receipt"]["runner_registry_bundle_path"]
+            if map_id_materialization is not None
+            else None
+        ),
     }
+
+
+def _implicit_map_resolution_status(scenarios: list[Any]) -> dict[str, Any]:
+    """Describe map inputs that are not explicitly materialized by the gallery."""
+    rows = [scenario for scenario in scenarios if isinstance(scenario, dict)]
+    if rows and all(isinstance(scenario.get("map_file"), str) for scenario in rows):
+        return {"status": "explicit_map_file_materialized"}
+    if any(isinstance(scenario.get("map_id"), str) for scenario in rows):
+        return {
+            "status": "unknown",
+            "reason": "scenario_map_id_resolution_snapshot_missing",
+        }
+    return {
+        "status": "unknown",
+        "reason": "implicit_default_map_pool_not_materialized",
+    }
+
+
+def _materialize_map_id_input(
+    snapshot: dict[str, Any],
+    *,
+    assets_dir: Path,
+    input_dir: Path,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Bundle the selected map and registry, pinning map_id replay resolution."""
+    map_bytes = snapshot.get("map_bytes")
+    registry_bytes = snapshot.get("registry_bytes")
+    map_path = snapshot.get("map_path")
+    registry_path = snapshot.get("registry_path")
+    map_sha256 = snapshot.get("map_sha256")
+    registry_sha256 = snapshot.get("registry_sha256")
+    if (
+        not all(isinstance(value, bytes) for value in (map_bytes, registry_bytes))
+        or not isinstance(map_path, Path)
+        or not isinstance(registry_path, Path)
+    ):
+        return None, "scenario_map_id_snapshot_incomplete"
+    if hashlib.sha256(map_bytes).hexdigest() != map_sha256:
+        return None, "scenario_map_snapshot_digest_mismatch"
+    if hashlib.sha256(registry_bytes).hexdigest() != registry_sha256:
+        return None, "scenario_map_registry_snapshot_digest_mismatch"
+
+    map_name = f"{map_sha256[:12]}-{map_path.name}"
+    bundled_map = assets_dir / map_name
+    bundled_map.write_bytes(map_bytes)
+    source_registry_name = f"{registry_sha256[:12]}-map_registry.yaml"
+    bundled_source_registry = assets_dir / source_registry_name
+    bundled_source_registry.write_bytes(registry_bytes)
+    try:
+        registry_payload = yaml.safe_load(registry_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        return None, f"scenario_map_registry_invalid: {type(exc).__name__}: {exc}"
+    if not isinstance(registry_payload, dict):
+        return None, "scenario_map_registry_entry_not_materializable"
+    selected_row = snapshot.get("registry_row")
+    selected_row = dict(selected_row) if isinstance(selected_row, dict) else None
+    if selected_row is None:
+        return None, "scenario_map_registry_entry_not_materializable"
+    selected_row["path"] = str(bundled_map.resolve())
+    selected_row["source_sha256"] = map_sha256
+    replay_registry_payload = dict(registry_payload)
+    original_entries = registry_payload.get("maps")
+    if isinstance(original_entries, list):
+        replay_registry_payload["maps"] = [selected_row]
+    elif isinstance(original_entries, dict):
+        replay_registry_payload["maps"] = {snapshot["map_id"]: str(bundled_map.resolve())}
+    else:
+        replay_registry_payload = {snapshot["map_id"]: str(bundled_map.resolve())}
+    runner_registry = input_dir / "map_registry.yaml"
+    runner_registry_bytes = yaml.safe_dump(
+        replay_registry_payload, sort_keys=False, allow_unicode=True
+    ).encode("utf-8")
+    runner_registry.write_bytes(runner_registry_bytes)
+    runner_registry_sha256 = hashlib.sha256(runner_registry_bytes).hexdigest()
+    assets = [
+        {
+            "field": "resolved_map_id",
+            "source_path": snapshot["map_path_display"],
+            "source_path_repository_relative": snapshot["map_path_repository_relative"],
+            "source_sha256": map_sha256,
+            "bundle_path": (Path("inputs") / "assets" / map_name).as_posix(),
+        },
+        {
+            "field": "map_registry_source",
+            "source_path": snapshot["registry_path_display"],
+            "source_path_repository_relative": snapshot["registry_path_repository_relative"],
+            "source_sha256": registry_sha256,
+            "bundle_path": (Path("inputs") / "assets" / source_registry_name).as_posix(),
+        },
+        {
+            "field": "runner_map_registry",
+            "source_path": None,
+            "source_path_repository_relative": False,
+            "source_sha256": runner_registry_sha256,
+            "bundle_path": "inputs/map_registry.yaml",
+        },
+    ]
+    return {
+        "assets": assets,
+        "receipt": {
+            "status": "materialized",
+            "kind": "map_id_registry_resolution",
+            "map_id": snapshot["map_id"],
+            "required_profile": snapshot["required_profile"],
+            "source_registry_path": snapshot["registry_path_display"],
+            "source_registry_sha256": registry_sha256,
+            "source_registry_override_used": snapshot["registry_override_used"],
+            "source_registry_binding": snapshot["source_registry_binding"],
+            "resolved_map_path": snapshot["map_path_display"],
+            "resolved_map_sha256": map_sha256,
+            "source_episode_map_binding": snapshot["source_episode_map_binding"],
+            "runner_registry_bundle_path": "inputs/map_registry.yaml",
+            "runner_registry_sha256": runner_registry_sha256,
+        },
+    }, None
 
 
 def _materialized_route_payload(
@@ -1116,7 +1562,7 @@ def _runner_config(
     )
 
 
-def _source_input_binding(
+def _source_input_binding(  # noqa: C901, PLR0912 - explicit evidence checks stay together
     materialization: dict[str, Any],
     execution_config: dict[str, Any],
     *,
@@ -1163,6 +1609,30 @@ def _source_input_binding(
                         expected_sha256=asset.get("source_sha256"),
                     )
                 )
+            elif field == "resolved_map_id":
+                checks.append(
+                    _tracked_source_file_binding(
+                        root=root,
+                        field="resolved_map_file",
+                        source_path=asset.get("source_path"),
+                        repository_relative=asset.get("source_path_repository_relative"),
+                        expected_sha256=asset.get("source_sha256"),
+                    )
+                )
+            elif field == "map_registry_source":
+                checks.append(
+                    _tracked_source_file_binding(
+                        root=root,
+                        field="map_registry",
+                        source_path=asset.get("source_path"),
+                        repository_relative=asset.get("source_path_repository_relative"),
+                        expected_sha256=asset.get("source_sha256"),
+                    )
+                )
+            elif field == "runner_map_registry":
+                # This derived registry is the exact one passed to load_scenarios;
+                # its source registry and selected map are checked separately.
+                pass
             elif field == "route_overrides_file":
                 checks.append(
                     _tracked_source_file_binding(
@@ -1182,6 +1652,75 @@ def _source_input_binding(
                 )
             else:
                 checks.append({"input": str(field or "materialized_asset"), "status": "unknown"})
+
+    map_resolution = materialization.get("map_resolution")
+    if (
+        isinstance(map_resolution, dict)
+        and map_resolution.get("kind") == "map_id_registry_resolution"
+    ):
+        source_episode_binding = map_resolution.get("source_episode_map_binding")
+        if isinstance(source_episode_binding, dict):
+            checks.append(
+                {
+                    "input": "source_episode_map_file",
+                    **source_episode_binding,
+                }
+            )
+        else:
+            checks.append(
+                {
+                    "input": "source_episode_map_file",
+                    "status": "unknown",
+                    "reason": "source_episode_map_binding_missing",
+                }
+            )
+        source_registry_binding = map_resolution.get("source_registry_binding")
+        if isinstance(source_registry_binding, dict):
+            checks.append(
+                {
+                    "input": "source_episode_map_registry",
+                    **source_registry_binding,
+                }
+            )
+        else:
+            checks.append(
+                {
+                    "input": "source_episode_map_registry",
+                    "status": "unknown",
+                    "reason": "source_episode_map_registry_binding_missing",
+                }
+            )
+        if map_resolution.get("source_registry_override_used") is True:
+            checks.append(
+                {
+                    "input": "source_map_registry_environment",
+                    "status": "unknown",
+                    "reason": "source_registry_override_not_attested_by_episode_provenance",
+                }
+            )
+        elif map_resolution.get("source_registry_override_used") is not False:
+            checks.append(
+                {
+                    "input": "source_map_registry_environment",
+                    "status": "unknown",
+                    "reason": "source_registry_environment_status_unknown",
+                }
+            )
+    elif not (
+        isinstance(map_resolution, dict)
+        and map_resolution.get("status") == "explicit_map_file_materialized"
+    ):
+        checks.append(
+            {
+                "input": "effective_map_resolution",
+                "status": "unknown",
+                "reason": (
+                    map_resolution.get("reason", "map_resolution_unknown")
+                    if isinstance(map_resolution, dict)
+                    else "map_resolution_receipt_missing"
+                ),
+            }
+        )
 
     file_inputs = execution_config.get("file_inputs")
     if not isinstance(file_inputs, list):
@@ -1398,14 +1937,16 @@ def _render_replay(
         return {"status": "unavailable", "reason": "replay_trace_missing", "artifacts": []}
     if not isinstance(trace.get("steps"), list):
         return {"status": "unavailable", "reason": "replay_trace_steps_missing", "artifacts": []}
-    replay_steps, critical_step, smallest_clearance = _replay_steps_from_trace(trace)
+    replay_steps, critical_step, smallest_clearance, continuity = _replay_steps_from_trace(trace)
     if len(replay_steps) < 2:
         return {"status": "unavailable", "reason": "replay_trace_too_short", "artifacts": []}
 
     row_payload = dict(record)
     row_payload["replay_steps"] = replay_steps
     row_payload["replay_dt"] = trace.get("dt")
-    row_payload["replay_map_path"] = str(map_path) if map_path is not None else None
+    map_context = _renderer_map_context(map_path)
+    render_map_path = map_path if map_context["status"] == "renderable" else None
+    row_payload["replay_map_path"] = str(render_map_path) if render_map_path is not None else None
     episode_row = EpisodeRow.from_dict(row_payload)
     frame_steps = [critical_step] if critical_step is not None else [len(replay_steps) - 1]
     rendered, error = _generate_replay_figures(
@@ -1425,15 +1966,25 @@ def _render_replay(
             artifacts.append(Path(raw_path).resolve().relative_to(output_dir.resolve()).as_posix())
         except (ValueError, TypeError):
             artifacts.append(str(raw_path))
+    if render_map_path is not None and _sha256_file(render_map_path) != map_context["sha256"]:
+        map_context.update(
+            status="unavailable",
+            reason="map_bytes_changed_during_render",
+        )
+    elif map_context["status"] == "renderable":
+        map_context["status"] = "overlay_rendered"
     return {
         "status": "rendered",
         "determinism_check_status": rendered.get("determinism_check_status"),
         "critical_frame_step": critical_step,
         "smallest_surface_clearance_m": smallest_clearance,
+        "track_continuity": continuity,
         "map_context": {
-            "status": "provided" if map_path is not None else "unavailable",
+            "status": map_context["status"],
+            "reason": map_context.get("reason"),
             "path": _relative_to(str(map_path), output_dir) if map_path is not None else None,
-            "sha256": _sha256_file(map_path) if map_path is not None else None,
+            "sha256": map_context.get("sha256"),
+            "renderer_error": map_context.get("renderer_error"),
         },
         "artifacts": artifacts,
         "provenance_sidecar": _relative_to(rendered.get("provenance_sidecar"), output_dir),
@@ -1447,7 +1998,10 @@ def _materialized_map_path(materialization: dict[str, Any], case_dir: Path) -> P
     if not isinstance(assets, list):
         return None
     for asset in assets:
-        if not isinstance(asset, dict) or asset.get("field") != "map_file":
+        if not isinstance(asset, dict) or asset.get("field") not in {
+            "map_file",
+            "resolved_map_id",
+        }:
             continue
         bundle_path = asset.get("bundle_path")
         if not isinstance(bundle_path, str) or not bundle_path.strip():
@@ -1461,20 +2015,83 @@ def _materialized_map_path(materialization: dict[str, Any], case_dir: Path) -> P
     return None
 
 
+def _renderer_map_context(map_path: Path | None) -> dict[str, Any]:
+    """Preflight the exact map bytes with the image reader used by the renderer."""
+    if map_path is None:
+        return {
+            "status": "unavailable",
+            "reason": "no_materialized_map_asset",
+            "sha256": None,
+        }
+    try:
+        digest = _sha256_file(map_path)
+        import matplotlib.image as mpimg  # noqa: PLC0415
+
+        mpimg.imread(map_path)
+    except (ImportError, OSError, SyntaxError, ValueError) as exc:
+        return {
+            "status": "unavailable",
+            "reason": "existing_renderer_cannot_decode_map_overlay",
+            "renderer_error": f"{type(exc).__name__}: {exc}",
+            "sha256": _sha256_file(map_path) if map_path.is_file() else None,
+        }
+    return {"status": "renderable", "sha256": digest}
+
+
 def _replay_steps_from_trace(
     trace: dict[str, Any],
-) -> tuple[list[dict[str, Any]], int | None, float | None]:
+) -> tuple[list[dict[str, Any]], int | None, float | None, dict[str, Any]]:
     """Convert the canonical runner trace to the replay-figure row shape."""
     trace_steps = trace.get("steps")
     if not isinstance(trace_steps, list):
-        return [], None, None
+        return (
+            [],
+            None,
+            None,
+            {
+                "status": "unavailable",
+                "reason": "trace_steps_missing",
+                "discontinuity_split_count": 0,
+                "unknown_identity_position_count": 0,
+            },
+        )
     replay_steps: list[dict[str, Any]] = []
+    previous_tracks: dict[str, tuple[float, float, float, int]] = {}
     critical_step: int | None = None
     smallest_clearance = math.inf
-    for step in trace_steps:
+    split_count = 0
+    unknown_identity_count = 0
+    for trace_index, step in enumerate(trace_steps):
         converted, step_clearance = _trace_step_to_replay_step(step)
         if converted is None:
             continue
+        positions = converted["ped_positions"]
+        actor_ids = converted.pop("_pedestrian_actor_ids")
+        track_ids: list[str] = []
+        for ped_index, (position, actor_id) in enumerate(zip(positions, actor_ids, strict=True)):
+            if actor_id is None:
+                track_ids.append(f"unknown-step-{trace_index}-actor-{ped_index}")
+                unknown_identity_count += 1
+                continue
+            prior = previous_tracks.get(actor_id)
+            segment = prior[3] if prior is not None else 0
+            if prior is not None:
+                previous_x, previous_y, previous_time, segment = prior
+                elapsed = converted["t"] - previous_time
+                distance = math.hypot(position[0] - previous_x, position[1] - previous_y)
+                speed = distance / elapsed if elapsed > 0.0 else math.inf
+                if not math.isfinite(speed) or speed > _MAX_PED_TRACK_SPEED_MPS:
+                    segment += 1
+                    split_count += 1
+            track_id = actor_id if segment == 0 else f"{actor_id}#segment-{segment}"
+            track_ids.append(track_id)
+            previous_tracks[actor_id] = (
+                position[0],
+                position[1],
+                converted["t"],
+                segment,
+            )
+        converted["pedestrian_ids"] = track_ids
         if step_clearance is not None and step_clearance < smallest_clearance:
             smallest_clearance = step_clearance
             critical_step = len(replay_steps)
@@ -1483,6 +2100,22 @@ def _replay_steps_from_trace(
         replay_steps,
         critical_step,
         smallest_clearance if math.isfinite(smallest_clearance) else None,
+        {
+            "status": (
+                "discontinuities_split"
+                if split_count
+                else "unknown_identity_isolated"
+                if unknown_identity_count
+                else "continuous"
+            ),
+            "maximum_assumed_track_speed_mps": _MAX_PED_TRACK_SPEED_MPS,
+            "discontinuity_split_count": split_count,
+            "unknown_identity_position_count": unknown_identity_count,
+            "note": (
+                "positions without stable actor identity are isolated; reused actor IDs are "
+                "split when consecutive displacement exceeds the visualization threshold"
+            ),
+        },
     )
 
 
@@ -1506,6 +2139,7 @@ def _trace_step_to_replay_step(step: Any) -> tuple[dict[str, Any] | None, float 
         return None, None
 
     pedestrian_positions: list[list[float]] = []
+    pedestrian_actor_ids: list[str | None] = []
     smallest_clearance: float | None = None
     pedestrians = step.get("pedestrians")
     for pedestrian in pedestrians if isinstance(pedestrians, list) else []:
@@ -1525,6 +2159,12 @@ def _trace_step_to_replay_step(step: Any) -> tuple[dict[str, Any] | None, float 
         if ped_x is None or ped_y is None:
             continue
         pedestrian_positions.append([ped_x, ped_y])
+        raw_actor_id = pedestrian.get("id", pedestrian.get("actor_id"))
+        pedestrian_actor_ids.append(
+            str(raw_actor_id).strip()
+            if isinstance(raw_actor_id, str | int) and str(raw_actor_id).strip()
+            else None
+        )
         clearance = _finite_number(pedestrian.get("surface_clearance_m"))
         if clearance is not None and (smallest_clearance is None or clearance < smallest_clearance):
             smallest_clearance = clearance
@@ -1537,6 +2177,7 @@ def _trace_step_to_replay_step(step: Any) -> tuple[dict[str, Any] | None, float 
         "heading": heading,
         "speed": speed,
         "ped_positions": pedestrian_positions,
+        "_pedestrian_actor_ids": pedestrian_actor_ids,
     }, smallest_clearance
 
 

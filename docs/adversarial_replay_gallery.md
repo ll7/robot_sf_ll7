@@ -12,8 +12,9 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   --top-k 5 --no-video
 ```
 
-The output directory must be new. Search inputs remain read-only; generated bundles belong under
-the ignored `output/` directory. The command writes `gallery_manifest.json`, a compact `README.md`,
+The output directory must be a new child of this checkout's ignored `output/` directory. The API
+resolves paths before checking this boundary, so a symlink that escapes `output/` is rejected too.
+Search inputs remain read-only. The command writes `gallery_manifest.json`, a compact `README.md`,
 and a separate case directory for each selected candidate. Every input candidate stays in the
 manifest accounting, including failed evaluations, missing source files, invalid certificates,
 duplicates, and candidates below the top-K cutoff.
@@ -59,8 +60,15 @@ and existing failure-mechanism clusters reduce duplicate displays.
 
 For each selected row, the tool copies the scenario YAML and its referenced map/route files into
 the case bundle, then calls the canonical benchmark runner with the recorded policy and available
-search configuration. It records a step trace for visualization. The replay is compared against
-the source episode's identity, canonical outcomes, registered objective value, and the configured
+search configuration. For `map_id` scenarios, selection snapshots the resolved map and registry
+bytes, materializes both, and points the runner at a derived registry that resolves the same ID to
+the bundled map. The source binding also checks the map path recorded in the source episode and the
+tracked registry/map bytes. If the source episode does not attest the registry digest, or the
+registry came from an external override, the binding stays `unknown` and cannot become `verified`.
+Scenarios that rely on the implicit default map pool without an explicit `map_file` or resolved
+`map_id` snapshot are also `unknown`; the gallery does not infer their map identity from the
+planner's outcome. It records a step trace for visualization. The replay is compared against the
+source episode's identity, canonical outcomes, registered objective value, and the configured
 absolute tolerance.
 
 `replay_match: match` means identity, exact categorical outcome/failure attribution, and objective
@@ -73,8 +81,9 @@ manifest.
 `verification_status: verified` additionally requires a known source revision from the episode
 record or, if absent there, from the manifest. If both provide a revision, they must agree. The
 replay revision and clean gallery code checkout must match that exact source revision; source
-map/config files must match tracked files at that revision; and source/replay planner configuration
-hashes must match. A matching replay without complete input binding remains
+map/registry/config files must match tracked files at that revision; the source episode must attest
+the map registry digest used by a `map_id` input; and source/replay planner configuration hashes
+must match. A matching replay without complete input binding remains
 `outcome_reproduced_source_inputs_unbound`; a dirty or different checkout has its own explicit
 status. A matching replay at another revision is reported as
 `outcome_reproduced_revision_changed`; missing revision provenance stays explicit. Input mismatches,
@@ -90,8 +99,15 @@ verification under these recorded checks.
   classification, copied scenario and file-backed runner configuration, effective runner settings,
   replay comparison and input-binding checks, and available rendering outputs.
 - `cases/<case-id>/figures/` uses the existing still, filmstrip, and trajectory renderer on the
-  canonical replay trace and passes the materialized map context to the renderer when supported.
-  The case manifest records the map path and digest, or `unavailable` when no map was materialized.
+  canonical replay trace and passes a materialized map only after the same image reader used by the
+  renderer can decode it. The case manifest records `map_context: overlay_rendered` only after that
+  preflight and render succeed; otherwise it records the source map path/digest and an exact
+  unavailable reason (for example, the existing image reader cannot decode an SVG). A map path
+  being present no longer implies that an overlay was drawn.
+  Pedestrian trajectory lines require stable actor IDs. Unknown identities are rendered as isolated
+  positions. When an actor ID reappears with a displacement above the documented 12 m/s
+  visualization continuity threshold, the track is split into segments and the split count is
+  recorded. This is a rendering safeguard, not a feasibility or physics verdict.
   Each case records video as `rendered`, `unavailable`, `not_attempted`, or `disabled`; a request
   that produces no video file is never reported as successful. The current map-backed batch runner
   does not emit synthetic video for these search scenarios, so their case manifests mark requested

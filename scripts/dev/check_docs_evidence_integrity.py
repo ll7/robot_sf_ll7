@@ -607,20 +607,42 @@ def _checksum_manifest_paths(path: Path, *, root: Path) -> list[Path]:
         return []
     if _EVIDENCE_DIR not in rel.parents:
         return []
-    parent = path.parent
-    return [parent / name for name in sorted(_CHECKSUM_FILENAMES) if (parent / name).is_file()]
+    parents = [path.parent]
+    if path.parent.name == "payload":
+        parents.append(path.parent.parent)
+    return [
+        parent / name
+        for parent in parents
+        for name in sorted(_CHECKSUM_FILENAMES)
+        if (parent / name).is_file()
+    ]
+
+
+def _is_evidence_bundle_v1(manifest: Path) -> bool:
+    """Return whether an adjacent bundle manifest defines payload-relative hashes."""
+    bundle_manifest = manifest.parent / "evidence_bundle_manifest.json"
+    try:
+        payload = json.loads(bundle_manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(payload, dict) and payload.get("schema_version") == "evidence_bundle.v1"
 
 
 def _resolve_checksum_target(candidate: Path, *, manifest: Path, root: Path) -> Path:
     """Resolve a manifest checksum entry to the file it should verify.
 
-    Prefer the file adjacent to the manifest (standard ``sha256sum -c`` semantics
+    ``evidence_bundle.v1`` entries are relative to ``payload/``. Other manifests
+    prefer the file adjacent to the manifest (standard ``sha256sum -c`` semantics
     run from the packet directory), so a bare entry such as ``README.md`` verifies
     the packet's own file rather than a repo-root file with the same name (issue
     #4317). Fall back to the repo-root-relative resolution only when no
     manifest-local file exists, which preserves manifests written with
     repo-root-relative paths (for example ``docs/context/evidence/.../summary.json``).
     """
+    if _is_evidence_bundle_v1(manifest):
+        # evidence_bundle.v1 writes checksum names relative to its payload root;
+        # its machine-readable files[].path values use the same convention.
+        return manifest.parent / "payload" / candidate
     manifest_candidate = manifest.parent / candidate
     if manifest_candidate.exists():
         return manifest_candidate

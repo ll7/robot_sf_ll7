@@ -28,8 +28,8 @@ The test modules cover:
 | `test_oracle_isolation.py` | Opt-in privileged traces and randomized simulator identity labels do not change or enter actor-visible observations. |
 | `test_replay_determinism.py` | Same-host crowd traces are byte-identical. On a scene with real-area robot zones and a sampled crowd, the noisy (`noise_std > 0`) SocialForcePlanner baseline and the release `social_force`, `orca` and hybrid v3 arms repeat commands, actions, poses, crowd and outcome for one seed. Negative controls require a different environment seed to move the start and crowd, and a different planner seed to move the command noise. |
 | `test_planner_unit_consistency.py` | Audits physical-unit fields in the release campaign's planner configs (resolved through `base_config_path` and every scenario override), the readiness matrix's representative YAMLs, and four planner defaults. Known violations are pinned value-for-value in a ledger; strict expected failures track #9726 (hybrid drive envelope and code defaults) and #9750 (robot-body radius). |
-| `test_grid_resolution_invariance.py` | Native ORCA commands are stable across 0.1, 0.2, and 0.4 m rasters of one wall in an unsaturated regime; DWA commands and the default social-force obstacle force have strict expected failures for #9740 and #9724. The #9738 `resolution_independent_v2` twin passes, and is skipped with a reason until that option exists. |
-| `test_mirror_symmetry.py` | The release `social_force` and `orca` arms return the transformed trace under y-mirror, x-mirror and a 90-degree rotation, with a pedestrian whose velocity crosses both mirror axes. Hybrid v3 keeps its outcome under each transform; its exact trace is a strict expected failure (a discrete near-tie flips). The SocialForcePlanner baseline and VisibilityPlanner mirror cases remain. |
+| `test_grid_resolution_invariance.py` | Native ORCA commands are stable across 0.1, 0.2, and 0.4 m rasters of one wall in an unsaturated regime; DWA commands and the legacy (code-default) social-force obstacle force have strict expected failures for #9740 and #9724. The `resolution_independent_v2` twin, which the release `social_force` arm now uses, passes. |
+| `test_mirror_symmetry.py` | The release `orca` arm returns the transformed trace under y-mirror, x-mirror and a 90-degree rotation, with a pedestrian whose velocity crosses both mirror axes. The release `social_force` (v2) arm and its pair kernel are strict expected failures: the kernel's unwrapped angle difference zeroes the force of a pair straddling the +/-pi branch cut, so the +x scene drops the pedestrian and the rotated one does not. Hybrid v3 keeps its outcome under each transform; its exact trace is a strict expected failure (a discrete near-tie flips). The SocialForcePlanner baseline and VisibilityPlanner mirror cases remain. |
 | `test_pedestrian_removal.py` | The SocialForcePlanner accepts empty/nonempty agent observations and keeps success after a nearby pedestrian is removed. For each release arm, a pedestrian timed to cross the route changes the commands; the successful crossing episode stays successful and no slower without it. |
 
 The suite is collected by the repository’s normal `tests/` discovery and
@@ -119,11 +119,16 @@ is not classified. Rules:
   (2.0 m/s, 1.0 m/s², 1.0 m/s²); the unbound SocNav default speed is the one
   stated exception, clipped by the map-runner action adapter;
 - angular speeds and angular accelerations: at most ten times the drive's;
-- robot-body radii: at least the drive's 1.0 m body;
-- pedestrian and proxemic radii: positive and at most 10 m;
+- robot and pedestrian body radii: between the physical value (1.0 m drive body,
+  0.4 m simulator pedestrian) and 1.5 times it, so a diameter is a unit error;
+  the structured observation and the ORCA and hybrid v4 adapters must also read
+  exactly those radii at runtime;
+- proxemic and goal-approach radii: positive and at most 10 m;
 - hybrid human speed gates, as centre distances: stop and moderate at least
   contact (1.4 m = 1.0 m body + 0.4 m simulator pedestrian); slow at least
-  contact plus the drive's stopping distance.
+  contact plus the drive's stopping distance. Hybrid v4 (#9747) replaces these
+  centre gates with surface clearances, so its base config and four release
+  twins are exempt from them and must otherwise break no rule.
 
 Known violations are pinned value-for-value, so a new, worsened or fixed
 violation fails the ledger test. Strict expected failures flip when #9726

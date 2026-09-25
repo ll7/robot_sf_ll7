@@ -174,6 +174,16 @@ decision_summary: >-
   per-code finding, and no #9656 path has a finding. Refresh the machine baseline only to bind this
   five-sidecar path-set change. The diagnostic-only historical claim boundary is preserved; no
   finding disposition or strict-CI exclusion is added.
+  Current-main reconciliation (2026-09-25): the source packet was merged onto frozen main
+  `61c9db79ba9b37d0668c0a93a72bd9b89ad3405b`. Relative to that base, the only evidence-tree
+  additions are the same five packet files and five SHA-bound sidecars listed above; there are no
+  evidence-tree removals. The current-main tree is 2427 files /
+  `2d0a52ac85a26ecedca6e4779c4e486acc999e8aef4d0f0ac88acf026ae1300c`; the merged candidate is
+  2437 files / `105bdffc3c3a47967360ed41c7a43b4e4042cb42cc511cb50265095fc66d7347`. The three
+  payload checksums and all five sidecar artifact paths, schema markers, and byte digests were
+  verified. Candidate projection retains 438 findings across 98 files, with all 171 finding rows
+  unchanged and no #9656 path finding. This refresh binds the merged path set only; it does not
+  alter finding dispositions or strict-CI exclusions.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

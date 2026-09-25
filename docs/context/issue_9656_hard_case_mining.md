@@ -56,6 +56,9 @@ Reproduction commands and the machine-readable 36-case inventory are in the trac
 and [checksums](evidence/issue_9656_hard_case_mining_2026-09-24/checksums.sha256). The original
 release and all source episode rows remain the durable raw evidence; extracted payloads, case
 JSON files, replay matrices/configs, and replay episode rows stay in ignored `output/` caches. The
+portable packet retains planner-config hashes but not config bytes, so those hashes cannot be
+independently revalidated from the tracked evidence; ignored-cache availability is not durable
+evidence. The
 [current-head no-replay manifest](evidence/issue_9656_hard_case_mining_2026-09-24/payload/current_head_no_replay_manifest.json)
 records the reachable source snapshot, reuses four historical receipts with zero new attempts, and
 keeps their missing replay-environment identities classified as unavailable.

@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/evidence_bundle_manifest.json",
-  "artifact_sha256": "d0c66b6cd803119bfdd79149fa1ff1f1a5d5ca94a9db292cfc93c147b8a0b002",
+  "artifact_sha256": "c05d2bd5dbba2ef74c73045ab75395688d52ac47ac7a528d4132b49cde318f7b",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

@@ -1,6 +1,6 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-25T04:55:42Z",
+  "created_at_utc": "2026-09-25T21:39:59.248907Z",
   "bundle_name": "issue_9656_hard_case_mining_2026-09-24",
   "source_root": "issue-9656-evidence-stage",
   "command": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/showcase_summary.json\" --campaign-root \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload\" --bundle \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz\" --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir \"${ISSUE9656_LOCAL_ROOT}/materialized_head_e58be7b_no_replay\" --resume-from \"${ISSUE9656_LOCAL_ROOT}/materialized_final_provenance_fix/manifest.json\" --replay-limit 0",
@@ -13,30 +13,29 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 251310
+    "total_bytes": 258251
   },
   "files": [
     {
+      "path": "current_head_no_replay_manifest.json",
+      "size_bytes": 124513,
+      "sha256": "d6d5cf60afb71a462ce6a33ee695ee107a82d8cdb2c287dc728983497ee103ff",
+      "kind": "misc",
+      "location": "payload/current_head_no_replay_manifest.json"
+    },
+    {
       "path": "report.md",
-      "size_bytes": 9664,
-      "sha256": "5e651940ad5e81634544e45e521c3cd5f247a0aa88dac6d2f541324f76689e55",
+      "size_bytes": 9867,
+      "sha256": "0bd8772d9c6bdfe1c33cea951c291f98f96806dd3c1a97e3365f55cc2e72d0ee",
       "kind": "reports",
-      "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/report.md"
+      "location": "payload/report.md"
     },
     {
       "path": "summary.json",
       "size_bytes": 123871,
       "sha256": "5b055840bfa08354641d3a7200c97ce5067cbf233d1d954f466f8c3fc78d6e90",
       "kind": "aggregates",
-      "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json"
-    },
-    {
-      "path": "current_head_no_replay_manifest.json",
-      "size_bytes": 117775,
-      "sha256": "b3e13b38e208500b976cc0452fdd7cebf011cd986f669e761c1366902205496e",
-      "kind": "manifests",
-      "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/current_head_no_replay_manifest.json"
+      "location": "payload/summary.json"
     }
-  ],
-  "metadata_updated_at_utc": "2026-09-25T05:12:15Z"
+  ]
 }

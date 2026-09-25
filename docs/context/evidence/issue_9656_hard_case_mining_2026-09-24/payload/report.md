@@ -28,7 +28,7 @@ The original `summary.json` and this report preserve the detailed four-case anal
 - Planner counts: `{"goal": 8, "orca": 4, "ppo": 5, "prediction_planner": 5, "sacadrl": 4, "social_force": 6, "socnav_sampling": 4}`.
 - Scenario-family counts: `{"accompanying_peer": 11, "blind_corner": 9, "bottleneck": 9, "circular_crossing": 4, "cross_trap": 2, "crowd_navigation": 1}`.
 - Full source contains 241 canonical collision events with collision termination; both `metrics.collisions` and `metrics.total_collision_count` are present and non-positive for all 241 rows. The slice preserves and flags 17 such rows without rewriting source events or metrics.
-- One-row, one-source-seed scenario matrices and planner configuration snapshots were materialized for 36/36 cases; their hashes are in `summary.json`.
+- One-row, one-source-seed scenario matrices and planner configuration snapshots were materialized for 36/36 cases; their hashes are in `summary.json`. The portable evidence bundle does not contain these generated config or matrix bytes, so the hashes cannot be independently revalidated from this packet; any ignored local cache is not durable evidence.
 - Existing showcase renderer status: `{'unavailable': 36}`. The release rows contain no `replay_steps`, so no trajectory renderer was called and no source animation is available.
 
 ## Bounded replay

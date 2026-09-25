@@ -44,9 +44,10 @@ comparison bytes and each archived manifest:
 comparison digests, and archived-file hash mismatches fail closed. Each mapped manifest must also
 match the indexed seed, budget, and objective, and its recorded `config.output_dir` must resolve to
 the parent of its original `declared_manifest_path`. The comparison input is read-only: the report
-keeps the declared path, resolved archive path, expected and observed hashes, and path-map
-provenance as separate fields. A supplied map takes precedence for its exact declared path; rows
-without a binding continue through normal path resolution. A binding may include the optional
+keeps the declared path and resolved archive path separately, records the archived manifest's
+verified SHA-256 after matching it against the map, and records path-map provenance. A supplied
+map takes precedence for its exact declared path; rows without a binding continue through normal
+path resolution. A binding may include the optional
 `path` alias used by the evidence registry only when it exactly equals `archived_manifest_path`.
 
 ```bash

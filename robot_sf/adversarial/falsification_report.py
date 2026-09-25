@@ -1650,7 +1650,7 @@ def build_convergence_report(
             "No inferential test is performed, and small pilot seed counts do not support broad claims.",
             "Search-level runtime is reported only when a finite nonnegative runtime_seconds field is recorded in the search manifest or its summary; comparison-row fields are ignored.",
             "The current runner's legacy num_valid_candidates summary omits evaluator failures; this report derives valid as candidate rows minus invalid minus failed and retains the legacy field for audit.",
-            "A report built from fixtures demonstrates report behavior, not planner safety or empirical search performance.",
+            "Fixture tests verify report accounting; finite-budget reports do not establish planner safety, search-space coverage, or absence of counterexamples.",
         ],
     }
 

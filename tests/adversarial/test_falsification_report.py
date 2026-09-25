@@ -253,6 +253,12 @@ def test_generated_runtime_limitation_matches_manifest_only_source_policy(tmp_pa
     assert runtime_limitations == [
         "Search-level runtime is reported only when a finite nonnegative runtime_seconds field is recorded in the search manifest or its summary; comparison-row fields are ignored."
     ]
+    assert (
+        "Fixture tests verify report accounting; finite-budget reports do not establish planner "
+        "safety, search-space coverage, or absence of counterexamples." in generated["limitations"]
+    )
+    markdown = Path(outputs["markdown"]).read_text(encoding="utf-8")
+    assert "A report built from fixtures" not in markdown
 
 
 def test_cli_writes_machine_readable_summary_table_and_figure(

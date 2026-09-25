@@ -167,11 +167,31 @@ def test_discover_build_command_txt_finds_known_file():
     assert len(five447.raw_commands) == 2
 
 
-def test_discover_manifest_fields_respects_exact_field_boundary():
-    # No committed manifest under docs/context/evidence uses an exact render_command/build_command
-    # field (near-misses like render_command_shape / rebuild_command must NOT count).
+def test_discover_manifest_fields_tracks_stored_comparison_renderer():
+    # The #9645 renderer is the sole exact command field in committed evidence; near-misses
+    # remain covered by test_extract_named_fields_exact_key_only.
     sources = reg.discover_manifest_fields()
-    assert sources == []
+    assert len(sources) == 1
+    source = sources[0]
+    assert source.source_path == (
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison_render_provenance.json"
+    )
+    assert len(source.raw_commands) == 1
+
+    entry = reg.classify(source, 0, source.raw_commands[0], reg.git_head())
+    assert entry.recurrence_eligible
+    assert set(entry.expected_outputs) == {
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison.md",
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison_render_provenance.json",
+    }
+    assert {item["path"] for item in entry.inputs} == {
+        "scripts/tools/compare_adversarial_samplers.py",
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison.json",
+    }
 
 
 def test_discover_readme_reproduction_only_catalog_linked():

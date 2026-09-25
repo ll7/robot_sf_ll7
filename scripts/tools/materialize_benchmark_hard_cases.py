@@ -34,6 +34,7 @@ REPLAY_CHECKOUT_SNAPSHOT_SCHEMA = "replay-checkout-snapshot.v1"
 CASE_ID_RE = re.compile(r"case-[0-9a-f]{16}\Z")
 MAX_CASES = 50
 MAX_REPLAYS = 5
+GIT_REVISION_RE = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
 EVENT_FIELDS = ("collision_event", "timeout_event", "route_complete")
 METRIC_FIELDS = (
     "collisions",
@@ -477,7 +478,12 @@ def _verify_inputs(
     }
 
 
-def _showcase_tool_snapshot(summary: dict[str, Any], snapshot_revision: str) -> dict[str, Any]:
+def _showcase_tool_snapshot(
+    summary: dict[str, Any],
+    snapshot_revision: str,
+    *,
+    fallback_snapshot_revision: str | None = None,
+) -> dict[str, Any]:
     """Preserve the executed showcase revision and verify an equivalent reachable snapshot.
 
     Showcase PR heads can become unreachable when a PR is squash-merged. The
@@ -505,28 +511,22 @@ def _showcase_tool_snapshot(summary: dict[str, Any], snapshot_revision: str) -> 
             for path, checksum in raw_files.items()
             if isinstance(path, str) and isinstance(checksum, str)
         }
-        verified = len(files) == len(raw_files)
-        for relative, expected in sorted(files.items()):
-            relative_path = PurePosixPath(relative)
-            if relative_path.is_absolute() or ".." in relative_path.parts:
-                verified = False
-                break
-            result = subprocess.run(
-                ["git", "show", f"{snapshot_revision}:{relative_path.as_posix()}"],
-                cwd=REPO_ROOT,
-                capture_output=True,
-                check=False,
-            )
-            if (
-                result.returncode != 0
-                or len(expected) != 64
-                or any(character not in "0123456789abcdefABCDEF" for character in expected)
-                or hashlib.sha256(result.stdout).hexdigest() != expected.lower()
-            ):
-                verified = False
-                break
-        status = "verified_file_hash_match" if verified else "source_files_not_matched"
-        verified_revision = snapshot_revision if verified else None
+        candidate_revisions = [snapshot_revision]
+        if (
+            isinstance(fallback_snapshot_revision, str)
+            and GIT_REVISION_RE.fullmatch(fallback_snapshot_revision)
+            and fallback_snapshot_revision not in candidate_revisions
+        ):
+            candidate_revisions.append(fallback_snapshot_revision)
+        verified_revision = next(
+            (
+                candidate_revision
+                for candidate_revision in candidate_revisions
+                if _showcase_source_files_match(files, raw_files, candidate_revision)
+            ),
+            None,
+        )
+        status = "verified_file_hash_match" if verified_revision else "source_files_not_matched"
 
     revision = provenance.get("git_revision")
     return {
@@ -535,6 +535,44 @@ def _showcase_tool_snapshot(summary: dict[str, Any], snapshot_revision: str) -> 
         "showcase_tool_source_snapshot_revision": verified_revision,
         "showcase_tool_source_snapshot_status": status,
     }
+
+
+def _showcase_source_files_match(
+    files: dict[str, str], raw_files: dict[str, Any], revision: str
+) -> bool:
+    """Verify every source hash against one reachable Git tree."""
+    if not GIT_REVISION_RE.fullmatch(revision) or len(files) != len(raw_files):
+        return False
+    for relative, expected in sorted(files.items()):
+        relative_path = PurePosixPath(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            return False
+        result = subprocess.run(
+            ["git", "show", f"{revision}:{relative_path.as_posix()}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+        if (
+            result.returncode != 0
+            or len(expected) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in expected)
+            or hashlib.sha256(result.stdout).hexdigest() != expected.lower()
+        ):
+            return False
+    return True
+
+
+def _resume_showcase_snapshot_revision(resume_manifest: dict[str, Any]) -> str | None:
+    """Return a prior verified snapshot revision, never a revision asserted by a case row."""
+    source = resume_manifest.get("source")
+    if not isinstance(source, dict):
+        return None
+    revision = source.get("showcase_tool_source_snapshot_revision")
+    status = source.get("showcase_tool_source_snapshot_status")
+    if status != "verified_file_hash_match" or not isinstance(revision, str):
+        return None
+    return revision if GIT_REVISION_RE.fullmatch(revision) else None
 
 
 def _compact_source_showcase_diagnostics(summary: dict[str, Any]) -> dict[str, Any]:
@@ -2300,6 +2338,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     resume_root, resume_records = _load_resume_records(args.resume_from, source=source_provenance)
     resume_manifest_sha256 = None
     resume_summary_sha256 = None
+    resume_source_snapshot_revision = None
     if resume_root is not None:
         resume_manifest_path = (
             resume_root / "manifest.json"
@@ -2311,6 +2350,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
         resume_manifest_source = resume_manifest.get("source")
         if isinstance(resume_manifest_source, dict):
             resume_summary_sha256 = resume_manifest_source.get("summary_sha256")
+        resume_source_snapshot_revision = _resume_showcase_snapshot_revision(resume_manifest)
     campaign = _read_object(campaign_root / "campaign_manifest.json")
     cases = _selected_cases(summary)
     replay_revision = replay_checkout["revision"]
@@ -2497,7 +2537,11 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
             **{key: value for key, value in source_provenance.items() if key != "campaign_id"},
             "source_campaign_id": source_provenance["campaign_id"],
             "summary_sha256": summary_sha256,
-            **_showcase_tool_snapshot(summary, replay_revision),
+            **_showcase_tool_snapshot(
+                summary,
+                replay_revision,
+                fallback_snapshot_revision=resume_source_snapshot_revision,
+            ),
         },
         "source_showcase_diagnostics": _compact_source_showcase_diagnostics(summary),
         "execution_environment": {

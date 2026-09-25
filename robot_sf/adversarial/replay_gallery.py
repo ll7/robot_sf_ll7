@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -39,11 +40,43 @@ from robot_sf.benchmark.fallback_policy import (
     runtime_fallback_or_degraded_marker,
 )
 from robot_sf.benchmark.runner import run_batch
-from robot_sf.scenario_certification.v1 import _STATUS_SEVERITY
+from robot_sf.scenario_certification.v1 import _STATUS_SEVERITY, _fingerprint_mapping
 from robot_sf.training import scenario_loader
 
 GALLERY_SCHEMA_VERSION = "adversarial-replay-gallery.v1"
 SEARCH_MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
+_REPLAY_MANIFEST_VARIABILITY = {
+    "schema_version": "adversarial-replay-gallery-variability.v1",
+    "comparison_rule": (
+        "For byte-stability comparisons, remove only the listed variable JSON paths; all other "
+        "manifest fields, including case IDs and bundle-relative paths, remain comparable."
+    ),
+    "variable_json_paths": [
+        "cases[*].replay.summary.batch_runtime_sec",
+        "cases[*].replay.summary.provenance.run_id",
+        "cases[*].replay.summary.provenance.invocation",
+        "cases[*].replay.summary.provenance.config_identity.scenario_matrix_hash",
+        "cases[*].replay.episode_record_sha256",
+    ],
+    "reasons": {
+        "cases[*].replay.summary.batch_runtime_sec": "measured execution time",
+        "cases[*].replay.summary.provenance.run_id": "runner-generated per-run identity",
+        "cases[*].replay.summary.provenance.invocation": "captured command line can differ",
+        "cases[*].replay.summary.provenance.config_identity.scenario_matrix_hash": (
+            "runner identity can include a resolved output-local map path"
+        ),
+        "cases[*].replay.episode_record_sha256": (
+            "digest covers the exact episode record, including per-run metadata and timing"
+        ),
+    },
+    "stable_guarantees": [
+        "case IDs",
+        "bundle-relative artifact paths",
+        "source input digests",
+        "replay outcome classifications and comparisons",
+        "derived map registry bytes across fresh output directories",
+    ],
+}
 _REVISION_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _MAX_PED_TRACK_SPEED_MPS = 12.0
 _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION = {
@@ -275,6 +308,7 @@ def _build_manifest_replay_gallery(
             "mechanism_cluster_deduplication": archive_cluster_status,
             "replay_objective_absolute_tolerance": tolerance,
         },
+        "reproducibility": deepcopy(_REPLAY_MANIFEST_VARIABILITY),
         "replay": {
             "policy": policy,
             "record_simulation_step_trace": True,
@@ -466,8 +500,24 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
             index, candidate_payload, scenario_error or "scenario_identity_unavailable"
         )
     scenario_id = _scenario_certificate_id(scenario_identity)
+    try:
+        loaded_scenarios = scenario_loader.load_scenarios(scenario_path)
+    except Exception:  # noqa: BLE001 - a loader failure cannot establish certificate binding
+        return None, _accounting_row(index, candidate_payload, "certificate_scenario_load_failed")
+    if len(loaded_scenarios) != 1 or not isinstance(loaded_scenarios[0], dict):
+        return None, _accounting_row(
+            index, candidate_payload, "certificate_scenario_identity_unavailable"
+        )
+    loaded_scenario = dict(loaded_scenarios[0])
+    if _scenario_certificate_id(loaded_scenario) != scenario_id:
+        return None, _accounting_row(index, candidate_payload, "certificate_scenario_id_mismatch")
     certificate, certificate_error = _validated_scenario_certificate(
-        candidate_payload.get("certification_status"), expected_scenario_id=scenario_id
+        candidate_payload.get("certification_status"),
+        expected_scenario_id=scenario_id,
+        loaded_scenario=loaded_scenario,
+        scenario_path=scenario_path,
+        root=root,
+        source_root=source_root,
     )
     if certificate_error is not None or certificate is None:
         return None, _accounting_row(
@@ -497,7 +547,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     )
     if map_file_error is not None:
         return None, _accounting_row(index, candidate_payload, map_file_error)
-    effective_hash, hash_error = _source_effective_scenario_hash(
+    effective_hash, route_overrides_sha256, hash_error = _source_effective_scenario_hash(
         scenario_path, scenario_identity, source_root=source_root, root=root
     )
     try:
@@ -519,6 +569,20 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         return None, _accounting_row(
             index, candidate_payload, "scenario_map_changed_during_selection"
         )
+    if route_overrides_sha256 is not None:
+        _, current_route_overrides_sha256, route_error = _scenario_file_binding(
+            scenario_identity,
+            "route_overrides_file",
+            scenario_path=scenario_path,
+            source_root=source_root,
+            root=root,
+        )
+        if route_error is not None:
+            return None, _accounting_row(index, candidate_payload, route_error)
+        if current_route_overrides_sha256 != route_overrides_sha256:
+            return None, _accounting_row(
+                index, candidate_payload, "scenario_route_overrides_changed_during_selection"
+            )
     try:
         if hashlib.sha256(episode_path.read_bytes()).hexdigest() != source_episode_sha256:
             return None, _accounting_row(
@@ -559,6 +623,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         "case_id": case_id,
         "candidate": candidate,
         "scenario_id": scenario_id,
+        "validated_certificate": certificate,
         "candidate_payload": candidate_payload,
         "objective_value": objective_value,
         "failure_attribution": candidate_payload.get("failure_attribution"),
@@ -571,6 +636,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         "scenario_sha256": scenario_sha256,
         "map_file_declared": map_file_declared,
         "map_file_sha256": map_file_sha256,
+        "route_overrides_sha256": route_overrides_sha256,
         "map_id_snapshot": map_id_snapshot,
         "effective_scenario_hash": effective_hash,
         "dedupe_key": dedupe_key,
@@ -868,7 +934,7 @@ def _initial_case_result(
         "failure_attribution": selected["failure_attribution"],
         "feasibility_verdict": _feasibility_verdict(
             selected["candidate_payload"].get("certification_status"),
-            scenario_id=selected["scenario_id"],
+            validated_certificate=selected.get("validated_certificate"),
         ),
         "source": {
             "revision": selected["source_revision"] or context.source_revision,
@@ -892,6 +958,7 @@ def _initial_case_result(
             "scenario_id": selected["source_record"].get("scenario_id"),
             "seed": selected["source_record"].get("seed"),
             "effective_scenario_hash": selected["effective_scenario_hash"],
+            "route_overrides_sha256": selected["route_overrides_sha256"],
             "gallery_checkout": {
                 "revision": context.checkout_revision,
                 "clean": context.checkout_clean,
@@ -1031,7 +1098,9 @@ def _record_replay_comparison(  # noqa: PLR0913 - preserve explicit replay diagn
     video_status = _video_status(context.video, video_artifacts, attempted=True)
     result["video_status"] = video_status
     result["replay"] = {
-        "summary": replay_summary,
+        "summary": _normalize_runner_summary_paths(
+            replay_summary, case_dir=case_dir, context=context
+        ),
         "episode_record_path": "replay/episode_records.jsonl",
         "episode_record_sha256": _sha256_file(episode_records),
         "episode_id": replay_record.get("episode_id"),
@@ -1497,16 +1566,19 @@ def _materialize_map_id_input(
     selected_row = dict(selected_row) if isinstance(selected_row, dict) else None
     if selected_row is None:
         return None, "scenario_map_registry_entry_not_materializable"
-    selected_row["path"] = str(bundled_map.resolve())
+    # The registry sits beside the scenario input, so a bundle-relative path is
+    # sufficient and keeps its digest independent of the chosen output directory.
+    bundled_map_registry_path = (Path("assets") / map_name).as_posix()
+    selected_row["path"] = bundled_map_registry_path
     selected_row["source_sha256"] = map_sha256
     replay_registry_payload = dict(registry_payload)
     original_entries = registry_payload.get("maps")
     if isinstance(original_entries, list):
         replay_registry_payload["maps"] = [selected_row]
     elif isinstance(original_entries, dict):
-        replay_registry_payload["maps"] = {snapshot["map_id"]: str(bundled_map.resolve())}
+        replay_registry_payload["maps"] = {snapshot["map_id"]: bundled_map_registry_path}
     else:
-        replay_registry_payload = {snapshot["map_id"]: str(bundled_map.resolve())}
+        replay_registry_payload = {snapshot["map_id"]: bundled_map_registry_path}
     runner_registry = input_dir / "map_registry.yaml"
     runner_registry_bytes = yaml.safe_dump(
         replay_registry_payload, sort_keys=False, allow_unicode=True
@@ -2007,6 +2079,67 @@ def _algorithm_config_binding(source: dict[str, Any], replay: dict[str, Any]) ->
         "status": "bound",
         "source_config_hash": source_hash,
     }
+
+
+def _normalize_runner_summary_paths(
+    summary: dict[str, Any], *, case_dir: Path, context: _ReplayContext
+) -> dict[str, Any]:
+    """Keep output-local runner paths relative while preserving run-specific receipt fields."""
+    normalized = deepcopy(summary)
+    _normalize_path_fields(normalized, case_dir=case_dir, context=context)
+    provenance = normalized.get("provenance")
+    if not isinstance(provenance, dict):
+        return normalized
+    invocation = provenance.get("invocation")
+    if isinstance(invocation, str):
+        output_root = str(context.output_dir.resolve())
+        repository_root = str(context.root.resolve())
+        case_root = str(case_dir.resolve())
+        invocation = invocation.replace(output_root, "<gallery-output>")
+        try:
+            relative_output_root = Path(output_root).relative_to(Path.cwd().resolve()).as_posix()
+        except ValueError:
+            relative_output_root = None
+        if relative_output_root:
+            invocation = invocation.replace(relative_output_root, "<gallery-output>")
+        provenance["invocation"] = invocation.replace(case_root, "<gallery-case>").replace(
+            repository_root, "<repository>"
+        )
+    return normalized
+
+
+def _normalize_path_fields(value: Any, *, case_dir: Path, context: _ReplayContext) -> None:
+    """Normalize path-valued fields recursively inside the copied runner summary."""
+    if isinstance(value, dict):
+        for child_key, child in value.items():
+            if isinstance(child, str) and (
+                "path" in child_key.casefold() or child_key.casefold().endswith("_file")
+            ):
+                value[child_key] = _stable_gallery_path(child, case_dir=case_dir, context=context)
+            else:
+                _normalize_path_fields(child, case_dir=case_dir, context=context)
+    elif isinstance(value, list):
+        for item in value:
+            _normalize_path_fields(item, case_dir=case_dir, context=context)
+
+
+def _stable_gallery_path(value: str, *, case_dir: Path, context: _ReplayContext) -> str:
+    """Represent paths under the gallery or repository without checkout-local prefixes."""
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        return path.as_posix()
+    resolved = path.resolve()
+    for base, prefix in (
+        (case_dir.resolve(), ""),
+        (context.output_dir.resolve(), ""),
+        (context.root.resolve(), "repo/"),
+    ):
+        try:
+            relative = resolved.relative_to(base).as_posix()
+        except ValueError:
+            continue
+        return f"{prefix}{relative}" if prefix else relative
+    return value
 
 
 def _positive_integer_setting(config: dict[str, Any], name: str, *, default: int) -> int:
@@ -2658,25 +2791,28 @@ def _source_effective_scenario_hash(
     *,
     source_root: Path,
     root: Path,
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     """Recompute the canonical effective hash from the persisted scenario inputs."""
     route_file = scenario.get("route_overrides_file")
     if route_file is None:
         route_payload = scenario.get("route_overrides") or {}
+        route_sha256 = None
     else:
         route_path = _resolve_referenced_file(route_file, scenario_path.parent, source_root, root)
         if route_path is None or not route_path.is_file():
-            return None, "route_overrides_input_missing"
+            return None, None, "route_overrides_input_missing"
         try:
-            route_payload = yaml.safe_load(route_path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            return None, "route_overrides_input_invalid"
+            route_bytes = route_path.read_bytes()
+            route_payload = yaml.safe_load(route_bytes.decode("utf-8")) or {}
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            return None, None, "route_overrides_input_invalid"
+        route_sha256 = hashlib.sha256(route_bytes).hexdigest()
     if not isinstance(route_payload, dict):
-        return None, "route_overrides_input_invalid"
+        return None, route_sha256, "route_overrides_input_invalid"
     try:
-        return compute_effective_scenario_hash(scenario, route_payload), None
+        return compute_effective_scenario_hash(scenario, route_payload), route_sha256, None
     except (TypeError, ValueError):
-        return None, "effective_scenario_hash_unavailable"
+        return None, route_sha256, "effective_scenario_hash_unavailable"
 
 
 def _scenario_file_binding(
@@ -2802,15 +2938,17 @@ def _failure_cluster_by_candidate(
     }
 
 
-def _feasibility_verdict(payload: Any, *, scenario_id: str | None = None) -> dict[str, Any]:
+def _feasibility_verdict(
+    payload: Any, *, validated_certificate: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Preserve only a complete, scenario-bound certificate without claiming a proof oracle."""
-    certificate, error = _validated_scenario_certificate(payload, expected_scenario_id=scenario_id)
-    if certificate is None:
+    if validated_certificate is None:
         return {
             "status": "unknown",
-            "reason": error or "certificate_scenario_identity_unavailable",
+            "reason": "certificate_not_bound_to_loaded_scenario",
             "source_certificate": payload,
         }
+    certificate = validated_certificate
     classification = str(certificate.get("classification", "")).strip().lower()
     if classification in _ADMISSIBLE_CLASSIFICATIONS:
         return {"status": "admissible_by_source_certificate", "source_certificate": payload}
@@ -2855,8 +2993,12 @@ def _validated_scenario_certificate(
     payload: Any,
     *,
     expected_scenario_id: str | None,
+    loaded_scenario: dict[str, Any] | None = None,
+    scenario_path: Path | None = None,
+    root: Path | None = None,
+    source_root: Path | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Return one complete canonical certificate only when its receipt is passed and bound."""
+    """Return one complete certificate only when its source and loaded mapping are bound."""
     certificate, error = _canonical_scenario_certificate(payload)
     if certificate is None:
         return None, error
@@ -2864,11 +3006,56 @@ def _validated_scenario_certificate(
         return None, "certificate_scenario_identity_unavailable"
     if certificate.get("scenario_id") != expected_scenario_id:
         return None, "certificate_scenario_id_mismatch"
+    if loaded_scenario is None or scenario_path is None or root is None or source_root is None:
+        return None, "certificate_binding_context_unavailable"
+    if not _certificate_source_matches(
+        certificate.get("source"), scenario_path=scenario_path, root=root, source_root=source_root
+    ):
+        return None, "certificate_source_mismatch"
+    evidence = certificate.get("evidence")
+    recorded_fingerprint = (
+        evidence.get("scenario_fingerprint") if isinstance(evidence, dict) else None
+    )
+    try:
+        expected_fingerprint = _fingerprint_mapping(loaded_scenario)
+    except (TypeError, ValueError, OverflowError):
+        return None, "certificate_scenario_fingerprint_unavailable"
+    if recorded_fingerprint != expected_fingerprint:
+        return None, "certificate_scenario_fingerprint_mismatch"
     if not _scenario_certificate_is_complete(certificate):
         return None, "certificate_incomplete"
     if not _scenario_certificate_eligibility_is_consistent(certificate):
         return None, "certificate_eligibility_inconsistent"
     return certificate, None
+
+
+def _certificate_source_matches(
+    raw_source: Any, *, scenario_path: Path, root: Path, source_root: Path
+) -> bool:
+    """Require the certificate source locator to resolve to this exact scenario file."""
+    if not isinstance(raw_source, str) or not raw_source.strip():
+        return False
+    source = Path(raw_source).expanduser()
+    candidates = (
+        [source]
+        if source.is_absolute()
+        else [
+            root / source,
+            source_root / source,
+            scenario_path.parent / source,
+        ]
+    )
+    try:
+        expected = scenario_path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    for candidate in candidates:
+        try:
+            if candidate.resolve() == expected:
+                return True
+        except (OSError, RuntimeError):
+            continue
+    return False
 
 
 def _canonical_scenario_certificate(payload: Any) -> tuple[dict[str, Any] | None, str | None]:

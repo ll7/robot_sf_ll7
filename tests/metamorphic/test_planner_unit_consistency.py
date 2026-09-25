@@ -117,6 +117,8 @@ AUDITED_UNIT_FIELDS = frozenset(
     static_safety_gate_progress_threshold stop_distance_human v_max very_slow_speed
     omega_max step_timeout_sec
     waypoint_switch_distance width
+    sampling_braking_margin sampling_footprint_margin sampling_horizon_s
+    sampling_near_field_surface_distance sampling_path_lookahead sampling_path_resolution
     """.split()
 )
 
@@ -130,6 +132,7 @@ NON_PHYSICAL_NAMES = frozenset(
     social_force_obstacle_factor social_force_factor social_force_gamma
     social_force_lambda_importance social_force_n social_force_n_prime
     route_rescue_progress_weight_boost
+    sampling_path_distance sampling_speed_fractions
     """.split()
 )
 NON_PHYSICAL_SUFFIXES = (

@@ -8,7 +8,6 @@ feasibility, or turn a finite no-discovery result into a claim of absence.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import math
 import os
@@ -23,6 +22,7 @@ from urllib.parse import quote
 from robot_sf.benchmark.figures.export import save_publication_figure
 from robot_sf.benchmark.figures.provenance import build_provenance
 from robot_sf.benchmark.figures.style import planner_color, publication_style
+from robot_sf.common.optional_import import try_import
 
 INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v3"
 REPORT_SCHEMA_VERSION = "adversarial-feasibility-frontier.v2"
@@ -601,10 +601,9 @@ def _plot_evaluation_performance(
 
 def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Path]:
     """Write the performance/discovery figure with the repository figure helpers."""
-    try:
-        plt = importlib.import_module("matplotlib.pyplot")
-    except ImportError as exc:  # pragma: no cover - environment-specific dependency guard
-        raise FrontierReportError("matplotlib is required to render the frontier figure") from exc
+    plt = try_import("matplotlib.pyplot")
+    if plt is None:  # pragma: no cover - environment-specific dependency guard
+        raise FrontierReportError("matplotlib is required to render the frontier figure")
 
     rounds = report["rounds"]
     x_values = [item["round_number"] for item in rounds]

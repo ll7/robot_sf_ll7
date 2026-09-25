@@ -3040,7 +3040,7 @@
       "scripts/tools/analyze_camera_ready_campaign.py": "16ebb65e69f682d9bcef5846422f72f8582a040a5e073e01fa7ba53875c71bcb",
       "scripts/tools/benchmark_showcase.py": "626e5480a0daaa9d0b46e6dd6af6a833247e0a0aed072c0eb8e4724db96a6eb9"
     },
-    "showcase_tool_source_snapshot_revision": "0a5f73283b98279900797b75d20adf6d4676086b",
+    "showcase_tool_source_snapshot_revision": "120c870d80daba4a06389f9df3c469a2f467da94",
     "showcase_tool_source_snapshot_status": "verified_file_hash_match",
     "source_campaign_id": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316",
     "source_files_verified": [
@@ -3059,7 +3059,10 @@
       "runs/socnav_sampling__differential_drive/episodes.jsonl"
     ],
     "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
-    "summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f"
+    "summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f",
+    "showcase_tool_source_snapshot_previous_revision": "0a5f73283b98279900797b75d20adf6d4676086b",
+    "showcase_tool_source_snapshot_previous_status": "rejected_unreachable",
+    "showcase_tool_source_snapshot_validation_revision": "e58be7bd141be58ac3bbd99658fc1665b8bcc717"
   },
   "source_showcase_diagnostics": {
     "accounting": {

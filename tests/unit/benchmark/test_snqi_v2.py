@@ -1727,6 +1727,38 @@ def test_config_hash_preserves_disabled_v2_and_serializes_enabled(tmp_path):
     assert _config_hash_payload(with_spec)["snqi_v2_spec"]["snqi_v2_version"] == "SNQI-v2"
 
 
+def test_load_snqi_v2_config_resolves_explicit_asset_paths(spec_files, tmp_path, monkeypatch):
+    """Load versioned assets from config-local and repository-root paths."""
+    from robot_sf.benchmark.camera_ready import _config as config_module
+
+    local_paths = {
+        "weights_path": spec_files[0].name,
+        "anchors_path": spec_files[1].name,
+        "family_path": spec_files[2].name,
+    }
+    local_spec = config_module._load_snqi_v2_config(
+        local_paths, spec_files[0].parent / "campaign.yaml"
+    )
+    assert local_spec == load_snqi_v2_spec(*spec_files)
+    assert config_module._load_snqi_v2_config(None, tmp_path / "campaign.yaml") is None
+    with pytest.raises(ValueError, match="requires exactly"):
+        config_module._load_snqi_v2_config(
+            {**local_paths, "unexpected": "value"}, spec_files[0].parent / "campaign.yaml"
+        )
+
+    repository_root = tmp_path / "repository"
+    repository_paths = [repository_root / "assets" / path.name for path in spec_files]
+    for source, destination in zip(spec_files, repository_paths, strict=True):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source.read_bytes())
+    monkeypatch.setattr(config_module, "get_repository_root", lambda: repository_root)
+    repository_paths_spec = config_module._load_snqi_v2_config(
+        {key: f"assets/{path.name}" for key, path in zip(local_paths, spec_files, strict=True)},
+        tmp_path / "config" / "campaign.yaml",
+    )
+    assert repository_paths_spec == load_snqi_v2_spec(*repository_paths)
+
+
 def test_offline_cli_emits_mandatory_pair(spec_files, tmp_path):
     from scripts.tools.analyze_snqi_contract import main
 

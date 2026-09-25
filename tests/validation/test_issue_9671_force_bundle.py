@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,8 @@ def _fixture(
     new_raw = tmp_path / "new.jsonl"
     for path in (baseline_raw, new_raw):
         path.write_text(json.dumps(row) + "\n")
+    producer_path = new_raw.with_name(new_raw.name + ".provenance.json")
+    producer_path.write_text("synthetic-producer-fixture")
     baseline_report = tmp_path / "baseline-report.json"
     baseline_report.write_text(
         json.dumps(
@@ -177,7 +180,7 @@ def _fixture(
         },
         "release_archive_sha256": _sha(archive),
         "trace_inputs_sha256": {str(new_raw): _sha(new_raw)},
-        "producer_manifests_sha256": {},
+        "producer_manifests_sha256": {str(producer_path): _sha(producer_path)},
         "comparisons": [
             {
                 "planner": "ppo",
@@ -191,7 +194,10 @@ def _fixture(
 
     def fake_checked_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
         result = copy.deepcopy(report)
-        result["trace_inputs_sha256"] = {str(new_raw): _sha(new_raw)}
+        current_raw = Path(args[1][0])
+        current_producer = current_raw.with_name(current_raw.name + ".provenance.json")
+        result["trace_inputs_sha256"] = {str(current_raw): _sha(current_raw)}
+        result["producer_manifests_sha256"] = {str(current_producer): _sha(current_producer)}
         return result
 
     monkeypatch.setattr(bundle.trace_checker, "check", fake_checked_report)
@@ -215,7 +221,7 @@ def test_manifest_binds_exact_sidecar_bytes_and_outcome(
     result = _build(spec)
     assert result["admission_status"] == "candidate"
     assert result["episodes"][0]["release_comparison"] == "match"
-    assert result["sidecar_sha256"][str(sidecar)] == _sha(sidecar)
+    assert result["sidecar_sha256"][result["episodes"][0]["sidecar_path"]] == _sha(sidecar)
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps(result))
     assert (
@@ -241,6 +247,29 @@ def test_manifest_binds_exact_sidecar_bytes_and_outcome(
             expected_baseline_counts={"match": 1, "mismatch": 0, "no_release_row": 0},
             expected_archive_sha256=None,
         )
+
+
+def test_manifest_survives_cold_tree_relocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, _ = _fixture(tmp_path, monkeypatch)
+    manifest = tmp_path / "bundle.json"
+    manifest.write_text(json.dumps(_build(spec)))
+    relocated = tmp_path.parent / f"{tmp_path.name}-relocated"
+    shutil.copytree(tmp_path, relocated)
+    moved_spec = json.loads(json.dumps(spec).replace(str(tmp_path), str(relocated)))
+    assert (
+        bundle.validate_manifest(
+            moved_spec,
+            relocated / "bundle.json",
+            _sha(manifest),
+            expected={("ppo", "classic_doorway_medium", 113)},
+            expected_baseline_report_sha256=None,
+            expected_baseline_counts={"match": 1, "mismatch": 0, "no_release_row": 0},
+            expected_archive_sha256=None,
+        )["admission_status"]
+        == "candidate"
+    )
 
 
 @pytest.mark.parametrize(

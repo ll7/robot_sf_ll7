@@ -11,8 +11,11 @@ import argparse
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from scripts.validation import check_issue_9671_trace_reexport as trace_checker
 
@@ -29,6 +32,59 @@ FROZEN_SOURCE_FILE_SHA256 = {
 
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _validate_submission_identity(item: dict[str, Any], startup_ids: dict[str, Any]) -> None:
+    """Bind producer startup to a reviewed launch packet and immutable submit intent."""
+    packet_sha = item.get("packet_sha256")
+    launch_sha = item.get("launch_packet_sha256")
+    intent_sha = item.get("submission_intent_sha256")
+    if any(
+        not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        for digest in (packet_sha, launch_sha, intent_sha)
+    ):
+        raise ValueError("reviewed launch packet or submission intent SHA-256 missing")
+    if not isinstance(item.get("queue_id"), str) or not item["queue_id"]:
+        raise ValueError("reviewed queue ID missing")
+    if not isinstance(item.get("submission_id"), str) or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", item["submission_id"]
+    ):
+        raise ValueError("reviewed submission ID missing")
+    launch_path = Path(item["launch_packet"])
+    intent_path = Path(item["submission_intent_receipt"])
+    if _sha(launch_path) != launch_sha or _sha(intent_path) != intent_sha:
+        raise ValueError("reviewed launch packet or submission intent bytes differ")
+    launch = yaml.safe_load(launch_path.read_text())
+    intent = json.loads(intent_path.read_text())
+    nonce = intent.get("nonce")
+    attempt = intent.get("attempt")
+    if not isinstance(nonce, str) or not nonce or type(attempt) is not int or attempt < 1:
+        raise ValueError("canonical submission intent nonce/attempt invalid")
+    identity_material = "\0".join((item["queue_id"], packet_sha, str(attempt), nonce))
+    derived_id = "sha256:" + hashlib.sha256(identity_material.encode()).hexdigest()
+    if (
+        not isinstance(launch, dict)
+        or launch.get("schema") != "robot-sf-launch-packet.v1"
+        or launch.get("queue_id") != item["queue_id"]
+        or launch.get("campaign_id") != item["campaign_id"]
+        or (launch.get("identity") or {}).get("source_sha") != trace_checker.SOURCE_SHA
+        or (launch.get("identity") or {}).get("canonical_config_path") != startup_ids.get("config")
+        or (launch.get("identity") or {}).get("canonical_config_sha256")
+        != _sha(Path(item["config"]))
+        or (launch.get("identity") or {}).get("private_ops_runtime_commit")
+        != intent.get("private_ops_commit")
+        or intent.get("schema") != "robot-sf-submission-intent.v1"
+        or intent.get("queue_id") != item["queue_id"]
+        or intent.get("submission_id") != item["submission_id"]
+        or intent.get("submission_id") != derived_id
+        or intent.get("packet_sha256") != packet_sha
+        or intent.get("campaign") != item["campaign_id"]
+        or intent.get("public_commit") != trace_checker.SOURCE_SHA
+        or startup_ids.get("queue_id") != item["queue_id"]
+        or startup_ids.get("submission_id") != item["submission_id"]
+        or startup_ids.get("packet_sha256") != packet_sha
+    ):
+        raise ValueError("Slurm startup/launch packet/submission intent identity mismatch")
 
 
 def _label(name: str, path: Path, campaign_root: Path) -> str:
@@ -313,7 +369,6 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
         raise ValueError("observer trace tuple inventory mismatch")
     receipt_rows = []
     sidecar_hashes: dict[str, str] = {}
-    startup_receipts: dict[str, dict[str, Any]] = {}
     for name, item in sorted(campaigns.items()):
         job_id = str(item["job_id"])
         if not job_id.isdigit() or not item["campaign_id"]:
@@ -327,11 +382,9 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
             or startup_ids.get("campaign") != item["campaign_id"]
             or startup_ids.get("config") != trace_checker.DIAGNOSTIC_CONFIG[name]
             or startup_ids.get("public_commit") != trace_checker.SOURCE_SHA
-            or not startup_ids.get("queue_id")
-            or not startup_ids.get("submission_id")
         ):
             raise ValueError(f"Slurm startup identity mismatch: {name}")
-        startup_receipts[name] = startup
+        _validate_submission_identity(item, startup_ids)
         selected = set(release_report["diagnostic_inputs"][name]["tuples"])
         sidecar_dir = Path(item["sidecar_dir"])
         paths = sorted(sidecar_dir.rglob("*.robot-force.json"))
@@ -412,8 +465,11 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
                     "campaign_manifest_sha256"
                 ],
                 "startup_receipt_sha256": _sha(Path(item["startup_receipt"])),
-                "queue_id": startup_receipts[name]["identities"]["queue_id"],
-                "submission_id": startup_receipts[name]["identities"]["submission_id"],
+                "launch_packet_sha256": item["launch_packet_sha256"],
+                "packet_sha256": item["packet_sha256"],
+                "submission_intent_sha256": item["submission_intent_sha256"],
+                "queue_id": item["queue_id"],
+                "submission_id": item["submission_id"],
             }
             for name, item in sorted(campaigns.items())
         },

@@ -116,6 +116,39 @@ def _fixture(
         config.write_text("synthetic-config")
         manifest = tmp_path / f"{name}-campaign.json"
         manifest.write_text("{}")
+        queue_id = f"queue-{name}"
+        packet_sha = hashlib.sha256(f"runtime-{name}".encode()).hexdigest()
+        nonce = f"nonce-{name}"
+        submission_id = (
+            "sha256:"
+            + hashlib.sha256("\0".join((queue_id, packet_sha, "1", nonce)).encode()).hexdigest()
+        )
+        launch_packet = tmp_path / f"{name}-launch.yaml"
+        launch_packet.write_text(
+            "schema: robot-sf-launch-packet.v1\n"
+            f"queue_id: {queue_id}\n"
+            f"campaign_id: test-{name}\n"
+            f"identity:\n  source_sha: {bundle.trace_checker.SOURCE_SHA}\n"
+            f"  canonical_config_path: {bundle.trace_checker.DIAGNOSTIC_CONFIG[name]}\n"
+            f"  canonical_config_sha256: {_sha(config)}\n"
+            "  private_ops_runtime_commit: test-private-runtime\n"
+        )
+        intent_path = tmp_path / f"{name}-intent.json"
+        intent_path.write_text(
+            json.dumps(
+                {
+                    "schema": "robot-sf-submission-intent.v1",
+                    "queue_id": queue_id,
+                    "submission_id": submission_id,
+                    "packet_sha256": packet_sha,
+                    "campaign": f"test-{name}",
+                    "public_commit": bundle.trace_checker.SOURCE_SHA,
+                    "private_ops_commit": "test-private-runtime",
+                    "attempt": 1,
+                    "nonce": nonce,
+                }
+            )
+        )
         startup = tmp_path / f"{name}-startup.json"
         startup.write_text(
             json.dumps(
@@ -127,8 +160,9 @@ def _fixture(
                         "campaign": f"test-{name}",
                         "config": bundle.trace_checker.DIAGNOSTIC_CONFIG[name],
                         "public_commit": bundle.trace_checker.SOURCE_SHA,
-                        "queue_id": f"queue-{name}",
-                        "submission_id": f"submission-{name}",
+                        "queue_id": queue_id,
+                        "submission_id": submission_id,
+                        "packet_sha256": packet_sha,
                     },
                 }
             )
@@ -139,6 +173,13 @@ def _fixture(
             "config": str(config),
             "campaign_manifest": str(manifest),
             "startup_receipt": str(startup),
+            "launch_packet": str(launch_packet),
+            "launch_packet_sha256": _sha(launch_packet),
+            "packet_sha256": packet_sha,
+            "submission_intent_receipt": str(intent_path),
+            "submission_intent_sha256": _sha(intent_path),
+            "queue_id": queue_id,
+            "submission_id": submission_id,
             "campaign_id": f"test-{name}",
             "job_id": "123" if name == "headon_group" else "124",
             "traces": [str(new_raw)] if name == "headon_group" else [],
@@ -319,6 +360,45 @@ def test_rejects_slurm_startup_job_mismatch(
     startup["identities"]["job_id"] = "999"
     path.write_text(json.dumps(startup))
     with pytest.raises(ValueError, match="Slurm startup identity"):
+        _build(spec)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_packet",
+        "forged_packet",
+        "missing_reviewed_packet",
+        "wrong_queue",
+        "wrong_submission",
+        "forged_intent",
+    ],
+)
+def test_rejects_unbound_submission_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    spec, _, _ = _fixture(tmp_path, monkeypatch)
+    campaign = spec["campaigns"]["headon_group"]
+    startup_path = Path(campaign["startup_receipt"])
+    startup = json.loads(startup_path.read_text())
+    if mutation == "missing_packet":
+        del startup["identities"]["packet_sha256"]
+    elif mutation == "forged_packet":
+        startup["identities"]["packet_sha256"] = "f" * 64
+    elif mutation == "missing_reviewed_packet":
+        del campaign["packet_sha256"]
+    elif mutation == "wrong_queue":
+        startup["identities"]["queue_id"] = "unreviewed-queue"
+    elif mutation == "wrong_submission":
+        startup["identities"]["submission_id"] = "sha256:" + "f" * 64
+    else:
+        intent_path = Path(campaign["submission_intent_receipt"])
+        intent = json.loads(intent_path.read_text())
+        intent["queue_id"] = "unreviewed-queue"
+        intent_path.write_text(json.dumps(intent))
+        campaign["submission_intent_sha256"] = _sha(intent_path)
+    startup_path.write_text(json.dumps(startup))
+    with pytest.raises(ValueError, match="submission intent identity|submission intent SHA-256"):
         _build(spec)
 
 

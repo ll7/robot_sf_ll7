@@ -235,7 +235,13 @@ status, and resimulation marker. Planner-specific attribution additionally requi
 reference a separately hashed
 [`target_planner_replay_result.v1`](../robot_sf/benchmark/schemas/target_planner_replay_result.v1.json)
 artifact. That result must identify the target planner and configuration, source episode-store
-digest, bound runtime context, and replay terminal outcome. A determinism pass from the existing
+digest, bound runtime context, and replay terminal outcome. It must also reference a separate
+canonical replay episode JSONL store by path, SHA-256, and episode ID. The adapter reads that store,
+validates its unique row against the canonical episode schema, and compares planner, scenario,
+seed, source revision, route outcome, persisted horizon, and producer-recorded execution context
+with the normalized replay. A result without this separate row, or with a runtime error, cannot
+establish planner-specific failure. This checks artifact consistency; the JSON artifacts do not
+cryptographically attest which external process produced them. A determinism pass from the existing
 episode visualization tool is diagnostic only: it may compare final position and use a generic goal
 policy, so it does not establish that the named target planner repeated its failure. Unreadable,
 malformed, stale, or conflicting artifacts leave execution evidence unknown. The fallback

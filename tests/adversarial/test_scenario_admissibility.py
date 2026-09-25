@@ -288,6 +288,15 @@ def _execution(
         replay_result_path = (
             _EXECUTION_FIXTURE_ROOT / f"target-replay-result-{fixture_index:04d}.json"
         )
+        replay_episode_row = dict(episode_row)
+        replay_episode_row["episode_id"] = "episode-target-replay"
+        replay_episode_store_path = (
+            _EXECUTION_FIXTURE_ROOT / f"replay-episodes-{fixture_index:04d}.jsonl"
+        )
+        replay_episode_store_bytes = (json.dumps(replay_episode_row, sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
+        replay_episode_store_path.write_bytes(replay_episode_store_bytes)
         replay_result = {
             "schema_version": "target_planner_replay_result.v1",
             "replay_kind": "target_planner",
@@ -297,6 +306,9 @@ def _execution(
             "planner_id": planner_id,
             "source_commit": "f" * 40,
             "source_episodes_jsonl_sha256": episode_store_sha256,
+            "replay_episode_id": replay_episode_row["episode_id"],
+            "replay_episodes_jsonl_path": replay_episode_store_path.as_posix(),
+            "replay_episodes_jsonl_sha256": hashlib.sha256(replay_episode_store_bytes).hexdigest(),
             "run_status": "ok",
             "fallback_or_degraded": False,
             "route_complete": route_complete,
@@ -1801,6 +1813,135 @@ def test_replay_result_must_bind_a_separate_target_planner_outcome() -> None:
     assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
 
 
+def test_replay_result_requires_a_distinct_canonical_replay_episode_store() -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    sidecar_path = Path(replay["evidence_ref"])
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    result_path = Path(sidecar["target_planner_replay_result_path"])
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result.pop("replay_episodes_jsonl_path")
+    result_bytes = (json.dumps(result, sort_keys=True) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    sidecar["target_planner_replay_result_sha256"] = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_path.write_text(json.dumps(sidecar, sort_keys=True), encoding="utf-8")
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert "replay_execution_target_planner_result_schema_invalid" in verdict.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
+def test_replay_result_cannot_relabel_the_source_episode_as_replay_output() -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    sidecar_path = Path(replay["evidence_ref"])
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    result_path = Path(sidecar["target_planner_replay_result_path"])
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["replay_episode_id"] = result["episode_id"]
+    result["replay_episodes_jsonl_path"] = sidecar["source_episodes_jsonl_path"]
+    result["replay_episodes_jsonl_sha256"] = sidecar["source_episodes_jsonl_sha256"]
+    result_bytes = (json.dumps(result, sort_keys=True) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    sidecar["target_planner_replay_result_sha256"] = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_path.write_text(json.dumps(sidecar, sort_keys=True), encoding="utf-8")
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert "replay_execution_target_planner_result_replay_episode_store_not_distinct" in (
+        verdict.reason_codes
+    )
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
+def test_replay_output_episode_store_digest_must_match_its_bytes() -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    sidecar_path = Path(replay["evidence_ref"])
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    result_path = Path(sidecar["target_planner_replay_result_path"])
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["replay_episodes_jsonl_sha256"] = "0" * 64
+    result_bytes = (json.dumps(result, sort_keys=True) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    sidecar["target_planner_replay_result_sha256"] = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_path.write_text(json.dumps(sidecar, sort_keys=True), encoding="utf-8")
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert (
+        "replay_execution_target_planner_result_replay_episode_store_digest_mismatch"
+        in verdict.reason_codes
+    )
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
+def test_episode_horizon_must_match_normalized_execution_context() -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    episode_path = Path(target["evidence_ref"])
+    episode = json.loads(episode_path.read_text(encoding="utf-8"))
+    episode["horizon"] = 101
+    episode_bytes = (json.dumps(episode, sort_keys=True) + "\n").encode()
+    episode_path.write_bytes(episode_bytes)
+    target["source_episodes_jsonl_sha256"] = hashlib.sha256(episode_bytes).hexdigest()
+
+    verdict = classify_scenario_admissibility(
+        "case-static", reference_execution=reference, target_execution=target
+    )
+
+    assert verdict.verdict != PLANNER_SPECIFIC_FAILURE
+    assert "target_execution_episode_horizon_mismatch" in verdict.reason_codes
+
+
+def test_replay_runtime_error_cannot_establish_planner_specific_failure() -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    sidecar_path = Path(replay["evidence_ref"])
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    result_path = Path(sidecar["target_planner_replay_result_path"])
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["termination_reason"] = "error"
+    result_bytes = (json.dumps(result, sort_keys=True) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    sidecar["target_planner_replay_result_sha256"] = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_path.write_text(json.dumps(sidecar, sort_keys=True), encoding="utf-8")
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert "replay_execution_target_planner_result_schema_invalid" in verdict.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
 def test_unbound_run_context_cannot_support_planner_specific_attribution() -> None:
     verdict = classify_scenario_admissibility(
         "case-static",
@@ -1828,34 +1969,34 @@ def test_unbound_run_context_cannot_support_planner_specific_attribution() -> No
         (
             "robot_model_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_run_context_mismatch",
+            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
         ),
         (
             "simulator_config_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_run_context_mismatch",
+            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
         ),
         (
             "environment_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_run_context_mismatch",
+            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
         ),
         ("source_commit", "e" * 40, "replay_execution_episode_identity_mismatch"),
         ("seed", 20, "replay_execution_episode_identity_mismatch"),
         (
             "horizon_steps",
             101,
-            "replay_execution_target_planner_result_run_context_mismatch",
+            "replay_execution_episode_horizon_mismatch",
         ),
         (
             "planner_config_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_run_context_mismatch",
+            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
         ),
         (
             "planner_checkpoint_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_run_context_mismatch",
+            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
         ),
         (
             "episode_id",

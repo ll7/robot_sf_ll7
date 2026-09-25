@@ -133,3 +133,25 @@ replacements are atomic; the file set is not a filesystem transaction. An interr
 replacements leaves a hash mismatch that downstream custody checks reject. Repeating a completed
 enrichment leaves episode and sidecar bytes unchanged. Extra disk space for staged JSONL files is
 required until replacement completes. Legacy field values are preserved; JSON formatting may change.
+
+## Execution identity during recomputation
+
+SNQI-v2 reuses the canonical release execution classifier. The guarded-PPO safe
+Risk-DWA counter exception requires the independently declared arm plus matching
+planner metadata; row self-labels cannot grant it. Campaign enrichment supplies
+the planner entry, and calibration freezing binds it to the campaign manifest.
+Direct validation and report APIs without that context reject typed shield state.
+The optional `paired_effect_metric_producer` companion describes metric availability,
+so it is excluded from execution classification without changing the source row.
+
+Offline `analyze_snqi_contract.py --score-version SNQI-v2` accepts `--execution-map`
+with an independent JSON object mapping every supplied episode file to a planner
+`{"key": "arm-id", "algo": "guarded_ppo", "kinematics": "differential_drive"}`.
+Paths are relative to the map file; the map must cover exactly the supplied files.
+The declaration replaces report grouping labels and supplies execution context.
+Without it, guarded shield records fail closed. This declaration is not a substitute
+for release custody validation or scientific admission of a diagnostic campaign.
+
+Numeric weights, anchors, counts, force, jerk, curvature and correlation reject JSON
+booleans. The producer's explicitly boolean `success` outcome retains its declared
+binary meaning through an explicit conversion to 0/1; legacy values are preserved.

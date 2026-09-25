@@ -42,6 +42,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--campaign-root", type=Path)
     parser.add_argument("--score-version", choices=["SNQI-v0", "SNQI-v2"], default="SNQI-v0")
     parser.add_argument("--episodes", type=Path, nargs="+")
+    parser.add_argument(
+        "--execution-map",
+        type=Path,
+        help="Independent JSON file-to-planner declaration for guarded execution; paths are relative to this map.",
+    )
     parser.add_argument("--anchors", type=Path)
     parser.add_argument("--family", type=Path)
     parser.add_argument("--reports-dir", type=Path)
@@ -234,6 +239,34 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
             )
 
 
+def _v2_execution_declarations(args: argparse.Namespace) -> dict[Path, dict[str, Any]]:
+    """Bind explicit offline files to caller declarations, never to episode self-labels.
+
+    Returns:
+        Resolved file paths and independently supplied planner descriptors.
+    """
+    declarations = {}
+    if args.execution_map:
+        document = json.loads(args.execution_map.read_text())
+        if not isinstance(document, dict):
+            raise ValueError("SNQI-v2 execution map must be a file-to-planner object")
+        for name, planner in document.items():
+            path = (args.execution_map.parent / name).resolve()
+            if (
+                path in declarations
+                or not isinstance(planner, dict)
+                or any(
+                    not isinstance(planner.get(key), str) or not planner[key].strip()
+                    for key in ("key", "algo")
+                )
+            ):
+                raise ValueError("SNQI-v2 malformed or duplicate execution declaration")
+            declarations[path] = planner
+        if set(declarations) != {path.resolve() for path in args.episodes}:
+            raise ValueError("SNQI-v2 execution map must bind exactly the supplied episode files")
+    return declarations
+
+
 def _analyze_v2(args: argparse.Namespace) -> int:
     """Write the mandatory v2 report pair from raw episode records.
 
@@ -250,9 +283,31 @@ def _analyze_v2(args: argparse.Namespace) -> int:
     if not all((args.episodes, args.weights, args.anchors, args.family, args.reports_dir)):
         raise ValueError("SNQI-v2 requires --episodes --weights --anchors --family --reports-dir")
     spec = load_snqi_v2_spec(args.weights, args.anchors, args.family)
-    episodes = [compact_report_episode(ep, spec) for ep in read_episode_files(args.episodes)]
+    declarations = _v2_execution_declarations(args)
+    episodes, expected_algorithms = [], {}
+    for path in args.episodes:
+        planner = declarations.get(path.resolve())
+        for episode in read_episode_files([path]):
+            expected = planner["algo"] if planner else None
+            if planner:
+                episode = {
+                    **episode,
+                    "planner_key": planner["key"],
+                    "kinematics": planner.get("kinematics"),
+                }
+                group = planner["key"] + (
+                    f"::{planner['kinematics']}" if planner.get("kinematics") else ""
+                )
+                if group in expected_algorithms and expected_algorithms[group] != expected:
+                    raise ValueError("SNQI-v2 conflicting algorithm declarations for report arm")
+                expected_algorithms[group] = expected
+            episodes.append(compact_report_episode(episode, spec, expected_algorithm=expected))
+            del episode
+
     spec.validate_evaluation_seeds([ep["seed"] for ep in episodes])
-    artifacts = write_v2_reports(episodes, spec, args.reports_dir)
+    artifacts = write_v2_reports(
+        episodes, spec, args.reports_dir, expected_algorithms=expected_algorithms
+    )
     print(json.dumps(artifacts, sort_keys=True))
     return 0
 

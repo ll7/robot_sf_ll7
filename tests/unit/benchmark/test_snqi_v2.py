@@ -687,7 +687,7 @@ def test_calibration_rejects_fallback_or_degraded_adapter(marker):
         derive_calibration_anchors(rows, **kwargs)
 
 
-def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch):
+def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch, guarded_episode):
     import hashlib
     import weakref
 
@@ -718,13 +718,20 @@ def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch
         v2_calibration, "derive_calibration_anchors", derive_without_retained_payloads
     )
     rows, kwargs = calibration_records()
+    rows[0]["algorithm_metadata"] = guarded_episode["algorithm_metadata"]
+    kwargs["expected_algorithms"] = {
+        arm: "guarded_ppo" if arm == kwargs["arms"][0] else "goal" for arm in kwargs["arms"]
+    }
     (tmp_path / "reports").mkdir()
     (tmp_path / "preflight").mkdir()
     manifest = {
         "campaign_id": "synthetic-archive",
         "git": {"commit": kwargs["source_commit"]},
         "seed_policy": {"resolved_seeds": [101, 102]},
-        "planners": [{"key": arm, "enabled": True} for arm in kwargs["arms"]],
+        "planners": [
+            {"key": arm, "algo": kwargs["expected_algorithms"][arm], "enabled": True}
+            for arm in kwargs["arms"]
+        ],
     }
     (tmp_path / "campaign_manifest.json").write_text(json.dumps(manifest))
     (tmp_path / "preflight/preview_scenarios.json").write_text(
@@ -832,6 +839,150 @@ def test_offline_cli_emits_mandatory_pair(spec_files, tmp_path):
     )
     assert (report_dir / "snqi_v2_family.json").exists()
     assert (report_dir / "snqi_v2_diagnostics.json").exists()
+
+
+@pytest.fixture
+def guarded_episode():
+    """Use real shield serialization with the composite's native safe counters."""
+    from robot_sf.planner.safety_shield import ShieldDecision
+
+    decision = ShieldDecision(
+        proposed_action=(1.0, 0.0),
+        filtered_action=(0.1, 0.0),
+        decision_label="fallback_safe",
+        intervention_reason="safe_risk_dwa",
+        intervened=True,
+        fallback_controller_state={
+            "policy": "RiskDWAPlannerAdapter",
+            "selected_safe": True,
+            "action_adaptation": {"mode": "guard_selected_command"},
+        },
+    ).to_metadata()
+    return {
+        **records()[0],
+        "planner_key": "declared-arm",
+        "algorithm_metadata": {
+            "status": "ok",
+            "algorithm": "ppo",
+            "canonical_algorithm": "guarded_ppo",
+            "planner_contract": {"planner_id": "guarded_ppo"},
+            "planner_kinematics": {"execution_mode": "mixed"},
+            "guard_stats": {"fallback_safe": 1},
+            "planner_runtime": {"last_decision": decision},
+            "shield_stats": {"last_decision": decision, "decision_counts": {"fallback_safe": 1}},
+        },
+    }
+
+
+@pytest.mark.parametrize("expected", [None, "goal", "guarded_ppo"])
+@pytest.mark.parametrize("nested_failure", [False, True])
+def test_guarded_execution_matches_release_classifier(guarded_episode, expected, nested_failure):
+    from robot_sf.benchmark.release_acceptance import _status_markers
+    from robot_sf.benchmark.snqi.v2_reports import validate_episode_execution
+
+    if nested_failure:
+        guarded_episode["algorithm_metadata"]["shield_stats"]["last_decision"][
+            "fallback_controller_state"
+        ]["fallback_triggered"] = True
+    rejected = expected != "guarded_ppo" or nested_failure
+    assert bool(_status_markers(guarded_episode, "row", expected_algorithm=expected)) is rejected
+    if rejected:
+        with pytest.raises(ValueError, match="fallback/degraded"):
+            validate_episode_execution(guarded_episode, expected_algorithm=expected)
+        with pytest.raises(ValueError, match="fallback/degraded"):
+            build_family_report(
+                [guarded_episode],
+                fixture_spec(),
+                bootstrap_samples=2,
+                expected_algorithms={"declared-arm": expected},
+            )
+    else:
+        validate_episode_execution(guarded_episode, expected_algorithm=expected)
+        report = build_family_report(
+            [guarded_episode],
+            fixture_spec(),
+            bootstrap_samples=2,
+            expected_algorithms={"declared-arm": expected},
+        )
+        assert report["episode_count"] == 1
+
+
+@pytest.mark.parametrize("expected", [None, "goal", "guarded_ppo"])
+def test_guarded_campaign_entry_binding(tmp_path, guarded_episode, expected):
+    path = tmp_path / "episodes.jsonl"
+    write_campaign_arm(path, [guarded_episode])
+    original = path.read_bytes()
+    entry = {
+        "status": "ok",
+        "episodes_path": str(path),
+        "planner": {"key": "declared-arm", "algo": expected},
+    }
+    if expected != "guarded_ppo":
+        with pytest.raises(ValueError, match="fallback/degraded"):
+            enrich_campaign_v2(
+                [entry],
+                fixture_spec(),
+                tmp_path / "reports",
+                repo_root=tmp_path,
+                bootstrap_samples=2,
+            )
+        assert path.read_bytes() == original
+    else:
+        result = enrich_campaign_v2(
+            [entry], fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=2
+        )
+        assert Path(result["snqi_v2_family_json"]).exists()
+
+
+@pytest.mark.parametrize("expected", [None, "goal", "guarded_ppo"])
+def test_guarded_offline_requires_independent_file_map(
+    tmp_path, spec_files, guarded_episode, expected
+):
+    from scripts.tools.analyze_snqi_contract import main
+
+    path = tmp_path / "episodes.jsonl"
+    path.write_text(json.dumps(guarded_episode) + "\n")
+    args = [
+        "--score-version",
+        "SNQI-v2",
+        "--episodes",
+        str(path),
+        "--weights",
+        str(spec_files[0]),
+        "--anchors",
+        str(spec_files[1]),
+        "--family",
+        str(spec_files[2]),
+        "--reports-dir",
+        str(tmp_path / "reports"),
+    ]
+    if expected is not None:
+        declaration = tmp_path / "execution.json"
+        declaration.write_text(
+            json.dumps({path.name: {"key": "independent-arm", "algo": expected}})
+        )
+        args += ["--execution-map", str(declaration)]
+    if expected != "guarded_ppo":
+        with pytest.raises(ValueError, match="fallback/degraded"):
+            main(args)
+    else:
+        assert main(args) == 0
+        family = json.loads((tmp_path / "reports/snqi_v2_family.json").read_text())
+        assert family["declared_ranking"][0]["planner"] == "independent-arm"
+
+
+@pytest.mark.parametrize("expected", [None, "goal", "guarded_ppo"])
+def test_guarded_calibration_uses_declared_algorithm(guarded_episode, expected):
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["algorithm_metadata"] = guarded_episode["algorithm_metadata"]
+    kwargs["expected_algorithms"] = {rows[0]["planner_key"]: expected}
+    if expected != "guarded_ppo":
+        with pytest.raises(ValueError, match="fallback/degraded"):
+            derive_calibration_anchors(rows, **kwargs)
+    else:
+        assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
 
 
 def test_unavailable_optional_metric_does_not_mark_planner_degraded():

@@ -16,7 +16,6 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from robot_sf.benchmark.fallback_policy import (
-    runtime_fallback_or_degraded_marker,
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -99,13 +98,15 @@ def _rho(a: Sequence[float], b: Sequence[float]) -> float | None:
     return float(spearmanr(a, b).statistic)
 
 
-def score_episode(episode: Mapping[str, Any], spec: SnqiV2Spec) -> dict[str, Any]:
+def score_episode(
+    episode: Mapping[str, Any], spec: SnqiV2Spec, *, expected_algorithm: str | None = None
+) -> dict[str, Any]:
     """Copy an episode and add v2 fields while preserving every legacy metric.
 
     Returns:
         Validated result described above.
     """
-    validate_episode_execution(episode)
+    validate_episode_execution(episode, expected_algorithm=expected_algorithm)
     metrics = episode.get("metrics")
     if not isinstance(metrics, Mapping):
         raise ValueError("SNQI-v2 episode requires metrics")
@@ -141,7 +142,11 @@ def _summary(values: Sequence[float | None]) -> dict[str, Any]:
 
 
 def build_family_report(
-    episodes: Sequence[Mapping[str, Any]], spec: SnqiV2Spec, *, bootstrap_samples: int = 2000
+    episodes: Sequence[Mapping[str, Any]],
+    spec: SnqiV2Spec,
+    *,
+    bootstrap_samples: int = 2000,
+    expected_algorithms: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Compute family sensitivity and paired seed-bootstrap intervals from raw records.
 
@@ -150,7 +155,12 @@ def build_family_report(
     """
     if not episodes or bootstrap_samples < 1:
         raise ValueError("SNQI-v2 family needs episodes and positive bootstrap samples")
-    scored = [score_episode(episode, spec) for episode in episodes]
+    scored = [
+        score_episode(
+            episode, spec, expected_algorithm=(expected_algorithms or {}).get(_planner(episode))
+        )
+        for episode in episodes
+    ]
     groups = sorted({_planner(episode) for episode in scored})
     grouped = {key: [episode for episode in scored if _planner(episode) == key] for key in groups}
     means = np.array(
@@ -294,14 +304,22 @@ def write_v2_reports(
     reports_dir: Path,
     *,
     bootstrap_samples: int = 2000,
+    expected_algorithms: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Emit the inseparable diagnostics/family pair, returning their artifact paths.
 
     Returns:
         Validated result described above.
     """
-    family = build_family_report(episodes, spec, bootstrap_samples=bootstrap_samples)
-    scored = [score_episode(episode, spec) for episode in episodes]
+    family = build_family_report(
+        episodes, spec, bootstrap_samples=bootstrap_samples, expected_algorithms=expected_algorithms
+    )
+    scored = [
+        score_episode(
+            episode, spec, expected_algorithm=(expected_algorithms or {}).get(_planner(episode))
+        )
+        for episode in episodes
+    ]
     terms = {term: [ep["metrics"]["snqi_v2_terms"][term] for ep in scored] for term in TERMS}
     diagnostics = {
         "schema_version": "snqi-v2-diagnostics.v1",
@@ -359,7 +377,9 @@ def read_episode_files(paths: Sequence[Path]) -> Iterator[dict[str, Any]]:
         raise ValueError("SNQI-v2 requires at least one episode")
 
 
-def compact_report_episode(episode: Mapping[str, Any], spec: SnqiV2Spec) -> dict[str, Any]:
+def compact_report_episode(
+    episode: Mapping[str, Any], spec: SnqiV2Spec, *, expected_algorithm: str | None = None
+) -> dict[str, Any]:
     """Validate a raw episode and retain only report identities and scalar score inputs.
 
     Force samples, simulation/planner traces and unrelated metrics never enter the
@@ -369,7 +389,7 @@ def compact_report_episode(episode: Mapping[str, Any], spec: SnqiV2Spec) -> dict
     Returns:
         An independent compact record accepted by the unchanged report calculations.
     """
-    scored = score_episode(episode, spec)
+    scored = score_episode(episode, spec, expected_algorithm=expected_algorithm)
     return {
         **{
             key: scored[key]
@@ -405,9 +425,12 @@ def _stage_v2_file(
             enriched = score_episode(
                 {**episode, "planner_key": planner["key"], "kinematics": planner.get("kinematics")},
                 spec,
+                expected_algorithm=planner.get("algo"),
             )
             output.write(json.dumps(enriched, separators=(",", ":")) + "\n")
-            records.append(compact_report_episode(enriched, spec))
+            records.append(
+                compact_report_episode(enriched, spec, expected_algorithm=planner.get("algo"))
+            )
     return records
 
 
@@ -518,6 +541,7 @@ def enrich_campaign_v2(
     staged: dict[Path, Path] = {}
     all_records = []
     original_hashes: dict[Path, str] = {}
+    expected_algorithms = {}
     try:
         for entry in run_entries:
             path, planner = _validated_run_input(entry, repo_root)
@@ -530,13 +554,19 @@ def enrich_campaign_v2(
             original_hashes[sidecar] = sha256_file(sidecar)
             staged[path] = _temporary_sibling(path)
             records = _stage_v2_file(path, staged[path], spec, planner)
+            for record in records:
+                expected_algorithms[_planner(record)] = planner.get("algo")
             staged[sidecar] = _temporary_sibling(sidecar)
             _stage_v2_provenance(
                 path, staged[path], sidecar, staged[sidecar], spec, records, original_hashes[path]
             )
             all_records.extend(records)
         artifacts = write_v2_reports(
-            all_records, spec, reports_dir, bootstrap_samples=bootstrap_samples
+            all_records,
+            spec,
+            reports_dir,
+            bootstrap_samples=bootstrap_samples,
+            expected_algorithms=expected_algorithms,
         )
         if any(sha256_file(path) != digest for path, digest in original_hashes.items()):
             raise ValueError("SNQI-v2 source or sidecar changed during enrichment")
@@ -589,20 +619,26 @@ def _write_markdown_report(path: Path, name: str, payload: Mapping[str, Any]) ->
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def validate_episode_execution(episode: Mapping[str, Any]) -> None:
-    """Reject planner fallback markers without interpreting unrelated metric availability.
+def validate_episode_execution(
+    episode: Mapping[str, Any], *, expected_algorithm: str | None = None
+) -> None:
+    """Apply canonical execution classification with independently declared arm identity.
 
-    Paired-effect metrics can legitimately be unavailable on an otherwise native
-    episode. Only the planner status and its runtime subtree determine execution.
+    Direct callers get no guarded exception without context. Import lazily because
+    release acceptance imports campaign entrypoints, which in turn consume reports.
+    Metric availability is separate from planner execution and is not scanned.
     """
-    metadata = episode.get("algorithm_metadata", {})
-    if not isinstance(metadata, Mapping):
+    from robot_sf.benchmark.release_acceptance import _status_markers  # noqa: PLC0415
+
+    if not isinstance(episode.get("algorithm_metadata", {}), Mapping):
         raise ValueError("SNQI-v2 malformed algorithm metadata")
-    direct = {
-        key: metadata[key]
-        for key in ("status", "execution_mode", "fallback_used", "fallback_triggered", "degraded")
-        if key in metadata
+    # This companion describes optional posthoc metrics, not planner execution.
+    metadata = episode.get("algorithm_metadata", {})
+    execution = {
+        **episode,
+        "algorithm_metadata": {
+            key: value for key, value in metadata.items() if key != "paired_effect_metric_producer"
+        },
     }
-    direct["planner_runtime"] = metadata.get("planner_runtime")
-    if runtime_fallback_or_degraded_marker(direct) is not None:
+    if _status_markers(execution, "episode", expected_algorithm=expected_algorithm):
         raise ValueError("SNQI-v2 refuses fallback/degraded episode metadata")

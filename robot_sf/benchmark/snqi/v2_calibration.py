@@ -40,6 +40,7 @@ def derive_calibration_anchors(
     run_id: str,
     source_commit: str,
     episodes_sha256: str,
+    expected_algorithms: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Derive the frozen asset only after complete source and split validation.
 
@@ -64,7 +65,9 @@ def derive_calibration_anchors(
         if identity in observed or identity not in expected:
             raise ValueError(f"SNQI-v2 calibration duplicate or out-of-split identity: {identity}")
         observed.add(identity)
-        _validate_calibration_episode(episode)
+        _validate_calibration_episode(
+            episode, expected_algorithm=(expected_algorithms or {}).get(identity[0])
+        )
         mode = resolve_execution_mode(episode["algorithm_metadata"])
         counts = command_modes[identity[0]]
         counts[mode] = counts.get(mode, 0) + 1
@@ -137,11 +140,20 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
         raise ValueError("SNQI-v2 calibration requires complete preview and development seeds")
     arms = [arm["key"] for arm in manifest["planners"] if arm["enabled"]]
     scenarios = [scenario["name"] for scenario in preview["scenarios"]]
+    expected_algorithms = {
+        arm["key"]: arm.get("algo") for arm in manifest["planners"] if arm["enabled"]
+    }
     records, hashes = [], {}
     for entry in summary["runs"]:
         availability = summarize_benchmark_availability(entry.get("summary"))
         if entry.get("status") != "ok" or not availability.benchmark_success:
             raise ValueError("SNQI-v2 calibration run has incomplete/fallback/degraded execution")
+        arm = entry["planner"]["key"]
+        if arm not in expected_algorithms or (
+            entry["planner"].get("algo") is not None
+            and entry["planner"]["algo"] != expected_algorithms[arm]
+        ):
+            raise ValueError("SNQI-v2 calibration run arm disagrees with manifest")
         source_path = Path(entry["episodes_path"])
         # Campaign archives preserve the runs/ tree while their producer's absolute
         # workspace may no longer exist. Resolve only that confined archive suffix.
@@ -158,7 +170,11 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
         for record in read_episode_files([path]):
             if record.get("git_hash") != manifest["git"]["commit"]:
                 raise ValueError("SNQI-v2 calibration record source commit mismatch")
-            records.append(_compact_calibration_record(record, entry["planner"]["key"]))
+            records.append(
+                _compact_calibration_record(
+                    record, arm, expected_algorithm=expected_algorithms[arm]
+                )
+            )
             del record
     digest = hashlib.sha256(
         json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
@@ -170,6 +186,7 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
         run_id=manifest["campaign_id"],
         source_commit=manifest["git"]["commit"],
         episodes_sha256=digest,
+        expected_algorithms=expected_algorithms,
     )
     document["calibration"]["episode_files_sha256"] = hashes
     document["calibration"]["episodes_hash_rule"] = (
@@ -185,7 +202,9 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
     return document
 
 
-def _compact_calibration_record(record: Mapping[str, Any], arm: str) -> dict[str, Any]:
+def _compact_calibration_record(
+    record: Mapping[str, Any], arm: str, *, expected_algorithm: str | None = None
+) -> dict[str, Any]:
     """Validate raw execution before retaining only scalar calibration inputs.
 
     Force samples and simulation traces remain in the hashed source files; their
@@ -194,7 +213,7 @@ def _compact_calibration_record(record: Mapping[str, Any], arm: str) -> dict[str
     Returns:
         Validated scalar inputs with the arm identity and actual command mode.
     """
-    _validate_calibration_episode(record)
+    _validate_calibration_episode(record, expected_algorithm=expected_algorithm)
     metrics = record["metrics"]
     return {
         **{key: record.get(key) for key in ("scenario_id", "seed", "status", "horizon", "steps")},
@@ -236,9 +255,11 @@ def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) 
         raise ValueError("SNQI-v2 calibration run_id is required")
 
 
-def _validate_calibration_episode(episode: Mapping[str, Any]) -> None:
+def _validate_calibration_episode(
+    episode: Mapping[str, Any], *, expected_algorithm: str | None = None
+) -> None:
     """Require frozen acquisition settings and declared, nonfallback planner execution."""
-    validate_episode_execution(episode)
+    validate_episode_execution(episode, expected_algorithm=expected_algorithm)
     if episode.get("status") not in {"success", "collision", "failure"}:
         raise ValueError("SNQI-v2 calibration rejects invalid episode execution status")
     mode = resolve_execution_mode(episode.get("algorithm_metadata"))

@@ -4941,8 +4941,25 @@ def _validate_replay_record_projection(
         artifact_metrics.get(key) != value for key, value in item.get("metrics", {}).items()
     ):
         errors.append("replay_artifact_selected_metrics_mismatch")
+    errors.extend(_replay_outcome_metric_consistency_errors(record))
     errors.extend(_validate_replay_event_projection(item, case, receipt, event_identity))
     return errors
+
+
+def _replay_outcome_metric_consistency_errors(record: Mapping[str, Any]) -> list[str]:
+    """Check canonical outcome consistency against every raw replay metric."""
+    outcome = record.get("outcome")
+    metrics = record.get("metrics")
+    if not isinstance(outcome, Mapping) or not isinstance(metrics, Mapping):
+        return []
+    contradictions = outcome_contradictions(
+        termination_reason=str(record.get("termination_reason") or ""),
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if not contradictions:
+        return []
+    return ["replay_artifact_outcome_metric_contradiction: " + "; ".join(contradictions)]
 
 
 def _target_config_snapshot_projection_errors(

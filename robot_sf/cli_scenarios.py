@@ -1393,6 +1393,32 @@ def _scenario_validation_diagnostics(  # noqa: C901
     return diagnostics, orphan_errors
 
 
+def validate_scenario_rows_structure(
+    raw_manifest: Any,
+    scenarios: list[Any],
+    *,
+    source_file: str | Path,
+) -> list[dict[str, Any]]:
+    """Validate expanded scenario rows with the CLI's schema and field contract.
+
+    This applies the same canonical row-schema and unknown-field checks used by
+    ``robot-sf scenarios validate`` without imposing that command's repository-path
+    and asset-location policy. Callers that validate staged or archived scenario
+    inputs must independently bind and validate the referenced assets.
+
+    Returns:
+        list[dict[str, Any]]: Deduplicated canonical schema and field diagnostics.
+    """
+    diagnostics, orphan_errors = _scenario_validation_diagnostics(
+        scenarios,
+        raw_manifest=raw_manifest,
+        source_file=Path(source_file),
+    )
+    return _deduplicate_diagnostics(
+        [*orphan_errors, *(error for row in diagnostics for error in row)]
+    )
+
+
 def _manifest_external_asset_errors(
     raw_manifest: Any,
     *,

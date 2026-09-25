@@ -1744,6 +1744,18 @@ def test_imported_search_receipts_reject_copied_candidate_table_tampering(tmp_pa
 def test_issue9645_search_run_fields_are_recomputed_from_pinned_packet(tmp_path: Path) -> None:
     corpus, _receipt, corpus_root = _import(tmp_path)
 
+    renamed_pilot = copy.deepcopy(corpus)
+    renamed_run = renamed_pilot["search_runs"][0]
+    renamed_run["run_id"] = "renamed_run"
+    renamed_run["source_issue"] = 999
+    renamed_run["new_counterexamples_discovered"] = 1
+    with pytest.raises(CorpusError, match="#9645 search-run identity or evidence root"):
+        validate_corpus(renamed_pilot, corpus_root=corpus_root)
+    orphaned_packet = copy.deepcopy(corpus)
+    orphaned_packet["search_runs"] = []
+    with pytest.raises(CorpusError, match="#9645 packet has no bound search-run record"):
+        validate_corpus(orphaned_packet, corpus_root=corpus_root)
+
     mutations = {
         "attempted_candidates": 63,
         "completed_candidates": 63,
@@ -1774,6 +1786,104 @@ def test_issue9645_search_run_fields_are_recomputed_from_pinned_packet(tmp_path:
     corpus_path.write_text(json.dumps(persisted, sort_keys=True), encoding="utf-8")
     with pytest.raises(CorpusError, match="new_counterexamples_discovered"):
         load_corpus(corpus_path)
+
+
+def test_case_admission_recomputes_structural_scenario_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caller-supplied valid receipt cannot admit a schema-invalid scenario row."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = _stage_case_under_candidate(
+        copy.deepcopy(corpus["cases"][0]), corpus_root, "invalid-structure-probe"
+    )
+    scenario_path = corpus_root / case["inputs"]["scenario_path"]
+    scenario_document = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    scenario_document["scenarios"][0]["typo_field"] = "not-a-canonical-scenario-field"
+    scenario_path.write_text(yaml.safe_dump(scenario_document, sort_keys=False), encoding="utf-8")
+    scenario_digest = hashlib.sha256(scenario_path.read_bytes()).hexdigest()
+    case["inputs"]["scenario_sha256"] = scenario_digest
+    case["structural_validation"]["scenario_sha256"] = scenario_digest
+
+    route_payload = yaml.safe_load(
+        (corpus_root / case["inputs"]["route_overrides_path"]).read_text(encoding="utf-8")
+    )
+    scenario_row = scenario_document["scenarios"][0]
+    effective_hash = counterexample_corpus.compute_case_effective_scenario_hash(
+        scenario_row,
+        route_payload,
+        case["inputs"]["map_assets"],
+    )
+    case["effective_scenario_sha256"] = effective_hash
+    case["case_id"] = f"case-{effective_hash}"
+
+    # Build a synthetic exact-current replay for the mutated input, then move its
+    # artifact into the candidate bundle so admission sees only the staged inputs.
+    replay_receipt = _single_replay_admission_receipt(case, corpus_root)
+    original_replay_path = replay_receipt["artifact_receipts"][0]["artifact_path"]
+    candidate_root = (
+        corpus_root / "historical_candidates/invalid-structure-probe/admission_evidence"
+    )
+    replay_destination = candidate_root / "replay_artifacts" / Path(original_replay_path).name
+    replay_destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(corpus_root / original_replay_path, replay_destination)
+    shutil.rmtree(corpus_root / "cases" / case["case_id"])
+    replay_relative = replay_destination.relative_to(corpus_root).as_posix()
+    for replay in replay_receipt["replay_artifacts"]:
+        replay["path"] = replay_relative
+    for artifact in replay_receipt["artifact_receipts"]:
+        artifact["artifact_path"] = replay_relative
+    for source_file in case["source_evidence"]["corpus_files"]:
+        if source_file["path"] == original_replay_path:
+            source_file["path"] = replay_relative
+            break
+    case["replay_receipt"] = replay_receipt
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "_current_target_revision",
+        lambda: replay_receipt["target_revision"],
+    )
+
+    corpus, admission = counterexample_corpus.admit_case_record(
+        case,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root="historical_candidates/invalid-structure-probe/admission_evidence",
+        source_kind="test_structural_admission",
+        source_id="schema-invalid-scenario-row",
+    )
+
+    assert admission["decision"] == "rejected"
+    assert any(
+        "Unknown scenario field 'typo_field'." in blocker for blocker in admission["blockers"]
+    )
+    assert len(corpus["cases"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("include", "shared.yaml"),
+        ("includes", ["shared.yaml"]),
+        ("scenario_files", ["shared.yaml"]),
+        ("map_search_paths", ["maps"]),
+        ("select_scenarios", ["case"]),
+        ("scenario_overrides", {"simulation_config": {"max_episode_steps": 999}}),
+        ("scenario_overrides_by_name", {"case": {"simulation_config": {}}}),
+    ],
+)
+def test_case_scenario_validation_rejects_manifest_loader_transforms(
+    field: str, value: object
+) -> None:
+    """Case digests cannot omit loader-applied overrides or external scenario includes."""
+    manifest = {"scenarios": [{"name": "case"}], field: value}
+    row = counterexample_corpus._case_scenario_structure_row(
+        manifest,
+        map_asset_path=None,
+    )
+
+    assert isinstance(row, str)
+    assert field in row
 
 
 def test_search_run_evidence_rejects_missing_paths_and_receipt_conflicts(tmp_path: Path) -> None:

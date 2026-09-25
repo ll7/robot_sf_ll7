@@ -38,7 +38,7 @@ from robot_sf.benchmark.termination_reason import (
     outcome_contradictions,
     status_from_termination_reason,
 )
-from robot_sf.cli_scenarios import validate_scenario_payload
+from robot_sf.cli_scenarios import validate_scenario_payload, validate_scenario_rows_structure
 
 CORPUS_SCHEMA_VERSION = "adversarial-counterexample-corpus.v1"
 CASE_SCHEMA_VERSION = "adversarial-counterexample.v1"
@@ -60,6 +60,17 @@ ISSUE_9656_SUMMARY_SCHEMA = "benchmark-hard-case-slice.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
+_CASE_SCENARIO_MANIFEST_TRANSFORMS = frozenset(
+    {
+        "includes",
+        "include",
+        "scenario_files",
+        "map_search_paths",
+        "select_scenarios",
+        "scenario_overrides",
+        "scenario_overrides_by_name",
+    }
+)
 
 
 class CorpusError(ValueError):
@@ -245,16 +256,26 @@ def _validate_search_run_evidence(
     search_runs: Sequence[Mapping[str, Any]], *, corpus_root: Path | None
 ) -> None:
     """Verify every persisted search-run artifact receipt against corpus custody."""
+    if not search_runs and corpus_root is None:
+        return
+    if search_runs and corpus_root is None:
+        raise CorpusError("corpus_root is required to validate persisted search-run evidence")
+    if corpus_root is None:
+        return
+
+    root = corpus_root.resolve()
+    pilot_packet = root / _ISSUE_9645_PILOT_EVIDENCE_ROOT
+    if pilot_packet.exists() and not any(
+        _search_run_references_issue9645_packet(run) for run in search_runs
+    ):
+        raise CorpusError("persisted #9645 packet has no bound search-run record")
     if not search_runs:
         return
-    if corpus_root is None:
-        raise CorpusError("corpus_root is required to validate persisted search-run evidence")
 
     run_ids = [run["run_id"] for run in search_runs]
     if len(run_ids) != len(set(run_ids)):
         raise CorpusError("search-run run_id values must be unique")
 
-    root = corpus_root.resolve()
     known_artifact_digests: dict[str, str] = {}
     for run in search_runs:
         _validate_one_search_run_evidence(run, root, known_artifact_digests)
@@ -278,8 +299,40 @@ def _validate_one_search_run_evidence(
         artifacts_in_run=artifacts_in_run,
         known_artifact_digests=known_artifact_digests,
     )
-    if run.get("source_issue") == 9645 or run.get("run_id") == _ISSUE_9645_PILOT_RUN_ID:
+    if (
+        run.get("source_issue") == 9645
+        or run.get("run_id") == _ISSUE_9645_PILOT_RUN_ID
+        or run.get("evidence_bundle_root") == _ISSUE_9645_PILOT_EVIDENCE_ROOT
+        or _search_run_references_issue9645_packet(run)
+    ):
         _validate_issue9645_search_run_record(run, root)
+
+
+def _search_run_references_issue9645_packet(run: Mapping[str, Any]) -> bool:
+    """Recognize the pilot by its packet custody paths, independent of editable IDs."""
+    if run.get("evidence_bundle_root") == _ISSUE_9645_PILOT_EVIDENCE_ROOT:
+        return True
+    prefix = f"{_ISSUE_9645_PILOT_EVIDENCE_ROOT}/"
+    for collection in ("source_files", "manifest_files"):
+        receipts = run.get(collection)
+        if not isinstance(receipts, Sequence) or isinstance(receipts, (str, bytes)):
+            continue
+        if any(
+            isinstance(receipt, Mapping)
+            and isinstance(receipt.get("path"), str)
+            and receipt["path"].startswith(prefix)
+            for receipt in receipts
+        ):
+            return True
+    receipts = run.get("bundle_receipts")
+    if isinstance(receipts, Sequence) and not isinstance(receipts, (str, bytes)):
+        return any(
+            isinstance(receipt, Mapping)
+            and isinstance(receipt.get("path"), str)
+            and receipt["path"].startswith(prefix)
+            for receipt in receipts
+        )
+    return False
 
 
 def _validate_issue9645_search_run_record(run: Mapping[str, Any], corpus_root: Path) -> None:
@@ -4124,10 +4177,19 @@ def _validate_case_record(case: Mapping[str, Any], *, corpus_root: Path | None =
     errors.extend(_validate_case_discovery(case))
     errors.extend(_validate_case_inputs(case))
     if corpus_root is not None:
+        input_paths = None
         try:
-            _case_input_paths(case, corpus_root)
+            input_paths = _case_input_paths(case, corpus_root)
         except (CorpusError, OSError, ValueError, TypeError, yaml.YAMLError) as exc:
             errors.append(f"materialized case inputs are invalid: {exc}")
+        if input_paths is not None:
+            errors.extend(
+                _validate_case_scenario_structure(
+                    case,
+                    input_paths["scenario"],
+                    map_asset_path=input_paths.get("map_asset"),
+                )
+            )
         errors.extend(_validate_case_corpus_evidence(case, corpus_root))
         errors.extend(_validate_case_admission_replay(case, corpus_root))
     return errors
@@ -5848,6 +5910,86 @@ def _validate_scenario_structure(scenario_path: Path) -> list[str]:
         for error in errors
         if isinstance(error, dict)
     ] or [str(report.get("status") or "scenario_invalid")]
+
+
+def _validate_case_scenario_structure(
+    case: Mapping[str, Any],
+    scenario_path: Path,
+    *,
+    map_asset_path: Path | None,
+) -> list[str]:
+    """Recompute structural validity from the exact staged scenario bytes.
+
+    The general CLI validator requires inputs under the repository and resolves assets
+    from the live repository registry. Corpus cases instead bind their own copied assets,
+    so validate the expanded row with the same schema/field checks after adding the
+    already-verified map path for a ``map_id`` row.
+    """
+    try:
+        source_bytes = scenario_path.read_bytes()
+        scenario_digest = hashlib.sha256(source_bytes).hexdigest()
+        document = yaml.safe_load(source_bytes)
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        return [f"canonical scenario structure could not be read: {exc}"]
+
+    inputs = case.get("inputs")
+    inputs = inputs if isinstance(inputs, Mapping) else {}
+    if scenario_digest != inputs.get("scenario_sha256"):
+        return ["canonical scenario structure bytes differ from the pinned scenario digest"]
+    structural = case.get("structural_validation")
+    structural = structural if isinstance(structural, Mapping) else {}
+    if structural.get("scenario_sha256") != scenario_digest:
+        return ["structural validation receipt does not bind the pinned scenario bytes"]
+    if structural.get("route_overrides_sha256") != inputs.get("route_overrides_sha256"):
+        return ["structural validation receipt does not bind the pinned route digest"]
+    expanded_row = _case_scenario_structure_row(document, map_asset_path=map_asset_path)
+    if isinstance(expanded_row, str):
+        return [expanded_row]
+
+    diagnostics = validate_scenario_rows_structure(
+        document,
+        [expanded_row],
+        source_file=scenario_path,
+    )
+    try:
+        final_digest = _sha256_file(scenario_path)
+    except OSError as exc:
+        return [f"scenario bytes became unavailable during structural validation: {exc}"]
+    if final_digest != scenario_digest:
+        return ["scenario bytes changed during canonical structural validation"]
+    return [
+        "canonical scenario structure invalid: "
+        f"{item.get('code') or 'validation_error'}: {item.get('message') or item}"
+        for item in diagnostics
+    ]
+
+
+def _case_scenario_structure_row(
+    document: Any,
+    *,
+    map_asset_path: Path | None,
+) -> dict[str, Any] | str:
+    if not isinstance(document, Mapping):
+        return "canonical scenario structure must be a scenario manifest object"
+    transforms = sorted(_CASE_SCENARIO_MANIFEST_TRANSFORMS.intersection(document))
+    if transforms:
+        return (
+            "case scenario manifest must be self-contained; loader transforms are not allowed: "
+            + ", ".join(transforms)
+        )
+    scenarios = document.get("scenarios")
+    if (
+        not isinstance(scenarios, list)
+        or len(scenarios) != 1
+        or not isinstance(scenarios[0], Mapping)
+    ):
+        return "canonical scenario structure must contain exactly one scenario row"
+    expanded_row = dict(scenarios[0])
+    if expanded_row.get("map_id") and not expanded_row.get("map_file"):
+        if map_asset_path is None:
+            return "canonical scenario structure cannot resolve its pinned map_id"
+        expanded_row["map_file"] = str(map_asset_path)
+    return expanded_row
 
 
 def _record_attempt(

@@ -948,6 +948,8 @@ def test_legacy_v1_no_row_admission_rejects_unselected_contradictory_metrics(
     [
         ("status_mismatch", "replay_artifact_status_termination_mismatch"),
         ("degraded_execution", "replay_artifact_fallback_status_mismatch"),
+        ("metadata_degraded", "replay_artifact_fallback_status_mismatch"),
+        ("foresight_prediction_fallback", "replay_artifact_fallback_status_mismatch"),
     ],
 )
 def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
@@ -967,11 +969,19 @@ def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
         episode = json.loads(artifact.read_text(encoding="utf-8"))
         if mutation == "status_mismatch":
             episode["status"] = "success"
-        else:
+        elif mutation == "degraded_execution":
             episode["integrity"]["effective_view"]["degraded"] = True
             episode["algorithm_metadata"]["status"] = "degraded"
             episode["readiness_status"] = "fallback"
             episode["availability_status"] = "not_available"
+        elif mutation == "metadata_degraded":
+            episode["algorithm_metadata"]["degraded"] = True
+            assert episode["algorithm_metadata"]["status"] == "ok"
+            assert episode["integrity"]["effective_view"]["degraded"] is False
+        else:
+            episode["algorithm_metadata"]["foresight_prediction"] = {"fallback_used": True}
+            assert episode["algorithm_metadata"]["status"] == "ok"
+            assert episode["integrity"]["effective_view"]["degraded"] is False
         artifact.write_text(json.dumps(episode, sort_keys=True) + "\n", encoding="utf-8")
         artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
         replay["sha256"] = artifact_sha256

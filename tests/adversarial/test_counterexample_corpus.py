@@ -895,6 +895,54 @@ def test_case_admission_rejects_unselected_contradictory_canonical_metrics(
     validate_corpus(corpus, corpus_root=corpus_root)
 
 
+def test_legacy_v1_no_row_admission_rejects_unselected_contradictory_metrics(
+    tmp_path: Path,
+) -> None:
+    """Legacy no-row receipts cannot hide raw metrics omitted from their projection."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = copy.deepcopy(corpus["cases"][0])
+    receipt = case["replay_receipt"]
+    selected_metrics = {
+        key: value
+        for key, value in receipt["selected_projection"]["metrics"].items()
+        if key in {"collisions", "total_collision_count"}
+    }
+    assert selected_metrics
+
+    for replay in receipt["replay_artifacts"]:
+        artifact_path = replay["path"]
+        artifact = corpus_root / artifact_path
+        episode = json.loads(artifact.read_text(encoding="utf-8"))
+        episode["metrics"]["success"] = 1
+        episode["metrics"]["success_rate"] = 1
+        artifact.write_text(json.dumps(episode, sort_keys=True) + "\n", encoding="utf-8")
+        artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        replay["sha256"] = artifact_sha256
+        replay["normalized_bundle_sha256"] = artifact_sha256
+        for source_file in case["source_evidence"]["corpus_files"]:
+            if source_file["path"] == artifact_path:
+                source_file["sha256"] = artifact_sha256
+                break
+        else:
+            raise AssertionError("admission replay artifact is absent from source evidence custody")
+
+    receipt["selected_projection"]["metrics"] = selected_metrics
+    receipt["selected_projection_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(receipt["selected_projection"]).encode("utf-8")
+    ).hexdigest()
+    receipt["schema_version"] = "adversarial-case-admission-replay.v1"
+    receipt.pop("artifact_receipts")
+
+    errors = counterexample_corpus._validate_case_admission_replay(case, corpus_root)
+    assert any(
+        "replay_artifact_outcome_metric_contradiction" in error and "success metrics > 0" in error
+        for error in errors
+    )
+    with pytest.raises(CorpusError, match="replay_artifact_outcome_metric_contradiction"):
+        validate_corpus({**corpus, "cases": [case]}, corpus_root=corpus_root)
+
+
 def test_target_planner_configuration_snapshot_must_match_replay_metadata(
     tmp_path: Path,
 ) -> None:

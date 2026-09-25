@@ -25,6 +25,7 @@ from robot_sf.adversarial.counterexample_corpus import (
     export_regression_slice,
     import_issue9645_packet,
     import_issue9656_candidates,
+    load_corpus,
     new_corpus,
     promote_historical_candidate,
     recompute_planner_status,
@@ -647,7 +648,7 @@ def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibilit
     for item in pilot["source_files"] + pilot["manifest_files"] + pilot["bundle_receipts"]:
         stored = corpus_root / item["path"]
         assert hashlib.sha256(stored.read_bytes()).hexdigest() == item["sha256"]
-    validate_corpus(corpus)
+    validate_corpus(corpus, corpus_root=corpus_root)
 
 
 def test_rehashed_route_input_cannot_reuse_a_stale_replay_jsonl(tmp_path: Path) -> None:
@@ -1696,14 +1697,14 @@ def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
                 case["dynamic_task_feasibility"] = "feasible"
             receipt_path.write_text(json.dumps(receipt))
 
-        corpus, receipt, _corpus_root = _import(tmp_path, payload)
+        corpus, receipt, corpus_root = _import(tmp_path, payload)
         assert receipt["decision"] == "rejected"
         assert any(expected_fragment in blocker for blocker in receipt["blockers"])
         assert len(corpus["search_runs"]) == 1
         assert corpus["search_runs"][0]["new_counterexamples_discovered"] == 0
         assert corpus["cases"] == []
         assert corpus["admission_attempts"][-1]["decision"] == "rejected"
-        validate_corpus(corpus)
+        validate_corpus(corpus, corpus_root=corpus_root)
 
 
 def test_pilot_candidate_table_is_bound_to_the_outer_bundle_checksums(tmp_path: Path) -> None:
@@ -1717,6 +1718,86 @@ def test_pilot_candidate_table_is_bound_to_the_outer_bundle_checksums(tmp_path: 
     assert any("pilot_evidence_invalid" in blocker for blocker in receipt["blockers"])
     assert corpus["search_runs"] == []
     assert corpus["cases"] == []
+
+
+def test_imported_search_receipts_reject_copied_candidate_table_tampering(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+
+    pilot = corpus["search_runs"][0]
+    candidate_receipt = next(
+        item for item in pilot["source_files"] if item["path"].endswith("candidate_evaluations.csv")
+    )
+    artifact_path = corpus_root / candidate_receipt["path"]
+    source_digest = candidate_receipt["sha256"]
+    artifact_path.write_bytes(artifact_path.read_bytes() + b"tampered after import\n")
+
+    with pytest.raises(CorpusError, match="search-run artifact digest mismatch"):
+        validate_corpus(corpus, corpus_root=corpus_root)
+    with pytest.raises(CorpusError, match="search-run artifact digest mismatch"):
+        load_corpus(corpus_path)
+    assert candidate_receipt["sha256"] == source_digest
+    assert corpus["cases"][0]["admissibility"]["verdict"] == "admissible_feasibility_unknown"
+
+
+def test_search_run_evidence_rejects_missing_paths_and_receipt_conflicts(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    run = corpus["search_runs"][0]
+
+    missing = copy.deepcopy(corpus)
+    missing["search_runs"][0]["source_files"][0]["path"] = (
+        "evidence/issue_9645_pilot/not-present.csv"
+    )
+    with pytest.raises(CorpusError, match="search-run artifact is missing"):
+        validate_corpus(missing, corpus_root=corpus_root)
+
+    escaped = copy.deepcopy(corpus)
+    escaped["search_runs"][0]["source_files"][0]["path"] = "../outside.csv"
+    with pytest.raises(CorpusError, match="unsafe path"):
+        validate_corpus(escaped, corpus_root=corpus_root)
+
+    duplicate_run = copy.deepcopy(corpus)
+    duplicate_run["search_runs"].append(copy.deepcopy(run))
+    with pytest.raises(CorpusError, match="run_id values must be unique"):
+        validate_corpus(duplicate_run, corpus_root=corpus_root)
+
+    duplicate_source = copy.deepcopy(corpus)
+    duplicate_source["search_runs"][0]["source_files"].append(
+        copy.deepcopy(duplicate_source["search_runs"][0]["source_files"][0])
+    )
+    with pytest.raises(CorpusError, match="duplicate path"):
+        validate_corpus(duplicate_source, corpus_root=corpus_root)
+
+    conflict = copy.deepcopy(corpus)
+    conflict["search_runs"][0]["manifest_files"][0]["sha256"] = "0" * 64
+    with pytest.raises(CorpusError, match="conflicting artifact receipt identity"):
+        validate_corpus(conflict, corpus_root=corpus_root)
+
+    duplicate_bundle = copy.deepcopy(corpus)
+    bundle_receipt = duplicate_bundle["search_runs"][0]["bundle_receipts"][0]
+    duplicate_bundle["search_runs"][0]["bundle_receipts"].append(copy.deepcopy(bundle_receipt))
+    with pytest.raises(CorpusError, match="duplicate source identity"):
+        validate_corpus(duplicate_bundle, corpus_root=corpus_root)
+
+
+def test_search_run_evidence_rejects_symlink_escape_and_requires_corpus_root(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    outside = tmp_path / "outside.csv"
+    outside.write_text("outside evidence\n", encoding="utf-8")
+    link = corpus_root / "evidence" / "issue_9645_pilot" / "symlink.csv"
+    link.symlink_to(outside)
+
+    escaped_symlink = copy.deepcopy(corpus)
+    receipt = escaped_symlink["search_runs"][0]["source_files"][0]
+    receipt["path"] = link.relative_to(corpus_root).as_posix()
+    receipt["sha256"] = hashlib.sha256(outside.read_bytes()).hexdigest()
+    with pytest.raises(CorpusError, match="escapes corpus root"):
+        validate_corpus(escaped_symlink, corpus_root=corpus_root)
+    with pytest.raises(CorpusError, match="corpus_root is required"):
+        validate_corpus(corpus)
 
 
 def test_bundle_checksum_sidecar_must_match_the_manifest(tmp_path: Path) -> None:
@@ -1909,7 +1990,7 @@ def test_duplicate_import_is_deterministic_and_later_planner_solve_keeps_case(
 
 
 def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Path) -> None:
-    corpus, _receipt, _corpus_root = _import(tmp_path)
+    corpus, _receipt, corpus_root = _import(tmp_path)
     case = corpus["cases"][0]
     incomplete = {
         "case_id": case["case_id"],
@@ -1928,13 +2009,13 @@ def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Pa
         "termination_reason": None,
         "metrics": {},
     }
-    append_planner_evaluation(corpus, incomplete)
+    append_planner_evaluation(corpus, incomplete, corpus_root=corpus_root)
 
     status = recompute_planner_status(
         corpus,
         planner_id="candidate-planner",
         planner_config_identity="config-under-test",
-        corpus_root=_corpus_root,
+        corpus_root=corpus_root,
     )
     assert status["status_counts"]["unknown"] == 1
     assert status["cases"][0]["unknown_observation_count"] == 1
@@ -1944,7 +2025,7 @@ def test_incomplete_evaluation_is_retained_as_unknown_not_discarded(tmp_path: Pa
         row for row in corpus["planner_evaluations"] if row["planner_id"] == "candidate-planner"
     )
     assert incomplete_row["episode_sha256"] is None
-    validate_corpus(corpus)
+    validate_corpus(corpus, corpus_root=corpus_root)
 
 
 @pytest.mark.parametrize("episode_status", ["failure", "placeholder"])
@@ -2174,7 +2255,7 @@ def test_replay_artifact_path_escape_stays_unknown(tmp_path: Path) -> None:
     row = next(item for item in corpus["planner_evaluations"] if item["planner_id"] == planner_id)
     row["replay_receipt"]["artifact_path"] = "../outside.jsonl"
 
-    validate_corpus(corpus)
+    validate_corpus(corpus, corpus_root=corpus_root)
     status = recompute_planner_status(
         corpus,
         planner_id=planner_id,
@@ -2210,7 +2291,7 @@ def test_legacy_complete_evaluation_without_receipt_is_retained_as_unknown(
     )
     legacy_row.pop("replay_receipt")
 
-    validate_corpus(legacy)
+    validate_corpus(legacy, corpus_root=corpus_root)
     status = recompute_planner_status(
         legacy,
         planner_id="legacy-planner",
@@ -2333,7 +2414,7 @@ def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
     assert (slice_root / "results").is_dir()
     assert case["replay_command"].startswith("ROBOT_SF_MAP_REGISTRY=maps/registry.yaml ")
     assert "uv run robot_sf_bench run --matrix replay_matrix.yaml" in case["replay_command"]
-    validate_corpus(corpus)
+    validate_corpus(corpus, corpus_root=corpus_root)
 
 
 @pytest.mark.parametrize("asset_role", ["map", "map_registry"])
@@ -2374,21 +2455,21 @@ def test_map_asset_tampering_invalidates_case_identity_and_slice_export(
 
 
 def test_append_evaluation_rejects_case_hash_mismatch(tmp_path: Path) -> None:
-    corpus, _receipt, _corpus_root = _import(tmp_path)
+    corpus, _receipt, corpus_root = _import(tmp_path)
     wrong = copy.deepcopy(corpus["planner_evaluations"][0])
     wrong["effective_scenario_sha256"] = "0" * 64
     with pytest.raises(CorpusError, match="replay_receipt_effective_scenario_sha256_mismatch"):
-        append_planner_evaluation(corpus, wrong)
+        append_planner_evaluation(corpus, wrong, corpus_root=corpus_root)
 
 
 def test_validate_corpus_rejects_planner_evaluation_for_absent_case(
     tmp_path: Path,
 ) -> None:
-    corpus, _receipt, _corpus_root = _import(tmp_path)
+    corpus, _receipt, corpus_root = _import(tmp_path)
     corpus["planner_evaluations"][0]["case_id"] = f"case-{'0' * 64}"
 
     with pytest.raises(CorpusError, match="planner evaluation references absent case"):
-        validate_corpus(corpus)
+        validate_corpus(corpus, corpus_root=corpus_root)
 
 
 def test_validate_corpus_rejects_excluded_invalid_and_incomplete_case_records(
@@ -2399,7 +2480,7 @@ def test_validate_corpus_rejects_excluded_invalid_and_incomplete_case_records(
     invalid["cases"][0]["structural_validation"]["status"] = "invalid"
     invalid["cases"][0]["admissibility"]["verdict"] = "excluded"
     with pytest.raises(CorpusError):
-        validate_corpus(invalid)
+        validate_corpus(invalid, corpus_root=corpus_root)
     with pytest.raises(CorpusError):
         recompute_planner_status(
             invalid,
@@ -2417,7 +2498,7 @@ def test_validate_corpus_rejects_excluded_invalid_and_incomplete_case_records(
     incomplete = copy.deepcopy(corpus)
     del incomplete["cases"][0]["target_planner"]["configuration_snapshot"]
     with pytest.raises(CorpusError):
-        validate_corpus(incomplete)
+        validate_corpus(incomplete, corpus_root=corpus_root)
 
 
 def test_corpus_cli_import_status_and_slice_work_without_simulator_run(tmp_path: Path) -> None:

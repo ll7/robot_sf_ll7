@@ -310,6 +310,7 @@ def test_map_runner_execution_boundaries_stay_extracted() -> None:
         map_runner._build_completed_batch_summary.__module__
         == "robot_sf.benchmark.map_runner.map_runner_batch_summary"
     )
+    assert "_scoped_episode_compat_overrides()" in wrapper_source
     assert "_execute_map_episode(" in wrapper_source
     assert "for step_idx in range" not in wrapper_source
 
@@ -2917,6 +2918,22 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
     map_def = _minimal_map_def()
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    episode_hook_names = (
+        "_build_env_config",
+        "make_robot_env",
+        "sample_obstacle_points",
+        "compute_shortest_path_length",
+        "compute_all_metrics",
+        "post_process_metrics",
+    )
+    episode_hooks_before = {name: getattr(map_runner_episode, name) for name in episode_hook_names}
+    metric_override_calls: list[None] = []
+
+    def fake_compute_all_metrics(*args: Any, **kwargs: Any) -> dict[str, float]:
+        """Return the map-runner stub metrics while proving the override was used."""
+        del args, kwargs
+        metric_override_calls.append(None)
+        return {"success": 0.0, "collisions": 0.0}
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
@@ -2935,7 +2952,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
-        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+        fake_compute_all_metrics,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
@@ -2954,6 +2971,10 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         algo="goal",
         algo_config_path=None,
         scenario_path=Path("."),
+    )
+    assert metric_override_calls
+    assert all(
+        getattr(map_runner_episode, name) is hook for name, hook in episode_hooks_before.items()
     )
     assert record["scenario_id"] == "s1"
     assert record["metrics"]["success"] == 0.0

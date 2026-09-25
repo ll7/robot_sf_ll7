@@ -128,6 +128,7 @@ def _validate_bindings(
     required: set[tuple[str, str, int]],
     config_sha256: dict[str, str],
     effective_hash: dict[str, str],
+    campaign_ids: dict[str, str],
 ) -> dict[str, Any]:
     """Bind separately versioned trace configs to frozen-source run manifests."""
     if set(config_paths) != {"headon_group", "doorway"} or set(manifest_paths) != set(config_paths):
@@ -156,7 +157,7 @@ def _validate_bindings(
         if (
             manifest.get("git", {}).get("commit") != SOURCE_SHA
             or manifest.get("config_hash") != effective_hash[name]
-            or manifest.get("campaign_id") != CAMPAIGN_ID[name]
+            or manifest.get("campaign_id") != campaign_ids[name]
             or not manifest.get("scenario_matrix_hash")
             or manifest.get("scenario_matrix") != config["scenario_matrix"]
             or set(manifest.get("seed_policy", {}).get("resolved_seeds", []))
@@ -403,7 +404,7 @@ def _compare_row(
     }
 
 
-def check(
+def check(  # noqa: PLR0913 - separately pinned campaign IDs are required for observer runs
     archive: Path,
     traces: list[Path],
     config_paths: dict[str, Path],
@@ -413,6 +414,7 @@ def check(
     expected_archive_sha256: str | None = ARCHIVE_SHA256,
     expected_config_sha256: dict[str, str] | None = None,
     expected_effective_hash: dict[str, str] | None = None,
+    expected_campaign_ids: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Return every outcome comparison, including absent release rows."""
     archive_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -425,6 +427,7 @@ def check(
         required,
         CONFIG_SHA256 if expected_config_sha256 is None else expected_config_sha256,
         EFFECTIVE_HASH if expected_effective_hash is None else expected_effective_hash,
+        CAMPAIGN_ID if expected_campaign_ids is None else expected_campaign_ids,
     )
     trace_rows: dict[tuple[str, str, int], dict[str, Any]] = {}
     digests: dict[str, str] = {}

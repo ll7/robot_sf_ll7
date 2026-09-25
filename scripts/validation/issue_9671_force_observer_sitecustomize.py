@@ -398,8 +398,11 @@ def install_from_environment() -> ForceObserver | None:
         "frozen_source_file_sha256": source_hashes,
         "diagnostic_config_sha256": config_sha,
         "campaign_id": os.environ["ISSUE9671_CAMPAIGN_ID"],
+        "job_id": os.environ["SLURM_JOB_ID"],
         "pid": str(os.getpid()),
     }
+    if not provenance["job_id"].isdigit():
+        raise ObserverIdentityError("Slurm job ID missing or invalid")
     observer = ForceObserver(Path(output), provenance, source, expected_codes)
     sys.settrace(observer)
     threading.settrace(observer)

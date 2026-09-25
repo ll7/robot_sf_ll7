@@ -216,12 +216,20 @@ diagnostic artifact, not an original 0.0.7 release field.
    an episode if behavior changes positions before force evaluation, or if two actors occupy
    identical positions; such a row needs a new identity method before force attribution.
 4. Keep the runner's raw JSONL and producer manifest unchanged. Emit separate per-episode
-   sidecars with observer SHA, frozen source SHA, diagnostic config SHA, campaign ID, PID,
+   sidecars with observer SHA, frozen source/file SHAs, diagnostic config SHA, campaign and
+   Slurm job IDs, PID,
    episode ID, per-step arrays and canonical episode-row SHA-256. The later producer/retrieval
    manifest must bind these row digests to the raw JSONL SHA and include checksums for every
-   sidecar and the staged observer input. The comparator must reject missing, extra, duplicate
-   or mixed samples. This bundle/manifest binding is **not yet implemented**; sidecars alone
-   are diagnostic and must not be promoted.
+   sidecar and the staged observer input. `check_issue_9671_force_bundle.py` implements a
+   deterministic manifest writer and cold validator, requiring the independently pinned
+   manifest SHA-256. It binds the startup receipt, campaign manifest, producer JSONL/manifest,
+   observer bytes, every sidecar byte stream and the 20 exact episode IDs. It checks complete
+   step/actor/force series and the component sum, then compares every new outcome and recorded
+   robot/pedestrian state/total-force vector against the SHA-pinned job 15758/15760 baseline.
+   A changed outcome or state is retained as `diagnostic_mismatch`; it is not silently promoted.
+   The existing baseline remains **2 match, 0 mismatch, 18 `no_release_row`**. The bundle gate
+   is implemented but **not yet executed on observer-run artifacts**; no force-enriched bundle
+   is admitted.
 5. Before any force-enriched bundle is admitted, rerun the same 20 tuples on the same frozen
    source/config under a **new** Slurm campaign and compare status, step count and every
    recorded robot/pedestrian state and total-force vector with jobs 15758/15760. Require exact
@@ -230,6 +238,18 @@ diagnostic artifact, not an original 0.0.7 release field.
    Preserve new packet/config/observer SHAs, source SHA, job ID, producer checksums, cold
    retrieval receipt and a separately versioned durable artifact. Do not overwrite either
    existing campaign or the 0.0.7 release bundle.
+
+For the later reviewed launch, the bundle gate takes a JSON `--spec` with `archive`,
+`baseline_report`, all four `baseline_traces`, `observer_path`, `observer_sha256`, and
+`campaigns.headon_group`/`campaigns.doorway`. Each campaign entry supplies its unchanged
+`config`, producer `campaign_manifest`, canonical `startup_receipt`, new `campaign_id` and
+`job_id`, raw `traces`, and `sidecar_dir`. The baseline report defaults to pinned SHA-256
+`e1637fa907d87f8a5456ee0f3367524e8e335b480c1d2bd5162215f08a3f7ffd`.
+After producer checksum and cold-retrieval checks, run
+`uv run python scripts/validation/check_issue_9671_force_bundle.py write --spec <spec.json> --manifest <new-manifest.json>`;
+record the printed manifest SHA separately, then use `validate --spec ... --manifest ...
+--manifest-sha256 <recorded-sha>` on cold artifacts. Exit 2 means a recorded outcome/state
+finding and is not candidate evidence. The writer refuses to overwrite an existing manifest.
 
 This plan needs review and #9667 to merge before a new packet or Slurm submission. The observer
 may change timing or planner behavior despite leaving force results untouched; the parity gate

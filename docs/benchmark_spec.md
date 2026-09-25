@@ -485,7 +485,11 @@ reductions and metadata; samples remain in memory for all force reductions. Exis
 post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
 inputs without a simulator, including explicitly supplied response multipliers. Reconstructing from
 post-integration legacy snapshots is a post-hoc estimate, not exact recorded-force parity.
-Absent optional fields produce no new metric keys and preserve legacy calculations.
+When recorded robot forces are absent, supplying both `robot_force_config` and
+`social_force_config` explicitly opts `robot_force_metrics` into this post-hoc path. Metadata
+declares `source: posthoc_recomputed` and timing as caller-supplied positions that may be
+post-integration. Supplying only one configuration fails closed. Absent optional fields produce
+no new metric keys and preserve legacy calculations; the recorded-force path is unchanged.
 
 `robot_force_pp_equiv_*` is experimental: it evaluates the pedestrian-pair kernel with robot
 position and finite-difference velocity, reducing center distance by the robot/pedestrian radius

@@ -250,9 +250,18 @@ first per-PR CI diagnosis of a run:
 
 1. `git fetch origin` and record `MAIN_SHA=$(git rev-parse origin/main)`.
 2. In a branch-attached worktree of `origin/main` (some inventory tests call
-   `git symbolic-ref HEAD` and error on a detached HEAD), run the base-sensitive marker suite from
-   `uv run python scripts/dev/base_sensitive_selector.py` plus any check that failed identically on
-   two or more queued PRs.
+   `git symbolic-ref HEAD` and error on a detached HEAD), run the observable base-sensitive marker
+   baseline from
+   `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/base_sensitive_selector.py --base-ref origin/main --json`
+   plus any check that failed identically on two or more queued PRs. The command reports the
+   attached branch, resolved base SHA, and every selected test file, then executes the selection
+   from a temporary worktree materialized at that exact commit. It exits nonzero when the checkout,
+   ref, selection, pytest runner, or test outcome is unavailable. Treat `status: passed` with a
+   clean, branch-attached checkout at the resolved base SHA, a positive `test_result.passed` count,
+   and zero reported failures or errors as the only successful baseline evidence. Dirty or
+   unavailable checkout state, an empty selection, and suites with no passing tests (including
+   all-skipped suites) are blocked evidence; any reported failure or error is failed evidence even
+   if a pytest plugin returns exit code zero.
 3. If it is green, proceed normally.
 4. If it is red: record `shared_main_blocked @ <MAIN_SHA>` with the failing test id in the ledger,
    classify every PR whose only failing check matches it as `awaiting_ci` (reason

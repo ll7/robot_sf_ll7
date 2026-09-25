@@ -181,6 +181,11 @@ class PlannerDecisionTraceEntry(TypedDict, total=False):
     selected_source: str
     planner_mode: str
     selected_command: list[float]
+    proposed_command: list[float]
+    safety_guard: dict[str, Any]
+    guard_intervened: bool
+    guard_intervention_start: bool
+    guard_intervention_end: bool
     selected_score: float | None
     static_recenter: float
     route_arc_progress: float

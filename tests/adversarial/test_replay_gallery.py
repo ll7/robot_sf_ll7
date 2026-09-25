@@ -420,6 +420,36 @@ def test_historical_compatibility_subset_is_explicitly_partial_in_gallery_readme
     assert "1 of 32 declared slots" in readme
 
 
+def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certificate() -> None:
+    """The smoke fixture passes current certificate checks without claiming dynamic feasibility."""
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    manifest = json.loads((fixture_root / "manifest.json").read_text(encoding="utf-8"))
+    candidate = manifest["candidates"][0]
+    certificate_status = candidate["certification_status"]
+    certificate, error = replay_gallery._validated_scenario_certificate(
+        certificate_status,
+        expected_scenario_id="crossing_ttc_template_adversarial_0008",
+    )
+    provenance = json.loads(
+        (fixture_root / "scenario_certification_provenance.json").read_text(encoding="utf-8")
+    )
+
+    assert error is None
+    assert certificate is not None
+    assert certificate["classification"] == "hard_but_solvable"
+    assert certificate["benchmark_eligibility"] == "eligible"
+    assert provenance["certificate"]["scenario_id"] == certificate["scenario_id"]
+    assert (
+        provenance["certificate"]["sha256_canonical_json"]
+        == hashlib.sha256(
+            json.dumps(certificate, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+    assert provenance["claim_boundary"]["dynamic_task_feasibility"] == "unknown"
+    assert "post-hoc" in provenance["claim_boundary"]["note"]
+
+
 @pytest.mark.parametrize(
     ("field", "value", "expected_disposition"),
     [

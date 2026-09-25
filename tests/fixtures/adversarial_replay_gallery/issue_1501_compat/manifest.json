@@ -30,15 +30,145 @@
           "certificates": [
             {
               "benchmark_eligibility": "eligible",
+              "checks": {
+                "all_routes_benchmark_eligible": true,
+                "route_count": 1,
+                "settings": {
+                  "hard_clearance_margin_m": 0.35,
+                  "hard_path_length_ratio": 1.5,
+                  "hard_turn_count": 3,
+                  "knife_edge_clearance_margin_m": 0.15,
+                  "knife_edge_path_length_ratio": 2.5,
+                  "planner_cells_per_meter": 2.0
+                }
+              },
               "classification": "hard_but_solvable",
+              "evidence": {
+                "archetype": "adversarial_crossing_ttc",
+                "difficulty_analysis": {
+                  "role": "optional_diagnostic_evidence_only",
+                  "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                },
+                "scenario_fingerprint": "cf2e405db87c807a"
+              },
               "reasons": [
                 "low_static_clearance_margin"
               ],
-              "scenario_id": "crossing_ttc_template_adversarial_0008"
+              "route_certificates": [
+                {
+                  "benchmark_eligibility": "eligible",
+                  "checks": {
+                    "authored_route_length_m": 4.981404002272052,
+                    "direct_start_goal_distance_m": 4.981404002272052,
+                    "dynamic": {
+                      "single_pedestrian_count": 0,
+                      "static_blocking_pedestrian_ids": []
+                    },
+                    "goal": [
+                      7.288956756845657,
+                      2.807913333960939
+                    ],
+                    "inflated_collision_free_path": true,
+                    "infrastructure": {
+                      "illegal_amv_zone_ids": [],
+                      "intersected_zone_ids": [],
+                      "zone_count": 0
+                    },
+                    "kinodynamic": {
+                      "command_limits_valid": true,
+                      "controller_semantics": "can_rotate_in_place",
+                      "minimum_turning_radius_m": 0.0,
+                      "robot_model": "DifferentialDriveSettings"
+                    },
+                    "map_name": "classic_cross_trap",
+                    "minimum_static_clearance_m": 0.3119256556477077,
+                    "path_length_ratio": 1.0037330836285243,
+                    "ped_radius_m": 0.4,
+                    "planned_turn_count": 0,
+                    "planned_waypoint_count": 11,
+                    "planner": {
+                      "algorithm": "a_star",
+                      "cells_per_meter": 2.0,
+                      "inflation_fallback": false,
+                      "inflation_radius_m": 1.0,
+                      "raw_info": {
+                        "cost": 10.0,
+                        "expand": {
+                          "(10, 74)": "Node((10, 74), (9, 74), 6.0, 4.0)",
+                          "(11, 74)": "Node((11, 74), (10, 74), 7.0, 3.0)",
+                          "(12, 74)": "Node((12, 74), (11, 74), 8.0, 2.0)",
+                          "(13, 74)": "Node((13, 74), (12, 74), 9.0, 1.0)",
+                          "(14, 74)": "Node((14, 74), (13, 74), 10.0, 0.0)",
+                          "(4, 74)": "Node((4, 74), None, 0, 10.0)",
+                          "(5, 74)": "Node((5, 74), (4, 74), 1.0, 9.0)",
+                          "(6, 74)": "Node((6, 74), (5, 74), 2.0, 8.0)",
+                          "(7, 74)": "Node((7, 74), (6, 74), 3.0, 7.0)",
+                          "(8, 74)": "Node((8, 74), (7, 74), 4.0, 6.0)",
+                          "(9, 74)": "Node((9, 74), (8, 74), 5.0, 5.0)"
+                        },
+                        "goal": [
+                          14,
+                          74
+                        ],
+                        "inflation_cells": 2,
+                        "inflation_meters": 1.0,
+                        "length": 5.0,
+                        "start": [
+                          4,
+                          74
+                        ],
+                        "success": true
+                      }
+                    },
+                    "robot_radius_m": 1.0,
+                    "shortest_path_length_m": 5.0,
+                    "simulator_obstacle_collision": {
+                      "blocker": null,
+                      "checked_sample_count": 101,
+                      "collides_obstacle": false,
+                      "first_collision_sample_index": null,
+                      "obstacle_source": "MapDefinition.obstacles_pysf_runtime_normalized",
+                      "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+                      "sample_spacing_m": 0.05,
+                      "validated": true
+                    },
+                    "start": [
+                      2.3119256556477077,
+                      2.5992335516140495
+                    ],
+                    "swept_envelope": {
+                      "blocker": null,
+                      "clearance_m": 0.25,
+                      "clipped_vertex_count": 0,
+                      "clips_obstacle": false,
+                      "planned_waypoint_count": 11,
+                      "validated": true,
+                      "vertex_clearance_m": 0.25
+                    },
+                    "waypoint_count": 2
+                  },
+                  "classification": "hard_but_solvable",
+                  "evidence": {
+                    "difficulty_analysis": {
+                      "role": "optional_diagnostic_evidence_only",
+                      "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                    }
+                  },
+                  "goal_id": 100008,
+                  "reasons": [
+                    "low_static_clearance_margin"
+                  ],
+                  "route_id": "override_adversarial",
+                  "spawn_id": 100008
+                }
+              ],
+              "scenario_id": "crossing_ttc_template_adversarial_0008",
+              "schema_version": "scenario_cert.v1",
+              "source": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml"
             }
           ]
         },
-        "reason": "current static route certificate; dynamic feasibility remains unknown",
+        "reason": "Post-hoc canonical scenario_cert.v1 static-route certification of the tracked historical scenario; this does not establish dynamic task feasibility.",
         "schema_version": "scenario_cert.v1",
         "status": "passed"
       },

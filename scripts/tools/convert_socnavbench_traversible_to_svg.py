@@ -169,6 +169,37 @@ def largest_component(mask: np.ndarray) -> set[GridPoint]:
     return best
 
 
+#: Robot radius plus spawn margin (metres) the robot spawn cell keeps from blocked space.
+#: Robot starts closer than this are rejected by clearance-aware sampling (issue #9725).
+ROBOT_SPAWN_CLEARANCE_M = 1.1
+
+
+def _clearance_candidates(
+    component: set[GridPoint], mask: np.ndarray, cell_size: float
+) -> set[GridPoint]:
+    """Return component cells whose whole cell keeps ``ROBOT_SPAWN_CLEARANCE_M`` from walls.
+
+    The mask is eroded with the 8-neighbourhood ``ceil(clearance / cell_size)`` times, so
+    every point of a remaining cell is at least the clearance from blocked space. Falls
+    back to the full component when no such cell exists (tiny or corridor-only maps).
+    """
+    steps = int(np.ceil(ROBOT_SPAWN_CLEARANCE_M / float(cell_size)))
+    eroded = np.asarray(mask, dtype=bool).copy()
+    for _ in range(steps):
+        padded = np.pad(eroded, 1, constant_values=False)
+        rows, cols = eroded.shape
+        shifted = [
+            padded[1 + dr : 1 + dr + rows, 1 + dc : 1 + dc + cols]
+            for dr in (-1, 0, 1)
+            for dc in (-1, 0, 1)
+        ]
+        eroded = np.logical_and.reduce(shifted)
+    clear = {point for point in component if eroded[point.row, point.col]}
+    if len({point.col for point in clear}) < 2:
+        return component
+    return clear
+
+
 def select_route_endpoints(component: set[GridPoint]) -> tuple[GridPoint, GridPoint]:
     """Select deterministic left-to-right endpoints inside a free-space component."""
 
@@ -293,7 +324,9 @@ def render_svg(
     """Render traversible data to SVG text and conversion metadata."""
 
     component = largest_component(map_data.traversible)
-    start, goal = select_route_endpoints(component)
+    start, goal = select_route_endpoints(
+        _clearance_candidates(component, map_data.traversible, map_data.cell_size)
+    )
     route = simplify_path(shortest_path(map_data.traversible, start, goal))
     runs = obstacle_runs(map_data.traversible)
     cell = map_data.cell_size

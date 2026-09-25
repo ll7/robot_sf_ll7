@@ -216,7 +216,7 @@ def _map_registry_entry(document: Any, map_id: str) -> Mapping[str, Any] | None:
 
 
 def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None = None) -> None:
-    """Validate corpus shape and stable case/evaluation references."""
+    """Validate corpus shape and evidence, including persisted historical imports."""
     if not isinstance(corpus, Mapping):
         raise CorpusError("corpus root must be an object")
     try:
@@ -251,7 +251,7 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
     _validate_all_case_admissibility_evidence(
         corpus["cases"], corpus["planner_evaluations"], corpus_root=root
     )
-    _validate_historical_candidate_registry(corpus)
+    _validate_historical_candidate_registry(corpus, corpus_root=root)
 
 
 def _validate_search_run_evidence(
@@ -556,7 +556,9 @@ def _validate_all_case_admissibility_evidence(
             )
 
 
-def _validate_historical_candidate_registry(corpus: Mapping[str, Any]) -> None:
+def _validate_historical_candidate_registry(
+    corpus: Mapping[str, Any], *, corpus_root: Path | None
+) -> None:
     candidates = corpus.get("historical_candidates", [])
     imports = corpus.get("historical_candidate_imports", [])
     candidate_ids = [candidate["candidate_id"] for candidate in candidates]
@@ -569,6 +571,8 @@ def _validate_historical_candidate_registry(corpus: Mapping[str, Any]) -> None:
     imports_by_id, source_identity_by_import = _historical_candidate_import_indexes(
         imports, known_candidate_ids
     )
+    imports_by_id_record = {receipt["import_id"]: receipt for receipt in imports}
+    candidates_by_id = {candidate["candidate_id"]: candidate for candidate in candidates}
     known_cases = {case["case_id"] for case in corpus.get("cases", [])}
     successful_attempts = {
         (attempt.get("attempt_id"), attempt.get("source_id"))
@@ -583,6 +587,194 @@ def _validate_historical_candidate_registry(corpus: Mapping[str, Any]) -> None:
             known_cases,
             successful_attempts,
         )
+    _validate_issue9656_candidate_imports(
+        corpus,
+        imports_by_id_record,
+        candidates_by_id,
+        source_identity_by_import,
+        corpus_root=corpus_root,
+    )
+
+
+def _validate_issue9656_candidate_imports(
+    corpus: Mapping[str, Any],
+    imports_by_id: Mapping[str, Mapping[str, Any]],
+    candidates_by_id: Mapping[str, Mapping[str, Any]],
+    source_identity_by_import: Mapping[str, Mapping[str, Any]],
+    *,
+    corpus_root: Path | None,
+) -> None:
+    """Bind imported replay classifications and historical counts to the retained summary."""
+    for import_id, import_record in imports_by_id.items():
+        source_identity = source_identity_by_import[import_id]
+        if source_identity.get("candidate_schema_version") != HISTORICAL_CANDIDATE_SCHEMA_VERSION:
+            continue
+        _validate_issue9656_candidate_import(
+            corpus,
+            import_id,
+            import_record,
+            source_identity,
+            candidates_by_id,
+            corpus_root=corpus_root,
+        )
+
+
+def _validate_issue9656_candidate_import(
+    corpus: Mapping[str, Any],
+    import_id: str,
+    import_record: Mapping[str, Any],
+    source_identity: Mapping[str, Any],
+    candidates_by_id: Mapping[str, Mapping[str, Any]],
+    *,
+    corpus_root: Path | None,
+) -> None:
+    import_candidate_ids = import_record.get("candidate_ids", [])
+    summary_rows = _load_issue9656_import_summary(
+        corpus, import_id, import_candidate_ids, candidates_by_id, corpus_root=corpus_root
+    )
+    _validate_issue9656_import_counts(import_record, import_candidate_ids, summary_rows)
+
+    source_replay_counts: Counter[str] = Counter()
+    candidate_status_counts: Counter[str] = Counter()
+    expected_candidate_ids = set()
+    for summary_case in summary_rows:
+        candidate_id, replay_status, candidate_status = _validate_issue9656_summary_case(
+            summary_case, source_identity, candidates_by_id
+        )
+        expected_candidate_ids.add(candidate_id)
+        source_replay_counts[replay_status] += 1
+        candidate_status_counts[candidate_status] += 1
+
+    if set(import_candidate_ids) != expected_candidate_ids:
+        raise CorpusError("#9656 candidate import IDs differ from checksum-pinned source rows")
+    if import_record.get("source_replay_status_counts") != dict(
+        sorted(source_replay_counts.items())
+    ):
+        raise CorpusError("#9656 source replay counters differ from checksum-pinned summary")
+    if import_record.get("candidate_status_counts") != dict(
+        sorted(candidate_status_counts.items())
+    ):
+        raise CorpusError("#9656 candidate status counters differ from original source rows")
+
+
+def _load_issue9656_import_summary(
+    corpus: Mapping[str, Any],
+    import_id: str,
+    import_candidate_ids: Sequence[str],
+    candidates_by_id: Mapping[str, Mapping[str, Any]],
+    *,
+    corpus_root: Path | None,
+) -> list[Any]:
+    if corpus_root is None:
+        raise CorpusError(
+            "corpus_root is required to validate persisted #9656 candidate classifications"
+        )
+    if not import_candidate_ids:
+        raise CorpusError("#9656 candidate import receipt contains no source rows")
+    first_candidate = candidates_by_id[import_candidate_ids[0]]
+    _load_pinned_historical_source_row(
+        first_candidate,
+        corpus,
+        corpus_root,
+        first_candidate.get("source_provenance", {}),
+        import_id,
+    )
+    summary_path = _resolve_corpus_artifact(
+        first_candidate.get("artifact_paths", {}).get("import_summary"), corpus_root
+    )
+    summary_rows = _read_json_object(summary_path).get("cases")
+    if not isinstance(summary_rows, list):
+        raise CorpusError("#9656 candidate import summary has no case rows")
+    return summary_rows
+
+
+def _validate_issue9656_import_counts(
+    import_record: Mapping[str, Any],
+    import_candidate_ids: Sequence[str],
+    summary_rows: Sequence[Any],
+) -> None:
+    summary_case_ids = [row.get("case_id") for row in summary_rows if isinstance(row, Mapping)]
+    if len(summary_case_ids) != len(summary_rows) or len(summary_case_ids) != len(
+        set(summary_case_ids)
+    ):
+        raise CorpusError("#9656 candidate import summary has duplicate or malformed case rows")
+    if (
+        import_record.get("candidate_count") != len(summary_rows)
+        or import_record.get("source_rows_verified") != len(summary_rows)
+        or len(import_candidate_ids) != len(summary_rows)
+    ):
+        raise CorpusError("#9656 candidate import counts differ from the checksum-pinned summary")
+
+
+def _validate_issue9656_summary_case(
+    summary_case: Any,
+    source_identity: Mapping[str, Any],
+    candidates_by_id: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, str]:
+    if not isinstance(summary_case, Mapping):
+        raise CorpusError("#9656 candidate import summary contains a malformed case row")
+    source_record = summary_case.get("source_record")
+    if not isinstance(source_record, Mapping):
+        raise CorpusError("#9656 candidate import summary row has no source record")
+    source_case_id = summary_case.get("case_id")
+    source_record_sha256 = source_record.get("record_sha256")
+    candidate_id = hashlib.sha256(
+        _stable_json(
+            {
+                **source_identity,
+                "source_case_id": source_case_id,
+                "source_record_sha256": source_record_sha256,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    candidate = candidates_by_id.get(candidate_id)
+    if candidate is None:
+        raise CorpusError("#9656 candidate import omits a checksum-pinned source row")
+    if (
+        candidate.get("source_case_id") != source_case_id
+        or candidate.get("source_record_sha256") != source_record_sha256
+    ):
+        raise CorpusError("historical candidate alias or source record differs from summary")
+
+    replay = summary_case.get("replay")
+    if not isinstance(replay, Mapping):
+        raise CorpusError("#9656 candidate summary row has no replay classification")
+    replay_status = replay.get("status")
+    candidate_status = _issue9656_source_candidate_status(
+        replay_status,
+        candidate.get("source_provenance", {}).get("source_identity_binding_status"),
+    )
+    if (
+        candidate.get("source_replay_status") != replay_status
+        or candidate.get("source_replay") != replay
+    ):
+        raise CorpusError(
+            "historical candidate source replay classification differs from checksum-pinned summary"
+        )
+    current_status = candidate.get("candidate_status")
+    if current_status == "admitted":
+        if candidate_status != "pending_exact_replay":
+            raise CorpusError("blocked historical candidate cannot transition to admitted")
+    elif current_status != candidate_status:
+        raise CorpusError(
+            "historical candidate status differs from checksum-pinned replay classification"
+        )
+    return candidate_id, replay_status, candidate_status
+
+
+def _issue9656_source_candidate_status(
+    replay_status: Any, source_identity_binding_status: Any
+) -> str:
+    candidate_status = {
+        "not_attempted": "pending_exact_replay",
+        "unavailable_model_artifact": "blocked_unavailable_model_artifact",
+        "mismatch_different_revision": "blocked_replay_revision_mismatch",
+    }.get(replay_status)
+    if candidate_status is None:
+        raise CorpusError("#9656 candidate summary row has an unsupported replay status")
+    if source_identity_binding_status != "verified":
+        return "blocked_source_provenance_mismatch"
+    return candidate_status
 
 
 def _historical_candidate_import_indexes(
@@ -1000,7 +1192,6 @@ def import_issue9656_candidates(
             [*corpus.get("historical_candidate_imports", []), import_record],
             key=lambda item: item["import_id"],
         )
-        validate_corpus(prospective, corpus_root=root)
         _promote_issue9656_candidate_artifacts(
             staging,
             root,
@@ -1008,6 +1199,7 @@ def import_issue9656_candidates(
             candidate_ids=[candidate["candidate_id"] for candidate in candidates],
             promoted_dirs=promoted_dirs,
         )
+        validate_corpus(prospective, corpus_root=root)
         corpus["historical_candidates"] = prospective["historical_candidates"]
         corpus["historical_candidate_imports"] = prospective["historical_candidate_imports"]
         return corpus, {**import_record, "decision": "imported"}

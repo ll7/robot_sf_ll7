@@ -117,6 +117,12 @@ admission attempts, or exported regression slices. They become admitted cases
 only after the existing exact-replay, input-binding, admissibility, and duplicate
 checks pass.
 
+Validation of current-schema #9656 imports requires the corpus root. Saving or
+loading the corpus rechecks each imported replay status and its original status
+counters against the digest-pinned summary. A mismatch row cannot be relabelled
+as `not_attempted` by changing its candidate and derived planner status; an
+admitted candidate retains its original pending classification and import counters.
+
 Each imported candidate explicitly records `feasibility.verdict: unknown`; the
 historical benchmark evidence does not establish dynamic task feasibility. Its
 `planner_status_at_import` is also `unknown` with zero valid current-revision

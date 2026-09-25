@@ -1159,7 +1159,9 @@ def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
         corpus, corpus_root=corpus_root, output_dir=tmp_path / "candidate-slice"
     )
     assert slice_manifest["case_count"] == 0
-    validate_corpus(corpus)
+    validate_corpus(corpus, corpus_root=corpus_root)
+    with pytest.raises(CorpusError, match="corpus_root is required"):
+        validate_corpus(corpus)
 
     corpus, duplicate = import_issue9656_candidates(
         summary_path, materialized, bundle_root, campaign_root, corpus, corpus_root=corpus_root
@@ -1236,6 +1238,62 @@ def test_issue9656_candidate_claims_unknown_and_rejects_tampering(tmp_path: Path
     tampered_feasibility["historical_candidates"][0]["feasibility"]["verdict"] = "feasible"
     with pytest.raises(CorpusError, match="invalid corpus at historical_candidates"):
         validate_corpus(tampered_feasibility, corpus_root=corpus_root)
+
+
+def test_issue9656_imported_replay_classification_cannot_be_rewritten(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(tmp_path)
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+
+    tampered = copy.deepcopy(corpus)
+    mismatch = next(
+        row
+        for row in tampered["historical_candidates"]
+        if row["source_replay_status"] == "mismatch_different_revision"
+    )
+    mismatch["source_replay_status"] = "not_attempted"
+    mismatch["source_replay"] = {
+        "attempted": False,
+        "status": "not_attempted",
+        "source_revision": None,
+        "replay_revision": None,
+    }
+    mismatch["candidate_status"] = "pending_exact_replay"
+    mismatch["planner_status_at_import"] = (
+        counterexample_corpus._issue9656_planner_status_at_import(mismatch)
+    )
+    imported = next(
+        record
+        for record in tampered["historical_candidate_imports"]
+        if record["import_id"] == mismatch["source_provenance"]["import_id"]
+    )
+    imported["source_replay_status_counts"] = {
+        "not_attempted": 2,
+        "unavailable_model_artifact": 1,
+    }
+    imported["candidate_status_counts"] = {
+        "blocked_unavailable_model_artifact": 1,
+        "pending_exact_replay": 2,
+    }
+
+    with pytest.raises(CorpusError, match="source replay classification differs"):
+        save_corpus(corpus_path, tampered)
+
+    # Simulate direct JSON editing that bypasses save_corpus validation.
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="source replay classification differs"):
+        load_corpus(corpus_path)
 
 
 def test_issue9656_revision_mismatch_claim_requires_distinct_full_revisions(
@@ -1335,6 +1393,12 @@ def test_pending_historical_candidate_promotes_after_exact_replay_and_input_bind
     assert receipt["case_id"] == case["case_id"]
     assert candidate["source_candidate_status"] == "pending_exact_replay"
     assert candidate["candidate_status"] == "admitted"
+    assert corpus["historical_candidate_imports"][0]["candidate_status_counts"] == {
+        "pending_exact_replay": 1
+    }
+    assert corpus["historical_candidate_imports"][0]["source_replay_status_counts"] == {
+        "not_attempted": 1
+    }
     assert candidate["promoted_case_id"] == case["case_id"]
     assert candidate["promotion_attempt_id"] == receipt["attempt_id"]
     admitted_case = corpus["cases"][0]

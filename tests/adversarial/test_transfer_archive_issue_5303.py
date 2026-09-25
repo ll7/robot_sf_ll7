@@ -10,6 +10,7 @@ planner replay campaign (ops queue) and makes no benchmark claim.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -232,13 +233,23 @@ def test_archive_transfer_run_requires_resolved_git_commit(tmp_path):
     """Provenance-pinned archival fails before writing when commit lookup fails."""
     matrix = _built_matrix(tmp_path, robustness=-1.0, failed=True)
     archive_root = tmp_path / "archive"
+    # A commit-less git repository is a genuine no-commit execution context no
+    # matter where pytest scratch lives: `git rev-parse HEAD` fails there even
+    # when the scratch tree sits inside a real checkout.
+    empty_repo = tmp_path / "no-commit-repo"
+    subprocess.run(
+        ["git", "init", "-q", str(empty_repo)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
 
     with pytest.raises(RuntimeError, match="without a resolved git commit"):
         archive_transfer_run(
             matrix,
             archive_root=archive_root,
             run_id="missing-commit",
-            repo_root=tmp_path,
+            repo_root=empty_repo,
         )
 
     assert not (archive_root / "transfer_matrix" / "missing-commit").exists()

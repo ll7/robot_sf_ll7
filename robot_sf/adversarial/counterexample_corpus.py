@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import os
+import posixpath
 import shlex
 import shutil
 import subprocess
@@ -57,6 +58,7 @@ ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
 _ISSUE_9645_PILOT_RUN_ID = "issue_9645_bounded_pilot"
 _ISSUE_9645_PILOT_EVIDENCE_ROOT = "evidence/issue_9645_pilot"
 ISSUE_9656_SUMMARY_SCHEMA = "benchmark-hard-case-slice.v1"
+ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA = "adversarial-historical-replay-input-binding.v1"
 HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v2"
 LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
@@ -629,12 +631,15 @@ def _validate_issue9656_candidate_import(
     corpus_root: Path | None,
 ) -> None:
     import_candidate_ids = import_record.get("candidate_ids", [])
-    summary = _load_issue9656_import_summary(
+    summary, materialized_manifest = _load_issue9656_import_summary(
         corpus, import_id, import_candidate_ids, candidates_by_id, corpus_root=corpus_root
     )
     summary_rows = summary.get("cases")
     if not isinstance(summary_rows, list):
         raise CorpusError("#9656 candidate import summary has no case rows")
+    materialized_cases = _issue9656_materialized_manifest_case_lookup(
+        materialized_manifest, summary_rows
+    )
     _validate_issue9656_import_counts(import_record, import_candidate_ids, summary)
     source_materialization_receipts = _issue9656_source_materialization_receipts(
         source_identity, summary_rows
@@ -653,6 +658,7 @@ def _validate_issue9656_candidate_import(
         _validate_issue9656_candidate_source_binding(
             candidate,
             summary_case,
+            materialized_cases[str(summary_case.get("case_id"))],
             summary.get("source"),
             source_identity=source_identity,
             source_materialization_receipts=source_materialization_receipts,
@@ -693,7 +699,7 @@ def _load_issue9656_import_summary(
     candidates_by_id: Mapping[str, Mapping[str, Any]],
     *,
     corpus_root: Path | None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     if corpus_root is None:
         raise CorpusError(
             "corpus_root is required to validate persisted #9656 candidate classifications"
@@ -735,6 +741,9 @@ def _load_issue9656_import_summary(
         if isinstance(import_record, Mapping)
         else None
     )
+    materialized_manifest_ref = first_candidate.get("artifact_paths", {}).get(
+        "import_materialized_manifest"
+    )
     if (
         summary.get("schema_version") != ISSUE_9656_SUMMARY_SCHEMA
         or not isinstance(source_identity, Mapping)
@@ -742,11 +751,37 @@ def _load_issue9656_import_summary(
         != first_candidate.get("source_provenance", {}).get("summary_sha256")
         or source_identity.get("summary_sha256") != _sha256_file(summary_path)
         or not isinstance(materialized_manifest_receipt, Mapping)
+        or materialized_manifest_ref != materialized_manifest_receipt.get("stored_path")
         or source_identity.get("materialized_manifest_sha256")
         != materialized_manifest_receipt.get("sha256")
     ):
         raise CorpusError("#9656 import identity does not bind its checksum-pinned summary")
-    return summary
+    materialized_manifest_path = _resolve_corpus_artifact(materialized_manifest_ref, corpus_root)
+    materialized_manifest = _read_json_object(materialized_manifest_path)
+    if materialized_manifest.get("schema_version") != ISSUE_9656_SUMMARY_SCHEMA:
+        raise CorpusError("#9656 retained materialized manifest schema is invalid")
+    _validate_issue9656_campaign_source(summary, materialized_manifest)
+    return summary, materialized_manifest
+
+
+def _issue9656_materialized_manifest_case_lookup(
+    materialized_manifest: Mapping[str, Any], summary_rows: Sequence[Any]
+) -> dict[str, Mapping[str, Any]]:
+    materialized_rows = materialized_manifest.get("cases")
+    if not isinstance(materialized_rows, list):
+        raise CorpusError("#9656 retained materialized manifest has no case rows")
+    materialized_cases = {
+        item.get("case_id"): item
+        for item in materialized_rows
+        if isinstance(item, Mapping) and isinstance(item.get("case_id"), str)
+    }
+    summary_case_ids = {item.get("case_id") for item in summary_rows if isinstance(item, Mapping)}
+    if (
+        len(materialized_cases) != len(materialized_rows)
+        or set(materialized_cases) != summary_case_ids
+    ):
+        raise CorpusError("#9656 retained materialized manifest cases differ from summary rows")
+    return materialized_cases
 
 
 def _validate_issue9656_import_counts(
@@ -820,6 +855,7 @@ def _issue9656_source_materialization_receipts(
 def _validate_issue9656_candidate_source_binding(
     candidate: Mapping[str, Any],
     summary_case: Mapping[str, Any],
+    materialized_manifest_case: Mapping[str, Any],
     summary_source: Any,
     *,
     source_identity: Mapping[str, Any],
@@ -839,6 +875,10 @@ def _validate_issue9656_candidate_source_binding(
     materialized_case = _read_json_object(source_case_path)
     if materialized_case.get("case_id") != summary_case.get("case_id"):
         raise CorpusError("#9656 materialized source case alias differs from the pinned summary")
+    if not _issue9656_case_document_matches(
+        summary_case, materialized_manifest_case, materialized_case
+    ):
+        raise CorpusError("#9656 retained materialized case differs from its pinned summary row")
     source_row = materialized_case.get("source_record")
     materialized_source = materialized_case.get("source")
     materialized_planner = materialized_case.get("planner")
@@ -866,9 +906,56 @@ def _validate_issue9656_candidate_source_binding(
         "source_identity_binding_issues": source_binding["issues"],
     }:
         raise CorpusError("#9652 candidate source identity binding differs from its import receipt")
+    _validate_issue9656_candidate_provenance_binding(
+        summary_case,
+        materialized_case,
+        source_binding,
+        source_identity,
+        provenance,
+        source_case_digest,
+    )
+    _validate_issue9656_candidate_replay_inputs(
+        candidate,
+        summary_case,
+        {
+            "materialized_manifest_case": materialized_manifest_case,
+            "materialized_case": materialized_case,
+            "summary_source": summary_source,
+            "source_identity": source_identity,
+            "provenance": provenance,
+            "artifact_paths": paths,
+        },
+        corpus_root=corpus_root,
+    )
+    target_planner = candidate.get("target_planner")
+    expected_config_hash = (
+        source_binding["episode_planner_config_hash"]
+        if source_binding["status"] == "verified"
+        else None
+    )
+    if not isinstance(target_planner, Mapping) or (
+        target_planner.get("planner_id") != summary_case.get("planner_key")
+        or target_planner.get("planner_id") != provenance.get("raw_planner_alias")
+        or target_planner.get("canonical_algorithm") != source_binding["canonical_algorithm"]
+        or target_planner.get("config_hash") != expected_config_hash
+    ):
+        raise CorpusError("#9652 candidate planner identity differs from pinned source evidence")
+
+
+def _validate_issue9656_candidate_provenance_binding(
+    summary_case: Mapping[str, Any],
+    materialized_case: Mapping[str, Any],
+    source_binding: Mapping[str, Any],
+    source_identity: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+    source_case_digest: str,
+) -> None:
     source_record_ref = summary_case.get("source_record")
     replay_input = materialized_case.get("replay_input")
-    if not isinstance(source_record_ref, Mapping) or not isinstance(replay_input, Mapping):
+    materialized_source = materialized_case.get("source")
+    if not all(
+        isinstance(item, Mapping) for item in (source_record_ref, replay_input, materialized_source)
+    ):
         raise CorpusError("#9656 source or replay input receipt is malformed")
     expected_provenance = {
         "source_row_binding": source_identity.get("source_row_binding"),
@@ -903,23 +990,20 @@ def _validate_issue9656_candidate_source_binding(
             "admission_requires": "exact_current_revision_replay",
         },
     }
+    binding_schema = source_identity.get("replay_input_binding_schema")
+    if binding_schema not in {None, ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA}:
+        raise CorpusError("#9656 source identity uses an unsupported replay input binding schema")
+    if binding_schema == ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA:
+        expected_provenance.update(
+            {
+                "source_replay_matrix_path": replay_input.get("scenario_matrix_path"),
+                "source_planner_config_path": replay_input.get("planner_config_path"),
+            }
+        )
     if any(provenance.get(field) != expected for field, expected in expected_provenance.items()):
         raise CorpusError(
             "#9652 candidate source identity binding differs from pinned materialized evidence"
         )
-    target_planner = candidate.get("target_planner")
-    expected_config_hash = (
-        source_binding["episode_planner_config_hash"]
-        if source_binding["status"] == "verified"
-        else None
-    )
-    if not isinstance(target_planner, Mapping) or (
-        target_planner.get("planner_id") != summary_case.get("planner_key")
-        or target_planner.get("planner_id") != provenance.get("raw_planner_alias")
-        or target_planner.get("canonical_algorithm") != source_binding["canonical_algorithm"]
-        or target_planner.get("config_hash") != expected_config_hash
-    ):
-        raise CorpusError("#9652 candidate planner identity differs from pinned source evidence")
 
 
 def _validate_issue9656_candidate_metadata_projection(
@@ -942,6 +1026,262 @@ def _validate_issue9656_candidate_metadata_projection(
         or materialized_scenario.get("seed") != summary_case.get("seed")
     ):
         raise CorpusError("#9652 candidate metadata differs from pinned summary/materialized case")
+
+
+def _validate_issue9656_candidate_replay_inputs(
+    candidate: Mapping[str, Any],
+    summary_case: Mapping[str, Any],
+    context: Mapping[str, Any],
+    *,
+    corpus_root: Path,
+) -> None:
+    artifacts = _issue9656_validate_replay_input_identity(
+        candidate, context, corpus_root=corpus_root
+    )
+    source_matrix_bytes = artifacts["source_matrix_bytes"]
+    matrix_document = _load_issue9656_candidate_matrix(source_matrix_bytes, summary_case)
+    map_source_path = _issue9656_materialized_map_source_path(
+        matrix_document, context["materialized_manifest_case"], artifacts["replay_input"]
+    )
+    _issue9656_validate_candidate_map_receipt(
+        artifacts["replay_inputs"],
+        context["summary_source"],
+        map_source_path,
+        artifacts["candidate_root"],
+        corpus_root=corpus_root,
+    )
+    _issue9656_validate_normalized_candidate_matrix(matrix_document, map_source_path, artifacts)
+
+
+def _issue9656_validate_replay_input_identity(
+    candidate: Mapping[str, Any], context: Mapping[str, Any], *, corpus_root: Path
+) -> dict[str, Any]:
+    materialized_case = context["materialized_case"]
+    source_identity = context["source_identity"]
+    provenance = context["provenance"]
+    artifact_paths = context["artifact_paths"]
+    replay_input = materialized_case.get("replay_input")
+    replay_inputs = candidate.get("replay_inputs")
+    if not isinstance(replay_input, Mapping) or not isinstance(replay_inputs, Mapping):
+        raise CorpusError("#9652 candidate replay input binding is malformed")
+    matrix_path = replay_input.get("scenario_matrix_path")
+    matrix_sha256 = replay_input.get("scenario_matrix_sha256")
+    config_path = replay_input.get("planner_config_path")
+    config_sha256 = replay_input.get("planner_config_sha256")
+    if (
+        not _safe_bundle_relative_path(matrix_path)
+        or not _is_sha256(matrix_sha256)
+        or not _safe_bundle_relative_path(config_path)
+        or not _is_sha256(config_sha256)
+    ):
+        raise CorpusError("#9652 materialized source replay input has an invalid path or digest")
+
+    binding_schema = source_identity.get("replay_input_binding_schema")
+    if binding_schema not in {None, ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA}:
+        raise CorpusError("#9652 source identity uses an unsupported replay input binding schema")
+    require_path_mirrors = binding_schema == ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA
+    _issue9656_validate_input_path_mirrors(
+        replay_inputs, provenance, matrix_path, config_path, required=require_path_mirrors
+    )
+
+    candidate_id = candidate.get("candidate_id")
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise CorpusError("#9652 candidate has no stable ID for retained input custody")
+    candidate_root = f"historical_candidates/{candidate_id}"
+    _issue9656_validate_candidate_replay_artifact_paths(artifact_paths, candidate_root)
+
+    if (
+        replay_inputs.get("source_matrix_sha256") != matrix_sha256
+        or provenance.get("source_replay_matrix_sha256") != matrix_sha256
+        or replay_inputs.get("source_planner_config_sha256") != config_sha256
+        or provenance.get("source_planner_config_sha256") != config_sha256
+        or replay_inputs.get("normalized_planner_config_sha256") != config_sha256
+    ):
+        raise CorpusError("#9652 candidate replay input digests differ from materialized evidence")
+
+    source_matrix_path = _resolve_corpus_artifact(artifact_paths["source_matrix"], corpus_root)
+    source_config_path = _resolve_corpus_artifact(
+        artifact_paths["source_planner_config"], corpus_root
+    )
+    normalized_matrix_path = _resolve_corpus_artifact(artifact_paths["replay_matrix"], corpus_root)
+    normalized_config_path = _resolve_corpus_artifact(artifact_paths["planner_config"], corpus_root)
+    _verify_corpus_artifact(corpus_root, artifact_paths["source_matrix"], matrix_sha256)
+    _verify_corpus_artifact(corpus_root, artifact_paths["source_planner_config"], config_sha256)
+
+    source_matrix_bytes = source_matrix_path.read_bytes()
+    source_config_bytes = source_config_path.read_bytes()
+    normalized_config_bytes = normalized_config_path.read_bytes()
+    if (
+        normalized_config_bytes != source_config_bytes
+        or hashlib.sha256(normalized_config_bytes).hexdigest() != config_sha256
+    ):
+        raise CorpusError("#9652 normalized planner config differs from its pinned source config")
+    if hashlib.sha256(normalized_config_bytes).hexdigest() != replay_inputs.get(
+        "normalized_planner_config_sha256"
+    ):
+        raise CorpusError("#9652 normalized planner config digest differs from retained bytes")
+
+    _verify_corpus_artifact(
+        corpus_root,
+        artifact_paths["replay_matrix"],
+        replay_inputs.get("normalized_matrix_sha256"),
+    )
+    return {
+        "replay_input": replay_input,
+        "replay_inputs": replay_inputs,
+        "candidate_root": candidate_root,
+        "source_matrix_bytes": source_matrix_bytes,
+        "source_config_bytes": source_config_bytes,
+        "normalized_matrix_path": normalized_matrix_path,
+    }
+
+
+def _issue9656_validate_input_path_mirrors(
+    replay_inputs: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+    matrix_path: str,
+    config_path: str,
+    *,
+    required: bool,
+) -> None:
+    for values, field, expected in (
+        (replay_inputs, "source_matrix_path", matrix_path),
+        (replay_inputs, "source_planner_config_path", config_path),
+        (provenance, "source_replay_matrix_path", matrix_path),
+        (provenance, "source_planner_config_path", config_path),
+    ):
+        if (required or field in values) and values.get(field) != expected:
+            raise CorpusError(
+                "#9652 candidate replay input path differs from materialized evidence"
+            )
+
+
+def _issue9656_validate_candidate_replay_artifact_paths(
+    artifact_paths: Mapping[str, Any], candidate_root: str
+) -> None:
+    expected_paths = {
+        "source_matrix": f"{candidate_root}/source/replay_matrix.yaml",
+        "source_planner_config": f"{candidate_root}/source/planner_config.yaml",
+        "replay_matrix": f"{candidate_root}/replay_input/replay_matrix.yaml",
+        "planner_config": f"{candidate_root}/replay_input/planner_config.yaml",
+    }
+    if any(artifact_paths.get(key) != path for key, path in expected_paths.items()):
+        raise CorpusError(
+            "#9652 candidate replay artifact paths differ from retained input custody"
+        )
+
+
+def _issue9656_validate_candidate_map_receipt(
+    replay_inputs: Mapping[str, Any],
+    summary_source: Mapping[str, Any],
+    map_source_path: str,
+    candidate_root: str,
+    *,
+    corpus_root: Path,
+) -> None:
+    map_receipts = replay_inputs.get("map_assets")
+    if not isinstance(map_receipts, list) or len(map_receipts) != 1:
+        raise CorpusError("#9652 candidate replay matrix must retain one pinned map asset")
+    map_receipt = map_receipts[0]
+    source_revision = summary_source.get("source_revision")
+    if (
+        not isinstance(map_receipt, Mapping)
+        or map_receipt.get("source_path") != map_source_path
+        or map_receipt.get("source_revision") != source_revision
+        or not _is_sha256(map_receipt.get("source_sha256"))
+        or map_receipt.get("stored_path") != f"{candidate_root}/{map_source_path}"
+        or map_receipt.get("stored_sha256") != map_receipt.get("source_sha256")
+    ):
+        raise CorpusError("#9652 candidate map receipt differs from source matrix provenance")
+    source_map_bytes = _issue9656_historical_git_blob(source_revision, map_source_path)
+    source_map_sha256 = hashlib.sha256(source_map_bytes).hexdigest()
+    if source_map_sha256 != map_receipt.get("source_sha256"):
+        raise CorpusError("#9652 candidate map digest differs from the pinned source revision")
+    _verify_corpus_artifact(
+        corpus_root, map_receipt.get("stored_path"), map_receipt.get("stored_sha256")
+    )
+
+
+def _issue9656_validate_normalized_candidate_matrix(
+    matrix_document: Mapping[str, Any],
+    map_source_path: str,
+    artifacts: Mapping[str, Any],
+) -> None:
+    expected_normalized = copy.deepcopy(matrix_document)
+    expected_normalized["scenarios"][0]["map_file"] = (
+        Path("..") / Path(*PurePosixPath(map_source_path).parts)
+    ).as_posix()
+    expected_normalized["map_search_paths"] = ["../maps/svg_maps"]
+    expected_normalized_bytes = yaml.safe_dump(
+        expected_normalized, sort_keys=True, allow_unicode=True
+    ).encode("utf-8")
+    normalized_matrix_bytes = artifacts["normalized_matrix_path"].read_bytes()
+    normalized_matrix_sha256 = hashlib.sha256(normalized_matrix_bytes).hexdigest()
+    if (
+        normalized_matrix_bytes != expected_normalized_bytes
+        or normalized_matrix_sha256 != artifacts["replay_inputs"].get("normalized_matrix_sha256")
+    ):
+        raise CorpusError("#9652 normalized replay matrix differs from its pinned source transform")
+
+
+def _load_issue9656_candidate_matrix(
+    source_matrix_bytes: bytes, summary_case: Mapping[str, Any]
+) -> dict[str, Any]:
+    try:
+        matrix = yaml.safe_load(source_matrix_bytes)
+    except yaml.YAMLError as exc:
+        raise CorpusError(f"#9656 retained source matrix is malformed: {exc}") from exc
+    scenarios = matrix.get("scenarios") if isinstance(matrix, dict) else None
+    if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
+        raise CorpusError("#9656 retained source matrix must contain one scenario")
+    scenario = scenarios[0]
+    if (
+        scenario.get("id") != summary_case.get("scenario_id")
+        or scenario.get("seeds") != [summary_case.get("seed")]
+        or scenario.get("algo") != summary_case.get("planner_key")
+        or not isinstance(scenario.get("map_file"), str)
+    ):
+        raise CorpusError("#9656 retained source matrix identity differs from its summary row")
+    return matrix
+
+
+def _issue9656_materialized_map_source_path(
+    matrix_document: Mapping[str, Any],
+    materialized_manifest_case: Mapping[str, Any],
+    replay_input: Mapping[str, Any],
+) -> str:
+    map_value = matrix_document["scenarios"][0]["map_file"]
+    if Path(map_value).is_absolute():
+        absolute_parts = PurePosixPath(map_value).parts
+        maps_index = next(
+            (
+                index
+                for index in range(len(absolute_parts) - 1)
+                if absolute_parts[index : index + 2] == ("maps", "svg_maps")
+            ),
+            None,
+        )
+        relative = (
+            PurePosixPath(*absolute_parts[maps_index:]).as_posix()
+            if maps_index is not None
+            else None
+        )
+    else:
+        case_file = materialized_manifest_case.get("case_file")
+        matrix_path = replay_input.get("scenario_matrix_path")
+        if not _safe_bundle_relative_path(case_file) or not _safe_bundle_relative_path(matrix_path):
+            raise CorpusError("#9656 materialized replay matrix path is invalid")
+        matrix_relative = PurePosixPath(case_file).parent / PurePosixPath(matrix_path)
+        normalized = posixpath.normpath(
+            (matrix_relative.parent / PurePosixPath(map_value)).as_posix()
+        )
+        parts = list(PurePosixPath(normalized).parts)
+        while parts and parts[0] == "..":
+            parts.pop(0)
+        relative = PurePosixPath(*parts).as_posix() if parts else None
+    if not _safe_bundle_relative_path(relative) or not relative.startswith("maps/svg_maps/"):
+        raise CorpusError("#9656 source matrix map path does not bind a repository map")
+    return relative
 
 
 def _validate_issue9656_summary_case(
@@ -1325,6 +1665,7 @@ def import_issue9656_candidates(
     import_identity = {
         "source_issue": 9656,
         "candidate_schema_version": HISTORICAL_CANDIDATE_SCHEMA_VERSION,
+        "replay_input_binding_schema": ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA,
         "source_row_binding": "verified_episode_file_and_line_sha256",
         "summary_sha256": summary_receipts["summary_sha256"],
         "evidence_bundle_manifest_sha256": summary_receipts["manifest_sha256"],
@@ -1336,18 +1677,14 @@ def import_issue9656_candidates(
     stable_import_identity = {
         key: value
         for key, value in import_identity.items()
-        if key != "source_materialization_bindings"
+        if key not in {"source_materialization_bindings", "replay_input_binding_schema"}
     }
     existing_import = next(
         (
             item
             for item in corpus.get("historical_candidate_imports", [])
             if item.get("import_id") == import_id
-            or {
-                key: value
-                for key, value in item.get("source_identity", {}).items()
-                if key != "source_materialization_bindings"
-            }
+            or _issue9656_stable_import_identity(item.get("source_identity", {}))
             == stable_import_identity
         ),
         None,
@@ -1356,12 +1693,7 @@ def import_issue9656_candidates(
         existing_identity = existing_import.get("source_identity")
         if (
             not isinstance(existing_identity, Mapping)
-            or {
-                key: value
-                for key, value in existing_identity.items()
-                if key != "source_materialization_bindings"
-            }
-            != stable_import_identity
+            or _issue9656_stable_import_identity(existing_identity) != stable_import_identity
         ):
             raise CorpusError("historical candidate import ID conflicts with stored provenance")
         expected_candidate_ids = sorted(
@@ -1479,6 +1811,16 @@ def import_issue9656_candidates(
         raise
     finally:
         shutil.rmtree(staging, ignore_errors=True)
+
+
+def _issue9656_stable_import_identity(source_identity: Any) -> dict[str, Any]:
+    if not isinstance(source_identity, Mapping):
+        return {}
+    return {
+        key: value
+        for key, value in source_identity.items()
+        if key not in {"source_materialization_bindings", "replay_input_binding_schema"}
+    }
 
 
 def admit_case_record(
@@ -2248,6 +2590,7 @@ def _issue9656_candidate_record(
 ) -> dict[str, Any]:
     source_record = source_case["source_record"]
     source = materialized_case.get("source", {})
+    source_replay_input = source_case["replay_input"]
     summary_receipts = context["summary_receipts"]
     source_binding = context["source_binding"]
     replay_status = source_case["replay"]["status"]
@@ -2289,7 +2632,9 @@ def _issue9656_candidate_record(
             "episode_canonical_algorithm": source_binding["episode_canonical_algorithm"],
             "materialized_canonical_algorithm": source_binding["materialized_canonical_algorithm"],
             "source_case_file_sha256": context["source_case_sha256"],
+            "source_replay_matrix_path": source_replay_input["scenario_matrix_path"],
             "source_replay_matrix_sha256": context["source_matrix_sha256"],
+            "source_planner_config_path": source_replay_input["planner_config_path"],
             "source_planner_config_sha256": context["source_config_sha256"],
             "raw_episode_artifact_custody": {
                 "status": "digest_only_not_copied_from_campaign_output",
@@ -2332,8 +2677,10 @@ def _issue9656_candidate_record(
         },
         "criticality": dict(source_case["criticality"]),
         "replay_inputs": {
+            "source_matrix_path": source_replay_input["scenario_matrix_path"],
             "source_matrix_sha256": context["source_matrix_sha256"],
             "normalized_matrix_sha256": context["normalized_matrix_sha256"],
+            "source_planner_config_path": source_replay_input["planner_config_path"],
             "source_planner_config_sha256": context["source_config_sha256"],
             "normalized_planner_config_sha256": context["normalized_config_sha256"],
             "map_assets": context["map_receipt"],
@@ -2666,12 +3013,14 @@ def _issue9656_case_document_matches(
     return (
         materialized_case.get("schema_version") == "benchmark-hard-case.v1"
         and materialized_case.get("case_id") == summary_case.get("case_id")
+        and materialized_case.get("case_file") == manifest_case.get("case_file")
         and all(source.get(key) == value for key, value in source_record.items())
         and materialized_case.get("criticality") == summary_case.get("criticality")
         and materialized_case.get("replay") == manifest_case.get("replay")
         and materialized_case.get("replay_input") == summary_case.get("replay_input")
         and planner.get("key") == summary_case.get("planner_key")
         and scenario.get("scenario_id") == summary_case.get("scenario_id")
+        and scenario.get("scenario_family") == summary_case.get("scenario_family")
         and scenario.get("seed") == summary_case.get("seed")
     )
 

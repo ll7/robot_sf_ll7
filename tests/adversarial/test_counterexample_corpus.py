@@ -1493,6 +1493,115 @@ def test_issue9656_retained_bundle_receipt_must_match_pinned_identity(
         validate_corpus(tampered, corpus_root=corpus_root)
 
 
+@pytest.mark.parametrize(
+    "tamper",
+    ("source_matrix", "source_planner_config", "normalized_matrix"),
+)
+def test_issue9656_replay_input_artifact_rejects_coordinated_byte_digest_edits(
+    tmp_path: Path, tamper: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    tampered = copy.deepcopy(corpus)
+    candidate = tampered["historical_candidates"][0]
+    paths = candidate["artifact_paths"]
+    replay_inputs = candidate["replay_inputs"]
+    provenance = candidate["source_provenance"]
+
+    if tamper == "source_matrix":
+        artifact = corpus_root / paths["source_matrix"]
+        updated = artifact.read_bytes() + b"\n# coordinated source and digest edit\n"
+        artifact.write_bytes(updated)
+        digest = hashlib.sha256(updated).hexdigest()
+        replay_inputs["source_matrix_sha256"] = digest
+        provenance["source_replay_matrix_sha256"] = digest
+    elif tamper == "source_planner_config":
+        updated = (corpus_root / paths["source_planner_config"]).read_bytes() + b"\n# edited\n"
+        for artifact_key in ("source_planner_config", "planner_config"):
+            (corpus_root / paths[artifact_key]).write_bytes(updated)
+        digest = hashlib.sha256(updated).hexdigest()
+        replay_inputs["source_planner_config_sha256"] = digest
+        replay_inputs["normalized_planner_config_sha256"] = digest
+        provenance["source_planner_config_sha256"] = digest
+    else:
+        artifact = corpus_root / paths["replay_matrix"]
+        matrix = yaml.safe_load(artifact.read_text(encoding="utf-8"))
+        matrix["scenarios"][0]["id"] = "coordinated_normalized_matrix_edit"
+        updated = yaml.safe_dump(matrix, sort_keys=True, allow_unicode=True).encode("utf-8")
+        artifact.write_bytes(updated)
+        replay_inputs["normalized_matrix_sha256"] = hashlib.sha256(updated).hexdigest()
+
+    with pytest.raises(CorpusError):
+        validate_corpus(tampered, corpus_root=corpus_root)
+
+
+@pytest.mark.parametrize(
+    ("path_collection", "path_field"),
+    (
+        ("replay_inputs", "source_matrix_path"),
+        ("replay_inputs", "source_planner_config_path"),
+        ("source_provenance", "source_replay_matrix_path"),
+        ("source_provenance", "source_planner_config_path"),
+    ),
+)
+def test_issue9656_candidate_source_input_path_mirrors_are_pinned(
+    tmp_path: Path, path_collection: str, path_field: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    tampered = copy.deepcopy(corpus)
+    candidate = tampered["historical_candidates"][0]
+    candidate[path_collection][path_field] = "replay_input/rewritten.yaml"
+
+    with pytest.raises(CorpusError):
+        validate_corpus(tampered, corpus_root=corpus_root)
+
+
+@pytest.mark.parametrize("artifact_key", ("source_matrix", "source_planner_config"))
+def test_issue9656_candidate_source_artifact_paths_are_canonical(
+    tmp_path: Path, artifact_key: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    tampered = copy.deepcopy(corpus)
+    tampered["historical_candidates"][0]["artifact_paths"][artifact_key] = (
+        "historical_candidates/elsewhere/input.yaml"
+    )
+
+    with pytest.raises(CorpusError, match="artifact paths"):
+        validate_corpus(tampered, corpus_root=corpus_root)
+
+
 def test_issue9656_revision_mismatch_claim_requires_distinct_full_revisions(
     tmp_path: Path,
 ) -> None:
@@ -1788,19 +1897,12 @@ def test_pending_historical_candidate_rejects_source_metadata_or_input_tampering
         artifact = corpus_root / candidate["artifact_paths"][tamper]
         artifact.write_bytes(artifact.read_bytes() + b"\n")
 
-    if tamper == "scenario_metadata":
-        with pytest.raises(CorpusError, match="candidate metadata differs from pinned"):
-            promote_historical_candidate(
-                candidate["candidate_id"], {}, corpus, corpus_root=corpus_root
-            )
-        return
-
-    corpus, receipt = promote_historical_candidate(
-        candidate["candidate_id"], {}, corpus, corpus_root=corpus_root
+    blockers = counterexample_corpus._historical_candidate_source_blockers(
+        candidate, corpus, corpus_root
     )
-
-    assert receipt["decision"] == "rejected"
-    assert any(expected_blocker in blocker for blocker in receipt["blockers"])
+    assert any(expected_blocker in blocker for blocker in blockers)
+    with pytest.raises(CorpusError):
+        promote_historical_candidate(candidate["candidate_id"], {}, corpus, corpus_root=corpus_root)
     assert candidate["candidate_status"] == "pending_exact_replay"
 
 

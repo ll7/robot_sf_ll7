@@ -828,9 +828,12 @@ def _oracle_proves_actor_free_rollout(
     return (
         nominal.get("status") == "feasible"
         and nominal.get("feasible") is True
+        and nominal.get("runtime_input_identity_stable") is True
         and isinstance(geo, Mapping)
+        and geo.get("runtime_input_identity_stable") is True
         and geo.get("route_geometrically_feasible") is True
         and isinstance(completion, Mapping)
+        and completion.get("runtime_input_identity_stable") is True
         and _completion_proves_actor_free_rollout(completion)
         and cert_valid
         and _certificate_supports_actor_free_rollout(cert)
@@ -1040,9 +1043,11 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
         and nominal.get("feasible") is False
         and nominal.get("claim_boundary") == DIAGNOSTIC_CLAIM_BOUNDARY
         and isinstance(geo, Mapping)
+        and geo.get("runtime_input_identity_stable") is True
         and geo.get("route_geometrically_feasible") is False
         and geo.get("benchmark_eligibility") == "excluded"
         and isinstance(completion, Mapping)
+        and completion.get("runtime_input_identity_stable") is True
         and completion.get("route_completion_feasible") is False
         and completion.get("status") == "failed"
         and completion.get("blocker") == "route_geometrically_infeasible_no_traversal_path"
@@ -1050,7 +1055,10 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
         and completion.get("completion_horizon_margin_steps") is None
         and completion.get("termination_reason") is None
         and _positive_int(completion.get("horizon_steps"))
-        and completion.get("fallback_or_degraded") in (None, False)
+        and (
+            completion.get("fallback_or_degraded") is None
+            or completion.get("fallback_or_degraded") is False
+        )
         and completion.get("observed_route_completion_feasible") is None
         and completion.get("fallback_marker") is None
         and completion.get("rollout_blocker") is None

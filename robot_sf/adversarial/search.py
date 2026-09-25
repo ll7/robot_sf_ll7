@@ -653,7 +653,7 @@ def _guard_target_observation_input_stability(
     return "unavailable"
 
 
-def _target_episode_candidate_binding_reason(  # noqa: C901 - fail-closed binding remains explicit.
+def _target_episode_candidate_binding_reason(  # noqa: C901, PLR0912 - fail-closed binding remains explicit.
     record: Mapping[str, Any],
     *,
     metadata: Mapping[str, Any],
@@ -663,10 +663,12 @@ def _target_episode_candidate_binding_reason(  # noqa: C901 - fail-closed bindin
     effective_planner_config: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Bind a native episode row to its materialized candidate and planner config."""
-    scenario_error, materialized_candidate = _materialized_candidate_provenance(scenario_yaml_path)
+    scenario_error, materialized_scenario, materialized_candidate = (
+        _materialized_candidate_provenance(scenario_yaml_path)
+    )
     if scenario_error is not None:
         return scenario_error
-    if materialized_candidate is None:
+    if materialized_scenario is None or materialized_candidate is None:
         return "target_episode_candidate_provenance_missing"
     expected_candidate = candidate.to_json()
     if not _candidate_payload_matches(materialized_candidate, expected_candidate):
@@ -688,6 +690,24 @@ def _target_episode_candidate_binding_reason(  # noqa: C901 - fail-closed bindin
     scenario_id = _candidate_scenario_id(scenario_yaml_path)
     if scenario_params.get("id") != scenario_id or scenario_params.get("algo") != config.policy:
         return "target_episode_record_scenario_parameters_mismatch"
+    if not _scenario_projection_matches(materialized_scenario, scenario_params):
+        return "target_episode_selected_scenario_parameters_mismatch"
+    expected_run_horizon = int(config.horizon or 100)
+    if (
+        type(scenario_params.get("run_horizon")) is not int
+        or scenario_params.get("run_horizon") != expected_run_horizon
+    ):
+        return "target_episode_run_horizon_mismatch"
+    expected_run_dt = float(config.dt or 0.1)
+    recorded_run_dt = scenario_params.get("run_dt")
+    if (
+        isinstance(recorded_run_dt, bool)
+        or not isinstance(recorded_run_dt, (int, float))
+        or float(recorded_run_dt) != expected_run_dt
+    ):
+        return "target_episode_run_timestep_mismatch"
+    if scenario_params.get("record_forces") is not bool(config.record_forces):
+        return "target_episode_record_forces_mismatch"
     if record.get("config_hash") != _config_hash(dict(scenario_params)):
         return "target_episode_scenario_config_hash_mismatch"
 
@@ -716,16 +736,18 @@ def _target_episode_candidate_binding_reason(  # noqa: C901 - fail-closed bindin
 
 def _materialized_candidate_provenance(
     scenario_yaml_path: Path,
-) -> tuple[str | None, Mapping[str, Any] | None]:
-    """Read the candidate provenance block from one materialized scenario file."""
+) -> tuple[str | None, Mapping[str, Any] | None, Mapping[str, Any] | None]:
+    """Read the selected scenario and candidate provenance from one materialized file."""
     try:
         scenario_payload = yaml.safe_load(scenario_yaml_path.read_bytes().decode("utf-8"))
         scenarios = (
             scenario_payload.get("scenarios") if isinstance(scenario_payload, Mapping) else None
         )
         if not isinstance(scenarios, list) or len(scenarios) != 1:
-            return "target_episode_candidate_scenario_missing_or_ambiguous", None
+            return "target_episode_candidate_scenario_missing_or_ambiguous", None, None
         scenario = scenarios[0]
+        if not isinstance(scenario, Mapping):
+            return "target_episode_candidate_scenario_missing_or_ambiguous", None, None
         scenario_metadata = scenario.get("metadata") if isinstance(scenario, Mapping) else None
         materialized_candidate = (
             scenario_metadata.get("adversarial_candidate")
@@ -733,13 +755,54 @@ def _materialized_candidate_provenance(
             else None
         )
     except (OSError, UnicodeDecodeError, yaml.YAMLError):
-        return "target_episode_candidate_scenario_unavailable", None
-    return None, materialized_candidate if isinstance(materialized_candidate, Mapping) else None
+        return "target_episode_candidate_scenario_unavailable", None, None
+    return (
+        None,
+        scenario,
+        materialized_candidate if isinstance(materialized_candidate, Mapping) else None,
+    )
 
 
 def _candidate_payload_matches(actual: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
     """Check every declared sampled-candidate field without rejecting added metadata."""
-    return all(actual.get(key) == value for key, value in expected.items())
+    return all(
+        key in actual and _scenario_value_matches(value, actual[key])
+        for key, value in expected.items()
+    )
+
+
+def _scenario_projection_matches(selected: Mapping[str, Any], recorded: Mapping[str, Any]) -> bool:
+    """Require every selected scenario field to survive in the episode identity.
+
+    The runner adds execution metadata and normalizes the seed to the episode seed, so
+    additional recorded keys and the top-level ``seed``/``seeds`` fields are allowed.
+    Existing selected fields must retain their JSON types and values recursively.
+    """
+    for key, expected in selected.items():
+        if key in {"seed", "seeds"}:
+            continue
+        if key not in recorded or not _scenario_value_matches(expected, recorded[key]):
+            return False
+    return True
+
+
+def _scenario_value_matches(expected: Any, actual: Any) -> bool:
+    """Compare selected nested scenario values without Python bool/int aliasing."""
+    if isinstance(expected, Mapping):
+        return isinstance(actual, Mapping) and all(
+            key in actual and _scenario_value_matches(value, actual[key])
+            for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(
+                _scenario_value_matches(left, right)
+                for left, right in zip(expected, actual, strict=True)
+            )
+        )
+    return type(expected) is type(actual) and expected == actual
 
 
 def _store_post_evaluation_admissibility(

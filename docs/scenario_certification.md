@@ -30,15 +30,18 @@ Each certificate includes:
   certificates also record `source_artifact_sha256`, captured when the certifier reads the
   manifest, and `effective_input_sha256` plus `effective_input_identity_stable`. The effective
   identity covers included manifests and the selected scenario's resolved map and route-override
-  files, including the resolved `map_id` path and parser selected by its suffix; the adapter
-  requires it to match current bytes when those inputs exist. Validation loading records each
-  manifest digest from the same byte buffer it parsed. File-based certification and feasibility
-  reports reuse that parsed validation report when computing input identity, so an include that
-  changes and is restored during loading cannot be paired with a digest from a later parse. Map
+  files, including the resolved `map_id` path and parser selected by its suffix. If a scenario
+  omits both `map_file` and `map_id`, the closure includes every SVG loaded into the default
+  `MapDefinitionPool`. Certification and actor-free oracle execution compare the source hashes
+  returned by the actual map and route parsers with this declared closure; a missing or different
+  consumed input leaves runtime identity unavailable. Validation loading records each manifest
+  digest from the same byte buffer it parsed. File-based certification and feasibility reports
+  reuse that parsed validation report when computing input identity, so an include that changes
+  and is restored during loading cannot be paired with a digest from a later parse. Explicit map
   definitions are cached by source-content digest and geometry contract, and SVG/serialized-map
-  parsers consume the same immutable bytes used for that digest. A legacy root-only identity is
-  available only when no populated include, map, map-search-path, or route-override reference is
-  declared.
+  parsers consume the same immutable bytes used for that digest. A legacy single-row identity is
+  available only when the full runtime input closure, including the default map pool when used, can
+  be resolved and matched to the consumer snapshots.
 
 Benchmark inclusion policy:
 

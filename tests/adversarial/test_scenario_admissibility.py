@@ -30,12 +30,16 @@ from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_CONTRACT_VERSION,
     SCENARIO_FEASIBILITY_PREDICATE_NAMES,
 )
+from robot_sf.adversarial.scenario_admissibility import _oracle_excludes
 from robot_sf.scenario_certification import v1 as scenario_certification_v1
 from robot_sf.scenario_certification.feasibility_oracle import (
     FEASIBILITY_ORACLE_SCHEMA,
     ISSUE_5574_REPORT_SCHEMA,
 )
-from robot_sf.scenario_certification.input_identity import scenario_input_identity
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+)
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
     ScenarioCertificate,
@@ -46,6 +50,9 @@ from robot_sf.scenario_certification.v1 import (
 _SCENARIO_ARTIFACT = Path(__file__).resolve().parent / "fixtures/issue_9651/case_static.yaml"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_ARTIFACT_SHA256 = hashlib.sha256(_SCENARIO_ARTIFACT.read_bytes()).hexdigest()
+_SCENARIO_EFFECTIVE_INPUT_SHA256 = scenario_input_identity(
+    _SCENARIO_ARTIFACT, scenario_id="case-static"
+).get("effective_input_sha256")
 
 
 def classify_scenario_admissibility(case_id: str, **kwargs: Any) -> Any:
@@ -106,7 +113,12 @@ def _certificate(
                 "evidence": {},
             }
         ],
-        "evidence": {"source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256},
+        "evidence": {
+            "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+            "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+            "effective_input_identity_stable": True,
+            "runtime_input_identity_stable": True,
+        },
     }
 
 
@@ -145,6 +157,7 @@ def _oracle(
             "route_geometrically_feasible": geometric,
             "classification": "hard_but_solvable" if geometric else "geometrically_infeasible",
             "benchmark_eligibility": "eligible" if geometric else "excluded",
+            "runtime_input_identity_stable": True,
         },
         "completion": {
             "route_completion_feasible": (
@@ -165,12 +178,16 @@ def _oracle(
                 else "rollout_incomplete"
             ),
             "fallback_or_degraded": False,
+            "runtime_input_identity_stable": True,
             "fallback_marker": None,
             "observed_route_completion_feasible": True if complete else None,
             "rollout_blocker": None,
         },
         "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
         "source_artifact_identity_stable": True,
+        "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+        "effective_input_identity_stable": True,
+        "runtime_input_identity_stable": True,
     }
 
 
@@ -181,6 +198,8 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
         "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
         "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
         "source_artifact_identity_stable": True,
+        "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+        "effective_input_identity_stable": True,
         "rollout_algo": "goal",
         "cells": [
             {
@@ -193,6 +212,9 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
                 "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
                 "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
                 "source_artifact_identity_stable": True,
+                "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+                "effective_input_identity_stable": True,
+                "runtime_input_identity_stable": True,
                 "rollout_algo": "goal",
                 "rollout_seed": 19,
                 "claim_boundary": "diagnostic_only_not_benchmark_evidence",
@@ -230,6 +252,8 @@ def _execution(
         ),
         "environment_sha256": "e" * 64,
         "source_episodes_jsonl_sha256": "a" * 64,
+        "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+        "effective_input_identity_stable": True,
         "source_commit": "f" * 40,
         "evidence_ref": f"artifacts/{planner_id}.json",
     }
@@ -736,6 +760,17 @@ def test_oracle_exclusion_requires_a_complete_matching_certificate() -> None:
     assert "oracle_geometric_exclusion_certificate_conflict" in conflicting_positive.reason_codes
 
 
+@pytest.mark.parametrize("fallback_marker", [0, "false", 1])
+def test_malformed_no_traversal_fallback_marker_cannot_exclude_case(
+    fallback_marker: Any,
+) -> None:
+    """Only literal false or null can pass the no-traversal fallback gate."""
+    oracle = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    oracle["completion"]["fallback_or_degraded"] = fallback_marker
+
+    assert _oracle_excludes(oracle) is False
+
+
 def test_incomplete_route_inventory_cannot_bind_oracle_success() -> None:
     certificate = _certificate()
     certificate["checks"]["route_count"] = 2
@@ -1130,7 +1165,7 @@ def test_certificate_producer_rejects_aba_include_replacement(
         "map_search_paths: [maps]",
     ),
 )
-def test_legacy_root_only_identity_rejects_external_references(
+def test_legacy_single_row_identity_rejects_external_references(
     tmp_path: Path, external_reference: str
 ) -> None:
     """Incomplete expansion cannot fall back to a root-only identity with references."""
@@ -1178,6 +1213,136 @@ def test_map_parser_cache_key_tracks_exact_source_bytes(
     assert first is not None and second is not None
     assert parsed_sources == [initial_bytes, updated_bytes]
     assert first is not second
+
+
+def test_default_map_pool_is_part_of_runtime_input_identity(tmp_path: Path) -> None:
+    """An implicit default map pool is included and matches the bytes its loader consumed."""
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+    scenario_path = tmp_path / "default-map.yaml"
+    scenario = {"name": "default-map-case", "seeds": [19]}
+    scenario_path.write_text(
+        yaml.safe_dump({"scenarios": [scenario]}, sort_keys=False), encoding="utf-8"
+    )
+    identity = scenario_input_identity(scenario_path, scenario_id="default-map-case")
+    consumed: list[dict[str, str]] = []
+
+    build_robot_config_from_scenario(
+        scenario,
+        scenario_path=scenario_path,
+        runtime_input_records=consumed,
+    )
+
+    assert identity["status"] == "available"
+    assert identity["requires_effective_input_binding"] is True
+    assert any(item["role"] == "default_map_pool" for item in identity["files"])
+    assert runtime_input_records_match(identity, consumed, scenario_id="default-map-case") is True
+
+
+def test_runtime_identity_rejects_bytes_consumed_during_aba_map_replacement(
+    tmp_path: Path,
+) -> None:
+    """Parser-consumed map hashes catch replacement even when path bytes are restored."""
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+    scenario_path = _referenced_scenario(tmp_path)
+    scenario = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"][0]
+    original_map_bytes = (tmp_path / "map.svg").read_bytes()
+    identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    consumed_variant = original_map_bytes + b"\n<!-- consumed-during-ABA -->\n"
+    (tmp_path / "map.svg").write_bytes(consumed_variant)
+    consumed: list[dict[str, str]] = []
+    try:
+        build_robot_config_from_scenario(
+            scenario,
+            scenario_path=scenario_path,
+            runtime_input_records=consumed,
+        )
+    finally:
+        (tmp_path / "map.svg").write_bytes(original_map_bytes)
+
+    assert (
+        scenario_input_identity(scenario_path, scenario_id="case-static")["effective_input_sha256"]
+        == identity["effective_input_sha256"]
+    )
+    assert runtime_input_records_match(identity, consumed, scenario_id="case-static") is False
+
+
+def test_runtime_identity_rejects_route_bytes_parsed_during_aba_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Route YAML identity follows the exact byte snapshot passed to its parser."""
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+    scenario_path = _referenced_scenario(tmp_path)
+    scenario = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"][0]
+    route_path = tmp_path / "routes.yaml"
+    original_route_bytes = route_path.read_bytes()
+    consumed_variant = original_route_bytes + b"# consumed-during-ABA\n"
+    identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    original_read_bytes = Path.read_bytes
+
+    def read_route_during_aba(path: Path) -> bytes:
+        if path.resolve() == route_path.resolve():
+            route_path.write_bytes(consumed_variant)
+            try:
+                consumed = original_read_bytes(path)
+            finally:
+                route_path.write_bytes(original_route_bytes)
+            return consumed
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_route_during_aba)
+    consumed: list[dict[str, str]] = []
+    build_robot_config_from_scenario(
+        scenario,
+        scenario_path=scenario_path,
+        runtime_input_records=consumed,
+    )
+
+    assert original_read_bytes(route_path) == original_route_bytes
+    assert any(
+        item["role"] == "route_overrides_file"
+        and item["sha256"] == hashlib.sha256(consumed_variant).hexdigest()
+        for item in consumed
+    )
+    assert runtime_input_records_match(identity, consumed, scenario_id="case-static") is False
+
+
+def test_certificate_runtime_identity_follows_exact_map_parser_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Certificate binding rejects map bytes consumed during an ABA replacement."""
+    from robot_sf.training import scenario_loader
+
+    scenario_path = _referenced_scenario(tmp_path, route_override=False)
+    map_path = tmp_path / "map.svg"
+    original_map_bytes = map_path.read_bytes()
+    consumed_variant = original_map_bytes + b"\n<!-- consumed-during-cert-ABA -->\n"
+    original_load = scenario_loader._load_map_definition_with_digest
+
+    def load_variant_then_restore(
+        path: str, *, geometry_contract: str = "legacy"
+    ) -> tuple[Any, str | None]:
+        if Path(path).resolve() == map_path.resolve():
+            map_path.write_bytes(consumed_variant)
+            try:
+                return original_load(path, geometry_contract=geometry_contract)
+            finally:
+                map_path.write_bytes(original_map_bytes)
+        return original_load(path, geometry_contract=geometry_contract)
+
+    monkeypatch.setattr(
+        scenario_loader, "_load_map_definition_with_digest", load_variant_then_restore
+    )
+
+    certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    )
+
+    assert map_path.read_bytes() == original_map_bytes
+    assert certificate["evidence"]["runtime_input_identity_stable"] is False
+    assert certificate["evidence"]["effective_input_identity_stable"] is False
 
 
 def test_map_registry_remap_changes_effective_identity(

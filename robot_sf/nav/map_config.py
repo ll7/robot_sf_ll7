@@ -2,6 +2,7 @@
 define the map configuration
 """
 
+import hashlib
 import os
 import random
 from dataclasses import dataclass, field
@@ -19,6 +20,8 @@ from robot_sf.nav.nav_types import (
     SemanticBoundary,
 )
 from robot_sf.nav.obstacle import Obstacle
+
+DEFAULT_MAPS_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
 
 # Success-definition identifiers are intentionally versioned.  The legacy policy is
 # the default so maps/configurations that predate the goal-zone policy retain their
@@ -1117,7 +1120,7 @@ class MapDefinitionPool:
         Returns a random map definition from the pool.
     """
 
-    maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
+    maps_folder: str = DEFAULT_MAPS_FOLDER
     """The directory where the **default** map files are located."""
     map_defs: dict[str, MapDefinition] = field(default_factory=dict)
 
@@ -1129,6 +1132,10 @@ class MapDefinitionPool:
         Raises a ValueError if the maps_folder directory does not exist or if
         map_defs is still empty after loading.
         """
+
+        # Keep parser-consumed identities out of the dataclass fields so they do not
+        # leak into serialized simulation configuration.
+        self.source_input_records: list[dict[str, str]] = []
 
         # If map_defs is empty, load the map definitions from the files
         if not self.map_defs:
@@ -1176,7 +1183,22 @@ class MapDefinitionPool:
         for name in map_names:
             svg_path = os.path.join(maps_folder, f"{name}.svg")
             try:
-                map_def = convert_map(svg_path)
+                with open(svg_path, "rb") as source_file:
+                    source_bytes = source_file.read()
+            except OSError as exc:
+                logger.warning("SVG map '{}' could not be read ({}); skipping", svg_path, exc)
+                continue
+            self.source_input_records.append(
+                {
+                    "role": "default_map_pool",
+                    "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                    "path": os.path.realpath(svg_path),
+                    "map_id": name,
+                    "parser": "svg",
+                }
+            )
+            try:
+                map_def = convert_map(svg_path, source_bytes=source_bytes)
             except ValueError as exc:
                 logger.warning("SVG map '{}' failed validation ({}); skipping", svg_path, exc)
                 continue

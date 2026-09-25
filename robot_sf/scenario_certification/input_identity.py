@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.nav.map_config import DEFAULT_MAPS_FOLDER
 from robot_sf.training.scenario_loader import (
     ScenarioValidationReport,
     load_scenarios_for_validation,
@@ -36,7 +37,7 @@ def scenario_input_identity(
         return loaded
     root, root_digest, report = loaded
     if report.load_error is not None or report.entry_issues or report.load_issues:
-        legacy_identity = _legacy_root_only_identity(
+        legacy_identity = _legacy_single_row_identity(
             root, root_digest=root_digest, scenario_id=scenario_id
         )
         if legacy_identity is not None:
@@ -71,6 +72,66 @@ def scenario_input_identity(
         "files": records,
         "reason_code": None,
     }
+
+
+def runtime_input_records_match(
+    identity: Mapping[str, Any],
+    consumed_records: list[Mapping[str, Any]],
+    *,
+    scenario_id: str,
+) -> bool:
+    """Check exact parser-consumed map/route snapshots against the declared closure.
+
+    Returns:
+        ``True`` only when every declared runtime input was consumed with the same
+        resolved path, content digest, parser, role, and scenario attribution.
+    """
+    if identity.get("status") != "available":
+        return False
+    root_value = identity.get("path")
+    if not isinstance(root_value, str) or not root_value:
+        return False
+    root = Path(root_value).resolve()
+    files = identity.get("files")
+    if not isinstance(files, list):
+        return False
+    expected_records = [
+        record
+        for record in files
+        if isinstance(record, Mapping)
+        and record.get("role") != "scenario_manifest"
+        and record.get("scenario_id") == scenario_id
+    ]
+    actual_records = [
+        record for record in consumed_records if record.get("scenario_id") == scenario_id
+    ]
+    if len(expected_records) != len(actual_records):
+        return False
+
+    def normalized(record: Mapping[str, Any], *, expected: bool) -> tuple[Any, ...] | None:
+        path_value = record.get("path")
+        if not isinstance(path_value, str) or not path_value:
+            return None
+        path = Path(path_value)
+        if expected and not path.is_absolute():
+            path = root.parent / path
+        values = (
+            record.get("role"),
+            record.get("scenario_id"),
+            record.get("sha256"),
+            path.resolve().as_posix(),
+            record.get("parser"),
+        )
+        if not all(isinstance(value, str) and value for value in values):
+            return None
+        map_id = record.get("map_id") if "map_id" in record else None
+        return (*values, map_id)
+
+    expected = [normalized(record, expected=True) for record in expected_records]
+    actual = [normalized(record, expected=False) for record in actual_records]
+    if any(record is None for record in [*expected, *actual]):
+        return False
+    return sorted(expected) == sorted(actual)
 
 
 def _load_scenario_report(
@@ -165,7 +226,7 @@ def _manifest_records(
     return records
 
 
-def _runtime_resource_records(
+def _runtime_resource_records(  # noqa: C901 - closure failures are explicit per resource role.
     root: Path, root_digest: str, scenarios: list[Mapping[str, Any]]
 ) -> list[dict[str, str | None]] | dict[str, Any]:
     """Hash the resolved map and route-override bytes for selected scenario rows.
@@ -187,6 +248,11 @@ def _runtime_resource_records(
                     return _unavailable_with_root(
                         root, root_digest, "scenario_map_reference_unresolved"
                     )
+                if key == "map_file":
+                    default_records = _default_map_pool_records(root, root_digest, sid)
+                    if isinstance(default_records, dict):
+                        return default_records
+                    records.extend(default_records)
                 continue
             resolved = _resolve_reference(root, source_file, reference, role, key)
             if isinstance(resolved, dict):
@@ -205,7 +271,49 @@ def _runtime_resource_records(
                 if isinstance(map_id, str) and map_id.strip():
                     record["map_id"] = map_id.strip()
                 record["parser"] = _map_parser_for_path(resolved)
+            else:
+                record["parser"] = "yaml"
             records.append(record)
+    return records
+
+
+def _default_map_pool_records(
+    root: Path, root_digest: str, scenario_id: str | None
+) -> list[dict[str, str | None]] | dict[str, Any]:
+    """Hash the SVG files loaded into the default map pool for a scenario.
+
+    Returns:
+        Resource records, or an unavailable identity payload if the pool cannot be read.
+    """
+    maps_folder = Path(DEFAULT_MAPS_FOLDER).resolve()
+    try:
+        map_paths = sorted(
+            (
+                path
+                for path in maps_folder.iterdir()
+                if path.is_file() and path.suffix.lower() == ".svg"
+            ),
+            key=lambda path: path.stem,
+        )
+    except OSError:
+        return _unavailable_with_root(root, root_digest, "default_map_pool_unavailable")
+    if not map_paths:
+        return _unavailable_with_root(root, root_digest, "default_map_pool_empty")
+    records: list[dict[str, str | None]] = []
+    for map_path in map_paths:
+        digest = _file_sha256(map_path)
+        if digest is None:
+            return _unavailable_with_root(map_path, root_digest, "default_map_pool_map_unreadable")
+        records.append(
+            {
+                "role": "default_map_pool",
+                "scenario_id": scenario_id,
+                "sha256": digest,
+                "path": map_path.resolve().as_posix(),
+                "map_id": map_path.stem,
+                "parser": "svg",
+            }
+        )
     return records
 
 
@@ -288,20 +396,20 @@ def _with_root_digest(payload: dict[str, Any], root_digest: str) -> dict[str, An
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str | None:
-    value = scenario.get("name") or scenario.get("scenario_id")
+    value = scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _legacy_root_only_identity(
+def _legacy_single_row_identity(
     root: Path,
     *,
     root_digest: str,
     scenario_id: str | None,
 ) -> dict[str, Any] | None:
-    """Support a legacy single-row scenario file only when it references no external inputs.
+    """Support a legacy single-row scenario file with a complete runtime input closure.
 
     Returns:
-        Root-only identity when unreferenced, otherwise ``None``.
+        Bound single-row identity, or ``None`` when its references cannot be resolved.
     """
     try:
         root_bytes = root.read_bytes()
@@ -336,20 +444,26 @@ def _legacy_root_only_identity(
     )
     if scenario_id is not None and scenario_id != candidate_id:
         return None
+    runtime_records = _runtime_resource_records(root, root_digest, [payload])
+    if isinstance(runtime_records, dict):
+        return None
+    records: list[dict[str, str | None]] = [
+        {
+            "role": "scenario_manifest",
+            "scenario_id": None,
+            "sha256": root_digest,
+            "path": root.name,
+        },
+        *runtime_records,
+    ]
+    effective_digest, requires_closure = _effective_digest(records, root_digest)
     return {
         "status": "available",
         "path": root.as_posix(),
         "source_artifact_sha256": root_digest,
-        "effective_input_sha256": root_digest,
-        "requires_effective_input_binding": False,
-        "files": [
-            {
-                "role": "scenario_manifest",
-                "scenario_id": None,
-                "sha256": root_digest,
-                "path": root.name,
-            }
-        ],
+        "effective_input_sha256": effective_digest,
+        "requires_effective_input_binding": requires_closure,
+        "files": records,
         "reason_code": None,
     }
 

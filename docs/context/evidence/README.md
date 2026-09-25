@@ -125,12 +125,20 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
+- `issue_9647_gallery_demo_2026-09-25/`: refreshed exact-head one-case replay and rendering smoke
+  from the #9647 gallery CLI using the tracked #1501 `failure_0002` compatibility fixture.
+  The collision outcome matched at a changed code revision; source map-registry binding and dynamic
+  task feasibility remain unknown, and map overlay/video are unavailable. Three small figures
+  (trajectory, critical frame, filmstrip) are tracked with checksums. This is historical
+  outcome-reproduction evidence, not a new discovery or planner-safety result. See the
+  [receipt and figures](issue_9647_gallery_demo_2026-09-25/payload/receipt.md) and
+  [machine-readable summary](issue_9647_gallery_demo_2026-09-25/payload/summary.json).
+
 - `issue_9647_final_gallery_smoke_2026-09-25/`: final-head one-case smoke of the #9647
   replay-gallery CLI, canonical runner, outcome comparison, and renderer using the tracked #1501
-  `failure_0002` compatibility fixture. One historical collision replay matched at a different
-  source revision; source map-registry binding and dynamic task feasibility remain unknown, while
-  map overlay and video are explicitly unavailable. This is not search/discovery or benchmark
-  evidence. Generated figures and raw replay streams remain in ignored local `output/`; see the
+  `failure_0002` compatibility fixture at earlier code revision `b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f`.
+  The refreshed gallery demo above supersedes it for current code. Its generated figures and raw
+  replay streams remain in ignored local `output/`; see the
   checksummed [receipt](issue_9647_final_gallery_smoke_2026-09-25/payload/receipt.md) and
   [machine-readable summary](issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json).
 

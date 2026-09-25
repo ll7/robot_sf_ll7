@@ -410,7 +410,7 @@ def test_committed_baseline_fixture_is_in_sync(tmp_path: Path) -> None:
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     regenerated = tyratchet.materialize_findings_from_baseline(baseline)
     generated_fixture = tmp_path / "ty_advisory_findings_fixture.json"
-    tyratchet.write_json(generated_fixture, regenerated)
+    tyratchet.write_findings_fixture(generated_fixture, regenerated)
     assert generated_fixture.read_bytes() == FIXTURE.read_bytes(), (
         "ty advisory findings fixture is out of sync with the baseline; "
         "regenerate with `uv run python scripts/dev/ty_advisory_ratchet.py "

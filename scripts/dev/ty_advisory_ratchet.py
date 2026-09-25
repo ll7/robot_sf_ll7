@@ -439,6 +439,14 @@ def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_findings_fixture(path: Path, findings: list[dict[str, Any]]) -> None:
+    """Write one compact, sorted JSON finding per line inside a valid JSON array."""
+    records = [
+        "  " + json.dumps(finding, sort_keys=True, separators=(",", ":")) for finding in findings
+    ]
+    path.write_text("[\n" + ",\n".join(records) + "\n]\n", encoding="utf-8")
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
@@ -524,7 +532,7 @@ def _emit_baseline_fixture(args: argparse.Namespace, repo_root: Path, baseline_p
     fixture = materialize_findings_from_baseline(baseline)
     fixture_path = args.fixture if args.fixture.is_absolute() else repo_root / args.fixture
     fixture_path.parent.mkdir(parents=True, exist_ok=True)
-    write_json(fixture_path, fixture)
+    write_findings_fixture(fixture_path, fixture)
     agg = aggregate(fixture)
     print(
         f"Wrote deterministic ty findings fixture to {fixture_path}: "

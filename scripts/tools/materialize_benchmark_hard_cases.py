@@ -1096,6 +1096,39 @@ def _valid_source_environment_identity(value: Any) -> bool:
     return value.get("identity_sha256") == expected
 
 
+def _execution_environment_identity() -> dict[str, Any]:
+    """Capture the Python/platform/lock identity used by one materializer process."""
+    lock_path = REPO_ROOT / "uv.lock"
+    try:
+        lock_sha256 = _sha256(lock_path) if lock_path.is_file() else None
+    except OSError:
+        lock_sha256 = None
+    identity = {
+        "python_version": sys.version.split()[0],
+        "python_implementation": platform.python_implementation(),
+        "platform_system": platform.system(),
+        "platform_release": platform.release(),
+        "machine": platform.machine(),
+        "uv_lock_sha256": lock_sha256,
+    }
+    complete = all(isinstance(value, str) and value for value in identity.values()) and (
+        re.fullmatch(r"[0-9a-f]{64}", identity["uv_lock_sha256"]) is not None
+    )
+    digest = (
+        hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        if complete
+        else None
+    )
+    return {
+        "schema_version": SOURCE_ENVIRONMENT_PROVENANCE_SCHEMA,
+        "complete": complete,
+        **identity,
+        "identity_sha256": digest,
+    }
+
+
 def _source_runtime_input_identity(row: dict[str, Any]) -> dict[str, Any]:
     """Read source-side runtime hashes only when the source row recorded them."""
     provenance = row.get("runtime_input_provenance")
@@ -1176,6 +1209,7 @@ def _source_runtime_input_identity(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "verified",
         "revision": revision,
+        "source_environment": environment,
         "source_environment_identity_sha256": environment["identity_sha256"],
         "assets": assets,
     }
@@ -1273,6 +1307,7 @@ def _matching_runtime_input_identity(
     *,
     source_matrix: Path | None,
     replay_matrix: Path | None,
+    replay_environment_identity: Any,
 ) -> dict[str, Any]:
     source_identity = _source_runtime_input_identity(source_row)
     replay_identity = _runtime_input_identity(replay_row, replay_revision, matrix=replay_matrix)
@@ -1282,6 +1317,16 @@ def _matching_runtime_input_identity(
         "replay": replay_identity,
     }
     if source_identity.get("status") != "verified" or replay_identity.get("status") != "verified":
+        return result
+    if not _valid_source_environment_identity(replay_environment_identity):
+        result["status"] = "replay_environment_unavailable"
+        result["replay_environment_identity"] = replay_environment_identity
+        return result
+    result["replay_environment_identity"] = replay_environment_identity
+    if source_identity.get("source_environment_identity_sha256") != replay_environment_identity.get(
+        "identity_sha256"
+    ):
+        result["status"] = "replay_environment_mismatch"
         return result
     source_assets = [
         (asset["kind"], asset["name"], asset["sha256"]) for asset in source_identity["assets"]
@@ -1304,6 +1349,7 @@ def _exact_match_runtime_input_status(
     *,
     source_matrix: Path | None,
     replay_matrix: Path | None,
+    replay_environment_identity: Any,
 ) -> tuple[str, dict[str, Any]]:
     identity = _matching_runtime_input_identity(
         source_row,
@@ -1312,10 +1358,13 @@ def _exact_match_runtime_input_status(
         replay_revision,
         source_matrix=source_matrix,
         replay_matrix=replay_matrix,
+        replay_environment_identity=replay_environment_identity,
     )
     status = {
         "verified_git_tree_match": "exact_match",
         "mismatch": "runtime_input_identity_mismatch",
+        "replay_environment_mismatch": "replay_environment_mismatch",
+        "replay_environment_unavailable": "unavailable_replay_environment_identity",
     }.get(identity["status"], "unavailable_runtime_input_identity")
     return status, identity
 
@@ -1486,6 +1535,7 @@ def _run_replay(
     command = _replay_command(case, row, replay_matrix, episode_path, config_path, str(profile))
     stdout_path = replay_dir / "stdout.txt"
     stderr_path = replay_dir / "stderr.txt"
+    replay_environment_identity = _execution_environment_identity()
     replay_checkout_before: dict[str, Any] = {"capture_status": "unavailable"}
     replay_revision: Any = None
     try:
@@ -1511,6 +1561,7 @@ def _run_replay(
             "error": str(exc),
             "source_revision": row.get("git_hash"),
             "replay_revision": replay_revision,
+            "replay_environment_identity": replay_environment_identity,
             **checkout_fields,
         }
     replay_checkout_after = _capture_replay_checkout_provenance()
@@ -1525,6 +1576,7 @@ def _run_replay(
         "replay_revision": replay_revision,
         "source_revision": row.get("git_hash"),
         "same_repository_revision": row.get("git_hash") == replay_revision,
+        "replay_environment_identity": replay_environment_identity,
         **checkout_fields,
         "source_matrix_sha256": _sha256(matrix),
         "replay_matrix_sha256": _sha256(replay_matrix),
@@ -1558,8 +1610,13 @@ def _run_replay(
             replay_revision,
             source_matrix=matrix,
             replay_matrix=replay_matrix,
-            replay_checkout_clean=checkout_fields["replay_checkout_clean"],
-            replay_checkout_stability_status=checkout_fields["replay_checkout_stability_status"],
+            replay_checkout={
+                "replay_checkout_clean": checkout_fields["replay_checkout_clean"],
+                "replay_checkout_stability_status": checkout_fields[
+                    "replay_checkout_stability_status"
+                ],
+            },
+            replay_environment_identity=replay_environment_identity,
         )
     )
     return result
@@ -1830,11 +1887,12 @@ def _classify_replay_row(
     *,
     source_matrix: Path | None = None,
     replay_matrix: Path | None = None,
-    replay_checkout_clean: bool | None,
-    replay_checkout_stability_status: str | None = None,
+    replay_checkout: dict[str, Any] | None,
+    replay_environment_identity: Any = None,
 ) -> dict[str, Any]:
     """Derive replay classification from the checksum-pinned source and replay rows."""
     source_revision = source_row.get("git_hash")
+    replay_checkout = replay_checkout if isinstance(replay_checkout, dict) else {}
     same_revision = (
         isinstance(source_revision, str)
         and bool(source_revision)
@@ -1846,8 +1904,9 @@ def _classify_replay_row(
         "source_revision": source_revision,
         "replay_revision": replay_revision,
         "same_repository_revision": same_revision,
-        "replay_checkout_clean": replay_checkout_clean,
-        "replay_checkout_stability_status": replay_checkout_stability_status,
+        "replay_checkout_clean": replay_checkout.get("replay_checkout_clean"),
+        "replay_checkout_stability_status": replay_checkout.get("replay_checkout_stability_status"),
+        "replay_environment_identity": replay_environment_identity,
         "identity": _replay_identity(case, replay_row),
         "episode_status": replay_row.get("status"),
         "config_hash_source": (
@@ -1920,12 +1979,14 @@ def _classify_replay_row(
                 replay_revision,
                 source_matrix=source_matrix,
                 replay_matrix=replay_matrix,
+                replay_environment_identity=replay_environment_identity,
             )
             result["runtime_input_identity"] = runtime_input_identity
             result["status"] = runtime_status
         if result["status"] == "exact_match":
             result["status"] = _exact_match_checkout_status(
-                replay_checkout_clean, replay_checkout_stability_status
+                replay_checkout.get("replay_checkout_clean"),
+                replay_checkout.get("replay_checkout_stability_status"),
             )
     return result
 
@@ -2201,8 +2262,13 @@ def _annotate_reused_replay_classification(
             if (case_dir / "replay_input" / "replay_matrix.yaml").is_file()
             else matrix
         ),
-        replay_checkout_clean=replay_checkout_clean,
-        replay_checkout_stability_status=checkout_stability,
+        replay_checkout={
+            "replay_checkout_clean": replay_checkout_clean,
+            "replay_checkout_stability_status": checkout_stability,
+        },
+        # Reuse the environment captured by the original replay attempt. The
+        # current materializer environment cannot stand in for missing history.
+        replay_environment_identity=replay.get("replay_environment_identity"),
     )
     replay.update(classification)
     if checksum_mismatch:
@@ -2226,6 +2292,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     if out_dir.exists() and any(out_dir.iterdir()):
         raise MaterializationError(f"refusing to overwrite a non-empty output directory: {out_dir}")
     replay_checkout = _replay_checkout_provenance()
+    materializer_environment_identity = _execution_environment_identity()
     out_dir.mkdir(parents=True, exist_ok=True)
     summary = _read_object(summary_path)
     source_provenance = _verify_inputs(summary, campaign_root, args.bundle, matrix)
@@ -2435,15 +2502,11 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
         "source_showcase_diagnostics": _compact_source_showcase_diagnostics(summary),
         "execution_environment": {
             "source_environment": "not_recorded_in_release_bundle",
-            "replay_environment": {
-                "python_version": sys.version.split()[0],
-                "python_implementation": platform.python_implementation(),
-                "platform_system": platform.system(),
-                "platform_release": platform.release(),
-                "machine": platform.machine(),
-                "uv_lock_sha256": _sha256(REPO_ROOT / "uv.lock")
-                if (REPO_ROOT / "uv.lock").is_file()
-                else None,
+            "materializer_environment_identity": materializer_environment_identity,
+            "replay_attempt_environments": {
+                record["case_id"]: record["replay"].get("replay_environment_identity")
+                for record in case_records
+                if record["replay"].get("attempted") is True
             },
         },
         "selection": {
@@ -2518,7 +2581,16 @@ def _write_report(path: Path, manifest: dict[str, Any]) -> None:
     )
     analyzer = diagnostics.get("camera_ready_analyzer", {}) if isinstance(diagnostics, dict) else {}
     environment = manifest.get("execution_environment", {})
-    replay_environment = environment.get("replay_environment", {})
+    materializer_environment = environment.get("materializer_environment_identity", {})
+    replay_attempt_environments = environment.get("replay_attempt_environments", {})
+    replay_environment_hashes = {
+        case_id: (
+            identity.get("identity_sha256")
+            if isinstance(identity, dict) and _valid_source_environment_identity(identity)
+            else "unavailable"
+        )
+        for case_id, identity in replay_attempt_environments.items()
+    }
     diagnostic_lines = []
     if accounting:
         diagnostic_lines.append(
@@ -2554,9 +2626,11 @@ def _write_report(path: Path, manifest: dict[str, Any]) -> None:
         f"- Source bundle SHA-256: `{manifest['source']['bundle_sha256']}`",
         f"- Scenario matrix SHA-256: `{manifest['source']['matrix_sha256']}`",
         f"- Source execution environment: `{environment.get('source_environment', 'not_recorded')}`",
-        f"- Replay execution environment: Python `{replay_environment.get('python_version')}`, "
-        f"{replay_environment.get('platform_system')} `{replay_environment.get('platform_release')}`; "
-        f"lock SHA-256 `{replay_environment.get('uv_lock_sha256')}`",
+        f"- Materializer environment: Python `{materializer_environment.get('python_version')}`, "
+        f"{materializer_environment.get('platform_system')} "
+        f"`{materializer_environment.get('platform_release')}`; lock SHA-256 "
+        f"`{materializer_environment.get('uv_lock_sha256')}`",
+        f"- Replay-attempt environment identity SHA-256 values: `{replay_environment_hashes}`",
         f"- Selected cases materialized: {manifest['selection']['case_count']}",
         f"- Planner counts: `{manifest['selection']['planner_counts']}`",
         f"- Scenario-family counts: `{manifest['selection']['scenario_family_counts']}`",

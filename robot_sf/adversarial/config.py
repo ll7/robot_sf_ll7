@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from random import Random
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
@@ -320,6 +320,13 @@ class CandidateEvaluation:
     bundle_path: Path | None = None
     error: str | None = None
     effective_scenario_hash: str | None = None
+    evaluation_disposition: Literal[
+        "not_recorded",
+        "rejected_by_search_space",
+        "rejected_by_admissibility",
+        "rejected_by_certification",
+        "evaluator_invoked",
+    ] = "not_recorded"
 
     def with_objective(self, objective_value: float | None) -> CandidateEvaluation:
         """Return a copy with an objective score attached."""

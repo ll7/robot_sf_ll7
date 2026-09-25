@@ -34,6 +34,7 @@ from robot_sf.benchmark.snqi.v2_spec import (
     SnqiV2Spec,
     parse_v2_json,
 )
+from robot_sf.benchmark.spawn_validity import SPAWN_VALIDITY_SCHEMA_VERSION
 
 CLAIM_BOUNDARY = (
     "SNQI-v2 is a declared benchmark aggregate over simulator quantities. It is not a validated "
@@ -628,6 +629,21 @@ def _write_markdown_report(path: Path, name: str, payload: Mapping[str, Any]) ->
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
+    """Refuse invalid or ambiguous spawn admission while preserving legacy absence."""
+    if "spawn_validity" not in episode:
+        return
+    block = episode["spawn_validity"]
+    if not isinstance(block, Mapping) or not isinstance(block.get("invalid_run"), bool):
+        raise ValueError("SNQI-v2 malformed spawn_validity: explicit boolean invalid_run required")
+    if block["invalid_run"]:
+        raise ValueError("SNQI-v2 refuses spawn_validity.invalid_run episode")
+    if block.get("invalid_reason") is not None:
+        raise ValueError("SNQI-v2 malformed spawn_validity: valid row has an invalid_reason")
+    if "schema_version" in block and block["schema_version"] != SPAWN_VALIDITY_SCHEMA_VERSION:
+        raise ValueError("SNQI-v2 malformed spawn_validity: unsupported schema_version")
+
+
 def validate_episode_execution(
     episode: Mapping[str, Any], *, expected_algorithm: str | None = None
 ) -> None:
@@ -639,6 +655,7 @@ def validate_episode_execution(
     """
     from robot_sf.benchmark.release_acceptance import _status_markers  # noqa: PLC0415
 
+    _validate_spawn_validity(episode)
     if not isinstance(episode.get("algorithm_metadata", {}), Mapping):
         raise ValueError("SNQI-v2 malformed algorithm metadata")
     # This companion describes optional posthoc metrics, not planner execution.

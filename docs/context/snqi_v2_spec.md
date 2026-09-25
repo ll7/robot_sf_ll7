@@ -31,8 +31,11 @@ active inputs fail; there is no zero imputation. A failure's undefined time rati
 is harmless because T is explicitly zero for failures.
 
 Collision-free successes score in [0.05, 1]; collision-free failures in [-0.70, 0].
-Collisions score at most -1, with overall minimum -2.70. Planner means are dominated
-by collision rate, then success rate; quality mainly separates similar outcomes.
+Collisions score at most -1, with overall minimum -2.70. These strict strata apply
+to individual episodes. Planner means combine success rate, collision rate and
+mean quality penalties; they do not guarantee lexicographic ordering by collision
+rate and then success rate. Quality differences can outweigh small differences
+in planner outcome rates.
 
 ## Changes from release 0.0.7
 

@@ -29,6 +29,7 @@ from robot_sf.benchmark.snqi.v2_spec import (
     QUALITY_TERMS,
     SIMULATED_FORCE,
     SOURCES,
+    TERMS,
     WEIGHTS,
     SnqiV2Spec,
     load_snqi_v2_spec,
@@ -202,6 +203,20 @@ def test_weight_loader_fail_closed(spec_files, mutation):
         ]
     spec_files[0].write_text(json.dumps(doc))
     with pytest.raises(ValueError):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("term", TERMS)
+def test_versioned_loader_rejects_alternate_stratum_safe_weights(spec_files, term):
+    """The fixed version cannot silently admit another safety-stratified score."""
+    doc = json.loads(spec_files[0].read_text())
+    doc["weights"][f"w_{term}"]["value"] *= 1.01
+    mutated = {key: doc["weights"][f"w_{key}"]["value"] for key in TERMS}
+    quality = sum(mutated[key] for key in QUALITY_TERMS)
+    assert mutated["S"] > quality
+    assert mutated["C"] > mutated["S"] + quality
+    spec_files[0].write_text(json.dumps(doc))
+    with pytest.raises(ValueError, match="exact declared weight"):
         load_snqi_v2_spec(*spec_files)
 
 

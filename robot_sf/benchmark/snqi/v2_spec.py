@@ -202,6 +202,8 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
             or not entry["rationale"].strip()
         ):
             raise ValueError("SNQI-v2 every weight needs value and nonempty rationale")
+    if any(entries[f"w_{term}"]["value"] != WEIGHTS[term] for term in TERMS):
+        raise ValueError("SNQI-v2.0 requires the exact declared weight values")
     if anchors_doc.get("version") != "SNQI-v2.0" or anchors_doc.get("status") != "frozen":
         raise ValueError("SNQI-v2 calibration anchors are not frozen")
     anchors = anchors_doc["anchors"]

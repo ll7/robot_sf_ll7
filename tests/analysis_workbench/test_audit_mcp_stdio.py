@@ -572,6 +572,7 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
             *,
             wait_for_dispatch: bool = False,
             response_timeout: float = 3.0,
+            phase: str = "response",
         ) -> dict[str, object]:
             process.stdin.write(json.dumps(message).encode() + b"\n")
             process.stdin.flush()
@@ -581,7 +582,7 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                 )
             ready, _, _ = select.select([process.stdout], [], [], response_timeout)
             assert ready, (
-                f"MCP proxy timed out after {response_timeout:g}s waiting for a dispatched "
+                f"MCP proxy timed out after {response_timeout:g}s waiting for {phase} "
                 f"response; {proxy_status()}"
             )
             line = process.stdout.readline()
@@ -600,6 +601,7 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                 },
             },
             response_timeout=15.0,
+            phase="initialize",
         )
         assert initialized["result"]["serverInfo"]["name"] == "robot-sf-audit"
         process.stdin.write(
@@ -609,7 +611,10 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
             + b"\n"
         )
         process.stdin.flush()
-        listed = exchange({"jsonrpc": "2.0", "id": "list", "method": "tools/list", "params": {}})
+        listed = exchange(
+            {"jsonrpc": "2.0", "id": "list", "method": "tools/list", "params": {}},
+            phase="tools/list",
+        )
         assert len(listed["result"]["tools"]) == len(AUDIT_MCP_TOOLS)
         called = exchange(
             {
@@ -622,6 +627,7 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                 },
             },
             wait_for_dispatch=True,
+            phase="tools/call",
         )
         assert called["result"]["structuredContent"]["status"] == "complete"
         assert session.session_token not in json.dumps(

@@ -4615,9 +4615,10 @@ def _validate_legacy_artifact_projection(
         artifact_projection = _admission_projection_from_episode(episode, selected_projection)
     except CorpusError as exc:
         return [f"legacy admission replay artifact is invalid: {exc}"]
+    consistency_errors = _replay_outcome_metric_consistency_errors(episode)
     if artifact_projection != selected_projection:
-        return ["selected projection differs from a verified replay artifact"]
-    return []
+        consistency_errors.append("selected projection differs from a verified replay artifact")
+    return consistency_errors
 
 
 def _admission_projection_from_episode(

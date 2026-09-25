@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 from robot_sf.benchmark.failure_mechanism_taxonomy import (
     MECHANISM_SCHEMA_VERSION,
@@ -305,6 +305,21 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     Draft202012Validator(
         json.loads((_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_text())
     ).validate(record)
+    runtime_identity_validator = Draft202012Validator(
+        json.loads(
+            (
+                _REPO_ROOT / "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json"
+            ).read_text()
+        )
+    )
+    runtime_identity_validator.validate(record)
+    invalid_identity = dict(record)
+    invalid_identity["selected_map_identity"] = {
+        **record["selected_map_identity"],
+        "sha256": "not-a-sha256",
+    }
+    with pytest.raises(ValidationError):
+        runtime_identity_validator.validate(invalid_identity)
 
     assert record["failure_mechanism"]["mechanism_schema_version"] == MECHANISM_SCHEMA_VERSION
     assert record["failure_mechanism"]["mechanism_label"] == "unknown"

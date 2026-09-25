@@ -108,11 +108,14 @@ def certify_scenario_file(
     *,
     scenario_id: str | None = None,
     settings: CertificationSettings | None = None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> list[ScenarioCertificate]:
     """Certify all scenarios, or one selected scenario, from a scenario manifest.
 
     Returns:
-        List of certificates in manifest order, or a single selected certificate.
+        List of certificates in manifest order, or a single selected certificate. When
+        ``runtime_input_records`` is supplied, it receives the parser-consumed external
+        map and route-override snapshots without changing the ``scenario_cert.v1`` payload.
     """
 
     scenarios = load_scenarios(scenario_path)
@@ -123,10 +126,23 @@ def certify_scenario_file(
     ]
     if scenario_id is not None and not selected:
         raise ValueError(f"Scenario id '{scenario_id}' not found in {scenario_path}")
-    return [
-        certify_scenario(scenario, scenario_path=scenario_path, settings=settings)
-        for scenario in selected
-    ]
+    certificates = []
+    for scenario in selected:
+        if runtime_input_records is None:
+            certificate = certify_scenario(
+                scenario,
+                scenario_path=scenario_path,
+                settings=settings,
+            )
+        else:
+            certificate = certify_scenario(
+                scenario,
+                scenario_path=scenario_path,
+                settings=settings,
+                runtime_input_records=runtime_input_records,
+            )
+        certificates.append(certificate)
+    return certificates
 
 
 def certify_scenario(
@@ -134,17 +150,27 @@ def certify_scenario(
     *,
     scenario_path: Path,
     settings: CertificationSettings | None = None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> ScenarioCertificate:
     """Build a ``scenario_cert.v1`` certificate from a scenario-loader entry.
 
     Returns:
-        Scenario certificate with fail-closed classification and evidence.
+        Scenario certificate with fail-closed classification and evidence. When
+        ``runtime_input_records`` is supplied, it receives the parser-consumed external
+        map and route-override snapshots without changing the ``scenario_cert.v1`` payload.
     """
 
     cert_settings = settings or CertificationSettings()
     sid = _scenario_id(scenario)
     try:
-        config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        if runtime_input_records is None:
+            config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        else:
+            config = build_robot_config_from_scenario(
+                scenario,
+                scenario_path=scenario_path,
+                runtime_input_records=runtime_input_records,
+            )
     except Exception as exc:  # noqa: BLE001 - certificate must fail closed on loader errors.
         return _invalid_scenario_certificate(
             scenario,

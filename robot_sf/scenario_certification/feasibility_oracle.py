@@ -718,6 +718,7 @@ def _geometric_margin(
     """
     envelope_diameter_m = 2.0 * float(envelope_radius_m)
     identity_before: Mapping[str, Any] | None = None
+    consumed_runtime_inputs: list[dict[str, str]] | None = None
     if require_runtime_input_binding:
         identity_before = scenario_input_identity(
             scenario_path,
@@ -729,7 +730,15 @@ def _geometric_margin(
                 "runtime_input_identity_unavailable",
             )
     try:
-        certificate = certifier(scenario, scenario_path)
+        if require_runtime_input_binding:
+            consumed_runtime_inputs = []
+            certificate = _default_certifier(
+                scenario,
+                scenario_path,
+                runtime_input_records=consumed_runtime_inputs,
+            )
+        else:
+            certificate = certifier(scenario, scenario_path)
     except Exception as exc:  # noqa: BLE001 - oracle must fail closed on certifier errors.
         return _blocked_geometric_margin(envelope_radius_m, str(exc))
 
@@ -740,9 +749,19 @@ def _geometric_margin(
             scenario_path,
             scenario_id=_scenario_id(scenario),
         )
+        consumed_inputs_match = (
+            identity_before is not None
+            and consumed_runtime_inputs is not None
+            and runtime_input_records_match(
+                identity_before,
+                consumed_runtime_inputs,
+                scenario_id=_scenario_id(scenario),
+            )
+        )
         runtime_input_identity_stable = (
             identity_before is not None
             and _scenario_input_identity_matches(identity_before, identity_after)
+            and consumed_inputs_match
             and _certificate_matches_scenario_input_identity(certificate, identity_before)
         )
         if not runtime_input_identity_stable:
@@ -1155,13 +1174,24 @@ def _annotation_for_category(category: str) -> str:
     return PLANNER_LIMITED
 
 
-def _default_certifier(scenario: Mapping[str, Any], scenario_path: Path) -> ScenarioCertificate:
-    """Default route certifier adapter (keyword-only ``scenario_path`` bridge).
+def _default_certifier(
+    scenario: Mapping[str, Any],
+    scenario_path: Path,
+    *,
+    runtime_input_records: list[dict[str, str]] | None = None,
+) -> ScenarioCertificate:
+    """Default route certifier adapter with optional exact input capture.
 
     Returns:
         Scenario certificate from the canonical ``certify_scenario`` certifier.
     """
-    return certify_scenario(scenario, scenario_path=scenario_path)
+    if runtime_input_records is None:
+        return certify_scenario(scenario, scenario_path=scenario_path)
+    return certify_scenario(
+        scenario,
+        scenario_path=scenario_path,
+        runtime_input_records=runtime_input_records,
+    )
 
 
 def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner:

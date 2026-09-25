@@ -135,6 +135,8 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
         or result.get("source_sha") != source_sha
         or manifest.source_sha != source_sha
         or result.get("identity_file_sha256") != _sha256(identity_path)
+        or identity.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
+        or result.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
     ):
         raise ValueError("producer is not an accepted exact-source scientific candidate")
     unsigned = dict(identity)
@@ -565,7 +567,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
         raise ValueError("publication derivative must be separate from its producer")
     _require_copyable_producer(producer_root)
     identity, _ = _require_scientific_candidate(producer_root, expected_source_sha, manifest)
-    _read_scientific_candidate_manifest(producer_root, expected_source_sha)
+    _read_scientific_candidate_manifest(producer_root, expected_source_sha, BASELINE_ARCHIVE_SHA256)
     original_raw = copy.deepcopy(identity["raw_episode_sha256"])
     if candidate_root.exists() or candidate_root.is_symlink():
         raise FileExistsError("publication derivative already exists")

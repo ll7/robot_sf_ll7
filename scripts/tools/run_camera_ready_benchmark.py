@@ -46,6 +46,7 @@ from robot_sf.benchmark.release_acceptance import (  # noqa: E402
     validate_full_benchmark_release_acceptance,
 )
 from robot_sf.benchmark.release_protocol import (  # noqa: E402
+    SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256,
     build_scientific_candidate_identity,
     scientific_candidate_acceptance_view,
 )
@@ -58,13 +59,14 @@ from scripts.tools.run_benchmark_release import (  # noqa: E402
     _compare_rehearsal_checkpoint_identities,
 )
 from scripts.validation.check_release_metric_equivalence import (  # noqa: E402
+    _read_archive_campaign_manifest,
     _read_archive_manifest,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-FROZEN_0_0_7_ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
+FROZEN_0_0_7_ARCHIVE_SHA256 = SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256
 FROZEN_0_0_7_SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 
 
@@ -98,6 +100,7 @@ def _finish_scientific_candidate(
     result: dict[str, Any],
     cfg: Any,
     baseline_manifest: dict[str, Any],
+    baseline_campaign_manifest: dict[str, Any],
     args: Any,
     checkpoint_receipt: dict[str, Any],
 ) -> None:
@@ -106,6 +109,8 @@ def _finish_scientific_candidate(
     identity = build_scientific_candidate_identity(
         cfg=cfg,
         baseline_manifest=baseline_manifest,
+        baseline_campaign_manifest=baseline_campaign_manifest,
+        baseline_archive_sha256=FROZEN_0_0_7_ARCHIVE_SHA256,
         source_sha=args.source_commit,
         checkpoint_receipt=checkpoint_receipt,
         checkpoint_receipt_sha256=_sha256(args.checkpoint_receipt),
@@ -170,6 +175,7 @@ def _finish_scientific_candidate(
         "status": "accepted_pre_publication",
         "source_sha": args.source_commit,
         "scientific_identity_sha256": identity["scientific_identity_sha256"],
+        "baseline_archive_sha256": FROZEN_0_0_7_ARCHIVE_SHA256,
         "identity_file_sha256": _sha256(identity_path),
         "full_acceptance_sha256": _sha256(report_dir / "scientific_candidate_acceptance.json"),
         "metric_equivalence_sha256": _sha256(equivalence),
@@ -295,6 +301,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     cfg = load_campaign_config(args.config)
     baseline_manifest: dict[str, Any] | None = None
+    baseline_campaign_manifest: dict[str, Any] | None = None
     checkpoint_receipt: dict[str, Any] | None = None
     if args.scientific_candidate:
         if (
@@ -319,6 +326,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         if _sha256(args.baseline_archive) != FROZEN_0_0_7_ARCHIVE_SHA256:
             raise ValueError("frozen 0.0.7 archive checksum mismatch")
         baseline_manifest = _read_archive_manifest(args.baseline_archive, FROZEN_0_0_7_SOURCE_SHA)
+        baseline_campaign_manifest = _read_archive_campaign_manifest(
+            args.baseline_archive, FROZEN_0_0_7_SOURCE_SHA
+        )
         checkpoint_receipt = validate_checkpoint_staging_receipt(
             cfg,
             args.checkpoint_receipt,
@@ -342,6 +352,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         build_scientific_candidate_identity(
             cfg=cfg,
             baseline_manifest=baseline_manifest,
+            baseline_campaign_manifest=baseline_campaign_manifest,
+            baseline_archive_sha256=FROZEN_0_0_7_ARCHIVE_SHA256,
             source_sha=args.source_commit,
             checkpoint_receipt=checkpoint_receipt,
             checkpoint_receipt_sha256=_sha256(args.checkpoint_receipt),
@@ -395,9 +407,18 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             if args.scientific_candidate:
                 if campaign_exit_code(result) != 0:
                     raise ValueError("campaign did not complete successfully")
-                assert baseline_manifest is not None and checkpoint_receipt is not None
+                assert (
+                    baseline_manifest is not None
+                    and baseline_campaign_manifest is not None
+                    and checkpoint_receipt is not None
+                )
                 _finish_scientific_candidate(
-                    result, cfg, baseline_manifest, args, checkpoint_receipt
+                    result,
+                    cfg,
+                    baseline_manifest,
+                    baseline_campaign_manifest,
+                    args,
+                    checkpoint_receipt,
                 )
     except OrcaRvo2PreflightError as exc:
         result = {

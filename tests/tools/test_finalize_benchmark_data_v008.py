@@ -52,6 +52,9 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     producer = tmp_path / "producer"
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"synthetic archive only")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
     registry = tmp_path / "model/registry.yaml"
     registry.parent.mkdir(parents=True)
     registry.write_text("fixture: true\n", encoding="utf-8")
@@ -91,6 +94,7 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     }
     identity = {
         "schema_version": "benchmark-scientific-candidate.v1",
+        "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
         "source_sha": SOURCE_SHA,
         "campaign_template_path": "configs/benchmarks/fixture.yaml",
         "campaign_template_sha256": "b" * 64,
@@ -130,6 +134,7 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     }
     result = {
         "schema_version": "benchmark-scientific-candidate-result.v1",
+        "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
         "status": "accepted_pre_publication",
         "source_sha": SOURCE_SHA,
         "identity_file_sha256": finalizer._sha256(identity_path),
@@ -155,11 +160,14 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         },
     )
     assert finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)[0] == identity
-    baseline = tmp_path / "predecessor.tar.gz"
-    baseline.write_bytes(b"synthetic archive only")
+    result["baseline_archive_sha256"] = "b" * 64
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+    result["baseline_archive_sha256"] = finalizer.BASELINE_ARCHIVE_SHA256
+    _write_json(producer / "release/scientific_candidate_result.json", result)
     resolved_identity = tmp_path / "resolved_identity.json"
     resolved_identity.write_text("{}\n", encoding="utf-8")
-    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
     monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
     monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
     monkeypatch.setattr(finalizer, "_read_scientific_candidate_manifest", lambda *_: science)

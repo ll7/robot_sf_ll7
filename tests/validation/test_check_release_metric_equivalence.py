@@ -159,6 +159,7 @@ def test_scientific_candidate_rejects_publication_and_changed_rows(tmp_path: Pat
     identity = {
         "schema_version": "benchmark-scientific-candidate.v1",
         "source_sha": NEW_SHA,
+        "baseline_archive_sha256": "a" * 64,
         "raw_episode_sha256": {
             raw_path.relative_to(root).as_posix(): hashlib.sha256(raw_path.read_bytes()).hexdigest()
         },
@@ -166,7 +167,9 @@ def test_scientific_candidate_rejects_publication_and_changed_rows(tmp_path: Pat
     }
     candidate_path = root / "release/scientific_candidate.json"
     candidate_path.write_text(json.dumps(identity), encoding="utf-8")
-    assert _read_scientific_candidate_manifest(root, NEW_SHA) == _manifest(NEW_SHA)
+    assert _read_scientific_candidate_manifest(root, NEW_SHA, "a" * 64) == _manifest(NEW_SHA)
+    with pytest.raises(ValueError, match="predecessor archive checksum mismatch"):
+        _read_scientific_candidate_manifest(root, NEW_SHA, "b" * 64)
 
     identity["scientific_manifest"]["provenance"]["doi"] = "{{version_doi}}"
     candidate_path.write_text(json.dumps(identity), encoding="utf-8")

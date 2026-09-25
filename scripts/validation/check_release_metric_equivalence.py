@@ -148,6 +148,30 @@ def _read_archive_manifest(archive: Path, expected_source: str) -> dict[str, Any
     return _validate_manifest(payload, expected_source)
 
 
+def _read_archive_campaign_manifest(archive: Path, expected_source: str) -> dict[str, Any]:
+    """Read the frozen per-arm checkpoint custody from the publication archive.
+
+    Returns:
+        The archived campaign manifest with its exact predecessor source verified.
+    """
+    with tarfile.open(archive, "r:gz") as handle:
+        members = [
+            member
+            for member in handle.getmembers()
+            if member.isfile() and member.name.endswith("/payload/campaign_manifest.json")
+        ]
+        if len(members) != 1:
+            raise ValueError("archive must contain exactly one campaign manifest")
+        stream = handle.extractfile(members[0])
+        if stream is None:
+            raise ValueError("cannot read archive campaign manifest")
+        payload = json.load(stream)
+    git = payload.get("git") if isinstance(payload, dict) else None
+    if not isinstance(git, dict) or git.get("commit") != expected_source:
+        raise ValueError("archive campaign manifest source mismatch")
+    return payload
+
+
 def _read_candidate_manifest(root: Path, expected_source: str) -> dict[str, Any]:
     path = root / "release" / "release_manifest.resolved.json"
     if not path.is_file():
@@ -156,7 +180,7 @@ def _read_candidate_manifest(root: Path, expected_source: str) -> dict[str, Any]
 
 
 def _read_scientific_candidate_manifest(  # noqa: C901
-    root: Path, expected_source: str
+    root: Path, expected_source: str, expected_baseline_sha256: str | None = None
 ) -> dict[str, Any]:
     """Verify publication-free custody before comparing predecessor science."""
     path = root / "release" / "scientific_candidate.json"
@@ -196,6 +220,11 @@ def _read_scientific_candidate_manifest(  # noqa: C901
     reject_publication(identity)
     if identity.get("source_sha") != expected_source:
         raise ValueError("scientific candidate source mismatch")
+    if (
+        expected_baseline_sha256 is not None
+        and identity.get("baseline_archive_sha256") != expected_baseline_sha256
+    ):
+        raise ValueError("scientific candidate predecessor archive checksum mismatch")
     raw = identity.get("raw_episode_sha256")
     if not isinstance(raw, dict) or not raw:
         raise ValueError("scientific candidate has no raw episode checksums")
@@ -441,7 +470,9 @@ def main() -> int:
     candidate = _read_candidate(args.candidate_root, args.candidate_source_sha)
     baseline_manifest = _read_archive_manifest(args.baseline_archive, args.baseline_source_sha)
     candidate_manifest = (
-        _read_scientific_candidate_manifest(args.candidate_root, args.candidate_source_sha)
+        _read_scientific_candidate_manifest(
+            args.candidate_root, args.candidate_source_sha, args.baseline_sha256
+        )
         if args.scientific_candidate
         else _read_candidate_manifest(args.candidate_root, args.candidate_source_sha)
     )

@@ -1,6 +1,8 @@
 """Fail-closed identity tests for the separately staged 0.0.7 force observer."""
 
 import importlib.util
+import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -62,6 +64,7 @@ def _capture() -> dict:
                 "post_step_positions": [[0.1, 0.0], [1.1, 0.0]],
                 "total_forces": [[1.0, 0.0], [2.0, 0.0]],
                 "robot_forces": [[0.2, 0.0], [0.3, 0.0]],
+                "component_ids": ["ped_robot:robot_0"],
             }
         ],
     }
@@ -117,6 +120,59 @@ def test_rejects_wrong_prior_trace_state_on_second_step() -> None:
     row["steps"] = 2
     with pytest.raises(observer.ObserverIdentityError, match="pre-step positions"):
         observer.bind_episode(capture, row)
+
+
+def test_rejects_changed_component_roster_on_second_step() -> None:
+    capture = _capture()
+    second = dict(capture["steps"][0])
+    second["step"] = 1
+    second["step_entry_positions"] = [[0.1, 0.0], [1.1, 0.0]]
+    second["force_input_positions"] = [[0.1, 0.0], [1.1, 0.0]]
+    second["component_ids"] = ["ped_robot:robot_1"]
+    capture["steps"].append(second)
+    row = _row()
+    second_trace = dict(row["algorithm_metadata"]["simulation_step_trace"]["steps"][0])
+    second_trace["step"] = 1
+    row["algorithm_metadata"]["simulation_step_trace"]["steps"].append(second_trace)
+    row["steps"] = 2
+    with pytest.raises(observer.ObserverIdentityError, match="component roster"):
+        observer.bind_episode(capture, row)
+
+
+def test_live_dispatch_rejects_episode_on_second_thread(tmp_path: Path) -> None:
+    namespace: dict = {}
+    exec(  # noqa: S102 - compile a synthetic frozen filename to exercise live trace dispatch
+        compile(
+            "def run_map_episode(scenario, seed, algo):\n    return None\n",
+            observer.RUNNER_FILE,
+            "exec",
+        ),
+        namespace,
+    )
+    watched = observer.ForceObserver(tmp_path, {})
+    failures: list[Exception] = []
+
+    def invoke() -> None:
+        try:
+            namespace["run_map_episode"]({"name": "doorway"}, 113, "ppo")
+        except Exception as exc:
+            failures.append(exc)
+
+    old_sys_trace = sys.gettrace()
+    old_thread_trace = threading.gettrace()
+    try:
+        sys.settrace(watched)
+        threading.settrace(watched)
+        thread = threading.Thread(target=invoke)
+        thread.start()
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    finally:
+        sys.settrace(old_sys_trace)
+        threading.settrace(old_thread_trace)
+    assert len(failures) == 1
+    assert isinstance(failures[0], observer.ObserverIdentityError)
+    assert "process or thread" in str(failures[0])
 
 
 def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -> None:

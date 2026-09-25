@@ -75,6 +75,7 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
     _same(row["steps"], len(steps), "recorded episode step count")
     prior = _positions(reset)
     bound_steps = []
+    component_roster: list[str] | None = None
     for index, (sample, step) in enumerate(zip(capture["steps"], steps, strict=True)):
         _same(step["step"], index, "trace step index")
         _same(sample["step"], index, "capture step index")
@@ -89,6 +90,12 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
             "total force vectors",
         )
         _same(len(sample["robot_forces"]), len(actors), "robot force cardinality")
+        roster = sample["component_ids"]
+        if not roster or len(set(roster)) != len(roster):
+            raise ObserverIdentityError("robot force component IDs missing or duplicated")
+        if component_roster is None:
+            component_roster = roster
+        _same(roster, component_roster, "robot force component roster")
         bound_steps.append({"step": index, "actor_ids": actors, **sample})
         prior = _positions(step["pedestrians"])
     return {
@@ -117,6 +124,7 @@ class ForceObserver:
         self.episode: dict[str, Any] | None = None
         self.step: dict[str, Any] | None = None
         self.force_returns: dict[int, dict[str, Any]] = {}
+        self.component_object_ids: tuple[int, ...] | None = None
 
     def _check_process(self) -> None:
         if os.getpid() != self.pid or threading.get_ident() != self.thread:
@@ -153,6 +161,7 @@ class ForceObserver:
                 ),
                 "steps": [],
             }
+            self.component_object_ids = None
         elif event == "return" and self.episode is not None:
             if not isinstance(arg, dict):
                 raise ObserverIdentityError("episode returned without a record")
@@ -216,6 +225,10 @@ class ForceObserver:
                 component_inputs.append(sample)
             if not all(component_ids) or len(set(component_ids)) != len(component_ids):
                 raise ObserverIdentityError("robot force component IDs missing or duplicated")
+            object_ids = tuple(id(component) for component in components)
+            if self.component_object_ids is None:
+                self.component_object_ids = object_ids
+            _same(object_ids, self.component_object_ids, "robot force component object roster")
             self.step["force_input_positions"] = input_positions
             self.step["robot_forces"] = _vectors(values, count)
             self.step["component_ids"] = component_ids
@@ -299,6 +312,7 @@ def install_from_environment() -> ForceObserver | None:
     }
     observer = ForceObserver(Path(output), provenance)
     sys.settrace(observer)
+    threading.settrace(observer)
     return observer
 
 

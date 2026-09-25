@@ -12,6 +12,7 @@ import pytest
 from robot_sf.adversarial.falsification_report import (
     REPORT_SCHEMA,
     build_convergence_report,
+    render_figures,
     render_markdown,
     write_convergence_report,
 )
@@ -178,6 +179,33 @@ def test_cli_writes_machine_readable_summary_table_and_figure(
     assert "available: 1, unknown: 3" in markdown
     assert "Not performed; descriptive only" in markdown
     assert (output / "convergence_constraints_first_lexicographic_v1.png").is_file()
+
+
+def test_figure_labels_budget_with_no_scored_observations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    original_subplots = plt.subplots
+    captured_figures = []
+
+    def capture_subplots(*args: Any, **kwargs: Any) -> Any:
+        figure, axes = original_subplots(*args, **kwargs)
+        captured_figures.append(figure)
+        return figure, axes
+
+    monkeypatch.setattr(plt, "subplots", capture_subplots)
+    render_figures(_report(), tmp_path)
+
+    assert any(
+        "No scored observations" in text.get_text()
+        for figure in captured_figures
+        for axis in figure.axes
+        for text in axis.texts
+    )
 
 
 def test_unsupported_comparison_schema_fails_closed(tmp_path: Path) -> None:

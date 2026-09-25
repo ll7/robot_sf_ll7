@@ -1606,8 +1606,22 @@ def render_figures(report: dict[str, Any], output_dir: Path) -> list[Path]:
             axis.set_ylabel("Best-so-far objective (maximize)")
             axis.set_xlim(1, max(1, budget))
             axis.grid(True, alpha=0.25)
-            if axis.get_legend_handles_labels()[0]:
+            has_scored_observations = any(
+                math.isfinite(float(value))
+                for line in axis.get_lines()
+                for value in line.get_ydata()
+            )
+            if has_scored_observations:
                 axis.legend(loc="best")
+            else:
+                axis.text(
+                    0.5,
+                    0.5,
+                    "No scored observations\nwithin this budget",
+                    ha="center",
+                    va="center",
+                    transform=axis.transAxes,
+                )
         for axis in flat_axes[len(budgets) :]:
             axis.set_visible(False)
         fig.suptitle(

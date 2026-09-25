@@ -39,8 +39,9 @@ Search curves maximize the objective recorded by the runner and carry the prior 
 invalid, failed, or scoreless attempts. Solid curves summarize only candidates with explicit
 `analysis_eligibility.eligible=true` and no fallback/degraded execution; dashed curves show all
 observed scored outcomes. Both curves stop at the comparison-indexed budget, and missing budget
-slots remain explicit rather than being drawn as completed evaluations. Runs whose comparison row
-disagrees with manifest objective, seed, or budget are retained but excluded from aggregates. A
+slots remain explicit rather than being drawn as completed evaluations. A budget panel without
+scored observations is labeled, so an empty curve is not mistaken for a zero-valued result. Runs
+whose comparison row disagrees with manifest objective, seed, or budget are retained but excluded from aggregates. A
 Random/TPE seed pair additionally requires the same normalized scenario/search/planner configuration
 fingerprint and eligible scores from both runs; exclusion reasons are retained in JSON. Runtime is
 read only from an explicit runtime field; it remains `null` / “Not recorded” when the source

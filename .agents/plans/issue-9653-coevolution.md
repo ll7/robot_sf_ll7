@@ -17,9 +17,9 @@ Implement one config-driven command for a provenance-bound tiny two-round planne
 # Steps
 
 1. Inspect and record the stable public APIs and schemas from merged/current code and reviewed upstream branches; do not integrate known-broken candidate APIs.
-2. Define the smallest round manifest/config that binds source revision, planner/config, map/scenario inputs, seeds, budgets, case IDs, artifacts, statuses, and stop decision.
-3. Implement the orchestrator as a thin coordinator over existing entry points. Freeze and digest each round before execution; verify persisted inputs before resume.
-4. Add fixture tests for two rounds, round-N-to-N+1 regression flow, no-discovery, invalid/mismatch/unknown preservation, stop rules, budget exhaustion, infrastructure failure, and resume identity.
+2. Define the smallest round manifest/config that binds source revision, planner/config, map/scenario inputs, sampler, seeds, budgets, case IDs, artifacts, statuses, and stop decision.
+3. Implement the orchestrator as a thin coordinator over existing entry points. Deep-freeze and digest each round before execution; journal paired manifest transitions and verify persisted inputs before resume.
+4. Add fixture tests for two rounds, round-N-to-N+1 regression flow, no-discovery, invalid/mismatch/unknown preservation, stop rules, budget exhaustion, infrastructure failure, sampler identity, case-payload immutability, manifest crash recovery, and resume identity.
 5. Once the upstream contracts are reviewed and available, run one finite tiny two-round end-to-end demonstration. Require two rounds unless an infrastructure gate fails; preserve a no-discovery result as budget-qualified.
 6. Generate a machine-readable receipt/report, perform independent exact-head review, repair findings, and run delivery readiness after the #9651 readiness lane clears.
 

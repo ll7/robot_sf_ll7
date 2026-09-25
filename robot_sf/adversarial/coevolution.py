@@ -14,7 +14,8 @@ The adapter boundary is normalized rather than tied to provisional manifests:
 * ``evaluate`` runs the selected planner on frozen held-out and accumulated
   regression case IDs through the canonical evaluation owner;
 * ``falsify`` wraps ``robot_sf.adversarial.search.run_adversarial_search`` and
-  returns every proposed candidate, including invalid and failed candidates;
+  returns the selected sampler plus every proposed candidate, including invalid
+  and failed candidates;
 * ``verify_discovery`` adapts replay plus feasibility/admissibility evidence;
 * ``admit_case`` adapts the versioned counterexample corpus.
 
@@ -35,6 +36,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Protocol
 
 try:
@@ -44,10 +46,13 @@ except ImportError:  # pragma: no cover - Windows has no POSIX flock implementat
 
 import yaml
 
+from robot_sf.adversarial.samplers import SUPPORTED_SAMPLERS
+
 CONFIG_SCHEMA = "adversarial_coevolution_config.v1"
 RUN_SCHEMA = "adversarial_coevolution_run.v1"
 ROUND_SCHEMA = "adversarial_coevolution_round.v1"
 PHASE_SCHEMA = "adversarial_coevolution_phase.v1"
+MANIFEST_TRANSACTION_SCHEMA = "adversarial_coevolution_manifest_transaction.v1"
 
 _EXECUTION_STATUSES = {"ok", "fallback", "degraded", "failed", "unknown", "not_run"}
 _SEARCH_STATUSES = {"evaluated", "invalid", "failed"}
@@ -109,9 +114,19 @@ def _atomic_write_json(path: Path, payload: Any) -> str:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
     return _sha256_bytes(encoded)
+
+
+def _fsync_directory(path: Path) -> None:
+    """Persist directory-entry changes made by atomic replace or unlink."""
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -199,9 +214,13 @@ def _parse_search_runtime(search: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError("falsification.dt must be a finite positive number")
     record_forces = search.get("record_forces", True)
     require_certification = search.get("require_certification", False)
+    sampler = _non_empty_string(search.get("sampler"), "falsification.sampler").lower()
     if not isinstance(record_forces, bool) or not isinstance(require_certification, bool):
         raise TypeError("falsification record_forces and require_certification must be booleans")
+    if sampler not in SUPPORTED_SAMPLERS:
+        raise ValueError(f"falsification.sampler must be one of: {', '.join(SUPPORTED_SAMPLERS)}")
     return {
+        "sampler": sampler,
         "horizon": horizon,
         "dt": dt,
         "workers": _integer(search.get("workers", 1), "falsification.workers", minimum=1),
@@ -226,6 +245,7 @@ class CoevolutionConfig:
     search_space: Path
     policy: str
     objective: str
+    falsification_sampler: str
     horizon: int | None
     dt: float | None
     workers: int
@@ -310,6 +330,7 @@ def load_coevolution_config(path: str | Path) -> CoevolutionConfig:
         ),
         policy=_non_empty_string(search.get("policy"), "falsification.policy"),
         objective=_non_empty_string(search.get("objective"), "falsification.objective"),
+        falsification_sampler=search_runtime["sampler"],
         horizon=search_runtime["horizon"],
         dt=search_runtime["dt"],
         workers=search_runtime["workers"],
@@ -355,17 +376,44 @@ class RegressionCase:
     scenario: Mapping[str, Any] | None = None
     source_evidence: Mapping[str, Any] | None = None
 
+    def __post_init__(self) -> None:
+        """Copy and recursively freeze JSON case payloads against adapter mutation."""
+        for field_name in ("scenario", "source_evidence"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if not isinstance(value, Mapping):
+                raise TypeError(f"RegressionCase.{field_name} must be a mapping or null")
+            detached = json.loads(_canonical_json(_deep_thaw(value)))
+            object.__setattr__(self, field_name, _deep_freeze(detached))
+
     def to_json(self) -> dict[str, Any]:
-        """Return a JSON-safe immutable record for the next round manifest."""
+        """Return a detached JSON-safe record for the next round manifest."""
         return {
             "case_id": self.case_id,
             "origin_round": self.origin_round,
             "candidate_id": self.candidate_id,
-            "scenario": dict(self.scenario) if self.scenario is not None else None,
-            "source_evidence": (
-                dict(self.source_evidence) if self.source_evidence is not None else None
-            ),
+            "scenario": _deep_thaw(self.scenario) if self.scenario is not None else None,
+            "source_evidence": _deep_thaw(self.source_evidence)
+            if self.source_evidence is not None
+            else None,
         }
+
+
+def _deep_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _deep_freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze(item) for item in value)
+    return value
+
+
+def _deep_thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _deep_thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_deep_thaw(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,6 +428,7 @@ class RoundRequest:
     optimizer_random_seed: int
     optimizer_tpe_seed: int
     falsification_seed: int
+    falsification_sampler: str
     heldout_case_ids: tuple[str, ...]
     regression_cases: tuple[RegressionCase, ...]
     source_revision: str
@@ -413,6 +462,7 @@ class RoundRequest:
             "policy": self.config.policy,
             "objective": self.config.objective,
             "search_execution": {
+                "sampler": self.falsification_sampler,
                 "horizon": self.config.horizon,
                 "dt": self.config.dt,
                 "workers": self.config.workers,
@@ -648,7 +698,6 @@ def _execute_phase(
     request: RoundRequest,
     round_state: dict[str, Any],
     round_dir: Path,
-    manifest_path: Path,
     run_manifest: dict[str, Any],
     execute: Callable[[], Mapping[str, Any]],
     validate: Callable[[dict[str, Any]], dict[str, Any]],
@@ -676,8 +725,7 @@ def _execute_phase(
         "artifact": str(_phase_path(round_dir, phase).relative_to(request.config.output_dir)),
     }
     round_state["status"] = "running"
-    _atomic_write_json(round_dir / "round_manifest.json", round_state)
-    _atomic_write_json(manifest_path, run_manifest)
+    _write_manifests(request.config, run_manifest, round_state)
     raw_output: dict[str, Any] | None = None
     try:
         raw_value = execute()
@@ -703,8 +751,7 @@ def _execute_phase(
             "file_sha256": file_sha,
             "artifact": str(_phase_path(round_dir, phase).relative_to(request.config.output_dir)),
         }
-        _atomic_write_json(round_dir / "round_manifest.json", round_state)
-        _atomic_write_json(manifest_path, run_manifest)
+        _write_manifests(request.config, run_manifest, round_state)
         return normalized
     except Exception as exc:
         failure_output: dict[str, Any] = {
@@ -740,8 +787,7 @@ def _execute_phase(
             "round_number": request.round_number,
             "claim_boundary": "No scientific conclusion is drawn from an incomplete round.",
         }
-        _atomic_write_json(round_dir / "round_manifest.json", round_state)
-        _atomic_write_json(manifest_path, run_manifest)
+        _write_manifests(request.config, run_manifest, round_state)
         raise CoevolutionInfrastructureError(
             f"phase {phase} failed in round {request.round_number}: {exc}"
         ) from exc
@@ -877,6 +923,12 @@ def _validate_falsification_output(raw: dict[str, Any], request: RoundRequest) -
     candidates = raw.get("candidates")
     if not isinstance(candidates, list):
         raise TypeError("falsification.candidates must be a list")
+    sampler = _non_empty_string(raw.get("sampler"), "falsification.sampler").lower()
+    if sampler != request.falsification_sampler:
+        raise ValueError(
+            "falsification sampler differs from the frozen round input: "
+            f"expected {request.falsification_sampler!r}, got {sampler!r}"
+        )
     if len(candidates) != request.falsification_candidates:
         raise ValueError("falsification did not preserve exactly one row per candidate budget slot")
     seen_ids: set[str] = set()
@@ -1165,6 +1217,7 @@ def _round_request(
         optimizer_random_seed=config.optimizer_random_seed_base + offset,
         optimizer_tpe_seed=config.optimizer_tpe_seed_base + offset,
         falsification_seed=config.falsification_seed_base + offset,
+        falsification_sampler=config.falsification_sampler,
         heldout_case_ids=config.heldout_case_ids,
         regression_cases=tuple(regression_cases),
         source_revision=source_revision,
@@ -1261,12 +1314,95 @@ def _runtime_environment() -> dict[str, str]:
     }
 
 
+def _manifest_file_digest(payload: Mapping[str, Any]) -> str:
+    return _sha256_bytes(_canonical_json(payload) + b"\n")
+
+
+def _recover_pending_manifest_transaction(config: CoevolutionConfig) -> None:
+    """Finish an interrupted paired manifest update from its durable intent."""
+    transaction_path = config.output_dir / ".manifest_transaction.json"
+    if not transaction_path.is_file():
+        return
+    transaction = _read_json(transaction_path)
+    if transaction.get("schema") != MANIFEST_TRANSACTION_SCHEMA:
+        raise CoevolutionError("pending manifest transaction has an unsupported schema")
+    round_manifest = _mapping(transaction.get("round_manifest"), "transaction.round_manifest")
+    run_manifest = _mapping(transaction.get("run_manifest"), "transaction.run_manifest")
+    round_number = _integer(round_manifest.get("round_number"), "round_number", minimum=1)
+    expected_round_path = config.output_dir / f"round_{round_number:03d}" / "round_manifest.json"
+    if (
+        transaction.get("round_path")
+        != expected_round_path.relative_to(config.output_dir).as_posix()
+    ):
+        raise CoevolutionError("pending manifest transaction points outside its expected round")
+    if transaction.get("run_path") != "run_manifest.json":
+        raise CoevolutionError("pending manifest transaction has an unexpected run manifest path")
+    if (
+        round_manifest.get("schema") != ROUND_SCHEMA
+        or run_manifest.get("schema") != RUN_SCHEMA
+        or run_manifest.get("run_id") != config.run_id
+        or run_manifest.get("config_sha256") != config.config_sha256
+    ):
+        raise CoevolutionError("pending manifest transaction belongs to a different run")
+    rounds = run_manifest.get("rounds")
+    if not isinstance(rounds, list):
+        raise CoevolutionError("pending transaction run manifest rounds must be a list")
+    matches = [
+        row
+        for row in rounds
+        if isinstance(row, Mapping) and row.get("round_number") == round_number
+    ]
+    if len(matches) != 1 or _canonical_json(matches[0]) != _canonical_json(round_manifest):
+        raise CoevolutionError("pending transaction manifests do not contain the same round state")
+    if transaction.get("round_sha256") != _manifest_file_digest(round_manifest):
+        raise CoevolutionError("pending transaction round manifest digest is invalid")
+    if transaction.get("run_sha256") != _manifest_file_digest(run_manifest):
+        raise CoevolutionError("pending transaction run manifest digest is invalid")
+
+    _atomic_write_json(expected_round_path, round_manifest)
+    _atomic_write_json(config.output_dir / "run_manifest.json", run_manifest)
+    transaction_path.unlink()
+    _fsync_directory(config.output_dir)
+
+
 def _write_manifests(
     config: CoevolutionConfig, manifest: dict[str, Any], round_state: dict[str, Any]
 ) -> None:
+    _recover_pending_manifest_transaction(config)
     round_dir = config.output_dir / f"round_{round_state['round_number']:03d}"
-    _atomic_write_json(round_dir / "round_manifest.json", round_state)
-    _atomic_write_json(config.output_dir / "run_manifest.json", manifest)
+    round_number = round_state["round_number"]
+    rounds = manifest.get("rounds")
+    if not isinstance(rounds, list):
+        raise CoevolutionError("run manifest rounds must be a list")
+    matching_indices = [
+        index
+        for index, row in enumerate(rounds)
+        if isinstance(row, Mapping) and row.get("round_number") == round_number
+    ]
+    if len(matching_indices) != 1:
+        raise CoevolutionError(f"run manifest must contain round {round_number} exactly once")
+    round_payload = json.loads(_canonical_json(round_state))
+    rounds[matching_indices[0]] = round_state
+    run_payload = json.loads(_canonical_json(manifest))
+    transaction_path = config.output_dir / ".manifest_transaction.json"
+    journal = {
+        "schema": MANIFEST_TRANSACTION_SCHEMA,
+        "round_path": (round_dir / "round_manifest.json").relative_to(config.output_dir).as_posix(),
+        "run_path": "run_manifest.json",
+        "round_sha256": _manifest_file_digest(round_payload),
+        "run_sha256": _manifest_file_digest(run_payload),
+        "round_manifest": round_payload,
+        "run_manifest": run_payload,
+    }
+    _atomic_write_json(transaction_path, journal)
+    try:
+        _atomic_write_json(round_dir / "round_manifest.json", round_payload)
+        _atomic_write_json(config.output_dir / "run_manifest.json", run_payload)
+    except Exception:
+        _recover_pending_manifest_transaction(config)
+        raise
+    transaction_path.unlink()
+    _fsync_directory(config.output_dir)
 
 
 def _open_or_create_run(
@@ -1277,6 +1413,7 @@ def _open_or_create_run(
 ) -> tuple[dict[str, Any], bool]:
     if _sha256_file(config.config_path) != config.config_sha256:
         raise CoevolutionError("config bytes changed after load; reload before starting a run")
+    _recover_pending_manifest_transaction(config)
     manifest_path = config.output_dir / "run_manifest.json"
     if manifest_path.exists():
         if not resume:
@@ -1349,7 +1486,6 @@ def _run_round_phases(
     adapters: CoevolutionAdapters,
 ) -> dict[str, dict[str, Any]]:
     round_dir = request.round_dir
-    manifest_path = config.output_dir / "run_manifest.json"
 
     def phase(
         name: str,
@@ -1361,7 +1497,6 @@ def _run_round_phases(
             request=request,
             round_state=round_state,
             round_dir=round_dir,
-            manifest_path=manifest_path,
             run_manifest=manifest,
             execute=execute,
             validate=validate,

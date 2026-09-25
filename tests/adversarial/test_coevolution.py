@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 import yaml
 
+from robot_sf.adversarial import coevolution as coevolution_module
 from robot_sf.adversarial.coevolution import (
     CoevolutionAdapters,
     CoevolutionError,
@@ -43,6 +44,7 @@ def _write_config(
             "search_space": "inputs/space.yaml",
             "policy": "fixture_planner",
             "objective": "worst_case_snqi",
+            "sampler": "random",
             "horizon": 12,
             "dt": 0.1,
             "workers": 1,
@@ -84,7 +86,11 @@ def _candidate(
         "search_status": search_status,
         "execution_status": execution_status,
         "planner_outcome": planner_outcome,
-        "scenario": {"name": f"scenario-{candidate_id}", "seed": 101},
+        "scenario": {
+            "name": f"scenario-{candidate_id}",
+            "seed": 101,
+            "geometry": {"points": [[0.0, 1.0], [2.0, 3.0]]},
+        },
         "objective_value": 1.0,
     }
 
@@ -170,6 +176,7 @@ class FixtureAdapters:
             "status": "complete",
             "candidate_budget": request.falsification_candidates,
             "seed": request.falsification_seed,
+            "sampler": request.falsification_sampler,
             "candidates": candidates,
             "invalid_count": sum(row["search_status"] == "invalid" for row in candidates),
             "failed_count": sum(row["search_status"] == "failed" for row in candidates),
@@ -310,6 +317,71 @@ def test_unknown_mismatch_invalid_fallback_degraded_and_failed_remain_distinct(
     assert result["stop"]["reason"] == "no_new_admissible_counterexample_under_budget"
 
 
+def test_falsification_sampler_is_required_and_must_match_frozen_round_input(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path)
+    config_payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_payload["falsification"].pop("sampler")
+    config_path.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="falsification.sampler must be a non-empty string"):
+        load_coevolution_config(config_path)
+
+    mismatch_dir = tmp_path / "mismatch"
+    mismatch_dir.mkdir()
+    config_path = _write_config(mismatch_dir)
+
+    class WrongSampler(FixtureAdapters):
+        def falsify(self, request, selected_planner, output_dir):
+            result = super().falsify(request, selected_planner, output_dir)
+            result["sampler"] = "coordinate"
+            return result
+
+    adapters = WrongSampler()
+    result = run_coevolution(config_path, adapters.bundle())
+
+    assert result["status"] == "diagnostic"
+    assert result["rounds"][0]["failure"]["phase"] == "falsification"
+    assert "sampler differs from the frozen round input" in result["rounds"][0]["failure"]["error"]
+    assert adapters.calls == Counter({"optimize": 1, "evaluate": 1, "falsify": 1})
+    round_input = json.loads(
+        (mismatch_dir / "run-output" / "round_001" / "round_input.json").read_text(encoding="utf-8")
+    )
+    assert round_input["search_execution"]["sampler"] == "random"
+    phase = json.loads(
+        (mismatch_dir / "run-output" / "round_001" / "phases" / "falsification.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert phase["output"]["raw_output"]["sampler"] == "coordinate"
+
+
+def test_nested_regression_case_payload_is_detached_and_deeply_immutable(tmp_path: Path) -> None:
+    config = load_coevolution_config(_write_config(tmp_path))
+
+    class MutatingEvaluator(FixtureAdapters):
+        def evaluate_challenges(self, request, planner, output_dir):
+            if request.round_number == 2:
+                case = request.regression_cases[0]
+                before = request.to_json()
+                assert case.scenario is not None
+                with pytest.raises(TypeError):
+                    case.scenario["geometry"]["points"][0][0] = -99.0
+                detached = case.to_json()
+                detached["scenario"]["geometry"]["points"][0][0] = -99.0
+                assert request.to_json() == before
+            return super().evaluate_challenges(request, planner, output_dir)
+
+    result = run_coevolution(config, MutatingEvaluator().bundle())
+
+    assert result["status"] == "complete"
+    round_input = json.loads(
+        (config.output_dir / "round_002" / "round_input.json").read_text(encoding="utf-8")
+    )
+    points = round_input["regression_cases"][0]["scenario"]["geometry"]["points"]
+    assert points == [[0.0, 1.0], [2.0, 3.0]]
+
+
 def test_optimization_improvement_is_recorded_and_maximum_round_budget_is_explicit(
     tmp_path: Path,
 ) -> None:
@@ -434,6 +506,62 @@ def test_resume_after_interruption_reuses_prior_rounds_and_does_not_retry_runnin
     assert result["stop"]["reason"] == "infrastructure_failure"
     assert adapters.calls == calls_after_interruption
     assert all(phase["status"] == "complete" for phase in result["rounds"][0]["phases"].values())
+
+
+def test_resume_recovers_manifest_pair_after_crash_between_atomic_replacements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = load_coevolution_config(_write_config(tmp_path))
+    adapters = FixtureAdapters()
+    atomic_write = coevolution_module._atomic_write_json
+    crashed = False
+    paired_run_manifest_writes = 0
+
+    def crash_before_run_manifest(path: Path, payload: Any) -> str:
+        nonlocal crashed, paired_run_manifest_writes
+        if (
+            path == config.output_dir / "run_manifest.json"
+            and (config.output_dir / ".manifest_transaction.json").is_file()
+        ):
+            paired_run_manifest_writes += 1
+            if paired_run_manifest_writes == 2:
+                crashed = True
+                raise KeyboardInterrupt("simulated crash between manifest replacements")
+        return atomic_write(path, payload)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(coevolution_module, "_atomic_write_json", crash_before_run_manifest)
+        with pytest.raises(KeyboardInterrupt, match="between manifest replacements"):
+            run_coevolution(config, adapters.bundle())
+
+    assert crashed
+    assert paired_run_manifest_writes == 2
+    assert adapters.calls == Counter()
+    transaction_path = config.output_dir / ".manifest_transaction.json"
+    assert transaction_path.is_file()
+    round_before_recovery = json.loads(
+        (config.output_dir / "round_001" / "round_manifest.json").read_text(encoding="utf-8")
+    )
+    run_before_recovery = json.loads(
+        (config.output_dir / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    assert round_before_recovery["phases"]["optimization"]["status"] == "running"
+    assert run_before_recovery["rounds"][0]["phases"] == {}
+    assert run_before_recovery["rounds"][0] != round_before_recovery
+
+    result = run_coevolution(config, adapters.bundle(), resume=True)
+
+    assert result["status"] == "diagnostic"
+    assert result["stop"]["reason"] == "infrastructure_failure"
+    assert adapters.calls == Counter()
+    assert not transaction_path.exists()
+    round_after_recovery = json.loads(
+        (config.output_dir / "round_001" / "round_manifest.json").read_text(encoding="utf-8")
+    )
+    run_after_recovery = json.loads(
+        (config.output_dir / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    assert run_after_recovery["rounds"] == [round_after_recovery]
 
 
 def test_round_contract_rejects_a_minimum_of_one(tmp_path: Path) -> None:

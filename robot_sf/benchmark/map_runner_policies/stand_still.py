@@ -14,6 +14,39 @@ if TYPE_CHECKING:
 STAND_STILL_ALGO_KEYS = frozenset({"stand_still"})
 
 
+def metadata_seed() -> dict[str, Any]:
+    """Declare the reference contract without changing frozen shared metadata.
+
+    Returns:
+        Fields required by the shared metadata enricher before policy construction.
+    """
+    return {
+        "baseline_category": "classical",
+        "policy_semantics": "constant_zero_velocity_reference",
+        "planner_kinematics": {
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": True,
+            "supports_adapter_commands": False,
+            "execution_detail": "Emits an exact zero linear and angular command on every step.",
+        },
+    }
+
+
+def apply_observation_contract(meta: dict[str, Any]) -> dict[str, Any]:
+    """Record that the stand-still policy consumes no observation fields.
+
+    Returns:
+        The supplied metadata with its effective observation contract corrected.
+    """
+    observation_spec = meta["observation_spec"]
+    observation_spec["inputs"] = []
+    observation_spec["notes"] = "Stationary reference ignores all observation content."
+    contract = meta["planner_contract"]["observation_contract"]
+    contract["required_inputs"] = []
+    contract["notes"] = observation_spec["notes"]
+    return meta
+
+
 def build(
     algo_key: str,
     algo_config: dict[str, Any],
@@ -44,6 +77,7 @@ def build(
         "status": "ok",
         "config": algo_config,
         "config_hash": _config_hash(algo_config),
+        **metadata_seed(),
     }
     meta = enrich_algorithm_metadata(
         algo=algo_key,
@@ -51,6 +85,10 @@ def build(
         execution_mode="native",
         robot_kinematics=robot_kinematics,
     )
+    # This reference is intentionally local to the oracle runner. Keep the
+    # shared algorithm-metadata source byte-for-byte frozen because historical
+    # adversarial campaign contracts pin its SHA-256.
+    apply_observation_contract(meta)
     planner_meta = meta.get("planner_kinematics")
     if isinstance(planner_meta, dict):
         planner_meta["planner_command_space"] = planner_commands.default_robot_command_space(

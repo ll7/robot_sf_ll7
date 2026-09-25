@@ -127,6 +127,20 @@ def _candidates(count: int) -> list[CandidateSpec]:
     ]
 
 
+def _admissibility_payload(verdict: str, disposition: str) -> dict[str, Any]:
+    return {
+        "schema_version": "scenario_admissibility.v1",
+        "case_id": "fixture-candidate",
+        "scenario_id": "fixture-scenario",
+        "verdict": verdict,
+        "target_planner_outcome": "not_evaluated",
+        "search_disposition": disposition,
+        "reason_codes": ["fixture_verdict"],
+        "assumptions": {},
+        "evidence": {},
+    }
+
+
 def _spanning_evaluations(count: int, *, temp_root: Path) -> list[CandidateEvaluation]:
     """Build evaluations whose descriptors span the full 2D grid."""
     evals: list[CandidateEvaluation] = []
@@ -264,7 +278,7 @@ def test_archive_rejects_explicit_admissibility_exclusion_with_passed_certificat
             cert_status=passed_status("custom certifier says passed"),
             temp_root=tmp_path,
         ),
-        scenario_admissibility={"search_disposition": "reject"},
+        scenario_admissibility=_admissibility_payload("structurally_invalid", "reject"),
     )
 
     assert not archive.try_insert(
@@ -292,7 +306,7 @@ def test_qd_search_counts_explicit_admissibility_exclusions(tmp_path: Path) -> N
             cert_status=passed_status("custom certifier says passed"),
             temp_root=tmp_path,
         ),
-        scenario_admissibility={"search_disposition": "reject"},
+        scenario_admissibility=_admissibility_payload("structurally_invalid", "reject"),
     )
     result = run_map_elites(config, evaluator=_FakeEvaluator([rejected]))
 
@@ -301,6 +315,57 @@ def test_qd_search_counts_explicit_admissibility_exclusions(tmp_path: Path) -> N
     assert result.num_admitted == 0
     assert result.archive.filled_cell_count() == 0
     assert result.to_json()["search_summary"]["num_admissibility_rejected"] == 1
+
+
+def test_qd_precheck_rejects_before_calling_evaluator(tmp_path: Path) -> None:
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+
+    def evaluator_must_not_run(
+        _config: QDSearchConfig, _candidate: CandidateSpec
+    ) -> CandidateEvaluation:
+        raise AssertionError("explicitly excluded candidate reached the evaluator")
+
+    result = run_map_elites(
+        config,
+        evaluator=evaluator_must_not_run,
+        admissibility_precheck=lambda _config, _candidate: _admissibility_payload(
+            "geometric_or_kinodynamic_impossibility", "reject"
+        ),
+    )
+
+    assert result.num_proposed == 1
+    assert result.num_evaluated == 0
+    assert result.num_admissibility_rejected == 1
+    assert result.pre_evaluation_rejections[0]["stage"] == "pre_evaluation"
+    assert result.to_json()["pre_evaluation_rejections"] == [
+        dict(result.pre_evaluation_rejections[0])
+    ]
+
+
+def test_qd_unknown_precheck_continues_to_evaluator(tmp_path: Path) -> None:
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+    evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        temp_root=tmp_path,
+    )
+    result = run_map_elites(
+        config,
+        evaluator=_FakeEvaluator([evaluation]),
+        admissibility_precheck=lambda _config, _candidate: _admissibility_payload(
+            "admissible_feasibility_unknown", "retain"
+        ),
+    )
+
+    assert result.num_proposed == 1
+    assert result.num_evaluated == 1
+    assert result.num_admissibility_rejected == 0
 
 
 def test_archive_keeps_higher_quality_incumbent(tmp_path: Path) -> None:

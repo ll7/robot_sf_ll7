@@ -14,6 +14,12 @@ Evidence tier: `diagnostic_only`. The artifacts describe one checksum-pinned his
 
 The source selector summary was rerun twice at the same output path and produced byte-identical SHA-256 `c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f`. A second run at a different output path produced the same case identities but different analyzer report hashes because that diagnostic records absolute paths.
 
+## Current-head no-replay refresh
+
+The current-head refresh was generated with materializer commit `634c2f7a453fbf377a59fa7c4b9391391a0a0773` and is preserved separately as `current_head_no_replay_manifest.json`. It reused the four historical replay receipts with `requested_limit=0` and `new_attempted=0`; it did not run another evaluation or simulation. The refreshed manifest revalidated the selector source-file hashes against reachable snapshot `0a5f73283b98279900797b75d20adf6d4676086b`. It retains four `unavailable_execution_evidence` rows because those historical receipts lack replay environment identities; the refresh does not upgrade them to exact replay evidence. The five missing-model cases and 27 not-attempted cases remain visible.
+
+The original `summary.json` and this report preserve the detailed four-case analysis and earlier execution history. The separate current-head manifest records the refreshed materializer provenance without replacing that historical account.
+
 ## Selection and materialization
 
 - 36 unique cases from 7 scenario IDs, 6 families, and 7 planners.
@@ -43,6 +49,6 @@ The original replay outputs predate output hashing in the first receipt. Their S
 
 ## Reproduction and limits
 
-The machine-readable summary contains the exact input digests, row hashes, selected case inventory, per-case replay command, outcomes, named metrics, checksums, and availability state. Local artifact paths use `${ISSUE9656_LOCAL_ROOT}`; set it to the local cache directory containing the preserved source and replay artifacts before resolving those paths. Failed-command paths are normalized to repository-root-relative paths; run those receipts from the repository root. The raw bundle and case/replay trees are not copied into git. Source cases are recoverable from the public release and per-row source references; the compact summary retains replay-row hashes and metrics, but does not contain the raw replay rows themselves.
+The machine-readable summary contains the exact input digests, row hashes, selected case inventory, per-case replay command, outcomes, named metrics, checksums, and availability state. The separate current-head manifest records the zero-new-evaluation refresh and current materializer revision. Local artifact paths use `${ISSUE9656_LOCAL_ROOT}`; set it to the local cache directory containing the preserved source and replay artifacts before resolving those paths. Failed-command paths are normalized to repository-root-relative paths; run those receipts from the repository root. The raw bundle and case/replay trees are not copied into git. Source cases are recoverable from the public release and per-row source references; the compact summary retains replay-row hashes and metrics, but does not contain the raw replay rows themselves.
 
 This produces an evidence-backed historical challenge slice only. It does not run a new benchmark campaign or search, render new trajectories, admit cases into issue #9652’s versioned corpus, or support planner-ranking/safety claims. Cases remain historical regression candidates pending the corpus owner’s admission policy.

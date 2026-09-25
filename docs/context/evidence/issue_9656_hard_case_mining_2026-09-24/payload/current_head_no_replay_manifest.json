@@ -1,0 +1,3153 @@
+{
+  "cases": [
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-03c37f0bb332305f/case.json",
+      "case_id": "case-03c37f0bb332305f",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 2.2429207548070593,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09491099136070058,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "prediction_planner",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "5e4b4171018ac0a240804eac445ae4511bf5bcc841ca11c6d18a7d263cabfee4",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "981bfebc325415330d4a680c347e823190e05a9036cbc04c6b4b6437b44b8c12",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 112,
+      "selected_groups": [
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "125675dcb6800ff7e6217ebe5cfc8a904b3dbaa1bfe6b5ca3fdab407be72c865",
+        "line_number": 86,
+        "record_sha256": "f84abef0462585bfc82da41ec8c599b92246091117aa75ba076292904c000fd0"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-04c568c31a04858e/case.json",
+      "case_id": "case-04c568c31a04858e",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.4139696226716154,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.9577609899848933,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "social_force",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "41187be38fbc00a52ba845afd4f185f198abeb34fa4682d2fc2f7c77a655f4f2",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/social_force__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "f7ef7c6a39b9825f812d189b9565010b614256f0ad88d2f55fd30b959da8e78d",
+        "line_number": 85,
+        "record_sha256": "b905ae2779d32aaf39b653d65e23b0920d789fe945d912d93e2afe3fa5baaa1a"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-0c2df6ecb2be1aa3/case.json",
+      "case_id": "case-0c2df6ecb2be1aa3",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 0.9763776895616805,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09491099136070058,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "prediction_planner",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "5e4b4171018ac0a240804eac445ae4511bf5bcc841ca11c6d18a7d263cabfee4",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "2a309cea9f7b71b72a82f5855ef813d8efe36986314b51f01e9e736055671492",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event",
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time"
+      ],
+      "source_record": {
+        "episode_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "125675dcb6800ff7e6217ebe5cfc8a904b3dbaa1bfe6b5ca3fdab407be72c865",
+        "line_number": 85,
+        "record_sha256": "df6b9eb52c24ea6b97604a8cf6a955c79f093b57af3725dbd314ddbc9dcaa28b"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-2d8fe23373d44a37/case.json",
+      "case_id": "case-2d8fe23373d44a37",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.0371592190330219,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.38087085206142784,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "ppo",
+      "replay": {
+        "attempted": false,
+        "status": "unavailable_model_artifact"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "f3b53ddda3630a7df423e1d4b3bae15149810fb0ad2bf330def62319ff788841",
+        "replay_eligible": false,
+        "replay_ineligibility": "unavailable_model_artifact",
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "1e79bb7f78b314fb33587c99a11dc772aea30580787c2441c2597e21c491d4c8",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 113,
+      "selected_groups": [
+        "minimum_clearance"
+      ],
+      "source_record": {
+        "episode_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "5ca888047081a431e8c6fabf1eba6889cb05974868ae5be811ea4dbdcc531b09",
+        "line_number": 87,
+        "record_sha256": "f13d222c7fb7cfecc4e909bd54fd3ba7e115ed5a8b3aa93469603440b6e6d6a2"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-2fa6f8a28dafddc0/case.json",
+      "case_id": "case-2fa6f8a28dafddc0",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.01,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 2.069473297753686,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09670929743708008,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "orca",
+      "replay": {
+        "attempted": true,
+        "command": [
+          "uv",
+          "run",
+          "robot_sf_bench",
+          "run",
+          "--matrix",
+          "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml",
+          "--out",
+          "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl",
+          "--base-seed",
+          "111",
+          "--repeats",
+          "1",
+          "--horizon",
+          "100",
+          "--dt",
+          "0.1",
+          "--algo",
+          "orca",
+          "--algo-config",
+          "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml",
+          "--benchmark-profile",
+          "baseline-safe",
+          "--workers",
+          "1",
+          "--no-resume",
+          "--no-video",
+          "--video-renderer",
+          "none",
+          "--fail-fast",
+          "--record-forces"
+        ],
+        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "comparison": {
+          "metrics": {
+            "clearing_distance_min": {
+              "expected": 2.069473297753686,
+              "observed": 2.057791676609906,
+              "status": "mismatch"
+            },
+            "collisions": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            },
+            "comfort_exposure": {
+              "expected": 0.01,
+              "observed": 0.01,
+              "status": "match"
+            },
+            "force_exceed_events": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "near_misses": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            },
+            "path_efficiency": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "time_to_goal_norm": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "total_collision_count": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            }
+          },
+          "outcomes": {
+            "collision_event": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            },
+            "route_complete": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            },
+            "timeout_event": {
+              "expected": true,
+              "observed": true,
+              "status": "match"
+            }
+          },
+          "overall": "mismatch"
+        },
+        "config_hash_replay": "44136fa355b3678a",
+        "config_hash_source": "44136fa355b3678a",
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_checksum_origin": "calculated_on_resume_prior_receipt_unavailable",
+        "episode_output_checksum_status": "verified",
+        "episode_output_observed_sha256": "2df8e8697022e5bf1afb6036bebea10eae7c7e81ec2465d6de27159018c791ac",
+        "episode_output_sha256": "2df8e8697022e5bf1afb6036bebea10eae7c7e81ec2465d6de27159018c791ac",
+        "episode_status": "failure",
+        "execution_evidence_replay": "unavailable_execution_availability",
+        "execution_evidence_source": "available",
+        "execution_mode": "adapter",
+        "execution_mode_source": "adapter",
+        "identity": {
+          "expected": {
+            "algo": "orca",
+            "scenario_id": "francis2023_accompanying_peer",
+            "seed": 111
+          },
+          "observed": {
+            "algo": "orca",
+            "scenario_id": "francis2023_accompanying_peer",
+            "seed": 111
+          },
+          "status": "match"
+        },
+        "invalid_run_evidence_replay": "available",
+        "invalid_run_evidence_source": "available",
+        "replay_checkout_clean": null,
+        "replay_checkout_stability_status": "unavailable",
+        "replay_environment_identity": null,
+        "replay_malformed_line_count": 0,
+        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml",
+        "replay_matrix_sha256": "37393c622cd09c0e20905def2e8a2cf71facad40692eacb9f3fec078f5236aae",
+        "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
+        "replay_row_count": 1,
+        "resume_receipt_consistency_status": "match",
+        "returncode": 0,
+        "reused": true,
+        "reused_from_manifest_sha256": "5108ad167fa1cf9672facde8e98d1d21ccf6e3c6574bf32ace444c71dcd4b560",
+        "reused_from_summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f",
+        "same_repository_revision": false,
+        "source_matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+        "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+        "status": "unavailable_execution_evidence",
+        "stderr_path": "replay/stderr.txt",
+        "stdout_path": "replay/stdout.txt"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "37393c622cd09c0e20905def2e8a2cf71facad40692eacb9f3fec078f5236aae",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/orca__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "432cb8546cba34ce97a01f12b8e45c854435aa2832fc9dd308dace09f188963b",
+        "line_number": 118,
+        "record_sha256": "903488c486b6781330280a56f0981afba026b6f615d1fc5f2f5bd5c8283e3198"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-3ada363af565c12f/case.json",
+      "case_id": "case-3ada363af565c12f",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.4142378433066363,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.10617475085026187,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "orca",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "58bb4165d11c6ee8f1765889b80e695811d97af4342396ba2a37a32f2e2d7972",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/orca__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "432cb8546cba34ce97a01f12b8e45c854435aa2832fc9dd308dace09f188963b",
+        "line_number": 85,
+        "record_sha256": "6eda84a752b0e63ced92aff921506fa190ad9d5e9d1ebd46a349e3095461a908"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-3d48eb25e54c042e/case.json",
+      "case_id": "case-3d48eb25e54c042e",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.022727272727272728,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 0.979392628341981,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.48524710665793724,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "sacadrl",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "f8dd5d20d5ff2492d97fa8b7a5f44258871e50de5bb22e1a8a3d7e31dea0b21b",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event",
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time"
+      ],
+      "source_record": {
+        "episode_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "71745759214dc63c16971831ae023b1c4c96e2685d06259c9434c0531f649e9d",
+        "line_number": 118,
+        "record_sha256": "37a1acec11b3457a5e900710db4242ef6e3b5c9c2a8ae8760bb0c318378a5985"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-3dde58967362f7b6/case.json",
+      "case_id": "case-3dde58967362f7b6",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.4134339917831498,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.12470672746904087,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "sacadrl",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "c8f77fa077660154f0d984932d87e3af6d378a5b842750f8d26de01b7d6f9232",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "71745759214dc63c16971831ae023b1c4c96e2685d06259c9434c0531f649e9d",
+        "line_number": 85,
+        "record_sha256": "d4adb62ff2afcde2624c930293f99da1bd1c90d379a5e2678509fb8e347786e0"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-4a01770a7c387ea0/case.json",
+      "case_id": "case-4a01770a7c387ea0",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.5,
+          "force_exceed_events": 3.0,
+          "minimum_clearance_m": 3.4073505044230434,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.18765125226323937,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": true,
+        "command": [
+          "uv",
+          "run",
+          "robot_sf_bench",
+          "run",
+          "--matrix",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml",
+          "--out",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl",
+          "--base-seed",
+          "111",
+          "--repeats",
+          "1",
+          "--horizon",
+          "100",
+          "--dt",
+          "0.1",
+          "--algo",
+          "goal",
+          "--algo-config",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml",
+          "--benchmark-profile",
+          "baseline-safe",
+          "--workers",
+          "1",
+          "--no-resume",
+          "--no-video",
+          "--video-renderer",
+          "none",
+          "--fail-fast",
+          "--record-forces"
+        ],
+        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "comparison": {
+          "metrics": {
+            "clearing_distance_min": {
+              "expected": 3.4073505044230434,
+              "observed": 2.7821372709967007,
+              "status": "mismatch"
+            },
+            "collisions": {
+              "expected": 0.0,
+              "observed": 1.0,
+              "status": "mismatch"
+            },
+            "comfort_exposure": {
+              "expected": 0.5,
+              "observed": 0.6666666666666666,
+              "status": "mismatch"
+            },
+            "force_exceed_events": {
+              "expected": 3.0,
+              "observed": 4.0,
+              "status": "mismatch"
+            },
+            "near_misses": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            },
+            "path_efficiency": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "time_to_goal_norm": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "total_collision_count": {
+              "expected": 0.0,
+              "observed": 1.0,
+              "status": "mismatch"
+            }
+          },
+          "outcomes": {
+            "collision_event": {
+              "expected": true,
+              "observed": true,
+              "status": "match"
+            },
+            "route_complete": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            },
+            "timeout_event": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            }
+          },
+          "overall": "mismatch"
+        },
+        "config_hash_replay": "44136fa355b3678a",
+        "config_hash_source": "44136fa355b3678a",
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_checksum_origin": "calculated_on_resume_prior_receipt_unavailable",
+        "episode_output_checksum_status": "verified",
+        "episode_output_observed_sha256": "a1bc1c9df1277aa98f48d66d7f5005451038f775ecd7b2f0b73ce84efc51d478",
+        "episode_output_sha256": "a1bc1c9df1277aa98f48d66d7f5005451038f775ecd7b2f0b73ce84efc51d478",
+        "episode_status": "collision",
+        "execution_evidence_replay": "unavailable_execution_availability",
+        "execution_evidence_source": "available",
+        "execution_mode": "native",
+        "execution_mode_source": "native",
+        "identity": {
+          "expected": {
+            "algo": "goal",
+            "scenario_id": "francis2023_circular_crossing",
+            "seed": 111
+          },
+          "observed": {
+            "algo": "goal",
+            "scenario_id": "francis2023_circular_crossing",
+            "seed": 111
+          },
+          "status": "match"
+        },
+        "invalid_run_evidence_replay": "available",
+        "invalid_run_evidence_source": "available",
+        "replay_checkout_clean": null,
+        "replay_checkout_stability_status": "unavailable",
+        "replay_environment_identity": null,
+        "replay_malformed_line_count": 0,
+        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml",
+        "replay_matrix_sha256": "a1472c3ab99f4cb47e270e21fbc7279b44cebb4f9360e9118dcfc8b6941f82b4",
+        "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
+        "replay_row_count": 1,
+        "resume_receipt_consistency_status": "match",
+        "returncode": 0,
+        "reused": true,
+        "reused_from_manifest_sha256": "5108ad167fa1cf9672facde8e98d1d21ccf6e3c6574bf32ace444c71dcd4b560",
+        "reused_from_summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f",
+        "same_repository_revision": false,
+        "source_matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+        "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+        "status": "unavailable_execution_evidence",
+        "stderr_path": "replay/stderr.txt",
+        "stdout_path": "replay/stdout.txt"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "a1472c3ab99f4cb47e270e21fbc7279b44cebb4f9360e9118dcfc8b6941f82b4",
+        "status": "materialized"
+      },
+      "scenario_family": "circular_crossing",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 136,
+        "record_sha256": "1af73f8033a79998d7f0c5d1667cdc8ac84fec434a16565ebee9bde90127a85f"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-4c70c247ff1fe036/case.json",
+      "case_id": "case-4c70c247ff1fe036",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.41571657680697,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09491099136070058,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "c0044cdd4e64a97067d687d11c701040e4059075ab815ae5addc371db30fcfad",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 113,
+      "selected_groups": [
+        "minimum_clearance"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 9,
+        "record_sha256": "338d0af0dfb3cccd591148baf34a29625f4b485f2ee5c94b725a097180aacf36"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-51a252ce9eccd3d8/case.json",
+      "case_id": "case-51a252ce9eccd3d8",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.14222222222222222,
+          "force_exceed_events": 128.0,
+          "minimum_clearance_m": 3.1684494422646825,
+          "near_misses": 5.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.2630931826740112,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "3d3b95de74a6d3d65b873eb897ffb3ce79c71d5184332cd126bd06f7f45506e0",
+        "status": "materialized"
+      },
+      "scenario_family": "crowd_navigation",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 113,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 129,
+        "record_sha256": "d0d643a7f998f57c4bab65c22195f14608c29b33ecc2cb850237b6decbded2a5"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-581e769a5f31d6e9/case.json",
+      "case_id": "case-581e769a5f31d6e9",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 2.7021533196872216,
+          "near_misses": 3.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.1389478918351926,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "b11cbbb4837015525102b97fc56baecf97cc8192b217039de715df6efc11e45f",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 112,
+      "selected_groups": [
+        "near_miss_extreme"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 11,
+        "record_sha256": "f94d6d7fd86314293b8789ab06f46a3d4eb94e4082fd7e8a24901b7a4e8fb7a4"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-5a33e6eb8e4a4d12/case.json",
+      "case_id": "case-5a33e6eb8e4a4d12",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.5,
+          "force_exceed_events": 3.0,
+          "minimum_clearance_m": 3.4627551590404937,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.18765125226323937,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "orca",
+      "replay": {
+        "attempted": true,
+        "command": [
+          "uv",
+          "run",
+          "robot_sf_bench",
+          "run",
+          "--matrix",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml",
+          "--out",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl",
+          "--base-seed",
+          "111",
+          "--repeats",
+          "1",
+          "--horizon",
+          "100",
+          "--dt",
+          "0.1",
+          "--algo",
+          "orca",
+          "--algo-config",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml",
+          "--benchmark-profile",
+          "baseline-safe",
+          "--workers",
+          "1",
+          "--no-resume",
+          "--no-video",
+          "--video-renderer",
+          "none",
+          "--fail-fast",
+          "--record-forces"
+        ],
+        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "comparison": {
+          "metrics": {
+            "clearing_distance_min": {
+              "expected": 3.4627551590404937,
+              "observed": 2.7821372709967007,
+              "status": "mismatch"
+            },
+            "collisions": {
+              "expected": 0.0,
+              "observed": 1.0,
+              "status": "mismatch"
+            },
+            "comfort_exposure": {
+              "expected": 0.5,
+              "observed": 0.6666666666666666,
+              "status": "mismatch"
+            },
+            "force_exceed_events": {
+              "expected": 3.0,
+              "observed": 4.0,
+              "status": "mismatch"
+            },
+            "near_misses": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            },
+            "path_efficiency": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "time_to_goal_norm": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "total_collision_count": {
+              "expected": 0.0,
+              "observed": 1.0,
+              "status": "mismatch"
+            }
+          },
+          "outcomes": {
+            "collision_event": {
+              "expected": true,
+              "observed": true,
+              "status": "match"
+            },
+            "route_complete": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            },
+            "timeout_event": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            }
+          },
+          "overall": "mismatch"
+        },
+        "config_hash_replay": "44136fa355b3678a",
+        "config_hash_source": "44136fa355b3678a",
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_checksum_origin": "calculated_on_resume_prior_receipt_unavailable",
+        "episode_output_checksum_status": "verified",
+        "episode_output_observed_sha256": "24a69c12b7eb39792a4e403996e9c95cdb2604cef7b034c689147fa58b0d4c1d",
+        "episode_output_sha256": "24a69c12b7eb39792a4e403996e9c95cdb2604cef7b034c689147fa58b0d4c1d",
+        "episode_status": "collision",
+        "execution_evidence_replay": "unavailable_execution_availability",
+        "execution_evidence_source": "available",
+        "execution_mode": "adapter",
+        "execution_mode_source": "adapter",
+        "identity": {
+          "expected": {
+            "algo": "orca",
+            "scenario_id": "francis2023_circular_crossing",
+            "seed": 111
+          },
+          "observed": {
+            "algo": "orca",
+            "scenario_id": "francis2023_circular_crossing",
+            "seed": 111
+          },
+          "status": "match"
+        },
+        "invalid_run_evidence_replay": "available",
+        "invalid_run_evidence_source": "available",
+        "replay_checkout_clean": null,
+        "replay_checkout_stability_status": "unavailable",
+        "replay_environment_identity": null,
+        "replay_malformed_line_count": 0,
+        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml",
+        "replay_matrix_sha256": "679b86b70a3418fe8a182edbc84cef430ab3f2159fbc944a80808ae848e1e358",
+        "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
+        "replay_row_count": 1,
+        "resume_receipt_consistency_status": "match",
+        "returncode": 0,
+        "reused": true,
+        "reused_from_manifest_sha256": "5108ad167fa1cf9672facde8e98d1d21ccf6e3c6574bf32ace444c71dcd4b560",
+        "reused_from_summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f",
+        "same_repository_revision": false,
+        "source_matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+        "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+        "status": "unavailable_execution_evidence",
+        "stderr_path": "replay/stderr.txt",
+        "stdout_path": "replay/stdout.txt"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "679b86b70a3418fe8a182edbc84cef430ab3f2159fbc944a80808ae848e1e358",
+        "status": "materialized"
+      },
+      "scenario_family": "circular_crossing",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/orca__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "432cb8546cba34ce97a01f12b8e45c854435aa2832fc9dd308dace09f188963b",
+        "line_number": 136,
+        "record_sha256": "ae07dc215bc12217eec55edbfc0441ae5ade9375420d7a1f801a491c53324112"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-5c3391df82cfa1a4/case.json",
+      "case_id": "case-5c3391df82cfa1a4",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 0.9857578958859784,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09491099136070058,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "prediction_planner",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "5e4b4171018ac0a240804eac445ae4511bf5bcc841ca11c6d18a7d263cabfee4",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "d08895be212c2e77e2a6bf69d271ba861124af4f3dd468d56b94e515056f114f",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 113,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "125675dcb6800ff7e6217ebe5cfc8a904b3dbaa1bfe6b5ca3fdab407be72c865",
+        "line_number": 9,
+        "record_sha256": "656334e3e8cfffdaec7d301d18dfe3fa0410ba085a43da8c5df08d9727d92000"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-64025bd60323624e/case.json",
+      "case_id": "case-64025bd60323624e",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.01,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 2.4120749196881883,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09763001970595232,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "prediction_planner",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "5e4b4171018ac0a240804eac445ae4511bf5bcc841ca11c6d18a7d263cabfee4",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "3ecb03811d557b44db3d1ab7ed3b8b35fd640744aec067f366ee1648576ba953",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "125675dcb6800ff7e6217ebe5cfc8a904b3dbaa1bfe6b5ca3fdab407be72c865",
+        "line_number": 118,
+        "record_sha256": "ca8d366a311c5ff9d822b00e89b222095967c56ca610424315508b6b8f7e4644"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-6f3cd3fc2e230d35/case.json",
+      "case_id": "case-6f3cd3fc2e230d35",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.15384615384615385,
+          "force_exceed_events": 2.0,
+          "minimum_clearance_m": 2.9778798966177495,
+          "near_misses": 2.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.6295749718455973,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "social_force",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "bc5d438b09edb7c92155401cb25837c6de54eaad15bd423655f4558fcece7c74",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 113,
+      "selected_groups": [
+        "comfort_exposure_extreme"
+      ],
+      "source_record": {
+        "episode_file": "runs/social_force__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "f7ef7c6a39b9825f812d189b9565010b614256f0ad88d2f55fd30b959da8e78d",
+        "line_number": 120,
+        "record_sha256": "b1022d992b8ba05c115e515dc744c08b493a63391b71a6465f70fc10eef3b910"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-741fc67b70554756/case.json",
+      "case_id": "case-741fc67b70554756",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.01,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 1.9477818564002227,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09670929743708008,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "prediction_planner",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "5e4b4171018ac0a240804eac445ae4511bf5bcc841ca11c6d18a7d263cabfee4",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "271990282142bf5825f1fa9a9b1a4338e0a3f260d8af6d9b207222e2df08dd74",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 112,
+      "selected_groups": [
+        "minimum_clearance"
+      ],
+      "source_record": {
+        "episode_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "125675dcb6800ff7e6217ebe5cfc8a904b3dbaa1bfe6b5ca3fdab407be72c865",
+        "line_number": 119,
+        "record_sha256": "971436386cca99cfbf17681042691e7e7cf0ec61f42ed61d6086f22ad5e76f71"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-8387bf3d2c2c6663/case.json",
+      "case_id": "case-8387bf3d2c2c6663",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.0439156202539412,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.10011236280083272,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "sacadrl",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "a9963c91074ccf3426e01b8250db7426e375689e13bc62214fa7ba83675403e8",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "selected_groups": [
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "71745759214dc63c16971831ae023b1c4c96e2685d06259c9434c0531f649e9d",
+        "line_number": 7,
+        "record_sha256": "a43ab8978ff67c817da895bcea2df7f7cc4673a135eef1f39f75886efc300de0"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-9129b9486534c898/case.json",
+      "case_id": "case-9129b9486534c898",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.0870101605124136,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.3675928536783869,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "ppo",
+      "replay": {
+        "attempted": false,
+        "status": "unavailable_model_artifact"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "f3b53ddda3630a7df423e1d4b3bae15149810fb0ad2bf330def62319ff788841",
+        "replay_eligible": false,
+        "replay_ineligibility": "unavailable_model_artifact",
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "cb03eedfe7ae082524463c4c07033b2e6b11514debe3960aca53825ba67c19a5",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "5ca888047081a431e8c6fabf1eba6889cb05974868ae5be811ea4dbdcc531b09",
+        "line_number": 85,
+        "record_sha256": "773909d340730946e3b8bb0c7bd511e556992a52d9d7de753c89146b8f827f38"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-937584ea0a24f210/case.json",
+      "case_id": "case-937584ea0a24f210",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.01,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 1.0244629541420869,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09670929743708008,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "socnav_sampling",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "99d6ada97f23a2a52bf5ff6db83768902e4f0481814291f7e70947c2250b5201",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 112,
+      "selected_groups": [
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "cd22fae7f7c686176cb7bfb37ee12ce9eff1edf6cf42d107ceebf6263fdd6c82",
+        "line_number": 119,
+        "record_sha256": "da16ff8d475dc6a9d94bc846ad41d913ce5352e33d9f0bb616c269c2ff59e7bd"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-9bb421b86702b018/case.json",
+      "case_id": "case-9bb421b86702b018",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 2.023622702446913,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09491099136070058,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "8c595a7aa945bd52b3bb3a188d162d348b764e7653ea72fa622239a59ab73951",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 7,
+        "record_sha256": "7da9feef444848b1fc7473d0bf3c28ce912a68ab00ef6d671cec0e1a6d562eec"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-9fb9400feed66b90/case.json",
+      "case_id": "case-9fb9400feed66b90",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.5,
+          "force_exceed_events": 3.0,
+          "minimum_clearance_m": 3.462738757955116,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.18765125226323937,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "social_force",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "8f019ad705e83e13fa75a63124189dc57a5aabfc5f95b27458c82496de4aafcb",
+        "status": "materialized"
+      },
+      "scenario_family": "circular_crossing",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/social_force__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "f7ef7c6a39b9825f812d189b9565010b614256f0ad88d2f55fd30b959da8e78d",
+        "line_number": 136,
+        "record_sha256": "a23340561ebe395e7ed2e2c287d6210ed7c493818f5af7b1ee48a50952b56186"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-a796d333cd47ef5a/case.json",
+      "case_id": "case-a796d333cd47ef5a",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.528043056819905,
+          "near_misses": 9.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.25045189518393085,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "socnav_sampling",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "0da9f43bee01135aaec63a9ccb23296fdca41f23164a320c99dc59a6ee2d0130",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "cd22fae7f7c686176cb7bfb37ee12ce9eff1edf6cf42d107ceebf6263fdd6c82",
+        "line_number": 7,
+        "record_sha256": "981cfbedde53c31a2167d8f471bf3e059bb41639473ca83b5f772994adc65b8b"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-b08371fb5cd09502/case.json",
+      "case_id": "case-b08371fb5cd09502",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.01,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 2.169809396642865,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09670929743708008,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": true,
+        "command": [
+          "uv",
+          "run",
+          "robot_sf_bench",
+          "run",
+          "--matrix",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml",
+          "--out",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl",
+          "--base-seed",
+          "111",
+          "--repeats",
+          "1",
+          "--horizon",
+          "100",
+          "--dt",
+          "0.1",
+          "--algo",
+          "goal",
+          "--algo-config",
+          "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml",
+          "--benchmark-profile",
+          "baseline-safe",
+          "--workers",
+          "1",
+          "--no-resume",
+          "--no-video",
+          "--video-renderer",
+          "none",
+          "--fail-fast",
+          "--record-forces"
+        ],
+        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "comparison": {
+          "metrics": {
+            "clearing_distance_min": {
+              "expected": 2.169809396642865,
+              "observed": 2.178114711076984,
+              "status": "mismatch"
+            },
+            "collisions": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            },
+            "comfort_exposure": {
+              "expected": 0.01,
+              "observed": 0.01,
+              "status": "match"
+            },
+            "force_exceed_events": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "near_misses": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            },
+            "path_efficiency": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "time_to_goal_norm": {
+              "expected": 1.0,
+              "observed": 1.0,
+              "status": "match"
+            },
+            "total_collision_count": {
+              "expected": 0.0,
+              "observed": 0.0,
+              "status": "match"
+            }
+          },
+          "outcomes": {
+            "collision_event": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            },
+            "route_complete": {
+              "expected": false,
+              "observed": false,
+              "status": "match"
+            },
+            "timeout_event": {
+              "expected": true,
+              "observed": true,
+              "status": "match"
+            }
+          },
+          "overall": "mismatch"
+        },
+        "config_hash_replay": "44136fa355b3678a",
+        "config_hash_source": "44136fa355b3678a",
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_checksum_origin": "calculated_on_resume_prior_receipt_unavailable",
+        "episode_output_checksum_status": "verified",
+        "episode_output_observed_sha256": "e5eef6e52003b17c15f3fb789ad161433ad35b35ed278dee0d9d7041c5b19737",
+        "episode_output_sha256": "e5eef6e52003b17c15f3fb789ad161433ad35b35ed278dee0d9d7041c5b19737",
+        "episode_status": "failure",
+        "execution_evidence_replay": "unavailable_execution_availability",
+        "execution_evidence_source": "available",
+        "execution_mode": "native",
+        "execution_mode_source": "native",
+        "identity": {
+          "expected": {
+            "algo": "goal",
+            "scenario_id": "francis2023_accompanying_peer",
+            "seed": 111
+          },
+          "observed": {
+            "algo": "goal",
+            "scenario_id": "francis2023_accompanying_peer",
+            "seed": 111
+          },
+          "status": "match"
+        },
+        "invalid_run_evidence_replay": "available",
+        "invalid_run_evidence_source": "available",
+        "replay_checkout_clean": null,
+        "replay_checkout_stability_status": "unavailable",
+        "replay_environment_identity": null,
+        "replay_malformed_line_count": 0,
+        "replay_matrix_path": "output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml",
+        "replay_matrix_sha256": "3ba4e8f959f88cff9259835e6622d7f404d679e69210d3a472f2aaa5a1d34cc2",
+        "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
+        "replay_row_count": 1,
+        "resume_receipt_consistency_status": "match",
+        "returncode": 0,
+        "reused": true,
+        "reused_from_manifest_sha256": "5108ad167fa1cf9672facde8e98d1d21ccf6e3c6574bf32ace444c71dcd4b560",
+        "reused_from_summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f",
+        "same_repository_revision": false,
+        "source_matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+        "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+        "status": "unavailable_execution_evidence",
+        "stderr_path": "replay/stderr.txt",
+        "stdout_path": "replay/stdout.txt"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "3ba4e8f959f88cff9259835e6622d7f404d679e69210d3a472f2aaa5a1d34cc2",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 118,
+        "record_sha256": "0900e3c8203f9e076bf80150db145f63041f60fb28ebbd72dfa3156371f31bdc"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-b1649ad6dcdcfd25/case.json",
+      "case_id": "case-b1649ad6dcdcfd25",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 2.0901537583214678,
+          "near_misses": 0.0,
+          "path_efficiency": 0.6136837921374797,
+          "snqi": -0.9720465306859256,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "social_force",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "90be888ba1ec0b095f81bf74b807ddb40f8d1c3f58185366e5c20f5d62d7aafe",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "selected_groups": [
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/social_force__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "f7ef7c6a39b9825f812d189b9565010b614256f0ad88d2f55fd30b959da8e78d",
+        "line_number": 7,
+        "record_sha256": "89db51d5d8876a6b366de377d091b28efce9ec4534f579052e9887c28632bf02"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-b8624230f2030240/case.json",
+      "case_id": "case-b8624230f2030240",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.06666666666666667,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 3.2452196016743,
+          "near_misses": 5.0,
+          "path_efficiency": 1.0,
+          "snqi": -1.0084440296127541,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "social_force",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "423bef28b237f3c07aee57841d3fa2eb47ae3285546711425edc671013dd742a",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 112,
+      "selected_groups": [
+        "near_miss_extreme"
+      ],
+      "source_record": {
+        "episode_file": "runs/social_force__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "f7ef7c6a39b9825f812d189b9565010b614256f0ad88d2f55fd30b959da8e78d",
+        "line_number": 119,
+        "record_sha256": "38e490958e8be67535a529857fdc85717a41bf0ead4218fb1817f44b644bb52a"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-c030496a069f9aec/case.json",
+      "case_id": "case-c030496a069f9aec",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 0.9872424913502108,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.33148304890788466,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "ppo",
+      "replay": {
+        "attempted": false,
+        "status": "unavailable_model_artifact"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "f3b53ddda3630a7df423e1d4b3bae15149810fb0ad2bf330def62319ff788841",
+        "replay_eligible": false,
+        "replay_ineligibility": "unavailable_model_artifact",
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "374ad8e865644a007c3d31109cfeefe0edc780bf6bec7a7198ccf24f7d103ec6",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "5ca888047081a431e8c6fabf1eba6889cb05974868ae5be811ea4dbdcc531b09",
+        "line_number": 7,
+        "record_sha256": "e30cb284405eb7b0b2cf6b8cbd9aa9056cdf2c055e4901e4c26e36910c7b5d17"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-d49815aa120869ac/case.json",
+      "case_id": "case-d49815aa120869ac",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.5833333333333334,
+          "force_exceed_events": 7.0,
+          "minimum_clearance_m": 4.175405778658591,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.2082870504001963,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "orca",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "9a4a5f31ca1ac988c0adf5b274d3b7a9507b7f145121aba98f0b9a7d5dd6b590",
+        "status": "materialized"
+      },
+      "scenario_family": "cross_trap",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/orca__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "432cb8546cba34ce97a01f12b8e45c854435aa2832fc9dd308dace09f188963b",
+        "line_number": 20,
+        "record_sha256": "e6e786f3fec847936eb4fdeb22b29f38665f675c912d91d8a19ef4b0d5b3643f"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-d7b1b3770342ca28/case.json",
+      "case_id": "case-d7b1b3770342ca28",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.125,
+          "force_exceed_events": 2.0,
+          "minimum_clearance_m": 2.4139760851895,
+          "near_misses": 2.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.5759611512913865,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "social_force",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "435d1f32d856521e26bf33f22f087d7403478b26be845382bacc7afd5d93b5b6",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "route_not_complete",
+        "slow_normalized_time"
+      ],
+      "source_record": {
+        "episode_file": "runs/social_force__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "f7ef7c6a39b9825f812d189b9565010b614256f0ad88d2f55fd30b959da8e78d",
+        "line_number": 118,
+        "record_sha256": "a25c621e88ca9ab6f59fdd2cea4398da9390f3bd6daab6a93d56f30d50e6533e"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-dbbc37b783a4d9db/case.json",
+      "case_id": "case-dbbc37b783a4d9db",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.01,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 2.174761386887249,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.34170773078783107,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "ppo",
+      "replay": {
+        "attempted": false,
+        "status": "unavailable_model_artifact"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "f3b53ddda3630a7df423e1d4b3bae15149810fb0ad2bf330def62319ff788841",
+        "replay_eligible": false,
+        "replay_ineligibility": "unavailable_model_artifact",
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "22e5b3ffc39dc8ca8d4f9ca02e60bd18f4a351ea614ffd7a633b5f58fd57a242",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "5ca888047081a431e8c6fabf1eba6889cb05974868ae5be811ea4dbdcc531b09",
+        "line_number": 118,
+        "record_sha256": "aa4294fd1f21d867fc767b38ed93755061279f39621d4d1df55254a8e1f6f388"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-e03cb3bded346ce9/case.json",
+      "case_id": "case-e03cb3bded346ce9",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.5,
+          "force_exceed_events": 3.0,
+          "minimum_clearance_m": 3.462756828951643,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.18765125226323937,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "ppo",
+      "replay": {
+        "attempted": false,
+        "status": "unavailable_model_artifact"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "f3b53ddda3630a7df423e1d4b3bae15149810fb0ad2bf330def62319ff788841",
+        "replay_eligible": false,
+        "replay_ineligibility": "unavailable_model_artifact",
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "683482524d60d81b8816f70e2ab8e73120e05cb0ff5e6c0ce24cc9f755d7983f",
+        "status": "materialized"
+      },
+      "scenario_family": "circular_crossing",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "5ca888047081a431e8c6fabf1eba6889cb05974868ae5be811ea4dbdcc531b09",
+        "line_number": 136,
+        "record_sha256": "d6c46fea29e45ac5cdb3dfe48e1ac5ec0061591ed06004c74cf59662b01d959b"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-e041affe9f70ed1b/case.json",
+      "case_id": "case-e041affe9f70ed1b",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 0.98710783130609,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.21301908599758262,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "sacadrl",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "c7943b9ed81ca154bd083f36d9cb09d3f5eeea048e917bf327c6e5fd2f34db1f",
+        "status": "materialized"
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 113,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "71745759214dc63c16971831ae023b1c4c96e2685d06259c9434c0531f649e9d",
+        "line_number": 9,
+        "record_sha256": "96cc12fc28aaa67b62fbd728e0a4928960ed1499808308f591b7aaaf57b66eb5"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-e418860b927a23a5/case.json",
+      "case_id": "case-e418860b927a23a5",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.022222222222222223,
+          "force_exceed_events": 1.0,
+          "minimum_clearance_m": 1.011411271465102,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09890722708598836,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "socnav_sampling",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "4505fbe08319158f44065194f00ba171e1de5d2735c9ed92d266d7f26967d9ad",
+        "status": "materialized"
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 111,
+      "selected_groups": [
+        "collision_event",
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time"
+      ],
+      "source_record": {
+        "episode_file": "runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "cd22fae7f7c686176cb7bfb37ee12ce9eff1edf6cf42d107ceebf6263fdd6c82",
+        "line_number": 118,
+        "record_sha256": "0df62a38fba3f43fe71b1e2212f0bf66379ed566da51516af317bd4295e06932"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-e7d19e671b87c6aa/case.json",
+      "case_id": "case-e7d19e671b87c6aa",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.412805262361518,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.1435894976415092,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "87382a0132dba2cd66229acc17778e268405bab46531f78ddd1264bcea7cde02",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 85,
+        "record_sha256": "b10b8d077126c164e0bf319c49025aaec9055b30dc8fad572836f818eba84672"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-eedb52eb02fe29ab/case.json",
+      "case_id": "case-eedb52eb02fe29ab",
+      "criticality": {
+        "anomalies": [
+          "collision_event_without_positive_collision_metric"
+        ],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.5833333333333334,
+          "force_exceed_events": 7.0,
+          "minimum_clearance_m": 4.136808067532955,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.2082870504001963,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        }
+      },
+      "planner_key": "goal",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "81bd5b107777b16a09f887fe0df826915400b353c51598fdaa7045f2bfabb52b",
+        "status": "materialized"
+      },
+      "scenario_family": "cross_trap",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "selected_groups": [
+        "collision_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/goal__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "a2d7fb318aaa713b1ead784635ea9985b22cf6b6f0ece45f621f2b16394544c5",
+        "line_number": 20,
+        "record_sha256": "decb62c8061ab8f95b58b4550af03dba6b7d65d05f758eda780dae815c99c10b"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    },
+    {
+      "benchmark_eligible": true,
+      "case_file": "cases/case-fc160f5827c013a1/case.json",
+      "case_id": "case-fc160f5827c013a1",
+      "criticality": {
+        "anomalies": [],
+        "evidence_tier": "diagnostic_only",
+        "metrics": {
+          "collisions_metric": 0.0,
+          "comfort_exposure": 0.0,
+          "force_exceed_events": 0.0,
+          "minimum_clearance_m": 1.4137033331720081,
+          "near_misses": 0.0,
+          "path_efficiency": 1.0,
+          "snqi": -0.09491099136070058,
+          "success_metric": 0.0,
+          "time_to_goal_norm": 1.0,
+          "total_collision_count": 0.0
+        },
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        }
+      },
+      "planner_key": "socnav_sampling",
+      "replay": {
+        "attempted": false,
+        "status": "not_attempted"
+      },
+      "replay_input": {
+        "planner_config_path": "replay_input/planner_config.yaml",
+        "planner_config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "replay_eligible": true,
+        "replay_ineligibility": null,
+        "scenario_matrix_path": "replay_input/replay_matrix.yaml",
+        "scenario_matrix_sha256": "d4f7aca028dcc8e4303f785170a729d032e45ed73d27595be0ff9492e2a31a82",
+        "status": "materialized"
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 111,
+      "selected_groups": [
+        "comfort_exposure_extreme",
+        "force_exceed_extreme",
+        "low_path_efficiency",
+        "minimum_clearance",
+        "near_miss_extreme",
+        "route_not_complete",
+        "slow_normalized_time",
+        "timeout_event"
+      ],
+      "source_record": {
+        "episode_file": "runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "episode_file_sha256": "cd22fae7f7c686176cb7bfb37ee12ce9eff1edf6cf42d107ceebf6263fdd6c82",
+        "line_number": 85,
+        "record_sha256": "ade96e74243cd2d5ac1739bbc7cab5c5fb7f5500c03e52c3b27752235e7ef003"
+      },
+      "source_showcase_renderer": {
+        "artifact_status": "not_generated",
+        "artifacts": [],
+        "reason": "source row has no recorded replay_steps; renderer was skipped to avoid resimulation",
+        "renderer_called": false,
+        "status": "unavailable"
+      }
+    }
+  ],
+  "claim_boundary": "Historical simulator records and bounded same-scenario reruns only; no real-world safety claim.",
+  "criticality_anomaly_counts": {
+    "collision_event_without_positive_collision_metric": 17
+  },
+  "evidence_tier": "diagnostic_only",
+  "execution_environment": {
+    "materializer_environment_identity": {
+      "complete": true,
+      "identity_sha256": "657d168f362e14760729e500bff7d25d557751943682eccd125f3ff41fae8e33",
+      "machine": "x86_64",
+      "platform_release": "7.0.0-29-generic",
+      "platform_system": "Linux",
+      "python_implementation": "CPython",
+      "python_version": "3.13.14",
+      "schema_version": "benchmark-execution-environment.v1",
+      "uv_lock_sha256": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+    },
+    "replay_attempt_environments": {
+      "case-2fa6f8a28dafddc0": null,
+      "case-4a01770a7c387ea0": null,
+      "case-5a33e6eb8e4a4d12": null,
+      "case-b08371fb5cd09502": null
+    },
+    "source_environment": "not_recorded_in_release_bundle"
+  },
+  "replay": {
+    "attempted": 4,
+    "materializer_checkout_clean": true,
+    "materializer_checkout_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "materializer_revision": "634c2f7a453fbf377a59fa7c4b9391391a0a0773",
+    "maximum_allowed": 5,
+    "new_attempted": 0,
+    "preserved_attempts_missing_artifacts": 0,
+    "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
+    "replay_revisions": [
+      "5cccee50be333adceee4c978b54bf63d32454cc9"
+    ],
+    "requested_limit": 0,
+    "reused_attempts": 4,
+    "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+    "status_counts": {
+      "not_attempted": 27,
+      "unavailable_execution_evidence": 4,
+      "unavailable_model_artifact": 5
+    }
+  },
+  "schema_version": "benchmark-hard-case-slice.v1",
+  "selection": {
+    "case_count": 36,
+    "case_ids": [
+      "case-03c37f0bb332305f",
+      "case-04c568c31a04858e",
+      "case-0c2df6ecb2be1aa3",
+      "case-2d8fe23373d44a37",
+      "case-2fa6f8a28dafddc0",
+      "case-3ada363af565c12f",
+      "case-3d48eb25e54c042e",
+      "case-3dde58967362f7b6",
+      "case-4a01770a7c387ea0",
+      "case-4c70c247ff1fe036",
+      "case-51a252ce9eccd3d8",
+      "case-581e769a5f31d6e9",
+      "case-5a33e6eb8e4a4d12",
+      "case-5c3391df82cfa1a4",
+      "case-64025bd60323624e",
+      "case-6f3cd3fc2e230d35",
+      "case-741fc67b70554756",
+      "case-8387bf3d2c2c6663",
+      "case-9129b9486534c898",
+      "case-937584ea0a24f210",
+      "case-9bb421b86702b018",
+      "case-9fb9400feed66b90",
+      "case-a796d333cd47ef5a",
+      "case-b08371fb5cd09502",
+      "case-b1649ad6dcdcfd25",
+      "case-b8624230f2030240",
+      "case-c030496a069f9aec",
+      "case-d49815aa120869ac",
+      "case-d7b1b3770342ca28",
+      "case-dbbc37b783a4d9db",
+      "case-e03cb3bded346ce9",
+      "case-e041affe9f70ed1b",
+      "case-e418860b927a23a5",
+      "case-e7d19e671b87c6aa",
+      "case-eedb52eb02fe29ab",
+      "case-fc160f5827c013a1"
+    ],
+    "planner_counts": {
+      "goal": 8,
+      "orca": 4,
+      "ppo": 5,
+      "prediction_planner": 5,
+      "sacadrl": 4,
+      "social_force": 6,
+      "socnav_sampling": 4
+    },
+    "scenario_family_counts": {
+      "accompanying_peer": 11,
+      "blind_corner": 9,
+      "bottleneck": 9,
+      "circular_crossing": 4,
+      "cross_trap": 2,
+      "crowd_navigation": 1
+    },
+    "scenario_id_count": 7,
+    "selected_group_counts": {
+      "collision_event": 15,
+      "comfort_exposure_extreme": 15,
+      "force_exceed_extreme": 15,
+      "low_path_efficiency": 15,
+      "minimum_clearance": 15,
+      "near_miss_extreme": 15,
+      "route_not_complete": 15,
+      "slow_normalized_time": 15,
+      "timeout_event": 15
+    },
+    "selector_contract": {
+      "opaque_composite_score_used": false,
+      "ordering": "named feature/event, then planner and scenario-family round-robin, then stable case identity",
+      "render_limit_unique_cases": 0,
+      "top_k_per_group": 15
+    },
+    "selector_schema": "benchmark-showcase.v1"
+  },
+  "source": {
+    "bundle_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
+    "embedded_checksums_status": "passed",
+    "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+    "showcase_tool_revision": "477f14c1b4b052ad407a34a71caace6618a75eeb",
+    "showcase_tool_source_files_sha256": {
+      "scripts/replay_episode_figure.py": "9274f0bfba7cdc5b9b68bbbddcf7f87731a97d0757748dff4c4b941f446558b9",
+      "scripts/tools/analyze_camera_ready_campaign.py": "16ebb65e69f682d9bcef5846422f72f8582a040a5e073e01fa7ba53875c71bcb",
+      "scripts/tools/benchmark_showcase.py": "626e5480a0daaa9d0b46e6dd6af6a833247e0a0aed072c0eb8e4724db96a6eb9"
+    },
+    "showcase_tool_source_snapshot_revision": "0a5f73283b98279900797b75d20adf6d4676086b",
+    "showcase_tool_source_snapshot_status": "verified_file_hash_match",
+    "source_campaign_id": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316",
+    "source_files_verified": [
+      "campaign_manifest.json",
+      "preflight/preview_scenarios.json",
+      "reports/campaign_summary.json",
+      "reports/scenario_breakdown.csv",
+      "reports/scenario_family_breakdown.csv",
+      "run_meta.json",
+      "runs/goal__differential_drive/episodes.jsonl",
+      "runs/orca__differential_drive/episodes.jsonl",
+      "runs/ppo__differential_drive/episodes.jsonl",
+      "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "runs/sacadrl__differential_drive/episodes.jsonl",
+      "runs/social_force__differential_drive/episodes.jsonl",
+      "runs/socnav_sampling__differential_drive/episodes.jsonl"
+    ],
+    "source_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+    "summary_sha256": "c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f"
+  },
+  "source_showcase_diagnostics": {
+    "accounting": {
+      "denominator_status": "complete_preflight_inventory",
+      "duplicate_identity_count": 0,
+      "expected_identity_count": 987,
+      "expected_run_count": 7,
+      "malformed_line_count": 0,
+      "missing_identity_count": 0,
+      "present_episode_rows": 987,
+      "present_unique_identities": 987,
+      "unexpected_identity_count": 0
+    },
+    "camera_ready_analyzer": {
+      "credibility_status": "credible_diagnostic",
+      "finding_count": 7,
+      "findings": [
+        "goal (differential_drive): episode integrity violations: 34 contradictory success/collision records",
+        "orca (differential_drive): episode integrity violations: 5 contradictory success/collision records",
+        "ppo (differential_drive): episode integrity violations: 14 contradictory success/collision records",
+        "prediction_planner (differential_drive): episode integrity violations: 30 contradictory success/collision records",
+        "sacadrl (differential_drive): episode integrity violations: 55 contradictory success/collision records",
+        "social_force (differential_drive): episode integrity violations: 30 contradictory success/collision records",
+        "socnav_sampling (differential_drive): episode integrity violations: 73 contradictory success/collision records"
+      ],
+      "status": "passed"
+    },
+    "collision_event_metric_consistency": {
+      "both_count_metrics_available_count": 241,
+      "both_count_metrics_nonpositive_count": 241,
+      "canonical_collision_event_count": 241,
+      "collision_event_and_collision_termination_count": 241,
+      "metric_fields": [
+        "metrics.collisions",
+        "metrics.total_collision_count"
+      ],
+      "missing_at_least_one_count_metric_count": 0,
+      "scope": "all_persisted_episode_rows"
+    },
+    "run_statuses": [
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 34,
+          "failure": 105,
+          "success": 2
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "goal",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      },
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 5,
+          "failure": 110,
+          "success": 26
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "orca",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      },
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 14,
+          "failure": 92,
+          "success": 35
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "ppo",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      },
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 30,
+          "failure": 102,
+          "success": 9
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "prediction_planner",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      },
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 55,
+          "failure": 86
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "sacadrl",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      },
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 30,
+          "failure": 111
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "social_force",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      },
+      {
+        "availability_status": "available",
+        "benchmark_eligible": true,
+        "benchmark_eligible_episode_rows": 141,
+        "episode_outcome_status_counts": {
+          "collision": 73,
+          "failure": 43,
+          "success": 25
+        },
+        "excluded_episode_rows": 0,
+        "expected_episodes": 141,
+        "failed": false,
+        "fallback_or_degraded": false,
+        "kinematics": "differential_drive",
+        "planner_key": "socnav_sampling",
+        "present_episode_rows": 141,
+        "run_status": "ok",
+        "unavailable": false
+      }
+    ]
+  },
+  "source_showcase_renderer_status_counts": {
+    "unavailable": 36
+  },
+  "status": "materialized"
+}

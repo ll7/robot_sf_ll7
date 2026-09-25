@@ -180,13 +180,13 @@ def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
 def _runtime_base_map(*, obstacles: list[Obstacle] | None = None) -> MapDefinition:
     """Build a compact map fixture for multi-pedestrian runtime checks."""
     width, height = 8.0, 6.0
-    robot_spawn_zones = [((0.5, 0.5), (1.0, 0.5), (1.0, 1.0))]
+    robot_spawn_zones = [((5.5, 2.5), (6.0, 2.5), (6.0, 3.0))]
     robot_goal_zones = [((7.0, 5.0), (7.5, 5.0), (7.5, 5.5))]
     robot_routes = [
         GlobalRoute(
             spawn_id=0,
             goal_id=0,
-            waypoints=[(0.75, 0.75), (4.0, 3.0), (7.25, 5.25)],
+            waypoints=[(5.75, 2.75), (4.0, 3.0), (7.25, 5.25)],
             spawn_zone=robot_spawn_zones[0],
             goal_zone=robot_goal_zones[0],
         )

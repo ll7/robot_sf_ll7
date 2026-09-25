@@ -81,7 +81,9 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     status fields (including the predictive-foresight fallback prefix), explicit
     boolean markers, and positive fallback counters fail closed.  An empty
     ``fallback_reason`` is tolerated only beside an explicit false
-    ``fallback_used`` or ``fallback_triggered`` flag.
+    ``fallback_used`` or ``fallback_triggered`` flag. The shield's typed
+    ``fallback_controller_state`` dictionary is traversed as diagnostic state,
+    with the same marker checks applied to its contents.
 
     Returns:
         ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
@@ -135,6 +137,9 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                         else:
                             return item_path, "invalid"
                     else:
+                        return item_path, "invalid"
+                elif key == "fallback_controller_state":
+                    if not isinstance(item, dict):
                         return item_path, "invalid"
                 elif "fallback" in key:
                     counter_marker = _counter_marker(item, item_path)

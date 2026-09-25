@@ -28,11 +28,14 @@ Each certificate includes:
 - `route_certificates`: per-route evidence for every applicable robot route.
 - `evidence`: optional scenario metadata and scenario-difficulty provenance. The frozen
   `scenario_cert.v1` producer does not add source or effective-input digest fields. The
-  `scenario_admissibility.v1` adapter computes source and runtime-input identity before and after
-  classification, verifies the certificate's `source` resolves to those candidate bytes, and
-  records that stable adapter-time binding in its assumptions. Producer digest fields are checked
-  when a certificate supplies them; their absence does not change the v1 certificate output. The
-  runtime identity covers included manifests and the selected scenario's resolved map and route-override
+  `scenario_admissibility.v1` adapter computes current source and runtime-input identity before and
+  after classification and verifies the certificate's `source` resolves to the candidate manifest
+  bytes. Producer digest fields are checked when a certificate supplies them; their absence does not
+  change the v1 output, but adapter-time identity does not attest which map/route bytes a legacy
+  certificate used when it was generated. A certificate can exclude only when its producer-time
+  identity matches the current source digest (root-only inputs) or effective-input digest (external
+  runtime closure); otherwise its classification remains unknown for admissibility. The runtime
+  identity covers included manifests and the selected scenario's resolved map and route-override
   files, including the resolved `map_id` path and parser selected by its suffix. If a scenario
   omits both `map_file` and `map_id`, the closure includes every SVG loaded into the default
   `MapDefinitionPool`. The feasibility oracle brackets the frozen certificate call with its own
@@ -287,10 +290,13 @@ execution records must carry the matching `effective_input_sha256`; their produc
 the referenced bytes stayed stable while evidence was generated. The adapter checks each named
 execution's parser-consumed input closure against the candidate's captured resources. Legacy
 `scenario_cert.v1` certificates have no producer-owned digest fields: the adapter binds their
-`source` to the current candidate source and input identity, and records that binding source in its
-assumptions. A missing or unavailable candidate identity, an unresolvable certificate source
-reference, or any supplied digest mismatch leaves the certificate unusable for rejection. This
-adapter-time binding does not attest when a legacy certificate was generated. For multi-scenario
+`source` to the current candidate manifest and records current input identity in its assumptions.
+That adapter-time binding does not attest when a legacy certificate was generated. When external
+runtime inputs are required, a legacy certificate without producer-time effective-input identity
+cannot support an impossibility/reject verdict; the adapter preserves `unknown`. For a root-only
+manifest, the producer-time source digest must match the current root bytes. A missing or unavailable
+candidate identity, an unresolvable certificate source reference, or any supplied digest mismatch
+also leaves the certificate unusable for rejection. For multi-scenario
 manifests, callers should pass the exact scenario artifact used for the named case; a shared
 scenario ID alone does not establish artifact identity.
 

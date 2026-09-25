@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9431
-latest_reviewed_date: 2026-09-23
+latest_reconciliation_issue: 9645
+latest_reviewed_date: 2026-09-25
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 438
-refreshed_baseline_files_with_findings: 98
+refreshed_baseline_total_findings: 507
+refreshed_baseline_files_with_findings: 104
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -157,11 +157,21 @@ decision_summary: >-
   across 98 files, and records the 40-file evidence-tree addition: 38 diagnostic trace files plus
   two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
   campaign provenance bytes without modifying either artifact.
-#8237 disposition: remediate. The E_release_checklist digest in the
-#4683 assurance-case example was recomputed against the exact final-head
-# docs/RELEASE.md bytes and is already current at this head. No
-# artifact_hash_mismatch was admitted to the machine baseline; the six
-# pre-existing hash_without_artifact_path findings remain unchanged.
+  Pilot evidence addendum (issue #9645; 2026-09-25): the bounded Random-vs-TPE packet now
+  inventories its 56 payload files with a matching SHA-256 sidecar, validates safe canonical
+  payload paths, and resolves only exact digest-matching archived copies. Two historical source
+  files were recovered byte-for-byte from their recorded source revision. The original renderer
+  output was reconstructed byte-for-byte from the preserved comparison JSON and exact producer
+  revision; no search or simulation was rerun. The linter moved from 438 findings across 98 files
+  to 507 across 104 files: all 69 increases are `uncommitted_artifact_missing_location` findings
+  in the six paths reviewed below. They refer to 64 per-candidate `episode_records.jsonl` outputs,
+  four historical/representative replay outputs, and one smoke replay output. Those raw episode
+  bytes are absent from the committed packet; similarly named records do not match their declared
+  hashes. The original comparison Markdown is archived at its exact producer-declared digest.
+  Preserve the remaining original references and report this evidence gap instead of synthesizing
+  replay records or relinking to nearby files. The pilot remains diagnostic and NO-GO for the scaled
+  #9648 campaign; this disposition does not treat missing outputs as successful evaluations or
+  promote the findings to benchmark evidence. The packet adds 58 evidence-tree paths.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -403,6 +413,56 @@ reviewed_files:
       the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
       admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
       unavailable, no waiver is claimed, and the issue stays open.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The convergence report references 64 per-candidate `episode_records.jsonl` outputs across
+      the two samplers and two seeds. Candidate/evaluation summaries and the report are preserved,
+      but those raw episode files are absent from the committed packet and no exact-hash copies
+      were found in its payload inventory. Retain the references as incomplete provenance; do not
+      reconstruct rows from aggregates or treat candidate summaries as replay evidence. This
+      prevents a complete candidate-level replay/accounting claim and is part of the #9645 NO-GO.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1.provenance.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The provenance records historical replay output `output/issue9645-historical-replay/failure_0002/replay.jsonl`
+      and its SHA-256, but the exact bytes are absent from the committed packet. The similarly named retained packet JSONL
+      does not match the declared digest. Keep the original producer reference; a scenario
+      or summary is insufficient to claim replay verification.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_2.provenance.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The provenance records historical replay output `output/issue9645-historical-replay/failure_0002/replay_2.jsonl`
+      and its SHA-256, but the exact bytes are absent from the committed packet. The similarly named retained packet JSONL
+      does not match the declared digest. Keep the original producer reference; a scenario
+      or summary is insufficient to claim replay verification.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_original.provenance.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The provenance records the original candidate's `episode_records.jsonl` and digest, but the
+      exact episode bytes are absent from the committed packet and the available records do not
+      match that digest. Preserve the original source binding; the retained trajectory and summary
+      do not substitute for the missing episode record.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_replay.provenance.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The provenance records the representative replay's `episode_records_replay.jsonl` and
+      digest, but the exact episode bytes are absent from the committed packet and the available
+      records do not match that digest. Preserve the original source binding; the replay summary
+      does not substitute for the missing episode record.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/episode_records.provenance.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The smoke provenance records an `episode_records.jsonl` path and digest, but the exact raw
+      episode bytes are absent from the committed packet. Its scenario, trajectory, and failure
+      attribution are not substitutes for the missing episode record; preserve the source binding
+      and do not count it as a replay verified from archived raw output.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

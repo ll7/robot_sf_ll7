@@ -32,3 +32,11 @@ verified successfully.
 For the pilot, the bounded Random/TPE comparison produced no critical candidate in four runs at 16
 evaluations each. That is a finite-budget null result and a **NO-GO** for the scaled campaign in
 issue #9648; it does not establish that the scenario space has no counterexample.
+
+Artifact recovery: the original producer Markdown output is archived at
+`evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_outputs/comparison.md`; its
+reconstruction record shows an exact digest match from the preserved comparison JSON and producer
+revision, without another search or simulation. The durable packet does not contain the raw
+`episode_records.jsonl` files for the 64 pilot candidates. Candidate statuses and metrics remain in
+the machine-readable summaries, but missing episode bytes prevent complete candidate-level replay
+and independent trace review. This custody gap is an additional limitation on the NO-GO result.

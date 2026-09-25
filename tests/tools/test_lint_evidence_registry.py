@@ -1167,6 +1167,252 @@ def test_artifact_manifest_paths_are_repository_root_relative(tmp_path: Path) ->
     assert repository_relative_report["issues"] == []
 
 
+def test_convergence_report_resolved_config_paths_bind_hashes(tmp_path: Path) -> None:
+    """The canonical convergence-report config provenance uses resolved repo paths."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path / "convergence-config")
+    report_path = evidence / "convergence.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial-search-convergence-report.v1",
+                "runs": [
+                    {
+                        "config_provenance": {
+                            "files": [
+                                {
+                                    "config_key": "campaign_config",
+                                    "declared_path": "configs/campaign.yaml",
+                                    "resolved_path": "configs/campaign.yaml",
+                                    "sha256": config_sha256,
+                                    "status": "available",
+                                }
+                            ]
+                        }
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(report_path.relative_to(repo)))
+    _git(repo, "commit", "-qm", "add convergence report config provenance")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert report["issues"] == []
+
+
+def test_evidence_bundle_payload_paths_are_resolved_and_verified(tmp_path: Path) -> None:
+    """Canonical bundle entries point inside payload and hash candidate-tree bytes."""
+    linter = _load_linter()
+    repo, evidence, base_commit, _config_sha256 = _make_repo(tmp_path / "bundle")
+    bundle = evidence / "case-study"
+    payload = bundle / "payload"
+    payload.mkdir(parents=True)
+    artifact = payload / "summary.json"
+    artifact.write_text('{"result":"ok"}\n', encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    checksums = bundle / "checksums.sha256"
+    checksums.write_text(
+        f"{artifact_sha256}  payload/summary.json\n",
+        encoding="utf-8",
+    )
+    manifest = bundle / "evidence_bundle_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "created_at_utc": "2026-09-25T00:00:00Z",
+                "bundle_name": "case-study",
+                "source_root": "output/case-study",
+                "command": "reproduce case-study",
+                "commit": base_commit,
+                "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+                "policy": {},
+                "totals": {"file_count": 1, "total_bytes": artifact.stat().st_size},
+                "files": [
+                    {
+                        "path": "summary.json",
+                        "size_bytes": artifact.stat().st_size,
+                        "sha256": artifact_sha256,
+                        "kind": "aggregates",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(bundle.relative_to(repo)))
+    _git(repo, "commit", "-qm", "add canonical evidence bundle")
+    candidate = _git(repo, "rev-parse", "HEAD")
+
+    ordinary = linter.lint_evidence_registry(repo, evidence)
+    projected = linter.lint_evidence_registry(
+        repo,
+        evidence,
+        candidate_head=candidate,
+        frozen_base=base_commit,
+    )
+
+    assert ordinary["issues"] == []
+    assert projected["issues"] == []
+    assert checksums.read_text(encoding="utf-8") == (f"{artifact_sha256}  payload/summary.json\n")
+
+
+def test_evidence_bundle_payload_path_cannot_fall_back_to_repo_root(tmp_path: Path) -> None:
+    """A repo-root path cannot bypass a canonical bundle's payload-relative binding."""
+    linter = _load_linter()
+    repo, evidence, _base_commit, _config_sha256 = _make_repo(tmp_path / "bundle-escape")
+    bundle = evidence / "case-study"
+    payload = bundle / "payload"
+    payload.mkdir(parents=True)
+    artifact = evidence / "artifact.json"
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    checksums = bundle / "checksums.sha256"
+    checksums.write_text(
+        f"{artifact_sha256}  payload/docs/context/evidence/artifact.json\n",
+        encoding="utf-8",
+    )
+    manifest = bundle / "evidence_bundle_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "files": [
+                    {
+                        "path": "docs/context/evidence/artifact.json",
+                        "size_bytes": artifact.stat().st_size,
+                        "sha256": artifact_sha256,
+                        "kind": "aggregates",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(bundle.relative_to(repo)))
+    _git(repo, "commit", "-qm", "add escaping evidence bundle reference")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert [(issue["path"], issue["code"]) for issue in report["issues"]] == [
+        (
+            "docs/context/evidence/case-study/evidence_bundle_manifest.json",
+            "uncommitted_artifact_missing_location",
+        )
+    ]
+
+
+def test_evidence_bundle_checksums_must_match_manifest(tmp_path: Path) -> None:
+    """Bundle sidecars must cover exactly the manifest's payload hashes."""
+    linter = _load_linter()
+    repo, evidence, _base_commit, _config_sha256 = _make_repo(tmp_path / "bundle-checksums")
+    bundle = evidence / "case-study"
+    payload = bundle / "payload"
+    payload.mkdir(parents=True)
+    artifact = payload / "summary.json"
+    artifact.write_text('{"result":"ok"}\n', encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    checksums = bundle / "checksums.sha256"
+    checksums.write_text(f"{'0' * 64}  payload/summary.json\n", encoding="utf-8")
+    manifest = bundle / "evidence_bundle_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "files": [
+                    {
+                        "path": "summary.json",
+                        "size_bytes": artifact.stat().st_size,
+                        "sha256": artifact_sha256,
+                        "kind": "aggregates",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(bundle.relative_to(repo)))
+    _git(repo, "commit", "-qm", "add evidence bundle with a bad checksum sidecar")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert [(issue["path"], issue["code"]) for issue in report["issues"]] == [
+        (
+            "docs/context/evidence/case-study/evidence_bundle_manifest.json",
+            "evidence_bundle_checksums_mismatch",
+        )
+    ]
+
+
+def test_evidence_bundle_binds_exact_copy_by_sha256(tmp_path: Path) -> None:
+    """An output reference resolves only to an exact same-bundle payload copy."""
+    linter = _load_linter()
+    repo, evidence, base_commit, _config_sha256 = _make_repo(tmp_path / "bundle-copy")
+    bundle = evidence / "case-study"
+    payload = bundle / "payload"
+    payload.mkdir(parents=True)
+    artifact = payload / "summary.json"
+    artifact.write_text('{"result":"historical"}\n', encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    reference = payload / "report.json"
+    reference.write_text(
+        json.dumps(
+            {
+                "artifact": {
+                    "path": "output/previous-run/summary.json",
+                    "sha256": artifact_sha256,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    reference_sha256 = hashlib.sha256(reference.read_bytes()).hexdigest()
+    checksums = bundle / "checksums.sha256"
+    checksums.write_text(
+        f"{artifact_sha256}  payload/summary.json\n{reference_sha256}  payload/report.json\n",
+        encoding="utf-8",
+    )
+    manifest = bundle / "evidence_bundle_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "files": [
+                    {
+                        "path": "summary.json",
+                        "size_bytes": artifact.stat().st_size,
+                        "sha256": artifact_sha256,
+                        "kind": "aggregates",
+                    },
+                    {
+                        "path": "report.json",
+                        "size_bytes": reference.stat().st_size,
+                        "sha256": reference_sha256,
+                        "kind": "reports",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(bundle.relative_to(repo)))
+    _git(repo, "commit", "-qm", "add bundle with exact copied artifact")
+    candidate = _git(repo, "rev-parse", "HEAD")
+
+    ordinary = linter.lint_evidence_registry(repo, evidence)
+    projected = linter.lint_evidence_registry(
+        repo,
+        evidence,
+        candidate_head=candidate,
+        frozen_base=base_commit,
+    )
+
+    assert ordinary["issues"] == []
+    assert projected["issues"] == []
+
+
 def test_config_hash_mismatch_is_classified(tmp_path: Path) -> None:
     """A declared producing-config hash must match the blob at the declared commit."""
     linter = _load_linter()

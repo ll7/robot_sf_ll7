@@ -12,8 +12,8 @@
     "paper_or_benchmark_claim": "not_established_by_bundle_alone"
   },
   "totals": {
-    "file_count": 52,
-    "total_bytes": 1135732
+    "file_count": 56,
+    "total_bytes": 1247677
   },
   "files": [
     {
@@ -53,6 +53,12 @@
       "kind": "misc"
     },
     {
+      "path": "historical_issue_1501_failure_0002.json",
+      "size_bytes": 2524,
+      "sha256": "453c6f7c1d6f6659bf63f7c197e2313fd5cbd8dd7df7b0165f3452c37caf9c01",
+      "kind": "misc"
+    },
+    {
       "path": "historical_issue_1501_failure_0002/replay_1.jsonl",
       "size_bytes": 24032,
       "sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
@@ -89,9 +95,15 @@
       "kind": "misc"
     },
     {
-      "path": "historical_issue_1501_failure_0002.json",
-      "size_bytes": 2524,
-      "sha256": "453c6f7c1d6f6659bf63f7c197e2313fd5cbd8dd7df7b0165f3452c37caf9c01",
+      "path": "historical_source/compare_adversarial_samplers.py",
+      "size_bytes": 59456,
+      "sha256": "e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd",
+      "kind": "misc"
+    },
+    {
+      "path": "historical_source/episode.schema.v1.json",
+      "size_bytes": 49521,
+      "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
       "kind": "misc"
     },
     {
@@ -311,6 +323,18 @@
       "kind": "misc"
     },
     {
+      "path": "source_outputs/comparison.md",
+      "size_bytes": 2097,
+      "sha256": "b92217b4eb625a5e70cfadc0de555b84dacb6eca4c1f971ca34c6ea58ded3d2a",
+      "kind": "reports"
+    },
+    {
+      "path": "source_outputs/comparison.reconstruction.json",
+      "size_bytes": 871,
+      "sha256": "8f2ff6e0b63b623aa4606713b3f7f9bde581c36b4c427acfa95006352c925dad",
+      "kind": "reports"
+    },
+    {
       "path": "source_revision_58e.patch",
       "size_bytes": 3809,
       "sha256": "44922462767140c89453fca8bbe01128cc73c384d62321459c858d336089ea31",
@@ -329,12 +353,12 @@
       "kind": "aggregates"
     }
   ],
-  "reconciled_at_utc": "2026-09-24T21:25:10.016667Z",
+  "reconciled_at_utc": "2026-09-25T11:38:34.138804Z",
   "source_revision_reconstruction": {
+    "full_tree_equivalence_claimed": false,
     "mapping_path": "source_revision_mapping.json",
     "patch_path": "source_revision_58e.patch",
     "patch_sha256": "44922462767140c89453fca8bbe01128cc73c384d62321459c858d336089ea31",
-    "verified_source_file_count": 11,
-    "full_tree_equivalence_claimed": false
+    "verified_source_file_count": 11
   }
 }

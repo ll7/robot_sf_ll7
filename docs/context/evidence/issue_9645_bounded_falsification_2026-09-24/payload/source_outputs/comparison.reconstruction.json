@@ -1,0 +1,13 @@
+{
+  "archived_path": "source_outputs/comparison.md",
+  "archived_sha256": "b92217b4eb625a5e70cfadc0de555b84dacb6eca4c1f971ca34c6ea58ded3d2a",
+  "input_path": "pilot_comparison.json",
+  "input_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d",
+  "method": "Reconstructed with render_durable_comparison_table from the exact producer revision and preserved comparison JSON; no search or simulation was rerun.",
+  "renderer_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "renderer_path": "scripts/tools/compare_adversarial_samplers.py",
+  "schema_version": "issue_9645_render_reconstruction.v1",
+  "source_output_path": "output/issue9645-pilot/comparison.md",
+  "source_output_sha256": "b92217b4eb625a5e70cfadc0de555b84dacb6eca4c1f971ca34c6ea58ded3d2a",
+  "verification": "Reconstructed bytes exactly match the producer-declared SHA-256."
+}

@@ -20,7 +20,7 @@ import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -681,9 +681,52 @@ def _synthetic_commit_findings(display_path: Path, value: Any) -> list[dict[str,
 
 
 def _artifact_path(
-    mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any], ...]
+    mapping: Mapping[str, Any],
+    ancestors: tuple[Mapping[str, Any], ...],
+    *,
+    display_path: Path | None = None,
 ) -> str | None:
-    """Find a neighboring artifact path, including ``reports_dir`` filename manifests."""
+    """Find a neighboring artifact path, including canonical bundle payload paths."""
+    bundle_manifest = next(
+        (
+            parent
+            for parent in reversed(ancestors)
+            if parent.get("schema_version") == "evidence_bundle.v1"
+            and isinstance(parent.get("files"), list)
+            and any(item is mapping for item in parent["files"])
+        ),
+        None,
+    )
+    if bundle_manifest is not None:
+        raw_path = mapping.get("path")
+        if display_path is None or not isinstance(raw_path, str) or not raw_path:
+            return None
+        payload_path = _safe_bundle_payload_path(raw_path)
+        if payload_path is None:
+            return None
+        return (display_path.parent / payload_path).as_posix()
+
+    if (
+        mapping.get("status") == "available"
+        and isinstance(mapping.get("config_key"), str)
+        and any(
+            parent.get("schema_version") == "adversarial-search-convergence-report.v1"
+            for parent in ancestors
+        )
+    ):
+        resolved_path = mapping.get("resolved_path")
+        if isinstance(resolved_path, str) and resolved_path.startswith("configs/"):
+            relative = PurePosixPath(resolved_path)
+            if (
+                not relative.is_absolute()
+                and "\\" not in resolved_path
+                and "\x00" not in resolved_path
+                and resolved_path == relative.as_posix()
+                and relative.parts
+                and all(part not in {".", ".."} for part in relative.parts)
+            ):
+                return relative.as_posix()
+
     paths = _string_values(mapping, ARTIFACT_PATH_KEYS)
     for value in paths:
         if value and not value.startswith("configs/"):
@@ -710,6 +753,189 @@ def _artifact_path(
     return None
 
 
+def _safe_bundle_payload_path(raw_path: str) -> str | None:
+    """Return a canonical bundle-root-relative payload path, rejecting escapes."""
+    relative = PurePosixPath(raw_path)
+    if (
+        relative.is_absolute()
+        or "\\" in raw_path
+        or "\x00" in raw_path
+        or raw_path != relative.as_posix()
+        or not relative.parts
+        or any(part in {".", ".."} for part in relative.parts)
+        or ":" in relative.parts[0]
+    ):
+        return None
+    return (PurePosixPath("payload") / relative).as_posix()
+
+
+def _manifest_bundle_checksums(value: Mapping[str, Any]) -> dict[str, str]:
+    """Return validated payload paths and digests declared by a bundle manifest."""
+    expected: dict[str, str] = {}
+    files = value.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("evidence bundle manifest files must be a non-empty list")
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            raise ValueError("evidence bundle manifest contains a non-object file entry")
+        raw_path = entry.get("path")
+        declared_hash = entry.get("sha256")
+        if (
+            not isinstance(raw_path, str)
+            or not isinstance(declared_hash, str)
+            or not SHA256_RE.fullmatch(declared_hash)
+        ):
+            raise ValueError("evidence bundle manifest contains an invalid path or SHA-256")
+        payload_path = _safe_bundle_payload_path(raw_path)
+        if payload_path is None or payload_path in expected:
+            raise ValueError("evidence bundle manifest contains an unsafe or duplicate path")
+        expected[payload_path] = declared_hash.lower()
+    return expected
+
+
+def _parse_bundle_checksum_sidecar(raw: bytes) -> dict[str, str]:
+    """Parse canonical bundle-root-relative checksum lines, rejecting path escapes."""
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ValueError("checksums.sha256 is not valid UTF-8") from exc
+    actual: dict[str, str] = {}
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            raise ValueError(f"checksums.sha256 line {line_number} is malformed")
+        declared_hash, raw_path = parts
+        raw_path = raw_path.removeprefix("*")
+        payload_suffix = raw_path.removeprefix("payload/")
+        payload_path = _safe_bundle_payload_path(payload_suffix)
+        if (
+            not SHA256_RE.fullmatch(declared_hash)
+            or not raw_path.startswith("payload/")
+            or payload_path != raw_path
+            or payload_path in actual
+        ):
+            raise ValueError(
+                f"checksums.sha256 line {line_number} has an invalid or duplicate entry"
+            )
+        actual[payload_path] = declared_hash.lower()
+    return actual
+
+
+def _evidence_bundle_checksum_findings(
+    repo_root: Path,
+    display_path: Path,
+    value: Mapping[str, Any],
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> list[dict[str, str]]:
+    """Require an evidence-bundle sidecar to match its manifest file inventory."""
+    sidecar_path = (display_path.parent / "checksums.sha256").as_posix()
+    code = "evidence_bundle_checksums_mismatch"
+    if not _is_tracked(repo_root, sidecar_path, content_ref, content_cache, tracked_paths):
+        return [_issue(display_path, code, "checksums.sha256 is missing from the evaluated bundle")]
+    raw = _repository_file_bytes(repo_root, sidecar_path, content_ref, content_cache)
+    if raw is None:
+        return [
+            _issue(display_path, code, "checksums.sha256 cannot be read from the evaluated tree")
+        ]
+    try:
+        expected = _manifest_bundle_checksums(value)
+        actual = _parse_bundle_checksum_sidecar(raw)
+    except ValueError as exc:
+        return [_issue(display_path, code, str(exc))]
+    if actual != expected:
+        missing = len(set(expected).difference(actual))
+        extra = len(set(actual).difference(expected))
+        different = sum(actual[path] != expected[path] for path in expected.keys() & actual.keys())
+        return [
+            _issue(
+                display_path,
+                code,
+                "checksums.sha256 does not match evidence_bundle_manifest.json "
+                f"(missing={missing}, extra={extra}, hash_mismatches={different})",
+            )
+        ]
+    return []
+
+
+def _validated_bundle_checksum_inventory(
+    repo_root: Path,
+    bundle_root: Path,
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> dict[str, str] | None:
+    """Return a bundle inventory only when manifest and checksum sidecar agree."""
+    manifest_path = (bundle_root / "evidence_bundle_manifest.json").as_posix()
+    if not _is_tracked(repo_root, manifest_path, content_ref, content_cache, tracked_paths):
+        return None
+    manifest_bytes = _repository_file_bytes(repo_root, manifest_path, content_ref, content_cache)
+    if manifest_bytes is None:
+        return None
+    try:
+        manifest = _load_document(repo_root / manifest_path, raw=manifest_bytes)
+        if (
+            not isinstance(manifest, Mapping)
+            or manifest.get("schema_version") != "evidence_bundle.v1"
+        ):
+            return None
+        expected = _manifest_bundle_checksums(manifest)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError, ValueError):
+        return None
+    sidecar_path = (bundle_root / "checksums.sha256").as_posix()
+    if not _is_tracked(repo_root, sidecar_path, content_ref, content_cache, tracked_paths):
+        return None
+    sidecar = _repository_file_bytes(repo_root, sidecar_path, content_ref, content_cache)
+    if sidecar is None:
+        return None
+    try:
+        return expected if _parse_bundle_checksum_sidecar(sidecar) == expected else None
+    except ValueError:
+        return None
+
+
+def _bundle_copy_for_sha256(
+    repo_root: Path,
+    display_path: Path,
+    declared_hash: str,
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> str | None:
+    """Find a same-bundle payload copy only when its manifest and bytes match."""
+    for bundle_root in display_path.parents:
+        document_relative = display_path.relative_to(bundle_root)
+        if not document_relative.parts or document_relative.parts[0] != "payload":
+            continue
+        expected = _validated_bundle_checksum_inventory(
+            repo_root,
+            bundle_root,
+            content_ref=content_ref,
+            content_cache=content_cache,
+            tracked_paths=tracked_paths,
+        )
+        if expected is None:
+            continue
+        for payload_path, payload_hash in expected.items():
+            if payload_hash != declared_hash.lower():
+                continue
+            resolved = _resolve_repo_path(repo_root, (bundle_root / payload_path).as_posix())
+            if resolved is None or not _is_tracked(
+                repo_root, resolved[0], content_ref, content_cache, tracked_paths
+            ):
+                continue
+            payload = _repository_file_bytes(repo_root, resolved[0], content_ref, content_cache)
+            if payload is not None and hashlib.sha256(payload).hexdigest() == declared_hash.lower():
+                return resolved[0]
+    return None
+
+
 def _has_location(mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any], ...]) -> bool:
     """Return whether an uncommitted artifact has an explicit location marker."""
     return any(
@@ -718,6 +944,66 @@ def _has_location(mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any]
         for key, value in candidate.items()
         if isinstance(key, str) and (key.lower() == "location" or key.lower().endswith("_location"))
     )
+
+
+def _verified_bundle_copy_for_reference(
+    repo_root: Path,
+    display_path: Path,
+    mapping: Mapping[str, Any],
+    declared_hash: str,
+    *,
+    content_ref: str | None,
+    content_cache: Mapping[str, bytes] | None,
+    tracked_paths: set[str] | None,
+) -> str | None:
+    """Use a bundle copy only when no explicit copy locator was declared."""
+    if mapping.get("artifact_path"):
+        return None
+    return _bundle_copy_for_sha256(
+        repo_root,
+        display_path,
+        declared_hash,
+        content_ref=content_ref,
+        content_cache=content_cache,
+        tracked_paths=tracked_paths,
+    )
+
+
+def _unresolved_artifact_finding(  # noqa: PLR0913 - candidate-tree inputs stay explicit.
+    repo_root: Path,
+    display_path: Path,
+    key: str,
+    declared_hash: str,
+    artifact_path: str | None,
+    mapping: Mapping[str, Any],
+    ancestors: tuple[Mapping[str, Any], ...],
+    *,
+    content_ref: str | None,
+    content_cache: Mapping[str, bytes] | None,
+    tracked_paths: set[str] | None,
+) -> dict[str, str] | None:
+    """Classify a missing path after checking for an exact same-bundle copy."""
+    if _verified_bundle_copy_for_reference(
+        repo_root,
+        display_path,
+        mapping,
+        declared_hash,
+        content_ref=content_ref,
+        content_cache=content_cache,
+        tracked_paths=tracked_paths,
+    ):
+        return None
+    if artifact_path is None:
+        return _issue(
+            display_path, "hash_without_artifact_path", f"{key} lacks an adjacent artifact path"
+        )
+    if not _has_location(mapping, ancestors):
+        return _issue(
+            display_path,
+            "uncommitted_artifact_missing_location",
+            f"{artifact_path} is not tracked and lacks an explicit location marker",
+        )
+    return None
 
 
 def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explicit.
@@ -737,24 +1023,35 @@ def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explic
     """Check one artifact hash declaration, returning its finding when invalid."""
     if not SHA256_RE.fullmatch(declared_hash):
         return _issue(display_path, "invalid_sha256", f"{key} is not a 64-hex SHA-256")
-    artifact_path = _artifact_path(mapping, ancestors)
-    if artifact_path is None:
-        return _issue(
-            display_path, "hash_without_artifact_path", f"{key} lacks an adjacent artifact path"
-        )
-    resolved = _resolve_repo_path(repo_root, artifact_path)
+    artifact_path = _artifact_path(mapping, ancestors, display_path=display_path)
+    resolved = _resolve_repo_path(repo_root, artifact_path) if artifact_path is not None else None
     if resolved is None or not _is_tracked(
         repo_root, resolved[0], content_ref, content_cache, tracked_paths
     ):
-        if not _has_location(mapping, ancestors):
-            return _issue(
-                display_path,
-                "uncommitted_artifact_missing_location",
-                f"{artifact_path} is not tracked and lacks an explicit location marker",
-            )
-        return None
+        return _unresolved_artifact_finding(
+            repo_root,
+            display_path,
+            key,
+            declared_hash,
+            artifact_path,
+            mapping,
+            ancestors,
+            content_ref=content_ref,
+            content_cache=content_cache,
+            tracked_paths=tracked_paths,
+        )
     artifact_bytes = _repository_file_bytes(repo_root, resolved[0], content_ref, content_cache)
     if artifact_bytes is None:
+        if _verified_bundle_copy_for_reference(
+            repo_root,
+            display_path,
+            mapping,
+            declared_hash,
+            content_ref=content_ref,
+            content_cache=content_cache,
+            tracked_paths=tracked_paths,
+        ):
+            return None
         return _issue(
             display_path,
             "artifact_unreadable",
@@ -767,6 +1064,16 @@ def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explic
         if binding is not None:
             if applied_bindings is not None and binding not in applied_bindings:
                 applied_bindings.append(dict(binding))
+            return None
+        if _verified_bundle_copy_for_reference(
+            repo_root,
+            display_path,
+            mapping,
+            declared_hash,
+            content_ref=content_ref,
+            content_cache=content_cache,
+            tracked_paths=tracked_paths,
+        ):
             return None
         return _issue(
             display_path,
@@ -954,6 +1261,17 @@ def _lint_document(  # noqa: PLR0913
         historical_bindings=historical_bindings,
         applied_bindings=applied_bindings,
     )
+    if isinstance(value, Mapping) and value.get("schema_version") == "evidence_bundle.v1":
+        local_findings.extend(
+            _evidence_bundle_checksum_findings(
+                repo_root,
+                display_path,
+                value,
+                content_ref=content_ref,
+                content_cache=content_cache,
+                tracked_paths=tracked_paths,
+            )
+        )
     local_findings.extend(_synthetic_commit_findings(display_path, value))
     return _DocumentRecord(
         path,
@@ -1332,7 +1650,9 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
                             or not isinstance(declared_hash, str)
                         ):
                             continue
-                        artifact_path = _artifact_path(mapping, ancestors)
+                        artifact_path = _artifact_path(
+                            mapping, ancestors, display_path=Path(relative)
+                        )
                         if artifact_path is None:
                             continue
                         resolved = _resolve_repo_path(repo_root, artifact_path)

@@ -348,6 +348,10 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
     the issue #3079 campaign is CPU-achievable; the full 27-cell empirical run is the same path
     scaled up. Prior cheap-lane workers BLOCKED on a false "requires Slurm/GPU" premise; the
     executor here verifies that premise against the actual code path.
+
+    Seed 1105 replaces 1101 (issue #9725): the only certified failure under seed 1101 was a
+    pedestrian placed on the robot at reset (collision at step 1), a spawn defect the
+    simulator now prevents. Seed 1105 yields a certified collision at step 10.
     """
     config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
     config = replace(config, output_dir=tmp_path / "comparison")
@@ -357,7 +361,7 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
         objective_names=objectives,
         synthetic=False,
         budgets=(16,),
-        seeds=(1101,),
+        seeds=(1105,),
     )
     assert len(rows) == 1
     row = rows[0]

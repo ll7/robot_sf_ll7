@@ -235,8 +235,13 @@ planner-independent digest from the episode's producer-recorded `scenario_params
 the canonical 16-character map-runner config hash. The complete row config hash remains planner
 specific and is compared between target and replay. An `execution_context` extension in an episode
 row or replay result is not producer authority. If the producer manifest or a required field is
-absent, the episode outcome may still support an empirical result, but the missing dimension
-remains unknown for planner attribution.
+absent, the captured episode outcome remains visible, but it cannot establish candidate-case
+feasibility unless the producer-bound scenario-matrix digest and planner-independent case identity
+are both valid. Missing or unavailable scenario/case identity, and every explicit run-context
+mismatch, leave the scenario verdict unknown. Missing execution-context or checkpoint dimensions
+are recorded as unknown and block planner-specific attribution; a completed episode can still
+support empirical feasibility for the named case when its producer-bound scenario and case
+identity are valid.
 
 Replay admission reads the sidecar's source episode-store path and digest, identity, determinism
 status, and resimulation marker. Planner-specific attribution additionally requires the sidecar to

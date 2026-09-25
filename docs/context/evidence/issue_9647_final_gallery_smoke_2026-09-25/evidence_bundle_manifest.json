@@ -1,0 +1,32 @@
+{
+  "schema_version": "evidence_bundle.v1",
+  "created_at_utc": "2026-09-25T02:41:11.234338Z",
+  "bundle_name": "issue_9647_final_gallery_smoke_2026-09-25",
+  "source_root": "output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/receipt-source",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66 --top-k 1",
+  "commit": "b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f",
+  "claim_boundary": "historical_outcome_reproduction_not_exact_source_or_feasibility_evidence",
+  "policy": {
+    "large_raw_artifacts": "excluded",
+    "output_tree_mirroring": "forbidden",
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone"
+  },
+  "totals": {
+    "file_count": 2,
+    "total_bytes": 7876
+  },
+  "files": [
+    {
+      "path": "receipt.md",
+      "size_bytes": 1869,
+      "sha256": "15a04a1a4fd08ceda603509e09488dac3c08997c626be7da0f381ff578cb93fb",
+      "kind": "misc"
+    },
+    {
+      "path": "summary.json",
+      "size_bytes": 6007,
+      "sha256": "c4585f90903dd73ac759adb212cd33258467882272f85f99e56ec2242fecb200",
+      "kind": "aggregates"
+    }
+  ]
+}

@@ -125,14 +125,20 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
-- `issue_9647_gallery_smoke_2026-09-25/`: compact exact-head smoke receipt for the #9647
-  replay-gallery selector, canonical runner, outcome comparison, and renderer using the tracked
-  #1501 `failure_0002` compatibility fixture. One historical collision replay matched at a
-  different source revision; dynamic task feasibility remains unknown, video and map context were
-  unavailable, and no search/discovery or benchmark claim is supported. The generated figures and
-  raw replay streams remain in ignored local `output/`; see the checksummed
-  [receipt](issue_9647_gallery_smoke_2026-09-25/payload/receipt.md) and
-  [machine-readable summary](issue_9647_gallery_smoke_2026-09-25/payload/summary.json).
+- `issue_9647_final_gallery_smoke_2026-09-25/`: final-head one-case smoke of the #9647
+  replay-gallery CLI, canonical runner, outcome comparison, and renderer using the tracked #1501
+  `failure_0002` compatibility fixture. One historical collision replay matched at a different
+  source revision; source map-registry binding and dynamic task feasibility remain unknown, while
+  map overlay and video are explicitly unavailable. This is not search/discovery or benchmark
+  evidence. Generated figures and raw replay streams remain in ignored local `output/`; see the
+  checksummed [receipt](issue_9647_final_gallery_smoke_2026-09-25/payload/receipt.md) and
+  [machine-readable summary](issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json).
+
+- `issue_9647_gallery_smoke_2026-09-25/`: preserved earlier smoke at code revision
+  `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4`, before final map-registry and actor-track fixes.
+  Its receipt warns that source-input binding was unknown and the trajectory connected a reused
+  simulator slot. The final-head smoke above supersedes it for current gallery behavior; retain
+  this earlier bundle only as historical audit context.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

@@ -1,0 +1,141 @@
+{
+  "budget": {
+    "held_out_episodes": 0,
+    "new_search_candidates": 0,
+    "replayed_episodes": 1
+  },
+  "claim_boundary": "historical outcome reproduction on a different revision; not falsification-search evidence, exact-source replay verification, dynamic-feasibility proof, benchmark performance, or real-world safety evidence",
+  "code": {
+    "clean": true,
+    "dirty_paths": [],
+    "revision": "b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f"
+  },
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66 --top-k 1",
+  "local_artifacts": {
+    "case_manifest_sha256": "12c689181b89b77c2a58f9788b15ac58e01670750893bbe401bfd2d971d9157b",
+    "gallery_manifest_sha256": "319b9797b6f3a0eb684054d37404c449802b89e0871494f9f38ac1a6bf7bce61",
+    "output_directory": "output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66",
+    "raw_replay_and_source_episode_streams": "kept under ignored output; not copied into the tracked evidence bundle",
+    "rendered_figures": [
+      {
+        "path": "output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/cases/case_0000_7e144c8113a9/figures/still_9.png",
+        "sha256": "fc2d75103e7b5ca1b35130dd29a5aea8d78d5d925c1a1318e1ce1799c92afe99",
+        "size_bytes": 46273
+      },
+      {
+        "path": "output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/cases/case_0000_7e144c8113a9/figures/filmstrip.png",
+        "sha256": "977b45d49c854367095792b94be1659ae39148e7c408cbfa7f55aa41657c75a7",
+        "size_bytes": 22549
+      },
+      {
+        "path": "output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/cases/case_0000_7e144c8113a9/figures/trajectory.png",
+        "sha256": "9003b7d6822c622c5c43d4571c8d1bc03613b73913f4ddf4c2f1ef8afe13f813",
+        "size_bytes": 69544
+      }
+    ],
+    "replay_episode_record_sha256": "55e5c7f92810aaac2dabd732cfe07db3f89a6886657558be229383648e6f1b44"
+  },
+  "result": {
+    "case_id": "case_0000_7e144c8113a9",
+    "feasibility": {
+      "source_certificate": {
+        "details": {
+          "certificates": [
+            {
+              "benchmark_eligibility": "eligible",
+              "classification": "hard_but_solvable",
+              "reasons": [
+                "low_static_clearance_margin"
+              ],
+              "scenario_id": "crossing_ttc_template_adversarial_0008"
+            }
+          ]
+        },
+        "reason": "current static route certificate; dynamic feasibility remains unknown",
+        "schema_version": "scenario_cert.v1",
+        "status": "passed"
+      },
+      "status": "admissible_by_source_certificate"
+    },
+    "objective": {
+      "absolute_tolerance": 1e-06,
+      "name": "constraints_first_lexicographic_v1",
+      "source_value": 4.833333333333333
+    },
+    "rendering": {
+      "critical_frame_step": 9,
+      "map_context": {
+        "path": "cases/case_0000_7e144c8113a9/inputs/assets/dec460721d42-classic_crossing.svg",
+        "reason": "existing_renderer_cannot_decode_map_overlay",
+        "renderer_error": "UnidentifiedImageError: cannot identify image file '/home/luttkule/git/robot_sf_ll7.worktrees/issue-9647-replay-bundles-refresh-20260924/output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/cases/case_0000_7e144c8113a9/inputs/assets/dec460721d42-classic_crossing.svg'",
+        "sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+        "status": "unavailable"
+      },
+      "smallest_surface_clearance_m": -0.015686402836192603,
+      "status": "rendered",
+      "track_continuity": {
+        "discontinuity_split_count": 1,
+        "maximum_assumed_track_speed_mps": 12.0,
+        "note": "positions without stable actor identity are isolated; reused actor IDs are split when consecutive displacement exceeds the visualization threshold",
+        "status": "discontinuities_split",
+        "unknown_identity_position_count": 0
+      },
+      "video": {
+        "artifacts": [],
+        "reason": "canonical_runner_did_not_emit_video_artifact",
+        "renderer": "synthetic",
+        "requested": true,
+        "status": "unavailable"
+      }
+    },
+    "replay": {
+      "benchmark_availability": {
+        "availability_reason": null,
+        "availability_status": "available",
+        "benchmark_success": true,
+        "execution_mode": "native",
+        "readiness_status": "native"
+      },
+      "categorical_outcome_matches": true,
+      "identity_matches": true,
+      "objective_matches": true,
+      "objective_value": 4.833333333333333,
+      "revision": "b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f",
+      "source_input_binding": "unknown",
+      "status": "match",
+      "verification_status": "outcome_reproduced_revision_changed"
+    },
+    "replay_matches": 1,
+    "replay_mismatches": 0,
+    "replay_unavailable": 0,
+    "selected_cases": 1,
+    "source_failure": {
+      "details": {
+        "availability_status": "available",
+        "execution_mode": "native",
+        "outcome": {
+          "collision_event": true,
+          "route_complete": false,
+          "timeout_event": false
+        },
+        "readiness_status": "native",
+        "status": "collision",
+        "termination_reason": "collision"
+      },
+      "primary_failure": "collision",
+      "reasons": [
+        "episode outcome reports a collision"
+      ],
+      "status": "attributed"
+    }
+  },
+  "schema_version": "issue_9647_final_gallery_smoke.v1",
+  "source": {
+    "candidate_budget_label": 32,
+    "fixture": "tracked #1501 failure_0002 compatibility fixture; not a search-run manifest or new discovery",
+    "manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+    "recorded_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+    "search_method_label": "optuna",
+    "search_seed_label": 42
+  }
+}

@@ -1547,6 +1547,111 @@ def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: P
     )
 
 
+def test_oracle_fails_closed_when_manifest_changes_after_scenario_parse(tmp_path: Path) -> None:
+    """A retained row cannot classify against changed manifest bytes at the same path."""
+    scenario_path = tmp_path / "scenario.yaml"
+    map_path = tmp_path / "map.yaml"
+
+    def write_manifest(robot_type: str) -> None:
+        """Write the selected robot configuration while preserving map inputs."""
+        robot_config: dict[str, Any] = {"type": robot_type, "radius": 0.4}
+        if robot_type == "bicycle_drive":
+            robot_config.update({"wheelbase": 4.0, "max_steer": 0.5})
+        scenario_path.write_text(
+            yaml.safe_dump(
+                {
+                    "scenarios": [
+                        {
+                            "name": "case-static",
+                            "map_file": map_path.name,
+                            "simulation_config": {
+                                "max_episode_steps": 100,
+                                "ped_density": 0.0,
+                            },
+                            "robot_config": robot_config,
+                            "seeds": [19],
+                        }
+                    ]
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+
+    map_path.write_text(
+        yaml.safe_dump(
+            {
+                "x_margin": [0, 12],
+                "y_margin": [0, 8],
+                "obstacles": [],
+                "robot_spawn_zones": [
+                    [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]],
+                    [[9.8, 6.8], [10.2, 6.8], [10.2, 7.2]],
+                ],
+                "robot_goal_zones": [
+                    [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]],
+                    [[2.8, 2.8], [3.2, 2.8], [3.2, 3.2]],
+                ],
+                "ped_spawn_zones": [],
+                "ped_goal_zones": [],
+                "ped_crowded_zones": [],
+                "robot_routes": [
+                    {"spawn_id": 0, "goal_id": 1, "waypoints": [[2, 2], [3, 2], [3, 3]]}
+                ],
+                "ped_routes": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_manifest("bicycle_drive")
+
+    from robot_sf.scenario_certification.feasibility_oracle import (
+        _default_certifier,
+        _geometric_margin,
+        make_envelope_scenario,
+    )
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    stale_scenario = load_scenarios(scenario_path)[0]
+    write_manifest("holonomic")
+    current_identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    stale_margin = _geometric_margin(
+        stale_scenario,
+        scenario_path=scenario_path,
+        envelope_radius_m=0.4,
+        certifier=_default_certifier,
+        require_runtime_input_binding=True,
+    )
+
+    assert current_identity["status"] == "available"
+    assert stale_margin.route_geometrically_feasible is None
+    assert stale_margin.classification == "blocked:scenario_manifest_parse_identity_mismatch"
+    assert stale_margin.benchmark_eligibility == "blocked"
+    assert stale_margin.runtime_input_identity_stable is False
+
+    fresh_scenario = load_scenarios(scenario_path)[0]
+    fresh_margin = _geometric_margin(
+        fresh_scenario,
+        scenario_path=scenario_path,
+        envelope_radius_m=0.4,
+        certifier=_default_certifier,
+        require_runtime_input_binding=True,
+    )
+    assert fresh_margin.runtime_input_identity_stable is True
+    assert fresh_margin.benchmark_eligibility == "eligible"
+    assert fresh_margin.route_geometrically_feasible is True
+
+    envelope_scenario = make_envelope_scenario(fresh_scenario, envelope_radius_m=0.3)
+    envelope_margin = _geometric_margin(
+        envelope_scenario,
+        scenario_path=scenario_path,
+        envelope_radius_m=0.3,
+        certifier=_default_certifier,
+        require_runtime_input_binding=True,
+    )
+    assert envelope_margin.runtime_input_identity_stable is True
+
+
 def test_present_certificate_producer_digest_must_match_adapter_identity() -> None:
     """Optional future producer digests remain checked when a certificate supplies them."""
 

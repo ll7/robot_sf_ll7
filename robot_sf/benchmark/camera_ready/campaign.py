@@ -3818,6 +3818,22 @@ def _execute_planner_matrix_phase(
     )
 
 
+def _enrich_campaign_snqi_v2(
+    cfg: CampaignConfig,
+    paths: _CampaignPreflightPaths,
+    run_entries: list[dict[str, Any]],
+) -> None:
+    """Enrich opt-in V2 rows and bind sidecars before campaign integrity checks."""
+    if getattr(cfg, "snqi_v2_spec", None) is not None:
+        enrich_campaign_v2(
+            run_entries,
+            cfg.snqi_v2_spec,
+            paths.reports_dir,
+            repo_root=get_repository_root(),
+            bootstrap_samples=cfg.bootstrap_samples,
+        )
+
+
 def _run_campaign_orchestrator(
     cfg: CampaignConfig,
     *,
@@ -3848,15 +3864,7 @@ def _run_campaign_orchestrator(
         )
     )
 
-    if getattr(cfg, "snqi_v2_spec", None) is not None:
-        enrich_campaign_v2(
-            run_entries,
-            cfg.snqi_v2_spec,
-            paths.reports_dir,
-            repo_root=get_repository_root(),
-            bootstrap_samples=cfg.bootstrap_samples,
-        )
-
+    _enrich_campaign_snqi_v2(cfg, paths, run_entries)
     campaign_integrity, arm_rollup, fairness_report = _post_run_integrity_and_fairness(
         cfg,
         manifest_payload=paths.manifest_payload,

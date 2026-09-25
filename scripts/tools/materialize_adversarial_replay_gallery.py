@@ -1,4 +1,4 @@
-"""Materialize and replay a bounded visual gallery from an adversarial search manifest."""
+"""Materialize a search-manifest gallery or reconcile a compact multi-run evidence packet."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ if TYPE_CHECKING:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the replay-gallery command line."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("manifest", type=Path, help="adversarial-search-manifest.v1 JSON")
+    parser.add_argument(
+        "manifest",
+        type=Path,
+        help="adversarial-search-manifest.v1 JSON or a compact #9645 payload directory",
+    )
     parser.add_argument(
         "--out", required=True, type=Path, help="new output directory for the gallery"
     )

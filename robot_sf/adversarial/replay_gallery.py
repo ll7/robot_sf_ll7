@@ -93,12 +93,10 @@ def build_replay_gallery(
     video: bool = True,
     render: bool = True,
 ) -> dict[str, Any]:
-    """Materialize, replay, compare, and render a bounded set of search candidates.
+    """Build a replay gallery from one search manifest or a compact evidence packet.
 
-    The search manifest and its candidate bundle files remain read-only. The output
-    directory must not already exist, so an earlier replay bundle cannot be replaced
-    accidentally. A candidate is selected only when its certificate, analysis
-    eligibility, source episode, scenario inputs, and objective are available.
+    Directory inputs are reconciled as compact packet accounting and do not trigger replay.
+    File inputs retain the materialize, replay, compare, and render behavior.
 
     Returns:
         The deterministic ``adversarial-replay-gallery.v1`` manifest.
@@ -108,6 +106,45 @@ def build_replay_gallery(
     if not math.isfinite(tolerance) or tolerance < 0.0:
         raise ValueError("tolerance must be finite and non-negative")
 
+    source = Path(manifest_path).expanduser()
+    if source.is_dir():
+        from robot_sf.adversarial.search_evidence_packet import (  # noqa: PLC0415
+            build_search_evidence_packet_gallery,
+        )
+
+        return build_search_evidence_packet_gallery(
+            source,
+            output_dir,
+            top_k=top_k,
+            tolerance=tolerance,
+            repository_root=_repository_root(),
+        )
+    return _build_manifest_replay_gallery(
+        source,
+        output_dir,
+        top_k=top_k,
+        tolerance=tolerance,
+        video=video,
+        render=render,
+    )
+
+
+def _build_manifest_replay_gallery(
+    manifest_path: str | Path,
+    output_dir: str | Path,
+    *,
+    top_k: int,
+    tolerance: float,
+    video: bool,
+    render: bool,
+) -> dict[str, Any]:
+    """Materialize, replay, compare, and render selected search candidates.
+
+    The search manifest and its candidate bundle files remain read-only. The output
+    directory must not already exist, so an earlier replay bundle cannot be replaced
+    accidentally. A candidate is selected only when its certificate, analysis
+    eligibility, source episode, scenario inputs, and objective are available.
+    """
     source_manifest = Path(manifest_path).expanduser().resolve()
     root = _repository_root()
     destination = _validated_output_directory(output_dir, root=root)

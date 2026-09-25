@@ -353,8 +353,13 @@ def render_frontier_markdown(
     report: dict[str, Any], *, evidence_root_relative_to_report: str = "."
 ) -> str:
     """Render the compact report text from the machine-readable summary."""
+    headline = {
+        "synthetic_fixture": "Synthetic fixture (implementation-only) feasibility-frontier report",
+        "simulator_run": "Empirical feasibility frontier",
+        "historical_artifact": "Historical-artifact feasibility-frontier report",
+    }[report["evidence_kind"]]
     lines = [
-        f"# Empirical feasibility frontier: {report['experiment_id']}",
+        f"# {headline}: {report['experiment_id']}",
         "",
         f"- Source revision: `{report['source_revision']}`",
         f"- Simulator: `{report['simulator_identity']}`",

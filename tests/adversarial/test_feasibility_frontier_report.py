@@ -1663,6 +1663,29 @@ def test_frontier_report_writer_emits_deterministic_json_markdown_and_figure(
         write_frontier_report(input_path, output_dir)
 
 
+@pytest.mark.parametrize(
+    ("evidence_kind", "headline"),
+    [
+        (
+            "synthetic_fixture",
+            "Synthetic fixture (implementation-only) feasibility-frontier report",
+        ),
+        ("simulator_run", "Empirical feasibility frontier"),
+        ("historical_artifact", "Historical-artifact feasibility-frontier report"),
+    ],
+)
+def test_frontier_markdown_headline_matches_evidence_kind(
+    tmp_path: Path, evidence_kind: str, headline: str
+) -> None:
+    """Synthetic output is visibly non-empirical; only simulator runs get that headline."""
+    evidence = _evidence(tmp_path)
+    evidence["evidence_kind"] = evidence_kind
+
+    report = build_frontier_report(evidence, evidence_root=tmp_path)
+
+    assert render_frontier_markdown(report).splitlines()[0] == (f"# {headline}: {_EXPERIMENT_ID}")
+
+
 def test_frontier_report_rejects_path_escape_and_noncanonical_admissibility(tmp_path: Path) -> None:
     """Case/artifact inputs cannot escape the bundle or invent verdict categories."""
     payload = _evidence(tmp_path)

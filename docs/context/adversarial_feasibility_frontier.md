@@ -24,7 +24,9 @@ The command writes:
 - `frontier_report.json` — round summaries, exact finite budgets, per-set denominators, candidate
   accounting, case status transitions, and checksummed evidence references;
 - `frontier_report.md` — concise round-by-round performance and case tables, including invalid,
-  failed, unknown, and replay-unavailable search rows;
+  failed, unknown, and replay-unavailable search rows. Its heading is evidence-kind-aware:
+  synthetic fixtures are marked implementation-only, simulator runs use the empirical-frontier
+  heading, and historical artifacts use distinct historical wording;
 - `frontier.png` and `frontier.pdf` — eligible complete success fractions by evaluation set and the
   cumulative known counterexample count, per-round solved/unsolved/mixed/unknown/not-observed case
   status, current unknown-feasibility count, and per-round structurally invalid and

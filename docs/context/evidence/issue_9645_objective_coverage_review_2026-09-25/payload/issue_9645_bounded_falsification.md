@@ -21,9 +21,9 @@ the source and rendered report digests, renderer revision, and `search_or_simula
 The experiment's recorded source commit, `58e516aa4f69ff3098bf518199f483006589758c`, is local-only
 and cannot currently be fetched from the remote. Its exact experiment-time revision can be
 reconstructed from base `5cccee50be333adceee4c978b54bf63d32454cc9` and the tracked
-[`source_revision_58e.patch`](evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_revision_58e.patch);
+[`source_revision_58e.patch`](../../issue_9645_bounded_falsification_2026-09-24/payload/source_revision_58e.patch);
 the patch digest, reconstruction commands, and verified file list are recorded in
-[`source_revision_mapping.json`](evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_revision_mapping.json).
+[`source_revision_mapping.json`](../../issue_9645_bounded_falsification_2026-09-24/payload/source_revision_mapping.json).
 All 11 declared source-file hashes match both the reconstructed revision and public commit
 `0ed1f06b5a24892e7409e653579ae35733b5d79d`. This establishes identity for those 11 files only,
 not full-tree equivalence. The source patch was applied to the declared base and all 11 checksums
@@ -55,7 +55,7 @@ safety tier unknown unless a negative severe-intrusion result is explicitly reco
 after this pilot and was not used for or rerun against the 64 historical candidates. Path
 efficiency, elapsed time, energy, and broader comfort outcomes also remain outside the pilot
 objective despite the scalar helper's general "comfort/efficiency" label. See the
-[objective-coverage review addendum](evidence/issue_9645_objective_coverage_review_2026-09-25/).
+[objective-coverage review addendum](../).
 
 The post-review audit counted 64 rows in the tracked candidate table: collision, timeout, and
 near-miss counts are zero for every row; route completion is true for every row; and no intrusion

@@ -13,13 +13,13 @@
   },
   "totals": {
     "file_count": 1,
-    "total_bytes": 6159
+    "total_bytes": 6099
   },
   "files": [
     {
       "path": "issue_9645_bounded_falsification.md",
-      "size_bytes": 6159,
-      "sha256": "9c7743ec77e85728daf2f989359e6a8818af5248bca5943fba9d0f0b039fe69f",
+      "size_bytes": 6099,
+      "sha256": "a214c4a3fc63ed01e1ee12847b0c06e2df9225b0a243e9045c9bd573d62d81ca",
       "kind": "misc"
     }
   ]

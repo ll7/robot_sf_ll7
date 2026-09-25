@@ -654,6 +654,25 @@ def test_spawn_validity_rejects_producer_inconsistent_valid_flag(entrypoint, sig
             derive_calibration_anchors(rows, **kwargs)
 
 
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize("status", ["collision", "failure", "ok", None])
+def test_spawn_validity_completed_exception_requires_success_status(entrypoint, status):
+    """Success metrics alone cannot contradict the producer's termination status."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    row = rows[0]
+    row["status"] = status
+    row["metrics"].update(success=1, total_collision_count=0)
+    row["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(row, fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
 def test_spawn_validity_preserves_producer_completed_route_exception():
     """The producer permits a completed route despite reset-overlap telemetry."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors

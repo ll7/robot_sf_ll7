@@ -1296,6 +1296,95 @@ def test_issue9656_imported_replay_classification_cannot_be_rewritten(
         load_corpus(corpus_path)
 
 
+def test_issue9656_source_identity_mismatch_cannot_be_reclassified_as_verified(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    source_case_path = materialized / "cases/case-0000000000000001/case.json"
+    source_case = json.loads(source_case_path.read_text(encoding="utf-8"))
+    source_case["source"]["row_git_hash"] = "0" * 40
+    source_case_path.write_text(json.dumps(source_case, sort_keys=True), encoding="utf-8")
+
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    candidate = corpus["historical_candidates"][0]
+    assert candidate["candidate_status"] == "blocked_source_provenance_mismatch"
+    assert candidate["source_provenance"]["source_identity_binding_status"] == "blocked"
+    assert candidate["source_provenance"]["source_identity_binding_issues"] == ["row_git_hash"]
+
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    tampered = copy.deepcopy(corpus)
+    tampered_candidate = tampered["historical_candidates"][0]
+    provenance = tampered_candidate["source_provenance"]
+    provenance["source_identity_binding_status"] = "verified"
+    provenance["source_identity_binding_issues"] = []
+    tampered_candidate["candidate_status"] = "pending_exact_replay"
+    tampered_candidate["target_planner"]["config_hash"] = provenance["episode_planner_config_hash"]
+    tampered_candidate["planner_status_at_import"] = (
+        counterexample_corpus._issue9656_planner_status_at_import(tampered_candidate)
+    )
+
+    with pytest.raises(CorpusError, match="source identity binding differs"):
+        save_corpus(corpus_path, tampered)
+
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="source identity binding differs"):
+        load_corpus(corpus_path)
+
+
+def test_issue9656_import_receipt_fields_cannot_be_rewritten(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(tmp_path)
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+
+    changed_values = {
+        "failed_setup_jobs": 0,
+        "failed_replay_attempts": {"attempts": []},
+        "criticality_anomaly_counts": {},
+        "feasibility_status_counts": {},
+        "planner_status_counts_at_import": {},
+        "evidence_tier": "paper_facing",
+        "claim_boundary": "claims are proven",
+    }
+    import_id = corpus["historical_candidate_imports"][0]["import_id"]
+    for field, value in changed_values.items():
+        tampered = copy.deepcopy(corpus)
+        import_record = next(
+            record
+            for record in tampered["historical_candidate_imports"]
+            if record["import_id"] == import_id
+        )
+        import_record[field] = value
+        with pytest.raises(CorpusError, match="#9652 import receipt"):
+            save_corpus(corpus_path, tampered)
+
+        corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+        with pytest.raises(CorpusError, match="#9652 import receipt"):
+            load_corpus(corpus_path)
+        corpus_path.write_text(json.dumps(corpus, sort_keys=True), encoding="utf-8")
+
+
 def test_issue9656_revision_mismatch_claim_requires_distinct_full_revisions(
     tmp_path: Path,
 ) -> None:

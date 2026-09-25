@@ -5132,7 +5132,7 @@ def _replay_fallback_marker(record: Mapping[str, Any], metadata: Mapping[str, An
         "availability_status",
         "fallback_or_degraded",
     ):
-        if record.get(key) is not None:
+        if key in record:
             execution_fields[key] = record[key]
     if runtime_fallback_or_degraded_marker(execution_fields) is not None:
         return True

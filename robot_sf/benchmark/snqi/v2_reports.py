@@ -642,6 +642,27 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
         raise ValueError("SNQI-v2 malformed spawn_validity: valid row has an invalid_reason")
     if "schema_version" in block and block["schema_version"] != SPAWN_VALIDITY_SCHEMA_VERSION:
         raise ValueError("SNQI-v2 malformed spawn_validity: unsupported schema_version")
+    reset_overlap = block.get("reset_overlap", False)
+    respawn_collisions = block.get("respawn_overlap_collisions", [])
+    if not isinstance(reset_overlap, bool) or not isinstance(respawn_collisions, list):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid overlap telemetry")
+    clearance = block.get("reset_clearance")
+    if clearance is not None and (
+        not isinstance(clearance, Mapping)
+        or clearance.get("overlap", reset_overlap) is not reset_overlap
+    ):
+        raise ValueError("SNQI-v2 inconsistent spawn_validity: reset overlap disagrees")
+    if reset_overlap or respawn_collisions:
+        metrics = episode.get("metrics", {})
+        completed = (
+            isinstance(metrics, Mapping)
+            and metrics.get("success") in (True, 1)
+            and metrics.get("total_collision_count") == 0
+        )
+        # The producer exempts completed routes; collision/failure rows cannot
+        # override reset or attributed respawn overlap with invalid_run=false.
+        if not completed:
+            raise ValueError("SNQI-v2 inconsistent spawn_validity: overlap row marked valid")
 
 
 def validate_episode_execution(

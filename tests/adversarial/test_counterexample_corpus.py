@@ -952,6 +952,7 @@ def test_legacy_v1_no_row_admission_rejects_unselected_contradictory_metrics(
         ("foresight_prediction_fallback", "replay_artifact_fallback_status_mismatch"),
         ("fallback_reason", "replay_artifact_fallback_status_mismatch"),
         ("null_degraded_marker", "replay_artifact_fallback_status_mismatch"),
+        ("null_top_level_fallback_marker", "replay_artifact_fallback_status_mismatch"),
     ],
 )
 def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
@@ -984,12 +985,24 @@ def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
             episode["algorithm_metadata"]["foresight_prediction"] = {"fallback_used": True}
             assert episode["algorithm_metadata"]["status"] == "ok"
             assert episode["integrity"]["effective_view"]["degraded"] is False
-        elif mutation == "fallback_reason":
-            episode["algorithm_metadata"]["fallback_reason"] = "unexpected runtime fallback"
-            assert episode["algorithm_metadata"]["status"] == "ok"
-            assert episode["integrity"]["effective_view"]["degraded"] is False
-        elif mutation == "null_degraded_marker":
-            episode["algorithm_metadata"]["degraded"] = None
+        elif mutation in {
+            "fallback_reason",
+            "null_degraded_marker",
+            "null_top_level_fallback_marker",
+        }:
+            marker_paths = {
+                "fallback_reason": (
+                    ("algorithm_metadata", "fallback_reason"),
+                    "unexpected runtime fallback",
+                ),
+                "null_degraded_marker": (("algorithm_metadata", "degraded"), None),
+                "null_top_level_fallback_marker": (("fallback_or_degraded",), None),
+            }
+            path, value = marker_paths[mutation]
+            target = episode
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
             assert episode["algorithm_metadata"]["status"] == "ok"
             assert episode["integrity"]["effective_view"]["degraded"] is False
         else:

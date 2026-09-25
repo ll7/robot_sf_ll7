@@ -634,27 +634,26 @@ def _write_markdown_report(path: Path, name: str, payload: Mapping[str, Any]) ->
 
 
 def _spawn_route_completed(episode: Mapping[str, Any]) -> bool:
-    """Bind the producer exception to explicit outcome, or legacy completion metrics.
+    """Bind the producer exception to explicit outcome and termination status.
 
     Returns:
         Whether the row consistently declares a completed route.
     """
-    if episode.get("status") != "success":
-        return False
-    if "outcome" in episode:
-        outcome = episode["outcome"]
-        return (
-            isinstance(outcome, Mapping)
-            and outcome.get("route_complete") is True
-            and isinstance(outcome.get("collision_event"), bool)
-            and outcome.get("timeout_event") is False
-        )
-    metrics = episode.get("metrics", {})
     return (
-        isinstance(metrics, Mapping)
-        and metrics.get("success") in (True, 1)
-        and metrics.get("total_collision_count") == 0
+        episode.get("status") == "success"
+        and episode["outcome"]["route_complete"] is True
+        and episode["outcome"]["timeout_event"] is False
     )
+
+
+def _validate_spawn_outcome(episode: Mapping[str, Any]) -> None:
+    """Present producer spawn blocks require the accompanying canonical outcome."""
+    outcome = episode.get("outcome")
+    if not isinstance(outcome, Mapping) or any(
+        not isinstance(outcome.get(key), bool)
+        for key in ("route_complete", "collision_event", "timeout_event")
+    ):
+        raise ValueError("SNQI-v2 malformed spawn_validity: canonical outcome required")
 
 
 def _spawn_clearance_negative(value: Any, *, obstacle: bool = False) -> bool:
@@ -742,8 +741,45 @@ def _validate_spawn_validity_shape(block: Mapping[str, Any]) -> None:
             raise ValueError("SNQI-v2 malformed spawn_validity: invalid respawn telemetry")
 
 
+def _validate_respawn_event(event: Mapping[str, Any]) -> None:
+    """Validate every event emitted by pedestrian respawn, even without collisions."""
+    if not {"group_id", "ped_rows", "step", "positions"}.issubset(event):
+        raise ValueError("SNQI-v2 malformed spawn_validity: incomplete respawn event")
+    if any(
+        isinstance(event[key], bool) or not isinstance(event[key], int) or event[key] < 0
+        for key in ("group_id", "step")
+    ):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid respawn identity/step")
+    rows = event["ped_rows"]
+    if (
+        not isinstance(rows, list)
+        or any(isinstance(row, bool) or not isinstance(row, int) or row < 0 for row in rows)
+        or rows != sorted(set(rows))
+    ):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid respawn pedestrian rows")
+    positions = event["positions"]
+    if (
+        not isinstance(positions, list)
+        or len(positions) != len(rows)
+        or any(
+            not isinstance(point, list)
+            or len(point) != 2
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                for value in point
+            )
+            for point in positions
+        )
+    ):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid respawn positions")
+
+
 def _validate_respawn_attribution(episode: Mapping[str, Any], block: Mapping[str, Any]) -> None:
     """Bind attributed collisions to declared respawn group, pedestrian and timing."""
+    for event in block["respawn_overlap_events"]:
+        _validate_respawn_event(event)
     collisions = block["respawn_overlap_collisions"]
     if not collisions:
         return
@@ -773,18 +809,8 @@ def _validate_respawn_collision(
         raise ValueError("SNQI-v2 malformed spawn_validity: invalid attributed collision")
     respawn_time, collision_time = times
     matched = any(
-        isinstance(event.get("group_id"), int)
-        and not isinstance(event["group_id"], bool)
-        and event["group_id"] == group
-        and isinstance(event.get("ped_rows"), list)
-        and all(
-            isinstance(value, int) and not isinstance(value, bool) and value >= 0
-            for value in event["ped_rows"]
-        )
+        event["group_id"] == group
         and row in event["ped_rows"]
-        and isinstance(event.get("step"), int)
-        and not isinstance(event["step"], bool)
-        and event["step"] >= 0
         and event["step"] * dt == respawn_time
         for event in events
     )
@@ -801,6 +827,7 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     if not isinstance(block, Mapping) or not isinstance(block.get("invalid_run"), bool):
         raise ValueError("SNQI-v2 malformed spawn_validity: explicit boolean invalid_run required")
     _validate_spawn_validity_shape(block)
+    _validate_spawn_outcome(episode)
     _validate_respawn_attribution(episode, block)
     if block["invalid_run"]:
         raise ValueError("SNQI-v2 refuses spawn_validity.invalid_run episode")

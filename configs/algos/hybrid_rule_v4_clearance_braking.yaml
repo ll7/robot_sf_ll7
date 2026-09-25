@@ -1,0 +1,88 @@
+# Hybrid rule local planner v4: clearance- and braking-consistent speed limits
+# (issue #9726).
+#
+# Same candidate lattice, route guide and scorer as
+# hybrid_rule_v3_teb_like_rollout.yaml, with three changes that make the
+# pedestrian speed limits consistent with the robot the planner drives:
+# 1. speed levels are pedestrian surface clearances, not centre distances;
+# 2. rollouts start at the measured speed and follow the drive's real
+#    acceleration/braking limits instead of switching speed instantly;
+# 3. a candidate is rejected when, after one control step, the robot could not
+#    brake to a stop before a constant-velocity pedestrian prediction reaches
+#    contact while the robot is still moving.
+# v3 configs are unaffected: every v4 branch is gated on planner_variant.
+allow_testing_algorithms: true
+planner_variant: hybrid_rule_v4_clearance_braking
+
+# v4 ignores max_linear_accel/max_linear_decel: rollouts, the dynamic window and
+# the braking check read the drive's limits from the bound environment
+# (DifferentialDriveSettings: 1.0 m/s^2 both ways in the benchmark). The speed
+# ceiling is min(max_linear_speed, drive max_linear_speed).
+max_linear_speed: 2.0
+max_angular_speed: 1.2
+max_angular_accel: 4.0
+control_period: 0.6
+
+rollout_dt: 0.2
+rollout_horizon: 1.6
+hard_collision_horizon: 1.2
+soft_prediction_horizon: 3.0
+goal_tolerance: 0.25
+waypoint_switch_distance: 0.9
+
+linear_samples: 7
+angular_samples: 9
+lookahead_distances: [0.5, 1.0, 1.5, 2.0]
+
+robot_radius_default: 0.3
+pedestrian_radius_default: 0.3
+hard_safety_margin: 0.05
+desired_static_clearance: 0.7
+desired_dynamic_clearance: 0.9
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+
+# Pedestrian speed levels in SURFACE clearance (centre distance minus robot
+# radius minus pedestrian radius), derived from the stopping distance
+# d(v) = v * t_r + v^2 / (2 * a_brake) + margin with a_brake = 1.0 m/s^2,
+# t_r = 0.1 s (one control step) and margin = 0.1 m:
+#   d(very_slow_speed = 0.15) = 0.126 m -> stop level (linear cap 0) at 0.15 m
+#   d(moderate_speed = 0.6)   = 0.34 m  -> slow level (very_slow_speed) at 0.35 m
+#   moderate level (moderate_speed) at 0.6 m = v3's effective 2.0 m centre
+#   distance for the benchmark's 1.0 m robot and 0.4 m pedestrian radii.
+# On every level the cap is also min'ed with v_brake(clearance - margin), the
+# largest speed that can still be braked to zero, so e.g. 1.25 m/s at 1.0 m and
+# the 2.0 m/s drive maximum only from 2.3 m surface clearance.
+# The v3 centre-distance fields (stop/slow/moderate_distance_human) are unused.
+v4_stop_clearance_human: 0.15
+v4_slow_clearance_human: 0.35
+v4_moderate_clearance_human: 0.6
+v4_braking_margin: 0.1
+v4_reaction_time: -1.0
+v4_braking_check_enabled: true
+very_slow_speed: 0.15
+moderate_speed: 0.6
+near_human_angular_limit_distance: 0.8
+near_human_max_angular_speed: 0.7
+
+goal_progress_weight: 4.0
+path_alignment_weight: 0.8
+speed_preference_weight: 0.6
+static_clearance_weight: 1.5
+dynamic_clearance_weight: 1.8
+ttc_weight: 0.8
+heading_smoothness_weight: 0.4
+velocity_smoothness_weight: 0.3
+control_effort_weight: 0.2
+freezing_weight: 0.8
+oscillation_weight: 0.5
+
+freezing_speed_threshold: 0.05
+goal_far_distance: 0.8
+oscillation_window: 6
+top_k_diagnostics: 5
+
+route_guide_enabled: true
+route_guide_obstacle_inflation_cells: 3
+route_guide_waypoint_lookahead_cells: 5
+route_guide_clearance_penalty_weight: 0.5

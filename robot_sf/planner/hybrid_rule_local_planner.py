@@ -4,6 +4,16 @@ This module starts the ``hybrid_rule_local_planner`` family with the v0 minimal
 variant: a dynamic-window style local planner with explicit safety filtering and
 diagnostic score decomposition.  It intentionally avoids training, learned
 weights, and benchmark-result fitting.
+
+Hybrid v4 (``planner_variant: hybrid_rule_v4_clearance_braking``, issue #9726)
+is a separately versioned code path. It keeps the v3 candidate lattice and
+scorer but makes the pedestrian speed limits consistent with the robot it
+drives: speed thresholds are pedestrian *surface* clearances (centre distance
+minus robot radius minus pedestrian radius), rollouts follow the drive model's
+real acceleration/deceleration limits, and a candidate is rejected when the
+robot could not brake to a stop before a predicted pedestrian contact. Every v4
+branch is gated on the variant, so v3 and older variants run the unchanged
+code path.
 """
 
 from __future__ import annotations
@@ -30,6 +40,12 @@ from robot_sf.nav.proxemic_costmap import (
 from robot_sf.planner import hybrid_route_corridor
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+# Issue #9726: the clearance- and braking-consistent successor of v3. The name is
+# distinct from the historical, rejected ``hybrid_rule_v4_recovery_aware``
+# policy-search candidate, which is an unrelated v3-scorer ablation.
+HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT = "hybrid_rule_v4_clearance_braking"
 
 _SUPPORTED_VARIANTS = {
     "hybrid_rule_v0_minimal",
@@ -37,6 +53,7 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v2_orca_guided",
     "hybrid_rule_v3_teb_like_rollout",
     "hybrid_rule_v4_recovery_aware",
+    HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
     "hybrid_rule_v5_ensemble_selector",
     "tentabot_value_scorer_v0",
     "tentabot_value_scorer_v1_static_gated",
@@ -83,6 +100,118 @@ def _ego_velocity_to_world(velocity: np.ndarray, heading: float) -> np.ndarray:
     world[:, 0] = cos_h * velocity[:, 0] - sin_h * velocity[:, 1]
     world[:, 1] = sin_h * velocity[:, 0] + cos_h * velocity[:, 1]
     return world
+
+
+def stopping_distance(speed: float, decel: float, reaction_time: float) -> float:
+    """Return the distance needed to brake from ``speed`` to zero.
+
+    The robot travels one reaction interval at ``speed`` and then brakes at a
+    constant ``decel``. The benchmark drive integrates per 0.1 s step, which
+    stops slightly shorter than this continuous bound, so the bound is
+    conservative for it.
+
+    Returns:
+        float: Stopping distance in metres.
+    """
+    speed = max(float(speed), 0.0)
+    decel = max(float(decel), _EPS)
+    return speed * max(float(reaction_time), 0.0) + speed * speed / (2.0 * decel)
+
+
+def braking_speed_limit(distance: float, decel: float, reaction_time: float) -> float:
+    """Return the largest speed whose stopping distance fits in ``distance``.
+
+    Inverse of :func:`stopping_distance`: solves
+    ``v * t_r + v^2 / (2 a) = distance`` for ``v >= 0``.
+
+    Returns:
+        float: Speed limit in metres/second (zero for non-positive distance).
+    """
+    distance = float(distance)
+    if not np.isfinite(distance):
+        return float("inf")
+    if distance <= 0.0:
+        return 0.0
+    decel = max(float(decel), _EPS)
+    reaction = max(float(reaction_time), 0.0)
+    return float(decel * (-reaction + np.sqrt(reaction * reaction + 2.0 * distance / decel)))
+
+
+def _default_drive_limits() -> dict[str, Any]:
+    """Return drive limits from the benchmark ``DifferentialDriveSettings`` defaults.
+
+    Returns:
+        dict[str, Any]: Acceleration, braking and speed limits plus their source.
+    """
+    defaults = DifferentialDriveSettings()
+    return {
+        "max_linear_accel": float(defaults.max_linear_accel),
+        "max_linear_decel": float(
+            defaults.max_linear_decel
+            if defaults.max_linear_decel is not None
+            else defaults.max_linear_accel
+        ),
+        "max_linear_speed": float(defaults.max_linear_speed),
+        "source": "differential_drive_settings_defaults",
+    }
+
+
+def _first_positive_attr(obj: Any, names: tuple[str, ...]) -> float | None:
+    """Return the first finite positive float attribute among ``names``."""
+    for name in names:
+        value = _finite_or_none(getattr(obj, name, None))
+        if value is not None and value > 0.0:
+            return float(value)
+    return None
+
+
+def _bound_robot_config(env: Any) -> Any | None:
+    """Return the first simulated robot's drive settings, or the env's robot config."""
+    robots = getattr(getattr(env, "simulator", None), "robots", None)
+    try:
+        if robots:
+            robot_config = getattr(robots[0], "config", None)
+            if robot_config is not None:
+                return robot_config
+    except (TypeError, IndexError, KeyError):
+        pass
+    env_config = getattr(env, "env_config", None) or getattr(env, "config", None)
+    return getattr(env_config, "robot_config", None)
+
+
+def _resolve_drive_limits(env: Any) -> dict[str, Any]:
+    """Read linear acceleration, braking and speed limits from a bound environment.
+
+    Supports differential-drive (``max_linear_*``) and bicycle-drive
+    (``max_accel``/``max_decel``/``max_velocity``) settings. Missing values fall
+    back to the ``DifferentialDriveSettings`` defaults, and ``source`` records
+    which path was taken so episode metadata can audit it.
+
+    Returns:
+        dict[str, Any]: Drive limits and their source.
+    """
+    limits = _default_drive_limits()
+    robot_config = _bound_robot_config(env)
+    if robot_config is None:
+        return limits
+    accel = _first_positive_attr(robot_config, ("max_linear_accel", "max_accel"))
+    decel = _first_positive_attr(robot_config, ("max_linear_decel", "max_decel"))
+    speed = _first_positive_attr(robot_config, ("max_linear_speed", "max_velocity", "max_speed"))
+    if accel is None and decel is None and speed is None:
+        return limits
+    if accel is not None:
+        limits["max_linear_accel"] = accel
+    if decel is not None:
+        limits["max_linear_decel"] = decel
+    elif accel is not None:
+        # Drive settings resolve an unset braking limit to the forward limit.
+        limits["max_linear_decel"] = accel
+    if speed is not None:
+        limits["max_linear_speed"] = speed
+    limits["source"] = f"env_robot_config:{type(robot_config).__name__}"
+    if accel is None and decel is None:
+        limits["source"] += "+default_accel_limits"
+    return limits
 
 
 @dataclass(frozen=True)
@@ -170,6 +299,32 @@ class HybridRuleLocalPlannerConfig:
     moderate_speed: float = 0.6
     near_human_angular_limit_distance: float = 0.8
     near_human_max_angular_speed: float = 0.7
+
+    # Hybrid v4 (issue #9726) speed-safety model. Only read when
+    # ``planner_variant == "hybrid_rule_v4_clearance_braking"``; v3 and older
+    # variants keep the centre-distance thresholds above. All ``v4_*``
+    # clearances are pedestrian SURFACE clearances in metres (centre distance
+    # minus robot radius minus pedestrian radius). The defaults are derived from
+    # the stopping distance d(v) = v * t_r + v^2 / (2 * a_brake) + margin of the
+    # benchmark differential drive (a_brake = 1.0 m/s^2, t_r = one 0.1 s step,
+    # margin 0.1 m): d(very_slow_speed=0.15) = 0.126 -> stop level 0.15 m;
+    # d(moderate_speed=0.6) = 0.34 -> slow level 0.35 m. Above the slow level a
+    # continuous braking cap v_brake(clearance) always applies, so speeds up to
+    # the drive maximum are only allowed where they can still be braked to zero.
+    # The moderate level keeps v3's effective social slow zone (2.0 m centre
+    # distance = 0.6 m surface clearance for the 1.0 m robot and 0.4 m
+    # pedestrian radii). ``tests/planner/test_hybrid_rule_v4_clearance_braking.py``
+    # asserts that each level is braking-consistent for the resolved drive.
+    v4_stop_clearance_human: float = 0.15
+    v4_slow_clearance_human: float = 0.35
+    v4_moderate_clearance_human: float = 0.6
+    v4_braking_margin: float = 0.1
+    # Reaction time for the braking cap in seconds; a negative value uses the
+    # observed simulation timestep (one control step of command latency).
+    v4_reaction_time: float = -1.0
+    # Reject candidates after which the robot cannot brake to a stop before a
+    # constant-velocity pedestrian prediction reaches contact while it still moves.
+    v4_braking_check_enabled: bool = True
 
     goal_progress_weight: float = 4.0
     path_alignment_weight: float = 0.8
@@ -293,6 +448,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 f"Unsupported hybrid rule planner variant "
                 f"'{self.config.planner_variant}'. Supported variants: {supported}."
             )
+        self._v4_clearance_braking = (
+            self.config.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
+        )
+        # v4 only: drive limits start from the DifferentialDriveSettings defaults
+        # and are replaced by the bound environment's robot config in bind_env.
+        self._drive_limits: dict[str, Any] | None = (
+            _default_drive_limits() if self._v4_clearance_braking else None
+        )
+        self._last_v4_speed_safety: dict[str, Any] | None = None
         self._route_guide = (
             GridRoutePlannerAdapter(
                 GridRoutePlannerConfig(
@@ -341,7 +505,13 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         }
 
     def bind_env(self, env: Any) -> None:
-        """Bind environment obstacle geometry for continuous static-collision checks."""
+        """Bind environment obstacle geometry for continuous static-collision checks.
+
+        Hybrid v4 additionally reads the robot drive's acceleration, braking and
+        speed limits here, so rollouts and braking checks use the real drive.
+        """
+        if self._v4_clearance_braking:
+            self._drive_limits = _resolve_drive_limits(env)
         simulator = getattr(env, "simulator", None)
         map_def = getattr(simulator, "map_def", None)
         get_obstacle_lines = getattr(simulator, "get_obstacle_lines", None)
@@ -489,15 +659,201 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             return min(float(self.config.moderate_speed), float(self.config.max_linear_speed))
         return float(self.config.max_linear_speed)
 
+    # ------------------------------------------------------------------
+    # Hybrid v4 (issue #9726): clearance- and braking-consistent speed model.
+    # ------------------------------------------------------------------
+    def _v4_drive_limits(self) -> dict[str, Any]:
+        """Return the resolved drive limits (v4 only)."""
+        if self._drive_limits is None:
+            self._drive_limits = _default_drive_limits()
+        return self._drive_limits
+
+    def _v4_effective_max_speed(self) -> float:
+        """Return the planner speed ceiling clipped to the drive's maximum speed."""
+        return min(
+            float(self.config.max_linear_speed),
+            float(self._v4_drive_limits()["max_linear_speed"]),
+        )
+
+    def _v4_reaction_time(self, dt: float) -> float:
+        """Return the braking-cap reaction time in seconds."""
+        configured = float(self.config.v4_reaction_time)
+        return configured if configured >= 0.0 else max(float(dt), 0.0)
+
+    @staticmethod
+    def _v4_surface_clearances(state: dict[str, Any]) -> np.ndarray:
+        """Return pedestrian surface clearances (centre distance minus both radii).
+
+        Returns:
+            np.ndarray: One surface clearance per pedestrian in metres.
+        """
+        ped_pos = state["ped_pos"]
+        if ped_pos.size == 0:
+            return np.zeros(0, dtype=float)
+        centre = np.linalg.norm(ped_pos - state["robot_pos"][None, :], axis=1)
+        return centre - float(state["robot_radius"]) - float(state["ped_radius"])
+
+    def _v4_human_speed_cap(self, state: dict[str, Any]) -> float:
+        """Return the v4 speed cap from surface clearance and braking distance.
+
+        Levels (surface clearance ``c``): below ``v4_stop_clearance_human`` the
+        linear cap is zero (rotation only); below ``v4_slow_clearance_human`` it
+        is ``very_slow_speed``; below ``v4_moderate_clearance_human`` it is
+        ``moderate_speed``. On every level the cap is also bounded by
+        :func:`braking_speed_limit` of ``c - v4_braking_margin`` with the drive's
+        braking deceleration, so the robot never exceeds a speed it could not
+        stop from before reaching the nearest pedestrian's current position.
+
+        Returns:
+            float: Maximum allowed linear speed for the current crowd proximity.
+        """
+        limits = self._v4_drive_limits()
+        max_speed = self._v4_effective_max_speed()
+        reaction = self._v4_reaction_time(float(state["dt"]))
+        clearances = self._v4_surface_clearances(state)
+        if clearances.size == 0:
+            min_clearance = float("inf")
+            braking_cap = float("inf")
+            level = "free"
+            band_cap = max_speed
+        else:
+            min_clearance = float(np.min(clearances))
+            braking_cap = braking_speed_limit(
+                min_clearance - float(self.config.v4_braking_margin),
+                float(limits["max_linear_decel"]),
+                reaction,
+            )
+            if min_clearance < float(self.config.v4_stop_clearance_human):
+                level, band_cap = "stop", 0.0
+            elif min_clearance < float(self.config.v4_slow_clearance_human):
+                level, band_cap = "slow", float(self.config.very_slow_speed)
+            elif min_clearance < float(self.config.v4_moderate_clearance_human):
+                level, band_cap = "moderate", float(self.config.moderate_speed)
+            else:
+                level, band_cap = "braking", max_speed
+        cap = max(min(max_speed, band_cap, braking_cap), 0.0)
+        self._last_v4_speed_safety = {
+            "model": HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
+            "min_surface_clearance": _finite_or_none(min_clearance),
+            "level": level,
+            "band_cap": float(band_cap),
+            "braking_cap": _finite_or_none(braking_cap),
+            "speed_cap": float(cap),
+            "reaction_time": float(reaction),
+        }
+        return float(cap)
+
+    def _v4_realized_rollout_commands(
+        self,
+        rollout_commands: list[tuple[float, float]],
+        *,
+        current_speed: float,
+        dt: float,
+    ) -> list[tuple[float, float]]:
+        """Replace commanded rollout speeds by the speeds the drive can realize.
+
+        Starting from the measured speed, each rollout step moves the linear
+        speed toward its command by at most ``max_linear_accel * dt`` (speeding
+        up) or ``max_linear_decel * dt`` (braking).
+
+        Returns:
+            list[tuple[float, float]]: Realized linear speed and commanded angular rate.
+        """
+        limits = self._v4_drive_limits()
+        accel_step = float(limits["max_linear_accel"]) * float(dt)
+        decel_step = float(limits["max_linear_decel"]) * float(dt)
+        max_speed = self._v4_effective_max_speed()
+        speed = float(np.clip(float(current_speed), 0.0, max_speed))
+        realized: list[tuple[float, float]] = []
+        for linear, angular in rollout_commands:
+            speed = float(np.clip(float(linear), speed - decel_step, speed + accel_step))
+            speed = float(np.clip(speed, 0.0, max_speed))
+            realized.append((speed, float(angular)))
+        return realized
+
+    def _v4_braking_rejection(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        state: dict[str, Any],
+        collision_radius: float,
+    ) -> dict[str, Any] | None:
+        """Reject a candidate after which the robot cannot brake before contact.
+
+        The robot executes the candidate for one control step (the observed
+        simulation timestep, with the drive's acceleration limits) and then
+        brakes at the drive's deceleration until it stops. Pedestrians follow a
+        constant-velocity prediction over the whole stopping time. A candidate
+        is rejected when a pedestrian comes within ``collision_radius`` and
+        closer than it is now while the robot is still moving; contact with an
+        already stopped robot is not something braking can prevent.
+
+        Returns:
+            dict[str, Any] | None: Rejection diagnostics, or ``None`` when feasible.
+        """
+        ped_pos = state["ped_pos"]
+        if ped_pos.size == 0:
+            return None
+        ped_vel = state["ped_vel"]
+        limits = self._v4_drive_limits()
+        step = max(float(state["dt"]), 1e-3)
+        decel = max(float(limits["max_linear_decel"]), _EPS)
+        accel = float(limits["max_linear_accel"])
+        max_speed = self._v4_effective_max_speed()
+        current_speed = float(np.clip(float(state["current_speed"]), 0.0, max_speed))
+        speed = float(
+            np.clip(
+                float(candidate.linear),
+                current_speed - decel * step,
+                current_speed + accel * step,
+            )
+        )
+        speed = float(np.clip(speed, 0.0, max_speed))
+        moving_threshold = max(float(self.config.freezing_speed_threshold), 0.0)
+        robot_pos = np.array(state["robot_pos"], dtype=float)
+        heading = float(state["heading"])
+        start_distances = np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)
+        max_steps = int(np.ceil(max_speed / (decel * step))) + 2
+        elapsed = 0.0
+        for step_idx in range(max_steps):
+            if speed <= moving_threshold:
+                return None
+            if step_idx == 0:
+                heading = _wrap_angle(heading + float(candidate.angular) * step)
+            robot_pos = robot_pos + speed * step * np.array(
+                [np.cos(heading), np.sin(heading)], dtype=float
+            )
+            elapsed += step
+            distances = np.linalg.norm(ped_pos + ped_vel * elapsed - robot_pos[None, :], axis=1)
+            violating = (distances <= collision_radius) & (distances < start_distances - _EPS)
+            if np.any(violating):
+                return {
+                    "accepted": False,
+                    "reason": "braking_infeasible",
+                    "candidate": candidate,
+                    "min_dynamic_clearance": float(np.min(distances[violating])),
+                    "collision_radius": float(collision_radius),
+                    "time": float(elapsed),
+                }
+            speed = max(0.0, speed - decel * step)
+        return None
+
     def _dynamic_window(
         self, current_speed: float, speed_cap: float
     ) -> tuple[float, float, float, float]:
         """Return feasible linear and angular bounds for the current control period."""
         period = max(float(self.config.control_period), 1e-3)
-        v_min = max(0.0, float(current_speed) - float(self.config.max_linear_decel) * period)
+        if self._v4_clearance_braking:
+            limits = self._v4_drive_limits()
+            linear_decel = float(limits["max_linear_decel"])
+            linear_accel = float(limits["max_linear_accel"])
+        else:
+            linear_decel = float(self.config.max_linear_decel)
+            linear_accel = float(self.config.max_linear_accel)
+        v_min = max(0.0, float(current_speed) - linear_decel * period)
         v_max = min(
             float(speed_cap),
-            float(current_speed) + float(self.config.max_linear_accel) * period,
+            float(current_speed) + linear_accel * period,
         )
         v_min = min(v_min, v_max)
         last_w = float(self._last_command[1])
@@ -2040,6 +2396,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             dict[str, Any]: Rollout parameters, positions, and clearance thresholds.
         """
         dt, _steps, rollout_commands = self._candidate_rollout_plan(candidate)
+        if self._v4_clearance_braking:
+            rollout_commands = self._v4_realized_rollout_commands(
+                rollout_commands,
+                current_speed=float(state["current_speed"]),
+                dt=dt,
+            )
         start_pos = np.array(state["robot_pos"], dtype=float)
         robot_pos = np.array(start_pos, dtype=float)
         heading = float(state["heading"])
@@ -2803,6 +3165,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         if collision_rejection is not None:
             return collision_rejection
+        if self._v4_clearance_braking and bool(self.config.v4_braking_check_enabled):
+            braking_rejection = self._v4_braking_rejection(
+                candidate=candidate,
+                state=state,
+                collision_radius=float(ctx["collision_radius"]),
+            )
+            if braking_rejection is not None:
+                return braking_rejection
 
         terms, diagnostics = self._compute_candidate_score_terms(
             candidate=candidate,
@@ -2967,6 +3337,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the selected ``(linear, angular)`` command."""
+        if self._v4_clearance_braking:
+            self._last_v4_speed_safety = None
         state = self._extract_state(observation)
         robot_pos = state["robot_pos"]
         goal = state["goal"]
@@ -2999,7 +3371,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             current_time=current_time,
         )
         nearest_ped = self._nearest_ped_distance(robot_pos, state["ped_pos"])
-        speed_cap = self._human_speed_cap(nearest_ped)
+        if self._v4_clearance_braking:
+            speed_cap = self._v4_human_speed_cap(state)
+        else:
+            speed_cap = self._human_speed_cap(nearest_ped)
         self._clearance_context = self._build_clearance_context(observation)
         goal_posterior = self._goal_posterior_signal(observation, state)
         corridor_subgoal = self._corridor_subgoal_activation(
@@ -3207,9 +3582,36 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "selected_actuation_diagnostics": actuation_diagnostics,
             "selected_static_safety_gate": static_safety_gate,
         }
+        if self._v4_clearance_braking:
+            # v4-only key; v3 decision payloads stay byte-identical.
+            self._last_decision["speed_safety"] = (
+                dict(self._last_v4_speed_safety) if self._last_v4_speed_safety else None
+            )
+
+    def _v4_speed_safety_metadata(self) -> dict[str, Any]:
+        """Return episode-level v4 speed-safety metadata (thresholds and drive limits)."""
+        limits = dict(self._v4_drive_limits())
+        return {
+            "model": HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
+            "clearance_reference": "surface",
+            "stop_clearance_human": float(self.config.v4_stop_clearance_human),
+            "slow_clearance_human": float(self.config.v4_slow_clearance_human),
+            "moderate_clearance_human": float(self.config.v4_moderate_clearance_human),
+            "braking_margin": float(self.config.v4_braking_margin),
+            "braking_check_enabled": bool(self.config.v4_braking_check_enabled),
+            "effective_max_linear_speed": float(self._v4_effective_max_speed()),
+            "drive_limits": limits,
+        }
 
     def diagnostics(self) -> dict[str, Any]:
         """Return aggregate planner diagnostics for benchmark episode metadata."""
+        payload = self._diagnostics_payload()
+        if self._v4_clearance_braking:
+            payload["speed_safety"] = self._v4_speed_safety_metadata()
+        return payload
+
+    def _diagnostics_payload(self) -> dict[str, Any]:
+        """Return the shared (v0-v3 compatible) aggregate diagnostics payload."""
         return {
             "planner_variant": self.config.planner_variant,
             "value_scorer": self._value_scorer_metadata(),
@@ -3345,8 +3747,11 @@ def _coerce_config_bool(key: str, value: Any) -> bool:
 
 
 __all__ = [
+    "HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT",
     "HybridRuleCandidate",
     "HybridRuleLocalPlannerAdapter",
     "HybridRuleLocalPlannerConfig",
+    "braking_speed_limit",
     "build_hybrid_rule_local_planner_config",
+    "stopping_distance",
 ]

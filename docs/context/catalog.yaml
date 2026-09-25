@@ -300,6 +300,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/current_head_no_replay_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/report.md
   status: evidence
   freshness: evidence

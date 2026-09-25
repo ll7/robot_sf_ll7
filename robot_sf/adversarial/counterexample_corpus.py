@@ -5121,8 +5121,13 @@ def _replay_fallback_marker(record: Mapping[str, Any], metadata: Mapping[str, An
             "status": metadata.get("status"),
             "readiness_status": metadata.get("readiness_status"),
             "availability_status": metadata.get("availability_status"),
+            "fallback": metadata.get("fallback"),
+            "fallback_triggered": metadata.get("fallback_triggered"),
+            "degraded": metadata.get("degraded"),
             "fallback_or_degraded": metadata.get("fallback_or_degraded"),
+            "fallback_used": metadata.get("fallback_used"),
             "planner_runtime": metadata.get("planner_runtime"),
+            "foresight_prediction": metadata.get("foresight_prediction"),
         }.items()
         if value is not None
     }

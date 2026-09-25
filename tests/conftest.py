@@ -701,6 +701,10 @@ _FAST_FILES = {
     "test_issue_9348_three_width_doorway.py",
     "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    "test_hierarchical_paired_release_analysis.py",
+    "test_parquet_export.py",
+    "test_seed_variance.py",
+    "test_map_inventory.py",
     "test_scenario_coverage.py",
     "test_seed_distribution_report.py",
     # ORCA preflight tests are deterministic contract coverage for the changed

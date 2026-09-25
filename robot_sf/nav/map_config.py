@@ -1145,7 +1145,12 @@ class MapDefinitionPool:
         if not self.map_defs:
             raise ValueError("Map pool is empty! Please specify some maps!")
 
-    def _load_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
+    def _load_map_definitions_from_folder(
+        self,
+        maps_folder: str,
+        *,
+        capture_source_input_records: bool = False,
+    ) -> dict[str, MapDefinition]:
         """Load SVG map definitions from a folder.
 
         Each SVG map is loaded via ``convert_map`` and then normalised so that
@@ -1183,22 +1188,26 @@ class MapDefinitionPool:
         for name in map_names:
             svg_path = os.path.join(maps_folder, f"{name}.svg")
             try:
-                with open(svg_path, "rb") as source_file:
-                    source_bytes = source_file.read()
+                if capture_source_input_records:
+                    with open(svg_path, "rb") as source_file:
+                        source_bytes = source_file.read()
+                    self.source_input_records.append(
+                        {
+                            "role": "default_map_pool",
+                            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                            "path": os.path.realpath(svg_path),
+                            "map_id": name,
+                            "parser": "svg",
+                        }
+                    )
+                    map_def = convert_map(svg_path, source_bytes=source_bytes)
+                else:
+                    map_def = convert_map(svg_path)
             except OSError as exc:
+                if not capture_source_input_records:
+                    raise
                 logger.warning("SVG map '{}' could not be read ({}); skipping", svg_path, exc)
                 continue
-            self.source_input_records.append(
-                {
-                    "role": "default_map_pool",
-                    "sha256": hashlib.sha256(source_bytes).hexdigest(),
-                    "path": os.path.realpath(svg_path),
-                    "map_id": name,
-                    "parser": "svg",
-                }
-            )
-            try:
-                map_def = convert_map(svg_path, source_bytes=source_bytes)
             except ValueError as exc:
                 logger.warning("SVG map '{}' failed validation ({}); skipping", svg_path, exc)
                 continue
@@ -1212,6 +1221,20 @@ class MapDefinitionPool:
             logger.debug("Loaded SVG map '{}' from '{}'", name, svg_path)
 
         return map_defs
+
+    def load_map_definitions_with_source_records(self) -> None:
+        """Reload the default pool from byte snapshots and retain their input identities.
+
+        This opt-in path is used only by callers that request runtime input records. The
+        ordinary ``MapDefinitionPool`` construction path keeps its established parser call.
+        """
+        self.source_input_records = []
+        self.map_defs = self._load_map_definitions_from_folder(
+            self.maps_folder,
+            capture_source_input_records=True,
+        )
+        if not self.map_defs:
+            raise ValueError("Map pool is empty! Please specify some maps!")
 
     def choose_random_map(self) -> MapDefinition:
         """

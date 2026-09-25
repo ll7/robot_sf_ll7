@@ -5115,21 +5115,12 @@ def _replay_fallback_marker(record: Mapping[str, Any], metadata: Mapping[str, An
     integrity = integrity if isinstance(integrity, dict) else {}
     effective_view = integrity.get("effective_view", {})
     effective_view = effective_view if isinstance(effective_view, dict) else {}
+    # Preserve marker presence and raw types for the canonical detector. In particular,
+    # dropping a present None boolean or fallback_reason would turn malformed evidence clean.
     runtime_metadata = {
-        key: value
-        for key, value in {
-            "status": metadata.get("status"),
-            "readiness_status": metadata.get("readiness_status"),
-            "availability_status": metadata.get("availability_status"),
-            "fallback": metadata.get("fallback"),
-            "fallback_triggered": metadata.get("fallback_triggered"),
-            "degraded": metadata.get("degraded"),
-            "fallback_or_degraded": metadata.get("fallback_or_degraded"),
-            "fallback_used": metadata.get("fallback_used"),
-            "planner_runtime": metadata.get("planner_runtime"),
-            "foresight_prediction": metadata.get("foresight_prediction"),
-        }.items()
-        if value is not None
+        str(key): value
+        for key, value in metadata.items()
+        if str(key) not in {"config", "planner_contract", "safety_shield_contract"}
     }
     execution_fields = {
         "algorithm_metadata": runtime_metadata,

@@ -950,6 +950,8 @@ def test_legacy_v1_no_row_admission_rejects_unselected_contradictory_metrics(
         ("degraded_execution", "replay_artifact_fallback_status_mismatch"),
         ("metadata_degraded", "replay_artifact_fallback_status_mismatch"),
         ("foresight_prediction_fallback", "replay_artifact_fallback_status_mismatch"),
+        ("fallback_reason", "replay_artifact_fallback_status_mismatch"),
+        ("null_degraded_marker", "replay_artifact_fallback_status_mismatch"),
     ],
 )
 def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
@@ -978,10 +980,20 @@ def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
             episode["algorithm_metadata"]["degraded"] = True
             assert episode["algorithm_metadata"]["status"] == "ok"
             assert episode["integrity"]["effective_view"]["degraded"] is False
-        else:
+        elif mutation == "foresight_prediction_fallback":
             episode["algorithm_metadata"]["foresight_prediction"] = {"fallback_used": True}
             assert episode["algorithm_metadata"]["status"] == "ok"
             assert episode["integrity"]["effective_view"]["degraded"] is False
+        elif mutation == "fallback_reason":
+            episode["algorithm_metadata"]["fallback_reason"] = "unexpected runtime fallback"
+            assert episode["algorithm_metadata"]["status"] == "ok"
+            assert episode["integrity"]["effective_view"]["degraded"] is False
+        elif mutation == "null_degraded_marker":
+            episode["algorithm_metadata"]["degraded"] = None
+            assert episode["algorithm_metadata"]["status"] == "ok"
+            assert episode["integrity"]["effective_view"]["degraded"] is False
+        else:
+            raise AssertionError(f"unexpected replay mutation: {mutation}")
         artifact.write_text(json.dumps(episode, sort_keys=True) + "\n", encoding="utf-8")
         artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
         replay["sha256"] = artifact_sha256

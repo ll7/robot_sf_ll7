@@ -33,6 +33,22 @@ For the pilot, the bounded Random/TPE comparison produced no critical candidate 
 evaluations each. That is a finite-budget null result and a **NO-GO** for the scaled campaign in
 issue #9648; it does not establish that the scenario space has no counterexample.
 
+### Objective coverage
+
+The reported zero scores are specific to `constraints_first_lexicographic_v1`: its upper score
+bands represent collision/severe intrusion and liveness failure; the lower band uses near-miss
+count and SNQI when available. The implementation does not score path efficiency, elapsed time,
+energy, or broader comfort outcomes, despite the scalar helper's general "comfort/efficiency"
+label. The pilot's tied zero scores therefore say nothing about those omitted dimensions.
+
+### Historical #1501 count caveat
+
+A prior #1501 issue comment describes 66 invalid candidates as simulator errors. The tracked,
+checksum-pinned report classifies 66 rows as invalid and records zero simulator errors. This
+aggregate discrepancy is unresolved, so the 66 rows are not treated as simulation failures. The
+historical claim used here is limited to the archived collision rows and the one selected case that
+was materialized and replayed twice under current source.
+
 Artifact recovery: the original producer Markdown output is archived at
 `evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_outputs/comparison.md`; its
 reconstruction record shows an exact digest match from the preserved comparison JSON and producer

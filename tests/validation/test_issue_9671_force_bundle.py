@@ -27,6 +27,12 @@ def _row() -> dict[str, Any]:
         "algo": "ppo",
         "scenario_params": {"algo": "ppo"},
         "status": "collision",
+        "termination_reason": "collision",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": True,
+            "timeout_event": False,
+        },
         "steps": 1,
         "algorithm_metadata": {
             "simulation_step_trace": {
@@ -452,6 +458,12 @@ def test_changed_outcome_is_retained_as_diagnostic_finding(
 ) -> None:
     spec, row, sidecar_path = _fixture(tmp_path, monkeypatch)
     row["status"] = "success"
+    row["termination_reason"] = "success"
+    row["outcome"] = {
+        "route_complete": True,
+        "collision_event": False,
+        "timeout_event": False,
+    }
     path = Path(spec["campaigns"]["headon_group"]["traces"][0])
     path.write_text(json.dumps(row) + "\n")
     sidecar = json.loads(sidecar_path.read_text())
@@ -460,5 +472,65 @@ def test_changed_outcome_is_retained_as_diagnostic_finding(
     result = _build(spec)
     assert result["admission_status"] == "diagnostic_mismatch"
     assert result["parity_differences"] == [
-        {"tuple": ["ppo", "classic_doorway_medium", 113], "fields": ["status"]}
+        {
+            "tuple": ["ppo", "classic_doorway_medium", 113],
+            "fields": ["status", "outcome", "termination_reason"],
+        }
     ]
+
+
+@pytest.mark.parametrize("field", ["outcome", "termination_reason"])
+def test_same_status_outcome_drift_is_not_a_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    spec, row, sidecar_path = _fixture(tmp_path, monkeypatch)
+    if field == "outcome":
+        row["outcome"]["collision_event"] = False
+    else:
+        row["termination_reason"] = "terminated"
+    path = Path(spec["campaigns"]["headon_group"]["traces"][0])
+    path.write_text(json.dumps(row) + "\n")
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["episode_record_canonical_sha256"] = bundle._canonical_row_sha(row)
+    sidecar_path.write_text(json.dumps(sidecar))
+
+    result = _build(spec)
+
+    assert result["admission_status"] == "diagnostic_mismatch"
+    assert result["parity_differences"] == [
+        {"tuple": ["ppo", "classic_doorway_medium", 113], "fields": [field]}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "field"),
+    [
+        ("baseline", "outcome"),
+        ("baseline", "termination_reason"),
+        ("observer", "outcome"),
+        ("observer", "termination_reason"),
+    ],
+)
+def test_missing_outcome_parity_field_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str, field: str
+) -> None:
+    spec, row, sidecar_path = _fixture(tmp_path, monkeypatch)
+    if source == "baseline":
+        path = Path(spec["baseline_traces"][0])
+        row = json.loads(path.read_text())
+    else:
+        path = Path(spec["campaigns"]["headon_group"]["traces"][0])
+    del row[field]
+    path.write_text(json.dumps(row) + "\n")
+    if source == "baseline":
+        baseline_report = Path(spec["baseline_report"])
+        report = json.loads(baseline_report.read_text())
+        report["trace_inputs_sha256"][str(path)] = _sha(path)
+        baseline_report.write_text(json.dumps(report))
+    else:
+        sidecar = json.loads(sidecar_path.read_text())
+        sidecar["episode_record_canonical_sha256"] = bundle._canonical_row_sha(row)
+        sidecar_path.write_text(json.dumps(sidecar))
+
+    with pytest.raises(ValueError, match="missing or invalid"):
+        _build(spec)

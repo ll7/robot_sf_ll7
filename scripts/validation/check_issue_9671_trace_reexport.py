@@ -18,6 +18,7 @@ from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
     runtime_fallback_or_degraded_marker,
 )
+from robot_sf.benchmark.termination_reason import TERMINATION_REASONS
 from robot_sf.benchmark.utils import _config_hash
 
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
@@ -49,6 +50,7 @@ EXPECTED_TUPLES = {
     for seed in (22, 23, 24)
 } | {("ppo", "classic_doorway_medium", seed) for seed in (113, 114)}
 PAIRED_RELEASE_TUPLES = {("ppo", "classic_doorway_medium", seed) for seed in (113, 114)}
+OUTCOME_FIELDS = ("route_complete", "collision_event", "timeout_event")
 
 
 def _rows(lines: Any) -> list[dict[str, Any]]:
@@ -57,6 +59,23 @@ def _rows(lines: Any) -> list[dict[str, Any]]:
 
 def _key(row: dict[str, Any]) -> tuple[str, str, int]:
     return str(row["scenario_params"]["algo"]), str(row["scenario_id"]), int(row["seed"])
+
+
+def _canonical_outcome(
+    row: dict[str, Any], *, key: tuple[str, str, int], source: str
+) -> tuple[dict[str, bool], str]:
+    """Return the strict episode outcome contract used for parity comparisons."""
+    outcome = row.get("outcome")
+    if (
+        not isinstance(outcome, dict)
+        or set(outcome) != set(OUTCOME_FIELDS)
+        or any(type(outcome.get(field)) is not bool for field in OUTCOME_FIELDS)
+    ):
+        raise ValueError(f"{source} row {key} has missing or invalid canonical outcome fields")
+    termination_reason = row.get("termination_reason")
+    if not isinstance(termination_reason, str) or termination_reason not in TERMINATION_REASONS:
+        raise ValueError(f"{source} row {key} has missing or invalid termination_reason")
+    return {field: outcome[field] for field in OUTCOME_FIELDS}, termination_reason
 
 
 def _release_rows(archive: Path, planners: set[str]) -> dict[tuple[str, str, int], dict[str, Any]]:
@@ -343,6 +362,13 @@ def _compare_row(
     frozen: dict[str, Any] | None,
     reference: dict[str, Any],
 ) -> dict[str, Any]:
+    trace_outcome, trace_termination_reason = _canonical_outcome(row, key=key, source="trace")
+    release_outcome = None
+    release_termination_reason = None
+    if frozen is not None:
+        release_outcome, release_termination_reason = _canonical_outcome(
+            frozen, key=key, source="release"
+        )
     metadata = row.get("algorithm_metadata") or {}
     trace = metadata.get("simulation_step_trace") or {}
     if row.get("git_hash") != SOURCE_SHA:
@@ -392,13 +418,21 @@ def _compare_row(
         "seed": key[2],
         "trace_status": row.get("status"),
         "release_status": frozen.get("status") if frozen else None,
+        "trace_outcome": trace_outcome,
+        "release_outcome": release_outcome,
+        "trace_termination_reason": trace_termination_reason,
+        "release_termination_reason": release_termination_reason,
         "trace_interaction_exposure_steps": trace_exposure,
         "release_interaction_exposure_steps": release_exposure,
         "comparison": (
             "no_release_row"
             if frozen is None
             else "match"
-            if row.get("status") == frozen.get("status")
+            if (
+                row.get("status") == frozen.get("status")
+                and trace_outcome == release_outcome
+                and trace_termination_reason == release_termination_reason
+            )
             else "mismatch"
         ),
     }

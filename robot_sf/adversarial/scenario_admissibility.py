@@ -1225,9 +1225,7 @@ def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are pass
     case_identity_status = run_context_binding.get("case_identity_binding_status")
     if scenario_status != "valid" or case_identity_status != "valid":
         identity_status = (
-            "mismatch"
-            if "mismatch" in {scenario_status, case_identity_status}
-            else "unavailable"
+            "mismatch" if "mismatch" in {scenario_status, case_identity_status} else "unavailable"
         )
         reasons.append(f"{role}_execution_scenario_case_identity_{identity_status}")
         return None

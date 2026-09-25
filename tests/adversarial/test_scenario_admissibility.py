@@ -1805,8 +1805,11 @@ def test_relative_execution_evidence_ref_uses_explicit_root(tmp_path: Path) -> N
         "case-static", reference_execution=run, evidence_root=tmp_path
     )
 
-    assert verdict.verdict == EMPIRICALLY_FEASIBLE
-    assert verdict.evidence["execution_artifact_bindings"]["reference"]["status"] == "valid"
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    binding = verdict.evidence["execution_artifact_bindings"]["reference"]
+    assert binding["episode_store_path"] == target_path.as_posix()
+    assert binding["producer_provenance_binding"]["status"] == "unavailable"
+    assert "reference_execution_scenario_case_identity_unavailable" in verdict.reason_codes
 
 
 def test_reference_success_is_empirical_but_target_failure_alone_is_unknown() -> None:

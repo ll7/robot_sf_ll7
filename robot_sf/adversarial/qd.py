@@ -405,7 +405,9 @@ def run_map_elites(
             `scenario_admissibility.v1` verdict before the evaluator runs. Explicit structural or
             geometric/kinodynamic exclusions are recorded and skipped only when `case_id` matches
             `qd_candidate_case_id(candidate)`; unknown, missing, invalid, or mismatched verdicts
-            continue to the evaluator.
+            continue to the evaluator. A raised exception is recorded as unavailable evidence and
+            also continues to the evaluator so one broken precheck does not consume the remaining
+            search budget.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
         archive: Optional live archive shared with stateful emitters. Its grid and
             certification policy must match ``config``.
@@ -431,15 +433,22 @@ def run_map_elites(
         emitter = active_emitters[index % len(active_emitters)]
         candidate = emitter.sample()
         candidate_case_id = qd_candidate_case_id(candidate)
-        verdict = admissibility_precheck(config, candidate) if admissibility_precheck else None
-        admissibility_records.append(
+        precheck_error_type: str | None = None
+        try:
+            verdict = admissibility_precheck(config, candidate) if admissibility_precheck else None
+        except Exception as exc:  # noqa: BLE001 - an advisory precheck must not abort the budget
+            verdict = None
+            precheck_error_type = type(exc).__name__
+        admissibility_record = dict(
             _admissibility_record(
                 candidate,
                 verdict,
                 candidate_case_id=candidate_case_id,
                 precheck_configured=admissibility_precheck is not None,
+                precheck_error_type=precheck_error_type,
             )
         )
+        admissibility_records.append(admissibility_record)
         if _scenario_admissibility_payload_rejects(verdict, expected_case_id=candidate_case_id):
             num_admissibility_rejected += 1
             pre_evaluation_rejections.append(
@@ -500,6 +509,7 @@ def _admissibility_record(
     *,
     candidate_case_id: str,
     precheck_configured: bool,
+    precheck_error_type: str | None = None,
 ) -> Mapping[str, Any]:
     """Preserve each verdict or its explicit unavailable/invalid state beside the candidate."""
     record: dict[str, Any] = {
@@ -511,12 +521,16 @@ def _admissibility_record(
             {
                 "status": "unavailable",
                 "reason_code": (
-                    "admissibility_verdict_unavailable"
+                    "admissibility_precheck_raised"
+                    if precheck_error_type is not None
+                    else "admissibility_verdict_unavailable"
                     if precheck_configured
                     else "admissibility_precheck_not_configured"
                 ),
             }
         )
+        if precheck_error_type is not None:
+            record["error_type"] = precheck_error_type
         return record
     if not isinstance(verdict, Mapping):
         record.update(

@@ -348,7 +348,7 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, *, route_override_snapshot=None: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",

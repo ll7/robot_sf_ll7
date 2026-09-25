@@ -234,16 +234,110 @@ def test_v2_metadata_names_the_geometry_convention() -> None:
     assert law["applied"] is True
 
 
+def _disc(cx: float, cy: float, radius: float):
+    return lambda xs, ys: (xs - cx) ** 2 + (ys - cy) ** 2 <= radius**2
+
+
+def _terms(resolution: float, occupied, heading: float = 0.0):
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig(social_force_planner_version=V2))
+    observation = _with_grid(_observation(heading=heading), resolution, occupied)
+    return adapter._visible_obstacle_points(observation, np.zeros(2), heading)
+
+
+@pytest.mark.parametrize("resolution", [0.2, 0.1])
+def test_separate_post_in_front_of_wall_keeps_its_own_term(resolution: float) -> None:
+    """A post near a wall is a separate obstacle and is never merged into the wall."""
+    wall = _wall_above(2.4)
+    post = _disc(1.0, 1.3, 0.3)
+    points, _normals, distances = _terms(resolution, lambda xs, ys: wall(xs, ys) | post(xs, ys))
+    assert points.shape[0] == 2
+    # The wall term is the wall's foot point straight ahead, not a point off to the side.
+    wall_term = points[np.argmax(distances)]
+    assert wall_term[0] == pytest.approx(0.0, abs=resolution)
+    assert wall_term[1] == pytest.approx(2.4, abs=resolution)
+
+
+@pytest.mark.parametrize("resolution", [0.2, 0.1])
+def test_row_of_columns_gives_one_term_per_column(resolution: float) -> None:
+    """Each column of a row is its own obstacle; the row is not collapsed to one term."""
+    columns = (-3.0, -1.5, 0.0, 1.5, 3.0)
+    row = lambda xs, ys: np.any([_disc(x0, 1.8, 0.25)(xs, ys) for x0 in columns], axis=0)  # noqa: E731
+    points, _normals, _distances = _terms(resolution, row)
+    assert points.shape[0] == len(columns)
+    assert sorted(np.round(points[:, 0] / 1.5).astype(int).tolist()) == [-2, -1, 0, 1, 2]
+
+
+def test_connected_wall_is_one_patch_but_merges_are_bounded() -> None:
+    """Merging happens only inside one connected region (documented behaviour)."""
+    points, _normals, _distances = _terms(0.1, _wall_above(2.0))
+    assert points.shape[0] == 1
+
+
+@pytest.mark.parametrize("heading", [0.0, 0.7, 2.3])
+def test_world_force_is_invariant_under_ego_frame_rotation(heading: float) -> None:
+    """The same world geometry gives the same world force whatever the robot heading."""
+
+    def world_scene(xw, yw):
+        return (yw >= 2.2) | _disc(2.0, -1.0, 0.4)(xw, yw)
+
+    def ego_scene(xe, ye):
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        return world_scene(cos_h * xe - sin_h * ye, sin_h * xe + cos_h * ye)
+
+    reference = _obstacle_force(V2, 0.1, world_scene)
+    rotated = _obstacle_force(V2, 0.1, ego_scene, heading=heading)
+    assert np.linalg.norm(rotated - reference) <= 0.25 * np.linalg.norm(reference)
+
+
+def test_v2_holds_instead_of_chasing_a_small_backward_velocity() -> None:
+    """A slow backward desired velocity (force balance) holds position, no spin."""
+    config = SocNavPlannerConfig(social_force_planner_version=V2)
+    adapter = SocialForcePlannerAdapter(config)
+    assert adapter._unicycle_command_v2(0.05, 2.5) == (0.0, 0.0)
+    assert adapter._unicycle_command_v2(0.05, -2.5) == (0.0, 0.0)
+    linear, angular = adapter._unicycle_command_v2(0.5, 2.5)
+    assert linear == 0.0
+    assert angular == pytest.approx(config.max_angular_speed)
+
+
+def test_v2_turn_direction_has_hysteresis_behind_the_robot() -> None:
+    """Beyond 150 deg the previous turn direction is kept, so turns do not flip each step."""
+    config = SocNavPlannerConfig(social_force_planner_version=V2)
+    adapter = SocialForcePlannerAdapter(config)
+    _linear, first = adapter._unicycle_command_v2(0.5, 2.9)
+    _linear, second = adapter._unicycle_command_v2(0.5, -2.9)
+    assert first > 0.0
+    assert second > 0.0  # kept the previous (positive) direction
+    _linear, third = adapter._unicycle_command_v2(0.5, -1.0)
+    assert third < 0.0  # outside the hysteresis band the error decides again
+    adapter.reset()
+    _linear, after_reset = adapter._unicycle_command_v2(0.5, -2.9)
+    assert after_reset < 0.0
+
+
 V2_CONFIG_PATH = Path("configs/algos/social_force_resolution_independent_v2.yaml")
 V2_CONFIG = yaml.safe_load(V2_CONFIG_PATH.read_text(encoding="utf-8"))
 RELEASE_MATRIX = Path("configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml")
 
 
-def _run(scenario_path: Path, scenario_id: str, seed: int, positions: list | None = None) -> dict:
+def _run(
+    scenario_path: Path,
+    scenario_id: str,
+    seed: int,
+    positions: list | None = None,
+    commands: list | None = None,
+) -> dict:
     scenario = next(
         dict(row) for row in load_scenarios(scenario_path) if row.get("name") == scenario_id
     )
     original = SocialForcePlannerAdapter.plan_velocity_world
+    original_plan = SocialForcePlannerAdapter.plan
+
+    def _record_plan(self, observation):
+        command = original_plan(self, observation)
+        if commands is not None:
+            commands.append(command)
+        return command
 
     def _record(self, observation):
         if positions is not None:
@@ -252,6 +346,7 @@ def _run(scenario_path: Path, scenario_id: str, seed: int, positions: list | Non
         return original(self, observation)
 
     SocialForcePlannerAdapter.plan_velocity_world = _record
+    SocialForcePlannerAdapter.plan = _record_plan
     try:
         return _run_map_episode(
             scenario,
@@ -269,6 +364,7 @@ def _run(scenario_path: Path, scenario_id: str, seed: int, positions: list | Non
         )
     finally:
         SocialForcePlannerAdapter.plan_velocity_world = original
+        SocialForcePlannerAdapter.plan = original_plan
 
 
 @pytest.mark.slow
@@ -313,3 +409,20 @@ def test_release_matrix_bottleneck_low_seed_112_enters_goal_zone() -> None:
     assert V2_CONFIG == {"social_force_planner_version": V2}
     record = _run(RELEASE_MATRIX, "classic_bottleneck_low", 112)
     assert record["outcome"]["route_complete"] is True
+
+
+@pytest.mark.slow
+def test_narrow_doorway_seed_111_does_not_spin_in_place() -> None:
+    """A blocked robot holds instead of spinning with a turn sign flip every step.
+
+    Before the hold/hysteresis rule, 234 of 400 commands were (0, +-max turn)
+    with 55 sign flips and mean curvature about 330.
+    """
+    commands: list[tuple[float, float]] = []
+    record = _run(RELEASE_MATRIX, "francis2023_narrow_doorway", 111, commands=commands)
+    turns = [angular for _linear, angular in commands]
+    flips = sum(1 for a, b in pairwise(turns) if a * b < 0.0 and abs(a) > 0.5 and abs(b) > 0.5)
+    spinning = sum(1 for linear, angular in commands if linear < 0.05 and abs(angular) > 0.9)
+    assert flips == 0
+    assert spinning <= 10
+    assert record["metrics"]["curvature_mean"] < 1.0

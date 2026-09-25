@@ -355,6 +355,7 @@ class SocNavPlannerConfig:
     social_force_obstacle_v2_length: float = 0.6
     social_force_obstacle_v2_max_terms: int = 8
     social_force_obstacle_v2_min_separation_deg: float = 30.0
+    social_force_v2_hold_speed: float = 0.1
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve versioned force selectors immediately and retain provenance."""

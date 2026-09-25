@@ -10,6 +10,7 @@ from pysocialforce.config import (
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
 )
+from scipy import ndimage
 
 from robot_sf.planner import socnav as _socnav
 from robot_sf.planner.socnav_base import (
@@ -59,6 +60,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
     """Social-force planner adapter using fast-pysf interaction forces."""
 
     _EPS = 1e-6
+    _TURN_HYSTERESIS_RAD = 5.0 * pi / 6.0  # 150 deg
 
     def __init__(self, config: SocNavPlannerConfig | None = None) -> None:
         """Initialize the social-force adapter with optional configuration."""
@@ -72,6 +74,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._obstacle_force_runtime_parameters: dict[str, Any] = {}
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters: dict[str, Any] = {}
+        self._last_turn_sign = 0.0
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
@@ -80,6 +83,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._obstacle_force_runtime_parameters = {}
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters = {}
+        self._last_turn_sign = 0.0
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -247,6 +251,8 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
 
         desired_heading = atan2(desired_vel[1], desired_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
+            return self._unicycle_command_v2(speed, heading_error)
         angular = float(
             np.clip(
                 self.config.angular_gain * heading_error,
@@ -254,14 +260,6 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 self.config.max_angular_speed,
             ),
         )
-        if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
-            # v2: drive only the component of the desired velocity along the
-            # current heading.  When the net force points sideways or backwards
-            # (|heading_error| >= 90 deg) the robot turns in place toward it
-            # instead of orbiting at speed; the turn rate stays limited above.
-            along_heading = max(0.0, float(np.cos(heading_error)))
-            linear = float(np.clip(speed * along_heading, 0.0, self._speed_limit()))
-            return linear, angular
         linear = float(
             np.clip(
                 speed * max(0.0, 1.0 - abs(heading_error) / pi),
@@ -269,6 +267,44 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 self.config.max_linear_speed,
             ),
         )
+        return linear, angular
+
+    def _unicycle_command_v2(self, speed: float, heading_error: float) -> tuple[float, float]:
+        """Map a desired world velocity to (v, w) for ``resolution_independent_v2``.
+
+        * Drive only the component of the desired velocity along the current
+          heading (``speed * max(0, cos(error))``), capped at the speed limit.
+          A sideways or backward desired velocity therefore turns the robot in
+          place at the limited turn rate instead of orbiting at speed.
+        * Hold (``(0, 0)``) when the desired velocity points backwards
+          (``|error| > 90 deg``) and is slower than
+          ``social_force_v2_hold_speed`` (0.1 m/s, 10 % of v_des).  Turning
+          around takes at least 1.6 s at 1 rad/s, during which such a velocity
+          would move the robot less than 0.16 m.  This case arises where the
+          wall and goal forces balance (for example in front of a doorway the
+          robot does not fit through): there the small net velocity changes
+          direction from step to step, and turning after it made the robot
+          spin in place with a sign flip every step.
+        * Hysteresis: when ``|error| > 150 deg`` keep the previous turn
+          direction, so a desired direction that flips around the robot's
+          back does not reverse the turn every step.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        max_turn = float(self.config.max_angular_speed)
+        backwards = abs(heading_error) > 0.5 * pi
+        if backwards and speed < float(self.config.social_force_v2_hold_speed):
+            return 0.0, 0.0
+        angular = float(
+            np.clip(float(self.config.angular_gain) * heading_error, -max_turn, max_turn)
+        )
+        if abs(heading_error) > self._TURN_HYSTERESIS_RAD and self._last_turn_sign != 0.0:
+            angular = self._last_turn_sign * abs(angular)
+        if abs(angular) > self._EPS:
+            self._last_turn_sign = 1.0 if angular > 0.0 else -1.0
+        along_heading = max(0.0, float(np.cos(heading_error)))
+        linear = float(np.clip(speed * along_heading, 0.0, self._speed_limit()))
         return linear, angular
 
     def _planner_version(self) -> str:
@@ -488,20 +524,34 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Every occupied cell is treated as a filled square, and its nearest point
         to the robot centre is computed exactly, so the occupied region (not the
         cell count) defines the geometry.  Points are then chosen greedily,
-        nearest first.  After choosing point ``q`` with outward direction
-        ``u = (q - robot) / |q - robot|``, every remaining point ``p`` that lies on
-        or behind the tangent line through ``q`` or within
-        ``social_force_obstacle_v2_min_separation_deg`` of ``u`` is discarded.
-        A straight wall therefore yields one term (like one fast-pysf segment),
-        a convex obstacle one term, and the two walls of a corridor or an inside
-        corner one term each, so their lateral forces cancel on the centre line.
+        nearest first.  After choosing point ``q`` with bearing
+        ``u = (q - robot) / |q - robot|``, the remaining points of the same
+        8-connected occupied region as ``q`` are discarded when they lie on or
+        behind the tangent line through ``q`` (``(p - q) . u >= -(tol +
+        sin(15 deg) * |p - q|)``) or within
+        ``social_force_obstacle_v2_min_separation_deg`` (30 deg) of ``u``.
+        Points of other occupied regions are never discarded.
 
-        The tangent test is ``(p - q) . u >= -(tol + sin(15 deg) * |p - q|)``.
-        On a rasterised oblique wall the nearest staircase corner tilts ``u`` by
-        a few degrees; the 15 degree slack keeps the rest of that wall on the
-        discarded side, while a genuinely different wall (opposite corridor
-        wall, the other leg of a 90 degree corner) stays far outside it.
-        ``tol`` is one cell diagonal and vanishes as the grid is refined.
+        ``tol`` is one cell diagonal.  The distance-proportional 15 deg part is
+        needed because on a rasterised oblique wall the nearest staircase
+        corner tilts ``u`` by a few degrees; with a resolution-only slack,
+        walls at 5-15 deg to the grid axes produced two or three terms at every
+        tested resolution (0.05-0.2 m).  It only acts inside one connected
+        region, so it cannot drop a separate nearby obstacle.
+
+        Consequences: a straight wall yields one term (like one fast-pysf
+        segment); a convex obstacle one term; the two walls of a corridor or
+        the legs of an inside corner one term each, so their lateral forces
+        cancel on the centre line.  Every separate obstacle (a post in front
+        of a wall, each column of a row) keeps its own term, as with
+        fast-pysf's per-obstacle sum, up to
+        ``social_force_obstacle_v2_max_terms`` (8) nearest terms; an obstacle
+        hidden behind a nearer one also keeps its (weaker) term.  Merging
+        happens only inside one connected region: surfaces within 15 deg of
+        coplanar, or within 30 deg of bearing, count as one patch.  Because
+        selection is discrete, a patch term can appear or disappear as the
+        robot moves; the exponential decay keeps such steps small except at
+        contact range.
 
         Returns:
             tuple[np.ndarray, np.ndarray, np.ndarray]: World-frame nearest points,
@@ -536,6 +586,8 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         indices = np.argwhere(mask & ~interior)
         if indices.size == 0:
             return empty
+        labels, _count = ndimage.label(mask, structure=np.ones((3, 3), dtype=bool))
+        components = labels[indices[:, 0], indices[:, 1]]
 
         half = 0.5 * float(resolution)
         centers = self._grid_cell_centers(indices, origin, resolution)
@@ -549,6 +601,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             return empty
         offsets = offsets[keep]
         dist = dist[keep]
+        components = components[keep]
         # A robot centre inside an occupied cell has no defined surface normal
         # from the clamped point; fall back to the cell-centre direction.
         inside = dist < self._EPS
@@ -559,7 +612,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         directions = offsets / norms[:, np.newaxis]
 
         tolerance = np.sqrt(2.0) * float(resolution)
-        tangent_slack = float(np.sin(np.deg2rad(15.0)))
+        same_surface_slack = float(np.sin(np.deg2rad(15.0)))
         cos_window = float(
             np.cos(np.deg2rad(float(self.config.social_force_obstacle_v2_min_separation_deg)))
         )
@@ -573,9 +626,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             u = directions[best]
             rel = offsets - offsets[best]
             rel_norm = np.sqrt(np.einsum("ij,ij->i", rel, rel))
-            beyond_tangent = rel @ u >= -(tolerance + tangent_slack * rel_norm)
-            same_patch = directions @ u >= cos_window
-            alive &= ~(beyond_tangent | same_patch)
+            same_surface = (components == components[best]) & (
+                (rel @ u >= -(tolerance + same_surface_slack * rel_norm))
+                | (directions @ u >= cos_window)
+            )
+            alive &= ~same_surface
             alive[best] = False
 
         sel_offsets = offsets[chosen]
@@ -874,6 +929,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                         "v2_strength": float(config.social_force_obstacle_v2_strength),
                         "v2_length": float(config.social_force_obstacle_v2_length),
                         "v2_max_terms": int(config.social_force_obstacle_v2_max_terms),
+                        "v2_hold_speed": float(config.social_force_v2_hold_speed),
                         "v2_min_separation_deg": float(
                             config.social_force_obstacle_v2_min_separation_deg
                         ),

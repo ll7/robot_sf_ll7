@@ -55,6 +55,42 @@ SOCIAL_FORCE_GOAL_APPROACH_VERSION_SELECTOR_KEYS = (
     "version",
 )
 
+# Social-force planner versions (issue #9724).  ``grid_cell_sum_v1`` is the
+# historical adapter: one obstacle repulsion per occupied grid cell (so the
+# total scales with grid resolution) and velocity commands capped only by
+# ``max_linear_speed``.  ``resolution_independent_v2`` uses one repulsion per
+# visible obstacle surface patch and speed-limited commands.  The default stays
+# the historical path so frozen campaigns remain reproducible; callers opt in.
+SOCIAL_FORCE_PLANNER_LEGACY_V1 = "grid_cell_sum_v1"
+SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2 = "resolution_independent_v2"
+SOCIAL_FORCE_PLANNER_VERSIONS = frozenset(
+    {
+        SOCIAL_FORCE_PLANNER_LEGACY_V1,
+        SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+    }
+)
+
+
+def resolve_social_force_planner_version(value: Any = None) -> str:
+    """Resolve the social-force planner version selector.
+
+    Returns:
+        str: Canonical planner version; ``None`` or blank selects the legacy path.
+    """
+    if value is None:
+        return SOCIAL_FORCE_PLANNER_LEGACY_V1
+    if not isinstance(value, str):
+        raise TypeError("social-force planner version must be a string or None")
+    resolved = value.strip()
+    if not resolved:
+        return SOCIAL_FORCE_PLANNER_LEGACY_V1
+    if resolved not in SOCIAL_FORCE_PLANNER_VERSIONS:
+        supported = ", ".join(sorted(SOCIAL_FORCE_PLANNER_VERSIONS))
+        raise ValueError(
+            f"unsupported social-force planner version {resolved!r}; expected one of {supported}"
+        )
+    return resolved
+
 
 class _ResolvedSocialForceGoalApproachVersion(str):
     """String-compatible goal-approach version retaining selector provenance."""
@@ -310,9 +346,21 @@ class SocNavPlannerConfig:
     social_force_goal_approach_stop_distance: float = 1.75
     social_force_goal_approach_max_speed: float = 0.75
     social_force_goal_approach_clearance: float = 0.25
+    # Issue #9724: opt-in resolution-independent obstacle term and speed-limited
+    # command mapping.  The v2 parameters are only read when the planner version
+    # is ``resolution_independent_v2``; see ``socnav_social_force`` for the
+    # derivation of the defaults.
+    social_force_planner_version: Any = None
+    social_force_obstacle_v2_strength: float = 5.0
+    social_force_obstacle_v2_length: float = 0.6
+    social_force_obstacle_v2_max_terms: int = 8
+    social_force_obstacle_v2_min_separation_deg: float = 30.0
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve versioned force selectors immediately and retain provenance."""
+        if name == "social_force_planner_version":
+            object.__setattr__(self, name, resolve_social_force_planner_version(value))
+            return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)

@@ -1714,8 +1714,7 @@ def _run_bounded(
             parent_conn.close()
         except OSError:
             pass
-        if process.is_alive():
-            _terminate_child(process)
+        _terminate_child(process)
 
 
 @dataclass(frozen=True, slots=True)

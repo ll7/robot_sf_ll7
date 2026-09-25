@@ -1,0 +1,55 @@
+# Hybrid v4 twin of hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml (issue #9726).
+# Identical parameters and scenario overrides except: the v4 base config
+# (surface-clearance speed levels, drive-limited rollouts, braking check), no
+# 3.0 m/s speed-limit raise, and centre-distance yielding overrides expressed as
+# surface clearances. The v3 config stays the frozen comparison arm.
+name: hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release
+algo: hybrid_rule_local_planner
+allow_testing_algorithms: true
+base_config_path: configs/algos/hybrid_rule_v4_clearance_braking.yaml
+params:
+  # v4 drops the v3 3.0 m/s cap raise: the drive saturates at 2.0 m/s, and
+  # near pedestrians the braking-consistent cap governs speed anyway.
+  max_linear_speed: 2.0
+  hard_safety_margin: 0.2
+  static_clearance_escape_enabled: true
+  static_clearance_escape_min_clearance: 1.0
+  static_clearance_escape_max_speed: 0.3
+  static_clearance_escape_tolerance: 0.05
+  static_recenter_enabled: true
+  static_recenter_weight: 0.7
+  static_recenter_probe_speed: 0.3
+  static_corridor_transit_enabled: true
+  static_corridor_transit_initial_band: 0.08
+  static_corridor_transit_tolerance: 0.08
+  static_corridor_transit_min_progress_3s: 0.1
+  static_corridor_transit_weight: 0.5
+  corridor_subgoal_enabled: true
+  corridor_subgoal_speed: 0.25
+  corridor_subgoal_turn_in_place_error: 0.25
+  corridor_subgoal_heading_gain: 1.0
+  corridor_subgoal_min_nearest_ped_distance: 1.0
+  corridor_subgoal_use_continuous_static_check: true
+  continuous_static_clearance_enabled: true
+  corridor_subgoal_static_clearance_buffer: 0.0
+  corridor_subgoal_goal_stall_progress_3s: 0.05
+  corridor_subgoal_route_stall_progress_3s: 0.05
+  corridor_subgoal_route_regression_1s: -0.05
+  corridor_subgoal_min_route_remaining_distance: 0.5
+  corridor_subgoal_max_lateral_offset: 0.5
+  corridor_subgoal_route_progress_weight: 2.0
+  corridor_subgoal_centering_weight: 0.5
+  corridor_subgoal_tangent_alignment_weight: 1.2
+  corridor_subgoal_clearance_weight: 0.3
+  corridor_subgoal_continuity_weight: 0.2
+scenario_overrides:
+  francis2023_blind_corner:
+    hard_safety_margin: 0.05
+    static_hard_safety_margin: 0.0
+    # v3 anticipatory yielding (slow 3.5 m / moderate 4.5 m centre distance)
+    # translated to surface clearance for the 1.0 m robot + 0.4 m pedestrian.
+    v4_slow_clearance_human: 2.1
+    v4_moderate_clearance_human: 3.1
+  francis2023_perpendicular_traffic:
+    very_slow_speed: 0.6
+    static_clearance_escape_max_speed: 0.6

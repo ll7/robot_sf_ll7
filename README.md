@@ -43,11 +43,14 @@ and uses
 [`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`](configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml).
 Before a full campaign, the four hybrid arms must also pass the predeclared
 [fallback-prone stress smoke](docs/benchmark_release_hybrid_stress_smoke.md).
-The old DOI above is historical; the live S30/H600 benchmark-data record is the
-September 2026 erratum successor: concept DOI `10.5281/zenodo.22227034`, version DOI
-`10.5281/zenodo.22265925` (tag
-`paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1`),
-frozen in
+The old DOI above is historical; the live S30/H600 benchmark-data record is release 0.0.7:
+concept DOI `10.5281/zenodo.22814342`, version DOI `10.5281/zenodo.22814343` (tag
+`paper-matrix-v2-h600-s30-2026-09-07f7e8d43084de748915e1b1eb8b2a1603357c6e`, producer commit
+`07f7e8d43084de748915e1b1eb8b2a1603357c6e`, archive SHA-256
+`684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`), frozen in
+[`docs/analysis/issue_9431_release_0_0_7_closeout.md`](docs/analysis/issue_9431_release_0_0_7_closeout.md).
+The September 2026 erratum (version DOI `10.5281/zenodo.22265925`) is superseded and kept
+as history in
 [`configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`](configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json).
 Social Navigation Quality Index (SNQI) is
 advisory/no-ranking, and the benchmark-data release remains separate from the
@@ -180,7 +183,8 @@ For host packages, optional capabilities, and a fuller setup walkthrough, see
 This repository is used as the Robot SF evidence base for dissertation work on scenario-based
 safety validation for autonomous micromobility vehicles. If you are:
 
-- **Reviewing the dissertation**: use the public release artifact DOI above and the repository tag
+- **Reviewing the dissertation**: use the current benchmark-data release DOI
+  `10.5281/zenodo.22814343` (release 0.0.7) and the repository tag
   named by the dissertation or artifact metadata. The dissertation repository maps claims to Robot
   SF evidence and reproduction steps.
 
@@ -192,9 +196,10 @@ safety validation for autonomous micromobility vehicles. If you are:
   [`docs/contributing_planner.md`](docs/contributing_planner.md) for current extension paths.
 
 - **Citing this work**: use the DOI badge above (`10.5281/zenodo.19563812`) only for the
-  historical release artifact. The current S30/H600 benchmark-data record is the September 2026
-  erratum successor: version DOI `10.5281/zenodo.22265925` (concept DOI `10.5281/zenodo.22227034`),
-  frozen in [`configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`](configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json).
+  historical release artifact. The current S30/H600 benchmark-data record is release 0.0.7:
+  version DOI `10.5281/zenodo.22814343` (concept DOI `10.5281/zenodo.22814342`),
+  frozen in [`docs/analysis/issue_9431_release_0_0_7_closeout.md`](docs/analysis/issue_9431_release_0_0_7_closeout.md).
+  The September 2026 erratum (version DOI `10.5281/zenodo.22265925`) is superseded history.
 
 ## Development workflow
 

@@ -57,7 +57,10 @@ from robot_sf.scenario_certification.feasibility_diagnostics import (
     SOLVABLE_ROUTE_CLASSES,
     make_actor_free_scenario,
 )
-from robot_sf.scenario_certification.input_identity import scenario_input_identity
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+)
 from robot_sf.scenario_certification.v1 import (
     GEOMETRICALLY_INFEASIBLE,
     KINODYNAMICALLY_INFEASIBLE,
@@ -168,6 +171,7 @@ class GeometricMargin:
     shortest_path_length_m: float | None
     classification: str
     benchmark_eligibility: str
+    runtime_input_identity_stable: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +204,7 @@ class CompletionMargin:
     fallback_marker: str | None = None
     observed_route_completion_feasible: bool | None = None
     rollout_blocker: str | None = None
+    runtime_input_identity_stable: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,6 +318,7 @@ def run_feasibility_oracle(
         scenario_path=config.scenario_path,
         envelope_radius_m=envelope_radius_m,
         certifier=certify,
+        require_runtime_input_binding=certifier is None,
     )
     completion = _completion_margin(
         scenario,
@@ -519,6 +525,7 @@ def build_issue_5574_feasibility_report(  # noqa: C901
             and identity_before.get("effective_input_sha256") is not None
             and identity_before.get("effective_input_sha256")
             == identity_after.get("effective_input_sha256")
+            and cell.get("runtime_input_identity_stable") is True
         )
         cell["effective_input_sha256"] = (
             identity_before.get("effective_input_sha256")
@@ -536,6 +543,9 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         "scenario_manifest": source.as_posix(),
         "source_artifact_sha256": source_artifact_sha256,
         "source_artifact_identity_stable": source_artifact_identity_stable,
+        "runtime_input_identity_stable": all(
+            cell.get("runtime_input_identity_stable") is True for cell in cells
+        ),
         "scenario_ids": list(requested_ids),
         "envelope_radii_m": list(radii),
         "rollout_algo": rollout_algo,
@@ -631,6 +641,7 @@ def envelope_sensitivity_verdict_to_dict(
     Returns:
         Versioned ``envelope_sensitivity_axis.v1`` payload.
     """
+    all_verdicts = (verdict.nominal_verdict, *verdict.reduced_verdicts)
     return {
         "schema_version": ENVELOPE_SENSITIVITY_SCHEMA,
         "issue": issue,
@@ -643,6 +654,9 @@ def envelope_sensitivity_verdict_to_dict(
         "reduced_verdicts": [
             feasibility_verdict_to_dict(v, issue=issue) for v in verdict.reduced_verdicts
         ],
+        "runtime_input_identity_stable": all(
+            _verdict_runtime_input_identity_stable(item) for item in all_verdicts
+        ),
     }
 
 
@@ -667,7 +681,21 @@ def feasibility_verdict_to_dict(
         "status": verdict.status,
         "geometric": _geometric_margin_to_dict(verdict.geometric),
         "completion": _completion_margin_to_dict(verdict.completion),
+        "runtime_input_identity_stable": _verdict_runtime_input_identity_stable(verdict),
     }
+
+
+def _verdict_runtime_input_identity_stable(verdict: FeasibilityVerdict) -> bool:
+    """Check the exact map/route inputs used by every executed oracle lane.
+
+    Returns:
+        ``True`` only when each executed lane matched its declared input closure.
+    """
+    if verdict.geometric.runtime_input_identity_stable is not True:
+        return False
+    if verdict.geometric.route_geometrically_feasible is False:
+        return True
+    return verdict.completion.runtime_input_identity_stable is True
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +709,7 @@ def _geometric_margin(
     scenario_path: Path,
     envelope_radius_m: float,
     certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate],
+    require_runtime_input_binding: bool = False,
 ) -> GeometricMargin:
     """Build the geometric route-clearance margin from the route certificate.
 
@@ -695,6 +724,9 @@ def _geometric_margin(
 
     classification = str(certificate.classification)
     eligibility = str(certificate.benchmark_eligibility)
+    runtime_input_identity_stable = certificate.evidence.get("runtime_input_identity_stable")
+    if require_runtime_input_binding and runtime_input_identity_stable is not True:
+        return _blocked_geometric_margin(envelope_radius_m, "runtime_input_identity_unavailable")
     route_checks = _aggregate_route_checks(certificate)
     min_clearance = _optional_float(route_checks.get("minimum_static_clearance_m"))
     shortest_path = _optional_float(route_checks.get("shortest_path_length_m"))
@@ -728,6 +760,11 @@ def _geometric_margin(
         shortest_path_length_m=shortest_path,
         classification=classification,
         benchmark_eligibility=eligibility,
+        runtime_input_identity_stable=(
+            runtime_input_identity_stable
+            if isinstance(runtime_input_identity_stable, bool)
+            else None
+        ),
     )
 
 
@@ -743,6 +780,7 @@ def _blocked_geometric_margin(envelope_radius_m: float, blocker: str) -> Geometr
         shortest_path_length_m=None,
         classification=f"blocked:{blocker}",
         benchmark_eligibility="blocked",
+        runtime_input_identity_stable=False,
     )
 
 
@@ -777,6 +815,7 @@ def _completion_margin(
             termination_reason=None,
             status="failed",
             blocker="route_geometrically_infeasible_no_traversal_path",
+            runtime_input_identity_stable=geometric.runtime_input_identity_stable,
         )
 
     try:
@@ -793,7 +832,21 @@ def _completion_margin(
             termination_reason=None,
             status="blocked",
             blocker=f"rollout_error: {exc}",
+            runtime_input_identity_stable=False,
         )
+
+    runtime_records = record.get("_scenario_runtime_input_records")
+    scenario_id = _scenario_id(scenario)
+    input_identity = scenario_input_identity(config.scenario_path, scenario_id=scenario_id)
+    runtime_input_stable = (
+        isinstance(runtime_records, list)
+        and all(isinstance(item, Mapping) for item in runtime_records)
+        and runtime_input_records_match(
+            input_identity,
+            runtime_records,
+            scenario_id=scenario_id,
+        )
+    )
 
     completed, termination = _rollout_route_complete(record)
     steps = _optional_int(record.get("steps"))
@@ -848,12 +901,18 @@ def _completion_margin(
         or explicit_status in {"blocked", "error", "invalid"}
         or flag_conflict
     )
-    if status_conflict or fallback_or_degraded is not False:
+    if (
+        status_conflict
+        or fallback_or_degraded is not False
+        or (episode_runner is None and not runtime_input_stable)
+    ):
         blocker = (
             "inconsistent_rollout_completion_record"
             if status_conflict
             else "rollout_fallback_or_degraded"
             if fallback_or_degraded is True
+            else "runtime_input_identity_unavailable"
+            if episode_runner is None and not runtime_input_stable
             else "rollout_fallback_status_unavailable"
         )
         return CompletionMargin(
@@ -869,6 +928,7 @@ def _completion_margin(
             fallback_marker=fallback_marker,
             observed_route_completion_feasible=completed,
             rollout_blocker=rollout_blocker,
+            runtime_input_identity_stable=runtime_input_stable,
         )
     min_completion_steps = steps if completed and steps is not None else None
     completion_horizon_margin_steps: int | None
@@ -897,6 +957,7 @@ def _completion_margin(
         fallback_marker=fallback_marker,
         observed_route_completion_feasible=completed,
         rollout_blocker=rollout_blocker,
+        runtime_input_identity_stable=runtime_input_stable,
     )
 
 
@@ -1041,6 +1102,7 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
         """Return the result of one actor-free diagnostic rollout run via ``_run_map_episode``."""
         scenario_payload = deepcopy(dict(scenario))
         scenario_payload["seeds"] = [int(seed)]
+        runtime_input_records: list[dict[str, str]] = []
         record = dict(
             _run_map_episode(
                 scenario_payload,
@@ -1052,8 +1114,10 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
                 snqi_baseline=None,
                 algo=algo,
                 scenario_path=config.scenario_path,
+                runtime_input_records=runtime_input_records,
             )
         )
+        record["_scenario_runtime_input_records"] = runtime_input_records
         metadata = record.get("algorithm_metadata")
         if (
             algo == "goal"
@@ -1313,6 +1377,7 @@ def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
         "shortest_path_length_m": margin.shortest_path_length_m,
         "classification": margin.classification,
         "benchmark_eligibility": margin.benchmark_eligibility,
+        "runtime_input_identity_stable": margin.runtime_input_identity_stable,
     }
 
 
@@ -1331,6 +1396,7 @@ def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
         "fallback_marker": margin.fallback_marker,
         "observed_route_completion_feasible": margin.observed_route_completion_feasible,
         "rollout_blocker": margin.rollout_blocker,
+        "runtime_input_identity_stable": margin.runtime_input_identity_stable,
     }
 
 

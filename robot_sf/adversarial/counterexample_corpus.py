@@ -3915,6 +3915,7 @@ def _validate_case_execution_contract(case: Mapping[str, Any]) -> list[str]:
         errors.append("current-revision replay verification is missing")
     else:
         errors.extend(_validate_case_replay_binding(case, receipt))
+        errors.extend(_validate_target_planner_replay_failure(receipt))
     target = case.get("target_planner")
     target_valid = (
         isinstance(target, dict)
@@ -3932,6 +3933,50 @@ def _validate_case_execution_contract(case: Mapping[str, Any]) -> list[str]:
     ):
         errors.append("replay receipt planner/configuration differs from target identity")
     return errors
+
+
+def _validate_target_planner_replay_failure(receipt: Mapping[str, Any]) -> list[str]:
+    """Require a verified canonical target collision or timeout before admission.
+
+    This is the supported v1 criticality boundary. Other metric-extreme cases need
+    a separately versioned objective and replay-bound threshold contract.
+    """
+    projection = receipt.get("selected_projection")
+    if not isinstance(projection, Mapping):
+        return ["target planner replay projection is missing"]
+    outcome = projection.get("outcome")
+    metrics = projection.get("metrics")
+    termination_reason = projection.get("termination_reason")
+    if not isinstance(outcome, Mapping) or not isinstance(metrics, Mapping):
+        return ["target planner replay outcome or metrics are missing"]
+    outcome_fields = ("collision_event", "route_complete", "timeout_event")
+    if any(not isinstance(outcome.get(field), bool) for field in outcome_fields):
+        return ["target planner replay outcome flags must be explicit booleans"]
+    if not isinstance(termination_reason, str) or termination_reason not in TERMINATION_REASONS:
+        return ["target planner replay termination reason is unsupported"]
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        return [
+            "target planner replay outcome contradicts canonical flags or metrics: "
+            + "; ".join(contradictions)
+        ]
+    collision_failure = (
+        outcome["collision_event"] is True
+        and outcome["timeout_event"] is False
+        and termination_reason == "collision"
+    )
+    timeout_failure = (
+        outcome["timeout_event"] is True
+        and outcome["collision_event"] is False
+        and termination_reason in {"truncated", "max_steps"}
+    )
+    if outcome["route_complete"] is not False or not (collision_failure or timeout_failure):
+        return ["target planner replay does not verify canonical collision/timeout noncompletion"]
+    return []
 
 
 def _validate_case_structure_admissibility(case: Mapping[str, Any]) -> list[str]:

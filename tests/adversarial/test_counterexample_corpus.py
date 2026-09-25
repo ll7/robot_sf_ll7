@@ -1072,6 +1072,68 @@ def test_admission_receipt_rejects_replay_revision_as_untrusted_target(
         _single_replay_admission_receipt(case, corpus_root, target_revision="0" * 40)
 
 
+def test_case_admission_rejects_successful_target_replay_despite_criticality_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Discovery metadata cannot make a successful target replay a counterexample."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = copy.deepcopy(corpus["cases"][0])
+    case["discovery"]["criticality"] = {
+        "claimed_metric": "minimum_clearance_m",
+        "claimed_threshold": -1000.0,
+        "claimed_value": -1001.0,
+    }
+    target = case["target_planner"]
+    observation = _append_episode_evaluation(
+        corpus,
+        corpus_root,
+        planner_id=target["planner_id"],
+        config_identity=target["config_identity"],
+        execution_mode="native",
+        outcome={"collision_event": False, "route_complete": True, "timeout_event": False},
+    )
+
+    source_artifact = corpus_root / observation["replay_receipt"]["artifact_path"]
+    artifact_relative = f"cases/{case['case_id']}/replay_artifacts/successful_target.jsonl"
+    artifact_path = corpus_root / artifact_relative
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_artifact, artifact_path)
+    case["source_evidence"]["corpus_files"].append(
+        {
+            "path": artifact_relative,
+            "sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+        }
+    )
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "_current_target_revision",
+        lambda: observation["source_revision"],
+    )
+    case["replay_receipt"] = create_case_admission_replay_receipt(
+        observation,
+        case,
+        artifact_path=artifact_relative,
+        corpus_root=corpus_root,
+    )
+
+    corpus, admission = counterexample_corpus.admit_case_record(
+        case,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=f"cases/{case['case_id']}",
+        source_kind="test_noncritical_target_replay",
+        source_id="successful-target-replay",
+    )
+
+    assert admission["decision"] == "rejected"
+    assert any(
+        "does not verify canonical collision/timeout noncompletion" in blocker
+        for blocker in admission["blockers"]
+    )
+    assert case["discovery"]["criticality"]["claimed_metric"] == "minimum_clearance_m"
+
+
 def test_case_admission_rejects_missing_or_mismatched_current_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -180,8 +180,10 @@ diagnostic artifact, not an original 0.0.7 release field.
 
 1. Stage the observer from a reviewed commit under ignored `output/`, verify its SHA-256, and
    load it through an explicitly named `sitecustomize` path in the private Slurm packet. Require
-   one in-process worker, matching these configs; write one PID-scoped capture stream and fail
-   if an unregistered worker or relevant second thread executes an episode.
+   one in-process worker, matching these configs; write one PID-scoped capture stream. Register
+   both `sys.settrace` and `threading.settrace` at startup. A later thread that enters
+   `run_map_episode` is observed and rejected before its body executes; a fork with the inherited
+   observer is also rejected by PID. No sidecar is admitted for unobserved or failed episodes.
 2. An opt-in `sys.settrace` observer copies the frozen `PedRobotForce.__call__` return value
    and its already evaluated frame locals (`ped_positions`, `robot_pos`, and `multipliers` if
    present). It must never call a force kernel, position provider or multiplier callback again.
@@ -191,7 +193,8 @@ diagnostic artifact, not an original 0.0.7 release field.
    `isinstance(PedRobotForce)`; exclude `adversarial` components. Match exactly one fresh
    return capture per selected instance, copy its `last_forces` and configuration, and sum the
    robot components. An active component left at its scalar initial value, a non-finite vector,
-   shape mismatch, missing active component or changed component roster fails closed. The
+   shape mismatch, missing active component or changed component ID/object roster across steps
+   fails closed. The
    observer does not infer a zero vector when no `PedRobotForce` instance executes.
 3. On each `step_once` call, copy the pre-behavior pedestrian positions. At the force-return
    event, copy the already evaluated force-input positions. Both must exactly equal reset

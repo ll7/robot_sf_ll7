@@ -553,6 +553,68 @@ def test_showcase_snapshot_revalidates_prior_verified_revision() -> None:
     assert record["showcase_tool_source_snapshot_status"] == "verified_file_hash_match"
 
 
+def test_showcase_snapshot_rejects_readable_but_unreachable_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dangling source commit is not promoted even when ``git show`` can read its blobs."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Fixture"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "fixture@example.invalid"], check=True
+    )
+    relative_path = "scripts/tools/benchmark_showcase.py"
+    source_path = repo / relative_path
+    source_path.parent.mkdir(parents=True)
+    source_bytes = b"recorded source snapshot\n"
+    source_path.write_bytes(source_bytes)
+    subprocess.run(["git", "-C", str(repo), "add", relative_path], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "--quiet", "-m", "source"], check=True)
+    source_branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    unreferenced_revision = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, check=True, text=True
+    ).stdout.strip()
+
+    subprocess.run(
+        ["git", "-C", str(repo), "checkout", "--quiet", "--orphan", "unrelated"], check=True
+    )
+    source_path.write_bytes(b"different source snapshot\n")
+    subprocess.run(["git", "-C", str(repo), "add", relative_path], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "--quiet", "-m", "unrelated"], check=True)
+    subprocess.run(["git", "-C", str(repo), "branch", "-D", source_branch], check=True)
+    current_revision = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, check=True, text=True
+    ).stdout.strip()
+    monkeypatch.setattr(materializer, "REPO_ROOT", repo)
+
+    record = _showcase_tool_snapshot(
+        {
+            "tool_provenance": {
+                "git_revision": unreferenced_revision,
+                "files": {relative_path: hashlib.sha256(source_bytes).hexdigest()},
+            }
+        },
+        current_revision,
+        fallback_snapshot_revision=unreferenced_revision,
+    )
+
+    readable_blob = subprocess.run(
+        ["git", "show", f"{unreferenced_revision}:{relative_path}"],
+        cwd=repo,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert readable_blob == source_bytes
+    assert record["showcase_tool_source_snapshot_revision"] is None
+    assert record["showcase_tool_source_snapshot_status"] == "source_files_not_matched"
+
+
 def test_showcase_snapshot_requires_a_file_hash_inventory() -> None:
     """A historical revision without file hashes stays explicitly unverified."""
     record = _showcase_tool_snapshot(

@@ -16,7 +16,9 @@ def test_spawn_in_obstacle():
     logger.info("Testing Spawn in Obstacle")
     map_def = convert_map("maps/svg_maps/test_spawn_in_obstacle.svg")
     logger.debug(f"type map_def: {type(map_def)}")
-    with pytest.raises(RuntimeError, match="Failed to sample"):
+    # Since #9739 spawn overlaps are invalid with a clearance diagnostic
+    # (issue #9725) instead of the legacy sampling error.
+    with pytest.raises(RuntimeError, match="No robot start with wall clearance found"):
         RobotEnvWithPedestrianObstacleForces(map_def=map_def, debug=True)
 
 

@@ -1694,6 +1694,12 @@ class Simulator:
         are drawn, so every other spawn of the seed stays unchanged. The next reset
         restores the construction-time layout and checks it again.
         """
+        pysf_state = getattr(self, "pysf_state", None)
+        if pysf_state is None or not hasattr(pysf_state, "ped_positions"):
+            # Pedestrian state is not initialized yet (PedSimulator resets the
+            # ego pedestrian after this call); nothing can overlap.
+            self.last_spawn_relocation = None
+            return
         ped_positions = np.asarray(self.ped_pos, dtype=float).reshape(-1, 2)
         if ped_positions.shape[0] == 0 or not self.robots:
             self.last_spawn_relocation = None

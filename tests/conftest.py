@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Social-force v2 planner contracts (issue #9724) are deterministic adapter
+    # checks on synthetic grids; the four episode tests stay marked slow.
+    "test_issue_9724_social_force_resolution_independent.py",
     # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
     # legacy compatibility; include them in PR changed-line coverage shards.
     "test_robot_attributable_force.py",

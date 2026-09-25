@@ -81,7 +81,8 @@ planners:
   - key: social_force
     algo: social_force
     planner_group: core
-    algo_config: configs/algos/social_force_terminal_goal_v1.yaml
+    # Issue #9724: resolution-independent obstacle term and speed-limited commands.
+    algo_config: configs/algos/social_force_resolution_independent_v2.yaml
     benchmark_profile: baseline-safe
 
   - key: orca

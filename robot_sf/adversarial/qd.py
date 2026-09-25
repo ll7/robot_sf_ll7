@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from robot_sf.adversarial.certification import CertificationStatus
 
 QD_ARCHIVE_SCHEMA_VERSION = "adversarial_qd_archive.v1"
+QD_COMPARISON_SCHEMA_VERSION = "adversarial_qd_comparison.v1"
 
 _BEHAVIOR_AXES = ("distance_to_human_min", "time_to_collision_min")
 
@@ -671,7 +672,7 @@ class QDComparisonReport:
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable comparison report."""
         return {
-            "schema_version": QD_ARCHIVE_SCHEMA_VERSION,
+            "schema_version": QD_COMPARISON_SCHEMA_VERSION,
             "comparison_type": "equal_proposal_budget_qd_vs_single_objective",
             "budget_basis": "proposed_candidate_slots",
             "grid": self.grid,
@@ -760,6 +761,7 @@ def compare_qd_vs_single_objective(
 
 __all__ = [
     "QD_ARCHIVE_SCHEMA_VERSION",
+    "QD_COMPARISON_SCHEMA_VERSION",
     "BehaviorDescriptorFn",
     "GridSpec",
     "QDArchive",

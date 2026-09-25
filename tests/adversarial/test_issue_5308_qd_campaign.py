@@ -98,6 +98,7 @@ def test_campaign_smoke_emits_equal_proposal_budget_comparison(tmp_path: Path) -
     """Smoke-mode report names the budget basis and exposes actual evaluator calls."""
     run_campaign(CONFIG_PATH, tmp_path, budget_override=18, smoke=True)
     comparison = json.loads((tmp_path / "comparison.json").read_text(encoding="utf-8"))
+    assert comparison["schema_version"] == "adversarial_qd_comparison.v1"
     assert comparison["comparison_type"] == "equal_proposal_budget_qd_vs_single_objective"
     assert comparison["budget_basis"] == "proposed_candidate_slots"
     assert comparison["rows"]["map_elites"]["budget"] == 18

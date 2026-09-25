@@ -179,6 +179,9 @@ stratification. `run_map_elites` accepts an `admissibility_precheck`; it records
 the proposed candidate, skips only explicit exclusions before evaluation, and continues unknown,
 missing, malformed, or unavailable verdicts to the evaluator. This keeps feasibility records
 separate from planner-evaluation results and does not alter the benchmark denominator.
+New QD comparison artifacts use `adversarial_qd_comparison.v1`: equal proposal slots are reported
+separately from each method's actual evaluator-call count. Historical `adversarial_qd_archive.v1`
+comparison fixtures remain unchanged.
 
 The adapter has five outcomes: `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,

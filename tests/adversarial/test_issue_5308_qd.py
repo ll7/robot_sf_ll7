@@ -512,6 +512,7 @@ def test_compare_qd_vs_single_objective(tmp_path: Path) -> None:
     report_path = tmp_path / "comparison.json"
     report_path.write_text(json.dumps(report.to_json(), indent=2), encoding="utf-8")
     loaded = json.loads(report_path.read_text(encoding="utf-8"))
+    assert loaded["schema_version"] == "adversarial_qd_comparison.v1"
     assert loaded["comparison_type"] == "equal_proposal_budget_qd_vs_single_objective"
     assert loaded["budget_basis"] == "proposed_candidate_slots"
     assert loaded["rows"]["map_elites"]["num_evaluated"] == 12

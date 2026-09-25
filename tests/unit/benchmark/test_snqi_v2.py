@@ -596,6 +596,80 @@ def calibration_records():
     }
 
 
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    "spawn_validity",
+    [
+        pytest.param({"invalid_run": True}, id="invalid"),
+        pytest.param(None, id="null"),
+        pytest.param([], id="list"),
+        pytest.param({}, id="missing-flag"),
+        pytest.param({"invalid_run": "false"}, id="string-flag"),
+        pytest.param({"invalid_run": 0}, id="integer-flag"),
+        pytest.param({"invalid_run": None}, id="null-flag"),
+        pytest.param({"invalid_run": False, "invalid_reason": "spawn_overlap"}, id="conflict"),
+        pytest.param({"invalid_run": False, "schema_version": "forged"}, id="schema"),
+    ],
+)
+def test_spawn_validity_rejected_before_score_or_calibration(entrypoint, spawn_validity):
+    """A single invalid or malformed row cannot enter the complete development grid."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["spawn_validity"] = spawn_validity
+    before = json.dumps(rows[0], sort_keys=True)
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+    assert json.dumps(rows[0], sort_keys=True) == before
+    assert "snqi_v2" not in rows[0]["metrics"]
+
+
+def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block():
+    """Legacy absence and canonical valid blocks retain the same score and anchors."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    legacy_score = score_episode(rows[0], fixture_spec())
+    legacy_anchors = derive_calibration_anchors(rows, **kwargs)
+    for row in rows:
+        row["spawn_validity"] = build_spawn_validity({"overlap": False}, [])
+    scored = score_episode(rows[0], fixture_spec())
+    assert scored["metrics"] == legacy_score["metrics"]
+    assert derive_calibration_anchors(rows, **kwargs) == legacy_anchors
+
+
+@pytest.mark.parametrize("block", [{"invalid_run": True}, {"invalid_run": "false"}])
+def test_calibration_freeze_rejects_spawn_validity_before_projection(
+    tmp_path, calibration_archive, block
+):
+    """Coherently hashed raw rows still refuse before compact projection drops metadata."""
+    from robot_sf.benchmark.result_provenance import (
+        manifest_path_for_result_jsonl,
+        validate_result_provenance_manifest,
+    )
+    from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+
+    cfg, _, kwargs = calibration_archive
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
+    sidecar = manifest_path_for_result_jsonl(path)
+    payload = json.loads(sidecar.read_text())
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[0]["spawn_validity"] = block
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    payload["raw_artifacts"][0]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    validate_result_provenance_manifest(payload)
+    sidecar.write_text(json.dumps(payload))
+    output = tmp_path / "anchors.json"
+    output.write_bytes(b"prior anchor\n")
+    with pytest.raises(ValueError, match="spawn_validity"):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
+    assert output.read_bytes() == b"prior anchor\n"
+
+
 def test_calibration_exact_grid_and_no_imputation():
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
 

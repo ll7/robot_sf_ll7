@@ -629,21 +629,40 @@ def _validate_issue9656_candidate_import(
     corpus_root: Path | None,
 ) -> None:
     import_candidate_ids = import_record.get("candidate_ids", [])
-    summary_rows = _load_issue9656_import_summary(
+    summary = _load_issue9656_import_summary(
         corpus, import_id, import_candidate_ids, candidates_by_id, corpus_root=corpus_root
     )
-    _validate_issue9656_import_counts(import_record, import_candidate_ids, summary_rows)
+    summary_rows = summary.get("cases")
+    if not isinstance(summary_rows, list):
+        raise CorpusError("#9656 candidate import summary has no case rows")
+    _validate_issue9656_import_counts(import_record, import_candidate_ids, summary)
+    source_materialization_receipts = _issue9656_source_materialization_receipts(
+        source_identity, summary_rows
+    )
 
     source_replay_counts: Counter[str] = Counter()
     candidate_status_counts: Counter[str] = Counter()
+    feasibility_status_counts: Counter[str] = Counter()
+    planner_status_counts: Counter[str] = Counter()
     expected_candidate_ids = set()
     for summary_case in summary_rows:
         candidate_id, replay_status, candidate_status = _validate_issue9656_summary_case(
             summary_case, source_identity, candidates_by_id
         )
+        candidate = candidates_by_id[candidate_id]
+        _validate_issue9656_candidate_source_binding(
+            candidate,
+            summary_case,
+            summary.get("source"),
+            source_identity=source_identity,
+            source_materialization_receipts=source_materialization_receipts,
+            corpus_root=corpus_root,
+        )
         expected_candidate_ids.add(candidate_id)
         source_replay_counts[replay_status] += 1
         candidate_status_counts[candidate_status] += 1
+        feasibility_status_counts[candidate["feasibility"]["verdict"]] += 1
+        planner_status_counts[candidate["planner_status_at_import"]["status"]] += 1
 
     if set(import_candidate_ids) != expected_candidate_ids:
         raise CorpusError("#9656 candidate import IDs differ from checksum-pinned source rows")
@@ -655,6 +674,16 @@ def _validate_issue9656_candidate_import(
         sorted(candidate_status_counts.items())
     ):
         raise CorpusError("#9656 candidate status counters differ from original source rows")
+    if import_record.get("feasibility_status_counts") != dict(
+        sorted(feasibility_status_counts.items())
+    ):
+        raise CorpusError("#9652 import receipt feasibility_status_counts differs from candidates")
+    if import_record.get("planner_status_counts_at_import") != dict(
+        sorted(planner_status_counts.items())
+    ):
+        raise CorpusError(
+            "#9652 import receipt planner_status_counts_at_import differs from candidates"
+        )
 
 
 def _load_issue9656_import_summary(
@@ -664,7 +693,7 @@ def _load_issue9656_import_summary(
     candidates_by_id: Mapping[str, Mapping[str, Any]],
     *,
     corpus_root: Path | None,
-) -> list[Any]:
+) -> dict[str, Any]:
     if corpus_root is None:
         raise CorpusError(
             "corpus_root is required to validate persisted #9656 candidate classifications"
@@ -682,17 +711,52 @@ def _load_issue9656_import_summary(
     summary_path = _resolve_corpus_artifact(
         first_candidate.get("artifact_paths", {}).get("import_summary"), corpus_root
     )
-    summary_rows = _read_json_object(summary_path).get("cases")
-    if not isinstance(summary_rows, list):
-        raise CorpusError("#9656 candidate import summary has no case rows")
-    return summary_rows
+    summary = _read_json_object(summary_path)
+    import_record = next(
+        (
+            item
+            for item in corpus.get("historical_candidate_imports", [])
+            if isinstance(item, Mapping) and item.get("import_id") == import_id
+        ),
+        None,
+    )
+    source_identity = (
+        import_record.get("source_identity") if isinstance(import_record, Mapping) else None
+    )
+    materialized_manifest_receipt = (
+        next(
+            (
+                item
+                for item in import_record.get("source_files", [])
+                if isinstance(item, Mapping) and item.get("path") == "materialized_manifest.json"
+            ),
+            None,
+        )
+        if isinstance(import_record, Mapping)
+        else None
+    )
+    if (
+        summary.get("schema_version") != ISSUE_9656_SUMMARY_SCHEMA
+        or not isinstance(source_identity, Mapping)
+        or source_identity.get("summary_sha256")
+        != first_candidate.get("source_provenance", {}).get("summary_sha256")
+        or source_identity.get("summary_sha256") != _sha256_file(summary_path)
+        or not isinstance(materialized_manifest_receipt, Mapping)
+        or source_identity.get("materialized_manifest_sha256")
+        != materialized_manifest_receipt.get("sha256")
+    ):
+        raise CorpusError("#9656 import identity does not bind its checksum-pinned summary")
+    return summary
 
 
 def _validate_issue9656_import_counts(
     import_record: Mapping[str, Any],
     import_candidate_ids: Sequence[str],
-    summary_rows: Sequence[Any],
+    summary: Mapping[str, Any],
 ) -> None:
+    summary_rows = summary.get("cases")
+    if not isinstance(summary_rows, list):
+        raise CorpusError("#9656 candidate import summary has no case rows")
     summary_case_ids = [row.get("case_id") for row in summary_rows if isinstance(row, Mapping)]
     if len(summary_case_ids) != len(summary_rows) or len(summary_case_ids) != len(
         set(summary_case_ids)
@@ -704,6 +768,149 @@ def _validate_issue9656_import_counts(
         or len(import_candidate_ids) != len(summary_rows)
     ):
         raise CorpusError("#9656 candidate import counts differ from the checksum-pinned summary")
+
+    replay_budget = summary.get("replay_budget_accounting")
+    if not isinstance(replay_budget, Mapping):
+        raise CorpusError("#9656 replay budget accounting is absent from the pinned summary")
+    _validate_issue9656_setup_accounting(summary)
+    anomaly_counts: Counter[str] = Counter()
+    for row in summary_rows:
+        criticality = row.get("criticality") if isinstance(row, Mapping) else None
+        anomalies = criticality.get("anomalies") if isinstance(criticality, Mapping) else None
+        if not isinstance(anomalies, list) or any(not isinstance(item, str) for item in anomalies):
+            raise CorpusError("#9656 criticality anomaly rows are malformed")
+        anomaly_counts.update(anomalies)
+    expected_anomalies = dict(sorted(anomaly_counts.items()))
+    if expected_anomalies != summary.get("criticality_anomaly_counts"):
+        raise CorpusError("#9656 criticality anomaly totals differ from the pinned summary rows")
+
+    receipt_fields = {
+        "criticality_anomaly_counts": expected_anomalies,
+        "failed_replay_attempts": summary.get("failed_replay_attempts"),
+        "failed_setup_jobs": replay_budget.get("failed_setup_jobs"),
+        "evidence_tier": summary.get("evidence_tier"),
+        "claim_boundary": summary.get("claim_boundary"),
+    }
+    for field, expected in receipt_fields.items():
+        if import_record.get(field) != expected:
+            raise CorpusError(
+                f"#9652 import receipt {field} differs from checksum-pinned source summary"
+            )
+
+
+def _issue9656_source_materialization_receipts(
+    source_identity: Mapping[str, Any], summary_rows: Sequence[Any]
+) -> dict[str, Mapping[str, Any]]:
+    receipt_rows = source_identity.get("source_materialization_bindings")
+    if receipt_rows is None:
+        return {}
+    if not isinstance(receipt_rows, list) or len(receipt_rows) != len(summary_rows):
+        raise CorpusError("#9656 source materialization receipts are incomplete")
+    receipts = {
+        item.get("source_case_id"): item
+        for item in receipt_rows
+        if isinstance(item, Mapping) and isinstance(item.get("source_case_id"), str)
+    }
+    summary_case_ids = {row.get("case_id") for row in summary_rows if isinstance(row, Mapping)}
+    if len(receipts) != len(receipt_rows) or set(receipts) != summary_case_ids:
+        raise CorpusError("#9656 source materialization receipts do not match summary rows")
+    return receipts
+
+
+def _validate_issue9656_candidate_source_binding(
+    candidate: Mapping[str, Any],
+    summary_case: Mapping[str, Any],
+    summary_source: Any,
+    *,
+    source_identity: Mapping[str, Any],
+    source_materialization_receipts: Mapping[str, Mapping[str, Any]],
+    corpus_root: Path | None,
+) -> None:
+    if corpus_root is None:
+        raise CorpusError("corpus_root is required to validate #9656 source identity bindings")
+    provenance = candidate.get("source_provenance")
+    paths = candidate.get("artifact_paths")
+    if not isinstance(provenance, Mapping) or not isinstance(paths, Mapping):
+        raise CorpusError("#9656 candidate source provenance is malformed")
+    source_case_path = _resolve_corpus_artifact(paths.get("source_case"), corpus_root)
+    source_case_digest = provenance.get("source_case_file_sha256")
+    if not _is_sha256(source_case_digest) or _sha256_file(source_case_path) != source_case_digest:
+        raise CorpusError("#9656 materialized source case differs from its retained digest")
+    materialized_case = _read_json_object(source_case_path)
+    if materialized_case.get("case_id") != summary_case.get("case_id"):
+        raise CorpusError("#9656 materialized source case alias differs from the pinned summary")
+    source_row = materialized_case.get("source_record")
+    materialized_source = materialized_case.get("source")
+    if (
+        not isinstance(source_row, Mapping)
+        or not isinstance(materialized_source, Mapping)
+        or not isinstance(summary_source, Mapping)
+    ):
+        raise CorpusError("#9656 source row or summary identity is malformed")
+    source_binding = _issue9656_source_identity_binding(
+        summary_case, materialized_case, source_row, summary_source
+    )
+    receipt = source_materialization_receipts.get(str(summary_case.get("case_id")))
+    if receipt is not None and dict(receipt) != {
+        "source_case_id": summary_case.get("case_id"),
+        "source_record_sha256": candidate.get("source_record_sha256"),
+        "source_case_file_sha256": source_case_digest,
+        "source_identity_binding_status": source_binding["status"],
+        "source_identity_binding_issues": source_binding["issues"],
+    }:
+        raise CorpusError("#9652 candidate source identity binding differs from its import receipt")
+    source_record_ref = summary_case.get("source_record")
+    replay_input = materialized_case.get("replay_input")
+    if not isinstance(source_record_ref, Mapping) or not isinstance(replay_input, Mapping):
+        raise CorpusError("#9656 source or replay input receipt is malformed")
+    expected_provenance = {
+        "source_row_binding": source_identity.get("source_row_binding"),
+        "summary_sha256": source_identity.get("summary_sha256"),
+        "materialized_manifest_sha256": source_identity.get("materialized_manifest_sha256"),
+        "source_bundle_sha256": materialized_source.get("bundle_sha256"),
+        "campaign_id": materialized_source.get("campaign_id"),
+        "campaign_source_revision": materialized_source.get("campaign_source_revision"),
+        "source_identity_binding_status": source_binding["status"],
+        "source_identity_binding_issues": source_binding["issues"],
+        "summary_source_revision": source_binding["summary_source_revision"],
+        "episode_git_hash": source_binding["episode_git_hash"],
+        "episode_file": source_record_ref.get("episode_file"),
+        "episode_file_sha256": source_record_ref.get("episode_file_sha256"),
+        "line_number": source_record_ref.get("line_number"),
+        "episode_planner_config_hash": source_binding["episode_planner_config_hash"],
+        "episode_scenario_algo_config_hash": source_binding["episode_scenario_algo_config_hash"],
+        "episode_canonical_algorithm": source_binding["episode_canonical_algorithm"],
+        "materialized_canonical_algorithm": source_binding["materialized_canonical_algorithm"],
+        "row_git_hash": materialized_source.get("row_git_hash"),
+        "materialized_planner_config_hash": materialized_source.get("planner_config_hash"),
+        "raw_planner_alias": summary_case.get("planner_key"),
+        "source_case_file_sha256": source_case_digest,
+        "source_replay_matrix_sha256": replay_input.get("scenario_matrix_sha256"),
+        "source_planner_config_sha256": replay_input.get("planner_config_sha256"),
+        "raw_episode_artifact_custody": {
+            "status": "digest_only_not_copied_from_campaign_output",
+            "episode_file": source_record_ref.get("episode_file"),
+            "episode_file_sha256": source_record_ref.get("episode_file_sha256"),
+            "raw_episode_artifact_used_as_admission_evidence": False,
+            "local_ignored_output_used_as_admission_evidence": False,
+            "admission_requires": "exact_current_revision_replay",
+        },
+    }
+    if any(provenance.get(field) != expected for field, expected in expected_provenance.items()):
+        raise CorpusError(
+            "#9652 candidate source identity binding differs from pinned materialized evidence"
+        )
+    target_planner = candidate.get("target_planner")
+    expected_config_hash = (
+        source_binding["episode_planner_config_hash"]
+        if source_binding["status"] == "verified"
+        else None
+    )
+    if not isinstance(target_planner, Mapping) or (
+        target_planner.get("canonical_algorithm") != source_binding["canonical_algorithm"]
+        or target_planner.get("config_hash") != expected_config_hash
+    ):
+        raise CorpusError("#9652 candidate planner identity differs from pinned source evidence")
 
 
 def _validate_issue9656_summary_case(
@@ -1072,6 +1279,17 @@ def import_issue9656_candidates(
         summary, materialized, materialized_manifest, campaign
     )
     materialized_manifest_sha = _sha256_file(materialized_manifest_path)
+    source_materialization_bindings = [
+        {
+            "source_case_id": source_case["case_id"],
+            "source_record_sha256": source_case["source_record"]["record_sha256"],
+            "source_case_file_sha256": source_map["_materialized_case_sha256"],
+            "source_identity_binding_status": source_map["_source_binding"]["status"],
+            "source_identity_binding_issues": source_map["_source_binding"]["issues"],
+        }
+        for source_case, _materialized_case, _case_path, _matrix, _config, source_map in source_rows
+    ]
+    source_materialization_bindings.sort(key=lambda item: item["source_case_id"])
 
     import_identity = {
         "source_issue": 9656,
@@ -1081,24 +1299,45 @@ def import_issue9656_candidates(
         "evidence_bundle_manifest_sha256": summary_receipts["manifest_sha256"],
         "evidence_checksums_sha256": summary_receipts["checksums_sha256"],
         "materialized_manifest_sha256": materialized_manifest_sha,
+        "source_materialization_bindings": source_materialization_bindings,
     }
     import_id = hashlib.sha256(_stable_json(import_identity).encode("utf-8")).hexdigest()
+    stable_import_identity = {
+        key: value
+        for key, value in import_identity.items()
+        if key != "source_materialization_bindings"
+    }
     existing_import = next(
         (
             item
             for item in corpus.get("historical_candidate_imports", [])
             if item.get("import_id") == import_id
+            or {
+                key: value
+                for key, value in item.get("source_identity", {}).items()
+                if key != "source_materialization_bindings"
+            }
+            == stable_import_identity
         ),
         None,
     )
     if existing_import is not None:
-        if existing_import.get("source_identity") != import_identity:
+        existing_identity = existing_import.get("source_identity")
+        if (
+            not isinstance(existing_identity, Mapping)
+            or {
+                key: value
+                for key, value in existing_identity.items()
+                if key != "source_materialization_bindings"
+            }
+            != stable_import_identity
+        ):
             raise CorpusError("historical candidate import ID conflicts with stored provenance")
         expected_candidate_ids = sorted(
             hashlib.sha256(
                 _stable_json(
                     {
-                        **import_identity,
+                        **existing_identity,
                         "source_case_id": source_case["case_id"],
                         "source_record_sha256": source_case["source_record"]["record_sha256"],
                     }

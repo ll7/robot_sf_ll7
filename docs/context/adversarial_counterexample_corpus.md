@@ -120,8 +120,14 @@ checks pass.
 Validation of current-schema #9656 imports requires the corpus root. Saving or
 loading the corpus rechecks each imported replay status and its original status
 counters against the digest-pinned summary. A mismatch row cannot be relabelled
-as `not_attempted` by changing its candidate and derived planner status; an
-admitted candidate retains its original pending classification and import counters.
+as `not_attempted` by changing its candidate and derived planner status. Source
+identity binding status is recomputed from the retained materialized case and
+checked against the import receipt; new import identities also digest-pin each
+materialized source-case digest, binding status, and issue list. Failure attempts,
+failed setup counts, criticality anomalies, feasibility and planner-status counts,
+evidence tier, and claim boundary must match the pinned summary and imported
+candidate records. An admitted candidate retains its original pending
+classification and import counters.
 
 Each imported candidate explicitly records `feasibility.verdict: unknown`; the
 historical benchmark evidence does not establish dynamic task feasibility. Its

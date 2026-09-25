@@ -12,6 +12,33 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   --top-k 5 --no-video
 ```
 
+For a compact multi-run **#9645 evidence packet** whose candidate-specific scenario and episode
+files are absent, pass its `payload/` directory to the same command. Directory mode reconciles the
+source search manifests against `candidate_evaluations.csv`, `row_status.json`, `summary.json`, and
+`convergence_report.json`. The payload must sit beside `evidence_bundle_manifest.json` and
+`checksums.sha256`; the command validates their file lists, sizes, and digests before reconciling
+rows. It binds planned budgets to per-run manifests, summaries, and convergence counts, including
+failed, invalid, missing, and duplicate evaluations. It reports a zero-critical result only when the
+declared budget is complete, no candidate is scoreless, every candidate has known noncritical
+criticality, and sampler aggregates agree. Unknown criticality, scoreless candidates, and missing
+budget slots stay visible and are not counted as zero. A packet containing a critical candidate
+requires its original search manifest for normal selection, materialization, and replay. Each packet
+row keeps execution outcome, scenario eligibility, case criticality, and replay-input availability as
+separate statuses. Missing raw inputs remain missing and do not mean the scenario is infeasible. The
+input status covers the candidate's scenario YAML and episode record; it does not certify that all
+maps or runner configuration needed for replay are present.
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run python \
+  scripts/tools/materialize_adversarial_replay_gallery.py \
+  docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload \
+  --out output/adversarial-replay-gallery/issue-9645-accounting
+```
+
+This packet result is bounded to its recorded search budget. A zero-critical result does not mean
+that no counterexample exists, and historical compatibility replays such as #1501 remain separate
+from candidates counted in the packet.
+
 The output directory must be a new child of this checkout's ignored `output/` directory. The API
 resolves paths before checking this boundary, so a symlink that escapes `output/` is rejected too.
 Search inputs remain read-only. The command writes `gallery_manifest.json`, a compact `README.md`,

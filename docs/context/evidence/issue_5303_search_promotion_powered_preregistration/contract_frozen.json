@@ -5,7 +5,7 @@
   "check_command": "uv run python scripts/tools/check_issue_5303_search_promotion_contract_v2.py",
   "contract_path": "configs/adversarial/issue_5303_search_promotion_contract_v2.yaml",
   "contract_schema_version": "issue_5303_search_promotion_contract.v2",
-  "contract_sha256": "14b21bd28005ce80d06935b7d2684990099c776d6b5407e07f109968c31a3679",
+  "contract_sha256": "b870bf6703493817fb9b6a673eb67c624b75fce8aa7a4ca075939518cb88e71a",
   "eligible_count": 8,
   "evidence_boundary": "proposal_preflight_only",
   "fit_family": "classic_cross_trap_medium",

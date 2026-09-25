@@ -147,7 +147,7 @@ input_provenance:
       path: robot_sf/adversarial/config.py
       # Refreshed after the additive issue #9304 evidence-trace bridge.
       # The #9651 filter option is false by default; #5303 remains on the same path.
-      sha256: d258a2d7ffdccd887b5067b2970f19f6eabbb42fcd6ed6556d256dfc7caf1b6b
+      sha256: c5f462930874cda58855411b574b4bed90f38fc743c3927993ab657398654c5e
     - id: timing_preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
       # Refreshed after propagating the authored pedestrian route mode into the

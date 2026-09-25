@@ -1072,21 +1072,35 @@ def _oracle(  # noqa: PLR0913 - oracle classification needs its bound source and
 def _classify_oracle_exclusion(cert: Any, cert_valid: bool, reasons: list[str]) -> str | None:
     """Keep route-based oracle exclusions unknown without global path-space evidence."""
     if not cert_valid or _certificate_global_impossibility_unresolved(cert):
-        if (
-            isinstance(cert, Mapping)
-            and _route_inventory_complete(cert)
-            and cert.get("classification")
-            in {"geometrically_infeasible", "kinodynamically_infeasible"}
-        ):
-            reasons.append("oracle_geometric_exclusion_alternative_paths_unresolved")
-            return None
-        reasons.append("oracle_geometric_exclusion_route_coverage_unresolved")
+        reasons.append(_oracle_route_exclusion_reason(cert))
         return None
     if not _certificate_supports_oracle_exclusion(cert):
         reasons.append("oracle_geometric_exclusion_certificate_conflict")
         return None
     reasons.append("oracle_geometric_exclusion_under_named_envelope")
     return GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+
+
+def _oracle_route_exclusion_reason(cert: Any) -> str:
+    """Keep oracle exclusion reasons aligned with the certificate's validated route evidence."""
+    if not isinstance(cert, Mapping) or cert.get("classification") not in {
+        "geometrically_infeasible",
+        "kinodynamically_infeasible",
+    }:
+        return "oracle_geometric_exclusion_route_coverage_unresolved"
+
+    certificate_reason = _certificate_route_exclusion_reason(cert, cert["classification"])
+    return {
+        "scenario_certificate_route_coverage_unresolved": (
+            "oracle_geometric_exclusion_route_coverage_unresolved"
+        ),
+        "scenario_certificate_route_exclusion_evidence_unresolved": (
+            "oracle_geometric_exclusion_route_evidence_unresolved"
+        ),
+        "scenario_certificate_alternative_paths_unresolved": (
+            "oracle_geometric_exclusion_alternative_paths_unresolved"
+        ),
+    }[certificate_reason]
 
 
 def _oracle_proves_actor_free_rollout(

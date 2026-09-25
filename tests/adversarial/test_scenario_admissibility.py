@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 import yaml
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString
 
 from robot_sf.adversarial import (
     ADMISSIBLE_FEASIBILITY_UNKNOWN,
@@ -57,9 +57,11 @@ from robot_sf.scenario_certification.input_identity import (
 )
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
+    _obstacle_union,
     certificate_to_dict,
     certify_scenario_file,
 )
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 _SCENARIO_ARTIFACT = Path(__file__).resolve().parent / "fixtures/issue_9651/case_static.yaml"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -839,79 +841,72 @@ def test_geometric_certificate_label_needs_matching_producer_evidence(mutation: 
     assert verdict.search_disposition == "retain"
 
 
-def test_route_collision_evidence_stays_unknown_when_alternative_path_exists() -> None:
-    obstacle = box(5.0, 3.0, 9.0, 7.0)
+def test_route_collision_evidence_stays_unknown_when_alternative_path_exists(
+    tmp_path: Path,
+) -> None:
+    scenario_id = "case-corner"
+    scenario_path = tmp_path / f"{scenario_id}.yaml"
+    map_path = tmp_path / "corner.svg"
+    map_path.write_text(
+        """<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="14" height="10" viewBox="0 0 14 10">
+  <g inkscape:label="obstacles"><rect inkscape:label="obstacle" x="5" y="3" width="4" height="4" fill="#000"/></g>
+  <g inkscape:label="robot">
+    <rect inkscape:label="robot_spawn_zone" x="1.8" y="1.8" width="0.4" height="0.4" fill="#ffd800"/>
+    <rect inkscape:label="robot_goal_zone" x="11.8" y="7.8" width="0.4" height="0.4" fill="#ff7f2a"/>
+  </g>
+  <g inkscape:label="routes"><path inkscape:label="robot_route" d="M2 2 L12 8" fill="none" stroke="#00f"/></g>
+</svg>
+""",
+        encoding="utf-8",
+    )
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": scenario_id,
+                        "map_file": map_path.name,
+                        "simulation_config": {"max_episode_steps": 100, "ped_density": 0.0},
+                        "robot_config": {"type": "differential_drive", "radius": 1.0},
+                        "seeds": [13],
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id=scenario_id)[0]
+    )
+    assert certificate["classification"] == "geometrically_infeasible"
+    route_checks = certificate["route_certificates"][0]["checks"]
+    assert route_checks["swept_envelope"]["clearance_m"] < 0.0
+
+    scenario = load_scenarios(scenario_path)[0]
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    map_definition = config.map_pool.map_defs[map_path.stem]
+    obstacle_union = _obstacle_union(map_definition)
+    radius = config.robot_config.radius
     alternate_path = LineString([(2.0, 2.0), (3.8, 2.0), (3.8, 8.5), (12.0, 8.5), (12.0, 8.0)])
-    assert alternate_path.distance(obstacle) - 1.0 == pytest.approx(0.2)
+    assert alternate_path.distance(obstacle_union) - radius == pytest.approx(0.2)
 
-    swept = _certificate("geometrically_infeasible", eligibility="excluded")
-    swept_reason = "planned_path_swept_envelope_clips_obstacle: full_polyline_clearance_m=-0.25"
-    swept["reasons"] = [swept_reason]
-    swept_route = swept["route_certificates"][0]
-    swept_route["reasons"] = [swept_reason]
-    swept_route["checks"].update(
-        {
-            "inflated_collision_free_path": False,
-            "swept_envelope": {
-                "validated": True,
-                "clips_obstacle": True,
-                "clearance_m": -0.25,
-                "vertex_clearance_m": -0.25,
-                "clipped_vertex_count": 1,
-                "planned_waypoint_count": 4,
-            },
-        }
+    verdict = classify_scenario_admissibility(
+        scenario_id,
+        scenario_artifact_path=scenario_path,
+        scenario_id=scenario_id,
+        scenario_certificate=certificate,
     )
 
-    simulator = _certificate("geometrically_infeasible", eligibility="excluded")
-    simulator_reason = "planned_path_simulator_collision: first_collision_sample_index=3"
-    simulator["reasons"] = [simulator_reason]
-    simulator_route = simulator["route_certificates"][0]
-    simulator_route["reasons"] = [simulator_reason]
-    simulator_route["checks"].update(
-        {
-            "inflated_collision_free_path": False,
-            "simulator_obstacle_collision": {
-                "validated": True,
-                "collides_obstacle": True,
-                "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
-                "obstacle_source": "MapDefinition.obstacles_pysf_runtime_normalized",
-                "sample_spacing_m": 0.05,
-                "checked_sample_count": 4,
-                "first_collision_sample_index": 3,
-            },
-        }
-    )
-
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_alternative_paths_unresolved" in verdict.reason_codes
     assert (
-        classify_scenario_admissibility("case-static", scenario_certificate=swept).verdict
-        == ADMISSIBLE_FEASIBILITY_UNKNOWN
-    )
-    assert (
-        classify_scenario_admissibility("case-static", scenario_certificate=simulator).verdict
-        == ADMISSIBLE_FEASIBILITY_UNKNOWN
-    )
-    swept_verdict = classify_scenario_admissibility("case-static", scenario_certificate=swept)
-    assert swept_verdict.search_disposition == "retain"
-    assert "scenario_certificate_alternative_paths_unresolved" in swept_verdict.reason_codes
-    assert (
-        swept_verdict.assumptions["scenario_certificate"]["route_inventory"][
+        verdict.assumptions["scenario_certificate"]["route_inventory"][
             "all_continuous_path_alternatives_covered"
         ]
         is False
-    )
-
-    swept["route_certificates"][0]["checks"]["swept_envelope"]["clearance_m"] = -0.5
-    assert (
-        classify_scenario_admissibility("case-static", scenario_certificate=swept).verdict
-        == ADMISSIBLE_FEASIBILITY_UNKNOWN
-    )
-    simulator["route_certificates"][0]["checks"]["simulator_obstacle_collision"][
-        "first_collision_sample_index"
-    ] = 2
-    assert (
-        classify_scenario_admissibility("case-static", scenario_certificate=simulator).verdict
-        == ADMISSIBLE_FEASIBILITY_UNKNOWN
     )
 
 
@@ -1120,7 +1115,25 @@ def test_oracle_exclusion_does_not_override_unresolved_mixed_route_certificate()
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
-    assert "oracle_geometric_exclusion_alternative_paths_unresolved" in verdict.reason_codes
+    assert "oracle_geometric_exclusion_route_evidence_unresolved" in verdict.reason_codes
+    assert "oracle_geometric_exclusion_alternative_paths_unresolved" not in verdict.reason_codes
+
+
+def test_oracle_exclusion_does_not_call_invalid_route_evidence_alternative_paths() -> None:
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+    certificate["route_certificates"][0]["checks"]["planner"]["path_status"] = "success"
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=certificate,
+        feasibility_evidence=_oracle(
+            status="infeasible_by_construction", geometric=False, complete=False
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_route_evidence_unresolved" in verdict.reason_codes
+    assert "oracle_geometric_exclusion_alternative_paths_unresolved" not in verdict.reason_codes
 
 
 def test_oracle_exclusion_does_not_override_unresolved_invalid_certificate() -> None:

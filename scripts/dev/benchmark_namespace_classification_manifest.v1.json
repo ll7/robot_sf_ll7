@@ -62,6 +62,7 @@
     "dwa_diagnostic_harness.py",
     "dynamics_sensitivity.py",
     "effective_algorithm_branches.py",
+    "episode_input_identity.py",
     "episode_replay_figure.py",
     "errors.py",
     "event_ledger.py",

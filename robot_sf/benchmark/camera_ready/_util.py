@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -116,7 +116,13 @@ def _config_hash_payload(cfg: Any) -> dict[str, Any]:
     Returns:
         Configuration mapping with the optional prospective provenance block removed when unset.
     """
-    payload = asdict(cfg)
+    spec = getattr(cfg, "snqi_v2_spec", None)
+    payload = asdict(replace(cfg, snqi_v2_spec=None)) if spec is not None else asdict(cfg)
+    payload.pop("snqi_v2_spec", None)
+    if spec is not None:
+        payload["snqi_v2_spec"] = {
+            key: value for key, value in spec.provenance().items() if not key.endswith("_path")
+        }
     if getattr(cfg, "tuning_run_provenance", None) is None:
         # Preserve hashes for legacy configs that predate the optional prospective block.
         payload.pop("tuning_run_provenance", None)

@@ -136,7 +136,11 @@
     "manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
     "recorded_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
     "search_method_label": "optuna",
-    "search_seed_label": 42
+    "search_seed_label": 42,
+    "historical_manifest_preserved_as": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.pre_strict_gate.json",
+    "current_gate_status": "pre_strict_manifest_rejected_by_current_certificate_gate"
   },
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "location": "Referenced output/ products are ignored local files and are not durable; compact tracked bundle members are stored in payload/.",
+  "superseded_by": "docs/context/evidence/issue_9647_gallery_demo_2026-09-25"
 }

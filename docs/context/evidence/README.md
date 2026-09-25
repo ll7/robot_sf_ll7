@@ -125,28 +125,32 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
-- `issue_9647_gallery_demo_2026-09-25/`: refreshed exact-head one-case replay and rendering smoke
-  from the #9647 gallery CLI using the tracked #1501 `failure_0002` compatibility fixture.
-  The collision outcome matched at a changed code revision; source map-registry binding and dynamic
-  task feasibility remain unknown, and map overlay/video are unavailable. Three small figures
-  (trajectory, critical frame, filmstrip) are tracked with checksums. This is historical
-  outcome-reproduction evidence, not a new discovery or planner-safety result. See the
-  [receipt and figures](issue_9647_gallery_demo_2026-09-25/payload/receipt.md) and
-  [machine-readable summary](issue_9647_gallery_demo_2026-09-25/payload/summary.json).
+- `issue_9647_gallery_demo_2026-09-25/`: current strict-gate one-case replay and rendering smoke
+  from the #9647 gallery CLI. At code revision `4ad36ecae489eea9e6461932a0b208a58ee27663`, the
+  documented command selected one tracked #1501 `failure_0002` compatibility row and replayed one
+  episode with matching identity, collision outcome, failure attribution, and objective. The
+  `scenario_cert.v1` certificate was generated post-hoc at `a468f1960278afb0896145221af105648bb3965f`
+  from the fixture's tracked scenario, route overrides, map registry, and map asset; its input and
+  certificate digests are in the fixture provenance file. It is static-route evidence only, not
+  original search-time or dynamic-feasibility evidence. Replay verification is
+  `outcome_reproduced_revision_changed`; source map-registry binding and dynamic task feasibility
+  remain unknown. Three small figures (trajectory, critical frame, filmstrip) are tracked with
+  checksums; map overlay and video are unavailable. This is selector/replay/rendering plumbing
+  evidence, not a new discovery or planner-safety result. See the [receipt and figures](issue_9647_gallery_demo_2026-09-25/payload/receipt.md)
+  and [machine-readable summary](issue_9647_gallery_demo_2026-09-25/payload/summary.json).
 
-- `issue_9647_final_gallery_smoke_2026-09-25/`: final-head one-case smoke of the #9647
-  replay-gallery CLI, canonical runner, outcome comparison, and renderer using the tracked #1501
-  `failure_0002` compatibility fixture at earlier code revision `b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f`.
-  The refreshed gallery demo above supersedes it for current code. Its generated figures and raw
-  replay streams remain in ignored local `output/`; see the
-  checksummed [receipt](issue_9647_final_gallery_smoke_2026-09-25/payload/receipt.md) and
-  [machine-readable summary](issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json).
+- `issue_9647_final_gallery_smoke_2026-09-25/`: earlier #9647 one-case smoke at code revision
+  `b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f`, before strict canonical certificate validation and
+  route-aggregation checks. The fixture then contained only a compact certificate annotation, so
+  this receipt's historical selection does not demonstrate current-gate acceptance. It is retained
+  as run history and superseded by the strict-gate gallery demo above. Raw replay streams remain in
+  ignored local `output/`; see the checksummed [receipt](issue_9647_final_gallery_smoke_2026-09-25/payload/receipt.md)
+  and [machine-readable summary](issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json).
 
-- `issue_9647_gallery_smoke_2026-09-25/`: preserved earlier smoke at code revision
-  `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4`, before final map-registry and actor-track fixes.
-  Its receipt warns that source-input binding was unknown and the trajectory connected a reused
-  simulator slot. The final-head smoke above supersedes it for current gallery behavior; retain
-  this earlier bundle only as historical audit context.
+- `issue_9647_gallery_smoke_2026-09-25/`: earlier smoke at code revision
+  `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4`, before strict certificate, map-registry, and
+  actor-track checks. It cannot establish current selector acceptance and is retained only as
+  historical audit context; the strict-gate gallery demo above is the current smoke reference.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

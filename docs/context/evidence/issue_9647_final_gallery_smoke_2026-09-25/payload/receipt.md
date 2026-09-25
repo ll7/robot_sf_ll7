@@ -1,3 +1,7 @@
+## Gate status
+
+This archived smoke predates the strict canonical certificate and route-aggregation gate. Its fixture contained only a compact certificate annotation at the recorded run, so its old selected-case result does not demonstrate that the current selector accepts the fixture. The current strict-gate run and figures are recorded in `../../issue_9647_gallery_demo_2026-09-25/payload/receipt.md`. The exact old manifest bytes (SHA-256 `289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9`) are retained as `tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.pre_strict_gate.json`; the current `manifest.json` carries the complete post-hoc static certificate and is the current selection input.
+
 <!-- AI-GENERATED (robot_sf#9647, 2026-09-25) - NEEDS-REVIEW -->
 # #9647 final-head replay gallery smoke
 

@@ -13,7 +13,7 @@
   },
   "totals": {
     "file_count": 2,
-    "total_bytes": 20929
+    "total_bytes": 21446
   },
   "files": [
     {
@@ -24,10 +24,11 @@
     },
     {
       "path": "summary.json",
-      "size_bytes": 18160,
-      "sha256": "a0e0b6e30d5d89e71e64a47a688ef50a3537a6dbee054aca4304cd93c3a399fc",
+      "size_bytes": 18677,
+      "sha256": "f92996ee65badc44225aa26ad84f51bea4413cd48ecd9f4f9107028da9940458",
       "kind": "aggregates"
     }
   ],
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "location": "Referenced output/ products are ignored local files and are not durable; compact tracked bundle members are stored in payload/."
 }

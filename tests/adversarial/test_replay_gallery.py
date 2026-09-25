@@ -448,6 +448,21 @@ def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certifi
     )
     assert provenance["claim_boundary"]["dynamic_task_feasibility"] == "unknown"
     assert "post-hoc" in provenance["claim_boundary"]["note"]
+    for relative_path, expected_digest in provenance["input_sha256"].items():
+        assert (
+            hashlib.sha256((repo_root / relative_path).read_bytes()).hexdigest() == expected_digest
+        )
+
+    historical_manifest = json.loads(
+        (fixture_root / "manifest.pre_strict_gate.json").read_text(encoding="utf-8")
+    )
+    historical_status = historical_manifest["candidates"][0]["certification_status"]
+    historical_certificate, historical_error = replay_gallery._validated_scenario_certificate(
+        historical_status,
+        expected_scenario_id="crossing_ttc_template_adversarial_0008",
+    )
+    assert historical_certificate is None
+    assert historical_error == "certificate_structurally_invalid"
 
 
 @pytest.mark.parametrize(

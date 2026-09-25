@@ -1,8 +1,8 @@
 {
   "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths. The payload also carries an evidence_tree manifest (issue #6839): adding or removing any file under docs/context/evidence/ without refreshing this baseline fails the ratchet on the causing PR, so a stale baseline can never redden main after merge.",
   "evidence_tree": {
-    "count": 2435,
-    "sha256": "e8d66071c157ef260fdb8e2a043b03b781b03f863174b3a42b7e5e200661269c"
+    "count": 2442,
+    "sha256": "a1acca979b7f839b93dcc20296d6c7d33ba07f6952344bdddf3f265351d49ee9"
   },
   "findings_by_path": {
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
@@ -371,21 +371,9 @@
     },
     "docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json": {
       "dangling_commit": 2
-    },
-    "docs/context/evidence/issue_9647_final_gallery_smoke_2026-09-25/evidence_bundle_manifest.json": {
-      "uncommitted_artifact_missing_location": 2
-    },
-    "docs/context/evidence/issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json": {
-      "uncommitted_artifact_missing_location": 4
-    },
-    "docs/context/evidence/issue_9647_gallery_smoke_2026-09-25/evidence_bundle_manifest.json": {
-      "uncommitted_artifact_missing_location": 2
-    },
-    "docs/context/evidence/issue_9647_gallery_smoke_2026-09-25/payload/summary.json": {
-      "uncommitted_artifact_missing_location": 15
     }
   },
-  "generated_at": "2026-09-25T06:46:57Z",
+  "generated_at": "2026-09-25T20:32:51Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
@@ -399,9 +387,9 @@
       "missing_commit": 27,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
-      "uncommitted_artifact_missing_location": 173
+      "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 102,
-    "total_findings": 461
+    "files_with_findings": 98,
+    "total_findings": 438
   }
 }

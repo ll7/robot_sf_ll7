@@ -12,3 +12,9 @@ scenario and current map/route inputs. Its generation command, code revision, in
 certificate digest are recorded in `scenario_certification_provenance.json`. This is static route
 classification only; dynamic task feasibility remains unknown. The certificate is not from the
 original search run and does not establish planner performance or real-world safety.
+
+The original manifest bytes are retained as `manifest.pre_strict_gate.json` so older receipts remain
+auditable. That file has an incomplete compact certificate and is rejected by current strict
+selection. The current CLI fixture is `manifest.json`; it carries the complete post-hoc static route
+certificate and remains selectable. This does not upgrade the historical receipt or establish
+dynamic feasibility.

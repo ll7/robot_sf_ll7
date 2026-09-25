@@ -850,6 +850,62 @@ def test_rollup_rejects_newer_malformed_gate_identity() -> None:
     assert merge_queue_gate_module._rollup_overall(rollup) == "unknown"
 
 
+@pytest.mark.parametrize(
+    "gate_checks",
+    [
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "merge-queue-gate",
+                "workflowName": "Merge Queue Gate",
+                "startedAt": "2026-07-25T12:05:00Z",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "merge-queue-gate",
+                "startedAt": "2026-07-25T12:05:00Z",
+                "status": "COMPLETED",
+                "conclusion": "FAILURE",
+            },
+        ],
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "merge-queue-gate",
+                "startedAt": "2026-07-25T12:05:00Z",
+                "status": "COMPLETED",
+                "conclusion": "FAILURE",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "merge-queue-gate",
+                "workflowName": "Merge Queue Gate",
+                "startedAt": "2026-07-25T12:05:00Z",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
+    ],
+)
+def test_rollup_rejects_conflicting_equal_timestamp_gate_records(gate_checks) -> None:
+    """An equal-time valid/malformed gate pair cannot be selected by API response order."""
+    rollup = [
+        *gate_checks,
+        {
+            "__typename": "CheckRun",
+            "name": "test",
+            "workflowName": "CI",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+
+    assert merge_queue_gate_module._rollup_overall(rollup) == "unknown"
+
+
 def test_rollup_rejects_queued_gate_without_timestamp() -> None:
     """An unordered queued gate cannot hide behind an older green gate."""
     rollup = [

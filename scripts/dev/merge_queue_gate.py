@@ -780,27 +780,33 @@ def _parse_json(stdout: str) -> tuple[Any, str | None]:
         return None, f"Failed to parse JSON: {exc}"
 
 
-def _select_current_gate(gate_checks: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Select the newest gate only when every candidate can be ordered.
+def _select_current_gate(
+    gate_checks: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, bool]:
+    """Select the newest gate only when every candidate can be ordered uniquely.
 
     GitHub's GraphQL status-check rollup does not document a chronological ordering guarantee, so
     response position cannot prove that an unorderable record predates a timestamped one. Keep any
     such candidate current; the caller will classify it as unknown rather than trusting older
-    success.
+    success. Equal order keys are also ambiguous unless the key's trusted replacement-run identity
+    distinguishes them. Exact duplicate records are semantically identical and can be represented
+    by either copy.
     """
     if not gate_checks:
-        return None
+        return None, False
     orderable = [
-        (index, check) for index, check in enumerate(gate_checks) if _check_run_order_key(check)[-1]
+        (check, _check_run_order_key(check))
+        for check in gate_checks
+        if _check_run_order_key(check)[-1]
     ]
     unorderable = [check for check in gate_checks if not _check_run_order_key(check)[-1]]
     if unorderable:
-        return unorderable[-1]
-    _current_index, current_gate = max(
-        orderable,
-        key=lambda item: (_check_run_order_key(item[1]), item[0]),
-    )
-    return current_gate
+        return unorderable[0], True
+    newest_key = max(order_key for _check, order_key in orderable)
+    newest_checks = [check for check, order_key in orderable if order_key == newest_key]
+    if len(newest_checks) > 1 and any(check != newest_checks[0] for check in newest_checks[1:]):
+        return newest_checks[0], True
+    return newest_checks[0], False
 
 
 def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901
@@ -816,7 +822,9 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901
         return "pending"
     effective_rollup, _superseded_count = _latest_check_runs(rollup)
     gate_checks = [check for check in rollup if check.get("name") == GATE_JOB_NAME]
-    current_gate = _select_current_gate(gate_checks)
+    current_gate, gate_selection_ambiguous = _select_current_gate(gate_checks)
+    if gate_selection_ambiguous:
+        return "unknown"
     if current_gate is not None:
         if not _check_run_order_key(current_gate)[-1]:
             # A current gate without the shared startedAt ordering key cannot establish CI.

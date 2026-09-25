@@ -7,6 +7,7 @@ import subprocess
 from unittest.mock import patch
 
 from scripts.dev.pr_carrier_gate import (
+    REVIEW_HEADER_PATTERNS,
     REVIEW_HEADING_VOCABULARY,
     _review_carrier_error,
     check_merge_ready_carriers,
@@ -130,9 +131,20 @@ def test_pure_no_carrier_error_names_recognized_vocabulary() -> None:
 
 
 def test_heading_vocabulary_matches_header_patterns() -> None:
-    """Every documented vocabulary heading is recognized; patterns and vocabulary cannot drift."""
-    for heading in REVIEW_HEADING_VOCABULARY:
+    """Every accepted pattern has one documented example and vice versa."""
+    assert len(REVIEW_HEADING_VOCABULARY) == len(REVIEW_HEADER_PATTERNS)
+    for heading, pattern in zip(REVIEW_HEADING_VOCABULARY, REVIEW_HEADER_PATTERNS, strict=True):
+        assert pattern.search(heading), heading
         assert is_review_carrier_comment(f"## {heading}\n\nEvidence."), heading
+
+
+def test_pure_review_carrier_accepts_legacy_exact_head_self_review() -> None:
+    """The documented legacy self-review form remains accepted."""
+    comment = _review_comment().replace(
+        "Exact-head self-review", "Self-review evidence for this change at exact head"
+    )
+
+    assert review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
 
 
 def test_pure_review_carrier_rejects_ambiguous_exact_head_review() -> None:
@@ -287,6 +299,31 @@ def test_gate_admits_independent_review_compatibility_comment() -> None:
 
     assert result["status"] == "ok"
     assert result["carrier_source"] == "issue_comment"
+
+
+def test_gate_admits_independent_review_from_review_endpoint() -> None:
+    """The reported COMMENTED review endpoint accepts the independent heading (issue #9509)."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    independent_review = _review_comment().replace(
+        "Exact-head self-review", "Exact-head independent review"
+    )
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=_reviews_payload(independent_review)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "ok"
+    assert result["carrier_source"] == "pull_request_review"
 
 
 def test_gate_withholds_merge_ready_while_exact_head_review_claim_is_active() -> None:

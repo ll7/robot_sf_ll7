@@ -19,9 +19,11 @@ This module closes that class of drift:
 - an unexpired trusted ``review-claim`` covering the live head means an exact-
   head review worker is still active, so the merge-ready write is withheld;
 - a review/comment heading must use the canonical carrier vocabulary
-  (``Exact-head self-review``, ``Exact-head implementation review``, or
-  ``Exact-head independent review``); anything else fails with the vocabulary
-  named in the error, never a bare "no carrier" verdict;
+  (``Exact-head self-review``, ``Exact-head implementation review``,
+  ``Exact-head independent review``, or the legacy ``Self-review … exact head``
+  form, where the ellipsis represents up to 40 non-newline characters);
+  anything else fails with the vocabulary named in the error, never a bare
+  "no carrier" verdict;
 - a body or comment carrying stale-narrative sentinels (including
   "not current-base merge evidence" and pending domain-review dispositions)
   invalidates the merge-ready disposition;
@@ -64,14 +66,16 @@ REVIEW_HEADER_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 #: Canonical carrier-heading vocabulary (issue #9509). A review or comment is
-#: an exact-head carrier only when its heading matches one of these phrases
-#: (case-insensitive, hyphen/space variants) and names the live head. Keep
-#: this tuple and ``REVIEW_HEADER_PATTERNS`` in sync; the gate error message
-#: below renders this vocabulary so a rejection names what is accepted.
+#: an exact-head carrier only when its heading matches one of these forms
+#: (case-insensitive, hyphen/space variants) and names the live head. The
+#: ellipsis in the legacy form represents up to 40 non-newline characters.
+#: Keep this tuple and ``REVIEW_HEADER_PATTERNS`` in sync; the gate error
+#: message below renders this vocabulary so a rejection names what is accepted.
 REVIEW_HEADING_VOCABULARY: tuple[str, ...] = (
     "Exact-head self-review",
     "Exact-head implementation review",
     "Exact-head independent review",
+    "Self-review … exact head",
 )
 
 STALE_CARRIER_PATTERNS: tuple[re.Pattern[str], ...] = (

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -34,26 +33,14 @@ from robot_sf.adversarial.config import (
     SearchConfig,
     SearchRunResult,
 )
-from robot_sf.adversarial.io import parse_first_jsonl_record, read_first_jsonl_record
+from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
-from robot_sf.adversarial.scenario_admissibility import (
-    classify_scenario_admissibility,
-    validate_scenario_admissibility,
-)
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
-    runtime_fallback_or_degraded_marker,
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.runner import run_batch
-from robot_sf.benchmark.termination_reason import (
-    TERMINATION_REASONS,
-    outcome_contradictions,
-    status_from_termination_reason,
-)
-from robot_sf.benchmark.utils import _config_hash
-from robot_sf.scenario_certification.input_identity import scenario_input_identity
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
 CandidateCertifier = Callable[[CandidateSpec, Path, bool], CertificationStatus]
@@ -62,7 +49,6 @@ ProductionCandidateEvaluator = Callable[[SearchConfig, CandidateSpec, int], Cand
 DEFAULT_SCHEMA_PATH = (
     Path(__file__).parent.parent / "benchmark" / "schemas" / "episode.schema.v1.json"
 )
-_NATIVE_EXECUTION_MODES = frozenset({"native", "native_command"})
 
 
 def _mark_missing_provenance(enriched: dict[str, Any], reason: str) -> dict[str, Any]:
@@ -173,10 +159,6 @@ def _default_evaluator(
 ) -> CandidateEvaluation:
     """Evaluate one candidate through the existing benchmark batch runner."""
     episode_path = candidate_dir / "episode_records.jsonl"
-    candidate_dir.mkdir(parents=True, exist_ok=True)
-    planner_config, planner_config_source_sha256, planner_config_snapshot = (
-        _load_planner_config_snapshot(config, snapshot_dir=candidate_dir)
-    )
     snqi_weights = config.load_optional_json(config.snqi_weights_path)
     snqi_baseline = config.load_optional_json(config.snqi_baseline_path)
     summary = run_batch(
@@ -189,9 +171,7 @@ def _default_evaluator(
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
         algo=config.policy,
-        algo_config_path=(
-            str(planner_config_snapshot) if planner_config_snapshot is not None else None
-        ),
+        algo_config_path=str(config.algo_config_path) if config.algo_config_path else None,
         benchmark_profile=config.benchmark_profile,
         workers=config.workers,
         resume=False,
@@ -221,35 +201,7 @@ def _default_evaluator(
         trajectory_csv_path=trajectory_path,
         scenario_yaml_path=scenario_yaml_path,
         bundle_path=candidate_dir,
-        effective_planner_config=planner_config,
-        planner_config_source_sha256=planner_config_source_sha256,
     )
-
-
-def _load_planner_config_snapshot(
-    config: SearchConfig,
-    *,
-    snapshot_dir: Path | None = None,
-) -> tuple[dict[str, Any], str | None, Path | None]:
-    """Read the selected planner config once and optionally persist its exact bytes.
-
-    Returns:
-        Parsed effective config, source-byte SHA-256, and snapshot path when written.
-    """
-    if config.algo_config_path is None:
-        return {}, None, None
-    source_path = config.algo_config_path.expanduser().resolve()
-    source_bytes = source_path.read_bytes()
-    payload = yaml.safe_load(source_bytes.decode("utf-8")) or {}
-    if not isinstance(payload, Mapping):
-        raise TypeError(f"Algorithm config must be a mapping: {source_path}")
-    parsed = dict(payload)
-    digest = hashlib.sha256(source_bytes).hexdigest()
-    if snapshot_dir is None:
-        return parsed, digest, None
-    snapshot_path = snapshot_dir / "planner_config.snapshot.yaml"
-    snapshot_path.write_bytes(source_bytes)
-    return parsed, digest, snapshot_path
 
 
 def _default_certifier(
@@ -290,7 +242,6 @@ def _invalid_evaluation(
     scenario_yaml_path: Path | None,
     bundle_path: Path | None,
     reason: str,
-    scenario_admissibility: dict[str, Any] | None = None,
 ) -> CandidateEvaluation:
     """Build an evaluation payload for a rejected candidate."""
     return CandidateEvaluation(
@@ -308,542 +259,6 @@ def _invalid_evaluation(
         scenario_yaml_path=scenario_yaml_path,
         bundle_path=bundle_path,
         error=reason,
-        scenario_admissibility=scenario_admissibility,
-    )
-
-
-def _candidate_scenario_id(scenario_yaml_path: Path) -> str | None:
-    """Read the one materialized scenario ID, returning None for malformed input."""
-    try:
-        payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError):
-        return None
-    scenarios = payload.get("scenarios") if isinstance(payload, Mapping) else None
-    if not isinstance(scenarios, list) or len(scenarios) != 1:
-        return None
-    scenario = scenarios[0]
-    scenario_id = scenario.get("name") if isinstance(scenario, Mapping) else None
-    return scenario_id.strip() if isinstance(scenario_id, str) and scenario_id.strip() else None
-
-
-def _certificate_for_scenario(
-    status: CertificationStatus, scenario_id: str | None
-) -> Mapping[str, Any] | None:
-    """Select only a certificate whose producer scenario ID matches the candidate."""
-    details = status.details if isinstance(status.details, Mapping) else {}
-    certificates = details.get("certificates")
-    if not isinstance(certificates, list):
-        return details if details.get("schema_version") == "scenario_cert.v1" else None
-    matches = [
-        item
-        for item in certificates
-        if isinstance(item, Mapping) and item.get("scenario_id") == scenario_id
-    ]
-    return matches[0] if len(matches) == 1 else None
-
-
-def _admissibility_payload(
-    *,
-    index: int,
-    scenario_yaml_path: Path,
-    certification_status: CertificationStatus,
-) -> dict[str, Any]:
-    """Classify a materialized candidate for durable stratification and early rejection."""
-    scenario_id = _candidate_scenario_id(scenario_yaml_path)
-    try:
-        verdict = classify_scenario_admissibility(
-            f"candidate_{index:04d}",
-            scenario_artifact_path=scenario_yaml_path,
-            scenario_id=scenario_id,
-            scenario_certificate=_certificate_for_scenario(certification_status, scenario_id),
-        )
-        return verdict.to_dict()
-    except Exception as exc:  # noqa: BLE001 - classification failure must remain an explicit unknown.
-        payload = classify_scenario_admissibility(f"candidate_{index:04d}").to_dict()
-        payload["reason_codes"] = sorted(
-            set(payload["reason_codes"] + ["scenario_admissibility_classifier_error"])
-        )
-        payload["assumptions"] = {"classifier_error_type": type(exc).__name__}
-        validate_scenario_admissibility(payload)
-        return payload
-
-
-def _admissibility_rejection_reason(payload: Mapping[str, Any]) -> str:
-    """Summarize explicit exclusion reason codes for candidate failure attribution."""
-    reason_codes = payload.get("reason_codes")
-    reasons = (
-        ", ".join(str(reason) for reason in reason_codes) if isinstance(reason_codes, list) else ""
-    )
-    return f"scenario admissibility rejected candidate: {reasons or 'explicit exclusion'}"
-
-
-def _post_evaluation_admissibility(  # noqa: C901, PLR0912, PLR0915 - fail-closed evidence checks stay explicit.
-    payload: Mapping[str, Any],
-    *,
-    config: SearchConfig,
-    candidate: CandidateSpec,
-    scenario_yaml_path: Path,
-    episode_record_path: Path | None,
-    failure_attribution: FailureAttribution | None,
-    planner_config_provenance: Mapping[str, Any] | None = None,
-    evaluation_error: str | None = None,
-) -> dict[str, Any]:
-    """Attach a provenance-checked planner observation without changing feasibility."""
-    updated = dict(payload)
-    evidence = dict(updated.get("evidence", {}))
-    observation: dict[str, Any] = {
-        "status": "unavailable",
-        "reason_code": "target_planner_observation_unavailable",
-    }
-    effective_planner_config = (
-        planner_config_provenance.get("config")
-        if isinstance(planner_config_provenance, Mapping)
-        else None
-    )
-    planner_config_source_sha256 = (
-        planner_config_provenance.get("source_sha256")
-        if isinstance(planner_config_provenance, Mapping)
-        else None
-    )
-    planner_config_capture_error = None
-    if planner_config_provenance is not None:
-        if not isinstance(effective_planner_config, Mapping):
-            planner_config_capture_error = "target_episode_selected_planner_config_not_captured"
-        elif config.algo_config_path is not None and (
-            not isinstance(planner_config_source_sha256, str)
-            or len(planner_config_source_sha256) != 64
-            or any(char not in "0123456789abcdef" for char in planner_config_source_sha256.lower())
-        ):
-            planner_config_capture_error = (
-                "target_episode_selected_planner_config_digest_missing_or_malformed"
-            )
-    target_outcome = "unavailable"
-    scenario_identity_snapshot: Mapping[str, Any] | None = None
-    if evaluation_error is not None:
-        observation["reason_code"] = "target_evaluation_failed"
-        observation["evaluation_error"] = evaluation_error
-    elif episode_record_path is None:
-        observation["reason_code"] = "target_episode_record_path_missing"
-    else:
-        episode_path = Path(episode_record_path)
-        observation["episode_record_path"] = episode_path.as_posix()
-        expected_identity = evidence.get("scenario_artifact_identity")
-        scenario_id = _candidate_scenario_id(scenario_yaml_path)
-        try:
-            current_identity = scenario_input_identity(scenario_yaml_path, scenario_id=scenario_id)
-        except (OSError, RuntimeError, TypeError, ValueError):
-            current_identity = {"status": "unavailable"}
-        observation["runtime_input_identity"] = {
-            "status": current_identity.get("status"),
-            "source_artifact_sha256": current_identity.get("source_artifact_sha256"),
-            "effective_input_sha256": current_identity.get("effective_input_sha256"),
-        }
-        if (
-            not isinstance(expected_identity, Mapping)
-            or current_identity.get("status") != "available"
-            or current_identity.get("source_artifact_sha256") != expected_identity.get("sha256")
-            or current_identity.get("effective_input_sha256")
-            != expected_identity.get("effective_input_sha256")
-        ):
-            observation["reason_code"] = (
-                "target_scenario_runtime_input_identity_changed_or_unavailable"
-            )
-            record = None
-            should_read_record = False
-        else:
-            should_read_record = True
-            scenario_identity_snapshot = current_identity
-            record = None
-        try:
-            if should_read_record:
-                episode_bytes = episode_path.read_bytes()
-                observation["episode_records_jsonl_sha256"] = hashlib.sha256(
-                    episode_bytes
-                ).hexdigest()
-                record = parse_first_jsonl_record(episode_bytes, source=episode_path.as_posix())
-        except (OSError, RuntimeError, ValueError):
-            record = None
-            observation["reason_code"] = "target_episode_record_missing_or_malformed"
-        if record is None:
-            observation.setdefault("reason_code", "target_episode_record_missing_or_malformed")
-        else:
-            record_metadata = record.get("algorithm_metadata")
-            if planner_config_capture_error is not None:
-                reason_code, route_complete = planner_config_capture_error, None
-            else:
-                reason_code, route_complete = _target_episode_observation_reason(
-                    record,
-                    config=config,
-                    candidate=candidate,
-                    scenario_yaml_path=scenario_yaml_path,
-                    failure_attribution=failure_attribution,
-                    effective_planner_config=effective_planner_config,
-                )
-            observation.update(
-                {
-                    "episode_id": record.get("episode_id"),
-                    "scenario_id": record.get("scenario_id"),
-                    "planner_id": record.get("algo"),
-                    "seed": record.get("seed"),
-                    "source_commit": record.get("git_hash"),
-                    "scenario_config_hash": record.get("config_hash"),
-                    "planner_config_hash": (
-                        record_metadata.get("config_hash")
-                        if isinstance(record_metadata, Mapping)
-                        else None
-                    ),
-                    "selected_planner_config_hash": (
-                        _config_hash(dict(effective_planner_config))
-                        if isinstance(effective_planner_config, Mapping)
-                        else None
-                    ),
-                    "selected_planner_config_source_sha256": planner_config_source_sha256,
-                    "termination_reason": record.get("termination_reason"),
-                    "route_complete": route_complete,
-                }
-            )
-            if reason_code is None and isinstance(route_complete, bool):
-                target_outcome = "route_completed" if route_complete else "route_incomplete"
-                observation.update(status="available", reason_code=None)
-            else:
-                observation["reason_code"] = reason_code or "target_episode_outcome_unavailable"
-    target_outcome = _guard_target_observation_input_stability(
-        target_outcome,
-        scenario_identity_snapshot=scenario_identity_snapshot,
-        scenario_yaml_path=scenario_yaml_path,
-        observation=observation,
-    )
-    evidence["target_planner_observation"] = observation
-    updated["evidence"] = evidence
-    updated["target_planner_outcome"] = target_outcome
-    reason_codes = list(updated.get("reason_codes", []))
-    new_reason = (
-        "target_planner_outcome_observed"
-        if target_outcome in {"route_completed", "route_incomplete"}
-        else str(observation["reason_code"])
-    )
-    if new_reason not in reason_codes:
-        reason_codes.append(new_reason)
-    updated["reason_codes"] = reason_codes
-    validate_scenario_admissibility(updated)
-    return updated
-
-
-def _target_episode_observation_reason(  # noqa: C901 - fail-closed evidence checks stay explicit.
-    record: Mapping[str, Any],
-    *,
-    config: SearchConfig,
-    candidate: CandidateSpec,
-    scenario_yaml_path: Path,
-    failure_attribution: FailureAttribution | None,
-    effective_planner_config: Mapping[str, Any] | None = None,
-) -> tuple[str | None, bool | None]:
-    """Require a native, internally consistent episode matching the search candidate."""
-    details = failure_attribution.details if failure_attribution is not None else {}
-    outcome = record.get("outcome")
-    metadata = record.get("algorithm_metadata")
-    episode_id = record.get("episode_id")
-    scenario_id = _candidate_scenario_id(scenario_yaml_path)
-    route_complete = outcome.get("route_complete") if isinstance(outcome, Mapping) else None
-    termination = record.get("termination_reason")
-    if (
-        record.get("version") != "v1"
-        or not isinstance(record.get("metrics"), Mapping)
-        or not isinstance(record.get("seed"), int)
-        or isinstance(record.get("seed"), bool)
-    ):
-        return "target_episode_schema_fields_missing_or_malformed", None
-    if not isinstance(episode_id, str) or not episode_id.strip():
-        return "target_episode_identity_missing", None
-    if (
-        not isinstance(scenario_id, str)
-        or record.get("scenario_id") != scenario_id
-        or record.get("algo") != config.policy
-        or record.get("seed") != candidate.scenario_seed
-    ):
-        return "target_episode_identity_mismatch", None
-    if (
-        not isinstance(record.get("git_hash"), str)
-        or len(record["git_hash"]) not in {40, 64}
-        or any(character not in "0123456789abcdefABCDEF" for character in record["git_hash"])
-    ):
-        return "target_episode_source_revision_missing_or_malformed", None
-    if (
-        not isinstance(metadata, Mapping)
-        or metadata.get("status") != "ok"
-        or resolve_execution_mode(metadata) not in _NATIVE_EXECUTION_MODES
-    ):
-        return "target_episode_planner_provenance_not_native_or_unavailable", None
-    binding_reason = _target_episode_candidate_binding_reason(
-        record,
-        metadata=metadata,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_yaml_path,
-        effective_planner_config=effective_planner_config,
-    )
-    if binding_reason is not None:
-        return binding_reason, None
-    if (
-        not isinstance(details, Mapping)
-        or details.get("availability_status") != "available"
-        or details.get("readiness_status") != "native"
-        or details.get("execution_mode") != resolve_execution_mode(metadata)
-    ):
-        return "target_planner_runtime_availability_not_clean", None
-    if runtime_fallback_or_degraded_marker(dict(record)) is not None:
-        return "target_episode_fallback_or_degraded", None
-    if (
-        not isinstance(route_complete, bool)
-        or not isinstance(outcome.get("collision_event"), bool)
-        or not isinstance(outcome.get("timeout_event"), bool)
-    ):
-        return "target_episode_route_completion_missing_or_malformed", None
-    if termination not in TERMINATION_REASONS:
-        return "target_episode_termination_reason_missing_or_malformed", None
-    if record.get("status") != status_from_termination_reason(termination):
-        return "target_episode_status_termination_conflict", None
-    integrity = record.get("integrity")
-    contradictions = integrity.get("contradictions") if isinstance(integrity, Mapping) else None
-    if not isinstance(contradictions, list) or contradictions:
-        return "target_episode_integrity_unavailable_or_contradictory", None
-    if outcome_contradictions(termination_reason=termination, outcome=outcome):
-        return "target_episode_outcome_termination_conflict", None
-    if route_complete and termination != "success":
-        return "target_episode_outcome_termination_conflict", None
-    if not route_complete and termination in {"success", "error"}:
-        return "target_episode_outcome_termination_conflict", None
-    return None, route_complete
-
-
-def _guard_target_observation_input_stability(
-    target_outcome: str,
-    *,
-    scenario_identity_snapshot: Mapping[str, Any] | None,
-    scenario_yaml_path: Path,
-    observation: dict[str, Any],
-) -> str:
-    """Clear an observed planner outcome if scenario inputs changed during parsing."""
-    if (
-        target_outcome not in {"route_completed", "route_incomplete"}
-        or not scenario_identity_snapshot
-    ):
-        return target_outcome
-    try:
-        identity_after_observation = scenario_input_identity(
-            scenario_yaml_path,
-            scenario_id=_candidate_scenario_id(scenario_yaml_path),
-        )
-    except (OSError, RuntimeError, TypeError, ValueError):
-        identity_after_observation = {"status": "unavailable"}
-    identity_stable = (
-        identity_after_observation.get("status") == "available"
-        and identity_after_observation.get("source_artifact_sha256")
-        == scenario_identity_snapshot.get("source_artifact_sha256")
-        and identity_after_observation.get("effective_input_sha256")
-        == scenario_identity_snapshot.get("effective_input_sha256")
-    )
-    if identity_stable:
-        return target_outcome
-    observation.update(
-        status="unavailable",
-        reason_code="target_scenario_runtime_input_changed_during_observation",
-        route_complete=None,
-    )
-    return "unavailable"
-
-
-def _target_episode_candidate_binding_reason(  # noqa: C901, PLR0912 - fail-closed binding remains explicit.
-    record: Mapping[str, Any],
-    *,
-    metadata: Mapping[str, Any],
-    config: SearchConfig,
-    candidate: CandidateSpec,
-    scenario_yaml_path: Path,
-    effective_planner_config: Mapping[str, Any] | None = None,
-) -> str | None:
-    """Bind a native episode row to its materialized candidate and planner config."""
-    scenario_error, materialized_scenario, materialized_candidate = (
-        _materialized_candidate_provenance(scenario_yaml_path)
-    )
-    if scenario_error is not None:
-        return scenario_error
-    if materialized_scenario is None or materialized_candidate is None:
-        return "target_episode_candidate_provenance_missing"
-    expected_candidate = candidate.to_json()
-    if not _candidate_payload_matches(materialized_candidate, expected_candidate):
-        return "target_episode_candidate_parameters_mismatch"
-
-    scenario_params = record.get("scenario_params")
-    recorded_metadata = (
-        scenario_params.get("metadata") if isinstance(scenario_params, Mapping) else None
-    )
-    recorded_candidate = (
-        recorded_metadata.get("adversarial_candidate")
-        if isinstance(recorded_metadata, Mapping)
-        else None
-    )
-    if not isinstance(scenario_params, Mapping) or not isinstance(recorded_candidate, Mapping):
-        return "target_episode_scenario_parameters_missing"
-    if not _candidate_payload_matches(recorded_candidate, expected_candidate):
-        return "target_episode_record_candidate_parameters_mismatch"
-    scenario_id = _candidate_scenario_id(scenario_yaml_path)
-    if scenario_params.get("id") != scenario_id or scenario_params.get("algo") != config.policy:
-        return "target_episode_record_scenario_parameters_mismatch"
-    if not _scenario_projection_matches(materialized_scenario, scenario_params):
-        return "target_episode_selected_scenario_parameters_mismatch"
-    expected_run_horizon = int(config.horizon or 100)
-    if (
-        type(scenario_params.get("run_horizon")) is not int
-        or scenario_params.get("run_horizon") != expected_run_horizon
-    ):
-        return "target_episode_run_horizon_mismatch"
-    expected_run_dt = float(config.dt or 0.1)
-    recorded_run_dt = scenario_params.get("run_dt")
-    if (
-        isinstance(recorded_run_dt, bool)
-        or not isinstance(recorded_run_dt, (int, float))
-        or float(recorded_run_dt) != expected_run_dt
-    ):
-        return "target_episode_run_timestep_mismatch"
-    if scenario_params.get("record_forces") is not bool(config.record_forces):
-        return "target_episode_record_forces_mismatch"
-    if record.get("config_hash") != _config_hash(dict(scenario_params)):
-        return "target_episode_scenario_config_hash_mismatch"
-
-    recorded_planner_config = metadata.get("config")
-    if not isinstance(recorded_planner_config, Mapping):
-        return "target_episode_recorded_planner_config_missing"
-    expected_planner_config_hash = _config_hash(dict(recorded_planner_config))
-    if (
-        scenario_params.get("algo_config_hash") != expected_planner_config_hash
-        or metadata.get("config_hash") != expected_planner_config_hash
-    ):
-        return "target_episode_planner_config_hash_mismatch"
-    if effective_planner_config is None:
-        try:
-            effective_planner_config, _selected_source_sha256, _snapshot = (
-                _load_planner_config_snapshot(config)
-            )
-        except (OSError, UnicodeDecodeError, TypeError, ValueError, yaml.YAMLError):
-            return "target_episode_selected_planner_config_unavailable"
-    if dict(recorded_planner_config) != dict(effective_planner_config):
-        return "target_episode_planner_config_selected_config_mismatch"
-    if expected_planner_config_hash != _config_hash(dict(effective_planner_config)):
-        return "target_episode_planner_config_selected_hash_mismatch"
-    return None
-
-
-def _materialized_candidate_provenance(
-    scenario_yaml_path: Path,
-) -> tuple[str | None, Mapping[str, Any] | None, Mapping[str, Any] | None]:
-    """Read the selected scenario and candidate provenance from one materialized file."""
-    try:
-        scenario_payload = yaml.safe_load(scenario_yaml_path.read_bytes().decode("utf-8"))
-        scenarios = (
-            scenario_payload.get("scenarios") if isinstance(scenario_payload, Mapping) else None
-        )
-        if not isinstance(scenarios, list) or len(scenarios) != 1:
-            return "target_episode_candidate_scenario_missing_or_ambiguous", None, None
-        scenario = scenarios[0]
-        if not isinstance(scenario, Mapping):
-            return "target_episode_candidate_scenario_missing_or_ambiguous", None, None
-        scenario_metadata = scenario.get("metadata") if isinstance(scenario, Mapping) else None
-        materialized_candidate = (
-            scenario_metadata.get("adversarial_candidate")
-            if isinstance(scenario_metadata, Mapping)
-            else None
-        )
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
-        return "target_episode_candidate_scenario_unavailable", None, None
-    return (
-        None,
-        scenario,
-        materialized_candidate if isinstance(materialized_candidate, Mapping) else None,
-    )
-
-
-def _candidate_payload_matches(actual: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
-    """Check every declared sampled-candidate field without rejecting added metadata."""
-    return all(
-        key in actual and _scenario_value_matches(value, actual[key])
-        for key, value in expected.items()
-    )
-
-
-def _scenario_projection_matches(selected: Mapping[str, Any], recorded: Mapping[str, Any]) -> bool:
-    """Require every selected scenario field to survive in the episode identity.
-
-    The runner adds execution metadata and normalizes the seed to the episode seed, so
-    additional recorded keys and the top-level ``seed``/``seeds`` fields are allowed.
-    Existing selected fields must retain their JSON types and values recursively.
-    """
-    for key, expected in selected.items():
-        if key in {"seed", "seeds"}:
-            continue
-        if key not in recorded or not _scenario_value_matches(expected, recorded[key]):
-            return False
-    return True
-
-
-def _scenario_value_matches(expected: Any, actual: Any) -> bool:
-    """Compare selected nested scenario values without Python bool/int aliasing."""
-    if isinstance(expected, Mapping):
-        return isinstance(actual, Mapping) and all(
-            key in actual and _scenario_value_matches(value, actual[key])
-            for key, value in expected.items()
-        )
-    if isinstance(expected, list):
-        return (
-            isinstance(actual, list)
-            and len(actual) == len(expected)
-            and all(
-                _scenario_value_matches(left, right)
-                for left, right in zip(expected, actual, strict=True)
-            )
-        )
-    return type(expected) is type(actual) and expected == actual
-
-
-def _store_post_evaluation_admissibility(
-    evaluation: CandidateEvaluation,
-    *,
-    initial_payload: Mapping[str, Any],
-    config: SearchConfig,
-    candidate: CandidateSpec,
-    scenario_yaml_path: Path,
-    candidate_dir: Path,
-    evaluation_error: str | None = None,
-) -> CandidateEvaluation:
-    """Save the target observation in both the manifest row and its candidate bundle."""
-    episode_path = evaluation.episode_record_path or (candidate_dir / "episode_records.jsonl")
-    admissibility = _post_evaluation_admissibility(
-        initial_payload,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_yaml_path,
-        episode_record_path=episode_path,
-        failure_attribution=evaluation.failure_attribution,
-        planner_config_provenance={
-            "config": evaluation.effective_planner_config,
-            "source_sha256": evaluation.planner_config_source_sha256,
-        },
-        evaluation_error=evaluation_error,
-    )
-    attribution = evaluation.failure_attribution
-    if attribution is not None:
-        attribution = replace(
-            attribution,
-            details={
-                **attribution.details,
-                "scenario_admissibility": admissibility,
-            },
-        )
-        write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
-    return replace(
-        evaluation,
-        failure_attribution=attribution,
-        scenario_admissibility=admissibility,
     )
 
 
@@ -918,28 +333,6 @@ def run_adversarial_search(
             scenario_yaml_path,
             config.require_certification,
         )
-        admissibility = _admissibility_payload(
-            index=index,
-            scenario_yaml_path=scenario_yaml_path,
-            certification_status=certification_status,
-        )
-        if admissibility["search_disposition"] == "reject":
-            num_invalid += 1
-            reason = _admissibility_rejection_reason(admissibility)
-            evaluation = _invalid_evaluation(
-                candidate=candidate,
-                certification_status=certification_status,
-                scenario_yaml_path=scenario_yaml_path,
-                bundle_path=candidate_dir,
-                reason=reason,
-                scenario_admissibility=admissibility,
-            )
-            write_json(
-                candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
-            )
-            evaluations.append(evaluation)
-            _observe_candidate(active_sampler, evaluation)
-            continue
         if not candidate_allowed(
             certification_status,
             require_certification=config.require_certification,
@@ -951,7 +344,6 @@ def run_adversarial_search(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 reason=certification_status.reason,
-                scenario_admissibility=admissibility,
             )
             write_json(
                 candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
@@ -968,18 +360,9 @@ def run_adversarial_search(
                 effective_scenario_hash=_effective_hash_for_bundle(
                     scenario_yaml_path, candidate_dir
                 ),
-                scenario_admissibility=admissibility,
             )
             score = objective(evaluation)
             evaluation = evaluation.with_objective(score)
-            evaluation = _store_post_evaluation_admissibility(
-                evaluation,
-                initial_payload=admissibility,
-                config=config,
-                candidate=candidate,
-                scenario_yaml_path=scenario_yaml_path,
-                candidate_dir=candidate_dir,
-            )
         except Exception as exc:  # noqa: BLE001 - evaluator failure records candidate attribution
             num_failed += 1
             error = repr(exc)
@@ -995,16 +378,6 @@ def run_adversarial_search(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 error=error,
-                scenario_admissibility=admissibility,
-            )
-            evaluation = _store_post_evaluation_admissibility(
-                evaluation,
-                initial_payload=admissibility,
-                config=config,
-                candidate=candidate,
-                scenario_yaml_path=scenario_yaml_path,
-                candidate_dir=candidate_dir,
-                evaluation_error=error,
             )
         evaluations.append(evaluation)
         _observe_candidate(active_sampler, evaluation)
@@ -1096,26 +469,6 @@ def production_candidate_evaluator(
         certification_status = active_certifier(
             candidate, scenario_yaml_path, config.require_certification
         )
-        admissibility = _admissibility_payload(
-            index=index,
-            scenario_yaml_path=scenario_yaml_path,
-            certification_status=certification_status,
-        )
-        if admissibility["search_disposition"] == "reject":
-            reason = _admissibility_rejection_reason(admissibility)
-            evaluation = _invalid_evaluation(
-                candidate=candidate,
-                certification_status=certification_status,
-                scenario_yaml_path=scenario_yaml_path,
-                bundle_path=candidate_dir,
-                reason=reason,
-                scenario_admissibility=admissibility,
-            )
-            write_json(
-                candidate_dir / "failure_attribution.json",
-                evaluation.failure_attribution.to_json(),
-            )
-            return evaluation
         if not candidate_allowed(
             certification_status, require_certification=config.require_certification
         ):
@@ -1125,7 +478,6 @@ def production_candidate_evaluator(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 reason=certification_status.reason,
-                scenario_admissibility=admissibility,
             )
             write_json(
                 candidate_dir / "failure_attribution.json",
@@ -1143,23 +495,14 @@ def production_candidate_evaluator(
                 effective_scenario_hash=_effective_hash_for_bundle(
                     scenario_yaml_path, candidate_dir
                 ),
-                scenario_admissibility=admissibility,
             )
             score = objective(evaluation)
-            evaluation = evaluation.with_objective(score)
-            return _store_post_evaluation_admissibility(
-                evaluation,
-                initial_payload=admissibility,
-                config=config,
-                candidate=candidate,
-                scenario_yaml_path=scenario_yaml_path,
-                candidate_dir=candidate_dir,
-            )
+            return evaluation.with_objective(score)
         except Exception as exc:  # noqa: BLE001 - evaluator failure records candidate attribution
             error = repr(exc)
             attribution = attribution_from_error(error)
             write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
-            evaluation = CandidateEvaluation(
+            return CandidateEvaluation(
                 candidate=candidate,
                 certification_status=certification_status,
                 objective_value=None,
@@ -1169,16 +512,6 @@ def production_candidate_evaluator(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 error=error,
-                scenario_admissibility=admissibility,
-            )
-            return _store_post_evaluation_admissibility(
-                evaluation,
-                initial_payload=admissibility,
-                config=config,
-                candidate=candidate,
-                scenario_yaml_path=scenario_yaml_path,
-                candidate_dir=candidate_dir,
-                evaluation_error=error,
             )
 
     return _evaluate

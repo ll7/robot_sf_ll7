@@ -28,6 +28,10 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.adversarial.bundle import compute_effective_scenario_hash
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
+from robot_sf.benchmark.episode_input_identity import (
+    EPISODE_INPUT_IDENTITY_SCHEMA,
+    scenario_semantic_sha256,
+)
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.termination_reason import (
     TERMINATION_REASONS,
@@ -40,10 +44,12 @@ CORPUS_SCHEMA_VERSION = "adversarial-counterexample-corpus.v1"
 CASE_SCHEMA_VERSION = "adversarial-counterexample.v1"
 ATTEMPT_SCHEMA_VERSION = "adversarial-counterexample-admission-attempt.v1"
 EVALUATION_SCHEMA_VERSION = "adversarial-counterexample-planner-evaluation.v1"
-EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION = "adversarial-planner-replay-receipt.v1"
+EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION = "adversarial-planner-replay-receipt.v2"
+LEGACY_EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION = "adversarial-planner-replay-receipt.v1"
 SLICE_SCHEMA_VERSION = "adversarial-counterexample-slice.v1"
 CASE_INPUT_IDENTITY_SCHEMA_VERSION = "adversarial-case-input-identity.v1"
-CASE_ADMISSION_REPLAY_SCHEMA_VERSION = "adversarial-case-admission-replay.v1"
+CASE_ADMISSION_REPLAY_SCHEMA_VERSION = "adversarial-case-admission-replay.v2"
+LEGACY_CASE_ADMISSION_REPLAY_SCHEMA_VERSION = "adversarial-case-admission-replay.v1"
 CASE_ADMISSIBILITY_EVIDENCE_SCHEMA_VERSION = "adversarial-case-admissibility-evidence.v1"
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v1"
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
@@ -487,7 +493,7 @@ def import_issue9645_packet(
         )
         replay_receipts.append(observation["replay_receipt"])
     if existing is None:
-        stored_case["replay_receipt"]["artifact_receipts"] = replay_receipts
+        _bind_historical_replay_artifact_receipts(stored_case, replay_receipts)
     for observation in observations:
         corpus = append_planner_evaluation(corpus, observation, corpus_root=root)
 
@@ -505,6 +511,28 @@ def import_issue9645_packet(
     receipt["pilot_new_discoveries"] = 0
     receipt["pilot_run_id"] = pilot["run_id"]
     return corpus, receipt
+
+
+def _bind_historical_replay_artifact_receipts(
+    case: dict[str, Any], artifact_receipts: list[dict[str, Any]]
+) -> None:
+    """Bind historical inventory rows to their artifact receipts without upgrading claims."""
+    case_receipt = case.get("replay_receipt")
+    if not isinstance(case_receipt, dict):
+        raise CorpusError("historical case replay receipt is missing")
+    inventory = case_receipt.get("replay_artifacts")
+    if not isinstance(inventory, list) or len(inventory) != len(artifact_receipts):
+        raise CorpusError("historical replay inventory and artifact receipt counts differ")
+    case_receipt["artifact_receipts"] = artifact_receipts
+    for inventory_row, artifact_receipt in zip(inventory, artifact_receipts, strict=True):
+        inventory_row.update(
+            {
+                "path": artifact_receipt["artifact_path"],
+                "sha256": artifact_receipt["artifact_sha256"],
+                "run_id": artifact_receipt["run_id"],
+                "selected_event_identity": artifact_receipt["selected_event_identity"],
+            }
+        )
 
 
 def import_issue9656_candidates(
@@ -2124,9 +2152,27 @@ def create_planner_replay_receipt(
     record = _read_single_jsonl_record(artifact)
     inputs = case.get("inputs")
     inputs = inputs if isinstance(inputs, dict) else {}
+    provenance = record.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    episode_input_identity = provenance.get("case_input_identity")
+    if isinstance(episode_input_identity, Mapping):
+        input_binding = dict(episode_input_identity)
+        run_id = input_binding.get("run_id")
+    elif item.get("input_binding_status") == "unknown_historical":
+        input_binding = {
+            "schema_version": EPISODE_INPUT_IDENTITY_SCHEMA,
+            "status": "unknown_historical",
+            "run_id": item.get("run_id"),
+            "reason": "stored episode predates direct scenario/route/map input binding",
+        }
+        run_id = item.get("run_id")
+    else:
+        raise CorpusError("replay receipt rejected: episode input identity is unavailable")
     receipt = {
         "schema_version": EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION,
         "verification_status": "artifact_projection_match",
+        "run_id": run_id,
+        "input_binding": input_binding,
         "artifact_path": PurePosixPath(artifact_path).as_posix(),
         "artifact_sha256": episode_sha256,
         "case_id": item.get("case_id"),
@@ -2174,6 +2220,8 @@ def create_case_admission_replay_receipt(
         artifact_path=artifact_path,
         corpus_root=corpus_root,
     )
+    if evaluation_receipt.get("input_binding", {}).get("status") != "bound":
+        raise CorpusError("admission replay rejected: direct case input binding is unavailable")
     revision = target_revision or str(observation.get("source_revision") or "")
     if not _is_full_git_revision(revision) or revision != observation.get("source_revision"):
         raise CorpusError("admission replay target revision must exactly match the replay revision")
@@ -2205,10 +2253,12 @@ def create_case_admission_replay_receipt(
             {
                 "path": PurePosixPath(artifact_path).as_posix(),
                 "sha256": evaluation_receipt["artifact_sha256"],
+                "run_id": evaluation_receipt["run_id"],
                 "selected_event_identity": evaluation_receipt["selected_event_identity"],
             }
         ],
         "artifact_receipts": [evaluation_receipt],
+        "input_binding_status": "bound",
         "effective_scenario_sha256": case.get("effective_scenario_sha256"),
         "scenario_input_sha256": inputs.get("scenario_sha256"),
         "route_overrides_sha256": inputs.get("route_overrides_sha256"),
@@ -2426,6 +2476,7 @@ def _export_case_slice(
         "scenario_id": case["scenario_id"],
         "seed": case["scenario_seed"],
         "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "replay_input_binding_status": _case_replay_input_binding_status(case),
         "identity_mapping": identity_mapping,
         "planner": case["target_planner"],
         "scenario_source_sha256": _sha256_file(scenario_path),
@@ -3275,6 +3326,11 @@ def _verify_historical_replay_pair(payload: Path, context: Mapping[str, Any]) ->
         )
         for index in (1, 2)
     ]
+    run_ids = [row["run_id"] for row in replay_rows]
+    if any(not isinstance(run_id, str) or not run_id.strip() for run_id in run_ids):
+        raise CorpusError("#1501 replay provenance is missing a distinct run ID")
+    if len(set(run_ids)) != len(run_ids):
+        raise CorpusError("#1501 replay provenance reuses a run ID")
     projections = [row["projection"] for row in replay_rows]
     if projections[0] != projections[1]:
         raise CorpusError("#1501 current replay records disagree on selected event/metric identity")
@@ -3288,6 +3344,7 @@ def _verify_historical_replay_pair(payload: Path, context: Mapping[str, Any]) ->
     return {
         "source_files": source_files,
         "projection": projections[0],
+        "run_ids": run_ids,
         "expected_hashes": expected_hashes,
         "normalization_rows": normalization_rows,
         "target_config_identity": target["config_hash"],
@@ -3319,6 +3376,8 @@ def _verify_one_historical_replay(
     )
     episode = _read_single_jsonl_record(replay_file)
     provenance = _read_json_object(provenance_file)
+    run = provenance.get("run")
+    run_id = run.get("run_id") if isinstance(run, Mapping) else None
     projection = _historical_replay_projection(episode)
     _validate_replay_provenance(
         provenance,
@@ -3333,6 +3392,7 @@ def _verify_one_historical_replay(
     return {
         "episode": episode,
         "projection": projection,
+        "run_id": run_id,
         "source_files": {
             f"replay_{index}": replay_file,
             f"replay_{index}_provenance": provenance_file,
@@ -3387,10 +3447,15 @@ def _materialize_historical_case(
     source = _historical_search_source(context)
     replay_receipt = _historical_replay_receipt(context, replay)
     case = _historical_case_record(context, replay, source, replay_receipt, payload)
-    observation = _historical_failure_observation(replay, replay_receipt)
     observations = [
-        {**observation, "episode_sha256": _sha256_file(replay["source_files"]["replay_1"])},
-        {**observation, "episode_sha256": _sha256_file(replay["source_files"]["replay_2"])},
+        {
+            **_historical_failure_observation(replay, replay_receipt, run_id=replay["run_ids"][0]),
+            "episode_sha256": _sha256_file(replay["source_files"]["replay_1"]),
+        },
+        {
+            **_historical_failure_observation(replay, replay_receipt, run_id=replay["run_ids"][1]),
+            "episode_sha256": _sha256_file(replay["source_files"]["replay_2"]),
+        },
     ]
     return case, observations
 
@@ -3457,6 +3522,9 @@ def _historical_replay_receipt(
         replay_artifacts.append(
             {
                 "path": f"source_evidence/replay_{index}.jsonl",
+                "run_id": replay["run_ids"][index - 1],
+                "selected_event_identity": projection["selected_event_identity"],
+                "sha256": _sha256_file(source_files[f"replay_{index}"]),
                 "normalized_bundle_sha256": _sha256_file(source_files[f"replay_{index}"]),
                 "source_artifact_sha256_before_path_normalization": expected_hashes[index - 1],
                 "path_normalization": "scenario_params.route_overrides_file",
@@ -3473,6 +3541,11 @@ def _historical_replay_receipt(
     return {
         "schema_version": CASE_ADMISSION_REPLAY_SCHEMA_VERSION,
         "verification_status": "repeated_current_revision_match",
+        "input_binding_status": "unknown_historical",
+        "input_binding_limitation": (
+            "historical replay rows predate direct scenario, route, and map input binding; "
+            "their current-revision projection match does not prove exact case-input replay"
+        ),
         "historical_origin_match": "not_verifiable_original_raw_episode_absent",
         "historical_original_raw_episode_available": False,
         "target_revision": str(result["regeneration_commit"]),
@@ -3496,7 +3569,7 @@ def _historical_replay_receipt(
 
 
 def _historical_failure_observation(
-    replay: Mapping[str, Any], replay_receipt: Mapping[str, Any]
+    replay: Mapping[str, Any], replay_receipt: Mapping[str, Any], *, run_id: str
 ) -> dict[str, Any]:
     projection = replay["projection"]
     return {
@@ -3507,6 +3580,8 @@ def _historical_failure_observation(
         "planner_config_identity": replay["target_config_identity"],
         "source_revision": replay["projection"]["source_revision"],
         "episode_sha256": "pending",
+        "run_id": run_id,
+        "input_binding_status": "unknown_historical",
         "execution_mode": "native",
         "readiness_status": "native",
         "availability_status": "available",
@@ -4204,6 +4279,11 @@ def _validate_case_admission_replay(case: Mapping[str, Any], corpus_root: Path) 
         return ["admission replay receipt is missing"]
     if receipt.get("schema_version") == CASE_ADMISSION_REPLAY_SCHEMA_VERSION:
         return _validate_new_admission_replay(case, receipt, corpus_root)
+    if receipt.get("schema_version") == LEGACY_CASE_ADMISSION_REPLAY_SCHEMA_VERSION:
+        if isinstance(receipt.get("artifact_receipts"), list):
+            return _validate_legacy_v1_admission_replay(case, receipt, corpus_root)
+        # Historical v1 receipts without row-level receipts keep the old validator.
+        return _validate_legacy_admission_replay(receipt, corpus_root)
     return _validate_legacy_admission_replay(receipt, corpus_root)
 
 
@@ -4211,24 +4291,185 @@ def _validate_new_admission_replay(
     case: Mapping[str, Any], receipt: Mapping[str, Any], corpus_root: Path
 ) -> list[str]:
     artifact_receipts = receipt.get("artifact_receipts")
+    replay_artifacts = receipt.get("replay_artifacts")
+    replay_count = receipt.get("replay_count")
     if (
         not isinstance(artifact_receipts, list)
-        or len(artifact_receipts) != receipt.get("replay_count")
+        or len(artifact_receipts) != replay_count
         or not artifact_receipts
+        or not isinstance(replay_artifacts, list)
+        or len(replay_artifacts) != replay_count
     ):
         return ["admission replay artifact receipts are incomplete"]
     errors = []
+    run_ids: list[str] = []
+    artifact_paths: list[str] = []
     selected_projection = receipt.get("selected_projection")
-    for artifact_receipt in artifact_receipts:
-        if not isinstance(artifact_receipt, Mapping):
-            errors.append("admission replay artifact receipt is malformed")
-            continue
-        item = _admission_replay_observation(case, artifact_receipt)
-        errors.extend(_validate_replay_artifact(item, case, artifact_receipt, corpus_root))
-        if not isinstance(selected_projection, Mapping) or (
-            _admission_projection_from_receipt(artifact_receipt) != selected_projection
-        ):
-            errors.append("selected projection differs from a verified replay artifact")
+    input_binding_statuses: list[str] = []
+    for inventory_row, artifact_receipt in zip(replay_artifacts, artifact_receipts, strict=True):
+        pair_errors, run_id, artifact_path, status = _validate_admission_replay_pair(
+            case,
+            inventory_row,
+            artifact_receipt,
+            selected_projection,
+            corpus_root,
+        )
+        errors.extend(pair_errors)
+        if run_id is not None:
+            run_ids.append(run_id)
+        if artifact_path is not None:
+            artifact_paths.append(artifact_path)
+        if status is not None:
+            input_binding_statuses.append(status)
+    errors.extend(
+        _validate_admission_replay_set(receipt, run_ids, artifact_paths, input_binding_statuses)
+    )
+    return errors
+
+
+def _validate_legacy_v1_admission_replay(
+    case: Mapping[str, Any], receipt: Mapping[str, Any], corpus_root: Path
+) -> list[str]:
+    """Read v1 row receipts while treating their missing direct input binding as unknown."""
+    artifacts = receipt.get("replay_artifacts")
+    artifact_receipts = receipt.get("artifact_receipts")
+    count = receipt.get("replay_count")
+    if (
+        not isinstance(artifacts, list)
+        or not isinstance(artifact_receipts, list)
+        or len(artifacts) != count
+        or len(artifact_receipts) != count
+        or not artifacts
+    ):
+        return ["legacy admission replay artifact inventory is incomplete"]
+    projection = receipt.get("selected_projection")
+    if not isinstance(projection, Mapping):
+        return ["legacy admission selected projection is missing"]
+    errors = []
+    artifact_paths: list[str] = []
+    for inventory_row, artifact_receipt in zip(artifacts, artifact_receipts, strict=True):
+        pair_errors, artifact_path = _validate_legacy_v1_admission_pair(
+            case, inventory_row, artifact_receipt, projection, corpus_root
+        )
+        errors.extend(pair_errors)
+        if artifact_path is not None:
+            artifact_paths.append(artifact_path)
+    if len(artifact_paths) != len(set(artifact_paths)):
+        errors.append("legacy admission replay artifact paths must be unique")
+    return errors
+
+
+def _validate_legacy_v1_admission_pair(
+    case: Mapping[str, Any],
+    inventory_row: Any,
+    artifact_receipt: Any,
+    projection: Mapping[str, Any],
+    corpus_root: Path,
+) -> tuple[list[str], str | None]:
+    if not isinstance(inventory_row, Mapping) or not isinstance(artifact_receipt, Mapping):
+        return ["legacy admission replay artifact row is malformed"], None
+    artifact_path = artifact_receipt.get("artifact_path")
+    inventory_path = inventory_row.get("path")
+    normalized_inventory_path = inventory_path
+    if isinstance(inventory_path, str) and inventory_path != artifact_path:
+        case_relative_path = f"cases/{case.get('case_id')}/{inventory_path}"
+        normalized_inventory_path = (
+            case_relative_path if case_relative_path == artifact_path else inventory_path
+        )
+    artifact_sha256 = artifact_receipt.get("artifact_sha256")
+    inventory_sha256 = inventory_row.get("sha256", inventory_row.get("normalized_bundle_sha256"))
+    errors = []
+    if normalized_inventory_path != artifact_path or inventory_sha256 != artifact_sha256:
+        errors.append("legacy replay inventory row does not match its artifact receipt")
+    inventory_event_identity = inventory_row.get("selected_event_identity")
+    if inventory_event_identity is not None and inventory_event_identity != artifact_receipt.get(
+        "selected_event_identity"
+    ):
+        errors.append("legacy replay inventory event identity differs from its receipt")
+    if not isinstance(artifact_path, str):
+        errors.append("legacy replay artifact path is missing")
+        return errors, None
+    item = _admission_replay_observation(case, artifact_receipt)
+    artifact_errors = _validate_replay_artifact(item, case, artifact_receipt, corpus_root)
+    errors.extend(
+        error for error in artifact_errors if error != "replay_receipt_input_binding_missing"
+    )
+    if _admission_projection_from_receipt(artifact_receipt) != projection:
+        errors.append("selected projection differs from a verified legacy replay artifact")
+    return errors, artifact_path
+
+
+def _case_replay_input_binding_status(case: Mapping[str, Any]) -> str:
+    receipt = case.get("replay_receipt")
+    if (
+        isinstance(receipt, Mapping)
+        and receipt.get("schema_version") == CASE_ADMISSION_REPLAY_SCHEMA_VERSION
+        and receipt.get("input_binding_status") in {"bound", "unknown_historical"}
+    ):
+        return str(receipt["input_binding_status"])
+    return "unknown_legacy"
+
+
+def _validate_admission_replay_pair(
+    case: Mapping[str, Any],
+    inventory_row: Any,
+    artifact_receipt: Any,
+    selected_projection: Any,
+    corpus_root: Path,
+) -> tuple[list[str], str | None, str | None, str | None]:
+    errors = []
+    if not isinstance(artifact_receipt, Mapping):
+        return ["admission replay artifact receipt is malformed"], None, None, None
+    if not isinstance(inventory_row, Mapping):
+        return ["admission replay artifact inventory row is malformed"], None, None, None
+    expected_inventory = {
+        "path": artifact_receipt.get("artifact_path"),
+        "sha256": artifact_receipt.get("artifact_sha256"),
+        "run_id": artifact_receipt.get("run_id"),
+        "selected_event_identity": artifact_receipt.get("selected_event_identity"),
+    }
+    if any(inventory_row.get(field) != value for field, value in expected_inventory.items()):
+        errors.append("replay artifact inventory row does not match its artifact receipt")
+    run_id = artifact_receipt.get("run_id")
+    artifact_path = artifact_receipt.get("artifact_path")
+    if not isinstance(run_id, str) or not run_id.strip():
+        errors.append("admission replay artifact receipt run_id is missing")
+        run_id = None
+    if not isinstance(artifact_path, str) or not artifact_path.strip():
+        errors.append("admission replay artifact receipt path is missing")
+        artifact_path = None
+    artifact_binding = artifact_receipt.get("input_binding")
+    status = artifact_binding.get("status") if isinstance(artifact_binding, Mapping) else None
+    if status not in {"bound", "unknown_historical"}:
+        errors.append("admission replay artifact input-binding status is unsupported")
+        status = None
+    item = _admission_replay_observation(case, artifact_receipt)
+    errors.extend(_validate_replay_artifact(item, case, artifact_receipt, corpus_root))
+    if not isinstance(selected_projection, Mapping) or (
+        _admission_projection_from_receipt(artifact_receipt) != selected_projection
+    ):
+        errors.append("selected projection differs from a verified replay artifact")
+    return errors, run_id, artifact_path, status
+
+
+def _validate_admission_replay_set(
+    receipt: Mapping[str, Any],
+    run_ids: list[str],
+    artifact_paths: list[str],
+    input_binding_statuses: list[str],
+) -> list[str]:
+    errors = []
+    if len(run_ids) != len(set(run_ids)):
+        errors.append("admission replay artifacts must have distinct run IDs")
+    if len(artifact_paths) != len(set(artifact_paths)):
+        errors.append("admission replay artifact paths must be unique")
+    if len(set(input_binding_statuses)) != 1:
+        errors.append("admission replay artifacts have mixed input-binding status")
+    expected_binding_status = (
+        input_binding_statuses[0] if len(set(input_binding_statuses)) == 1 else None
+    )
+    if receipt.get("input_binding_status") != expected_binding_status:
+        errors.append("admission replay input-binding status differs from its receipts")
     return errors
 
 
@@ -4437,8 +4678,150 @@ def _validate_replay_artifact(
         errors.append(f"replay_artifact_invalid:{exc}")
         return errors
     errors.extend(_validate_replay_record_projection(item, case, receipt, record, event_identity))
+    errors.extend(_validate_replay_input_binding(case, receipt, record, corpus_root))
     errors.extend(_validate_replay_execution_evidence(item, record))
     return errors
+
+
+def _validate_replay_input_binding(
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    record: Mapping[str, Any],
+    corpus_root: Path,
+) -> list[str]:
+    """Bind exact receipts to captured runtime inputs; retain legacy uncertainty explicitly."""
+    provenance = record.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    recorded = provenance.get("case_input_identity")
+    declared = receipt.get("input_binding")
+    if not isinstance(declared, Mapping):
+        return ["replay_receipt_input_binding_missing"]
+    status = declared.get("status")
+    if status == "unknown_historical":
+        return _validate_unknown_historical_input_binding(
+            case, receipt, declared, recorded, corpus_root
+        )
+    if status != "bound":
+        return ["replay_receipt_input_binding_status_invalid"]
+    return _validate_bound_replay_input_binding(case, receipt, declared, recorded, corpus_root)
+
+
+def _validate_unknown_historical_input_binding(
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    declared: Mapping[str, Any],
+    recorded: Any,
+    corpus_root: Path,
+) -> list[str]:
+    if recorded is not None:
+        return ["replay_receipt_marks_available_input_binding_unknown"]
+    if not isinstance(declared.get("reason"), str) or not declared["reason"].strip():
+        return ["replay_receipt_historical_input_uncertainty_reason_missing"]
+    run_id = receipt.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
+        return ["replay_receipt_historical_run_id_missing"]
+    if declared.get("run_id") != run_id:
+        return ["replay_receipt_historical_run_id_mismatch"]
+    return _validate_historical_replay_run_binding(case, receipt, corpus_root)
+
+
+def _validate_bound_replay_input_binding(
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    declared: Mapping[str, Any],
+    recorded: Any,
+    corpus_root: Path,
+) -> list[str]:
+    if not isinstance(recorded, Mapping):
+        return ["replay_artifact_direct_input_binding_missing"]
+    try:
+        expected = _case_runtime_input_binding(case, corpus_root)
+    except (CorpusError, OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+        return [f"replay_artifact_case_input_identity_invalid:{exc}"]
+    binding_fields = (
+        "schema_version",
+        "status",
+        "scenario_semantic_sha256",
+        "route_overrides_sha256",
+        "map_assets",
+    )
+    errors = []
+    for field in binding_fields:
+        if recorded.get(field) != expected.get(field):
+            errors.append(f"replay_artifact_input_binding_{field}_mismatch")
+        if declared.get(field) != recorded.get(field):
+            errors.append(f"replay_receipt_input_binding_{field}_mismatch")
+    run_id = recorded.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
+        errors.append("replay_artifact_input_binding_run_id_missing")
+    elif receipt.get("run_id") != run_id or declared.get("run_id") != run_id:
+        errors.append("replay_receipt_run_id_mismatch")
+    if recorded.get("reason_codes") != []:
+        errors.append("replay_artifact_input_binding_has_unresolved_reasons")
+    return errors
+
+
+def _case_runtime_input_binding(case: Mapping[str, Any], corpus_root: Path) -> dict[str, Any]:
+    """Recompute semantic scenario and exact route/map input identities from custody."""
+    inputs = case.get("inputs")
+    inputs = inputs if isinstance(inputs, Mapping) else {}
+    paths = _scenario_input_paths(case, corpus_root)
+    scenario_document = _load_yaml_object(paths["scenario"], "scenario")
+    scenario_rows = scenario_document.get("scenarios")
+    if (
+        not isinstance(scenario_rows, list)
+        or len(scenario_rows) != 1
+        or not isinstance(scenario_rows[0], Mapping)
+    ):
+        raise CorpusError("case scenario input must contain exactly one scenario")
+    return {
+        "schema_version": EPISODE_INPUT_IDENTITY_SCHEMA,
+        "status": "bound",
+        "scenario_semantic_sha256": scenario_semantic_sha256(
+            scenario_rows[0], seed=int(case["scenario_seed"])
+        ),
+        "route_overrides_sha256": inputs.get("route_overrides_sha256"),
+        "map_assets": _map_asset_identity(inputs.get("map_assets")),
+    }
+
+
+def _validate_historical_replay_run_binding(
+    case: Mapping[str, Any], receipt: Mapping[str, Any], corpus_root: Path
+) -> list[str]:
+    """Verify the historical run ID against its separately retained provenance sidecar."""
+    case_receipt = case.get("replay_receipt")
+    inventory = case_receipt.get("replay_artifacts") if isinstance(case_receipt, Mapping) else None
+    if not isinstance(inventory, list):
+        return ["historical_replay_run_provenance_inventory_missing"]
+    matching = [
+        row
+        for row in inventory
+        if isinstance(row, Mapping) and row.get("path") == receipt.get("artifact_path")
+    ]
+    if len(matching) != 1:
+        return ["historical_replay_run_provenance_artifact_not_unique"]
+    row = matching[0]
+    if (
+        row.get("sha256") != receipt.get("artifact_sha256")
+        or row.get("run_id") != receipt.get("run_id")
+        or row.get("selected_event_identity") != receipt.get("selected_event_identity")
+    ):
+        return ["historical_replay_run_provenance_inventory_mismatch"]
+    provenance_path = row.get("provenance_path")
+    provenance_sha256 = row.get("provenance_sha256_normalized")
+    if not isinstance(provenance_path, str) or not _is_sha256(provenance_sha256):
+        return ["historical_replay_run_provenance_receipt_missing"]
+    try:
+        provenance_file = _resolve_corpus_artifact(provenance_path, corpus_root)
+        if _sha256_file(provenance_file) != provenance_sha256:
+            return ["historical_replay_run_provenance_checksum_mismatch"]
+        provenance = _read_json_object(provenance_file)
+    except (CorpusError, OSError, ValueError, TypeError) as exc:
+        return [f"historical_replay_run_provenance_invalid:{exc}"]
+    run = provenance.get("run")
+    if not isinstance(run, Mapping) or run.get("run_id") != receipt.get("run_id"):
+        return ["historical_replay_run_id_does_not_match_provenance"]
+    return []
 
 
 def _validate_replay_record_projection(
@@ -4650,7 +5033,10 @@ def _evaluation_receipt_binding_errors(
     if not isinstance(receipt, Mapping):
         return ["replay_receipt_missing"]
     errors = []
-    if receipt.get("schema_version") != EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION:
+    if receipt.get("schema_version") not in {
+        EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION,
+        LEGACY_EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION,
+    }:
         errors.append("replay_receipt_schema_invalid")
     if receipt.get("verification_status") != "artifact_projection_match":
         errors.append("replay_receipt_verification_status_invalid")
@@ -4874,6 +5260,17 @@ def _evaluation_state(
     replay_errors = _validate_replay_artifact(item, case, item.get("replay_receipt"), corpus_root)
     if replay_errors:
         return {"status": "unknown", "reason_codes": sorted(set(replay_errors))}
+    replay_receipt = item["replay_receipt"]
+    input_binding = replay_receipt.get("input_binding")
+    if (
+        replay_receipt.get("schema_version") != EVALUATION_REPLAY_RECEIPT_SCHEMA_VERSION
+        or not isinstance(input_binding, Mapping)
+        or input_binding.get("status") != "bound"
+    ):
+        return {
+            "status": "unknown",
+            "reason_codes": ["replay_input_binding_unknown_historical"],
+        }
     reasons = _complete_evaluation_eligibility_errors(item)
     if reasons:
         return {"status": "unknown", "reason_codes": sorted(set(reasons))}
@@ -5182,6 +5579,11 @@ def _materialize_case_artifacts(
         case["inputs"]["route_overrides_path"] = f"cases/{case_id}/inputs/route_overrides.yaml"
         for asset in case["inputs"]["map_assets"]:
             asset["path"] = copied_map_paths[asset["role"]]
+        for replay in case["replay_receipt"].get("replay_artifacts", []):
+            for field in ("path", "provenance_path"):
+                relative = replay.get(field)
+                if isinstance(relative, str) and not relative.startswith(f"cases/{case_id}/"):
+                    replay[field] = f"cases/{case_id}/{relative}"
         case["source_evidence"]["corpus_files"] = _case_file_inventory(final_dir, corpus_root)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)

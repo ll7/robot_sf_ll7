@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping
 from copy import deepcopy
@@ -26,6 +27,7 @@ from robot_sf.benchmark.analysis_trace import (
     telemetry_from_scenario,
 )
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
+from robot_sf.benchmark.episode_input_identity import capture_episode_input_identity
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
@@ -1305,6 +1307,7 @@ class _EpisodeRunContext:
     latency_profile: LatencyStressProfile | None
     algo: str
     policy_cfg: dict[str, Any]
+    case_input_identity: dict[str, Any]
 
 
 def _resolve_episode_run_context(  # noqa: PLR0913
@@ -1375,7 +1378,34 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
+    case_input_run_id = uuid.uuid4().hex
+    input_identity_before_config = capture_episode_input_identity(
+        scenario,
+        scenario_path=scenario_path,
+        seed=int(seed),
+        run_id=case_input_run_id,
+    )
     config = _build_env_config(scenario, scenario_path=scenario_path)
+    case_input_identity = capture_episode_input_identity(
+        scenario,
+        scenario_path=scenario_path,
+        seed=int(seed),
+        run_id=case_input_run_id,
+    )
+    identity_fields = (
+        "scenario_semantic_sha256",
+        "route_overrides_sha256",
+        "map_assets",
+    )
+    if any(
+        input_identity_before_config.get(field) != case_input_identity.get(field)
+        for field in identity_fields
+    ):
+        case_input_identity["status"] = "unavailable"
+        case_input_identity["reason_codes"] = sorted(
+            set(case_input_identity.get("reason_codes", []))
+            | {"inputs_changed_during_environment_resolution"}
+        )
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
     if horizon_val <= 0:
@@ -1445,6 +1475,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         latency_profile=latency_profile,
         algo=algo,
         policy_cfg=policy_cfg,
+        case_input_identity=case_input_identity,
     )
 
 
@@ -4964,6 +4995,11 @@ def _assemble_episode_record(  # noqa: PLR0913
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
     )
+    provenance = record.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {}
+        record["provenance"] = provenance
+    provenance["case_input_identity"] = dict(ctx.case_input_identity)
     runtime_law = record.get("algorithm_metadata", {}).get("obstacle_force_law")
     if isinstance(runtime_law, dict) and isinstance(runtime_law.get("sites"), dict):
         for site_metadata in runtime_law["sites"].values():

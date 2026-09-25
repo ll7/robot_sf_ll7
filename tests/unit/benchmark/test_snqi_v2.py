@@ -629,6 +629,76 @@ def test_spawn_validity_rejected_before_score_or_calibration(entrypoint, spawn_v
 
 @pytest.mark.parametrize("entrypoint", ["score", "calibration"])
 @pytest.mark.parametrize(
+    "missing_key",
+    [
+        "all_telemetry",
+        "schema_version",
+        "reset_clearance",
+        "reset_clearance_status",
+        "reset_clearance_error",
+        "reset_overlap",
+        "respawn_overlap_events",
+        "respawn_overlap_collisions",
+        "invalid_reason",
+        "invalid_run",
+    ],
+)
+def test_spawn_validity_present_block_requires_complete_schema(entrypoint, missing_key):
+    """Legacy omission is distinct from a truncated present producer block."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    row = rows[0]
+    row["status"] = "collision"
+    row["metrics"].update(success=0, total_collision_count=1)
+    row["outcome"] = {"route_complete": False, "collision_event": True, "timeout_event": False}
+    block = build_spawn_validity({"overlap": False}, [])
+    if missing_key == "all_telemetry":
+        block = {"invalid_run": False}
+    else:
+        del block[missing_key]
+    row["spawn_validity"] = block
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(row, fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("reset_clearance", []),
+        ("reset_clearance", {}),
+        ("reset_clearance", {"overlap": 0}),
+        ("reset_clearance_status", "unavailable"),
+        ("reset_clearance_error", "unexpected with available clearance"),
+        ("reset_overlap", 0),
+        ("respawn_overlap_events", None),
+        ("respawn_overlap_events", [False]),
+        ("respawn_overlap_collisions", [False]),
+    ],
+)
+def test_spawn_validity_present_block_rejects_malformed_telemetry(entrypoint, key, value):
+    """Complete keys cannot conceal malformed or internally inconsistent telemetry."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    block = build_spawn_validity({"overlap": False}, [])
+    block[key] = value
+    rows[0]["spawn_validity"] = block
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
     "signal", ["reset_overlap", "respawn_overlap_collisions", "reset_clearance_mismatch"]
 )
 def test_spawn_validity_rejects_producer_inconsistent_valid_flag(entrypoint, signal):
@@ -724,7 +794,8 @@ def test_spawn_validity_preserves_producer_completed_route_exception(with_outcom
     assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
 
 
-def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block():
+@pytest.mark.parametrize("clearance", [{"overlap": False}, None])
+def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block(clearance):
     """Legacy absence and canonical valid blocks retain the same score and anchors."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
@@ -733,7 +804,7 @@ def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block():
     legacy_score = score_episode(rows[0], fixture_spec())
     legacy_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
-        row["spawn_validity"] = build_spawn_validity({"overlap": False}, [])
+        row["spawn_validity"] = build_spawn_validity(clearance, [])
     scored = score_episode(rows[0], fixture_spec())
     assert scored["metrics"] == legacy_score["metrics"]
     assert derive_calibration_anchors(rows, **kwargs) == legacy_anchors

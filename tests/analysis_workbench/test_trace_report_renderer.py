@@ -169,7 +169,9 @@ def test_trace_report_renderer_rejects_invalid_annotation_references(
     output = tmp_path / "report.md"
 
     repo_root = Path(__file__).resolve().parents[2]
-    with tempfile.TemporaryDirectory(prefix="trace-invalid-annotation-", dir=repo_root) as scratch_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="trace-invalid-annotation-", dir=repo_root
+    ) as scratch_dir:
         scratch_root = Path(scratch_dir)
         trace_dir = scratch_root / "simulation_trace_export_v1"
         annotation_dir = scratch_root / "trace_annotation_set_v1"

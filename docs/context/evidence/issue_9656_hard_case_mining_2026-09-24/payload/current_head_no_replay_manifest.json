@@ -37,7 +37,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "981bfebc325415330d4a680c347e823190e05a9036cbc04c6b4b6437b44b8c12",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -96,7 +100,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "41187be38fbc00a52ba845afd4f185f198abeb34fa4682d2fc2f7c77a655f4f2",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -164,7 +172,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "2a309cea9f7b71b72a82f5855ef813d8efe36986314b51f01e9e736055671492",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -230,7 +242,11 @@
         "replay_ineligibility": "unavailable_model_artifact",
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "1e79bb7f78b314fb33587c99a11dc772aea30580787c2441c2597e21c491d4c8",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -312,7 +328,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_1_derived/cases/case-2fa6f8a28dafddc0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -429,7 +445,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "37393c622cd09c0e20905def2e8a2cf71facad40692eacb9f3fec078f5236aae",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -495,7 +515,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "58bb4165d11c6ee8f1765889b80e695811d97af4342396ba2a37a32f2e2d7972",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -563,7 +587,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "f8dd5d20d5ff2492d97fa8b7a5f44258871e50de5bb22e1a8a3d7e31dea0b21b",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -629,7 +657,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "c8f77fa077660154f0d984932d87e3af6d378a5b842750f8d26de01b7d6f9232",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -720,7 +752,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-4a01770a7c387ea0/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -837,7 +869,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "a1472c3ab99f4cb47e270e21fbc7279b44cebb4f9360e9118dcfc8b6941f82b4",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "circular_crossing",
       "scenario_id": "francis2023_circular_crossing",
@@ -896,7 +932,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "c0044cdd4e64a97067d687d11c701040e4059075ab815ae5addc371db30fcfad",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -957,7 +997,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "3d3b95de74a6d3d65b873eb897ffb3ce79c71d5184332cd126bd06f7f45506e0",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "crowd_navigation",
       "scenario_id": "francis2023_crowd_navigation",
@@ -1016,7 +1060,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "b11cbbb4837015525102b97fc56baecf97cc8192b217039de715df6efc11e45f",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_realworld_double_bottleneck_high",
@@ -1100,7 +1148,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo orca --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-5a33e6eb8e4a4d12/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -1217,7 +1265,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "679b86b70a3418fe8a182edbc84cef430ab3f2159fbc944a80808ae848e1e358",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "circular_crossing",
       "scenario_id": "francis2023_circular_crossing",
@@ -1278,7 +1330,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "d08895be212c2e77e2a6bf69d271ba861124af4f3dd468d56b94e515056f114f",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -1337,7 +1393,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "3ecb03811d557b44db3d1ab7ed3b8b35fd640744aec067f366ee1648576ba953",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -1404,7 +1464,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "bc5d438b09edb7c92155401cb25837c6de54eaad15bd423655f4558fcece7c74",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -1463,7 +1527,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "271990282142bf5825f1fa9a9b1a4338e0a3f260d8af6d9b207222e2df08dd74",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -1522,7 +1590,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "a9963c91074ccf3426e01b8250db7426e375689e13bc62214fa7ba83675403e8",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -1581,7 +1653,11 @@
         "replay_ineligibility": "unavailable_model_artifact",
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "cb03eedfe7ae082524463c4c07033b2e6b11514debe3960aca53825ba67c19a5",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -1646,7 +1722,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "99d6ada97f23a2a52bf5ff6db83768902e4f0481814291f7e70947c2250b5201",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -1705,7 +1785,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "8c595a7aa945bd52b3bb3a188d162d348b764e7653ea72fa622239a59ab73951",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -1771,7 +1855,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "8f019ad705e83e13fa75a63124189dc57a5aabfc5f95b27458c82496de4aafcb",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "circular_crossing",
       "scenario_id": "francis2023_circular_crossing",
@@ -1832,7 +1920,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "0da9f43bee01135aaec63a9ccb23296fdca41f23164a320c99dc59a6ee2d0130",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -1914,7 +2006,7 @@
           "--fail-fast",
           "--record-forces"
         ],
-        "command_shell": "uv run robot_sf_bench run --matrix output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml --out output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config output/issue9656_hard_case_mining/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
+        "command_shell": "uv run robot_sf_bench run --matrix ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/replay_matrix.yaml --out ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/episodes.jsonl --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --algo goal --algo-config ${ISSUE9656_LOCAL_ROOT}/replay_limit_4_resumed/cases/case-b08371fb5cd09502/replay/planner_config.yaml --benchmark-profile baseline-safe --workers 1 --no-resume --no-video --video-renderer none --fail-fast --record-forces",
         "comparison": {
           "metrics": {
             "clearing_distance_min": {
@@ -2031,7 +2123,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "3ba4e8f959f88cff9259835e6622d7f404d679e69210d3a472f2aaa5a1d34cc2",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -2097,7 +2193,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "90be888ba1ec0b095f81bf74b807ddb40f8d1c3f58185366e5c20f5d62d7aafe",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -2158,7 +2258,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "423bef28b237f3c07aee57841d3fa2eb47ae3285546711425edc671013dd742a",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -2219,7 +2323,11 @@
         "replay_ineligibility": "unavailable_model_artifact",
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "374ad8e865644a007c3d31109cfeefe0edc780bf6bec7a7198ccf24f7d103ec6",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -2280,7 +2388,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "9a4a5f31ca1ac988c0adf5b274d3b7a9507b7f145121aba98f0b9a7d5dd6b590",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "cross_trap",
       "scenario_id": "classic_cross_trap_high",
@@ -2341,7 +2453,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "435d1f32d856521e26bf33f22f087d7403478b26be845382bacc7afd5d93b5b6",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -2405,7 +2521,11 @@
         "replay_ineligibility": "unavailable_model_artifact",
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "22e5b3ffc39dc8ca8d4f9ca02e60bd18f4a351ea614ffd7a633b5f58fd57a242",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -2473,7 +2593,11 @@
         "replay_ineligibility": "unavailable_model_artifact",
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "683482524d60d81b8816f70e2ab8e73120e05cb0ff5e6c0ce24cc9f755d7983f",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "circular_crossing",
       "scenario_id": "francis2023_circular_crossing",
@@ -2534,7 +2658,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "c7943b9ed81ca154bd083f36d9cb09d3f5eeea048e917bf327c6e5fd2f34db1f",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "bottleneck",
       "scenario_id": "classic_bottleneck_high",
@@ -2595,7 +2723,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "4505fbe08319158f44065194f00ba171e1de5d2735c9ed92d266d7f26967d9ad",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "accompanying_peer",
       "scenario_id": "francis2023_accompanying_peer",
@@ -2661,7 +2793,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "87382a0132dba2cd66229acc17778e268405bab46531f78ddd1264bcea7cde02",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -2729,7 +2865,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "81bd5b107777b16a09f887fe0df826915400b353c51598fdaa7045f2bfabb52b",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "cross_trap",
       "scenario_id": "classic_cross_trap_high",
@@ -2788,7 +2928,11 @@
         "replay_ineligibility": null,
         "scenario_matrix_path": "replay_input/replay_matrix.yaml",
         "scenario_matrix_sha256": "d4f7aca028dcc8e4303f785170a729d032e45ed73d27595be0ff9492e2a31a82",
-        "status": "materialized"
+        "status": "materialized",
+        "portable_bundle_availability": {
+          "planner_config": "unavailable_from_portable_bundle",
+          "scenario_matrix": "unavailable_from_portable_bundle"
+        }
       },
       "scenario_family": "blind_corner",
       "scenario_id": "francis2023_blind_corner",
@@ -2863,6 +3007,11 @@
       "unavailable_execution_evidence": 4,
       "unavailable_model_artifact": 5
     }
+  },
+  "portable_artifact_availability": {
+    "planner_config_bytes": "unavailable_from_portable_bundle",
+    "scenario_matrix_bytes": "unavailable_from_portable_bundle",
+    "digest_scope": "SHA-256 values identify prior local materialization outputs; the compact bundle does not contain the bytes needed to independently revalidate them."
   },
   "schema_version": "benchmark-hard-case-slice.v1",
   "selection": {

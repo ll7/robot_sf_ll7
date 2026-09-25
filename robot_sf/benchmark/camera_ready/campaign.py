@@ -115,6 +115,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     soft_contract_warning_active,
     validate_snqi_normalized_inputs,
 )
+from robot_sf.benchmark.snqi.v2_reports import enrich_campaign_v2
 from robot_sf.benchmark.utils import load_optional_json
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
@@ -2722,6 +2723,7 @@ def _build_campaign_metadata_section(
         "release_url": release_url,
         "release_asset_url": release_asset_url,
         "doi_url": doi_url,
+        **(cfg.snqi_v2_spec.provenance() if getattr(cfg, "snqi_v2_spec", None) else {}),
         "snqi_weights_version": (
             cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
         ),
@@ -3816,6 +3818,22 @@ def _execute_planner_matrix_phase(
     )
 
 
+def _enrich_campaign_snqi_v2(
+    cfg: CampaignConfig,
+    paths: _CampaignPreflightPaths,
+    run_entries: list[dict[str, Any]],
+) -> None:
+    """Enrich opt-in V2 rows and bind sidecars before campaign integrity checks."""
+    if getattr(cfg, "snqi_v2_spec", None) is not None:
+        enrich_campaign_v2(
+            run_entries,
+            cfg.snqi_v2_spec,
+            paths.reports_dir,
+            repo_root=get_repository_root(),
+            bootstrap_samples=cfg.bootstrap_samples,
+        )
+
+
 def _run_campaign_orchestrator(
     cfg: CampaignConfig,
     *,
@@ -3846,6 +3864,7 @@ def _run_campaign_orchestrator(
         )
     )
 
+    _enrich_campaign_snqi_v2(cfg, paths, run_entries)
     campaign_integrity, arm_rollup, fairness_report = _post_run_integrity_and_fairness(
         cfg,
         manifest_payload=paths.manifest_payload,

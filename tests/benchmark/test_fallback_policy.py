@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from unittest.mock import Mock
+
 import pytest
 
 from robot_sf.benchmark.fallback_policy import (
@@ -14,6 +17,277 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_campaign_outcome,
     summarize_campaign_status_axes,
 )
+
+
+@pytest.fixture
+def guarded_runtime(request) -> dict[str, object]:
+    """Build the real shield serialization and runner hook for a clear policy command.
+
+    Returns:
+        Runtime metadata matching the issue9718 diagnostic's nonintervened command.
+    """
+    from robot_sf.benchmark.map_runner.map_runner import _attach_guard_decision_stats
+    from robot_sf.planner.safety_shield import ShieldDecision
+
+    action = (2.0, -0.045798975974321365)
+    label = getattr(request, "param", "ppo_clear")
+    intervened = label not in {"ppo_clear", "ppo_safe", "goal_reached"}
+    filtered_action = (0.0, 0.0) if intervened else action
+    decision = ShieldDecision(
+        proposed_action=action,
+        filtered_action=filtered_action,
+        decision_label=label,
+        intervention_reason="proposed_action_clear_of_near_field",
+        intervened=intervened,
+        fallback_controller_state={
+            "policy": "RiskDWAPlannerAdapter",
+            "prior_available": False,
+            "action_adaptation": {
+                "mode": "guard_selected_command" if intervened else "direct_policy_command",
+                "raw_policy_action": list(action),
+                "adapted_action": list(filtered_action),
+                "residual_clipped": False,
+                "hard_guard_authoritative": True,
+            },
+        },
+    )
+    policy = Mock()
+    policy._planner_stats.return_value = {
+        "checkpoint_provenance": {"load_succeeded": True, "fallback_triggered": False}
+    }
+    _attach_guard_decision_stats(
+        policy, {"shield_stats": {"last_decision": decision.to_metadata()}}
+    )
+    return policy._planner_stats()
+
+
+def test_shield_dictionary_does_not_report_policy_fallback(
+    guarded_runtime, guarded_metadata
+) -> None:
+    """Typed diagnostic state must survive the real runner-to-availability path."""
+    decision = guarded_runtime["last_decision"]
+    assert decision["intervened"] is False
+    assert decision["override_applied"] is False
+    assert (
+        runtime_fallback_or_degraded_marker(
+            guarded_runtime, expected_algorithm="guarded_ppo", algorithm_metadata=guarded_metadata
+        )
+        is None
+    )
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    availability = summarize_benchmark_availability(summary)
+    assert availability.execution_mode == "mixed"
+    assert availability.benchmark_success is True
+    assert benchmark_run_exit_code(summary) == 0
+
+
+@pytest.fixture
+def guarded_metadata(guarded_runtime) -> dict[str, object]:
+    """Bind real shield telemetry to the established guarded composite identity.
+
+    Returns:
+        Algorithm metadata with the real serialized decision and positive decision counters.
+    """
+    label = guarded_runtime["last_decision"]["decision_label"]
+    return {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "planner_kinematics": {"execution_mode": "mixed"},
+        "planner_runtime": guarded_runtime,
+        "guard_stats": {label: 1},
+        "shield_stats": {
+            "decision_counts": {label: 1},
+            "last_decision": guarded_runtime["last_decision"],
+        },
+    }
+
+
+@pytest.mark.parametrize("guarded_runtime", ["fallback_safe"], indirect=True)
+def test_declared_guarded_safe_command_remains_available(guarded_metadata) -> None:
+    """The frozen composite planner's safe Risk-DWA intervention retains its contract."""
+    from robot_sf.benchmark.release_acceptance import _status_markers
+
+    runtime = guarded_metadata["planner_runtime"]
+    decision = runtime["last_decision"]
+    assert decision["intervened"] is True
+    assert decision["fallback_controller_state"]["policy"] == "RiskDWAPlannerAdapter"
+    assert (
+        runtime_fallback_or_degraded_marker(
+            runtime, expected_algorithm="guarded_ppo", algorithm_metadata=guarded_metadata
+        )
+        is None
+    )
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    availability = summarize_benchmark_availability(summary)
+    assert availability.execution_mode == "mixed"
+    assert availability.availability_status == "available"
+    assert availability.benchmark_success is True
+    assert benchmark_run_exit_code(summary) == 0
+    payload = {"status": "ok", "algorithm_metadata": guarded_metadata}
+    assert _status_markers(payload, "row", expected_algorithm="guarded_ppo") == []
+    assert _status_markers(payload, "row", expected_algorithm="goal")
+
+
+@pytest.mark.parametrize(
+    "guarded_runtime",
+    ["fallback_best_effort", "uncertainty_fallback_configured"],
+    indirect=True,
+)
+def test_guarded_genuine_fallback_counters_remain_forbidden(guarded_metadata) -> None:
+    """Positive producer counters keep best-effort/uncertainty execution inadmissible."""
+    from robot_sf.benchmark.release_acceptance import _status_markers
+
+    label = guarded_metadata["planner_runtime"]["last_decision"]["decision_label"]
+    payload = {"status": "ok", "algorithm_metadata": guarded_metadata}
+    markers = _status_markers(payload, "row", expected_algorithm="guarded_ppo")
+    assert any(f"guard_stats.{label}" in path and value == "1" for path, value in markers)
+
+
+@pytest.mark.parametrize("guarded_runtime", ["fallback_safe"], indirect=True)
+def test_guarded_safe_decision_does_not_hide_checkpoint_fallback(guarded_metadata) -> None:
+    """A legitimate shield command cannot excuse a genuine failed checkpoint path."""
+    from robot_sf.benchmark.release_acceptance import _status_markers
+
+    runtime = guarded_metadata["planner_runtime"]
+    runtime["checkpoint_provenance"]["fallback_triggered"] = True
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    assert runtime_fallback_or_degraded_marker(runtime) == (
+        "checkpoint_provenance.fallback_triggered",
+        "true",
+    )
+    assert summarize_benchmark_availability(summary).benchmark_success is False
+    assert benchmark_run_exit_code(summary) == 2
+    payload = {"status": "ok", "algorithm_metadata": guarded_metadata}
+    assert _status_markers(payload, "row", expected_algorithm="guarded_ppo")
+
+
+@pytest.mark.parametrize("expected_algorithm", [None, "goal", "guarded_ppo"])
+def test_shield_dictionary_requires_complete_identity(guarded_runtime, expected_algorithm) -> None:
+    """A caller name alone cannot grant the structured-state exception."""
+    assert runtime_fallback_or_degraded_marker(
+        guarded_runtime, expected_algorithm=expected_algorithm
+    ) == ("last_decision.fallback_controller_state", "invalid")
+
+
+@pytest.mark.parametrize(
+    "readiness", [None, [], "guarded_ppo", {}, {"name": "goal"}, {"name": False}]
+)
+def test_shield_availability_requires_declared_readiness(guarded_metadata, readiness) -> None:
+    """Self-reported runtime identity cannot replace the producer's requested algorithm."""
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": readiness,
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    availability = summarize_benchmark_availability(summary)
+    assert availability.benchmark_success is False
+    assert "fallback_controller_state=invalid" in availability.availability_reason
+    assert benchmark_run_exit_code(summary) == 2
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("canonical_algorithm", "goal"),
+        ("canonical_algorithm", None),
+        ("algorithm", "guarded_ppo"),
+        ("algorithm", None),
+        ("planner_contract", {}),
+        ("planner_contract", None),
+        ("planner_contract", {"planner_id": "goal"}),
+    ],
+)
+def test_shield_availability_cross_checks_contract_identity(guarded_metadata, field, value) -> None:
+    """Every identity carrier must agree; the readiness name alone is insufficient."""
+    guarded_metadata[field] = value
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    assert summarize_benchmark_availability(summary).benchmark_success is False
+    assert benchmark_run_exit_code(summary) == 2
+
+
+@pytest.mark.parametrize("value", [None, [], "unused", 0, False, 1])
+def test_shield_dictionary_rejects_wrong_type(value, guarded_metadata) -> None:
+    """The declared dictionary cannot be substituted with a scalar or sequence."""
+    assert runtime_fallback_or_degraded_marker(
+        {"fallback_controller_state": value},
+        expected_algorithm="guarded_ppo",
+        algorithm_metadata=guarded_metadata,
+    ) == (
+        "fallback_controller_state",
+        "invalid",
+    )
+
+
+@pytest.mark.parametrize(
+    ("marker", "value", "expected"),
+    [
+        ("fallback_triggered", True, "true"),
+        ("degraded", True, "true"),
+        ("status", "fallback", "fallback"),
+        ("status", "degraded", "degraded"),
+        ("fallback_count", 2, "2"),
+        ("fallback_count", {}, "invalid"),
+        ("fallback_count", float("nan"), "invalid"),
+        ("fallback_used", "false", "invalid"),
+    ],
+)
+def test_shield_dictionary_still_exposes_nested_failures(
+    guarded_runtime, guarded_metadata, marker, value, expected
+) -> None:
+    """Recognizing the container must never skip genuine or malformed failure evidence."""
+    payload = deepcopy(guarded_runtime)
+    payload["last_decision"]["fallback_controller_state"]["events"] = [{marker: value}]
+    assert runtime_fallback_or_degraded_marker(
+        payload, expected_algorithm="guarded_ppo", algorithm_metadata=guarded_metadata
+    ) == (
+        f"last_decision.fallback_controller_state.events[0].{marker}",
+        expected,
+    )
+
+
+def test_unknown_fallback_dictionary_is_still_invalid() -> None:
+    """Only the documented typed field is a container; other counters stay strict."""
+    assert runtime_fallback_or_degraded_marker({"unknown_fallback_counter": {}}) == (
+        "unknown_fallback_counter",
+        "invalid",
+    )
 
 
 def test_summarize_benchmark_availability_marks_fallback_as_not_available() -> None:

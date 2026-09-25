@@ -45,6 +45,11 @@
         "state": 4
       }
     },
+    "spawn_validity": {
+      "records_with_spawn_validity": 0,
+      "reset_clearance_unavailable_count": 0,
+      "spawn_overlap_excluded_count": 0
+    },
     "warnings": []
   },
   "orca": {

@@ -34,7 +34,7 @@ from robot_sf.benchmark.errors import (
 from robot_sf.benchmark.grouping import EFFECTIVE_REPORT_GROUP_KEY, resolve_report_group_key
 from robot_sf.benchmark.metric_layers import MetricSourceBinding  # noqa: TC001
 from robot_sf.benchmark.metrics import snqi as snqi_fn
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
+from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap, spawn_validity_counts
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
 if TYPE_CHECKING:
@@ -906,6 +906,7 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
     Returns:
         Aggregate summary, contributor IDs by group/metric, and eligible episode records.
     """
+    spawn_validity_meta = spawn_validity_counts(records)
     records, excluded_evidence_records = filter_evidence_eligible_records(records)
     for rec in records:
         _ensure_snqi(
@@ -969,6 +970,7 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
                 "excluded as simulator spawn defects."
             ),
         },
+        "spawn_validity": spawn_validity_meta,
     }
 
     if expected_algorithms:

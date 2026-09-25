@@ -341,6 +341,11 @@ def _step_collision_events(
                 nearest = int(np.argmin(ped_distances))
             ped_index = int(finite_indices[nearest])
             partner_id = str(ped_index)
+            # Every pedestrian in contact, so a respawn overlap is attributed even when
+            # the respawned pedestrian is not the nearest one (issue #9725).
+            contact_partner_ids = [str(int(finite_indices[i])) for i in contact_candidates] or [
+                partner_id
+            ]
             ped_velocity = np.zeros(2, dtype=float)
             if (
                 previous_ped_positions is not None
@@ -356,6 +361,7 @@ def _step_collision_events(
             {
                 "collision_partner_type": "pedestrian",
                 "collision_partner_id": partner_id,
+                "contact_partner_ids": contact_partner_ids,
                 "collision_time": collision_time,
                 "relative_speed_at_contact": relative_speed,
                 "clearance_series_source": "runtime.step.pedestrian_positions",
@@ -1841,6 +1847,7 @@ class _EpisodeStepLoopResult:
     sampler_capture: dict[str, Any] | None = None
     robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
     reset_spawn_clearance: dict[str, Any] | None = None
+    reset_spawn_clearance_error: str | None = None
     respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -1900,21 +1907,24 @@ class _StepLoopState:
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
     sampler_capture: dict[str, Any] | None = None
     reset_spawn_clearance: dict[str, Any] | None = None
+    reset_spawn_clearance_error: str | None = None
     respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _read_reset_spawn_clearance(simulator: Any) -> dict[str, Any] | None:
+def _read_reset_spawn_clearance(simulator: Any) -> tuple[dict[str, Any] | None, str | None]:
     """Measure reset clearance for the episode record (issue #9725).
 
     Returns:
-        The clearance block, or ``None`` when the simulator does not expose the
-        robot, pedestrian, and map state it needs.
+        The clearance block and ``None``, or ``None`` and the error text when the
+        simulator does not expose the robot, pedestrian, and map state it needs.
+        The error is written to ``spawn_validity.reset_clearance_error`` and counted
+        in aggregate metadata, so unmeasured rows stay visible.
     """
     try:
-        return reset_spawn_clearance(simulator)
+        return reset_spawn_clearance(simulator), None
     except (AttributeError, TypeError, ValueError, IndexError) as exc:
         logger.warning("Reset spawn clearance unavailable: {err}", err=exc)
-        return None
+        return None, f"{type(exc).__name__}: {exc}"
 
 
 def _read_respawn_overlap_events(simulator: Any) -> list[dict[str, Any]]:
@@ -2201,7 +2211,10 @@ def _init_step_loop_state(
     state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
     state.sampler_capture = _read_sampler_capture(env)
-    state.reset_spawn_clearance = _read_reset_spawn_clearance(env.simulator)
+    (
+        state.reset_spawn_clearance,
+        state.reset_spawn_clearance_error,
+    ) = _read_reset_spawn_clearance(env.simulator)
     return state
 
 
@@ -3315,6 +3328,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         ),
         sampler_capture=state.sampler_capture,
         reset_spawn_clearance=state.reset_spawn_clearance,
+        reset_spawn_clearance_error=state.reset_spawn_clearance_error,
         respawn_overlap_events=list(state.respawn_overlap_events),
     )
 
@@ -4829,6 +4843,7 @@ def _finalize_assembled_record_provenance(  # noqa: PLR0913
         collision_events=loop_result.collision_events,
         dt_seconds=float(ctx.config.sim_config.time_per_step_in_secs),
         route_complete=loop_result.reached_goal_step is not None,
+        reset_clearance_error=loop_result.reset_spawn_clearance_error,
     )
     _finalize_record_provenance(
         record,

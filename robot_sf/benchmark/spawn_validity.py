@@ -45,7 +45,10 @@ def _respawn_collisions(
         if collision.get("collision_partner_type") != "pedestrian":
             continue
         try:
-            partner = int(str(collision.get("collision_partner_id")))
+            raw_partners = collision.get("contact_partner_ids") or [
+                collision.get("collision_partner_id")
+            ]
+            partners = {int(str(partner)) for partner in raw_partners}
             collision_time = float(collision.get("collision_time"))
         except (TypeError, ValueError):
             continue
@@ -53,11 +56,13 @@ def _respawn_collisions(
             rows = {int(row) for row in event.get("ped_rows", [])}
             respawn_time = float(event.get("step", 0)) * dt_seconds
             elapsed = collision_time - respawn_time
-            if partner in rows and -dt_seconds <= elapsed <= RESPAWN_COLLISION_WINDOW_S + 1.0e-9:
+            in_window = -dt_seconds - 1.0e-9 <= elapsed <= RESPAWN_COLLISION_WINDOW_S + 1.0e-9
+            hit = sorted(partners & rows)
+            if hit and in_window:
                 matches.append(
                     {
                         "group_id": event.get("group_id"),
-                        "ped_row": partner,
+                        "ped_row": hit[0],
                         "respawn_time_s": respawn_time,
                         "collision_time_s": collision_time,
                     }
@@ -72,6 +77,7 @@ def build_spawn_validity(
     collision_events: Sequence[Mapping[str, Any]] | None = None,
     dt_seconds: float = 0.1,
     route_complete: bool = False,
+    reset_clearance_error: str | None = None,
 ) -> dict[str, Any]:
     """Return the per-episode spawn-validity block.
 
@@ -81,6 +87,7 @@ def build_spawn_validity(
         respawn_overlap_events: Route-end respawns that landed inside a robot footprint.
         collision_events: Typed collision events of the episode.
         dt_seconds: Simulation step length used to time respawn events.
+        reset_clearance_error: Why the reset clearance could not be measured, if so.
         route_complete: Whether the robot completed its route. A completed route is
             never marked invalid: no collision was counted, so no rate is distorted,
             and the ledger keeps ``goal_reached`` and ``invalid_run`` exclusive.
@@ -96,11 +103,32 @@ def build_spawn_validity(
         "schema_version": SPAWN_VALIDITY_SCHEMA_VERSION,
         "reset_clearance": dict(reset_clearance) if reset_clearance else None,
         "reset_clearance_status": "available" if reset_clearance else "unavailable",
+        "reset_clearance_error": None if reset_clearance else reset_clearance_error,
         "reset_overlap": reset_overlap,
         "respawn_overlap_events": events,
         "respawn_overlap_collisions": respawn_collisions,
         "invalid_run": invalid,
         "invalid_reason": SPAWN_OVERLAP_INVALID_REASON if invalid else None,
+    }
+
+
+def spawn_validity_counts(records: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Count spawn-validity outcomes over episode records for report metadata.
+
+    Returns:
+        Counts of records with a spawn block, spawn-overlap exclusions, and records
+        whose reset clearance could not be measured (so their validity is unknown).
+    """
+    blocks = [r.get("spawn_validity") for r in records if isinstance(r, Mapping)]
+    present = [b for b in blocks if isinstance(b, Mapping)]
+    return {
+        "records_with_spawn_validity": len(present),
+        "spawn_overlap_excluded_count": sum(
+            1 for r in records if isinstance(r, Mapping) and record_has_spawn_overlap(r)
+        ),
+        "reset_clearance_unavailable_count": sum(
+            1 for b in present if b.get("reset_clearance_status") != "available"
+        ),
     }
 
 
@@ -119,4 +147,5 @@ __all__ = [
     "SPAWN_VALIDITY_SCHEMA_VERSION",
     "build_spawn_validity",
     "record_has_spawn_overlap",
+    "spawn_validity_counts",
 ]

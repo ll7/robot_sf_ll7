@@ -21,12 +21,19 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.result_provenance import (
+    load_result_provenance_manifest,
+    manifest_path_for_result_jsonl,
+    validate_result_provenance_manifest,
+)
 from robot_sf.benchmark.snqi.v2_reports import read_episode_files, validate_episode_execution
 from robot_sf.benchmark.snqi.v2_spec import (
     PP_EQUIV_FORCE,
     SIMULATED_FORCE,
     finite_nonnegative,
 )
+from robot_sf.benchmark.utils import _config_hash
+from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -127,55 +134,91 @@ def derive_calibration_anchors(
     }
 
 
-def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str, Any]:
+def freeze_campaign_anchors(
+    campaign_root: Path, output_path: Path, *, campaign_config: Any | None = None
+) -> dict[str, Any]:
     """Validate a completed development campaign and atomically write its anchor asset.
 
     Returns:
         Frozen anchor document, including hashes of every source episode file.
     """
-    manifest = json.loads((campaign_root / "campaign_manifest.json").read_text())
-    summary = json.loads((campaign_root / "reports/campaign_summary.json").read_text())
-    preview = json.loads((campaign_root / "preflight/preview_scenarios.json").read_text())
-    if preview.get("truncated") or manifest["seed_policy"]["resolved_seeds"] != [101, 102]:
-        raise ValueError("SNQI-v2 calibration requires complete preview and development seeds")
-    arms = [arm["key"] for arm in manifest["planners"] if arm["enabled"]]
-    scenarios = [scenario["name"] for scenario in preview["scenarios"]]
-    expected_algorithms = {
-        arm["key"]: arm.get("algo") for arm in manifest["planners"] if arm["enabled"]
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config  # noqa: PLC0415
+
+    campaign_root = campaign_root.resolve()
+    config = campaign_config or load_campaign_config(
+        get_repository_root() / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
+    )
+    metadata_paths = [
+        campaign_root / name
+        for name in (
+            "campaign_manifest.json",
+            "reports/campaign_summary.json",
+            "preflight/preview_scenarios.json",
+        )
+    ]
+    snapshots = _snapshot_calibration_files(metadata_paths, campaign_root)
+    manifest, summary, preview = [json.loads(path.read_text()) for path in metadata_paths]
+    planners, canonical_scenarios = _bind_calibration_config(config, manifest, preview)
+    input_paths = {
+        Path(config.scenario_matrix_path),
+        get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
     }
-    records, hashes = [], {}
+    input_paths.update(
+        Path(planner.algo_config_path)
+        for planner in planners.values()
+        if planner.algo_config_path is not None
+    )
+    snapshots.update({str(path): sha256_file(path) for path in input_paths})
+    arms = list(planners)
+    scenarios = list(canonical_scenarios)
+    expected_algorithms = {key: planner.algo for key, planner in planners.items()}
+    records, hashes, sidecar_hashes = [], {}, {}
+    observed_arms = set()
     for entry in summary["runs"]:
+        arm = entry.get("planner", {}).get("key")
+        planner = planners.get(arm)
+        if (
+            planner is None
+            or arm in observed_arms
+            or entry["planner"].get("algo") != planner.algo
+            or entry["planner"].get("kinematics") != "differential_drive"
+        ):
+            raise ValueError("SNQI-v2 calibration run arm disagrees with manifest/config")
+        observed_arms.add(arm)
         availability = summarize_benchmark_availability(entry.get("summary"))
         if entry.get("status") != "ok" or not availability.benchmark_success:
             raise ValueError("SNQI-v2 calibration run has incomplete/fallback/degraded execution")
-        arm = entry["planner"]["key"]
-        if arm not in expected_algorithms or (
-            entry["planner"].get("algo") is not None
-            and entry["planner"]["algo"] != expected_algorithms[arm]
-        ):
-            raise ValueError("SNQI-v2 calibration run arm disagrees with manifest")
-        source_path = Path(entry["episodes_path"])
-        # Campaign archives preserve the runs/ tree while their producer's absolute
-        # workspace may no longer exist. Resolve only that confined archive suffix.
-        if "runs" not in source_path.parts:
-            raise ValueError("SNQI-v2 calibration source path must be under campaign runs/")
-        suffix = source_path.parts[source_path.parts.index("runs") :]
-        path = (campaign_root.joinpath(*suffix)).resolve()
-        if not path.is_relative_to(campaign_root.resolve()):
-            raise ValueError("SNQI-v2 calibration source escapes campaign root")
-        key = str(path.relative_to(campaign_root.resolve()))
-        if key in hashes:
-            raise ValueError("SNQI-v2 calibration duplicate episode source")
-        hashes[key] = sha256_file(path)
-        for record in read_episode_files([path]):
-            if record.get("git_hash") != manifest["git"]["commit"]:
-                raise ValueError("SNQI-v2 calibration record source commit mismatch")
-            records.append(
-                _compact_calibration_record(
-                    record, arm, expected_algorithm=expected_algorithms[arm]
-                )
+        relative = Path("runs") / f"{arm}__differential_drive" / "episodes.jsonl"
+        declared = Path(entry["episodes_path"])
+        if tuple(declared.parts[-3:]) != relative.parts:
+            raise ValueError("SNQI-v2 calibration episode path is not bound to its arm")
+        path = campaign_root / relative
+        sidecar = manifest_path_for_result_jsonl(path)
+        for artifact in (path, sidecar):
+            _require_calibration_file(artifact, campaign_root)
+        file_hash = sha256_file(path)
+        sidecar_hash = sha256_file(sidecar)
+        custody = _load_calibration_custody(
+            path, planner, config, canonical_scenarios, manifest["git"]["commit"], file_hash
+        )
+        hashes[str(relative)] = file_hash
+        sidecar_hashes[str(sidecar.relative_to(campaign_root))] = sidecar_hash
+        snapshots[str(path)] = file_hash
+        snapshots[str(sidecar)] = sidecar_hash
+        count = 0
+        for index, record in enumerate(read_episode_files([path])):
+            _validate_calibration_row_custody(
+                record, custody, index, planner, canonical_scenarios, manifest["git"]["commit"]
             )
+            records.append(
+                _compact_calibration_record(record, arm, expected_algorithm=planner.algo)
+            )
+            count += 1
             del record
+        if count != 96:
+            raise ValueError("SNQI-v2 calibration producer arm must contain exactly96 rows")
+    if observed_arms != set(planners):
+        raise ValueError("SNQI-v2 calibration run inventory is incomplete")
     digest = hashlib.sha256(
         json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -189,17 +232,228 @@ def freeze_campaign_anchors(campaign_root: Path, output_path: Path) -> dict[str,
         expected_algorithms=expected_algorithms,
     )
     document["calibration"]["episode_files_sha256"] = hashes
+    document["calibration"]["producer_sidecars_sha256"] = sidecar_hashes
+    document["calibration"]["campaign_config_hash"] = manifest["config_hash"]
     document["calibration"]["episodes_hash_rule"] = (
         "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
     )
     document["calibration"]["campaign_manifest_sha256"] = hashlib.sha256(
         (campaign_root / "campaign_manifest.json").read_bytes()
     ).hexdigest()
+    if any(sha256_file(Path(path)) != digest for path, digest in snapshots.items()):
+        raise ValueError("SNQI-v2 calibration custody changed during analysis")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_suffix(output_path.suffix + ".tmp")
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False) + "\n")
     temporary.replace(output_path)
     return document
+
+
+def _snapshot_calibration_files(paths: Sequence[Path], root: Path) -> dict[str, str]:
+    """Snapshot safe metadata inputs for the post-analysis custody recheck.
+
+    Returns:
+        Absolute-path to streamed SHA256 mapping.
+    """
+    for path in paths:
+        _require_calibration_file(path, root)
+    return {str(path): sha256_file(path) for path in paths}
+
+
+def _require_calibration_file(path: Path, root: Path) -> None:
+    """Reject missing or symlinked custody inputs before reading or hashing them."""
+    if (
+        not path.is_file()
+        or path.is_symlink()
+        or not path.resolve().is_relative_to(root)
+        or any(parent.is_symlink() for parent in path.parents if parent != root)
+    ):
+        raise ValueError("SNQI-v2 calibration custody file is missing or unsafe")
+
+
+def _bind_calibration_config(
+    config: Any, manifest: Mapping[str, Any], preview: Mapping[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Bind acquisition metadata to the caller's independent campaign configuration.
+
+    Returns:
+        Verified planner specs and canonical resolved scenarios.
+    """
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415
+    from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash  # noqa: PLC0415
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload  # noqa: PLC0415
+
+    resolved = _load_campaign_scenarios(config)
+    planners = {planner.key: planner for planner in config.planners if planner.enabled}
+    declared = {arm["key"]: arm for arm in manifest["planners"] if arm["enabled"]}
+    if (
+        len(planners) != 14
+        or len(resolved) != 48
+        or set(declared) != set(planners)
+        or len(declared) != len([arm for arm in manifest["planners"] if arm["enabled"]])
+        or manifest.get("config_hash") != _config_hash(_config_hash_payload(config))
+        or manifest.get("scenario_matrix_hash") != _scenario_matrix_hash(resolved)
+        or list(config.kinematics_matrix) != ["differential_drive"]
+        or manifest.get("kinematics_matrix") != ["differential_drive"]
+        or tuple(config.seed_policy.seeds) != (101, 102)
+        or manifest["seed_policy"]["resolved_seeds"] != [101, 102]
+        or config.horizon != 600
+        or config.dt != 0.1
+        or any(declared[key].get("algo") != planner.algo for key, planner in planners.items())
+    ):
+        raise ValueError("SNQI-v2 calibration manifest/config binding mismatch")
+    from robot_sf.benchmark.release_acceptance import _result_provenance_scenarios  # noqa: PLC0415
+
+    effective = _result_provenance_scenarios(config, resolved, kinematics="differential_drive")
+    scenarios = {scenario.get("name", scenario.get("id")): scenario for scenario in effective}
+    if preview.get("truncated") or {scenario["name"] for scenario in preview["scenarios"]} != set(
+        scenarios
+    ):
+        raise ValueError("SNQI-v2 calibration preview differs from canonical scenarios")
+    return planners, scenarios
+
+
+def _load_calibration_custody(
+    path: Path, planner: Any, config: Any, scenarios: Mapping[str, Any], source: str, file_hash: str
+) -> dict[str, Any]:
+    """Verify producer sidecar schema, source, inputs and exact raw artifact binding.
+
+    Returns:
+        Validated sidecar with one row binding per expected development cell.
+    """
+    from robot_sf.benchmark.release_acceptance import _result_provenance_scenarios  # noqa: PLC0415
+
+    payload = load_result_provenance_manifest(manifest_path_for_result_jsonl(path))
+    validate_result_provenance_manifest(payload)
+    identity = payload["campaign_identity"]
+    inputs = payload["inputs"]
+    expected_inputs = {
+        "schema_path": get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        "scenario_matrix": config.scenario_matrix_path,
+        "algo_config": planner.algo_config_path,
+    }
+    for role, expected_path in expected_inputs.items():
+        item = inputs[role]
+        if expected_path is None:
+            if (
+                item.get("artifact_status") != "not_provided"
+                or item.get("path") is not None
+                or item.get("sha256") is not None
+            ):
+                raise ValueError("SNQI-v2 calibration sidecar declares unexpected config input")
+        elif item.get("sha256") != sha256_file(Path(expected_path)):
+            raise ValueError("SNQI-v2 calibration sidecar input hash is not config-bound")
+    expected_identity = _config_hash(
+        {
+            "schema_path": inputs["schema_path"]["path"],
+            "algo": planner.algo,
+            "algo_config_path": inputs["algo_config"].get("path"),
+        }
+    )
+    if (
+        not payload.get("input_binding_schema_version")
+        or payload["run"].get("repo_commit") != source
+        or payload["run"].get("runner") != "map_runner.run_map_batch"
+        or payload["completeness"].get("status") != "complete"
+        or identity.get("algorithm") != planner.algo
+        or identity.get("config_hash") != expected_identity
+        or identity.get("scenario_matrix_hash")
+        != _config_hash(
+            _result_provenance_scenarios(
+                config, list(scenarios.values()), kinematics="differential_drive"
+            )
+        )
+        or identity.get("written") != 96
+        or identity.get("total_jobs") != 96
+        or len(payload["rows"]) != 96
+    ):
+        raise ValueError("SNQI-v2 calibration producer sidecar identity is not bound")
+    artifacts = [item for item in payload["raw_artifacts"] if item.get("kind") == "episodes_jsonl"]
+    if (
+        len(artifacts) != 1
+        or artifacts[0].get("sha256") != file_hash
+        or tuple(Path(artifacts[0].get("path", "")).parts[-3:]) != tuple(path.parts[-3:])
+    ):
+        raise ValueError("SNQI-v2 calibration producer sidecar raw artifact is stale/misrouted")
+    return payload
+
+
+def _validate_calibration_row_custody(
+    record: Mapping[str, Any],
+    custody: Mapping[str, Any],
+    index: int,
+    planner: Any,
+    scenarios: Mapping[str, Any],
+    source: str,
+) -> None:
+    """Reject a mismatched raw identity before assigning its verified containing arm."""
+    from robot_sf.benchmark.release_acceptance import (  # noqa: PLC0415
+        _full_release_effective_algorithm,
+        _full_release_row_contract_blockers,
+    )
+
+    scenario = scenarios.get(record.get("scenario_id"))
+    if scenario is None or index >= len(custody["rows"]):
+        raise ValueError("SNQI-v2 calibration row is outside canonical scenario grid")
+    expected_algo, error = _full_release_effective_algorithm(
+        planner_spec=planner,
+        base_algorithm=planner.algo,
+        scenario=scenario,
+        allowed_scenario_ids=set(scenarios),
+    )
+    blockers = _full_release_row_contract_blockers(
+        record, prefix="calibration row", expected_algo=expected_algo or planner.algo
+    )
+    params = record.get("scenario_params")
+    if error or blockers or not isinstance(params, dict):
+        raise ValueError(f"SNQI-v2 calibration raw row contract mismatch: {error or blockers}")
+    if (
+        record.get("git_hash") != source
+        or record.get("config_hash") != _config_hash(params)
+        or ("planner_key" in record and record["planner_key"] != planner.key)
+        or ("kinematics" in record and record["kinematics"] != "differential_drive")
+    ):
+        raise ValueError("SNQI-v2 calibration raw row source/config/arm mismatch")
+    expected_params = {
+        key: value for key, value in scenario.items() if key not in {"seed", "seeds"}
+    }
+    expected_params["robot_config"] = {
+        **scenario.get("robot_config", {}),
+        "type": "differential_drive",
+    }
+    if any(params.get(key) != value for key, value in expected_params.items()):
+        raise ValueError("SNQI-v2 calibration row scenario config differs from canonical matrix")
+    bound = custody["rows"][index]
+    provenance = record["result_provenance"]
+    artifact = next(item for item in custody["raw_artifacts"] if item["kind"] == "episodes_jsonl")
+    expected = {
+        "episode_id": record.get("episode_id"),
+        "scenario_id": record.get("scenario_id"),
+        "seed": record.get("seed"),
+        "config_hash": record.get("config_hash"),
+        "repo_commit": source,
+        "jsonl_line": index,
+    }
+    if (
+        any(bound.get(key) != value for key, value in expected.items())
+        or any(
+            provenance.get(key) != expected[key]
+            for key in ("scenario_id", "seed", "config_hash", "repo_commit")
+        )
+        or any(
+            provenance[key] != expected[key]
+            for key in ("episode_id", "jsonl_line")
+            if key in provenance
+        )
+        or bound.get("raw_artifact") != artifact["path"]
+        or ("raw_artifact" in provenance and provenance["raw_artifact"] != artifact["path"])
+        or any(
+            bound.get("simulator_settings", {}).get(key) != value
+            or provenance.get("simulator_settings", {}).get(key) != value
+            for key, value in (("horizon", 600), ("dt", 0.1), ("record_forces", True))
+        )
+    ):
+        raise ValueError("SNQI-v2 calibration producer sidecar row binding mismatch")
 
 
 def _compact_calibration_record(

@@ -155,3 +155,14 @@ for release custody validation or scientific admission of a diagnostic campaign.
 Numeric weights, anchors, counts, force, jerk, curvature and correlation reject JSON
 booleans. The producer's explicitly boolean `success` outcome retains its declared
 binary meaning through an explicit conversion to 0/1; legacy values are preserved.
+
+Calibration freezing requires the independent acquisition `CampaignConfig` (the CLI
+default is the versioned development configuration), matching manifest config/scenario
+hashes and roster, and exactly one `runs/<arm>__differential_drive/episodes.jsonl`
+per arm. Each file must have a complete producer sidecar whose input hashes, source,
+algorithm, raw hash, and every row identity match. Raw config hashes are recomputed
+from scenario parameters and those parameters are checked against the canonical
+matrix before projection. Optional raw arm aliases must agree with the containing
+arm. Archive relocation preserves the exact arm suffix and original row-to-artifact
+associations. Metadata, raw files, sidecars, and independent inputs are hashed again
+before any anchor output is replaced; rejected custody leaves existing output intact.

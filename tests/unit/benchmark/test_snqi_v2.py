@@ -687,7 +687,261 @@ def test_calibration_rejects_fallback_or_degraded_adapter(marker):
         derive_calibration_anchors(rows, **kwargs)
 
 
-def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch, guarded_episode):
+@pytest.fixture
+def calibration_archive(tmp_path, guarded_episode):
+    """Build a complete synthetic archive using real producer custody constructors."""
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+    from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload
+    from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
+    from robot_sf.benchmark.release_acceptance import _result_provenance_scenarios
+    from robot_sf.benchmark.result_provenance import (
+        build_result_provenance_manifest,
+        build_simulator_settings_provenance,
+        manifest_path_for_result_jsonl,
+        write_result_provenance_manifest,
+    )
+    from robot_sf.benchmark.utils import _config_hash
+
+    rows, kwargs = calibration_records()
+    kwargs["expected_algorithms"] = {
+        arm: "guarded_ppo" if i == 0 else "goal" for i, arm in enumerate(kwargs["arms"])
+    }
+    scenario_path = tmp_path / "matrix.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            [
+                {"name": name, "map_file": str(ROOT / "maps/svg_maps/classic_crossing.svg")}
+                for name in kwargs["scenarios"]
+            ]
+        )
+    )
+    cfg = CampaignConfig(
+        name="custody-test",
+        scenario_matrix_path=scenario_path,
+        planners=tuple(
+            PlannerSpec(key=arm, algo=kwargs["expected_algorithms"][arm]) for arm in kwargs["arms"]
+        ),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(101, 102)),
+        horizon=600,
+        dt=0.1,
+    )
+    resolved = _load_campaign_scenarios(cfg)
+    effective = _result_provenance_scenarios(cfg, resolved, kinematics="differential_drive")
+    by_name = {row["name"]: row for row in effective}
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "preflight").mkdir()
+    manifest = {
+        "campaign_id": "synthetic-archive",
+        "git": {"commit": kwargs["source_commit"]},
+        "config_hash": _config_hash(_config_hash_payload(cfg)),
+        "scenario_matrix_hash": _scenario_matrix_hash(resolved),
+        "kinematics_matrix": ["differential_drive"],
+        "seed_policy": {"resolved_seeds": [101, 102]},
+        "planners": [
+            {"key": arm, "algo": kwargs["expected_algorithms"][arm], "enabled": True}
+            for arm in kwargs["arms"]
+        ],
+    }
+    (tmp_path / "campaign_manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / "preflight/preview_scenarios.json").write_text(
+        json.dumps({"scenarios": [{"name": name} for name in kwargs["scenarios"]]})
+    )
+    runs = []
+    for arm in kwargs["arms"]:
+        path = tmp_path / "runs" / f"{arm}__differential_drive" / "episodes.jsonl"
+        path.parent.mkdir(parents=True)
+        arm_rows = [row for row in rows if row["planner_key"] == arm]
+        algo = kwargs["expected_algorithms"][arm]
+        for row in arm_rows:
+            row["algo"] = algo
+            row["episode_id"] = f"{row['scenario_id']}--{row['seed']}--{arm}"
+            row["git_hash"] = kwargs["source_commit"]
+            row["scenario_params"] = {
+                **{
+                    k: v
+                    for k, v in by_name[row["scenario_id"]].items()
+                    if k not in {"seed", "seeds"}
+                },
+                "run_horizon": 600,
+                "run_dt": 0.1,
+                "record_forces": True,
+            }
+            row["config_hash"] = _config_hash(row["scenario_params"])
+            row["algorithm_metadata"] = (
+                json.loads(json.dumps(guarded_episode["algorithm_metadata"]))
+                if algo == "guarded_ppo"
+                else {
+                    "execution_mode": "native",
+                    "algorithm": algo,
+                    "canonical_algorithm": algo,
+                    "planner_contract": {"planner_id": algo},
+                }
+            )
+            row["result_provenance"] = {
+                "schema_version": "benchmark_row_provenance.v1",
+                "scenario_id": row["scenario_id"],
+                "seed": row["seed"],
+                "config_hash": row["config_hash"],
+                "repo_commit": row["git_hash"],
+                "simulator_settings": build_simulator_settings_provenance(
+                    horizon=600,
+                    dt=0.1,
+                    record_forces=True,
+                    active_observation_mode="native",
+                    active_observation_level="full",
+                ),
+            }
+        path.write_text("".join(json.dumps(row) + "\n" for row in arm_rows))
+        payload = build_result_provenance_manifest(
+            out_path=path,
+            episode_records=arm_rows,
+            schema_path=ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+            scenario_path=scenario_path,
+            scenarios=effective,
+            algo=algo,
+            algo_config_path=None,
+            benchmark_profile="baseline-safe",
+            suite_key="fixture",
+            total_jobs=96,
+            written=96,
+            horizon=600,
+            dt=0.1,
+            record_forces=True,
+            active_observation_mode="native",
+            active_observation_level="full",
+        )
+        payload["run"]["repo_commit"] = kwargs["source_commit"]
+        write_result_provenance_manifest(manifest_path_for_result_jsonl(path), payload)
+        runs.append(
+            {
+                "status": "ok",
+                "planner": {"key": arm, "algo": algo, "kinematics": "differential_drive"},
+                "episodes_path": str(path),
+                "summary": {
+                    "status": "ok",
+                    "total_jobs": 96,
+                    "written": 96,
+                    "algorithm_metadata_contract": {"execution_mode": "native"},
+                },
+            }
+        )
+    (tmp_path / "reports/campaign_summary.json").write_text(json.dumps({"runs": runs}))
+    return cfg, rows, kwargs
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_sidecar",
+        "stale_raw",
+        "misrouted_summary",
+        "sidecar_row",
+        "sidecar_source",
+        "forged_planner",
+        "forged_algorithm",
+        "coherent_scenario_config",
+        "forged_sidecar_algorithm",
+        "manifest_config",
+        "sidecar_input",
+        "nested_fallback",
+    ],
+)
+def test_calibration_freeze_rejects_unbound_custody(  # noqa: C901, PLR0915
+    tmp_path, calibration_archive, mutation
+):
+    from robot_sf.benchmark.result_provenance import (
+        _canonical_input_bundle_sha256,
+        manifest_path_for_result_jsonl,
+        validate_result_provenance_manifest,
+    )
+    from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+    from robot_sf.benchmark.utils import _config_hash
+
+    cfg, _, kwargs = calibration_archive
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
+    sidecar = manifest_path_for_result_jsonl(path)
+    payload = json.loads(sidecar.read_text())
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if mutation == "missing_sidecar":
+        sidecar.unlink()
+    elif mutation == "misrouted_summary":
+        target = tmp_path / "reports/campaign_summary.json"
+        summary = json.loads(target.read_text())
+        summary["runs"][0]["episodes_path"] = summary["runs"][1]["episodes_path"]
+        target.write_text(json.dumps(summary))
+    elif mutation == "manifest_config":
+        target = tmp_path / "campaign_manifest.json"
+        manifest = json.loads(target.read_text())
+        manifest["config_hash"] = "f" * 64
+        target.write_text(json.dumps(manifest))
+    elif mutation == "sidecar_row":
+        payload["rows"][0]["config_hash"] = "f" * 64
+    elif mutation == "sidecar_source":
+        payload["run"]["repo_commit"] = "f" * 40
+    elif mutation == "forged_sidecar_algorithm":
+        identity = payload["campaign_identity"]
+        identity["algorithm"] = "goal"
+        identity["config_hash"] = _config_hash(
+            {
+                "schema_path": payload["inputs"]["schema_path"]["path"],
+                "algo": "goal",
+                "algo_config_path": None,
+            }
+        )
+        identity["input_bundle_sha256"] = _canonical_input_bundle_sha256(
+            inputs=payload["inputs"],
+            algo="goal",
+            protocol_version=payload["run"]["protocol_version"],
+            suite_key=identity["suite_key"],
+        )
+        validate_result_provenance_manifest(payload)
+    elif mutation == "sidecar_input":
+        forged_input = tmp_path / "forged-matrix.yaml"
+        forged_input.write_text("- name: forged-scenario\n")
+        payload["inputs"]["scenario_matrix"].update(
+            path=str(forged_input), sha256=hashlib.sha256(forged_input.read_bytes()).hexdigest()
+        )
+        identity = payload["campaign_identity"]
+        identity["input_bundle_sha256"] = _canonical_input_bundle_sha256(
+            inputs=payload["inputs"],
+            algo=identity["algorithm"],
+            protocol_version=payload["run"]["protocol_version"],
+            suite_key=identity["suite_key"],
+        )
+        validate_result_provenance_manifest(payload)
+    else:
+        if mutation == "stale_raw":
+            rows[0]["metrics"][SIMULATED_FORCE] += 1
+        elif mutation == "forged_planner":
+            rows[0]["planner_key"] = "forged-other-arm"
+        elif mutation == "forged_algorithm":
+            rows[0]["algo"] = "goal"
+        elif mutation == "nested_fallback":
+            rows[0]["algorithm_metadata"]["planner_runtime"]["fallback_triggered"] = True
+        else:
+            rows[0]["scenario_params"]["map_file"] = "forged.svg"
+            digest = _config_hash(rows[0]["scenario_params"])
+            rows[0]["config_hash"] = digest
+            rows[0]["result_provenance"]["config_hash"] = digest
+            payload["rows"][0]["config_hash"] = digest
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        if mutation != "stale_raw":
+            payload["raw_artifacts"][0]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            validate_result_provenance_manifest(payload)
+    if mutation != "missing_sidecar":
+        sidecar.write_text(json.dumps(payload))
+    output = tmp_path / "anchors.json"
+    output.write_bytes(b"existing frozen anchor must survive rejection\n")
+    before = output.read_bytes()
+    with pytest.raises((ValueError, OSError)):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
+    assert output.read_bytes() == before
+
+
+def test_freeze_calibration_archive_binds_files_and_source(
+    tmp_path, monkeypatch, calibration_archive
+):
     import hashlib
     import weakref
 
@@ -717,51 +971,7 @@ def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch
     monkeypatch.setattr(
         v2_calibration, "derive_calibration_anchors", derive_without_retained_payloads
     )
-    rows, kwargs = calibration_records()
-    rows[0]["algorithm_metadata"] = guarded_episode["algorithm_metadata"]
-    kwargs["expected_algorithms"] = {
-        arm: "guarded_ppo" if arm == kwargs["arms"][0] else "goal" for arm in kwargs["arms"]
-    }
-    (tmp_path / "reports").mkdir()
-    (tmp_path / "preflight").mkdir()
-    manifest = {
-        "campaign_id": "synthetic-archive",
-        "git": {"commit": kwargs["source_commit"]},
-        "seed_policy": {"resolved_seeds": [101, 102]},
-        "planners": [
-            {"key": arm, "algo": kwargs["expected_algorithms"][arm], "enabled": True}
-            for arm in kwargs["arms"]
-        ],
-    }
-    (tmp_path / "campaign_manifest.json").write_text(json.dumps(manifest))
-    (tmp_path / "preflight/preview_scenarios.json").write_text(
-        json.dumps({"scenarios": [{"name": name} for name in kwargs["scenarios"]]})
-    )
-    runs = []
-    for arm in kwargs["arms"]:
-        path = tmp_path / "runs" / arm / "episodes.jsonl"
-        path.parent.mkdir(parents=True)
-        path.write_text(
-            "".join(
-                json.dumps({**row, "git_hash": kwargs["source_commit"]}) + "\n"
-                for row in rows
-                if row["planner_key"] == arm
-            )
-        )
-        runs.append(
-            {
-                "status": "ok",
-                "planner": {"key": arm},
-                "episodes_path": f"/producer/archive/runs/{arm}/episodes.jsonl",
-                "summary": {
-                    "status": "ok",
-                    "total_jobs": 96,
-                    "written": 96,
-                    "algorithm_metadata_contract": {"execution_mode": "native"},
-                },
-            }
-        )
-    (tmp_path / "reports/campaign_summary.json").write_text(json.dumps({"runs": runs}))
+    cfg, rows, kwargs = calibration_archive
     output = tmp_path / "anchors.json"
     original_read_bytes = Path.read_bytes
 
@@ -771,7 +981,7 @@ def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch
 
     with monkeypatch.context() as scope:
         scope.setattr(Path, "read_bytes", reject_whole_episode_file_read)
-        document = freeze_campaign_anchors(tmp_path, output)
+        document = freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
     expected = original_derive(rows, **kwargs)
     assert document["anchors"] == expected["anchors"]
     assert document["force_decision"] == expected["force_decision"]
@@ -786,19 +996,19 @@ def test_freeze_calibration_archive_binds_files_and_source(tmp_path, monkeypatch
         hashlib.sha256((tmp_path / path).read_bytes()).hexdigest() == value
         for path, value in hashes.items()
     )
-    path = tmp_path / "runs" / kwargs["arms"][0] / "episodes.jsonl"
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
     path.write_text(path.read_text().replace(kwargs["source_commit"], "c" * 40))
     before = output.read_bytes()
-    with pytest.raises(ValueError, match="source commit mismatch"):
-        freeze_campaign_anchors(tmp_path, output)
+    with pytest.raises(ValueError, match="stale/misrouted"):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
     assert output.read_bytes() == before
     corrupted = [json.loads(line) for line in path.read_text().splitlines()]
     for row in corrupted:
         row["git_hash"] = kwargs["source_commit"]
     corrupted[0]["algorithm_metadata"]["planner_runtime"] = {"fallback_triggered": True}
     path.write_text("".join(json.dumps(row) + "\n" for row in corrupted))
-    with pytest.raises(ValueError, match="fallback/degraded"):
-        freeze_campaign_anchors(tmp_path, output)
+    with pytest.raises(ValueError, match="stale/misrouted"):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
     assert output.read_bytes() == before
 
 

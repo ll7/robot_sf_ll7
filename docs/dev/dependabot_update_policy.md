@@ -63,6 +63,11 @@ External experiment integrations use the individual experiment-integrations lane
 
 Developer-only tools use the bounded developer-tooling group. This includes Ruff, Mypy, Pylint, Pre-commit, Pytest, and related test helpers. The group is intentionally limited to tools whose review and rollback surface is the development workflow.
 
+Hypothesis uses the existing developer-tooling lane because it is declared only in the development
+dependency group and generates/shrinks property-test cases; it does not run in the simulator or serialize
+benchmark artifacts. Its update and rollback scope is the test workflow. Unclassified transitive
+lock rows, including sortedcontainers, retain the conservative compatibility fallback.
+
 Security updates remain independently actionable. Every root group explicitly applies only to version updates, and no root group may opt into the Dependabot security-update scope, so urgent security work is not delayed behind a normal grouped-update cadence.
 
 ## Evidence and merge boundary

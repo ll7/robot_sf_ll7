@@ -4,7 +4,7 @@
   "execution_class": "cpu_batch",
   "title": "Ordinary CPU batch environment (uv sync, no GPU, no CARLA)",
   "verification_status": "verified",
-  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"},
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"},
   "prerequisites": [
     {"id": "uv", "kind": "binary", "identity": "uv>=0.11", "probe": {"argv": ["uv", "--version"], "expect_exit_code": 0}},
     {"id": "python", "kind": "binary", "identity": "python3>=3.11", "probe": {"argv": ["python3", "--version"], "expect_exit_code": 0}}

@@ -2026,17 +2026,33 @@ def _renderer_map_context(map_path: Path | None) -> dict[str, Any]:
             "reason": "no_materialized_map_asset",
             "sha256": None,
         }
+    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
+
     try:
         digest = _sha256_file(map_path)
-        import matplotlib.image as mpimg  # noqa: PLC0415
-
-        mpimg.imread(map_path)
-    except (ImportError, OSError, SyntaxError, ValueError) as exc:
+    except OSError as exc:
         return {
             "status": "unavailable",
             "reason": "existing_renderer_cannot_decode_map_overlay",
             "renderer_error": f"{type(exc).__name__}: {exc}",
-            "sha256": _sha256_file(map_path) if map_path.is_file() else None,
+            "sha256": None,
+        }
+    mpimg = try_import("matplotlib.image")
+    if mpimg is None:
+        return {
+            "status": "unavailable",
+            "reason": "existing_renderer_cannot_decode_map_overlay",
+            "renderer_error": "ImportError: matplotlib.image is unavailable",
+            "sha256": digest,
+        }
+    try:
+        mpimg.imread(map_path)
+    except (OSError, SyntaxError, ValueError) as exc:
+        return {
+            "status": "unavailable",
+            "reason": "existing_renderer_cannot_decode_map_overlay",
+            "renderer_error": f"{type(exc).__name__}: {exc}",
+            "sha256": digest,
         }
     return {"status": "renderable", "sha256": digest}
 

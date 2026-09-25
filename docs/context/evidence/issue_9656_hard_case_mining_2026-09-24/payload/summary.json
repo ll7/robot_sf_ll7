@@ -2933,7 +2933,8 @@
       "mismatch_different_revision": 4,
       "not_attempted": 27,
       "unavailable_model_artifact": 5
-    }
+    },
+    "materializer_revision_status": "historical_id_unavailable_from_published_refs"
   },
   "replay_budget_accounting": {
     "additional_attempts_after_final_materialization": 0,
@@ -3239,5 +3240,7 @@
   "source_showcase_renderer_status_counts": {
     "unavailable": 36
   },
-  "status": "materialized"
+  "status": "materialized",
+  "materializer_revision_status": "historical_id_unavailable_from_published_refs",
+  "materializer_revision_note": "Retained as the original materializer execution identifier. Commit 0a5f73283b98279900797b75d20adf6d4676086b is not reachable from published refs, so this bundle does not independently verify that historical implementation. The separate current_head_no_replay_manifest.json records the reproducible current refresh at e58be7bd141be58ac3bbd99658fc1665b8bcc717."
 }

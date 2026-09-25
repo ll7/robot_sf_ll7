@@ -112,9 +112,9 @@ def build_replay_gallery(
     root = _repository_root()
     destination = _validated_output_directory(output_dir, root=root)
     source_root = _source_repository_root(source_manifest, root)
-    payload = _load_search_manifest(source_manifest)
+    payload, source_manifest_snapshot = _read_search_manifest_snapshot(source_manifest)
     checkout_state = _git_checkout_state(root)
-    source_manifest_sha256 = _sha256_file(source_manifest)
+    source_manifest_sha256 = hashlib.sha256(source_manifest_snapshot).hexdigest()
     source_revision = _manifest_revision(payload)
     config = payload.get("config")
     if not isinstance(config, dict):
@@ -134,7 +134,9 @@ def build_replay_gallery(
     # Reuse the repository's mechanism clustering for attributed failures. The
     # selector below still ranks each cluster by the search objective, rather than
     # substituting the archive's perturbation-minimal representative.
-    archive_clusters, archive_cluster_status = _failure_cluster_by_candidate(source_manifest)
+    archive_clusters, archive_cluster_status = _failure_cluster_by_candidate(
+        source_manifest_snapshot
+    )
     eligible: list[dict[str, Any]] = []
     accounting: list[dict[str, Any]] = []
     for index, raw_candidate in enumerate(candidates):
@@ -155,7 +157,7 @@ def build_replay_gallery(
 
     selected = _select_top_candidates(eligible, top_k=top_k)
     destination.mkdir(parents=True, exist_ok=False)
-    shutil.copyfile(source_manifest, destination / "source_search_manifest.json")
+    (destination / "source_search_manifest.json").write_bytes(source_manifest_snapshot)
     replay_context = _ReplayContext(
         config=config,
         objective=objective,
@@ -260,11 +262,12 @@ def _validated_output_directory(output_dir: str | Path, *, root: Path) -> Path:
     return destination
 
 
-def _load_search_manifest(path: Path) -> dict[str, Any]:
-    """Load one manifest with the supported adversarial search schema version."""
+def _read_search_manifest_snapshot(path: Path) -> tuple[dict[str, Any], bytes]:
+    """Read, validate, and retain one immutable source-manifest byte snapshot."""
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        source_bytes = path.read_bytes()
+        payload = json.loads(source_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"cannot read search manifest {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("search manifest must be a JSON object")
@@ -273,7 +276,7 @@ def _load_search_manifest(path: Path) -> dict[str, Any]:
             "unsupported search manifest schema: "
             f"{payload.get('schema_version')!r}; expected {SEARCH_MANIFEST_SCHEMA_VERSION!r}"
         )
-    return payload
+    return payload, source_bytes
 
 
 def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validation gates together
@@ -2584,13 +2587,15 @@ def _read_single_episode_bytes(raw: bytes) -> dict[str, Any] | None:
 
 
 def _failure_cluster_by_candidate(
-    manifest_path: Path,
+    manifest_snapshot: bytes,
 ) -> tuple[dict[int, dict[str, Any]], dict[str, Any]]:
-    """Reuse existing failure-archive clusters and retain any fallback status."""
+    """Cluster failures from the same immutable manifest snapshot as selection."""
     try:
         with tempfile.TemporaryDirectory(prefix="rsf-replay-gallery-") as temp_dir:
+            snapshot_path = Path(temp_dir) / "source_search_manifest.json"
+            snapshot_path.write_bytes(manifest_snapshot)
             archive = curate_failure_archive(
-                [manifest_path], output_path=Path(temp_dir) / "failure_archive.json"
+                [snapshot_path], output_path=Path(temp_dir) / "failure_archive.json"
             )
     except Exception as exc:  # noqa: BLE001 - preserve deduplication fallback in the manifest
         return {}, {"status": "unavailable", "reason": type(exc).__name__}

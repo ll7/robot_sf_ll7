@@ -1452,6 +1452,42 @@ def test_gallery_deduplicates_identical_effective_scenarios(tmp_path: Path) -> N
     assert result["summary"]["dispositions"]["duplicate_effective_scenario"] == 1
 
 
+def test_gallery_binds_parse_digest_clustering_and_bundle_to_one_manifest_snapshot(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manifest = _source_manifest(tmp_path, manifest_revision="a" * 40)
+    snapshot = manifest.read_bytes()
+    replacement = json.loads(snapshot)
+    replacement["source_revision"] = "b" * 40
+    replacement["candidates"] = []
+    replacement_bytes = json.dumps(replacement, sort_keys=True).encode("utf-8") + b"\n"
+
+    original_cluster = replay_gallery._failure_cluster_by_candidate
+
+    def replace_source_after_snapshot(source_snapshot: bytes) -> Any:
+        assert source_snapshot == snapshot
+        manifest.write_bytes(replacement_bytes)
+        return original_cluster(source_snapshot)
+
+    monkeypatch.setattr(
+        replay_gallery, "_failure_cluster_by_candidate", replace_source_after_snapshot
+    )
+    _install_fake_replay(monkeypatch)
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    bundled_snapshot = (
+        tmp_path / "output" / "gallery" / "source_search_manifest.json"
+    ).read_bytes()
+    assert manifest.read_bytes() == replacement_bytes
+    assert bundled_snapshot == snapshot
+    assert result["source"]["manifest_sha256"] == hashlib.sha256(snapshot).hexdigest()
+    assert result["source"]["source_revision"] == "a" * 40
+    assert result["summary"]["selected_case_count"] == 1
+
+
 def test_gallery_repeated_fixture_runs_have_byte_stable_manifests(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

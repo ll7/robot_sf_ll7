@@ -271,7 +271,10 @@ def _assert_social_force_resolution_invariant(
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
-    reason="Known per-cell wall-force scaling tracked by #9724; remove after that fix merges.",
+    reason=(
+        "#9724: the default (release) grid_cell_sum_v1 obstacle term sums one force per "
+        "occupied cell; remove when the release arm stops using it."
+    ),
 )
 def test_social_force_command_and_force_are_invariant_to_grid_resolution() -> None:
     """The default (release) social-force obstacle term sums one force per cell."""

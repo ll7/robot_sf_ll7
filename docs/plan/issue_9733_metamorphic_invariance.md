@@ -3,8 +3,8 @@
 ## Goal and scope
 
 Add bounded tests for occupancy-grid resolution, mirrored deterministic episodes,
-pedestrian removal, planner physical units, and seeded replay. Keep the normal
-test tier small and put broader episode matrices behind `slow`. Change tests and
+pedestrian removal, planner physical units, and seeded replay. Keep every case in
+the default tier (no `slow` marker; PR shards skip slow tests). Change tests and
 their documentation only; do not change spawn logic, `socnav_social_force.py`, or
 the hybrid planner.
 
@@ -35,6 +35,16 @@ an explicit numeric tolerance because float representation may vary.
 The grid probe also found a DWA resolution counterexample, tracked as #9740;
 retain it as a narrow strict expected failure rather than masking the command
 change with a larger tolerance. This is not evidence of benchmark performance.
+
+The refute review (FIX on `ba4ac942`) found eight undetected mutations. The
+follow-up runs mirror, removal and replay on the release `social_force`, `orca`
+and hybrid v3 arms through the map-runner policy builder, samples every replay
+input from its seed with negative controls, audits the release campaign configs
+with a value-pinned violation ledger, and adds a 90-degree rotation relation
+because a reflection-type sign error commutes with every mirror. The hybrid v3
+arm is not reflection-equivariant at trace level (a discrete near-tie flips);
+that is a strict expected failure pending its own issue, while its outcome
+relation passes.
 
 ## Recovery and handoff
 

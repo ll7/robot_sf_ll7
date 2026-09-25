@@ -15,7 +15,7 @@ error. The trajectory and outcome relations use bounded real `RobotEnv`
 episodes with explicit map and seed fixtures; grid and unit checks call planner
 or config surfaces directly.
 
-The twelve test modules cover:
+The test modules cover:
 
 | Test | Contract exercised |
 | --- | --- |
@@ -26,11 +26,11 @@ The twelve test modules cover:
 | `test_render_independence.py` | Rendering at every observation boundary does not alter simulation state. |
 | `test_record_replay_roundtrip.py` | The environment’s compact JSONL state recording replays without numeric drift. This is state-trace replay, not action re-simulation. |
 | `test_oracle_isolation.py` | Opt-in privileged traces and randomized simulator identity labels do not change or enter actor-visible observations. |
-| `test_replay_determinism.py` | Same-host crowd traces are byte-identical; seeded real `RobotEnv` runs repeat planner commands, projected actions, robot states, outcomes, and fallback metadata. The complete-episode case is marked slow. |
-| `test_planner_unit_consistency.py` | Audits physical-unit fields in the planner readiness matrix's representative YAMLs and four known planner defaults against the differential-drive envelope where the semantics allow it. The selected hybrid v3 safety/braking mismatch is a strict expected failure for #9726. |
-| `test_grid_resolution_invariance.py` | Native ORCA commands are stable across 0.1, 0.2, and 0.4 m rasters of one wall; DWA commands and social-force obstacle forces have strict expected failures for #9740 and #9724. |
-| `test_mirror_symmetry.py` | A mirrored real `RobotEnv` scene gives the mirrored SocialForcePlanner route and robot trajectory with the same outcome. |
-| `test_pedestrian_removal.py` | The SocialForcePlanner accepts empty/nonempty agent observations; a paired successful episode preserves success after removing a nearby pedestrian, and an expanded crossing case is marked slow. |
+| `test_replay_determinism.py` | Same-host crowd traces are byte-identical. On a scene with real-area robot zones and a sampled crowd, the noisy (`noise_std > 0`) SocialForcePlanner baseline and the release `social_force`, `orca` and hybrid v3 arms repeat commands, actions, poses, crowd and outcome for one seed. Negative controls require a different environment seed to move the start and crowd, and a different planner seed to move the command noise. |
+| `test_planner_unit_consistency.py` | Audits physical-unit fields in the release campaign's planner configs (resolved through `base_config_path` and every scenario override), the readiness matrix's representative YAMLs, and four planner defaults. Known violations are pinned value-for-value in a ledger; strict expected failures track #9726 (hybrid drive envelope and code defaults) and #9750 (robot-body radius). |
+| `test_grid_resolution_invariance.py` | Native ORCA commands are stable across 0.1, 0.2, and 0.4 m rasters of one wall in an unsaturated regime; DWA commands and the default social-force obstacle force have strict expected failures for #9740 and #9724. The #9738 `resolution_independent_v2` twin passes, and is skipped with a reason until that option exists. |
+| `test_mirror_symmetry.py` | The release `social_force` and `orca` arms return the transformed trace under y-mirror, x-mirror and a 90-degree rotation, with a pedestrian whose velocity crosses both mirror axes. Hybrid v3 keeps its outcome under each transform; its exact trace is a strict expected failure (a discrete near-tie flips). The SocialForcePlanner baseline and VisibilityPlanner mirror cases remain. |
+| `test_pedestrian_removal.py` | The SocialForcePlanner accepts empty/nonempty agent observations and keeps success after a nearby pedestrian is removed. For each release arm, a pedestrian timed to cross the route changes the commands; the successful crossing episode stays successful and no slower without it. |
 
 The suite is collected by the repository’s normal `tests/` discovery and
 `run_tests_parallel.sh`; it does not alter production code or benchmark metrics.
@@ -64,17 +64,14 @@ differing byte offset.
 
 ## Replay across hosts
 
-Run the fast local checks with:
+Run the checks with:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/metamorphic/test_grid_resolution_invariance.py tests/metamorphic/test_mirror_symmetry.py tests/metamorphic/test_pedestrian_removal.py tests/metamorphic/test_planner_unit_consistency.py tests/metamorphic/test_replay_determinism.py -q -m 'not slow'
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/metamorphic -q
 ```
 
-The expanded cases are selected on the cluster with:
-
-```bash
-scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/metamorphic/test_pedestrian_removal.py tests/metamorphic/test_replay_determinism.py -q -m slow
-```
+No case carries a `slow` marker: the release-arm episodes take seconds, and PR
+shards run with `-m "not slow"`, so a slow marker would keep them out of CI.
 
 These synthetic fixtures check implementation contracts only. The DWA
 counterexample in #9740 changes its command by 0.16 m/s between rasters; a
@@ -89,35 +86,53 @@ observation fields, planner commands, projected actions, and robot poses at each
 step. Align pedestrian row identities and compare numeric values with `rtol=0`,
 `atol=1e-5` in each field's native units (metres, m/s, m/s², radians, or the
 recorded force units). Require exact field names, shapes, row identities, step
-count, success/collision/truncation outcomes, and fallback status/count/reason.
+count, success/collision/step-limit outcomes, and fallback status/count/reason.
 This tolerance allows float32 serialization and integration round-off, not a
 changed outcome or a substituted fallback planner.
 No paired Mac/cluster artifact is part of this test suite, so cross-host
 agreement is a documented comparison contract rather than a proven result.
 
+## Stochastic planners
+
+Exact trace relations (mirror, rotation, removal) apply to deterministic planners
+only. A sampling planner (`socnav_sampling`, MPPI, a stochastic learned policy)
+draws different samples in a transformed scene even with the same seed. Such
+planners are covered by seeded replay here; distribution-level agreement over
+seeds belongs in the cluster tier. A reflection-type sign error (for example a
+flipped pedestrian `vy`) commutes with every mirror, so only the rotation
+relation detects it.
+
 ## Planner-unit audit boundary
 
-The audit reads every representative YAML path in
+The audit reads the release campaign planner list: the campaign config named by
+`configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml` plus the
+successor template. Each `algo_config` is resolved like the map runner does,
+through `base_config_path`, for the default scenario and every scenario
+override. It also reads every representative YAML in
 `configs/benchmarks/planner_readiness_matrix_v1.yaml` and the defaults of
 `HybridRuleLocalPlannerConfig`, `SocNavPlannerConfig`, `DWAPlannerConfig`, and
-`RiskDWAPlannerConfig`. Its explicit field inventory fails when a new
-unit-bearing name is not classified. It checks finite values and valid signs,
-and bounds explicit YAML forward-speed caps by
-`DifferentialDriveSettings.max_linear_speed`. DWA's clearance-score
-normalization is checked against contact scale, but it is a scoring distance,
-not a stopping or safety gate. For the selected hybrid v3, the strict #9726
-expected failure checks
-pedestrian centre-distance thresholds and the rollout's acceleration and
-deceleration against the drive. A new hybrid v4 configuration needs a separate
-**passing** safety-envelope test; it must not inherit the v3 expected failure.
+`RiskDWAPlannerConfig`. Its field inventory fails when a new unit-bearing name
+is not classified. Rules:
 
-Goal tolerances, map extents, surface clearances, and navigation trigger
-distances are all metres but are not interchangeable with a robot centre
-contact threshold. Angular command caps may exceed the differential drive's
-angular cap and are clipped by the actuator; this audit does not call that a
-passing feasibility relation. Several legacy planner robot-radius defaults
-(`0.25–0.3 m`) are smaller than the drive's `1.0 m` collision radius; they are
-explicit exceptions, not proof of collision-radius consistency (see #4856).
+- time steps (`*_dt`, `control_period`): positive and at most ten simulator steps (1.0 s);
+- linear speeds, forward acceleration and braking: at most the drive's
+  (2.0 m/s, 1.0 m/s², 1.0 m/s²); the unbound SocNav default speed is the one
+  stated exception, clipped by the map-runner action adapter;
+- angular speeds and angular accelerations: at most ten times the drive's;
+- robot-body radii: at least the drive's 1.0 m body;
+- pedestrian and proxemic radii: positive and at most 10 m;
+- hybrid human speed gates, as centre distances: stop and moderate at least
+  contact (1.4 m = 1.0 m body + 0.4 m simulator pedestrian); slow at least
+  contact plus the drive's stopping distance.
+
+Known violations are pinned value-for-value, so a new, worsened or fixed
+violation fails the ledger test. Strict expected failures flip when #9726
+(hybrid envelope, including code defaults) or #9750 (robot-body radius) is
+fixed. A new hybrid v4 configuration needs a separate **passing**
+safety-envelope test; it must not inherit the v3 expected failure. Goal
+tolerances, map extents, surface clearances, and perception or neighbour ranges
+are metres but are not a centre-contact threshold, so they get sign and
+finiteness checks only.
 Pedestrian radii and proxemic radii are separate quantities. The social-force
 parameters and synthetic actuation-score fields are model or diagnostic
 quantities, not drive limits.

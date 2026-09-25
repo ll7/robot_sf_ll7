@@ -416,8 +416,8 @@ _FAST_FILES = {
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
-    # VV-3 bounded metamorphic smoke tests run in the default lane. Their
-    # expanded episode matrices carry explicit slow markers for cluster runs.
+    # VV-3 bounded metamorphic tests, including the release-arm episodes, run in
+    # the default lane; none is marked slow, so PR shards execute all of them.
     "test_grid_resolution_invariance.py",
     "test_mirror_symmetry.py",
     "test_pedestrian_removal.py",

@@ -3,6 +3,12 @@
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 
+Issue #9653 fixture-verified planner–falsifier coordinator contract: immutable
+minimum-two-round inputs, digest-checked phase resume, regression-case flow,
+strict admission gates, and finite-budget stop language. Production owner
+adapters and empirical loop execution remain pending exact upstream review:
+[issue_9653_coevolution_contract.md](issue_9653_coevolution_contract.md).
+
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA
 `09f6b1beeff71b4ee30deae7cc2504c0c7310729`) and the release/audit workflow around it.

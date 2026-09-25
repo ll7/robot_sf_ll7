@@ -184,8 +184,10 @@ scenario bytes and runtime-referenced map/route inputs. Missing, mismatched, or 
 remains an unknown retained row. Each search-manifest candidate also records a separate
 `evaluation_disposition`: `rejected_by_search_space`, `rejected_by_admissibility`,
 `rejected_by_certification`, `evaluator_invoked`, or `not_recorded` for directly constructed
-evaluation rows that did not pass through the search runner. A bound admissibility rejection skips
-evaluation; an unknown or retained verdict does not override a failed certification gate.
+evaluation rows that did not pass through the search runner. The `SearchConfig` option
+`apply_admissibility_filter` defaults to `false`, so a bound admissibility rejection is recorded but
+does not skip evaluation unless the caller explicitly opts in. An unknown or retained verdict does
+not override a failed certification gate.
 `run_map_elites` accepts an `admissibility_precheck`; it records each verdict next to the proposed
 candidate, skips only explicit exclusions before evaluation, and continues unknown, missing,
 malformed, unavailable, or raised-precheck outcomes to the evaluator. This keeps feasibility

@@ -604,6 +604,7 @@ class SearchConfig:
     workers: int = 1
     record_forces: bool = True
     require_certification: bool = False
+    apply_admissibility_filter: bool = False
     benchmark_profile: str = "baseline-safe"
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
@@ -626,6 +627,7 @@ class SearchConfig:
         workers: int = 1,
         record_forces: bool = True,
         require_certification: bool = False,
+        apply_admissibility_filter: bool = False,
         benchmark_profile: str = "baseline-safe",
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
@@ -647,6 +649,7 @@ class SearchConfig:
             workers=int(workers),
             record_forces=bool(record_forces),
             require_certification=bool(require_certification),
+            apply_admissibility_filter=bool(apply_admissibility_filter),
             benchmark_profile=benchmark_profile,
             snqi_weights_path=Path(snqi_weights_path) if snqi_weights_path else None,
             snqi_baseline_path=Path(snqi_baseline_path) if snqi_baseline_path else None,
@@ -700,6 +703,7 @@ class SearchConfig:
             "workers": int(self.workers),
             "record_forces": bool(self.record_forces),
             "require_certification": bool(self.require_certification),
+            "apply_admissibility_filter": bool(self.apply_admissibility_filter),
             "benchmark_profile": self.benchmark_profile,
             "snqi_weights_path": self.snqi_weights_path.as_posix()
             if self.snqi_weights_path

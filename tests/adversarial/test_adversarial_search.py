@@ -135,6 +135,7 @@ def _config(
     tmp_path: Path,
     *,
     require_certification: bool = False,
+    apply_admissibility_filter: bool = False,
     workers: int = 1,
 ) -> SearchConfig:
     """Build a search config backed by temporary template and space files."""
@@ -152,6 +153,7 @@ def _config(
         seed=123,
         workers=workers,
         require_certification=require_certification,
+        apply_admissibility_filter=apply_admissibility_filter,
     )
 
 
@@ -2330,11 +2332,19 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     )
 
 
-def test_bound_admissibility_rejection_is_recorded_and_skips_evaluator(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize("apply_filter", [False, True], ids=["default-disabled", "opted-in"])
+def test_bound_admissibility_filter_is_explicit_opt_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, apply_filter: bool
 ) -> None:
-    """A bound admissibility rejection is its own gate even with passing certification."""
-    config = dataclasses.replace(_config(tmp_path, require_certification=True), budget=1)
+    """Only explicit opt-in lets a bound admissibility rejection skip evaluation."""
+    config = dataclasses.replace(
+        _config(
+            tmp_path,
+            require_certification=True,
+            apply_admissibility_filter=apply_filter,
+        ),
+        budget=1,
+    )
     candidate = _candidate(7)
     evaluated: list[CandidateSpec] = []
 
@@ -2359,11 +2369,20 @@ def test_bound_admissibility_rejection_is_recorded_and_skips_evaluator(
     def evaluator(
         _config: SearchConfig,
         candidate: CandidateSpec,
-        _scenario_yaml_path: Path,
-        _candidate_dir: Path,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
     ) -> CandidateEvaluation:
         evaluated.append(candidate)
-        raise AssertionError("an admissibility rejection reached the evaluator")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("evaluator called"),
+            objective_value=None,
+            failure_attribution=None,
+            episode_record_path=None,
+            trajectory_csv_path=None,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
 
     monkeypatch.setattr(search, "classify_scenario_admissibility", reject_bound_candidate)
     result = search.run_adversarial_search(
@@ -2373,8 +2392,8 @@ def test_bound_admissibility_rejection_is_recorded_and_skips_evaluator(
         sampler=_SequenceSampler([candidate]),
     )
 
-    assert evaluated == []
-    assert result.num_invalid_candidates == 1
+    assert evaluated == ([] if apply_filter else [candidate])
+    assert result.num_invalid_candidates == int(apply_filter)
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     row = manifest["candidates"][0]
     assert row["certification_status"]["status"] == "passed"
@@ -2382,7 +2401,10 @@ def test_bound_admissibility_rejection_is_recorded_and_skips_evaluator(
         row["certification_status"]["details"]["scenario_admissibility"]["search_disposition"]
         == "reject"
     )
-    assert row["evaluation_disposition"] == "rejected_by_admissibility"
+    assert row["evaluation_disposition"] == (
+        "rejected_by_admissibility" if apply_filter else "evaluator_invoked"
+    )
+    assert manifest["config"]["apply_admissibility_filter"] is apply_filter
 
 
 def test_required_certification_uses_real_scenario_certification_api(tmp_path: Path) -> None:

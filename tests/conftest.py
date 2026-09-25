@@ -474,6 +474,10 @@ _FAST_FILES = {
     # offline contracts; keep changed coverage in the exact-head fast lane.
     "test_audit_scan.py",
     "test_audit_detectors.py",
+    # VV-4 release-row bundle and anomaly checks are deterministic offline
+    # contracts; include them in fast shards for changed-line coverage.
+    "test_release_row_bundle.py",
+    "test_release_row_anomalies.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",

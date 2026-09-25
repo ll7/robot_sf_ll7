@@ -1210,8 +1210,11 @@ def _build_manifest_execution_block(
         "holonomic_command_mode": cfg.holonomic_command_mode,
         "observation_mode": cfg.observation_mode,
         "repository_url": cfg.repository_url,
-        "release_tag": cfg.release_tag,
-        "doi": cfg.doi,
+        **(
+            {}
+            if cfg.publication_identity_mode == "scientific_candidate"
+            else {"release_tag": cfg.release_tag, "doi": cfg.doi}
+        ),
     }
 
 

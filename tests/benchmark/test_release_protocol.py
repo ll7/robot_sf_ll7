@@ -48,8 +48,8 @@ def test_smoke_release_manifest_validates_against_campaign_config() -> None:
     assert not any(key.startswith("snqi_v2_") for key in resolved["metrics"])
 
 
-def test_v008_campaign_defers_publication_without_changing_scientific_inputs() -> None:
-    """Post-run validation needs the accepted episodes before bundle export."""
+def test_v008_campaign_defers_publication_and_pins_frozen_social_force() -> None:
+    """The dedicated identity keeps frozen Social Force v1 after the live template moved."""
     root = Path("configs/benchmarks")
     predecessor = yaml.safe_load(
         (root / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml").read_text(
@@ -64,6 +64,17 @@ def test_v008_campaign_defers_publication_without_changing_scientific_inputs() -
     assert predecessor.pop("export_publication_bundle") is True
     assert candidate.pop("export_publication_bundle") is False
     assert set(candidate.pop("snqi_v2_spec")) == {"weights_path", "anchors_path", "family_path"}
+    generic_social_force = next(
+        planner for planner in predecessor["planners"] if planner["key"] == "social_force"
+    )
+    frozen_social_force = next(
+        planner for planner in candidate["planners"] if planner["key"] == "social_force"
+    )
+    assert generic_social_force["algo_config"] == (
+        "configs/algos/social_force_resolution_independent_v2.yaml"
+    )
+    assert frozen_social_force["algo_config"] == "configs/algos/social_force_terminal_goal_v1.yaml"
+    generic_social_force["algo_config"] = frozen_social_force["algo_config"]
     assert candidate == predecessor
 
 

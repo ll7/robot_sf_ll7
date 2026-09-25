@@ -496,6 +496,10 @@ def campaign_expectations(repo_root: Path) -> dict[str, CampaignExpectation]:
             str(row.get("name") or row.get("scenario_id") or row.get("id")) for row in scenarios
         )
         seeds = tuple(sorted({int(seed) for row in scenarios for seed in row.get("seeds", [])}))
+        # This package predates candidate mode and hashes the complete dataclass.
+        # Omit the new runtime-only switch so historical trace hashes stay identical.
+        legacy_hash_payload = asdict(cfg)
+        legacy_hash_payload.pop("publication_identity_mode", None)
         expectations[label] = CampaignExpectation(
             label=label,
             name=cfg.name,
@@ -503,7 +507,7 @@ def campaign_expectations(repo_root: Path) -> dict[str, CampaignExpectation]:
             scenarios=scenario_names,
             scenario_candidates=cfg.scenario_candidates.names,
             seeds=seeds,
-            config_hash=_config_hash(_jsonable_repo_relative(asdict(cfg))),
+            config_hash=_config_hash(_jsonable_repo_relative(legacy_hash_payload)),
             scenario_matrix_hash=_hash_payload(scenarios),
         )
     return expectations

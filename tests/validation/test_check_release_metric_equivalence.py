@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tarfile
 from io import BytesIO
@@ -17,6 +18,7 @@ from scripts.validation.check_release_metric_equivalence import (
     _read_archive_manifest,
     _read_candidate,
     _read_candidate_manifest,
+    _read_scientific_candidate_manifest,
     compare,
     scan_robot_force_metrics,
     scientific_manifest_differences,
@@ -148,6 +150,34 @@ def test_frozen_manifest_contract_allows_new_v2_assets_but_rejects_roster_change
     assert scientific_manifest_differences(baseline, candidate) == [
         "planners.config_identities[0].key"
     ]
+
+
+def test_scientific_candidate_rejects_publication_and_changed_rows(tmp_path: Path) -> None:
+    root = tmp_path / "candidate"
+    _write_candidate(root, [_row(NEW_SHA)])
+    raw_path = root / "runs/goal__differential_drive/episodes.jsonl"
+    identity = {
+        "schema_version": "benchmark-scientific-candidate.v1",
+        "source_sha": NEW_SHA,
+        "raw_episode_sha256": {
+            raw_path.relative_to(root).as_posix(): hashlib.sha256(raw_path.read_bytes()).hexdigest()
+        },
+        "scientific_manifest": _manifest(NEW_SHA),
+    }
+    candidate_path = root / "release/scientific_candidate.json"
+    candidate_path.write_text(json.dumps(identity), encoding="utf-8")
+    assert _read_scientific_candidate_manifest(root, NEW_SHA) == _manifest(NEW_SHA)
+
+    identity["scientific_manifest"]["provenance"]["doi"] = "{{version_doi}}"
+    candidate_path.write_text(json.dumps(identity), encoding="utf-8")
+    with pytest.raises(ValueError, match="publication fields"):
+        _read_scientific_candidate_manifest(root, NEW_SHA)
+
+    del identity["scientific_manifest"]["provenance"]["doi"]
+    candidate_path.write_text(json.dumps(identity), encoding="utf-8")
+    raw_path.write_bytes(raw_path.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="raw episode checksums mismatch"):
+        _read_scientific_candidate_manifest(root, NEW_SHA)
 
 
 def test_successor_manifest_rejects_unrelated_additions() -> None:

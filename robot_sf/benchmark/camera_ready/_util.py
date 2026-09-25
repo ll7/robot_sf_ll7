@@ -117,6 +117,12 @@ def _config_hash_payload(cfg: Any) -> dict[str, Any]:
         Configuration mapping with the optional prospective provenance block removed when unset.
     """
     payload = asdict(cfg)
+    mode = payload.pop("publication_identity_mode", "bound")
+    if mode == "scientific_candidate":
+        payload.pop("release_tag", None)
+        payload.pop("doi", None)
+    elif mode != "bound":
+        raise ValueError(f"unsupported publication identity mode: {mode}")
     if getattr(cfg, "tuning_run_provenance", None) is None:
         # Preserve hashes for legacy configs that predate the optional prospective block.
         payload.pop("tuning_run_provenance", None)

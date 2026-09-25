@@ -103,25 +103,55 @@ DOI, create a tag, publish a release, or submit a campaign.
 
 The 0.0.8 campaign template
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml`
-sets `export_publication_bundle: false`. The release runner first produces an
-accepted, unpublished 20,160-row campaign. The old-metric equivalence and
-robot-force reports need those completed episode rows, so bundle export is a
-separate step. After the source, DOI coordinates, launch packet, and campaign
-have passed their own gates, run from the same clean source commit:
+sets `export_publication_bundle: false`. Issue #9668 has an explicit
+publication-free candidate route so the 20,160-row campaign, 0.0.7
+old-metric equivalence, robot-force validation, and strict full-matrix
+acceptance can finish before the author's publication approval. It requires
+the exact clean source, the frozen 0.0.7 archive, an enforced-staged
+checkpoint receipt, and an exact-source runtime-smoke receipt. Submit this
+command through the repository Slurm entry point with a durable output root;
+the runner itself does not submit a job:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --scientific-candidate \
+  --mode run \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml \
+  --source-commit <exact_0.0.8_source_sha> \
+  --baseline-archive <frozen_0.0.7_archive_path> \
+  --checkpoint-receipt <staged_checkpoint_receipt_path> \
+  --runtime-smoke-receipt <exact_source_runtime_smoke_result_path> \
+  --output-root <durable_campaign_output_root>
+```
+
+The candidate's `release/scientific_candidate.json` omits DOI and tag keys;
+it binds source, campaign-template and algorithm-config bytes, checkpoint
+identities, scenarios, seeds, raw `episodes.jsonl` files, and producer
+sidecars. `release/scientific_candidate_result.json` records the three
+passing gates. Missing, changed, or degraded rows leave the candidate
+unaccepted. Do not launch until the #9667 SNQI-v2 parser and assets have
+landed and the exact-source launch admissions pass. The default runner and
+existing DOI-bound release semantics are unchanged.
+
+After the author approves the publication steps and real concept/version DOI
+coordinates are bound in a clean-source resolved identity, create a derivative
+bundle from the accepted candidate:
 
 ```bash
 uv run python scripts/tools/finalize_benchmark_data_v008.py \
-  --producer-root output/benchmarks/camera_ready/<accepted_campaign_id> \
+  --pre-doi-producer \
+  --producer-root <durable_accepted_campaign_root> \
   --candidate-root output/benchmarks/camera_ready/<new_publication_candidate_id> \
   --resolved-identity output/release/release_identity.resolved.json \
   --baseline-archive <frozen_0.0.7_archive_path> \
   --expected-source-sha <exact_0.0.8_source_sha>
 ```
 
-The finalizer refuses an already-published producer and checks the frozen
-0.0.7 archive SHA-256. It copies the producer, saves its release result, runs
-the 20,160-row predecessor equivalence and robot-force gates, repeats full
-release acceptance on the candidate, then exports and preflights the bundle.
+The candidate finalizer checks the frozen 0.0.7 archive SHA-256 and verifies
+the accepted pre-publication identity, gate reports, and every raw and sidecar
+checksum. It copies the producer, binds DOI metadata only in the derivative,
+repeats full release acceptance, then exports and preflights the bundle. It
+checks every raw episode digest before and after the derivative work.
 Failed gates leave the candidate marked invalid and preserve the producer.
 Its sibling `*.finalization_receipt.json` records the source and output hashes.
 The receipt is written through a pending file and renamed only after the
@@ -134,8 +164,8 @@ only its own export after a caught validation or receipt failure. Promote
 the archive, both gate reports, gate logs, and receipt to durable
 storage before any publication decision. Bundle creation is a reviewable
 candidate step; tagging, Zenodo publication, and DOI creation require the
-author's explicit go recorded on issue #9668. The canonical 0.0.8 campaign
-itself also waits for that go because its resolved identity requires the DOI.
+author's explicit go recorded on issue #9668. The publication-free 0.0.8
+campaign and its release-candidate verification precede that go.
 The source candidate already carries `CITATION.cff` version `0.0.8` and
 `configs/releases/release_0_0_8_preparation.yaml` with
 `publication_authorized: false`. The alignment guard accepts this explicit

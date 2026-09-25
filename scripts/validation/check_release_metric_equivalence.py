@@ -155,6 +155,59 @@ def _read_candidate_manifest(root: Path, expected_source: str) -> dict[str, Any]
     return _validate_manifest(json.loads(path.read_text(encoding="utf-8")), expected_source)
 
 
+def _read_scientific_candidate_manifest(  # noqa: C901
+    root: Path, expected_source: str
+) -> dict[str, Any]:
+    """Verify publication-free custody before comparing predecessor science."""
+    path = root / "release" / "scientific_candidate.json"
+    if not path.is_file():
+        raise ValueError("candidate has no scientific_candidate.json")
+    identity = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(identity, dict) or identity.get("schema_version") != (
+        "benchmark-scientific-candidate.v1"
+    ):
+        raise ValueError("scientific candidate schema is invalid")
+    forbidden = {
+        "release_tag",
+        "doi",
+        "version_doi",
+        "concept_doi",
+        "publication",
+        "doi_url",
+        "release_url",
+        "release_asset_url",
+    }
+
+    def reject_publication(value: Any) -> None:
+        if isinstance(value, dict):
+            leaked = forbidden & value.keys()
+            if leaked:
+                raise ValueError(
+                    f"scientific candidate contains publication fields: {sorted(leaked)}"
+                )
+            for item in value.values():
+                reject_publication(item)
+        elif isinstance(value, list):
+            for item in value:
+                reject_publication(item)
+        elif isinstance(value, str) and ("{{" in value or "}}" in value):
+            raise ValueError("scientific candidate contains an unresolved template slot")
+
+    reject_publication(identity)
+    if identity.get("source_sha") != expected_source:
+        raise ValueError("scientific candidate source mismatch")
+    raw = identity.get("raw_episode_sha256")
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError("scientific candidate has no raw episode checksums")
+    observed = {
+        path.relative_to(root).as_posix(): _sha256(path)
+        for path in sorted((root / "runs").glob("*/episodes.jsonl"))
+    }
+    if observed != raw:
+        raise ValueError("scientific candidate raw episode checksums mismatch")
+    return _validate_manifest(identity.get("scientific_manifest"), expected_source)
+
+
 def _validate_manifest(payload: Any, expected_source: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("resolved release manifest must be an object")
@@ -375,6 +428,11 @@ def main() -> int:
     parser.add_argument("--candidate-source-sha", required=True)
     parser.add_argument("--expected-rows", type=int, default=20160)
     parser.add_argument("--require-robot-force-metrics", action="store_true")
+    parser.add_argument(
+        "--scientific-candidate",
+        action="store_true",
+        help="Read the publication-free, raw-hash-bound candidate identity",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if _sha256(args.baseline_archive) != args.baseline_sha256:
@@ -382,7 +440,11 @@ def main() -> int:
     baseline = _read_archive(args.baseline_archive, args.baseline_source_sha)
     candidate = _read_candidate(args.candidate_root, args.candidate_source_sha)
     baseline_manifest = _read_archive_manifest(args.baseline_archive, args.baseline_source_sha)
-    candidate_manifest = _read_candidate_manifest(args.candidate_root, args.candidate_source_sha)
+    candidate_manifest = (
+        _read_scientific_candidate_manifest(args.candidate_root, args.candidate_source_sha)
+        if args.scientific_candidate
+        else _read_candidate_manifest(args.candidate_root, args.candidate_source_sha)
+    )
     report = compare(baseline, candidate)
     manifest_differences = scientific_manifest_differences(baseline_manifest, candidate_manifest)
     report.update(

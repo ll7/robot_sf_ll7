@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from robot_sf.benchmark.artifact_publication import PublicationPreflightError
+from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 from scripts.tools import finalize_benchmark_data_v008 as finalizer
 
 SOURCE_SHA = "a" * 40
@@ -44,6 +46,163 @@ def _producer(root: Path) -> dict:
     )
     _write_json(root / "campaign_manifest.json", {"git_hash": SOURCE_SHA})
     return result
+
+
+def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    registry = tmp_path / "model/registry.yaml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text("fixture: true\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    for index in range(14):
+        path = producer / f"runs/arm{index}__differential_drive/episodes.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f'{{"arm":{index}}}\n'.encode())
+    sidecar_names = [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_integrity.json",
+    ]
+    sidecar_names.extend(
+        name
+        for index in range(14)
+        for name in (
+            f"runs/arm{index}__differential_drive/episodes.jsonl.provenance.json",
+            f"runs/arm{index}__differential_drive/summary.json",
+        )
+    )
+    for name in sidecar_names:
+        payload = {"source": SOURCE_SHA}
+        if name == "reports/campaign_summary.json":
+            payload = {"campaign": {"status": "benchmark_success", "benchmark_success": True}}
+        elif name == "campaign_manifest.json":
+            payload = {"config_hash": "c" * 64}
+        _write_json(producer / name, payload)
+    science = {
+        "provenance": {"source_sha": SOURCE_SHA},
+        **{
+            key: {}
+            for key in ("matrix", "scenario", "seed_policy", "planners", "kinematics", "metrics")
+        },
+    }
+    identity = {
+        "schema_version": "benchmark-scientific-candidate.v1",
+        "source_sha": SOURCE_SHA,
+        "campaign_template_path": "configs/benchmarks/fixture.yaml",
+        "campaign_template_sha256": "b" * 64,
+        "scientific_config_hash_schema": "camera-ready-publication-free.v1",
+        "scientific_config_hash": "c" * 64,
+        "model_registry_sha256": finalizer._sha256(registry),
+        "scientific_manifest": science,
+        "raw_episode_sha256": finalizer._raw_episode_hashes(producer),
+        "producer_sidecar_sha256": {
+            name: finalizer._sha256(producer / name) for name in sidecar_names
+        },
+    }
+    canonical = (
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+            separators=(",", ": "),
+        )
+        + "\n"
+    )
+    identity["scientific_identity_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
+    identity_path = producer / "release/scientific_candidate.json"
+    _write_json(identity_path, identity)
+    reports = {
+        "full_acceptance_sha256": (
+            "reports/scientific_candidate_acceptance.json",
+            {"status": "valid"},
+        ),
+        "metric_equivalence_sha256": ("reports/metric_equivalence.json", {"status": "pass"}),
+        "robot_force_validation_sha256": (
+            "reports/robot_force_validation.json",
+            {"classification": "release_robot_force_validation", "episodes": 20160},
+        ),
+    }
+    result = {
+        "schema_version": "benchmark-scientific-candidate-result.v1",
+        "status": "accepted_pre_publication",
+        "source_sha": SOURCE_SHA,
+        "identity_file_sha256": finalizer._sha256(identity_path),
+        "scientific_identity_sha256": identity["scientific_identity_sha256"],
+    }
+    for key, (name, report) in reports.items():
+        _write_json(producer / name, report)
+        result[key] = finalizer._sha256(producer / name)
+    for key, name in (
+        ("metric_equivalence_log_sha256", "reports/scientific_candidate_equivalence.log"),
+        ("robot_force_log_sha256", "reports/scientific_candidate_force.log"),
+    ):
+        log = producer / name
+        log.write_text("synthetic gate passed\n", encoding="utf-8")
+        result[key] = finalizer._sha256(log)
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    manifest = SimpleNamespace(
+        source_sha=SOURCE_SHA,
+        resolved_manifest_payload={
+            **science,
+            "canonical_campaign_config": "configs/benchmarks/fixture.yaml",
+            "canonical_campaign_config_sha256": "b" * 64,
+        },
+    )
+    assert finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)[0] == identity
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"synthetic archive only")
+    resolved_identity = tmp_path / "resolved_identity.json"
+    resolved_identity.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
+    monkeypatch.setattr(finalizer, "_read_scientific_candidate_manifest", lambda *_: science)
+    monkeypatch.setattr(
+        finalizer, "build_release_provenance", lambda *_, **__: {"source_sha": SOURCE_SHA}
+    )
+    monkeypatch.setattr(finalizer, "_merge_release_provenance", lambda *_, **__: None)
+    monkeypatch.setattr(
+        finalizer,
+        "load_release_campaign_config",
+        lambda _: CampaignConfig(name="synthetic", scenario_matrix_path=Path("s"), planners=()),
+    )
+    monkeypatch.setattr(
+        finalizer,
+        "validate_full_benchmark_release_acceptance",
+        lambda *_, **__: {"status": "valid"},
+    )
+
+    def publication_stub(candidate: Path, _result: dict, _manifest: object) -> Path:
+        assert finalizer._raw_episode_hashes(candidate) == identity["raw_episode_sha256"]
+        archive = tmp_path / "derivative.tar.gz"
+        archive.write_bytes(b"synthetic derivative")
+        return archive
+
+    monkeypatch.setattr(finalizer, "_publish_copy", publication_stub)
+    receipt = finalizer.finalize_pre_doi_candidate(
+        producer_root=producer,
+        candidate_root=tmp_path / "derivative",
+        resolved_identity=resolved_identity,
+        baseline_archive=baseline,
+        expected_source_sha=SOURCE_SHA,
+    )
+    assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(producer)
+    assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(tmp_path / "derivative")
+    raw_path = producer / "runs/arm0__differential_drive/episodes.jsonl"
+    raw_path.write_bytes(raw_path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="raw episode bytes changed"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+    raw_path.write_bytes(b'{"arm":0}\n')
+    sidecar = producer / "run_meta.json"
+    sidecar.write_bytes(sidecar.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="sidecar bytes changed"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
 
 
 def test_finalize_copies_accepted_producer_before_postrun_gates(

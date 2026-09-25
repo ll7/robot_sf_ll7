@@ -9,16 +9,19 @@ command works on a new copy so the accepted producer remains untouched.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import shutil
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
 from robot_sf.benchmark.release_protocol import (
+    build_release_provenance,
     load_release_campaign_config,
     verify_resolved_release_identity,
 )
@@ -26,9 +29,13 @@ from robot_sf.common.artifact_paths import get_repository_root
 from scripts.tools.run_benchmark_release import (
     _assert_no_historical_release_identity,
     _build_publication_payload,
+    _merge_release_provenance,
     _record_publication_payload,
     _run_publication_preflight,
     _write_json,
+)
+from scripts.validation.check_release_metric_equivalence import (
+    _read_scientific_candidate_manifest,
 )
 
 BASELINE_ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
@@ -102,6 +109,125 @@ def _require_copyable_producer(producer_root: Path) -> None:
         raise ValueError("producer root checksum inventory is already frozen")
     if any(path.is_symlink() for path in producer_root.rglob("*")):
         raise ValueError("producer campaign contains a symlink")
+
+
+def _raw_episode_hashes(root: Path) -> dict[str, str]:
+    """Hash only immutable episode rows, keyed by relative artifact path."""
+    paths = sorted((root / "runs").glob("*/episodes.jsonl"))
+    if len(paths) != 14:
+        raise ValueError("0.0.8 candidate must contain exactly 14 raw episode files")
+    return {path.relative_to(root).as_posix(): _sha256(path) for path in paths}
+
+
+def _require_scientific_candidate(  # noqa: C901, PLR0912
+    producer_root: Path, source_sha: str, manifest: Any
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Reverify accepted pre-publication custody and DOI-bound science identity."""
+    identity_path = producer_root / "release/scientific_candidate.json"
+    result_path = producer_root / "release/scientific_candidate_result.json"
+    identity = _read_mapping(identity_path)
+    result = _read_mapping(result_path)
+    if (
+        identity.get("schema_version") != "benchmark-scientific-candidate.v1"
+        or result.get("schema_version") != "benchmark-scientific-candidate-result.v1"
+        or result.get("status") != "accepted_pre_publication"
+        or identity.get("source_sha") != source_sha
+        or result.get("source_sha") != source_sha
+        or manifest.source_sha != source_sha
+        or result.get("identity_file_sha256") != _sha256(identity_path)
+    ):
+        raise ValueError("producer is not an accepted exact-source scientific candidate")
+    unsigned = dict(identity)
+    identity_digest = unsigned.pop("scientific_identity_sha256", None)
+    canonical = (
+        json.dumps(
+            unsigned,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+            separators=(",", ": "),
+        )
+        + "\n"
+    )
+    if hashlib.sha256(canonical.encode()).hexdigest() != identity_digest or (
+        result.get("scientific_identity_sha256") != identity_digest
+    ):
+        raise ValueError("scientific candidate identity hash changed")
+    science = identity.get("scientific_manifest")
+    resolved = manifest.resolved_manifest_payload
+    if not isinstance(science, dict) or not isinstance(resolved, dict):
+        raise ValueError("candidate or resolved scientific manifest is missing")
+    for field in ("matrix", "scenario", "seed_policy", "planners", "kinematics", "metrics"):
+        if science.get(field) != resolved.get(field):
+            raise ValueError(f"DOI-bound {field} differs from accepted candidate science")
+    if resolved.get("canonical_campaign_config_sha256") != identity.get("campaign_template_sha256"):
+        raise ValueError("DOI-bound campaign template differs from candidate")
+    if resolved.get("canonical_campaign_config") != identity.get("campaign_template_path"):
+        raise ValueError("DOI-bound campaign template path differs from candidate")
+    if identity.get("model_registry_sha256") != _sha256(
+        get_repository_root() / "model/registry.yaml"
+    ):
+        raise ValueError("model registry bytes changed since scientific acceptance")
+    campaign_manifest = _read_mapping(producer_root / "campaign_manifest.json")
+    if identity.get(
+        "scientific_config_hash_schema"
+    ) != "camera-ready-publication-free.v1" or campaign_manifest.get("config_hash") != identity.get(
+        "scientific_config_hash"
+    ):
+        raise ValueError("scientific campaign config hash differs from producer")
+    if _raw_episode_hashes(producer_root) != identity.get("raw_episode_sha256"):
+        raise ValueError("accepted candidate raw episode bytes changed")
+    sidecars = identity.get("producer_sidecar_sha256")
+    expected_sidecars = {
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_integrity.json",
+    }
+    expected_sidecars.update(
+        name
+        for raw_name in identity["raw_episode_sha256"]
+        for name in (
+            f"{Path(raw_name).parent.as_posix()}/episodes.jsonl.provenance.json",
+            f"{Path(raw_name).parent.as_posix()}/summary.json",
+        )
+    )
+    if (
+        not isinstance(sidecars, dict)
+        or set(sidecars) != expected_sidecars
+        or any(
+            _sha256(producer_root / name) != sidecar_digest
+            for name, sidecar_digest in sidecars.items()
+        )
+    ):
+        raise ValueError("accepted candidate producer sidecar bytes changed")
+    required_reports = {
+        "full_acceptance_sha256": "reports/scientific_candidate_acceptance.json",
+        "metric_equivalence_sha256": "reports/metric_equivalence.json",
+        "robot_force_validation_sha256": "reports/robot_force_validation.json",
+    }
+    for key, name in required_reports.items():
+        report_path = producer_root / name
+        report = _read_mapping(report_path)
+        accepted = (
+            report.get("classification") == "release_robot_force_validation"
+            and report.get("episodes") == EXPECTED_EPISODES
+            if key == "robot_force_validation_sha256"
+            else report.get("status") in {"valid", "pass"}
+        )
+        if _sha256(report_path) != result.get(key) or not accepted:
+            raise ValueError(f"scientific candidate gate is not accepted: {name}")
+    for key, name in (
+        ("metric_equivalence_log_sha256", "reports/scientific_candidate_equivalence.log"),
+        ("robot_force_log_sha256", "reports/scientific_candidate_force.log"),
+    ):
+        if _sha256(producer_root / name) != result.get(key):
+            raise ValueError(f"scientific candidate gate log changed: {name}")
+    if result.get("scientific_identity_sha256") != identity_digest:
+        raise ValueError("scientific candidate result is detached from identity")
+    return identity, result
 
 
 def _run_gate(command: list[str], log_path: Path) -> None:
@@ -232,7 +358,7 @@ def _mark_candidate_failure(candidate_root: Path, stage: str) -> None:
         if result_path.is_file()
         else (candidate_root / "release" / "producer_release_result.json")
     )
-    result = _read_mapping(source_path)
+    result = _read_mapping(source_path) if source_path.is_file() else {}
     result.update(
         {
             "finalization_status": "fail",
@@ -414,6 +540,119 @@ def finalize(
         raise
 
 
+def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
+    *,
+    producer_root: Path,
+    candidate_root: Path,
+    resolved_identity: Path,
+    baseline_archive: Path,
+    expected_source_sha: str,
+) -> dict[str, Any]:
+    """After author approval, bind DOI metadata in a copy of accepted raw rows."""
+    manifest = verify_resolved_release_identity(resolved_identity)
+    if manifest.source_sha != expected_source_sha or manifest.source_sha == BASELINE_SOURCE_SHA:
+        raise ValueError("resolved DOI identity has the wrong scientific source")
+    if _sha256(baseline_archive) != BASELINE_ARCHIVE_SHA256:
+        raise ValueError("frozen 0.0.7 archive checksum mismatch")
+    if producer_root.is_symlink() or candidate_root.is_symlink():
+        raise ValueError("candidate source and destination must be regular directories")
+    producer_root = producer_root.resolve(strict=True)
+    candidate_root = candidate_root.resolve()
+    trusted_root = get_repository_root().resolve()
+    if not candidate_root.is_relative_to(trusted_root):
+        raise ValueError("publication derivative must be inside the exact source checkout")
+    if candidate_root == producer_root or producer_root in candidate_root.parents:
+        raise ValueError("publication derivative must be separate from its producer")
+    _require_copyable_producer(producer_root)
+    identity, _ = _require_scientific_candidate(producer_root, expected_source_sha, manifest)
+    _read_scientific_candidate_manifest(producer_root, expected_source_sha)
+    original_raw = copy.deepcopy(identity["raw_episode_sha256"])
+    if candidate_root.exists() or candidate_root.is_symlink():
+        raise FileExistsError("publication derivative already exists")
+    if _publication_output(candidate_root).exists():
+        raise FileExistsError("publication output already exists")
+    stage_root = candidate_root.with_name(f"{candidate_root.name}.copying")
+    if stage_root.exists() or stage_root.is_symlink():
+        raise FileExistsError("incomplete publication derivative copy already exists")
+    shutil.copytree(producer_root, stage_root, symlinks=False)
+    if _raw_episode_hashes(stage_root) != original_raw:
+        raise ValueError("raw episode bytes changed during derivative copy")
+    stage_root.rename(candidate_root)
+    stage = "publication_identity"
+    try:
+        resolved = manifest.resolved_manifest_payload
+        _write_json(candidate_root / "release/release_manifest.resolved.json", resolved)
+        provenance = build_release_provenance(
+            manifest,
+            campaign_root=candidate_root,
+            invoked_command="finalize_benchmark_data_v008.py --pre-doi-producer",
+            source_commit=expected_source_sha,
+        )
+        _merge_release_provenance(candidate_root, provenance)
+        if _raw_episode_hashes(candidate_root) != original_raw:
+            raise ValueError("raw episode bytes changed during publication identity binding")
+        stage = "full_release_acceptance"
+        campaign_cfg = load_release_campaign_config(manifest)
+        campaign_cfg = replace(campaign_cfg, publication_identity_mode="scientific_candidate")
+        acceptance = validate_full_benchmark_release_acceptance(
+            candidate_root,
+            manifest=manifest,
+            campaign_config=campaign_cfg,
+        )
+        if acceptance.get("status") != "valid":
+            raise ValueError("DOI-bound derivative failed full release acceptance")
+        _write_json(candidate_root / "reports/release_acceptance.json", acceptance)
+        summary = _read_mapping(candidate_root / "reports/campaign_summary.json")
+        campaign = summary.get("campaign")
+        if not isinstance(campaign, dict) or campaign.get("benchmark_success") is not True:
+            raise ValueError("DOI-bound derivative has no successful campaign summary")
+        release_result = {
+            **campaign,
+            "benchmark_release": provenance,
+            "release_acceptance": acceptance,
+            "release_benchmark_success": True,
+            "release_status": "ok",
+            "release_exit_code": 0,
+            "publication_requested": False,
+            "publication_preflight_status": "not_requested",
+            "publication_bundle": None,
+            "scientific_candidate_result_sha256": _sha256(
+                producer_root / "release/scientific_candidate_result.json"
+            ),
+        }
+        _write_json(candidate_root / "release/producer_release_result.json", release_result)
+        _write_json(candidate_root / "release/release_result.json", release_result)
+        stage = "publication_bundle"
+        archive = _publish_copy(candidate_root, release_result, manifest)
+        if _raw_episode_hashes(candidate_root) != original_raw:
+            raise ValueError("raw episode bytes changed during publication export")
+        stage = "finalization_receipt"
+        receipt = {
+            "schema_version": "benchmark-data-v008-pre-doi-promotion.v1",
+            "source_sha": expected_source_sha,
+            "scientific_identity_sha256": identity["scientific_identity_sha256"],
+            "scientific_candidate_result_sha256": _sha256(
+                producer_root / "release/scientific_candidate_result.json"
+            ),
+            "publication_identity_sha256": _sha256(resolved_identity),
+            "raw_episode_sha256": original_raw,
+            "publication_archive_sha256": _sha256(archive),
+            "publication_archive": str(archive),
+        }
+        pending_receipt, receipt_path = _receipt_paths(candidate_root)
+        _write_json(pending_receipt, receipt)
+        pending_receipt.rename(receipt_path)
+        return receipt
+    except BaseException:
+        try:
+            _mark_candidate_failure(candidate_root, stage)
+        finally:
+            _remove_owned_output(candidate_root)
+            for path in _receipt_paths(candidate_root):
+                path.unlink(missing_ok=True)
+        raise
+
+
 def main() -> int:
     """Run the post-campaign release finalizer from its explicit source pins."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -422,8 +661,14 @@ def main() -> int:
     parser.add_argument("--resolved-identity", type=Path, required=True)
     parser.add_argument("--baseline-archive", type=Path, required=True)
     parser.add_argument("--expected-source-sha", required=True)
+    parser.add_argument(
+        "--pre-doi-producer",
+        action="store_true",
+        help="Bind a real DOI identity only in a derivative of an accepted scientific candidate",
+    )
     args = parser.parse_args()
-    receipt = finalize(
+    finalizer = finalize_pre_doi_candidate if args.pre_doi_producer else finalize
+    receipt = finalizer(
         producer_root=args.producer_root,
         candidate_root=args.candidate_root,
         resolved_identity=args.resolved_identity,

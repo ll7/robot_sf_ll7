@@ -4,7 +4,7 @@ These tests exercise the campaign runner wiring
 (``scripts/adversarial.run_qd_campaign_issue_5308``) in smoke mode (injected
 evaluator, no simulator) so the integration contract - config parsing, warm-start
 extraction, emitter mix (Random + CoordinateRefinement + CMA-ME), archive artifact
-schema, and the equal-budget comparison - is validated on CPU. This is capability
+schema, and the equal-proposal-budget comparison - is validated on CPU. This is capability
 plumbing, not a benchmark claim.
 """
 
@@ -94,11 +94,12 @@ def test_campaign_smoke_finds_distinct_certified_failure_modes(tmp_path: Path) -
     assert summary["filled_cell_count"] > 0
 
 
-def test_campaign_smoke_emits_equal_budget_comparison(tmp_path: Path) -> None:
-    """Smoke-mode run emits an equal-budget MAP-Elites vs single-objective report."""
+def test_campaign_smoke_emits_equal_proposal_budget_comparison(tmp_path: Path) -> None:
+    """Smoke-mode report names the budget basis and exposes actual evaluator calls."""
     run_campaign(CONFIG_PATH, tmp_path, budget_override=18, smoke=True)
     comparison = json.loads((tmp_path / "comparison.json").read_text(encoding="utf-8"))
-    assert comparison["comparison_type"] == "equal_budget_qd_vs_single_objective"
+    assert comparison["comparison_type"] == "equal_proposal_budget_qd_vs_single_objective"
+    assert comparison["budget_basis"] == "proposed_candidate_slots"
     assert comparison["rows"]["map_elites"]["budget"] == 18
     assert comparison["rows"]["single_objective"]["budget"] == 18
     assert comparison["rows"]["map_elites"]["num_evaluated"] == 18
@@ -160,7 +161,7 @@ def test_tracked_fixture_archive_meets_issue_5308_contract() -> None:
     assert payload["summary"]["filled_cell_count"] > 0
     assert len(payload["summary"]["distinct_failure_modes"]) >= 2
     assert len(payload["cells"]) == payload["summary"]["filled_cell_count"]
-    # Equal-budget comparison artifact is archived alongside.
+    # Historical pre-admissibility artifact is preserved with its original report schema.
     comparison = json.loads((FIXTURE_DIR / "comparison.json").read_text(encoding="utf-8"))
     assert comparison["comparison_type"] == "equal_budget_qd_vs_single_objective"
     manifest = json.loads((FIXTURE_DIR / "run_manifest.json").read_text(encoding="utf-8"))

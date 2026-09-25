@@ -46,6 +46,12 @@ def _row(seed: int, status: str, *, trace: bool) -> dict:
         "scenario_id": "classic_doorway_medium",
         "seed": seed,
         "status": status,
+        "termination_reason": "collision" if status == "collision" else "success",
+        "outcome": {
+            "route_complete": status == "success",
+            "collision_event": status == "collision",
+            "timeout_event": False,
+        },
         "steps": 1,
         "interaction_exposure": {"interaction_exposure_steps": 0},
         "git_hash": SOURCE_SHA,
@@ -219,6 +225,54 @@ def test_reports_mismatch_and_absent_release_row(tmp_path: Path) -> None:
     ]
     assert report["comparisons"][1]["release_interaction_exposure_steps"] == 0
     assert report["comparisons"][1]["trace_interaction_exposure_steps"] == 0
+
+
+@pytest.mark.parametrize("field", ["outcome", "termination_reason"])
+def test_paired_rows_compare_canonical_outcome_fields(tmp_path: Path, field: str) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    if field == "outcome":
+        trace["outcome"]["collision_event"] = False
+    else:
+        trace["termination_reason"] = "terminated"
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    report = _check(archive, traces, tmp_path, [113])
+
+    assert report["comparison_counts"] == {"match": 0, "mismatch": 1, "no_release_row": 0}
+    comparison = report["comparisons"][0]
+    assert comparison["comparison"] == "mismatch"
+    assert (
+        comparison["trace_outcome"] != comparison["release_outcome"]
+        or comparison["trace_termination_reason"] != comparison["release_termination_reason"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "field"),
+    [
+        ("trace", "outcome"),
+        ("trace", "termination_reason"),
+        ("release", "outcome"),
+        ("release", "termination_reason"),
+    ],
+)
+def test_rejects_missing_canonical_outcome_fields(tmp_path: Path, source: str, field: str) -> None:
+    release_row = _row(113, "collision", trace=False)
+    trace = _row(113, "collision", trace=True)
+    if source == "release":
+        del release_row[field]
+    else:
+        del trace[field]
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [release_row])
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    with pytest.raises(ValueError, match="missing or invalid"):
+        _check(archive, traces, tmp_path, [113])
 
 
 def test_rejects_missing_paired_release_row(tmp_path: Path) -> None:

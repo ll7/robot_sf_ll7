@@ -447,9 +447,19 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
     for key in sorted(expected):
         old = baseline_rows[key]
         new = new_rows[key]
+        old_outcome, old_termination_reason = trace_checker._canonical_outcome(
+            old, key=key, source="baseline"
+        )
+        new_outcome, new_termination_reason = trace_checker._canonical_outcome(
+            new, key=key, source="observer"
+        )
         changed = [
             field for field in ("episode_id", "status", "steps") if old.get(field) != new.get(field)
         ]
+        if old_outcome != new_outcome:
+            changed.append("outcome")
+        if old_termination_reason != new_termination_reason:
+            changed.append("termination_reason")
         if _trace_state(old) != _trace_state(new):
             changed.append("recorded_state_or_total_forces")
         if changed:
@@ -462,6 +472,10 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
         receipt["baseline_episode_id"] = old["episode_id"]
         receipt["baseline_status"] = old["status"]
         receipt["new_status"] = new["status"]
+        receipt["baseline_outcome"] = old_outcome
+        receipt["new_outcome"] = new_outcome
+        receipt["baseline_termination_reason"] = old_termination_reason
+        receipt["new_termination_reason"] = new_termination_reason
         receipt["release_comparison"] = comparison_by_key[key]["comparison"]
     return {
         "schema_version": SCHEMA,

@@ -491,6 +491,11 @@ def test_diagnostic_runner_rejects_unapproved_execution(
     command_parts = shlex.split(command)
     monkeypatch.setattr(
         compare_adversarial_samplers,
+        "preflight_issue_5303_contract",
+        lambda *_args, **_kwargs: type("Preflight", (), {"ready": True, "blockers": ()})(),
+    )
+    monkeypatch.setattr(
+        compare_adversarial_samplers,
         "run_sampler_comparison",
         lambda **_kwargs: pytest.fail("search must not run without separate authorization"),
     )

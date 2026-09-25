@@ -320,6 +320,7 @@ def _step_collision_events(
     if bool(meta.get("is_pedestrian_collision", False)):
         ped_array = np.asarray(ped_positions, dtype=float).reshape(-1, 2)
         partner_id: str | None = None
+        contact_partner_ids: list[str] = []
         relative_speed = float(np.linalg.norm(robot_velocity))
         # Filter non-finite pedestrian slots (padded/absent pedestrians) before
         # selecting the contact partner: np.argmin over a NaN-containing array

@@ -1061,6 +1061,14 @@ class MapDefinition:
         state = self.__dict__.copy()
         # Drop shapely prepared geometries to keep pickling safe
         state.pop("_prepared_obstacles", None)
+        # Spawn-clearance caches (issue #9725) hold prepared geometries too; they are
+        # rebuilt lazily after unpickling.
+        for cache_name in (
+            "_robot_start_exclusion_cache",
+            "_ped_relocation_block_cache",
+            "_ped_relocation_wall_cache",
+        ):
+            state.pop(cache_name, None)
         return state
 
     def __setstate__(self, state):

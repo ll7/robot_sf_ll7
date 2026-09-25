@@ -264,3 +264,21 @@ def test_spawn_overlap_rows_are_ledger_invalid_and_excluded_from_rates() -> None
     assert summary["orca"]["success"]["mean"] == 1.0
     assert summary["orca"]["collisions"]["mean"] == 0.0
     assert summary["_meta"]["evidence_eligibility"]["excluded_record_count"] == 1
+
+
+def test_map_definition_pickles_after_spawn_sampling() -> None:
+    """Spawn-clearance caches hold prepared geometries; pickling must drop and rebuild them."""
+    import pickle
+
+    map_def = convert_map(str(MAPS / "classic_head_on_corridor.svg"))
+    np.random.seed(0)
+    sample_route(map_def, 0, robot_radius=ROBOT_RADIUS)
+    relocate_overlapping_pedestrians(
+        [(15.0, 20.0)], PED_RADIUS, [((15.2, 20.0), ROBOT_RADIUS)], map_def
+    )
+    restored = pickle.loads(pickle.dumps(map_def))
+    np.random.seed(1)
+    start = sample_route(restored, 0, robot_radius=ROBOT_RADIUS)[0]
+    assert (
+        robot_obstacle_clearance(restored, start, ROBOT_RADIUS) >= SPAWN_CLEARANCE_MARGIN_M - 1e-9
+    )

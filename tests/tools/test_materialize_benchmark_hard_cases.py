@@ -85,6 +85,8 @@ def _record_fixture_runtime_inputs(row: dict[str, Any]) -> None:
                 "sha256": hashlib.sha256(source_bytes).hexdigest(),
             }
         )
+    if row.get("algo") == "crowdnav_height":
+        assets.extend(_crowdnav_height_fixture_assets(config))
     environment = {
         "python_version": "3.12.0-fixture",
         "python_implementation": "CPython-fixture",
@@ -108,6 +110,83 @@ def _record_fixture_runtime_inputs(row: dict[str, Any]) -> None:
         },
         "assets": assets,
     }
+
+
+def _crowdnav_height_fixture_assets(config: dict[str, Any]) -> list[dict[str, str]]:
+    assets = []
+    for descriptor in materializer._crowdnav_height_input_specs(config):
+        identity = materializer._crowdnav_height_runtime_asset_identity(descriptor)
+        if identity.get("status") == "verified":
+            assets.append(
+                {
+                    "kind": descriptor["kind"],
+                    "name": identity["name"],
+                    "reference": descriptor["reference"],
+                    "sha256": identity["sha256"],
+                }
+            )
+    return assets
+
+
+def _create_crowdnav_height_assets(
+    root: Path, checkpoint_name: str = "237800.pt", *, include_checkpoint: bool = True
+) -> tuple[Path, Path]:
+    repo_root = root / "CrowdNav_HEIGHT"
+    repo_root.mkdir(parents=True)
+    (repo_root / "training" / "networks").mkdir(parents=True)
+    (repo_root / "training" / "networks" / "model.py").write_text(
+        "# fixture upstream source\n", encoding="utf-8"
+    )
+    subprocess.run(["git", "init", str(repo_root)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.email", "fixture@example.invalid"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.name", "Fixture"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_root), "add", "training/networks/model.py"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_root), "commit", "-m", "fixture upstream source"],
+        check=True,
+        capture_output=True,
+    )
+    model_dir = root / "HEIGHT" / "HEIGHT"
+    (model_dir / "configs").mkdir(parents=True)
+    (model_dir / "checkpoints").mkdir(parents=True)
+    (model_dir / "configs" / "config.py").write_text("class Config: pass\n", encoding="utf-8")
+    if include_checkpoint:
+        (model_dir / "checkpoints" / checkpoint_name).write_bytes(b"fixture HEIGHT checkpoint")
+    return repo_root, model_dir
+
+
+def _crowdnav_height_source_row(
+    repo_root: Path,
+    model_dir: Path,
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    row["algo"] = "crowdnav_height"
+    row["algorithm_metadata"]["algorithm"] = "crowdnav_height"
+    row["algorithm_metadata"]["config"] = (
+        config
+        if config is not None
+        else {
+            "repo_root": str(repo_root),
+            "model_dir": str(model_dir),
+            "checkpoint_name": "237800.pt",
+        }
+    )
+    _record_fixture_runtime_inputs(row)
+    return row
 
 
 def _clean_checkout_snapshot(revision: str) -> dict[str, Any]:
@@ -1006,6 +1085,119 @@ def test_sacadrl_checkpoint_bundle_bytes_are_part_of_runtime_identity(
         if asset["kind"] == "sacadrl_checkpoint_path" and ".data-" in asset["name"]
     )
     assert source_data_hash != replay_data_hash
+
+
+def test_crowdnav_height_default_checkpoint_and_model_inputs_are_bound(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo_root, model_dir = _create_crowdnav_height_assets(tmp_path)
+    monkeypatch.setattr(materializer, "CROWDNAV_HEIGHT_DEFAULT_REPO_ROOT", str(repo_root))
+    monkeypatch.setattr(materializer, "CROWDNAV_HEIGHT_DEFAULT_MODEL_DIR", str(model_dir))
+    source = _crowdnav_height_source_row(repo_root, model_dir, config={})
+    replay = json.loads(json.dumps(source))
+    case = {
+        "planner_key": "crowdnav_height",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        replay,
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "exact_match"
+    identity = classification["runtime_input_identity"]
+    checkpoint = next(
+        asset
+        for asset in identity["replay"]["assets"]
+        if asset["kind"] == materializer.CROWDNAV_HEIGHT_CHECKPOINT_ASSET_KIND
+    )
+    assert checkpoint["reference"].endswith("/checkpoints/237800.pt")
+    assert checkpoint["sha256"] == _sha256(model_dir / "checkpoints" / "237800.pt")
+    assert {
+        asset["kind"] for asset in identity["source"]["assets"]
+    } >= materializer.CROWDNAV_HEIGHT_ASSET_KINDS
+
+
+def test_crowdnav_height_explicit_checkpoint_byte_change_is_a_mismatch(
+    tmp_path: Path,
+) -> None:
+    checkpoint_name = "selected-model.pt"
+    repo_root, model_dir = _create_crowdnav_height_assets(tmp_path, checkpoint_name=checkpoint_name)
+    source = _crowdnav_height_source_row(
+        repo_root,
+        model_dir,
+        config={
+            "repo_root": str(repo_root),
+            "model_dir": str(model_dir),
+            "checkpoint_name": checkpoint_name,
+        },
+    )
+    replay = json.loads(json.dumps(source))
+    checkpoint_path = model_dir / "checkpoints" / checkpoint_name
+    checkpoint_path.write_bytes(b"changed explicit HEIGHT checkpoint")
+    case = {
+        "planner_key": "crowdnav_height",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        replay,
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "runtime_input_identity_mismatch"
+    checkpoint = next(
+        asset
+        for asset in classification["runtime_input_identity"]["replay"]["assets"]
+        if asset["kind"] == materializer.CROWDNAV_HEIGHT_CHECKPOINT_ASSET_KIND
+    )
+    assert checkpoint["sha256"] == _sha256(checkpoint_path)
+
+
+def test_missing_crowdnav_height_default_checkpoint_is_unavailable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo_root, model_dir = _create_crowdnav_height_assets(tmp_path, include_checkpoint=False)
+    monkeypatch.setattr(materializer, "CROWDNAV_HEIGHT_DEFAULT_REPO_ROOT", str(repo_root))
+    monkeypatch.setattr(materializer, "CROWDNAV_HEIGHT_DEFAULT_MODEL_DIR", str(model_dir))
+    source = _crowdnav_height_source_row(repo_root, model_dir, config={})
+    case = {
+        "planner_key": "crowdnav_height",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        json.loads(json.dumps(source)),
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "unavailable_runtime_input_identity"
+    identity = classification["runtime_input_identity"]
+    assert identity["source"]["status"] == "unavailable"
+    assert identity["replay"]["status"] == "unavailable"
+    assert any(
+        asset.get("reason") == "crowdnav_height_runtime_file_missing"
+        for asset in identity["replay"]["assets"]
+    )
 
 
 def test_exact_replay_rejects_different_tracked_scenario_map() -> None:

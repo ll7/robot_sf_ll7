@@ -5823,7 +5823,7 @@ def _is_full_git_revision(value: Any) -> bool:
 
 
 def _current_target_revision() -> str | None:
-    """Resolve the exact HEAD of the checkout that provides this corpus module."""
+    """Resolve the exact HEAD when the module's source checkout is clean."""
     try:
         completed = subprocess.run(
             ["git", "-C", str(_ROOT), "rev-parse", "--verify", "HEAD^{commit}"],
@@ -5832,9 +5832,21 @@ def _current_target_revision() -> str | None:
             text=True,
             timeout=5,
         )
+        status = subprocess.run(
+            ["git", "-C", str(_ROOT), "status", "--porcelain", "--untracked-files=all"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return None
     revision = completed.stdout.strip()
-    if completed.returncode != 0 or not _is_full_git_revision(revision):
+    if (
+        completed.returncode != 0
+        or status.returncode != 0
+        or status.stdout.strip()
+        or not _is_full_git_revision(revision)
+    ):
         return None
     return revision

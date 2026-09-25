@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -1042,13 +1043,14 @@ def test_pending_historical_candidate_promotes_after_exact_replay_and_input_bind
 
 
 def test_admission_receipt_rejects_replay_revision_as_untrusted_target(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A caller cannot label a stale replay revision as the current target."""
     corpus_root = tmp_path / "corpus"
     corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
     case = copy.deepcopy(corpus["cases"][0])
     case["replay_receipt"] = _single_replay_admission_receipt(case, corpus_root)
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: "f" * 40)
     assert counterexample_corpus._validate_case_current_target_revision(case) == [
         "admission replay does not match the independently resolved current target revision"
     ]
@@ -1092,6 +1094,31 @@ def test_case_admission_rejects_missing_or_mismatched_current_target(
         "independent current target revision is unavailable" in blocker
         for blocker in admission["blockers"]
     )
+
+
+@pytest.mark.parametrize(
+    ("status_output", "expected_revision"),
+    [("", "a" * 40), (" M robot_sf/planner.py\n", None), ("?? local_module.py\n", None)],
+)
+def test_current_target_revision_requires_clean_source_checkout(
+    monkeypatch: pytest.MonkeyPatch,
+    status_output: str,
+    expected_revision: str | None,
+) -> None:
+    """Dirty tracked or untracked source cannot claim the checkout HEAD as exact."""
+    timeout_expired = counterexample_corpus.subprocess.TimeoutExpired
+
+    def fake_git_run(arguments: list[str], **_kwargs: object) -> SimpleNamespace:
+        if "rev-parse" in arguments:
+            return SimpleNamespace(returncode=0, stdout=f"{'a' * 40}\n")
+        return SimpleNamespace(returncode=0, stdout=status_output)
+
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "subprocess",
+        SimpleNamespace(run=fake_git_run, TimeoutExpired=timeout_expired),
+    )
+    assert counterexample_corpus._current_target_revision() == expected_revision
 
 
 @pytest.mark.parametrize(

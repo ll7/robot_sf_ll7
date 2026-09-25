@@ -138,10 +138,11 @@ independently authenticate a replay.
 The public `create_case_admission_replay_receipt` helper binds an existing one-row episode JSONL
 to the case inputs and selected event/metric projection. Its `artifact_path` is relative to the
 corpus root. The helper independently resolves the exact `HEAD` of the checkout that provides the
-corpus module and requires the replay's source revision to match it. An optional
-`target_revision` argument is only an expected-value check; it cannot set or override the target.
-If checkout `HEAD` is unavailable, or if the replay was produced by another revision, receipt
-creation and case admission reject the evidence. The helper does not run a simulator. Corpus
+corpus module and requires the source checkout to be clean and the replay's source revision to
+match `HEAD`. An optional `target_revision` argument is only an expected-value check; it cannot set
+or override the target. If checkout `HEAD` is unavailable, the source checkout is dirty, or the
+replay was produced by another revision, receipt creation and case admission reject the evidence.
+The helper does not run a simulator. Corpus
 validation later preserves the recorded admission-time claim and does not compare it with a newer
 checkout `HEAD`.
 

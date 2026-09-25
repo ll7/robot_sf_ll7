@@ -2483,6 +2483,7 @@ def _run_map_episode(  # noqa: PLR0913
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
     with _scoped_episode_compat_overrides():
+        consumed_runtime_inputs = runtime_input_records if runtime_input_records is not None else []
         episode_kwargs: dict[str, Any] = {
             "horizon": horizon,
             "dt": dt,
@@ -2512,10 +2513,13 @@ def _run_map_episode(  # noqa: PLR0913
             "record_simulation_step_trace": record_simulation_step_trace,
             "close_policy": close_policy,
             "policy_builder": policy_builder or _build_policy,
+            "runtime_input_records": consumed_runtime_inputs,
         }
-        if runtime_input_records is not None:
-            episode_kwargs["runtime_input_records"] = runtime_input_records
-        return _execute_map_episode(scenario, seed, **episode_kwargs)
+        episode = _execute_map_episode(scenario, seed, **episode_kwargs)
+        # Keep exact parser-consumed map/route input identities in the hashed episode row so
+        # downstream evidence consumers can bind the execution to the same resource closure.
+        episode["runtime_input_records"] = [dict(record) for record in consumed_runtime_inputs]
+        return episode
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:

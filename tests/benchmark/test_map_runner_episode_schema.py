@@ -20,6 +20,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.failure_mechanism_taxonomy import (
     MECHANISM_SCHEMA_VERSION,
@@ -222,9 +223,24 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         (),
         {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
     )()
+
+    def build_env_config(_scenario, scenario_path, *, runtime_input_records=None):
+        del scenario_path
+        if runtime_input_records is not None:
+            runtime_input_records.append(
+                {
+                    "role": "fixture_map",
+                    "scenario_id": "episode-schema-smoke",
+                    "sha256": "a" * 64,
+                    "path": "/fixture/map.svg",
+                    "parser": "svg",
+                }
+            )
+        return dummy_config
+
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        build_env_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -282,9 +298,21 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         scenario_path=_SCENARIO_PATH,
         policy_builder=policy_builder,
     )
+    Draft202012Validator(
+        json.loads((_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_text())
+    ).validate(record)
 
     assert record["failure_mechanism"]["mechanism_schema_version"] == MECHANISM_SCHEMA_VERSION
     assert record["failure_mechanism"]["mechanism_label"] == "unknown"
+    assert record["runtime_input_records"] == [
+        {
+            "role": "fixture_map",
+            "scenario_id": "episode-schema-smoke",
+            "sha256": "a" * 64,
+            "path": "/fixture/map.svg",
+            "parser": "svg",
+        }
+    ]
     exposure = record["interaction_exposure"]
     assert exposure["interaction_exposure_schema_version"] == INTERACTION_EXPOSURE_SCHEMA_VERSION
     # Two pedestrians are present, so exposure is derivable (computed), not blank.

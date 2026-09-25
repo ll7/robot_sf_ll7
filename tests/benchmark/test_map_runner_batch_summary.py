@@ -146,6 +146,95 @@ def test_malformed_telemetry_container_survives_later_safe_episode() -> None:
     assert availability.benchmark_success is False
 
 
+def test_shield_counter_merge_sums_valid_values_and_preserves_malformed_evidence() -> None:
+    """Shield counters aggregate while malformed values remain visible to policy checks."""
+    first = _guarded_episode_metadata(decision_label="fallback_safe", stop_count=0, safe_count=1)
+    first_shield = first["shield_stats"]
+    assert isinstance(first_shield, dict)
+    first_shield.update(
+        {
+            "decision_count": 2,
+            "override_count": 0,
+            "intervention_count": "malformed-existing",
+            "decision_counts": {
+                "stop_best_effort": 0,
+                "fallback_safe": 1,
+                "preserve_invalid": "malformed-existing",
+                "becomes_invalid": 0,
+            },
+            "violated_constraint_counts": {"wall": 1},
+        }
+    )
+    second = _guarded_episode_metadata(
+        decision_label="fallback_safe", stop_count="malformed-new", safe_count=2
+    )
+    second_shield = second["shield_stats"]
+    assert isinstance(second_shield, dict)
+    second_shield.update(
+        {
+            "decision_count": 3,
+            "pass_through_count": 4,
+            "override_count": "malformed-new",
+            "intervention_count": 9,
+            "decision_counts": {
+                "stop_best_effort": "malformed-new",
+                "fallback_safe": 2,
+                "preserve_invalid": 5,
+                "becomes_invalid": "malformed-new",
+                "new_event": 4,
+            },
+            "violated_constraint_counts": "malformed-container",
+            "last_decision": {},
+            "diagnostic_payload": "new-value",
+        }
+    )
+
+    contract = merge_runtime_algorithm_contract(_guarded_contract_base(), first)
+    merge_runtime_algorithm_contract(contract, second)
+    shield_stats = contract["shield_stats"]
+    assert isinstance(shield_stats, dict)
+    decision_counts = shield_stats["decision_counts"]
+    assert isinstance(decision_counts, dict)
+    assert contract["guard_stats"]["stop_best_effort"] == "malformed-new"
+    assert contract["guard_stats"]["fallback_safe"] == 3
+    assert shield_stats["decision_count"] == 5
+    assert shield_stats["pass_through_count"] == 4
+    assert shield_stats["override_count"] == "malformed-new"
+    assert shield_stats["intervention_count"] == "malformed-existing"
+    assert decision_counts == {
+        "stop_best_effort": "malformed-new",
+        "fallback_safe": 3,
+        "preserve_invalid": "malformed-existing",
+        "becomes_invalid": "malformed-new",
+        "new_event": 4,
+    }
+    assert shield_stats["violated_constraint_counts"] == "malformed-container"
+    assert "last_decision" not in shield_stats
+    assert shield_stats["diagnostic_payload"] == "new-value"
+
+    availability = summarize_benchmark_availability(
+        {
+            "status": "ok",
+            "total_jobs": 2,
+            "written": 2,
+            "failed_jobs": 0,
+            "algorithm_readiness": {"name": "guarded_ppo"},
+            "algorithm_metadata_contract": contract,
+        }
+    )
+    assert availability.benchmark_success is False
+
+
+def test_malformed_guard_container_replaces_valid_batch_container() -> None:
+    """A malformed later telemetry container remains available for fail-closed rejection."""
+    base = _guarded_contract_base()
+    base["guard_stats"] = {"fallback_safe": 2}
+
+    contract = merge_runtime_algorithm_contract(base, {"guard_stats": None})
+
+    assert contract["guard_stats"] is None
+
+
 class TestFloatMetadataValue:
     """Tests for _float_metadata_value conversion."""
 

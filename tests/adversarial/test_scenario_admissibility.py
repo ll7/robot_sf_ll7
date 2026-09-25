@@ -1495,10 +1495,27 @@ def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: P
     root_manifest_bytes = scenario_path.read_bytes()
 
     map_path.write_text(yaml.safe_dump(map_payload(straight_route=True)), encoding="utf-8")
-    from robot_sf.training import scenario_loader
+    from robot_sf.scenario_certification.feasibility_oracle import (
+        _default_certifier,
+        _geometric_margin,
+    )
+    from robot_sf.training.scenario_loader import load_scenarios
 
-    scenario_loader._load_map_definition.cache_clear()
-    current_certificate = certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    current_identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    scenario = load_scenarios(scenario_path)[0]
+    geometric = _geometric_margin(
+        scenario,
+        scenario_path=scenario_path,
+        envelope_radius_m=0.4,
+        certifier=_default_certifier,
+        require_runtime_input_binding=True,
+    )
+    captured_records: list[dict[str, str]] = []
+    current_certificate = certify_scenario_file(
+        scenario_path,
+        scenario_id="case-static",
+        runtime_input_records=captured_records,
+    )[0]
     verdict = _classify_scenario_admissibility(
         "case-static",
         scenario_artifact_path=scenario_path,
@@ -1507,8 +1524,16 @@ def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: P
     )
 
     assert scenario_path.read_bytes() == root_manifest_bytes
+    assert geometric.runtime_input_identity_stable is True
+    assert geometric.classification == "hard_but_solvable"
+    assert geometric.benchmark_eligibility == "eligible"
+    assert geometric.route_geometrically_feasible is True
     assert current_certificate.classification == "hard_but_solvable"
     assert current_certificate.benchmark_eligibility == "eligible"
+    assert (
+        runtime_input_records_match(current_identity, captured_records, scenario_id="case-static")
+        is True
+    )
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
     assert "scenario_certificate_effective_input_identity_generation_unbound" in (
@@ -1674,10 +1699,10 @@ def test_opt_in_map_parser_cache_tracks_exact_source_bytes(
     assert first is not second
 
 
-def test_legacy_map_loader_keeps_path_parser_without_input_capture(
+def test_legacy_map_loader_uses_content_bound_parser_without_capture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The legacy scenario loader does not opt into the new parser snapshot path."""
+    """The default loader parses the immutable source snapshot behind its cache key."""
     from robot_sf.nav import svg_map_parser
     from robot_sf.training import scenario_loader
 
@@ -1693,14 +1718,14 @@ def test_legacy_map_loader_keeps_path_parser_without_input_capture(
             path, geometry_contract=geometry_contract, source_bytes=source_bytes
         )
 
-    scenario_loader._load_map_definition.cache_clear()
+    scenario_loader._load_map_definition_cached.cache_clear()
     monkeypatch.setattr(svg_map_parser, "convert_map", capture_source)
     try:
         assert scenario_loader._load_map_definition(str(source_path)) is not None
     finally:
-        scenario_loader._load_map_definition.cache_clear()
+        scenario_loader._load_map_definition_cached.cache_clear()
 
-    assert parsed_sources == [None]
+    assert parsed_sources == [source_path.read_bytes()]
 
 
 def test_default_map_pool_is_part_of_runtime_input_identity(tmp_path: Path) -> None:

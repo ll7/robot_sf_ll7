@@ -204,7 +204,10 @@ validated runtime collision with the same first-collision sample, or a bicycle t
 steering-limit failure with matching kinematic values. The scenario-level reason list must match
 the route-level reasons. Labels without those checks, empty reasons, or contradictory values stay
 `admissible_feasibility_unknown`; an unsupported robot model does not establish kinodynamic
-impossibility.
+impossibility. For the default oracle certifier, the loader records the exact parser-consumed map
+and route-override snapshots; the report's stable-input status requires those records to match the
+declared closure. Map parsing is cached by content digest, so replacing bytes at the same path
+cannot reuse a stale parsed definition.
 
 Planner outcomes remain separate from scenario feasibility. The adapter does not infer a named
 execution from one search evaluation; callers must pass producer-bound reference, target, and replay

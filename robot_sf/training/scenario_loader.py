@@ -1495,46 +1495,16 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> MapDefinition | None:
-    """Load and cache maps by the established path and geometry contract.
+    """Load the current map snapshot, using content rather than path as cache identity.
 
     Returns:
         MapDefinition | None: Parsed map definition for supported map formats.
     """
-
-    from robot_sf.nav.map_config import serialize_map  # noqa: PLC0415
-    from robot_sf.nav.nav_types import (  # noqa: PLC0415
-        GEOMETRY_CONTRACT_LEGACY,
-        SUPPORTED_GEOMETRY_CONTRACTS,
+    definition, _source_sha256 = _load_map_definition_with_digest(
+        map_path, geometry_contract=geometry_contract
     )
-    from robot_sf.nav.svg_map_parser import convert_map  # noqa: PLC0415
-
-    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
-        raise ValueError(
-            f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
-            f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
-        )
-
-    path = Path(map_path)
-    if not path.exists():
-        logger.warning("Scenario map file not found: {}", path)
-        return None
-    if path.suffix.lower() == ".svg":
-        return convert_map(str(path), geometry_contract=geometry_contract)
-    if path.suffix.lower() in {".json", ".yaml", ".yml"}:
-        if geometry_contract != GEOMETRY_CONTRACT_LEGACY:
-            raise ValueError(
-                f"geometry_contract {geometry_contract!r} is only supported for SVG maps; "
-                f"map {map_path!r} is {path.suffix.lower()} and uses the legacy map format."
-            )
-        data = _load_yaml_documents(path)
-        if not isinstance(data, dict):
-            logger.warning("Map definition '{}' must contain a mapping.", path)
-            return None
-        return serialize_map(data)
-    logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
-    return None
+    return definition
 
 
 def _load_map_definition_with_digest(
@@ -3144,19 +3114,19 @@ def _apply_route_overrides(
 def map_cache_info() -> dict[str, int]:
     """Return hit/miss/eviction statistics for the map-definition cache.
 
-    Useful for diagnosing cache churn during multi-scenario training runs.
+    Useful for diagnosing content-keyed cache churn during multi-scenario runs.
     Example::
 
         from robot_sf.training.scenario_loader import map_cache_info
 
         info = map_cache_info()
-        # {'hits': 42, 'misses': 12, 'maxsize': 64, 'currsize': 12}
+        # {'hits': 42, 'misses': 12, 'maxsize': 256, 'currsize': 12}
 
     Returns:
         dict[str, int]: Mapping of ``hits``, ``misses``, ``maxsize``, and
         ``currsize`` from the underlying LRU cache.
     """
-    ci = _load_map_definition.cache_info()
+    ci = _load_map_definition_cached.cache_info()
     return {
         "hits": ci.hits,
         "misses": ci.misses,

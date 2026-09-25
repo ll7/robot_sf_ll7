@@ -124,9 +124,9 @@ def profile_scenario_cache(
             unique_maps.add(str(mf))
 
     # Reset module-level cache for a clean measurement.
-    from robot_sf.training.scenario_loader import _load_map_definition  # noqa: PLC0415
+    from robot_sf.training.scenario_loader import _load_map_definition_cached  # noqa: PLC0415
 
-    _load_map_definition.cache_clear()
+    _load_map_definition_cached.cache_clear()
 
     before = map_cache_info()
     timings: list[ScenarioTiming] = []

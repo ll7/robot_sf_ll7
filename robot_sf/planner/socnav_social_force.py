@@ -242,7 +242,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         desired_vel = self.plan_velocity_world(observation)
         speed = float(np.linalg.norm(desired_vel))
@@ -252,7 +252,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         desired_heading = atan2(desired_vel[1], desired_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
         if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
-            return self._unicycle_command_v2(speed, heading_error)
+            robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+            to_goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2] - robot_pos
+            goal_ahead = (
+                float(to_goal @ np.array([np.cos(robot_heading), np.sin(robot_heading)])) > 0.0
+            )
+            return self._unicycle_command_v2(speed, heading_error, goal_ahead=goal_ahead)
         angular = float(
             np.clip(
                 self.config.angular_gain * heading_error,
@@ -269,7 +274,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         )
         return linear, angular
 
-    def _unicycle_command_v2(self, speed: float, heading_error: float) -> tuple[float, float]:
+    def _unicycle_command_v2(
+        self, speed: float, heading_error: float, *, goal_ahead: bool
+    ) -> tuple[float, float]:
         """Map a desired world velocity to (v, w) for ``resolution_independent_v2``.
 
         * Drive only the component of the desired velocity along the current
@@ -277,14 +284,17 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
           A sideways or backward desired velocity therefore turns the robot in
           place at the limited turn rate instead of orbiting at speed.
         * Hold (``(0, 0)``) when the desired velocity points backwards
-          (``|error| > 90 deg``) and is slower than
-          ``social_force_v2_hold_speed`` (0.1 m/s, 10 % of v_des).  Turning
-          around takes at least 1.6 s at 1 rad/s, during which such a velocity
-          would move the robot less than 0.16 m.  This case arises where the
-          wall and goal forces balance (for example in front of a doorway the
-          robot does not fit through): there the small net velocity changes
-          direction from step to step, and turning after it made the robot
-          spin in place with a sign flip every step.
+          (``|error| > 90 deg``) while the current goal lies in front of the
+          robot.  A backward desired velocity with the goal ahead means an
+          obstacle or pedestrian in front pushes harder than the goal pulls
+          (for example in front of a doorway the robot does not fit through).
+          A unicycle cannot back up, and turning away from the goal only
+          makes the goal force turn it back: in that force balance the net
+          velocity changed direction from step to step and the robot spun in
+          place with a sign flip every step.  Holding waits for the scene to
+          change instead.  The rule is purely geometric, so it does not depend
+          on the timestep or on force magnitudes, and it can never freeze a
+          robot whose goal is behind it: then the robot always turns.
         * Hysteresis: when ``|error| > 150 deg`` keep the previous turn
           direction, so a desired direction that flips around the robot's
           back does not reverse the turn every step.
@@ -294,7 +304,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         """
         max_turn = float(self.config.max_angular_speed)
         backwards = abs(heading_error) > 0.5 * pi
-        if backwards and speed < float(self.config.social_force_v2_hold_speed):
+        if backwards and goal_ahead:
             return 0.0, 0.0
         angular = float(
             np.clip(float(self.config.angular_gain) * heading_error, -max_turn, max_turn)
@@ -548,7 +558,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         ``social_force_obstacle_v2_max_terms`` (8) nearest terms; an obstacle
         hidden behind a nearer one also keeps its (weaker) term.  Merging
         happens only inside one connected region: surfaces within 15 deg of
-        coplanar, or within 30 deg of bearing, count as one patch.  Because
+        coplanar, or within 30 deg of bearing, count as one patch.  Note the
+        attached-pillar case: a pillar that touches a wall rasterises into the
+        same connected region, so when it lies within 30 deg of the wall's
+        nearest point (or behind the tangent line there) it merges into that
+        wall term instead of getting its own.  Tested cell sizes: 0.05-0.2 m.  Because
         selection is discrete, a patch term can appear or disappear as the
         robot moves; the exponential decay keeps such steps small except at
         contact range.
@@ -929,7 +943,6 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                         "v2_strength": float(config.social_force_obstacle_v2_strength),
                         "v2_length": float(config.social_force_obstacle_v2_length),
                         "v2_max_terms": int(config.social_force_obstacle_v2_max_terms),
-                        "v2_hold_speed": float(config.social_force_v2_hold_speed),
                         "v2_min_separation_deg": float(
                             config.social_force_obstacle_v2_min_separation_deg
                         ),

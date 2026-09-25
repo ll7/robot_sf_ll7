@@ -35,6 +35,7 @@ def _observation(
     goal: tuple[float, float] = (20.0, 0.0),
     peds: np.ndarray | None = None,
     ped_vel: np.ndarray | None = None,
+    dt: float = 0.1,
 ) -> dict:
     """Build a SocNav observation with the robot at the origin."""
     peds = np.zeros((0, 2), dtype=np.float32) if peds is None else peds
@@ -55,7 +56,7 @@ def _observation(
             "velocities": np.asarray(ped_vel, dtype=np.float32),
             "count": np.array([float(len(peds))], dtype=np.float32),
         },
-        "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+        "sim": {"timestep": np.array([dt], dtype=np.float32)},
     }
 
 
@@ -186,13 +187,14 @@ def test_v2_velocity_respects_desired_speed() -> None:
 
 
 def test_v2_turns_in_place_when_net_force_points_backwards() -> None:
-    """A backward net force produces a rate-limited turn, not a fast orbit."""
+    """A backward net force turns in place (goal behind) or holds (goal ahead), never orbits."""
     config = SocNavPlannerConfig(social_force_planner_version=V2)
     adapter = SocialForcePlannerAdapter(config)
     adapter._compute_social_force = lambda *_args: np.array([-50.0, 0.5])
-    linear, angular = adapter.plan(_observation(speed=0.2))
+    linear, angular = adapter.plan(_observation(speed=0.2, goal=(-20.0, 1.0)))
     assert linear == pytest.approx(0.0, abs=1e-9)
     assert abs(angular) == pytest.approx(config.max_angular_speed)
+    assert adapter.plan(_observation(speed=0.2)) == (0.0, 0.0)
 
 
 def test_v2_pedestrian_repulsion_acts_on_an_approaching_pedestrian() -> None:
@@ -289,13 +291,13 @@ def test_world_force_is_invariant_under_ego_frame_rotation(heading: float) -> No
     assert np.linalg.norm(rotated - reference) <= 0.25 * np.linalg.norm(reference)
 
 
-def test_v2_holds_instead_of_chasing_a_small_backward_velocity() -> None:
-    """A slow backward desired velocity (force balance) holds position, no spin."""
+def test_v2_holds_only_when_pushed_back_with_the_goal_ahead() -> None:
+    """A backward desired velocity holds only while the goal is in front."""
     config = SocNavPlannerConfig(social_force_planner_version=V2)
     adapter = SocialForcePlannerAdapter(config)
-    assert adapter._unicycle_command_v2(0.05, 2.5) == (0.0, 0.0)
-    assert adapter._unicycle_command_v2(0.05, -2.5) == (0.0, 0.0)
-    linear, angular = adapter._unicycle_command_v2(0.5, 2.5)
+    assert adapter._unicycle_command_v2(0.05, 2.5, goal_ahead=True) == (0.0, 0.0)
+    assert adapter._unicycle_command_v2(0.9, -2.5, goal_ahead=True) == (0.0, 0.0)
+    linear, angular = adapter._unicycle_command_v2(0.05, 2.5, goal_ahead=False)
     assert linear == 0.0
     assert angular == pytest.approx(config.max_angular_speed)
 
@@ -304,15 +306,56 @@ def test_v2_turn_direction_has_hysteresis_behind_the_robot() -> None:
     """Beyond 150 deg the previous turn direction is kept, so turns do not flip each step."""
     config = SocNavPlannerConfig(social_force_planner_version=V2)
     adapter = SocialForcePlannerAdapter(config)
-    _linear, first = adapter._unicycle_command_v2(0.5, 2.9)
-    _linear, second = adapter._unicycle_command_v2(0.5, -2.9)
+    _linear, first = adapter._unicycle_command_v2(0.5, 2.9, goal_ahead=False)
+    _linear, second = adapter._unicycle_command_v2(0.5, -2.9, goal_ahead=False)
     assert first > 0.0
     assert second > 0.0  # kept the previous (positive) direction
-    _linear, third = adapter._unicycle_command_v2(0.5, -1.0)
+    _linear, third = adapter._unicycle_command_v2(0.5, -1.0, goal_ahead=False)
     assert third < 0.0  # outside the hysteresis band the error decides again
     adapter.reset()
-    _linear, after_reset = adapter._unicycle_command_v2(0.5, -2.9)
+    _linear, after_reset = adapter._unicycle_command_v2(0.5, -2.9, goal_ahead=False)
     assert after_reset < 0.0
+
+
+def _closed_loop(dt: float, world_occupied, steps: int, goal=(-10.0, 0.0)):
+    """Integrate unicycle commands from rest, heading +x, with a world-fixed scene."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig(social_force_planner_version=V2))
+    pos, heading, speed = np.zeros(2), 0.0, 0.0
+    held = 0
+    for _ in range(steps):
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+
+        def ego_scene(xe, ye, pos=pos, cos_h=cos_h, sin_h=sin_h):
+            return world_occupied(
+                pos[0] + cos_h * xe - sin_h * ye, pos[1] + sin_h * xe + cos_h * ye
+            )
+
+        observation = _with_grid(
+            _observation(heading=heading, speed=speed, goal=tuple(np.asarray(goal) - pos), dt=dt),
+            0.1,
+            ego_scene,
+        )
+        linear, angular = adapter.plan(observation)
+        held += int(linear == 0.0 and angular == 0.0)
+        heading += angular * dt
+        pos = pos + linear * dt * np.array([np.cos(heading), np.sin(heading)])
+        speed = linear
+    return pos, held
+
+
+@pytest.mark.parametrize("dt", [0.05, 0.1])
+def test_robot_at_rest_with_goal_behind_turns_and_drives(dt: float) -> None:
+    """Open space, goal 10 m behind: the robot turns around and drives, at any dt."""
+    pos, held = _closed_loop(dt, lambda xs, _ys: np.zeros_like(xs, dtype=bool), round(12.0 / dt))
+    assert held == 0
+    assert pos[0] < -5.0
+
+
+def test_post_behind_the_robot_does_not_freeze_it() -> None:
+    """A post between the robot and a goal behind it is passed, not a permanent hold."""
+    post = _disc(-2.0, 0.3, 0.4)
+    pos, _held = _closed_loop(0.1, post, 400)
+    assert pos[0] < -6.0
 
 
 V2_CONFIG_PATH = Path("configs/algos/social_force_resolution_independent_v2.yaml")

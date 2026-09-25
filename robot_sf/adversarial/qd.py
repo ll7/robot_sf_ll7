@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
@@ -43,6 +44,7 @@ from robot_sf.adversarial.samplers import (
     CoordinateRefinementSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.scenario_admissibility import validate_scenario_admissibility
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.certification import CertificationStatus
@@ -363,7 +365,9 @@ class QDSearchResult:
     archive: QDArchive
     num_evaluated: int
     num_admitted: int
+    num_proposed: int = 0
     num_admissibility_rejected: int = 0
+    pre_evaluation_rejections: tuple[Mapping[str, Any], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable result payload."""
@@ -372,7 +376,9 @@ class QDSearchResult:
             "num_evaluated": self.num_evaluated,
             "num_admitted": self.num_admitted,
             "num_admissibility_rejected": self.num_admissibility_rejected,
+            "num_proposed": self.num_proposed,
         }
+        payload["pre_evaluation_rejections"] = [dict(row) for row in self.pre_evaluation_rejections]
         return payload
 
 
@@ -381,6 +387,8 @@ def run_map_elites(
     *,
     evaluator: QDEvaluator,
     certifier: Any | None = None,
+    admissibility_precheck: Callable[[QDSearchConfig, CandidateSpec], Mapping[str, Any] | None]
+    | None = None,
     emitters: list[QDEmitter] | None = None,
     archive: QDArchive | None = None,
 ) -> QDSearchResult:
@@ -394,6 +402,10 @@ def run_map_elites(
             campaign integration.
         certifier: Optional callable (candidate) -> CertificationStatus; when omitted
             the evaluation's own certification status is used as the gate.
+        admissibility_precheck: Optional cheap candidate-level check that returns the versioned
+            `scenario_admissibility.v1` verdict before the evaluator runs. Explicit structural or
+            geometric/kinodynamic exclusions are recorded and skipped; unknown or missing verdicts
+            continue to the evaluator.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
         archive: Optional live archive shared with stateful emitters. Its grid and
             certification policy must match ``config``.
@@ -412,10 +424,22 @@ def run_map_elites(
     num_evaluated = 0
     num_admitted = 0
     num_admissibility_rejected = 0
+    pre_evaluation_rejections: list[Mapping[str, Any]] = []
 
     for index in range(config.budget):
         emitter = active_emitters[index % len(active_emitters)]
         candidate = emitter.sample()
+        verdict = admissibility_precheck(config, candidate) if admissibility_precheck else None
+        if _scenario_admissibility_payload_rejects(verdict):
+            num_admissibility_rejected += 1
+            pre_evaluation_rejections.append(
+                {
+                    "candidate": candidate.to_json(),
+                    "scenario_admissibility": dict(verdict),
+                    "stage": "pre_evaluation",
+                }
+            )
+            continue
         num_evaluated += 1
         evaluation, admissibility_rejected = _evaluate_qd_candidate(
             config=config,
@@ -450,9 +474,11 @@ def run_map_elites(
 
     return QDSearchResult(
         archive=archive,
+        num_proposed=config.budget,
         num_evaluated=num_evaluated,
         num_admitted=num_admitted,
         num_admissibility_rejected=num_admissibility_rejected,
+        pre_evaluation_rejections=tuple(pre_evaluation_rejections),
     )
 
 
@@ -483,8 +509,18 @@ def _evaluate_qd_candidate(
 
 def _scenario_admissibility_rejects(evaluation: CandidateEvaluation) -> bool:
     """Recognize only the helper's explicit pre-evaluation exclusion disposition."""
-    payload = evaluation.scenario_admissibility
-    return isinstance(payload, dict) and payload.get("search_disposition") == "reject"
+    return _scenario_admissibility_payload_rejects(evaluation.scenario_admissibility)
+
+
+def _scenario_admissibility_payload_rejects(payload: Any) -> bool:
+    """Recognize only an explicit exclusion disposition from the feasibility adapter."""
+    if not isinstance(payload, Mapping):
+        return False
+    try:
+        validate_scenario_admissibility(payload)
+    except ValueError:
+        return False
+    return payload.get("search_disposition") == "reject"
 
 
 def _default_emitters(search_space: SearchSpaceConfig, *, seed: int) -> list[QDEmitter]:

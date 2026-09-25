@@ -29,6 +29,7 @@ SCENARIO_ADMISSIBILITY_SCHEMA = "scenario_admissibility.v1"
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
 ENVELOPE_SENSITIVITY_SCHEMA = "envelope_sensitivity_axis.v1"
 ISSUE_5574_REPORT_SCHEMA = "issue_5574_feasibility_oracle_report.v1"
+TARGET_PLANNER_REPLAY_SCHEMA = "target_planner_replay_result.v1"
 
 STRUCTURALLY_INVALID = "structurally_invalid"
 GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY = "geometric_or_kinodynamic_impossibility"
@@ -53,6 +54,17 @@ _SCHEMA_PATH = (
 )
 _EPISODE_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "benchmark/schemas/episode.schema.v1.json"
+)
+_TARGET_PLANNER_REPLAY_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "benchmark/schemas/target_planner_replay_result.v1.json"
+)
+_RUN_CONTEXT_FIELDS = (
+    "horizon_steps",
+    "robot_model_sha256",
+    "simulator_config_sha256",
+    "planner_config_sha256",
+    "planner_checkpoint_sha256",
+    "environment_sha256",
 )
 
 
@@ -97,6 +109,15 @@ class AdmissibilityPartition:
     by_verdict: Mapping[str, tuple[str, ...]]
 
 
+@dataclass(frozen=True, slots=True)
+class _ReplayResultArtifact:
+    """One separately hashed target-planner replay result artifact."""
+
+    payload: Mapping[str, Any]
+    path: Path
+    sha256: str
+
+
 def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindings are API inputs.
     case_id: str,
     *,
@@ -118,17 +139,20 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     episode JSONL stores. Replay refs identify the canonical replay provenance sidecar, whose
     source episode-store path and digest are read and checked. In every case, the selected v1
     episode row must match the normalized row's episode, planner, scenario, seed, revision, and
-    route outcome before it can establish a verdict.
+    route outcome before it can establish an individual execution outcome. Cross-planner
+    attribution additionally requires the episode's recorded ``execution_context`` to bind the
+    normalized horizon and runtime/configuration hashes.
 
     Certificate and oracle source paths must hash to those exact bytes, and named execution
     ``scenario_sha256`` values must match that digest. Named execution mappings carry
     case/scenario/planner IDs, original variant, run status,
     route completion, seed/horizon, source commit, evidence reference, and hashes for the
     scenario, robot model, simulator config, and environment. Every execution also carries
-    ``episode_id`` and ``source_episodes_jsonl_sha256``; planner-specific failure requires the replay
-    sidecar's values to match the target row. Planner-specific failure needs matching bindings,
-    distinct planner IDs, and a deterministic replay of the target failure. Replay evidence also
-    needs a passing ``determinism_check_status`` and ``resimulated=True``.
+    ``episode_id`` and ``source_episodes_jsonl_sha256``. Planner-specific failure additionally
+    requires a separate ``target_planner_replay_result.v1`` artifact, referenced and hashed by the
+    replay sidecar. The result must bind the target planner/configuration, runtime context, source
+    episode store, and terminal route outcome. A position-only visualization determinism check is
+    diagnostic evidence and cannot establish a repeated target-planner failure.
     """
     if not isinstance(case_id, str) or not case_id.strip():
         raise ValueError("case_id must be non-empty")
@@ -1193,7 +1217,12 @@ def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are pass
     if evidence_problem is not None:
         reasons.append(evidence_problem)
         return None
-    return dict(source)
+    context_status = binding.get("run_context_binding", {}).get("status")
+    if context_status != "valid":
+        reasons.append(f"{role}_execution_run_context_{context_status or 'unavailable'}")
+    bound_source = dict(source)
+    bound_source["_execution_context_binding_status"] = context_status
+    return bound_source
 
 
 def _execution_evidence_binding(
@@ -1248,6 +1277,45 @@ def _replay_evidence_binding(
             "evidence_ref": artifact_path.as_posix(),
             "replay_sidecar_sha256": sidecar_sha256,
         }
+    result_path = _resolve_evidence_path(
+        sidecar_payload.get("target_planner_replay_result_path"),
+        evidence_root=evidence_root,
+        relative_to=artifact_path.parent,
+    )
+    if result_path is None:
+        return "replay_execution_target_planner_result_missing_or_unreadable", {
+            "status": "unavailable",
+            "evidence_ref": artifact_path.as_posix(),
+            "replay_sidecar_sha256": sidecar_sha256,
+        }
+    try:
+        result_bytes = result_path.read_bytes()
+        result_payload = json.loads(result_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return "replay_execution_target_planner_result_missing_or_malformed", {
+            "status": "unavailable",
+            "evidence_ref": result_path.as_posix(),
+            "replay_sidecar_sha256": sidecar_sha256,
+        }
+    if not isinstance(result_payload, Mapping):
+        return "replay_execution_target_planner_result_missing_or_malformed", {
+            "status": "unavailable",
+            "evidence_ref": result_path.as_posix(),
+            "replay_sidecar_sha256": sidecar_sha256,
+        }
+    result_sha256 = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_result_sha256 = sidecar_payload.get("target_planner_replay_result_sha256")
+    if (
+        not isinstance(sidecar_result_sha256, str)
+        or _SHA256.fullmatch(sidecar_result_sha256) is None
+        or sidecar_result_sha256.lower() != result_sha256
+    ):
+        return "replay_execution_target_planner_result_digest_mismatch", {
+            "status": "mismatch",
+            "evidence_ref": result_path.as_posix(),
+            "replay_sidecar_sha256": sidecar_sha256,
+            "target_planner_replay_result_sha256": result_sha256,
+        }
     return _episode_store_binding(
         source,
         role="replay",
@@ -1255,6 +1323,11 @@ def _replay_evidence_binding(
         store_path=store_path,
         sidecar=sidecar_payload,
         sidecar_sha256=sidecar_sha256,
+        replay_result_artifact=_ReplayResultArtifact(
+            payload=result_payload,
+            path=result_path,
+            sha256=result_sha256,
+        ),
     )
 
 
@@ -1266,6 +1339,7 @@ def _episode_store_binding(
     store_path: Path,
     sidecar: Mapping[str, Any] | None = None,
     sidecar_sha256: str | None = None,
+    replay_result_artifact: _ReplayResultArtifact | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Validate store bytes and episode identity/outcome for a normalized execution row."""
     try:
@@ -1287,6 +1361,9 @@ def _episode_store_binding(
     }
     if sidecar_sha256 is not None:
         binding["replay_sidecar_sha256"] = sidecar_sha256
+    if replay_result_artifact is not None:
+        binding["target_planner_replay_result_path"] = replay_result_artifact.path.as_posix()
+        binding["target_planner_replay_result_sha256"] = replay_result_artifact.sha256
     if store_sha256.lower() != str(source.get("source_episodes_jsonl_sha256", "")).lower():
         binding["status"] = "mismatch"
         return f"{role}_execution_episode_store_digest_mismatch", binding
@@ -1297,15 +1374,26 @@ def _episode_store_binding(
     if episode is None:
         binding["status"] = "mismatch"
         return f"{role}_execution_{parse_reason}", binding
-    row_reason = _episode_row_binding_problem(episode, source)
+    row_reason = _episode_row_binding_problem(
+        episode, source, compare_route_outcome=role != "replay"
+    )
     if row_reason is not None:
         binding["status"] = "mismatch"
         return f"{role}_execution_{row_reason}", binding
     if sidecar is not None:
-        sidecar_reason = _replay_sidecar_binding_problem(sidecar, source, store_sha256)
-        if sidecar_reason is not None:
+        auxiliary_reason, auxiliary_binding = _replay_auxiliary_binding(
+            sidecar=sidecar,
+            source=source,
+            store_sha256=store_sha256,
+            result_artifact=replay_result_artifact,
+        )
+        binding.update(auxiliary_binding)
+        if auxiliary_reason is not None:
             binding["status"] = "mismatch"
-            return f"replay_execution_{sidecar_reason}", binding
+            return f"replay_execution_{auxiliary_reason}", binding
+    else:
+        context_binding = _episode_run_context_binding(episode, source)
+        binding["run_context_binding"] = context_binding
     binding["status"] = "valid"
     binding["row_identity"] = {
         "scenario_id": episode["scenario_id"],
@@ -1316,6 +1404,30 @@ def _episode_store_binding(
         "termination_reason": episode["termination_reason"],
     }
     return None, binding
+
+
+def _replay_auxiliary_binding(
+    *,
+    sidecar: Mapping[str, Any],
+    source: Mapping[str, Any],
+    store_sha256: str,
+    result_artifact: _ReplayResultArtifact | None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Check replay sidecar and separate target-planner result against one source store."""
+    sidecar_reason = _replay_sidecar_binding_problem(sidecar, source, store_sha256)
+    if sidecar_reason is not None:
+        return sidecar_reason, {"status": "mismatch"}
+    if result_artifact is None:
+        return "target_planner_result_missing_or_malformed", {"status": "unavailable"}
+    result_reason, result_binding = _target_planner_replay_result_binding(
+        result_artifact.payload, source=source, store_sha256=store_sha256
+    )
+    return result_reason, {
+        "target_planner_replay_result_path": result_artifact.path.as_posix(),
+        "target_planner_replay_result_sha256": result_artifact.sha256,
+        "target_planner_replay_result_binding": result_binding,
+        "run_context_binding": result_binding.get("run_context_binding", {}),
+    }
 
 
 def _resolve_evidence_path(
@@ -1387,8 +1499,18 @@ def _episode_schema_validator() -> Draft202012Validator:
     return Draft202012Validator(_load_episode_schema())
 
 
+@lru_cache(maxsize=1)
+def _target_planner_replay_schema_validator() -> Draft202012Validator:
+    """Reuse the versioned target-planner replay result validator."""
+    schema = json.loads(_TARGET_PLANNER_REPLAY_SCHEMA_PATH.read_text(encoding="utf-8"))
+    return Draft202012Validator(schema)
+
+
 def _episode_row_binding_problem(
-    episode: Mapping[str, Any], source: Mapping[str, Any]
+    episode: Mapping[str, Any],
+    source: Mapping[str, Any],
+    *,
+    compare_route_outcome: bool = True,
 ) -> str | None:
     """Check source episode identity, clean runtime status, and route outcome against its row."""
     outcome = episode.get("outcome")
@@ -1406,7 +1528,7 @@ def _episode_row_binding_problem(
     if (
         not isinstance(outcome, Mapping)
         or type(outcome.get("route_complete")) is not bool
-        or outcome["route_complete"] is not source.get("route_complete")
+        or (compare_route_outcome and outcome["route_complete"] is not source.get("route_complete"))
         or not isinstance(termination, str)
         or termination not in TERMINATION_REASONS
         or episode.get("status") != status_from_termination_reason(termination)
@@ -1446,9 +1568,81 @@ def _replay_sidecar_binding_problem(
         or source.get("resimulated") is not True
         or not isinstance(sidecar.get("replay_command"), str)
         or not sidecar.get("replay_command", "").strip()
+        or not isinstance(sidecar.get("target_planner_replay_result_path"), str)
+        or not sidecar.get("target_planner_replay_result_path", "").strip()
+        or not isinstance(sidecar.get("target_planner_replay_result_sha256"), str)
+        or _SHA256.fullmatch(sidecar.get("target_planner_replay_result_sha256", "")) is None
     ):
         return "replay_sidecar_identity_or_outcome_mismatch"
     return None
+
+
+def _target_planner_replay_result_binding(
+    result: Mapping[str, Any] | None,
+    *,
+    source: Mapping[str, Any],
+    store_sha256: str,
+) -> tuple[str | None, dict[str, Any]]:
+    """Bind a separate target-planner replay result to its original execution context."""
+    binding: dict[str, Any] = {
+        "schema_version": result.get("schema_version") if isinstance(result, Mapping) else None,
+        "episode_id": result.get("episode_id") if isinstance(result, Mapping) else None,
+        "route_complete": result.get("route_complete") if isinstance(result, Mapping) else None,
+    }
+    if not isinstance(result, Mapping):
+        return "target_planner_result_missing_or_malformed", binding
+    errors = list(_target_planner_replay_schema_validator().iter_errors(result))
+    if errors:
+        binding["status"] = "schema_invalid"
+        return "target_planner_result_schema_invalid", binding
+    identity_pairs = (
+        ("episode_id", "episode_id"),
+        ("scenario_id", "scenario_id"),
+        ("seed", "seed"),
+        ("planner_id", "planner_id"),
+        ("source_commit", "source_commit"),
+    )
+    if any(
+        result.get(result_key) != source.get(source_key)
+        for result_key, source_key in identity_pairs
+    ):
+        binding["status"] = "identity_mismatch"
+        return "target_planner_result_identity_mismatch", binding
+    if result.get("source_episodes_jsonl_sha256", "").lower() != store_sha256.lower():
+        binding["status"] = "source_digest_mismatch"
+        return "target_planner_result_source_episode_mismatch", binding
+    if result.get("route_complete") is not source.get("route_complete"):
+        binding["status"] = "outcome_mismatch"
+        return "target_planner_result_outcome_mismatch", binding
+    if result.get("run_status") != "ok" or result.get("fallback_or_degraded") is not False:
+        binding["status"] = "runtime_unavailable_or_degraded"
+        return "target_planner_result_runtime_unavailable_or_degraded", binding
+    context = _context_mapping_binding(result.get("execution_context"), source)
+    binding["run_context_binding"] = context
+    if context["status"] != "valid":
+        binding["status"] = "run_context_" + context["status"]
+        return "target_planner_result_run_context_" + context["status"], binding
+    binding["status"] = "valid"
+    return None, binding
+
+
+def _episode_run_context_binding(
+    episode: Mapping[str, Any], source: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Compare persisted episode context with normalized hashes used for case matching."""
+    return _context_mapping_binding(episode.get("execution_context"), source)
+
+
+def _context_mapping_binding(context: Any, source: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(context, Mapping):
+        return {"status": "unavailable", "missing_fields": list(_RUN_CONTEXT_FIELDS)}
+    missing = [key for key in _RUN_CONTEXT_FIELDS if key not in context]
+    if missing:
+        return {"status": "unavailable", "missing_fields": missing}
+    mismatched = [key for key in _RUN_CONTEXT_FIELDS if context.get(key) != source.get(key)]
+    if mismatched:
+        return {"status": "mismatch", "mismatched_fields": mismatched}
+    return {"status": "valid", "fields": list(_RUN_CONTEXT_FIELDS)}
 
 
 def _execution_problem(
@@ -1652,6 +1846,16 @@ def _resolve(
         and reference["planner_id"] != target["planner_id"]
         and _same_case(reference, target)
     )
+    potential_matched_failure = (
+        reference is not None
+        and target is not None
+        and reference["route_complete"]
+        and not target["route_complete"]
+        and reference["planner_id"] != target["planner_id"]
+    )
+    if potential_matched_failure and not matched_failure:
+        reasons.append("matched_reference_target_failure_run_context_unbound")
+        reasons.append("planner_specific_failure_attribution_unconfirmed")
     if matched_failure:
         reasons.append("named_execution_completed_original_case")
         if replay is None:
@@ -1683,6 +1887,11 @@ def _resolve(
 
 
 def _same_case(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    if (
+        left.get("_execution_context_binding_status") != "valid"
+        or right.get("_execution_context_binding_status") != "valid"
+    ):
+        return False
     keys = (
         "case_id",
         "scenario_id",
@@ -1721,6 +1930,11 @@ def _replay_binding_mismatch(replay: Mapping[str, Any], target: Mapping[str, Any
     """Return the first failed binding required to attribute a planner-specific failure."""
     if replay["planner_id"] != target["planner_id"]:
         return "planner_specific_failure_replay_wrong_planner"
+    if (
+        replay.get("_execution_context_binding_status") != "valid"
+        or target.get("_execution_context_binding_status") != "valid"
+    ):
+        return "planner_specific_failure_replay_run_context_unbound"
     if not _same_case(replay, target):
         return "planner_specific_failure_replay_case_mismatch"
     if not _same_planner_configuration(replay, target):

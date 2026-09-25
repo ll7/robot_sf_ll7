@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/target_planner_replay_result.v1.json",
+  "title": "Robot SF Target Planner Replay Result (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "replay_kind",
+    "episode_id",
+    "scenario_id",
+    "seed",
+    "planner_id",
+    "source_commit",
+    "source_episodes_jsonl_sha256",
+    "run_status",
+    "fallback_or_degraded",
+    "route_complete",
+    "termination_reason",
+    "replay_command",
+    "execution_context"
+  ],
+  "properties": {
+    "schema_version": {"const": "target_planner_replay_result.v1"},
+    "replay_kind": {"const": "target_planner"},
+    "episode_id": {"type": "string", "minLength": 1},
+    "scenario_id": {"type": "string", "minLength": 1},
+    "seed": {"type": "integer", "minimum": 0},
+    "planner_id": {"type": "string", "minLength": 1},
+    "source_commit": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"},
+    "source_episodes_jsonl_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "run_status": {"const": "ok"},
+    "fallback_or_degraded": {"const": false},
+    "route_complete": {"type": "boolean"},
+    "termination_reason": {
+      "type": "string",
+      "enum": ["success", "collision", "terminated", "truncated", "max_steps", "error"]
+    },
+    "replay_command": {"type": "string", "minLength": 1},
+    "execution_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "horizon_steps",
+        "robot_model_sha256",
+        "simulator_config_sha256",
+        "planner_config_sha256",
+        "planner_checkpoint_sha256",
+        "environment_sha256"
+      ],
+      "properties": {
+        "horizon_steps": {"type": "integer", "minimum": 1},
+        "robot_model_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "simulator_config_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "planner_config_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "planner_checkpoint_sha256": {
+          "type": "string",
+          "oneOf": [
+            {"pattern": "^[0-9a-fA-F]{64}$"},
+            {"const": "not_applicable"}
+          ]
+        },
+        "environment_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"route_complete": {"const": true}}},
+      "then": {"properties": {"termination_reason": {"const": "success"}}}
+    },
+    {
+      "if": {"properties": {"termination_reason": {"const": "success"}}},
+      "then": {"properties": {"route_complete": {"const": true}}}
+    }
+  ]
+}

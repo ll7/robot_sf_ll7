@@ -159,10 +159,11 @@ oracle, predicate contract, and named execution/replay records through
 `scenario_artifact_path` with the evidence. The output contract is
 [`scenario_admissibility.v1`](../robot_sf/benchmark/schemas/scenario_admissibility.v1.json),
 and `partition_candidates_by_admissibility(...)` retains cases by verdict for search
-stratification. The canonical single-objective and production-QD candidate pipelines also
-reject only an explicit `search_disposition: reject` before planner evaluation. Single-objective
-search manifests preserve each candidate's verdict; QD artifacts attach it to admitted elites and
-count explicit exclusions in the run summary. Unknown, failed, or unavailable certification is not
+stratification. Single-objective search rejects only explicit `search_disposition: reject` verdicts
+before planner evaluation. QD callers can supply an `admissibility_precheck` to `run_map_elites`;
+explicit exclusions are recorded and skipped before its evaluator, while unknown or missing verdicts
+continue to evaluation. A verdict attached only to a completed QD evaluation prevents archive
+admission but does not save that evaluation. Unknown, failed, or unavailable certification is not
 rejected by this boundary and continues through the existing certification gate.
 
 The adapter has five outcomes: `structurally_invalid`,
@@ -224,10 +225,20 @@ while replay rows point to the canonical `replay_provenance.json` sidecar. Relat
 require `evidence_root`; absolute references are accepted when readable. The adapter reads and
 hashes the bytes, validates the selected row against `episode.schema.v1`, requires one matching
 episode ID, and compares its scenario, planner, seed, source revision, runtime status, and
-route-completion outcome with the normalized row. Replay admission also reads the sidecar's source
-episode-store path and binds its digest, episode/scenario/planner/seed/revision, determinism status,
-and resimulation marker. Unreadable, malformed, stale, or conflicting artifacts leave execution
-evidence unknown. The fallback
+route-completion outcome with the normalized row. To compare runs, the source episode row must also
+carry an `execution_context` matching the normalized horizon and robot, simulator, planner,
+checkpoint, and environment hashes. Without that binding, an individual completion may still show
+empirical feasibility, but the runs cannot support a same-case planner attribution.
+
+Replay admission reads the sidecar's source episode-store path and digest, identity, determinism
+status, and resimulation marker. Planner-specific attribution additionally requires the sidecar to
+reference a separately hashed
+[`target_planner_replay_result.v1`](../robot_sf/benchmark/schemas/target_planner_replay_result.v1.json)
+artifact. That result must identify the target planner and configuration, source episode-store
+digest, bound runtime context, and replay terminal outcome. A determinism pass from the existing
+episode visualization tool is diagnostic only: it may compare final position and use a generic goal
+policy, so it does not establish that the named target planner repeated its failure. Unreadable,
+malformed, stale, or conflicting artifacts leave execution evidence unknown. The fallback
 boolean must be false; the adapter also applies the canonical runtime fallback/degraded detector to
 the full normalized record, so nested fallback flags, unavailable/fallback/degraded statuses, and
 positive fallback counters cannot establish an outcome. Missing or malformed fallback state stays
@@ -236,11 +247,11 @@ guessing from the episode's terminal status. The checkpoint field is either a SH
 explicit value `not_applicable` for a known checkpoint-free planner; missing checkpoint provenance
 stays unknown. Only `scenario_variant: original`, `run_status: ok`, and non-fallback/non-degraded
 records can establish an outcome. Replay records additionally require
-`determinism_check_status: pass` and `resimulated: true`; callers adapt canonical episode rows and
-the existing replay provenance sidecar into this input shape. For a target-planner failure replay,
-the sidecar's `episode_id` and `source_episodes_jsonl_sha256` must match the target episode row and
-its source episode-store artifact exactly. A replay from another episode or source artifact leaves
-planner-specific failure attribution unconfirmed, even when its scenario, seed, and planner
+`determinism_check_status: pass` and `resimulated: true`; those fields alone cannot establish a
+repeated target-planner outcome. For a target-planner failure replay, the result artifact's episode,
+scenario, seed, source revision, planner/configuration, execution context, and terminal outcome must
+match the target run and its source episode store. A replay from another episode or source artifact
+leaves planner-specific failure attribution unconfirmed, even when its scenario, seed, and planner
 configuration match. Incomplete records stay visible in `evidence` and do not establish feasibility.
 
 Artifact provenance is bound across evidence sources: the certificate `source` and oracle
@@ -259,12 +270,13 @@ scenario artifact used for the named case and adapt evidence hashes to those sam
 scenario ID alone does not establish artifact identity.
 
 An observed reference or replay completion is empirical evidence for that named case and run, not
-a proof that every planner can solve it. Replay counts only after simulator resimulation with a
-passing determinism check. A target-planner failure alone does not establish scenario
+a proof that every planner can solve it. Replay counts for planner attribution only when a separate
+target-planner result records the route outcome and binds its planner/configuration and source
+context. A target-planner failure alone does not establish scenario
 infeasibility; `planner_specific_failure` requires a completed reference run and an incomplete
 target run bound to the same scenario, seed, horizon, source revision, and configuration hashes,
-plus a deterministic replay by the target planner that reproduces the incomplete route under the
-same scenario bindings and matching planner-config and checkpoint hashes as the target run. The
+plus a target-planner replay result that reproduces the incomplete route under the same scenario
+bindings and matching planner-config and checkpoint hashes as the target run. The
 replay must also bind to the target episode ID and source episode-store digest. Missing, mismatched,
 or successful replay leaves planner-specific failure attribution unconfirmed. A valid completed
 reference run still establishes empirical feasibility for that same named scenario, and the target's

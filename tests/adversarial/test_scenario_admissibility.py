@@ -236,14 +236,28 @@ def _execution(
     scenario_id: str = "case-static",
     seed: int = 19,
     replay: bool = False,
+    include_context: bool = True,
 ) -> dict[str, Any]:
     episode_id = "episode-target"
     termination_reason = "success" if route_complete else "max_steps"
+    planner_config_sha256 = "d" * 64 if planner_id == "target" else "c" * 64
+    planner_checkpoint_sha256 = (
+        "not_applicable" if planner_id in {"goal", "social_force", "orca"} else "d" * 64
+    )
+    execution_context = {
+        "horizon_steps": 100,
+        "robot_model_sha256": "b" * 64,
+        "simulator_config_sha256": "c" * 64,
+        "planner_config_sha256": planner_config_sha256,
+        "planner_checkpoint_sha256": planner_checkpoint_sha256,
+        "environment_sha256": "e" * 64,
+    }
     episode_row = {
         "version": "v1",
         "episode_id": episode_id,
         "scenario_id": scenario_id,
         "seed": seed,
+        "horizon": 100,
         "algo": planner_id,
         "git_hash": "f" * 40,
         "status": "success" if route_complete else "failure",
@@ -261,6 +275,8 @@ def _execution(
             "execution_mode": "native",
         },
     }
+    if include_context:
+        episode_row["execution_context"] = execution_context
     fixture_index = next(_EXECUTION_FIXTURE_COUNTER)
     episode_store_path = _EXECUTION_FIXTURE_ROOT / f"episodes-{fixture_index:04d}.jsonl"
     episode_store_bytes = (json.dumps(episode_row, sort_keys=True) + "\n").encode("utf-8")
@@ -269,6 +285,27 @@ def _execution(
     evidence_ref = episode_store_path.as_posix()
     if planner_id == "replay" or replay:
         replay_sidecar_path = _EXECUTION_FIXTURE_ROOT / f"replay-{fixture_index:04d}.json"
+        replay_result_path = (
+            _EXECUTION_FIXTURE_ROOT / f"target-replay-result-{fixture_index:04d}.json"
+        )
+        replay_result = {
+            "schema_version": "target_planner_replay_result.v1",
+            "replay_kind": "target_planner",
+            "episode_id": episode_id,
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "planner_id": planner_id,
+            "source_commit": "f" * 40,
+            "source_episodes_jsonl_sha256": episode_store_sha256,
+            "run_status": "ok",
+            "fallback_or_degraded": False,
+            "route_complete": route_complete,
+            "termination_reason": termination_reason,
+            "replay_command": "robot-sf-target-planner-replay --fixture",
+            "execution_context": execution_context,
+        }
+        replay_result_bytes = (json.dumps(replay_result, sort_keys=True) + "\n").encode()
+        replay_result_path.write_bytes(replay_result_bytes)
         replay_sidecar_path.write_text(
             json.dumps(
                 {
@@ -281,6 +318,10 @@ def _execution(
                     "determinism_check_status": "pass",
                     "source_episodes_jsonl_path": episode_store_path.as_posix(),
                     "source_episodes_jsonl_sha256": episode_store_sha256,
+                    "target_planner_replay_result_path": replay_result_path.as_posix(),
+                    "target_planner_replay_result_sha256": hashlib.sha256(
+                        replay_result_bytes
+                    ).hexdigest(),
                     "resimulated": True,
                 },
                 sort_keys=True,
@@ -302,10 +343,8 @@ def _execution(
         "scenario_sha256": _SCENARIO_ARTIFACT_SHA256,
         "robot_model_sha256": "b" * 64,
         "simulator_config_sha256": "c" * 64,
-        "planner_config_sha256": "d" * 64 if planner_id == "target" else "c" * 64,
-        "planner_checkpoint_sha256": (
-            "not_applicable" if planner_id in {"goal", "social_force", "orca"} else "d" * 64
-        ),
+        "planner_config_sha256": planner_config_sha256,
+        "planner_checkpoint_sha256": planner_checkpoint_sha256,
         "environment_sha256": "e" * 64,
         "source_episodes_jsonl_sha256": episode_store_sha256,
         "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
@@ -1735,6 +1774,47 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
     assert "matched_reference_success_target_planner_failure" not in unmatched.reason_codes
 
 
+def test_replay_result_must_bind_a_separate_target_planner_outcome() -> None:
+    reference = _execution("reference", route_complete=True)
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    sidecar_path = Path(replay["evidence_ref"])
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    result_path = Path(sidecar["target_planner_replay_result_path"])
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["route_complete"] = True
+    result["termination_reason"] = "success"
+    result_bytes = (json.dumps(result, sort_keys=True) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    sidecar["target_planner_replay_result_sha256"] = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_path.write_text(json.dumps(sidecar, sort_keys=True), encoding="utf-8")
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=reference,
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert "replay_execution_target_planner_result_outcome_mismatch" in verdict.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
+def test_unbound_run_context_cannot_support_planner_specific_attribution() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution("reference", route_complete=True, include_context=False),
+        target_execution=_execution("target", route_complete=False),
+        replay_execution=_execution("target", route_complete=False, replay=True),
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert "reference_execution_run_context_unavailable" in verdict.reason_codes
+    assert "matched_reference_target_failure_run_context_unbound" in verdict.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
 @pytest.mark.parametrize(
     "field,value,reason",
     [
@@ -1745,21 +1825,37 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
             "f" * 64,
             "replay_execution_scenario_artifact_identity_mismatch",
         ),
-        ("robot_model_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
-        ("simulator_config_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
-        ("environment_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
+        (
+            "robot_model_sha256",
+            "f" * 64,
+            "replay_execution_target_planner_result_run_context_mismatch",
+        ),
+        (
+            "simulator_config_sha256",
+            "f" * 64,
+            "replay_execution_target_planner_result_run_context_mismatch",
+        ),
+        (
+            "environment_sha256",
+            "f" * 64,
+            "replay_execution_target_planner_result_run_context_mismatch",
+        ),
         ("source_commit", "e" * 40, "replay_execution_episode_identity_mismatch"),
         ("seed", 20, "replay_execution_episode_identity_mismatch"),
-        ("horizon_steps", 101, "planner_specific_failure_replay_case_mismatch"),
+        (
+            "horizon_steps",
+            101,
+            "replay_execution_target_planner_result_run_context_mismatch",
+        ),
         (
             "planner_config_sha256",
             "f" * 64,
-            "planner_specific_failure_replay_configuration_mismatch",
+            "replay_execution_target_planner_result_run_context_mismatch",
         ),
         (
             "planner_checkpoint_sha256",
             "f" * 64,
-            "planner_specific_failure_replay_configuration_mismatch",
+            "replay_execution_target_planner_result_run_context_mismatch",
         ),
         (
             "episode_id",

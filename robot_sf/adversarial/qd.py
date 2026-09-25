@@ -21,6 +21,7 @@ not camera-ready findings.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Callable, Mapping
@@ -401,7 +402,8 @@ def run_map_elites(
             the evaluation's own certification status is used as the gate.
         admissibility_precheck: Optional cheap candidate-level check that returns the versioned
             `scenario_admissibility.v1` verdict before the evaluator runs. Explicit structural or
-            geometric/kinodynamic exclusions are recorded and skipped; unknown or missing verdicts
+            geometric/kinodynamic exclusions are recorded and skipped only when `case_id` matches
+            `qd_candidate_case_id(candidate)`; unknown, missing, invalid, or mismatched verdicts
             continue to the evaluator.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
         archive: Optional live archive shared with stateful emitters. Its grid and
@@ -427,15 +429,17 @@ def run_map_elites(
     for index in range(config.budget):
         emitter = active_emitters[index % len(active_emitters)]
         candidate = emitter.sample()
+        candidate_case_id = qd_candidate_case_id(candidate)
         verdict = admissibility_precheck(config, candidate) if admissibility_precheck else None
         admissibility_records.append(
             _admissibility_record(
                 candidate,
                 verdict,
+                candidate_case_id=candidate_case_id,
                 precheck_configured=admissibility_precheck is not None,
             )
         )
-        if _scenario_admissibility_payload_rejects(verdict):
+        if _scenario_admissibility_payload_rejects(verdict, expected_case_id=candidate_case_id):
             num_admissibility_rejected += 1
             pre_evaluation_rejections.append(
                 {
@@ -493,10 +497,14 @@ def _admissibility_record(
     candidate: CandidateSpec,
     verdict: Any,
     *,
+    candidate_case_id: str,
     precheck_configured: bool,
 ) -> Mapping[str, Any]:
     """Preserve each verdict or its explicit unavailable/invalid state beside the candidate."""
-    record: dict[str, Any] = {"candidate": candidate.to_json()}
+    record: dict[str, Any] = {
+        "candidate": candidate.to_json(),
+        "candidate_case_id": candidate_case_id,
+    }
     if verdict is None:
         record.update(
             {
@@ -529,11 +537,20 @@ def _admissibility_record(
             }
         )
         return record
+    if verdict.get("case_id") != candidate_case_id:
+        record.update(
+            {
+                "status": "invalid",
+                "reason_code": "admissibility_candidate_identity_mismatch",
+                "scenario_admissibility": dict(verdict),
+            }
+        )
+        return record
     record.update({"status": "available", "scenario_admissibility": dict(verdict)})
     return record
 
 
-def _scenario_admissibility_payload_rejects(payload: Any) -> bool:
+def _scenario_admissibility_payload_rejects(payload: Any, *, expected_case_id: str) -> bool:
     """Recognize only an explicit exclusion disposition from the feasibility adapter."""
     if not isinstance(payload, Mapping):
         return False
@@ -541,7 +558,17 @@ def _scenario_admissibility_payload_rejects(payload: Any) -> bool:
         validate_scenario_admissibility(payload)
     except ValueError:
         return False
-    return payload.get("search_disposition") == "reject"
+    return (
+        payload.get("case_id") == expected_case_id and payload.get("search_disposition") == "reject"
+    )
+
+
+def qd_candidate_case_id(candidate: CandidateSpec) -> str:
+    """Return a deterministic case ID binding an admissibility verdict to one candidate."""
+    encoded = json.dumps(
+        candidate.to_json(), sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return f"qd-candidate-{hashlib.sha256(encoded).hexdigest()}"
 
 
 def _default_emitters(search_space: SearchSpaceConfig, *, seed: int) -> list[QDEmitter]:
@@ -608,7 +635,7 @@ def production_qd_evaluator(
 
 @dataclass(frozen=True)
 class QDComparisonRow:
-    """One row of an equal-budget QD vs single-objective comparison."""
+    """One row of an equal-proposal-budget comparison."""
 
     method: str
     budget: int
@@ -635,7 +662,7 @@ class QDComparisonRow:
 
 @dataclass(frozen=True)
 class QDComparisonReport:
-    """Equal-budget comparison of MAP-Elites against a single-objective baseline."""
+    """Equal-proposal-budget comparison of MAP-Elites and a single-objective baseline."""
 
     qd: QDComparisonRow
     single_objective: QDComparisonRow
@@ -645,7 +672,8 @@ class QDComparisonReport:
         """Return a JSON-serializable comparison report."""
         return {
             "schema_version": QD_ARCHIVE_SCHEMA_VERSION,
-            "comparison_type": "equal_budget_qd_vs_single_objective",
+            "comparison_type": "equal_proposal_budget_qd_vs_single_objective",
+            "budget_basis": "proposed_candidate_slots",
             "grid": self.grid,
             "rows": {
                 "map_elites": self.qd.to_json(),
@@ -670,12 +698,19 @@ def compare_qd_vs_single_objective(
     require_certification: bool = False,
     behavior_descriptor: BehaviorDescriptorFn = default_behavior_descriptor,
 ) -> QDComparisonReport:
-    """Build an equal-budget comparison of QD diversity vs the single-objective baseline.
+    """Build an equal-proposal-budget comparison of QD and a single-objective baseline.
 
     The single-objective baseline is summarised by how many *distinct certified
-    failure mechanisms* its evaluated candidates would have populated into the same
-    grid (a fair, budget-matched diversity yardstick), not by its best objective value.
+    failure mechanisms* its candidate attempts would have populated into the same grid.
+    Pre-evaluation exclusions can reduce QD evaluator calls; both proposal and evaluator
+    counts remain visible, and this report does not claim matched simulator calls.
     """
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
+        raise ValueError("proposal budget must be a positive integer")
+    if qd_result.num_proposed != budget or len(single_objective_evaluations) != budget:
+        raise ValueError(
+            "proposal-budget comparison requires the declared budget to match both proposal counts"
+        )
     qd_row = QDComparisonRow(
         method="map_elites",
         budget=budget,
@@ -738,6 +773,7 @@ __all__ = [
     "compare_qd_vs_single_objective",
     "default_behavior_descriptor",
     "production_qd_evaluator",
+    "qd_candidate_case_id",
     "run_map_elites",
     "write_qd_archive",
 ]

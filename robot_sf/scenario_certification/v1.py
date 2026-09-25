@@ -52,7 +52,6 @@ KINODYNAMICALLY_INFEASIBLE = "kinodynamically_infeasible"
 DYNAMICALLY_OVERCONSTRAINED = "dynamically_overconstrained"
 KNIFE_EDGE = "knife_edge"
 HARD_BUT_SOLVABLE = "hard_but_solvable"
-UNKNOWN = "unknown"
 
 EXCLUDED_STATUSES = {
     INVALID,
@@ -62,7 +61,6 @@ EXCLUDED_STATUSES = {
 }
 
 _STATUS_SEVERITY = {
-    UNKNOWN: 55,
     INVALID: 60,
     GEOMETRICALLY_INFEASIBLE: 50,
     KINODYNAMICALLY_INFEASIBLE: 40,
@@ -634,16 +632,9 @@ def _check_geometric_feasibility(state: _RouteCertificationState) -> str | None:
     )
     if planned_path is None:
         state.checks["planner"] = planner_info
-        if planner_info.get("path_status") == "no_path":
-            state.reasons.append("no_inflated_collision_free_path: empty_path")
-            state.checks["inflated_collision_free_path"] = False
-            return GEOMETRICALLY_INFEASIBLE
-        state.reasons.append(
-            "inflated_path_planner_error: "
-            f"{planner_error or 'planner returned no path without a no-path result'}"
-        )
-        state.checks["inflated_collision_free_path"] = None
-        return UNKNOWN
+        state.reasons.append(f"no_inflated_collision_free_path: {planner_error or 'empty_path'}")
+        state.checks["inflated_collision_free_path"] = False
+        return GEOMETRICALLY_INFEASIBLE
     planned_line, shortest_length, path_length_ratio = _planned_path_metrics(
         planned_path,
         direct_length,
@@ -926,8 +917,6 @@ def _benchmark_eligibility(status: str) -> str:
     """
     if status in EXCLUDED_STATUSES:
         return "excluded"
-    if status == UNKNOWN:
-        return "stress_only"
     if status == KNIFE_EDGE:
         return "stress_only"
     return "eligible"

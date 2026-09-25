@@ -50,9 +50,10 @@ Benchmark inclusion policy:
   an explicit benchmark issue.
 - `invalid`, `geometrically_infeasible`, `kinodynamically_infeasible`, and
   `dynamically_overconstrained` are excluded.
-- `unknown` is retained for adversarial screening but marked `stress_only` for benchmark
-  selection. A planner exception is recorded as `inflated_path_planner_error` and does not prove
-  geometric impossibility; only a completed planner result with no path is a geometric exclusion.
+- `scenario_cert.v1` preserves its established classification and eligibility fields for
+  compatibility. Its geometric exclusion label alone is not a feasibility proof: the adversarial
+  admissibility layer checks the route evidence and retains planner errors or other unresolved
+  exclusions as `admissible_feasibility_unknown`.
 
 ## Checks
 
@@ -65,7 +66,8 @@ Geometry checks:
 - finite start and goal coordinates within map bounds,
 - start/goal not inside static obstacles,
 - inflated global path existence using the classic A* planner with no inflation fallback,
-- a planner exception is an unknown certification result, not evidence that the route is blocked,
+- a planner exception retains the historical v1 classification label, while the adversarial
+  admissibility layer recognizes `path_status=error` as unresolved and does not reject the case,
 - **continuous swept-envelope validation of the planned A* path** (issue #6139): after A*
   returns a collision-free grid path, the certifier re-validates the planned polyline
   against the same parsed obstacle geometry and robot envelope the simulator uses. A

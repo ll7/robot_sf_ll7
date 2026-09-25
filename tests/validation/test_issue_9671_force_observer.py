@@ -1,0 +1,139 @@
+"""Fail-closed identity tests for the separately staged 0.0.7 force observer."""
+
+import importlib.util
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from robot_sf.ped_npc.ped_robot_force import PedRobotForce
+
+OBSERVER = (
+    Path(__file__).parents[2] / "scripts/validation/issue_9671_force_observer_sitecustomize.py"
+)
+SPEC = importlib.util.spec_from_file_location("issue_9671_observer_test", OBSERVER)
+assert SPEC is not None and SPEC.loader is not None
+observer = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(observer)
+
+
+def _row() -> dict:
+    return {
+        "episode_id": "doorway--113--test",
+        "scenario_id": "doorway",
+        "seed": 113,
+        "algo": "ppo",
+        "steps": 1,
+        "algorithm_metadata": {
+            "simulation_step_trace": {
+                "reset": {
+                    "pedestrians": [
+                        {"actor_id": "simulator-slot-0", "position": [0.0, 0.0]},
+                        {"actor_id": "simulator-slot-1", "position": [1.0, 0.0]},
+                    ]
+                },
+                "steps": [
+                    {
+                        "step": 0,
+                        "pedestrians": [
+                            {"actor_id": "simulator-slot-0", "position": [0.1, 0.0]},
+                            {"actor_id": "simulator-slot-1", "position": [1.1, 0.0]},
+                        ],
+                        "planner": {"ammv": {"pedestrian_force_vectors": [[1.0, 0.0], [2.0, 0.0]]}},
+                    }
+                ],
+            },
+        },
+    }
+
+
+def _capture() -> dict:
+    return {
+        "episode_id": "doorway--113--test",
+        "scenario_id": "doorway",
+        "seed": 113,
+        "algo": "ppo",
+        "steps": [
+            {
+                "step": 0,
+                "step_entry_positions": [[0.0, 0.0], [1.0, 0.0]],
+                "force_input_positions": [[0.0, 0.0], [1.0, 0.0]],
+                "post_step_positions": [[0.1, 0.0], [1.1, 0.0]],
+                "total_forces": [[1.0, 0.0], [2.0, 0.0]],
+                "robot_forces": [[0.2, 0.0], [0.3, 0.0]],
+            }
+        ],
+    }
+
+
+def test_binds_each_force_slot_to_reset_actor_id() -> None:
+    bound = observer.bind_episode(_capture(), _row())
+    assert bound["actor_ids"] == ["simulator-slot-0", "simulator-slot-1"]
+    assert bound["steps"][0]["actor_ids"] == bound["actor_ids"]
+
+
+@pytest.mark.parametrize("field", ["step_entry_positions", "force_input_positions"])
+def test_rejects_permuted_force_slots(field: str) -> None:
+    capture = _capture()
+    capture["steps"][0][field].reverse()
+    with pytest.raises(observer.ObserverIdentityError, match="positions"):
+        observer.bind_episode(capture, _row())
+
+
+def test_rejects_episode_misbinding() -> None:
+    capture = _capture()
+    capture["episode_id"] = "doorway--114--other"
+    with pytest.raises(observer.ObserverIdentityError, match="episode ID"):
+        observer.bind_episode(capture, _row())
+
+
+def test_rejects_actor_permutation_in_trace() -> None:
+    row = _row()
+    row["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["pedestrians"].reverse()
+    with pytest.raises(observer.ObserverIdentityError, match="actor IDs"):
+        observer.bind_episode(_capture(), row)
+
+
+def test_rejects_coincident_positions_that_hide_permutation() -> None:
+    row = _row()
+    row["algorithm_metadata"]["simulation_step_trace"]["reset"]["pedestrians"][1]["position"] = [
+        0.0,
+        0.0,
+    ]
+    with pytest.raises(observer.ObserverIdentityError, match="coincident"):
+        observer.bind_episode(_capture(), row)
+
+
+def test_rejects_wrong_prior_trace_state_on_second_step() -> None:
+    capture = _capture()
+    second = dict(capture["steps"][0])
+    second["step"] = 1
+    capture["steps"].append(second)
+    row = _row()
+    second_trace = dict(row["algorithm_metadata"]["simulation_step_trace"]["steps"][0])
+    second_trace["step"] = 1
+    row["algorithm_metadata"]["simulation_step_trace"]["steps"].append(second_trace)
+    row["steps"] = 2
+    with pytest.raises(observer.ObserverIdentityError, match="pre-step positions"):
+        observer.bind_episode(capture, row)
+
+
+def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -> None:
+    component = PedRobotForce.__new__(PedRobotForce)
+    component.component_type = "pedestrian_robot"
+    component.last_forces = np.asarray([[0.2, 0.0], [0.3, 0.0]])
+    component.config = SimpleNamespace(force_multiplier=10.0)
+    component.get_robot_pos = lambda: pytest.fail("observer re-invoked provider")
+    watched = observer.ForceObserver(tmp_path, {})
+    watched.episode = {"steps": []}
+    watched.step = {"step_entry_positions": [[0.0, 0.0], [1.0, 0.0]]}
+    frame = SimpleNamespace(
+        f_locals={
+            "self": component,
+            "ped_positions": np.asarray([[0.0, 0.0], [1.0, 0.0]]),
+            "robot_pos": np.asarray([2.0, 0.0]),
+        }
+    )
+    watched._force_event(frame, component.last_forces)
+    assert watched.force_returns[id(component)]["forces"] == [[0.2, 0.0], [0.3, 0.0]]

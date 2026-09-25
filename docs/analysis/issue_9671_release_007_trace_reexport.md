@@ -166,13 +166,14 @@ therefore need a new reading or a different explicitly selected episode before t
 labels can be removed. This is a cross-run worked-example change, separate from the **zero**
 paired release-row outcome mismatches. The source of the cross-run change has not been established.
 
-## Proposed passive robot-force sidecar — not yet executed
+## Implemented passive robot-force observer — not yet executed
 
 The frozen `PedRobotForce` already retains each component's `last_forces`, but the frozen
 benchmark writer records only `last_ped_forces`. A frozen-code JSONL record cannot acquire a new
 field without changing code. Post-integration robot/pedestrian positions cannot reproduce the
 force-evaluation input reliably, particularly with optional pedestrian response multipliers.
-The proposed path is a separately SHA-pinned, opt-in **observer overlay**; it leaves every file
+The implemented but unexecuted path is a separately SHA-pinned, opt-in **observer overlay** in
+`scripts/validation/issue_9671_force_observer_sitecustomize.py`; it leaves every file
 at commit `07f7e8d43084de748915e1b1eb8b2a1603357c6e` and both scientific config bytes
 unchanged, but the executed Python process includes observer code. Its sidecar is a new
 diagnostic artifact, not an original 0.0.7 release field.
@@ -190,19 +191,27 @@ diagnostic artifact, not an original 0.0.7 release field.
    `isinstance(PedRobotForce)`; exclude `adversarial` components. Match exactly one fresh
    return capture per selected instance, copy its `last_forces` and configuration, and sum the
    robot components. An active component left at its scalar initial value, a non-finite vector,
-   shape mismatch or changed component roster fails closed; a genuinely inactive component is
-   represented by a declared zero vector.
-3. On each `step_once` return, copy `last_ped_forces` and require one force-evaluation capture
-   with matching pedestrian cardinality. Observe `run_map_episode` call/return at frozen line
-   5075 to bind the ordered samples to its returned `episode_id`, scenario, seed, planner and
-   step count. Require contiguous step indices and exact slot/actor cardinality against
-   `algorithm_metadata.simulation_step_trace.steps`; compare captured total vectors to
-   `planner.ammv.pedestrian_force_vectors`. A failed or ambiguous episode is not admitted.
-4. Keep the runner's raw JSONL and producer manifest unchanged. Emit a separate sidecar with
-   observer SHA, frozen source SHA, diagnostic config SHA/effective hash, campaign ID, PID,
-   episode ID, per-step arrays and SHA-256 of the associated raw JSONL. Producer checksums must
-   cover this sidecar and its observer input. The comparator must bind every sidecar row to one
-   original episode and reject missing, extra, duplicate or mixed samples.
+   shape mismatch, missing active component or changed component roster fails closed. The
+   observer does not infer a zero vector when no `PedRobotForce` instance executes.
+3. On each `step_once` call, copy the pre-behavior pedestrian positions. At the force-return
+   event, copy the already evaluated force-input positions. Both must exactly equal reset
+   positions on step zero and the prior post-step trace positions thereafter. Require distinct
+   positions, so coincident actors cannot be silently assigned by row order. On each step
+   return, copy `last_ped_forces` and post-step positions. Observe `run_map_episode` call/return
+   at frozen line 5075 to bind the ordered samples to its returned `episode_id`, input scenario,
+   seed, planner and step count; the row's canonical SHA-256 binds the observer receipt to
+   exact episode content. Require contiguous step indices and the same ordered
+   `trace_actor_ids` on reset and every step; compare post-step positions and total vectors to
+   the recorded trace. A failed or ambiguous episode is not admitted. This deliberately rejects
+   an episode if behavior changes positions before force evaluation, or if two actors occupy
+   identical positions; such a row needs a new identity method before force attribution.
+4. Keep the runner's raw JSONL and producer manifest unchanged. Emit separate per-episode
+   sidecars with observer SHA, frozen source SHA, diagnostic config SHA, campaign ID, PID,
+   episode ID, per-step arrays and canonical episode-row SHA-256. The later producer/retrieval
+   manifest must bind these row digests to the raw JSONL SHA and include checksums for every
+   sidecar and the staged observer input. The comparator must reject missing, extra, duplicate
+   or mixed samples. This bundle/manifest binding is **not yet implemented**; sidecars alone
+   are diagnostic and must not be promoted.
 5. Before any force-enriched bundle is admitted, rerun the same 20 tuples on the same frozen
    source/config under a **new** Slurm campaign and compare status, step count and every
    recorded robot/pedestrian state and total-force vector with jobs 15758/15760. Require exact

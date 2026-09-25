@@ -5090,7 +5090,7 @@ def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shap
     return sorted(set(issues))
 
 
-def _comparison_source_binding_issues(
+def _comparison_source_binding_issues(  # noqa: C901 - fail-closed source binding branches
     baseline: dict[str, Any],
     current: dict[str, Any],
     current_generator_sha256: str | None,
@@ -5123,6 +5123,8 @@ def _comparison_source_binding_issues(
     )
     issues.extend(baseline_input_issues)
     issues.extend(current_input_issues)
+    if set(baseline_inputs) != set(current_inputs):
+        issues.append("comparison baseline repository input paths differ from current report")
     for canonical in (CANONICAL_PROFILE_MANIFEST, CANONICAL_POLICY):
         if canonical not in baseline_inputs:
             issues.append(

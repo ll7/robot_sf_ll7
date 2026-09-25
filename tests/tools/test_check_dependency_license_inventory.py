@@ -2298,6 +2298,44 @@ def test_compare_baseline_canonical_input_hash_mismatch_fails_closed(
     assert needle in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("input_path", ("pyproject.toml", "uv.lock"))
+def test_compare_baseline_missing_mutable_input_path_fails_before_write(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    input_path: str,
+) -> None:
+    """A refreshed baseline must retain every current input path."""
+    baseline = _generate_baseline(tmp_path)
+
+    def mutate(payload: dict) -> None:
+        payload["repository_inputs"] = [
+            item for item in payload["repository_inputs"] if item.get("path") != input_path
+        ]
+        from scripts.tools.check_dependency_license_inventory import _report_content_digest
+
+        payload["report_content_sha256"] = _report_content_digest(payload)
+
+    _rewrite_baseline(baseline, mutate)
+    current = tmp_path / "current.json"
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--compare-baseline",
+                str(baseline),
+                "--output",
+                str(current),
+            ]
+        )
+        == 1
+    )
+    assert not current.exists()
+    assert "repository input paths" in capsys.readouterr().err
+
+
 def test_compare_baseline_policy_mismatch_fails_closed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

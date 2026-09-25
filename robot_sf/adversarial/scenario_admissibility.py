@@ -8,6 +8,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -16,6 +17,11 @@ from jsonschema import Draft202012Validator
 from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
+from robot_sf.benchmark.termination_reason import (
+    TERMINATION_REASONS,
+    outcome_contradictions,
+    status_from_termination_reason,
+)
 from robot_sf.scenario_certification.feasibility_diagnostics import DIAGNOSTIC_CLAIM_BOUNDARY
 from robot_sf.scenario_certification.input_identity import scenario_input_identity
 
@@ -44,6 +50,9 @@ _GIT_COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _CHECKPOINT_FREE_CLASSICAL_PLANNERS = frozenset({"goal", "social_force", "orca"})
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "benchmark/schemas/scenario_admissibility.v1.json"
+)
+_EPISODE_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "benchmark/schemas/episode.schema.v1.json"
 )
 
 
@@ -92,6 +101,7 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     case_id: str,
     *,
     scenario_artifact_path: str | Path | None = None,
+    evidence_root: str | Path | None = None,
     scenario_id: str | None = None,
     scenario_certificate: Mapping[str, Any] | None = None,
     feasibility_evidence: Mapping[str, Any] | None = None,
@@ -102,12 +112,19 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
 ) -> ScenarioAdmissibilityVerdict:
     """Map certificate, oracle, predicate, and named-run evidence without overclaiming.
 
-    ``scenario_artifact_path`` identifies the candidate's canonical source artifact. Certificate
-    and oracle source paths must hash to those exact bytes, and named execution
+    ``scenario_artifact_path`` identifies the candidate's canonical source artifact. Relative
+    execution ``evidence_ref`` values resolve under ``evidence_root``; absolute paths are accepted
+    when they identify readable local artifacts. Reference and target refs identify canonical
+    episode JSONL stores. Replay refs identify the canonical replay provenance sidecar, whose
+    source episode-store path and digest are read and checked. In every case, the selected v1
+    episode row must match the normalized row's episode, planner, scenario, seed, revision, and
+    route outcome before it can establish a verdict.
+
+    Certificate and oracle source paths must hash to those exact bytes, and named execution
     ``scenario_sha256`` values must match that digest. Named execution mappings carry
     case/scenario/planner IDs, original variant, run status,
     route completion, seed/horizon, source commit, evidence reference, and hashes for the
-    scenario, robot model, simulator config, and environment. Target and replay rows also carry
+    scenario, robot model, simulator config, and environment. Every execution also carries
     ``episode_id`` and ``source_episodes_jsonl_sha256``; planner-specific failure requires the replay
     sidecar's values to match the target row. Planner-specific failure needs matching bindings,
     distinct planner IDs, and a deterministic replay of the target failure. Replay evidence also
@@ -117,6 +134,11 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         raise ValueError("case_id must be non-empty")
     if scenario_id is not None and (not isinstance(scenario_id, str) or not scenario_id.strip()):
         raise ValueError("scenario_id must be non-empty when provided")
+    resolved_evidence_root = (
+        Path(evidence_root).expanduser().resolve()
+        if isinstance(evidence_root, (str, Path))
+        else None
+    )
     execution_scenario_id = scenario_id
     reasons: list[str] = []
     evidence: dict[str, Any] = {}
@@ -176,6 +198,7 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         cert_valid,
         reasons,
     )
+    execution_artifact_bindings: dict[str, Any] = {}
     runs = {
         role: _execution(
             inputs[f"{role}_execution"],
@@ -185,10 +208,13 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
             artifact_sha256,
             effective_input_sha256,
             requires_effective_input_binding,
+            resolved_evidence_root,
             reasons,
+            execution_artifact_bindings,
         )
         for role in ("reference", "target", "replay")
     }
+    evidence["execution_artifact_bindings"] = execution_artifact_bindings
     verdict = _resolve(cert_state, oracle_state, predicate_state, runs, reasons)
     target = runs["target"]
     target_outcome = (
@@ -1134,7 +1160,7 @@ def _certificate_supports_actor_free_rollout(cert: Any) -> bool:
     return _route_inventory_complete(cert) and _static_certificate(cert)
 
 
-def _execution(
+def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are passed through.
     source: Any,
     role: str,
     case_id: str,
@@ -1142,7 +1168,9 @@ def _execution(
     artifact_sha256: str | None,
     effective_input_sha256: str | None,
     requires_effective_input_binding: bool,
+    evidence_root: Path | None,
     reasons: list[str],
+    artifact_bindings: dict[str, Any],
 ) -> dict[str, Any] | None:
     if source is None:
         return None
@@ -1158,7 +1186,269 @@ def _execution(
     if reason is not None:
         reasons.append(reason)
         return None
+    evidence_problem, binding = _execution_evidence_binding(
+        source, role=role, evidence_root=evidence_root
+    )
+    artifact_bindings[role] = binding
+    if evidence_problem is not None:
+        reasons.append(evidence_problem)
+        return None
     return dict(source)
+
+
+def _execution_evidence_binding(
+    source: Mapping[str, Any], *, role: str, evidence_root: Path | None
+) -> tuple[str | None, dict[str, Any]]:
+    """Read and bind canonical episode-store and replay-sidecar bytes to one normalized run."""
+    reference = source.get("evidence_ref")
+    artifact_path = _resolve_evidence_path(reference, evidence_root=evidence_root)
+    if artifact_path is None:
+        return f"{role}_execution_evidence_ref_missing_or_unreadable", {
+            "status": "unavailable",
+            "evidence_ref": reference,
+        }
+    if role == "replay":
+        return _replay_evidence_binding(
+            source, artifact_path=artifact_path, evidence_root=evidence_root
+        )
+    return _episode_store_binding(
+        source,
+        role=role,
+        evidence_ref=artifact_path,
+        store_path=artifact_path,
+    )
+
+
+def _replay_evidence_binding(
+    source: Mapping[str, Any], *, artifact_path: Path, evidence_root: Path | None
+) -> tuple[str | None, dict[str, Any]]:
+    """Load the replay sidecar and bind it through its referenced source episode store."""
+    try:
+        sidecar_bytes = artifact_path.read_bytes()
+        sidecar_payload = json.loads(sidecar_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return "replay_execution_replay_sidecar_missing_or_malformed", {
+            "status": "unavailable",
+            "evidence_ref": artifact_path.as_posix(),
+        }
+    if not isinstance(sidecar_payload, Mapping):
+        return "replay_execution_replay_sidecar_missing_or_malformed", {
+            "status": "unavailable",
+            "evidence_ref": artifact_path.as_posix(),
+        }
+    sidecar_sha256 = hashlib.sha256(sidecar_bytes).hexdigest()
+    store_path = _resolve_evidence_path(
+        sidecar_payload.get("source_episodes_jsonl_path"),
+        evidence_root=evidence_root,
+        relative_to=artifact_path.parent,
+    )
+    if store_path is None:
+        return "replay_execution_episode_store_missing_or_unreadable", {
+            "status": "unavailable",
+            "evidence_ref": artifact_path.as_posix(),
+            "replay_sidecar_sha256": sidecar_sha256,
+        }
+    return _episode_store_binding(
+        source,
+        role="replay",
+        evidence_ref=artifact_path,
+        store_path=store_path,
+        sidecar=sidecar_payload,
+        sidecar_sha256=sidecar_sha256,
+    )
+
+
+def _episode_store_binding(
+    source: Mapping[str, Any],
+    *,
+    role: str,
+    evidence_ref: Path,
+    store_path: Path,
+    sidecar: Mapping[str, Any] | None = None,
+    sidecar_sha256: str | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Validate store bytes and episode identity/outcome for a normalized execution row."""
+    try:
+        store_bytes = store_path.read_bytes()
+    except OSError:
+        return f"{role}_execution_episode_store_missing_or_unreadable", {
+            "status": "unavailable",
+            "evidence_ref": evidence_ref.as_posix(),
+            "episode_store_path": store_path.as_posix(),
+        }
+    store_sha256 = hashlib.sha256(store_bytes).hexdigest()
+    binding = {
+        "status": "checked",
+        "evidence_ref": evidence_ref.as_posix(),
+        "episode_store_path": store_path.as_posix(),
+        "episode_store_sha256": store_sha256,
+        "episode_id": source.get("episode_id"),
+        "route_complete": source.get("route_complete"),
+    }
+    if sidecar_sha256 is not None:
+        binding["replay_sidecar_sha256"] = sidecar_sha256
+    if store_sha256.lower() != str(source.get("source_episodes_jsonl_sha256", "")).lower():
+        binding["status"] = "mismatch"
+        return f"{role}_execution_episode_store_digest_mismatch", binding
+
+    episode, parse_reason = _episode_row_for_binding(
+        store_bytes, episode_id=source.get("episode_id")
+    )
+    if episode is None:
+        binding["status"] = "mismatch"
+        return f"{role}_execution_{parse_reason}", binding
+    row_reason = _episode_row_binding_problem(episode, source)
+    if row_reason is not None:
+        binding["status"] = "mismatch"
+        return f"{role}_execution_{row_reason}", binding
+    if sidecar is not None:
+        sidecar_reason = _replay_sidecar_binding_problem(sidecar, source, store_sha256)
+        if sidecar_reason is not None:
+            binding["status"] = "mismatch"
+            return f"replay_execution_{sidecar_reason}", binding
+    binding["status"] = "valid"
+    binding["row_identity"] = {
+        "scenario_id": episode["scenario_id"],
+        "planner_id": episode["algo"],
+        "seed": episode["seed"],
+        "source_commit": episode["git_hash"],
+        "route_complete": episode["outcome"]["route_complete"],
+        "termination_reason": episode["termination_reason"],
+    }
+    return None, binding
+
+
+def _resolve_evidence_path(
+    value: Any,
+    *,
+    evidence_root: Path | None,
+    relative_to: Path | None = None,
+) -> Path | None:
+    """Resolve a local evidence reference without allowing implicit CWD binding."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = Path(value).expanduser()
+    root_relative = not path.is_absolute() and relative_to is None
+    if not path.is_absolute():
+        base = relative_to if relative_to is not None else evidence_root
+        if base is None:
+            return None
+        path = base / path
+    try:
+        resolved = path.resolve(strict=True)
+        if (
+            root_relative
+            and evidence_root is not None
+            and not resolved.is_relative_to(evidence_root.resolve())
+        ):
+            return None
+        if not resolved.is_file():
+            return None
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return resolved
+
+
+def _episode_row_for_binding(
+    episode_store_bytes: bytes, *, episode_id: Any
+) -> tuple[dict[str, Any] | None, str]:
+    """Parse a JSONL store and select exactly one schema-valid source episode row."""
+    if not isinstance(episode_id, str) or not episode_id.strip():
+        return None, "episode_identity_mismatch"
+    matches: list[dict[str, Any]] = []
+    try:
+        text = episode_store_bytes.decode("utf-8")
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            value = json.loads(line)
+            if not isinstance(value, dict):
+                return None, "episode_store_malformed"
+            if value.get("episode_id") == episode_id:
+                matches.append(value)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None, "episode_store_malformed"
+    if len(matches) != 1:
+        return None, "episode_identity_missing_or_ambiguous"
+    episode = matches[0]
+    if list(_episode_schema_validator().iter_errors(episode)):
+        return None, "episode_store_episode_schema_invalid"
+    return episode, ""
+
+
+def _load_episode_schema() -> dict[str, Any]:
+    """Load the benchmark's canonical v1 episode JSON Schema."""
+    return json.loads(_EPISODE_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def _episode_schema_validator() -> Draft202012Validator:
+    """Reuse the canonical episode validator across candidate classifications."""
+    return Draft202012Validator(_load_episode_schema())
+
+
+def _episode_row_binding_problem(
+    episode: Mapping[str, Any], source: Mapping[str, Any]
+) -> str | None:
+    """Check source episode identity, clean runtime status, and route outcome against its row."""
+    outcome = episode.get("outcome")
+    integrity = episode.get("integrity")
+    metadata = episode.get("algorithm_metadata")
+    termination = episode.get("termination_reason")
+    if (
+        episode.get("episode_id") != source.get("episode_id")
+        or episode.get("scenario_id") != source.get("scenario_id")
+        or episode.get("seed") != source.get("seed")
+        or episode.get("algo") != source.get("planner_id")
+        or episode.get("git_hash") != source.get("source_commit")
+    ):
+        return "episode_identity_mismatch"
+    if (
+        not isinstance(outcome, Mapping)
+        or type(outcome.get("route_complete")) is not bool
+        or outcome["route_complete"] is not source.get("route_complete")
+        or not isinstance(termination, str)
+        or termination not in TERMINATION_REASONS
+        or episode.get("status") != status_from_termination_reason(termination)
+        or outcome_contradictions(
+            termination_reason=termination,
+            outcome=outcome,
+            metrics=episode.get("metrics") if isinstance(episode.get("metrics"), Mapping) else None,
+        )
+    ):
+        return "episode_outcome_mismatch"
+    contradictions = integrity.get("contradictions") if isinstance(integrity, Mapping) else None
+    if not isinstance(contradictions, list) or contradictions:
+        return "episode_integrity_invalid_or_contradictory"
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("status") != "ok"
+        or runtime_fallback_or_degraded_marker(dict(episode)) is not None
+    ):
+        return "episode_runtime_unavailable_or_degraded"
+    return None
+
+
+def _replay_sidecar_binding_problem(
+    sidecar: Mapping[str, Any], source: Mapping[str, Any], store_sha256: str
+) -> str | None:
+    """Match canonical replay provenance fields to the selected episode and normalized run."""
+    if (
+        sidecar.get("episode_id") != source.get("episode_id")
+        or sidecar.get("scenario_id") != source.get("scenario_id")
+        or sidecar.get("seed") != source.get("seed")
+        or sidecar.get("planner_key") != source.get("planner_id")
+        or sidecar.get("repo_commit") != source.get("source_commit")
+        or sidecar.get("determinism_check_status") != source.get("determinism_check_status")
+        or sidecar.get("resimulated") is not source.get("resimulated")
+        or sidecar.get("source_episodes_jsonl_sha256") != store_sha256
+        or source.get("determinism_check_status") != "pass"
+        or source.get("resimulated") is not True
+        or not isinstance(sidecar.get("replay_command"), str)
+        or not sidecar.get("replay_command", "").strip()
+    ):
+        return "replay_sidecar_identity_or_outcome_mismatch"
+    return None
 
 
 def _execution_problem(
@@ -1178,7 +1468,7 @@ def _execution_problem(
     fallback_problem = _execution_fallback_problem(source, role)
     if fallback_problem is not None:
         return fallback_problem
-    if not _execution_digest_fields_valid(source, role):
+    if not _execution_digest_fields_valid(source):
         return f"{role}_execution_provenance_incomplete"
     artifact_problem = _execution_artifact_problem(source, role, artifact_sha256)
     if artifact_problem is not None:
@@ -1224,17 +1514,16 @@ def _execution_binding_problem(
         "source_commit",
         "evidence_ref",
     }
-    if role in {"target", "replay"}:
-        # The canonical replay sidecar identifies the source episode and its source file.
-        # Bind both on the target row so an unrelated replay cannot corroborate its failure.
-        required.update({"episode_id", "source_episodes_jsonl_sha256"})
+    # Every named run must resolve to one canonical source episode row. The replay role's
+    # ``evidence_ref`` identifies its provenance sidecar; reference/target refs identify JSONL.
+    required.update({"episode_id", "source_episodes_jsonl_sha256"})
     if not isinstance(source, Mapping) or not required.issubset(source):
         return f"{role}_execution_provenance_incomplete"
     if scenario_id is None:
         return f"{role}_execution_scenario_identity_unbound"
     if source["case_id"] != case_id or source["scenario_id"] != scenario_id:
         return f"{role}_execution_identity_mismatch"
-    if not _execution_text_fields_valid(source, role):
+    if not _execution_text_fields_valid(source):
         return f"{role}_execution_provenance_incomplete"
     return None
 
@@ -1268,14 +1557,18 @@ def _execution_fallback_problem(source: Mapping[str, Any], role: str) -> str | N
     return None
 
 
-def _execution_text_fields_valid(source: Mapping[str, Any], role: str) -> bool:
-    fields = ("scenario_id", "scenario_variant", "planner_id", "evidence_ref")
-    if role in {"target", "replay"}:
-        fields += ("episode_id",)
+def _execution_text_fields_valid(source: Mapping[str, Any]) -> bool:
+    fields = (
+        "scenario_id",
+        "scenario_variant",
+        "planner_id",
+        "evidence_ref",
+        "episode_id",
+    )
     return all(isinstance(source[key], str) and source[key].strip() for key in fields)
 
 
-def _execution_digest_fields_valid(source: Mapping[str, Any], role: str) -> bool:
+def _execution_digest_fields_valid(source: Mapping[str, Any]) -> bool:
     fields = (
         "scenario_sha256",
         "robot_model_sha256",
@@ -1283,8 +1576,7 @@ def _execution_digest_fields_valid(source: Mapping[str, Any], role: str) -> bool
         "planner_config_sha256",
         "environment_sha256",
     )
-    if role in {"target", "replay"}:
-        fields += ("source_episodes_jsonl_sha256",)
+    fields += ("source_episodes_jsonl_sha256",)
     checkpoint_hash = source["planner_checkpoint_sha256"]
     return (
         all(isinstance(source[key], str) and _SHA256.fullmatch(source[key]) for key in fields)

@@ -408,7 +408,9 @@ def test_package_b_orchestrator_empirical_flag_runs_real_evaluator(tmp_path: Pat
     # not enforce the preflight's fixed 27-cell contract, so a reduced manifest runs here.
     payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     payload["budget_grid"] = [16]
-    payload["repeated_seeds"] = [1101]
+    # Seed 1105, not 1101: seed 1101's only certified failure was a reset spawn overlap
+    # that issue #9725 removed (see the evaluator test above).
+    payload["repeated_seeds"] = [1105]
     payload["samplers"] = ["random"]
     manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
 

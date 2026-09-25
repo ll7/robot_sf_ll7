@@ -760,13 +760,32 @@ def test_oracle_exclusion_requires_a_complete_matching_certificate() -> None:
     assert "oracle_geometric_exclusion_certificate_conflict" in conflicting_positive.reason_codes
 
 
-@pytest.mark.parametrize("fallback_marker", [0, "false", 1])
+@pytest.mark.parametrize("fallback_marker", [0, "false", 1, True])
 def test_malformed_no_traversal_fallback_marker_cannot_exclude_case(
     fallback_marker: Any,
 ) -> None:
-    """Only literal false or null can pass the no-traversal fallback gate."""
+    """Malformed or affirmative fallback markers cannot exclude a scenario."""
     oracle = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
     oracle["completion"]["fallback_or_degraded"] = fallback_marker
+
+    assert _oracle_excludes(oracle) is False
+
+
+@pytest.mark.parametrize("fallback_marker", [None, False])
+def test_explicit_no_traversal_fallback_marker_can_exclude_case(
+    fallback_marker: bool | None,
+) -> None:
+    """Only explicitly present literal null or false can pass the no-traversal gate."""
+    oracle = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    oracle["completion"]["fallback_or_degraded"] = fallback_marker
+
+    assert _oracle_excludes(oracle) is True
+
+
+def test_missing_no_traversal_fallback_marker_cannot_exclude_case() -> None:
+    """An absent marker is unknown, not equivalent to explicit JSON null."""
+    oracle = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
+    del oracle["completion"]["fallback_or_degraded"]
 
     assert _oracle_excludes(oracle) is False
 

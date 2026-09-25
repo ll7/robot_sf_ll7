@@ -1055,9 +1055,10 @@ def _oracle_excludes(nominal: Mapping[str, Any]) -> bool:
         and completion.get("completion_horizon_margin_steps") is None
         and completion.get("termination_reason") is None
         and _positive_int(completion.get("horizon_steps"))
+        and "fallback_or_degraded" in completion
         and (
-            completion.get("fallback_or_degraded") is None
-            or completion.get("fallback_or_degraded") is False
+            completion["fallback_or_degraded"] is None
+            or completion["fallback_or_degraded"] is False
         )
         and completion.get("observed_route_completion_feasible") is None
         and completion.get("fallback_marker") is None

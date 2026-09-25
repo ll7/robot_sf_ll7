@@ -53,6 +53,12 @@ and a separate case directory for each selected candidate. Every input candidate
 manifest accounting, including failed evaluations, missing source files, invalid certificates,
 duplicates, and candidates below the top-K cutoff.
 
+For a direct complete search run, `summary.num_candidates`, the candidate-list length, and
+`config.budget` must agree; a missing summary or truncated inventory is rejected before replay. A
+historical compatibility input may omit the producer summary only when it explicitly says it is not
+a persisted search manifest. Its gallery marks the inventory incomplete and limits top-K to the
+candidate rows supplied; it cannot represent the original run's full candidate ranking.
+
 ## Lightweight CLI smoke
 
 When a search pilot produces no failure rows, use the one-candidate historical compatibility

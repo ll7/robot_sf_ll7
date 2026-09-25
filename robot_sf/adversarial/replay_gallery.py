@@ -167,6 +167,11 @@ def _build_manifest_replay_gallery(
     candidates = payload.get("candidates")
     if not isinstance(candidates, list):
         raise ValueError("search manifest candidates must be a list")
+    candidate_inventory = _candidate_inventory_status(
+        payload=payload,
+        config=config,
+        candidate_count=len(candidates),
+    )
 
     # Reuse the repository's mechanism clustering for attributed failures. The
     # selector below still ranks each cluster by the search objective, rather than
@@ -231,6 +236,7 @@ def _build_manifest_replay_gallery(
             "search_method": _search_method(payload, config),
             "search_seed": config.get("seed"),
             "search_budget": config.get("budget"),
+            "candidate_inventory": candidate_inventory,
             "search_space_sha256": hashlib.sha256(
                 _stable_json(config.get("search_space")).encode("utf-8")
             ).hexdigest()
@@ -277,7 +283,12 @@ def _build_manifest_replay_gallery(
         "cases": cases,
     }
     _write_json(destination / "gallery_manifest.json", result)
-    _write_gallery_readme(destination, cases, result["summary"])
+    _write_gallery_readme(
+        destination,
+        cases,
+        result["summary"],
+        candidate_inventory=candidate_inventory,
+    )
     return result
 
 
@@ -314,6 +325,65 @@ def _read_search_manifest_snapshot(path: Path) -> tuple[dict[str, Any], bytes]:
             f"{payload.get('schema_version')!r}; expected {SEARCH_MANIFEST_SCHEMA_VERSION!r}"
         )
     return payload, source_bytes
+
+
+def _candidate_inventory_status(
+    *, payload: dict[str, Any], config: dict[str, Any], candidate_count: int
+) -> dict[str, Any]:
+    """Require a complete canonical run or label a known historical candidate subset."""
+    budget = config.get("budget")
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 0:
+        raise ValueError("search manifest config.budget must be a non-negative integer")
+
+    summary = payload.get("summary")
+    if isinstance(summary, dict):
+        reported_count = summary.get("num_candidates")
+        if (
+            isinstance(reported_count, bool)
+            or not isinstance(reported_count, int)
+            or reported_count < 0
+        ):
+            raise ValueError(
+                "search manifest summary.num_candidates must be a non-negative integer"
+            )
+        if reported_count != candidate_count:
+            raise ValueError(
+                "search manifest candidate list length does not match summary.num_candidates"
+            )
+        if reported_count != budget:
+            raise ValueError(
+                "search manifest is incomplete: summary.num_candidates does not match config.budget"
+            )
+        return {
+            "status": "complete_search_run",
+            "complete": True,
+            "represented_candidate_count": candidate_count,
+            "declared_search_budget": budget,
+            "producer_candidate_count": reported_count,
+        }
+
+    compatibility = payload.get("historical_compatibility_smoke")
+    claim_boundary = (
+        compatibility.get("claim_boundary") if isinstance(compatibility, dict) else None
+    )
+    if (
+        isinstance(claim_boundary, str)
+        and "not a persisted search manifest" in claim_boundary.casefold()
+    ):
+        if candidate_count > budget:
+            raise ValueError("historical candidate subset exceeds its declared search budget")
+        return {
+            "status": "historical_candidate_subset",
+            "complete": False,
+            "represented_candidate_count": candidate_count,
+            "declared_search_budget": budget,
+            "producer_candidate_count": None,
+            "claim_boundary": claim_boundary,
+        }
+    raise ValueError(
+        "search manifest requires summary.num_candidates; incomplete historical inputs must be "
+        "explicitly labeled as compatibility subsets"
+    )
 
 
 def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validation gates together
@@ -3128,21 +3198,46 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _write_gallery_readme(
-    output_dir: Path, cases: list[dict[str, Any]], summary: dict[str, Any]
+    output_dir: Path,
+    cases: list[dict[str, Any]],
+    summary: dict[str, Any],
+    *,
+    candidate_inventory: dict[str, Any],
 ) -> None:
     """Write a compact human-readable index over replay outputs."""
     lines = [
         "# Adversarial replay gallery",
         "",
-        "Generated from a persisted search manifest. Each case records source and replay identity,",
-        "objective comparison, feasibility classification, and available diagnostic artifacts.",
-        "",
-        f"Cases selected: {summary['selected_case_count']}",
-        f"Replay outcome matches: {summary['replay_match_count']}",
-        f"Replay mismatches: {summary['replay_mismatch_count']}",
-        f"Replay unavailable: {summary['replay_unavailable_count']}",
+        "Each case records source and replay identity, objective comparison, feasibility",
+        "classification, and available diagnostic artifacts.",
         "",
     ]
+    if candidate_inventory["complete"]:
+        lines.extend(
+            [
+                "The source inventory accounts for every candidate in the declared search budget.",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "The source is an explicitly labeled historical candidate subset, not a complete",
+                "persisted search run. Top-K selection applies only to the supplied candidate rows.",
+                f"Represented candidates: {candidate_inventory['represented_candidate_count']} of "
+                f"{candidate_inventory['declared_search_budget']} declared slots.",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            f"Cases selected: {summary['selected_case_count']}",
+            f"Replay outcome matches: {summary['replay_match_count']}",
+            f"Replay mismatches: {summary['replay_mismatch_count']}",
+            f"Replay unavailable: {summary['replay_unavailable_count']}",
+            "",
+        ]
+    )
     if not cases:
         lines.append(
             "No candidates met the required provenance, certificate, and replay-input checks."

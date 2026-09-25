@@ -141,6 +141,7 @@ def _source_manifest(
                 "bundle_path": str(bundle),
             }
         ],
+        "summary": {"num_candidates": 1},
     }
     if manifest_revision is not None:
         payload["source_revision"] = manifest_revision
@@ -267,6 +268,13 @@ def test_gallery_materializes_replays_compares_and_renders(
     assert result["summary"]["selected_case_count"] == 1
     assert result["summary"]["replay_match_count"] == 1
     assert result["source"]["search_method"] == "random"
+    assert result["source"]["candidate_inventory"] == {
+        "status": "complete_search_run",
+        "complete": True,
+        "represented_candidate_count": 1,
+        "declared_search_budget": 1,
+        "producer_candidate_count": 1,
+    }
     assert result["selection"]["mechanism_cluster_deduplication"]["status"] == "available"
     case = result["cases"][0]
     assert case["replay_match"] == "match"
@@ -287,7 +295,83 @@ def test_gallery_materializes_replays_compares_and_renders(
     assert calls[0]["scenario_path"].is_file()
     assert (output_dir / case["case_manifest_path"]).is_file()
     assert (output_dir / "README.md").is_file()
+    assert "accounts for every candidate" in (output_dir / "README.md").read_text(encoding="utf-8")
     assert (output_dir / "gallery_manifest.json").is_file()
+
+
+def test_gallery_rejects_a_truncated_direct_search_manifest(tmp_path: Path) -> None:
+    """A partial candidate list cannot be presented as a completed search run."""
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["config"]["budget"] = 2
+    manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="incomplete.*config.budget"):
+        replay_gallery.build_replay_gallery(
+            manifest, tmp_path / "output" / "gallery", render=False, video=False
+        )
+
+
+def test_gallery_rejects_candidate_list_disagreeing_with_producer_summary(
+    tmp_path: Path,
+) -> None:
+    """The embedded producer count must match the rows read from its manifest."""
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["summary"]["num_candidates"] = 2
+    manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="list length does not match summary.num_candidates"):
+        replay_gallery.build_replay_gallery(
+            manifest, tmp_path / "output" / "gallery", render=False, video=False
+        )
+
+
+def test_gallery_rejects_unlabeled_manifest_without_candidate_summary(tmp_path: Path) -> None:
+    """Missing completion accounting is allowed only for an explicit historical subset."""
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.pop("summary")
+    manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="requires summary.num_candidates"):
+        replay_gallery.build_replay_gallery(
+            manifest, tmp_path / "output" / "gallery", render=False, video=False
+        )
+
+
+def test_historical_compatibility_subset_is_explicitly_partial_in_gallery_readme(
+    tmp_path: Path,
+) -> None:
+    """The #1501 compatibility fixture cannot imply top-K over its original run."""
+    repo_root = Path(__file__).resolve().parents[2]
+    manifest_path = (
+        repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json"
+    )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    inventory = replay_gallery._candidate_inventory_status(
+        payload=payload,
+        config=payload["config"],
+        candidate_count=len(payload["candidates"]),
+    )
+    output = tmp_path / "README.md"
+    replay_gallery._write_gallery_readme(
+        tmp_path,
+        [],
+        {
+            "selected_case_count": 0,
+            "replay_match_count": 0,
+            "replay_mismatch_count": 0,
+            "replay_unavailable_count": 0,
+        },
+        candidate_inventory=inventory,
+    )
+
+    readme = output.read_text(encoding="utf-8")
+    assert inventory["status"] == "historical_candidate_subset"
+    assert inventory["complete"] is False
+    assert "not a complete" in readme
+    assert "1 of 32 declared slots" in readme
 
 
 @pytest.mark.parametrize(
@@ -1533,6 +1617,8 @@ def test_gallery_deduplicates_identical_effective_scenarios(tmp_path: Path) -> N
     manifest = _source_manifest(tmp_path)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["candidates"].append(dict(payload["candidates"][0]))
+    payload["config"]["budget"] = 2
+    payload["summary"]["num_candidates"] = 2
     manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
     result = replay_gallery.build_replay_gallery(
@@ -1710,6 +1796,8 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
     failed = dict(payload["candidates"][0])
     failed["error"] = "simulator initialization failed"
     payload["candidates"] = [invalid, failed]
+    payload["config"]["budget"] = 2
+    payload["summary"]["num_candidates"] = 2
     manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
     result = replay_gallery.build_replay_gallery(

@@ -185,11 +185,15 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py promote-
 For a case that did not originate from a #9656 row, use `admit-case` with a complete case record
 and an `--artifact-root` directory below the corpus root that contains every referenced scenario,
 route, map, and replay artifact. Both paths apply the same fail-closed case validator and duplicate
-policy. The supported v1 admission criticality predicate requires the exact target-planner replay
-to show noncompletion with a canonical collision or timeout outcome, consistent termination reason,
-and non-contradictory selected metrics. Discovery criticality metadata alone and successful replay
-rows do not qualify. Other metric extremes require a separately versioned objective and
-replay-bound threshold contract before they can be admitted.
+policy. Admission rereads the digest-pinned scenario bytes and reruns the canonical row/schema,
+manifest-metadata, and strict unknown-field checks; a caller-supplied `structural_validation`
+receipt is not sufficient by itself. Case manifests must be self-contained: includes, selection,
+overrides, and map search paths are rejected so the runtime row stays within the pinned inputs.
+The supported v1 admission criticality predicate requires the exact target-planner replay to show
+noncompletion with a canonical collision or timeout outcome, consistent termination reason, and
+non-contradictory selected metrics. Discovery criticality metadata alone and successful replay rows
+do not qualify. Other metric extremes require a separately versioned objective and replay-bound
+threshold contract before they can be admitted.
 
 ## Record an evaluation and recompute status
 

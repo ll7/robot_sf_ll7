@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 import yaml
 
+import scripts.tools.materialize_benchmark_hard_cases as materializer
 from scripts.tools.materialize_benchmark_hard_cases import (
     REPLAY_CHECKOUT_SNAPSHOT_SCHEMA,
     MaterializationError,
@@ -39,6 +40,74 @@ MATRIX_RELATIVE = "configs/scenarios/classic_interactions_francis2023.yaml"
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _record_fixture_runtime_inputs(row: dict[str, Any]) -> None:
+    """Attach synthetic historical hashes to classifier fixtures only."""
+    params = row.get("scenario_params")
+    metadata = row.get("algorithm_metadata")
+    config = metadata.get("config") if isinstance(metadata, dict) else None
+    if not isinstance(params, dict) or not isinstance(config, dict):
+        return
+    assets: list[dict[str, str]] = []
+    refs: list[tuple[str, str, Path]] = []
+    map_value = params.get("map_file")
+    if isinstance(map_value, str) and map_value:
+        map_path = Path(map_value)
+        if not map_path.is_absolute():
+            map_path = REPO_ROOT / map_path
+        refs.append(("scenario_map", map_value, map_path))
+    for key, value in materializer._runtime_model_paths(config):
+        paths = materializer._runtime_model_path_components(key, value)
+        if paths is not None:
+            refs.extend((key, value, path) for path in paths)
+    for kind, reference, path in refs:
+        try:
+            name = path.name
+            repository_path = path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+        except (OSError, ValueError):
+            repository_path = ""
+            name = path.name
+        if repository_path:
+            source_bytes = subprocess.run(
+                ["git", "show", f"{SOURCE_REVISION}:{repository_path}"],
+                cwd=REPO_ROOT,
+                check=True,
+                capture_output=True,
+            ).stdout
+        else:
+            source_bytes = path.read_bytes()
+        assets.append(
+            {
+                "kind": kind,
+                "name": name,
+                "reference": reference,
+                "sha256": hashlib.sha256(source_bytes).hexdigest(),
+            }
+        )
+    environment = {
+        "python_version": "3.12.0-fixture",
+        "python_implementation": "CPython-fixture",
+        "platform_system": "Linux-fixture",
+        "platform_release": "fixture",
+        "machine": "x86_64-fixture",
+        "uv_lock_sha256": "0" * 64,
+    }
+    row["runtime_input_provenance"] = {
+        "schema_version": materializer.SOURCE_RUNTIME_INPUT_PROVENANCE_SCHEMA,
+        "source_revision": row.get("git_hash"),
+        "source_checkout_clean": True,
+        "complete": True,
+        "source_environment": {
+            "schema_version": materializer.SOURCE_ENVIRONMENT_PROVENANCE_SCHEMA,
+            "complete": True,
+            **environment,
+            "identity_sha256": hashlib.sha256(
+                json.dumps(environment, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+        },
+        "assets": assets,
+    }
 
 
 def _clean_checkout_snapshot(revision: str) -> dict[str, Any]:
@@ -94,6 +163,7 @@ def _source_row(
             "run_dt": 0.1,
             "run_horizon": 10,
         }
+        _record_fixture_runtime_inputs(row)
     return row
 
 
@@ -648,6 +718,7 @@ def test_exact_replay_requires_runtime_inputs_bound_to_source_git_tree(
         source["scenario_params"]["map_file"] = str(runtime_asset)
     else:
         source["algorithm_metadata"]["config"]["checkpoint_path"] = str(runtime_asset)
+    _record_fixture_runtime_inputs(source)
     observed = json.loads(json.dumps(source))
     runtime_asset.write_bytes(b"changed replay bytes")
     replay_asset_sha256 = _sha256(runtime_asset)
@@ -673,13 +744,14 @@ def test_exact_replay_requires_runtime_inputs_bound_to_source_git_tree(
     assert classification["status"] == "unavailable_runtime_input_identity"
     identity = classification["runtime_input_identity"]
     assert identity["status"] == "unavailable"
-    assert identity["source"]["status"] == "unavailable"
-    assert identity["source"]["reason"] == "runtime_asset_not_source_bound"
+    assert identity["replay"]["status"] == "unavailable"
+    assert identity["replay"]["reason"] == "runtime_asset_not_source_bound"
 
 
 def test_exact_replay_records_git_tree_identity_for_tracked_runtime_inputs() -> None:
     row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
     row["algorithm_metadata"]["config"]["checkpoint_path"] = "pyproject.toml"
+    _record_fixture_runtime_inputs(row)
     case = {
         "planner_key": "goal",
         "scenario_id": "scenario_a",
@@ -703,7 +775,237 @@ def test_exact_replay_records_git_tree_identity_for_tracked_runtime_inputs() -> 
         "checkpoint_path",
         "scenario_map",
     ]
-    assert all(asset["status"] == "verified" for asset in identity["source"]["assets"])
+    assert all(len(asset["sha256"]) == 64 for asset in identity["source"]["assets"])
+
+
+def test_missing_historical_runtime_input_provenance_is_not_reconstructed() -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    source.pop("runtime_input_provenance")
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        json.loads(json.dumps(source)),
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["comparison"]["overall"] == "match"
+    assert classification["status"] == "unavailable_runtime_input_identity"
+    identity = classification["runtime_input_identity"]
+    assert identity["source"]["status"] == "unavailable"
+    assert (
+        identity["source"]["reason"]
+        == "historical_source_environment_or_runtime_inputs_not_recorded"
+    )
+
+
+def test_missing_historical_source_environment_remains_unavailable() -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    source["runtime_input_provenance"].pop("source_environment")
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        json.loads(json.dumps(source)),
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "unavailable_runtime_input_identity"
+    identity = classification["runtime_input_identity"]
+    assert identity["source"]["status"] == "unavailable"
+    assert identity["source"]["reason"] == "historical_source_environment_not_recorded"
+
+
+def test_malformed_source_checkpoint_asset_list_fails_closed(tmp_path: Path) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    prefix = tmp_path / "sacadrl"
+    for component in (
+        prefix.with_name("sacadrl.meta"),
+        prefix.with_name("sacadrl.index"),
+        prefix.with_name("sacadrl.data-00000-of-00001"),
+    ):
+        component.write_bytes(b"fixture checkpoint")
+    source["algo"] = "sacadrl"
+    source["algorithm_metadata"]["config"] = {
+        "sacadrl_model_id": "registered-sacadrl",
+        "sacadrl_checkpoint_path": str(prefix),
+    }
+    _record_fixture_runtime_inputs(source)
+    source["runtime_input_provenance"]["assets"] = None
+    case = {
+        "planner_key": "sacadrl",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        json.loads(json.dumps(source)),
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "unavailable_runtime_input_identity"
+    assert classification["runtime_input_identity"]["source"]["reason"] == (
+        "source_runtime_input_reference_unresolved"
+    )
+
+
+def test_malformed_native_model_path_fails_closed() -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    source["algorithm_metadata"]["config"]["checkpoint_path"] = 123
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        json.loads(json.dumps(source)),
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "unavailable_runtime_input_identity"
+    assert classification["runtime_input_identity"]["source"]["reason"] == (
+        "source_runtime_input_reference_unresolved"
+    )
+
+
+def test_predictive_checkpoint_bytes_are_part_of_runtime_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    checkpoint = tmp_path / "predictive.pt"
+    checkpoint.write_bytes(b"source predictive checkpoint")
+    config = {
+        "predictive_model_id": "registered-predictor",
+        "predictive_checkpoint_path": str(checkpoint),
+    }
+    source["algo"] = "prediction_planner"
+    source["algorithm_metadata"]["algorithm"] = "prediction_planner"
+    source["algorithm_metadata"]["config"] = config
+    _record_fixture_runtime_inputs(source)
+    replay = json.loads(json.dumps(source))
+    checkpoint.write_bytes(b"changed predictive checkpoint")
+    real_identity = materializer._git_tree_file_identity
+
+    def identity_with_runtime_bytes(revision: str, path: Path, *, kind: str) -> dict[str, Any]:
+        if path.resolve() == checkpoint.resolve():
+            return {"kind": kind, "status": "verified", "sha256": _sha256(path)}
+        return real_identity(revision, path, kind=kind)
+
+    monkeypatch.setattr(materializer, "_git_tree_file_identity", identity_with_runtime_bytes)
+    case = {
+        "planner_key": "prediction_planner",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        replay,
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "runtime_input_identity_mismatch"
+    source_assets = classification["runtime_input_identity"]["source"]["assets"]
+    replay_assets = classification["runtime_input_identity"]["replay"]["assets"]
+    assert any(asset["kind"] == "predictive_checkpoint_path" for asset in source_assets)
+    assert next(
+        asset["sha256"] for asset in source_assets if asset["kind"] == "predictive_checkpoint_path"
+    ) != next(
+        asset["sha256"] for asset in replay_assets if asset["kind"] == "predictive_checkpoint_path"
+    )
+
+
+def test_sacadrl_checkpoint_bundle_bytes_are_part_of_runtime_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    prefix = tmp_path / "sacadrl"
+    components = [
+        prefix.with_name("sacadrl.meta"),
+        prefix.with_name("sacadrl.index"),
+        prefix.with_name("sacadrl.data-00000-of-00001"),
+    ]
+    for component in components:
+        component.write_bytes(f"source {component.suffix}".encode())
+    config = {
+        "sacadrl_model_id": "registered-sacadrl",
+        "sacadrl_checkpoint_path": str(prefix),
+    }
+    source["algo"] = "sacadrl"
+    source["algorithm_metadata"]["algorithm"] = "sacadrl"
+    source["algorithm_metadata"]["config"] = config
+    _record_fixture_runtime_inputs(source)
+    replay = json.loads(json.dumps(source))
+    components[2].write_bytes(b"changed TensorFlow data shard")
+    real_identity = materializer._git_tree_file_identity
+
+    def identity_with_runtime_bytes(revision: str, path: Path, *, kind: str) -> dict[str, Any]:
+        if path.resolve() in {component.resolve() for component in components}:
+            return {"kind": kind, "status": "verified", "sha256": _sha256(path)}
+        return real_identity(revision, path, kind=kind)
+
+    monkeypatch.setattr(materializer, "_git_tree_file_identity", identity_with_runtime_bytes)
+    case = {
+        "planner_key": "sacadrl",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        replay,
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+    )
+
+    assert classification["status"] == "runtime_input_identity_mismatch"
+    source_assets = classification["runtime_input_identity"]["source"]["assets"]
+    replay_assets = classification["runtime_input_identity"]["replay"]["assets"]
+    source_data_hash = next(
+        asset["sha256"]
+        for asset in source_assets
+        if asset["kind"] == "sacadrl_checkpoint_path" and ".data-" in asset["name"]
+    )
+    replay_data_hash = next(
+        asset["sha256"]
+        for asset in replay_assets
+        if asset["kind"] == "sacadrl_checkpoint_path" and ".data-" in asset["name"]
+    )
+    assert source_data_hash != replay_data_hash
 
 
 def test_exact_replay_rejects_different_tracked_scenario_map() -> None:

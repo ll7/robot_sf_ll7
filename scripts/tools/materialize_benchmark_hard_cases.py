@@ -76,9 +76,46 @@ SHOWCASE_METRIC_GROUPS = {
 SUPPORTED_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 SUCCESSFUL_EXECUTION_STATUSES = frozenset({"ok", "success", "passed", "complete", "completed"})
 AVAILABLE_EXECUTION_STATUSES = SUCCESSFUL_EXECUTION_STATUSES | {"available"}
+SOURCE_RUNTIME_INPUT_PROVENANCE_SCHEMA = "benchmark-runtime-input-provenance.v1"
+SOURCE_ENVIRONMENT_PROVENANCE_SCHEMA = "benchmark-execution-environment.v1"
 RUNTIME_MODEL_PATH_KEYS = frozenset(
-    {"model_path", "checkpoint_path", "predictive_foresight_checkpoint_path"}
+    {
+        "model_path",
+        "checkpoint_path",
+        "predictive_foresight_checkpoint_path",
+        "predictive_checkpoint_path",
+        "sacadrl_checkpoint_path",
+        "learned_gmm_checkpoint_path",
+        "learned_policy_checkpoint",
+    }
 )
+RUNTIME_MODEL_ID_KEYS = frozenset(
+    {
+        "model_id",
+        "checkpoint_id",
+        "sacadrl_model_id",
+        "predictive_model_id",
+        "predictive_foresight_model_id",
+        "learned_gmm_model_id",
+        "learned_policy_model_id",
+    }
+)
+RUNTIME_MODEL_ID_PATH_KEYS = {
+    "model_id": "model_path",
+    "checkpoint_id": "checkpoint_path",
+    "sacadrl_model_id": "sacadrl_checkpoint_path",
+    "predictive_model_id": "predictive_checkpoint_path",
+    "predictive_foresight_model_id": "predictive_foresight_checkpoint_path",
+    "learned_gmm_model_id": "learned_gmm_checkpoint_path",
+    "learned_policy_model_id": "learned_policy_checkpoint",
+}
+RUNTIME_MODEL_ID_ACTIVE_FLAGS = {"predictive_foresight_model_id": "predictive_foresight_enabled"}
+RUNTIME_DEFAULT_MODEL_REFERENCES = {
+    "ppo": frozenset({"model_id", "model_path"}),
+    "prediction_planner": frozenset({"predictive_model_id", "predictive_checkpoint_path"}),
+    "prediction": frozenset({"predictive_model_id", "predictive_checkpoint_path"}),
+    "sacadrl": frozenset({"sacadrl_model_id", "sacadrl_checkpoint_path"}),
+}
 FAILED_EXECUTION_STATUSES = frozenset(
     {
         "blocked",
@@ -689,6 +726,316 @@ def _runtime_model_paths(config: dict[str, Any]) -> list[tuple[str, str]]:
     return sorted(set(found))
 
 
+def _invalid_runtime_model_path_values(config: dict[str, Any]) -> list[dict[str, Any]]:
+    invalid = []
+    stack: list[Any] = [config]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            for key, value in current.items():
+                if (
+                    key in RUNTIME_MODEL_PATH_KEYS
+                    and value is not None
+                    and not isinstance(value, str)
+                ):
+                    invalid.append(
+                        {
+                            "kind": key,
+                            "reason": "runtime_model_path_malformed",
+                            "value_type": type(value).__name__,
+                        }
+                    )
+                if isinstance(value, dict | list):
+                    stack.append(value)
+        elif isinstance(current, list):
+            stack.extend(current)
+    return invalid
+
+
+def _runtime_model_path_components(key: str, value: str) -> list[Path] | None:
+    """Resolve files consumed by a configured model path without guessing defaults."""
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    try:
+        path = path.resolve()
+        if key != "sacadrl_checkpoint_path":
+            return [path] if path.is_file() else None
+        prefix = path.with_suffix("") if path.suffix == ".meta" else path
+        meta_path = prefix.with_name(f"{prefix.name}.meta")
+        index_path = prefix.with_name(f"{prefix.name}.index")
+        data_paths = sorted(prefix.parent.glob(f"{prefix.name}.data*"))
+        components = [meta_path, index_path, *data_paths]
+        if not meta_path.is_file() or not index_path.is_file() or not data_paths:
+            return None
+        return components
+    except (OSError, RuntimeError):
+        return None
+
+
+def _runtime_input_descriptors(
+    row: dict[str, Any], *, matrix: Path | None
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    """Describe effective map/model inputs, preserving unresolved model references."""
+    params = row.get("scenario_params")
+    config = _config_snapshot(row)
+    if not isinstance(params, dict) or config is None:
+        return [], [
+            {"kind": "runtime_inputs", "reason": "scenario_or_planner_configuration_unavailable"}
+        ]
+
+    descriptors: list[dict[str, str]] = []
+    unresolved: list[dict[str, Any]] = _invalid_runtime_model_path_values(config)
+    map_value = params.get("map_file")
+    map_path = _scenario_map_runtime_path(params, matrix)
+    if not isinstance(map_value, str) or not map_value or map_path is None:
+        unresolved.append({"kind": "scenario_map", "reason": "scenario_map_file_unavailable"})
+    else:
+        descriptors.append(
+            {
+                "kind": "scenario_map",
+                "name": map_path.name,
+                "reference": map_value,
+            }
+        )
+
+    model_descriptors, model_unresolved = _runtime_model_input_descriptors(config, row)
+    descriptors.extend(model_descriptors)
+    unresolved.extend(model_unresolved)
+    return sorted(
+        descriptors, key=lambda item: (item["kind"], item["name"], item["reference"])
+    ), unresolved
+
+
+def _runtime_model_input_descriptors(
+    config: dict[str, Any], row: dict[str, Any]
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    descriptors: list[dict[str, str]] = []
+    unresolved: list[dict[str, Any]] = []
+    paths = _runtime_model_paths(config)
+    path_keys = {key for key, _value in paths}
+    for key, value in paths:
+        components = _runtime_model_path_components(key, value)
+        if components is None:
+            unresolved.append(
+                {"kind": key, "reason": "runtime_model_files_unavailable", "reference": value}
+            )
+            continue
+        descriptors.extend(
+            {"kind": key, "name": component.name, "reference": value} for component in components
+        )
+
+    unresolved.extend(_unresolved_runtime_model_references(config, row, path_keys))
+    return descriptors, unresolved
+
+
+def _unresolved_runtime_model_references(
+    config: dict[str, Any], row: dict[str, Any], path_keys: set[str]
+) -> list[dict[str, Any]]:
+    unresolved = []
+    for id_key in sorted(RUNTIME_MODEL_ID_KEYS):
+        active_flag = RUNTIME_MODEL_ID_ACTIVE_FLAGS.get(id_key)
+        if id_key not in config or (active_flag is not None and config.get(active_flag) is False):
+            continue
+        if RUNTIME_MODEL_ID_PATH_KEYS[id_key] not in path_keys:
+            unresolved.append(
+                {
+                    "kind": id_key,
+                    "reason": "registry_model_bytes_not_recorded",
+                    "model_id": config.get(id_key),
+                }
+            )
+    algorithm = row.get("algo")
+    if isinstance(algorithm, str):
+        expected = RUNTIME_DEFAULT_MODEL_REFERENCES.get(algorithm.strip().lower(), frozenset())
+        if expected and not (path_keys & expected):
+            unresolved.append(
+                {
+                    "kind": "default_model_reference",
+                    "reason": "implicit_default_model_bytes_not_recorded",
+                    "algorithm": algorithm,
+                }
+            )
+    return unresolved
+
+
+def _source_runtime_input_references(
+    row: dict[str, Any], raw_assets: Any
+) -> tuple[list[tuple[str, str, str]], list[dict[str, Any]]]:
+    """Validate source asset references from the row and recorded names only."""
+    params = row.get("scenario_params")
+    config = _config_snapshot(row)
+    if not isinstance(params, dict) or config is None:
+        return [], [
+            {"kind": "runtime_inputs", "reason": "scenario_or_planner_configuration_unavailable"}
+        ]
+    map_value = params.get("map_file")
+    if not isinstance(map_value, str) or not map_value:
+        return [], [{"kind": "scenario_map", "reason": "scenario_map_reference_unavailable"}]
+
+    expected = [("scenario_map", Path(map_value).name, map_value)]
+    model_expected, unresolved = _source_model_input_references(config, row, raw_assets)
+    return sorted(expected + model_expected), unresolved
+
+
+def _source_model_input_references(
+    config: dict[str, Any], row: dict[str, Any], raw_assets: Any
+) -> tuple[list[tuple[str, str, str]], list[dict[str, Any]]]:
+    expected: list[tuple[str, str, str]] = []
+    unresolved: list[dict[str, Any]] = _invalid_runtime_model_path_values(config)
+    paths = _runtime_model_paths(config)
+    path_keys = {key for key, _value in paths}
+    for key, value in paths:
+        if key == "sacadrl_checkpoint_path":
+            names, complete = _source_sacadrl_component_names(raw_assets, key, value)
+            if not complete:
+                unresolved.append(
+                    {
+                        "kind": key,
+                        "reason": "source_checkpoint_bundle_incomplete",
+                        "reference": value,
+                    }
+                )
+            expected.extend((key, name, value) for name in names)
+        else:
+            expected.append((key, Path(value).expanduser().name, value))
+    unresolved.extend(_unresolved_runtime_model_references(config, row, path_keys))
+    return expected, unresolved
+
+
+def _source_sacadrl_component_names(
+    raw_assets: Any, key: str, value: str
+) -> tuple[list[str], bool]:
+    checkpoint = Path(value).expanduser()
+    prefix = checkpoint.with_suffix("") if checkpoint.suffix == ".meta" else checkpoint
+    matching = []
+    if isinstance(raw_assets, list):
+        matching = [
+            asset
+            for asset in raw_assets
+            if isinstance(asset, dict)
+            and asset.get("kind") == key
+            and asset.get("reference") == value
+        ]
+    names = [asset.get("name") for asset in matching]
+    complete = (
+        f"{prefix.name}.meta" in names
+        and f"{prefix.name}.index" in names
+        and any(isinstance(name, str) and name.startswith(f"{prefix.name}.data") for name in names)
+    )
+    return [name for name in names if isinstance(name, str)], complete
+
+
+def _valid_source_environment_identity(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    environment_fields = (
+        "python_version",
+        "python_implementation",
+        "platform_system",
+        "platform_release",
+        "machine",
+        "uv_lock_sha256",
+    )
+    if (
+        value.get("schema_version") != SOURCE_ENVIRONMENT_PROVENANCE_SCHEMA
+        or value.get("complete") is not True
+        or not all(isinstance(value.get(key), str) and value[key] for key in environment_fields)
+        or re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]) is None
+    ):
+        return False
+    identity = {key: value[key] for key in environment_fields}
+    expected = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return value.get("identity_sha256") == expected
+
+
+def _source_runtime_input_identity(row: dict[str, Any]) -> dict[str, Any]:
+    """Read source-side runtime hashes only when the source row recorded them."""
+    provenance = row.get("runtime_input_provenance")
+    revision = row.get("git_hash")
+    if not isinstance(provenance, dict):
+        return {
+            "status": "unavailable",
+            "reason": "historical_source_environment_or_runtime_inputs_not_recorded",
+            "assets": [],
+        }
+    environment = provenance.get("source_environment")
+    if (
+        provenance.get("schema_version") != SOURCE_RUNTIME_INPUT_PROVENANCE_SCHEMA
+        or provenance.get("source_revision") != revision
+        or provenance.get("source_checkout_clean") is not True
+        or provenance.get("complete") is not True
+    ):
+        return {
+            "status": "unavailable",
+            "reason": "source_runtime_input_provenance_invalid",
+            "assets": [],
+        }
+    if not _valid_source_environment_identity(environment):
+        return {
+            "status": "unavailable",
+            "reason": "historical_source_environment_not_recorded",
+            "assets": [],
+        }
+    raw_assets = provenance.get("assets")
+    expected_refs, unresolved = _source_runtime_input_references(row, raw_assets)
+    if unresolved:
+        return {
+            "status": "unavailable",
+            "reason": "source_runtime_input_reference_unresolved",
+            "assets": [],
+            "unresolved": unresolved,
+        }
+    if not isinstance(raw_assets, list) or not raw_assets:
+        return {
+            "status": "unavailable",
+            "reason": "source_runtime_input_assets_missing",
+            "assets": [],
+        }
+    actual_refs: list[tuple[str, str, str]] = []
+    assets: list[dict[str, str]] = []
+    for asset in raw_assets:
+        if not isinstance(asset, dict) or set(asset) != {"kind", "name", "reference", "sha256"}:
+            return {
+                "status": "unavailable",
+                "reason": "source_runtime_input_asset_malformed",
+                "assets": [],
+            }
+        kind, name, reference, digest = (
+            asset.get("kind"),
+            asset.get("name"),
+            asset.get("reference"),
+            asset.get("sha256"),
+        )
+        if (
+            not all(isinstance(value, str) and value for value in (kind, name, reference))
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            return {
+                "status": "unavailable",
+                "reason": "source_runtime_input_asset_malformed",
+                "assets": [],
+            }
+        actual_refs.append((kind, name, reference))
+        assets.append({"kind": kind, "name": name, "reference": reference, "sha256": digest})
+    if sorted(actual_refs) != expected_refs:
+        return {
+            "status": "unavailable",
+            "reason": "source_runtime_input_asset_set_incomplete",
+            "assets": [],
+        }
+    assets.sort(key=lambda item: (item["kind"], item["name"], item["reference"]))
+    return {
+        "status": "verified",
+        "revision": revision,
+        "source_environment_identity_sha256": environment["identity_sha256"],
+        "assets": assets,
+    }
+
+
 def _scenario_map_runtime_path(params: dict[str, Any], matrix: Path | None) -> Path | None:
     map_value = params.get("map_file")
     if not isinstance(map_value, str) or not map_value:
@@ -706,48 +1053,51 @@ def _scenario_map_runtime_path(params: dict[str, Any], matrix: Path | None) -> P
         return None
 
 
-def _model_runtime_asset_identities(config: dict[str, Any], revision: str) -> list[dict[str, Any]]:
-    assets = []
-    for key, value in _runtime_model_paths(config):
-        try:
-            model_path = Path(value)
-            if not model_path.is_absolute():
-                model_path = REPO_ROOT / model_path
-            if not model_path.is_file():
-                raise FileNotFoundError(value)
-            model_identity = _git_tree_file_identity(revision, model_path.resolve(), kind=key)
-        except (OSError, RuntimeError):
-            assets.append(
-                {"kind": key, "status": "unavailable", "reason": "runtime_file_unavailable"}
-            )
-            continue
-        assets.append(model_identity)
-    return assets
-
-
 def _runtime_input_identity(
     row: dict[str, Any], revision: Any, *, matrix: Path | None
 ) -> dict[str, Any]:
-    """Verify scenario-map and configured model inputs against one Git tree."""
+    """Verify replay runtime input bytes against the recorded replay Git tree."""
     if not isinstance(revision, str) or not revision:
         return {"status": "unavailable", "reason": "revision_unavailable", "assets": []}
-    params = row.get("scenario_params")
-    if not isinstance(params, dict):
-        return {"status": "unavailable", "reason": "scenario_parameters_unavailable", "assets": []}
-    map_path = _scenario_map_runtime_path(params, matrix)
-    if map_path is None:
-        return {"status": "unavailable", "reason": "scenario_map_file_unavailable", "assets": []}
-
-    assets = [_git_tree_file_identity(revision, map_path, kind="scenario_map")]
-    config = _config_snapshot(row)
-    if config is None:
+    descriptors, unresolved = _runtime_input_descriptors(row, matrix=matrix)
+    if unresolved:
         return {
             "status": "unavailable",
-            "reason": "planner_configuration_unavailable",
-            "assets": assets,
+            "reason": "runtime_input_reference_unresolved",
+            "assets": [],
+            "unresolved": unresolved,
         }
-    assets.extend(_model_runtime_asset_identities(config, revision))
-    assets.sort(key=lambda item: (str(item.get("kind")), str(item.get("path", ""))))
+    assets = []
+    for descriptor in descriptors:
+        path_value = descriptor["reference"]
+        if descriptor["kind"] == "scenario_map":
+            params = row.get("scenario_params")
+            path = _scenario_map_runtime_path(params, matrix) if isinstance(params, dict) else None
+        else:
+            path = _runtime_model_path_components(descriptor["kind"], path_value)
+            # Component descriptors name individual TensorFlow files. The path
+            # reference is the configured prefix; resolve the matching component.
+            if isinstance(path, list):
+                path = next((item for item in path if item.name == descriptor["name"]), None)
+        if not isinstance(path, Path) or not path.is_file():
+            assets.append(
+                {**descriptor, "status": "unavailable", "reason": "runtime_file_unavailable"}
+            )
+            continue
+        identity = _git_tree_file_identity(revision, path, kind=descriptor["kind"])
+        assets.append(
+            {
+                "kind": descriptor["kind"],
+                "name": descriptor["name"],
+                "reference": descriptor["reference"],
+                "status": identity.get("status"),
+                "sha256": identity.get("sha256"),
+                **({"reason": identity["reason"]} if identity.get("reason") else {}),
+            }
+        )
+    assets.sort(
+        key=lambda item: (str(item.get("kind")), str(item.get("name")), str(item.get("reference")))
+    )
     if any(asset.get("status") != "verified" for asset in assets):
         return {
             "status": "unavailable",
@@ -766,7 +1116,7 @@ def _matching_runtime_input_identity(
     source_matrix: Path | None,
     replay_matrix: Path | None,
 ) -> dict[str, Any]:
-    source_identity = _runtime_input_identity(source_row, source_revision, matrix=source_matrix)
+    source_identity = _source_runtime_input_identity(source_row)
     replay_identity = _runtime_input_identity(replay_row, replay_revision, matrix=replay_matrix)
     result: dict[str, Any] = {
         "status": "unavailable",
@@ -775,7 +1125,13 @@ def _matching_runtime_input_identity(
     }
     if source_identity.get("status") != "verified" or replay_identity.get("status") != "verified":
         return result
-    if source_identity["assets"] != replay_identity["assets"]:
+    source_assets = [
+        (asset["kind"], asset["name"], asset["sha256"]) for asset in source_identity["assets"]
+    ]
+    replay_assets = [
+        (asset["kind"], asset["name"], asset["sha256"]) for asset in replay_identity["assets"]
+    ]
+    if sorted(source_assets) != sorted(replay_assets):
         result["status"] = "mismatch"
         return result
     result["status"] = "verified_git_tree_match"

@@ -413,6 +413,11 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # VV-2 reference-oracle tests are deterministic policy, overlay, and report
+    # contracts; include them in PR changed-line coverage shards.
+    "test_reference_oracle_report.py",
+    "test_stand_still_reference_planner.py",
+    "test_run_reference_planner_oracles.py",
     # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
     # legacy compatibility; include them in PR changed-line coverage shards.
     "test_robot_attributable_force.py",

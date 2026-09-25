@@ -140,16 +140,20 @@ def test_rejects_changed_component_roster_on_second_step() -> None:
 
 
 def test_live_dispatch_rejects_episode_on_second_thread(tmp_path: Path) -> None:
-    namespace: dict = {}
+    source_root = tmp_path / "frozen"
+    runner = source_root / observer.RUNNER_FILE
+    runner.parent.mkdir(parents=True)
+    code = "def run_map_episode(scenario, seed, algo):\n    return None\n"
+    runner.write_text(code)
+    namespace: dict = {
+        "__name__": observer.SOURCE_MODULES[observer.RUNNER_FILE],
+        "__file__": str(runner),
+    }
     exec(  # noqa: S102 - compile a synthetic frozen filename to exercise live trace dispatch
-        compile(
-            "def run_map_episode(scenario, seed, algo):\n    return None\n",
-            observer.RUNNER_FILE,
-            "exec",
-        ),
+        compile(code, str(runner), "exec"),
         namespace,
     )
-    watched = observer.ForceObserver(tmp_path, {})
+    watched = observer.ForceObserver(tmp_path, {}, source_root)
     failures: list[Exception] = []
 
     def invoke() -> None:
@@ -175,13 +179,38 @@ def test_live_dispatch_rejects_episode_on_second_thread(tmp_path: Path) -> None:
     assert "process or thread" in str(failures[0])
 
 
+def test_live_dispatch_rejects_shadowed_import_root(tmp_path: Path) -> None:
+    verified_root = tmp_path / "frozen"
+    verified = verified_root / observer.RUNNER_FILE
+    shadowed = tmp_path / "shadow" / observer.RUNNER_FILE
+    for path in (verified, shadowed):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("def run_map_episode(scenario, seed, algo):\n    return None\n")
+    namespace: dict = {
+        "__name__": observer.SOURCE_MODULES[observer.RUNNER_FILE],
+        "__file__": str(shadowed),
+    }
+    exec(  # noqa: S102 - live dispatch must see a real shadow-root filename
+        compile(shadowed.read_text(), str(shadowed), "exec"), namespace
+    )
+    watched = observer.ForceObserver(tmp_path, {}, verified_root)
+    previous = sys.gettrace()
+    try:
+        sys.settrace(watched)
+        with pytest.raises(observer.ObserverIdentityError, match="outside pinned frozen source"):
+            namespace["run_map_episode"]({"name": "doorway"}, 113, "ppo")
+    finally:
+        sys.settrace(previous)
+    assert list(tmp_path.glob("*.robot-force.json")) == []
+
+
 def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -> None:
     component = PedRobotForce.__new__(PedRobotForce)
     component.component_type = "pedestrian_robot"
     component.last_forces = np.asarray([[0.2, 0.0], [0.3, 0.0]])
     component.config = SimpleNamespace(force_multiplier=10.0)
     component.get_robot_pos = lambda: pytest.fail("observer re-invoked provider")
-    watched = observer.ForceObserver(tmp_path, {})
+    watched = observer.ForceObserver(tmp_path, {}, tmp_path)
     watched.episode = {"steps": []}
     watched.step = {"step_entry_positions": [[0.0, 0.0], [1.0, 0.0]]}
     frame = SimpleNamespace(

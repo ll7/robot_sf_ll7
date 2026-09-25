@@ -46,6 +46,7 @@ def test_frozen_checkpoint_admission_rejects_coherent_new_model_and_runtime_bund
     planners = [
         SimpleNamespace(key=f"arm{index:02}", algo=f"algo{index:02}") for index in range(14)
     ]
+    planners[2] = SimpleNamespace(key="sacadrl", algo="sacadrl")
     references = [
         SimpleNamespace(
             planner_key=planner.key,
@@ -90,6 +91,11 @@ def test_frozen_checkpoint_admission_rejects_coherent_new_model_and_runtime_bund
                             "model_id": record["value"],
                             "kinematics": "differential_drive",
                             "checkpoint_sha256": bundle_digest,
+                            "hash_source": (
+                                "computed_tensorflow_checkpoint_bundle"
+                                if index == 2
+                                else "runtime_observed"
+                            ),
                         }
                     ]
                     if record
@@ -106,8 +112,17 @@ def test_frozen_checkpoint_admission_rejects_coherent_new_model_and_runtime_bund
     kwargs = {
         "registry_path": tmp_path / "registry.yaml",
     }
+    assert all("runtime" not in arm and "hash_source" not in arm for arm in staged["arms"])
     projection = release_protocol._candidate_frozen_checkpoint_arms(cfg, frozen, staged, **kwargs)
     assert len(projection) == 14 and projection[2]["checkpoint_sha256"] == "c" * 64
+    wrong_frozen_source = copy.deepcopy(frozen)
+    wrong_frozen_source["planners"][2]["checkpoint_provenance"]["runtime"][0]["hash_source"] = (
+        "registry_declared"
+    )
+    with pytest.raises(ValueError, match="SACADRL runtime must use the computed bundle"):
+        release_protocol._candidate_frozen_checkpoint_arms(
+            cfg, wrong_frozen_source, staged, **kwargs
+        )
     incomplete = copy.deepcopy(frozen)
     incomplete["planners"].pop()
     with pytest.raises(ValueError, match="checkpoint roster is incomplete"):
@@ -143,6 +158,14 @@ def test_frozen_checkpoint_admission_rejects_coherent_new_model_and_runtime_bund
     observed = copy.deepcopy(frozen)
     observed["planners"][2]["checkpoint_provenance"]["runtime"][0]["checkpoint_sha256"] = "b" * 64
     with pytest.raises(ValueError, match="runtime checkpoint digest differs"):
+        release_protocol._candidate_frozen_checkpoint_arms(
+            cfg, frozen, staged, observed_campaign=observed, **kwargs
+        )
+    observed = copy.deepcopy(frozen)
+    observed["planners"][2]["checkpoint_provenance"]["runtime"][0]["hash_source"] = (
+        "registry_declared"
+    )
+    with pytest.raises(ValueError, match="runtime checkpoint hash source differs"):
         release_protocol._candidate_frozen_checkpoint_arms(
             cfg, frozen, staged, observed_campaign=observed, **kwargs
         )

@@ -66,6 +66,10 @@ no canonical invalid-run state on either row, matching non-empty planner config 
 unchanged checkout snapshots immediately before and after replay at the recorded revision.
 Exact replay identity also requires the source row to carry complete, revision-bound hashes for its
 scenario map and every effective model/checkpoint file, plus a recorded source environment identity.
+Each replay attempt stores its own validated Python/platform/`uv.lock` identity in both its case
+receipt and the manifest. Exact classification requires that identity to match the source
+environment identity; a missing or different replay environment remains non-exact. Resume validates
+the preserved attempt identity and never substitutes the current materializer environment.
 The materializer does not reconstruct those historical values from files visible in the current
 checkout. Benchmark Release 0.0.2 records neither source runtime-input hashes nor its execution
 environment, so any same-revision replay from that release remains unavailable for exact input
@@ -112,8 +116,10 @@ Replay episode checksums were first captured while resuming existing output beca
 receipts lacked output hashes; later copies matched. The source-row comparison is rederived on
 resume, and no successful comparison without its prior checksum is promoted to an exact match. This
 records local artifact custody from the hash capture onward, not a signed checksum emitted by the
-original runner process. The historical release does not record its execution environment; replay
-Python/platform and `uv.lock` digest are included in the summary.
+original runner process. The historical release does not record its execution environment; the
+existing summary records the local replay process's Python/platform and `uv.lock` digest. New
+attempt receipts carry their own environment identity so later materializer environments cannot be
+mistaken for the environment that ran an earlier replay.
 
 ## Claim boundary and ownership
 

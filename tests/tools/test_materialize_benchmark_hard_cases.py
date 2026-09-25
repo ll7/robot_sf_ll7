@@ -17,7 +17,6 @@ import scripts.tools.materialize_benchmark_hard_cases as materializer
 from scripts.tools.materialize_benchmark_hard_cases import (
     REPLAY_CHECKOUT_SNAPSHOT_SCHEMA,
     MaterializationError,
-    _classify_replay_row,
     _compare,
     _materialize_replay_matrix,
     _replay_checkout_provenance,
@@ -30,16 +29,91 @@ from scripts.tools.materialize_benchmark_hard_cases import (
     _showcase_tool_snapshot,
     materialize,
 )
+from scripts.tools.materialize_benchmark_hard_cases import (
+    _classify_replay_row as _classify_replay_row_impl,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_REVISION = subprocess.run(
     ["git", "rev-parse", "HEAD^"], cwd=REPO_ROOT, check=True, capture_output=True, text=True
 ).stdout.strip()
 MATRIX_RELATIVE = "configs/scenarios/classic_interactions_francis2023.yaml"
+_SOURCE_ENVIRONMENT = object()
 
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _fixture_execution_environment() -> dict[str, Any]:
+    identity = {
+        "python_version": "3.12.0-fixture",
+        "python_implementation": "CPython-fixture",
+        "platform_system": "Linux-fixture",
+        "platform_release": "fixture",
+        "machine": "x86_64-fixture",
+        "uv_lock_sha256": "0" * 64,
+    }
+    return {
+        "schema_version": materializer.SOURCE_ENVIRONMENT_PROVENANCE_SCHEMA,
+        "complete": True,
+        **identity,
+        "identity_sha256": hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
+def _different_fixture_execution_environment() -> dict[str, Any]:
+    environment = _fixture_execution_environment()
+    environment["platform_release"] = "different-runtime-fixture"
+    identity_fields = {
+        key: environment[key]
+        for key in (
+            "python_version",
+            "python_implementation",
+            "platform_system",
+            "platform_release",
+            "machine",
+            "uv_lock_sha256",
+        )
+    }
+    environment["identity_sha256"] = hashlib.sha256(
+        json.dumps(identity_fields, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return environment
+
+
+def _classify_replay_row(
+    case: dict[str, Any],
+    source_row: dict[str, Any],
+    replay_row: dict[str, Any],
+    replay_revision: Any,
+    *,
+    replay_environment_identity: Any = _SOURCE_ENVIRONMENT,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Use a same-as-source replay environment unless a test overrides it."""
+    if replay_environment_identity is _SOURCE_ENVIRONMENT:
+        provenance = source_row.get("runtime_input_provenance")
+        replay_environment_identity = (
+            provenance.get("source_environment") if isinstance(provenance, dict) else None
+        )
+    if "replay_checkout" not in kwargs:
+        kwargs["replay_checkout"] = {
+            "replay_checkout_clean": kwargs.pop("replay_checkout_clean", None),
+            "replay_checkout_stability_status": kwargs.pop(
+                "replay_checkout_stability_status", None
+            ),
+        }
+    return _classify_replay_row_impl(
+        case,
+        source_row,
+        replay_row,
+        replay_revision,
+        replay_environment_identity=replay_environment_identity,
+        **kwargs,
+    )
 
 
 def _record_fixture_runtime_inputs(row: dict[str, Any]) -> None:
@@ -87,26 +161,14 @@ def _record_fixture_runtime_inputs(row: dict[str, Any]) -> None:
         )
     if row.get("algo") == "crowdnav_height":
         assets.extend(_crowdnav_height_fixture_assets(config))
-    environment = {
-        "python_version": "3.12.0-fixture",
-        "python_implementation": "CPython-fixture",
-        "platform_system": "Linux-fixture",
-        "platform_release": "fixture",
-        "machine": "x86_64-fixture",
-        "uv_lock_sha256": "0" * 64,
-    }
+    environment = _fixture_execution_environment()
     row["runtime_input_provenance"] = {
         "schema_version": materializer.SOURCE_RUNTIME_INPUT_PROVENANCE_SCHEMA,
         "source_revision": row.get("git_hash"),
         "source_checkout_clean": True,
         "complete": True,
         "source_environment": {
-            "schema_version": materializer.SOURCE_ENVIRONMENT_PROVENANCE_SCHEMA,
-            "complete": True,
             **environment,
-            "identity_sha256": hashlib.sha256(
-                json.dumps(environment, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest(),
         },
         "assets": assets,
     }
@@ -857,6 +919,46 @@ def test_exact_replay_records_git_tree_identity_for_tracked_runtime_inputs() -> 
     assert all(len(asset["sha256"]) == 64 for asset in identity["source"]["assets"])
 
 
+@pytest.mark.parametrize(
+    ("environment_mutation", "expected_status", "identity_status"),
+    [
+        ("different", "replay_environment_mismatch", "replay_environment_mismatch"),
+        ("missing", "unavailable_replay_environment_identity", "replay_environment_unavailable"),
+    ],
+)
+def test_exact_replay_requires_source_bound_matching_environment(
+    environment_mutation: str, expected_status: str, identity_status: str
+) -> None:
+    source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    replay = json.loads(json.dumps(source))
+    replay_environment = json.loads(
+        json.dumps(source["runtime_input_provenance"]["source_environment"])
+    )
+    if environment_mutation == "different":
+        replay_environment = _different_fixture_execution_environment()
+    else:
+        replay_environment = None
+    case = {
+        "planner_key": "goal",
+        "scenario_id": "scenario_a",
+        "seed": 111,
+        "benchmark_eligible": True,
+    }
+
+    classification = _classify_replay_row(
+        case,
+        source,
+        replay,
+        SOURCE_REVISION,
+        replay_checkout_clean=True,
+        replay_checkout_stability_status="clean_stable",
+        replay_environment_identity=replay_environment,
+    )
+
+    assert classification["status"] == expected_status
+    assert classification["runtime_input_identity"]["status"] == identity_status
+
+
 def test_missing_historical_runtime_input_provenance_is_not_reconstructed() -> None:
     source = _source_row(scenario_id="scenario_a", episode_id="episode-a")
     source.pop("runtime_input_provenance")
@@ -1337,6 +1439,9 @@ def test_replay_records_episode_checksum_and_row_count(
     expected_status: str,
 ) -> None:
     row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    monkeypatch.setattr(
+        materializer, "_execution_environment_identity", _fixture_execution_environment
+    )
     row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = source_mode
     case = {
         "planner_key": "goal",
@@ -1380,6 +1485,7 @@ def test_replay_records_episode_checksum_and_row_count(
     assert replay["replay_malformed_line_count"] == int(observed_mode == "malformed-extra-line")
     assert replay["episode_output_sha256"] == _sha256(episode_path)
     assert replay["episode_output_checksum_status"] == "captured_at_run"
+    assert replay["replay_environment_identity"] == _fixture_execution_environment()
     assert replay["replay_checkout_stability_status"] == "clean_stable"
     assert replay["replay_checkout_before"]["revision"] == SOURCE_REVISION
     assert replay["replay_checkout_after"]["revision"] == SOURCE_REVISION
@@ -1414,6 +1520,9 @@ def test_checkout_mutation_during_replay_blocks_exact_match(
     checkout_status: str,
 ) -> None:
     row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    monkeypatch.setattr(
+        materializer, "_execution_environment_identity", _fixture_execution_environment
+    )
     case = {
         "planner_key": "goal",
         "scenario_id": "scenario_a",
@@ -1508,6 +1617,7 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
         "status": "mismatch",
         "returncode": 0,
         "replay_revision": SOURCE_REVISION,
+        "replay_environment_identity": _fixture_execution_environment(),
         "replay_checkout_clean": True,
         "replay_checkout_status_sha256": hashlib.sha256(b"").hexdigest(),
         "episode_output": "replay/episodes.jsonl",
@@ -1588,6 +1698,7 @@ def test_resume_rederives_classification_when_prior_episode_checksum_is_absent(
         "returncode": 0,
         "source_revision": SOURCE_REVISION,
         "replay_revision": SOURCE_REVISION,
+        "replay_environment_identity": _fixture_execution_environment(),
         "replay_checkout_before": _clean_checkout_snapshot(SOURCE_REVISION),
         "replay_checkout_after": _clean_checkout_snapshot(SOURCE_REVISION),
         "replay_checkout_clean": True,
@@ -1702,6 +1813,7 @@ def test_resume_recomputes_checkout_snapshot_consistency(
         "returncode": 0,
         "source_revision": SOURCE_REVISION,
         "replay_revision": SOURCE_REVISION,
+        "replay_environment_identity": _fixture_execution_environment(),
         "replay_checkout_before": before,
         "replay_checkout_after": after,
         "replay_checkout_clean": True,
@@ -1740,6 +1852,86 @@ def test_resume_recomputes_checkout_snapshot_consistency(
         assert resumed_case["replay"]["resume_receipt_consistency_status"] == "match"
 
 
+@pytest.mark.parametrize(
+    ("prior_environment_matches_source", "expected_status"),
+    [(True, "exact_match"), (False, "replay_environment_mismatch")],
+)
+def test_resume_preserves_prior_environment_across_materializer_environment_change(
+    tmp_path: Path,
+    monkeypatch,
+    prior_environment_matches_source: bool,
+    expected_status: str,
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    source_episode = campaign_root / "runs/goal__differential_drive/episodes.jsonl"
+    source_row = json.loads(source_episode.read_text(encoding="utf-8").splitlines()[0])
+    output_bytes = (json.dumps(source_row) + "\n").encode("utf-8")
+    replay_dir = case_file.parent / "replay"
+    replay_dir.mkdir()
+    (replay_dir / "episodes.jsonl").write_bytes(output_bytes)
+    prior_environment = (
+        _fixture_execution_environment()
+        if prior_environment_matches_source
+        else _different_fixture_execution_environment()
+    )
+    current_environment = (
+        _different_fixture_execution_environment()
+        if prior_environment_matches_source
+        else _fixture_execution_environment()
+    )
+    replay = {
+        "attempted": True,
+        "status": "exact_match",
+        "returncode": 0,
+        "source_revision": SOURCE_REVISION,
+        "replay_revision": SOURCE_REVISION,
+        "replay_environment_identity": prior_environment,
+        "replay_checkout_before": _clean_checkout_snapshot(SOURCE_REVISION),
+        "replay_checkout_after": _clean_checkout_snapshot(SOURCE_REVISION),
+        "replay_checkout_clean": True,
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_sha256": hashlib.sha256(output_bytes).hexdigest(),
+        "episode_output_checksum_origin": "captured_at_run",
+        "episode_output_checksum_status": "captured_at_run",
+    }
+    case_record["replay"] = replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = replay
+    manifest["replay"]["attempted"] = 1
+    manifest["execution_environment"]["replay_attempt_environments"][case_record["case_id"]] = (
+        prior_environment
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.setattr(
+        materializer,
+        "_execution_environment_identity",
+        lambda: current_environment,
+    )
+    args = _args(summary, campaign_root, matrix, tmp_path / "resumed")
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    resumed_case = json.loads(
+        (tmp_path / "resumed" / resumed["cases"][0]["case_file"]).read_text(encoding="utf-8")
+    )
+
+    assert resumed_case["replay"]["status"] == expected_status
+    assert resumed_case["replay"]["replay_environment_identity"] == prior_environment
+    assert (
+        resumed["execution_environment"]["materializer_environment_identity"] == current_environment
+    )
+    assert (
+        resumed["execution_environment"]["replay_attempt_environments"][resumed_case["case_id"]]
+        == prior_environment
+    )
+
+
 def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -1763,6 +1955,7 @@ def test_resume_preserves_the_expected_hash_after_a_replay_artifact_mismatch(
         "returncode": 0,
         "source_revision": SOURCE_REVISION,
         "replay_revision": SOURCE_REVISION,
+        "replay_environment_identity": _fixture_execution_environment(),
         "replay_checkout_before": _clean_checkout_snapshot(SOURCE_REVISION),
         "replay_checkout_after": _clean_checkout_snapshot(SOURCE_REVISION),
         "replay_checkout_clean": True,
@@ -1819,6 +2012,7 @@ def test_resume_preserves_attempt_when_prior_replay_directory_is_missing(tmp_pat
         "status": "runner_failed",
         "returncode": 1,
         "replay_revision": "prior-replay-revision",
+        "replay_environment_identity": _fixture_execution_environment(),
     }
     case_record["replay"] = prior_replay
     case_file.write_text(json.dumps(case_record), encoding="utf-8")

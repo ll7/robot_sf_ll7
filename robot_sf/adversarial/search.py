@@ -313,7 +313,7 @@ def run_adversarial_search(
         candidate_dir = config.output_dir / f"candidate_{index:04d}"
         validation_errors = config.search_space.validate_candidate(candidate)
         if validation_errors:
-            certification_status = _attach_scenario_admissibility(
+            certification_status, _case_id = _attach_scenario_admissibility(
                 failed_status(
                     "search-space validation failed", details={"errors": validation_errors}
                 ),
@@ -321,12 +321,15 @@ def run_adversarial_search(
                 scenario_yaml_path=None,
             )
             num_invalid += 1
-            evaluation = _invalid_evaluation(
-                candidate=candidate,
-                certification_status=certification_status,
-                scenario_yaml_path=None,
-                bundle_path=None,
-                reason="; ".join(validation_errors),
+            evaluation = replace(
+                _invalid_evaluation(
+                    candidate=candidate,
+                    certification_status=certification_status,
+                    scenario_yaml_path=None,
+                    bundle_path=None,
+                    reason="; ".join(validation_errors),
+                ),
+                evaluation_disposition="rejected_by_search_space",
             )
             evaluations.append(evaluation)
             _observe_candidate(active_sampler, evaluation)
@@ -343,22 +346,46 @@ def run_adversarial_search(
             scenario_yaml_path,
             config.require_certification,
         )
-        certification_status = _attach_scenario_admissibility(
+        certification_status, admissibility_case_id = _attach_scenario_admissibility(
             certification_status,
             candidate=candidate,
             scenario_yaml_path=scenario_yaml_path,
         )
+        if _scenario_admissibility_rejects(
+            certification_status,
+            expected_case_id=admissibility_case_id,
+        ):
+            num_invalid += 1
+            evaluation = replace(
+                _invalid_evaluation(
+                    candidate=candidate,
+                    certification_status=certification_status,
+                    scenario_yaml_path=scenario_yaml_path,
+                    bundle_path=candidate_dir,
+                    reason="scenario admissibility rejected candidate",
+                ),
+                evaluation_disposition="rejected_by_admissibility",
+            )
+            write_json(
+                candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
+            )
+            evaluations.append(evaluation)
+            _observe_candidate(active_sampler, evaluation)
+            continue
         if not candidate_allowed(
             certification_status,
             require_certification=config.require_certification,
         ):
             num_invalid += 1
-            evaluation = _invalid_evaluation(
-                candidate=candidate,
-                certification_status=certification_status,
-                scenario_yaml_path=scenario_yaml_path,
-                bundle_path=candidate_dir,
-                reason=certification_status.reason,
+            evaluation = replace(
+                _invalid_evaluation(
+                    candidate=candidate,
+                    certification_status=certification_status,
+                    scenario_yaml_path=scenario_yaml_path,
+                    bundle_path=candidate_dir,
+                    reason=certification_status.reason,
+                ),
+                evaluation_disposition="rejected_by_certification",
             )
             write_json(
                 candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
@@ -375,6 +402,7 @@ def run_adversarial_search(
                 effective_scenario_hash=_effective_hash_for_bundle(
                     scenario_yaml_path, candidate_dir
                 ),
+                evaluation_disposition="evaluator_invoked",
             )
             score = objective(evaluation)
             evaluation = evaluation.with_objective(score)
@@ -393,6 +421,7 @@ def run_adversarial_search(
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 error=error,
+                evaluation_disposition="evaluator_invoked",
             )
         evaluations.append(evaluation)
         _observe_candidate(active_sampler, evaluation)
@@ -434,7 +463,7 @@ def _attach_scenario_admissibility(
     *,
     candidate: CandidateSpec,
     scenario_yaml_path: Path | None,
-) -> CertificationStatus:
+) -> tuple[CertificationStatus, str]:
     """Bind one conservative admissibility verdict to a materialized search candidate.
 
     The existing certifier result is reused; this helper never reruns the producer. The
@@ -514,7 +543,25 @@ def _attach_scenario_admissibility(
     details["scenario_admissibility"] = verdict
     if classification_error_type is not None:
         details["scenario_admissibility_status"] = "unavailable"
-    return replace(certification_status, details=details)
+    return replace(certification_status, details=details), case_id
+
+
+def _scenario_admissibility_rejects(
+    certification_status: CertificationStatus,
+    *,
+    expected_case_id: str,
+) -> bool:
+    """Honor only a schema-valid rejection bound to this materialized candidate."""
+    verdict = certification_status.details.get("scenario_admissibility")
+    if not isinstance(verdict, dict):
+        return False
+    try:
+        validate_scenario_admissibility(verdict)
+    except ValueError:
+        return False
+    return (
+        verdict.get("case_id") == expected_case_id and verdict.get("search_disposition") == "reject"
+    )
 
 
 def production_candidate_evaluator(

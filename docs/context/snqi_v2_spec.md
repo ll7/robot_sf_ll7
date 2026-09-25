@@ -176,3 +176,8 @@ options, and wrapper/filter settings. Extra or changed fields are refused even w
 config hash, and producer sidecar are coherently rehashed. The deterministic map-runner episode ID
 must also match these parameters and the development seed. IDs must be unique within an arm;
 identical algorithms/configurations in distinct declared arms can legitimately share an ID.
+
+V2 JSON inputs reject duplicate object keys at every nesting depth before row classification or
+scoring. This applies to raw episode streams, calibration metadata, producer sidecars, frozen JSON
+assets, and offline execution maps; an earlier fallback marker or seed cannot be overwritten by a
+later duplicate key. Rejection preserves existing anchors and staged campaign inputs.

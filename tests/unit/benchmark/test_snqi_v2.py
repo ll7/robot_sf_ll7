@@ -1009,6 +1009,48 @@ def test_calibration_freeze_rejects_coherent_identity_forgery(
     assert output.read_bytes() == b"prior anchor\n"
 
 
+@pytest.mark.parametrize("location", ["metadata", "nested_metadata", "seed", "manifest", "sidecar"])
+def test_calibration_freeze_rejects_duplicate_json_keys(tmp_path, calibration_archive, location):
+    from robot_sf.benchmark.result_provenance import (
+        manifest_path_for_result_jsonl,
+        validate_result_provenance_manifest,
+    )
+    from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+
+    cfg, _, kwargs = calibration_archive
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
+    sidecar = manifest_path_for_result_jsonl(path)
+    payload = json.loads(sidecar.read_text())
+    if location in {"manifest", "sidecar"}:
+        target = tmp_path / "campaign_manifest.json" if location == "manifest" else sidecar
+        prefix = '"config_hash":"forged",' if location == "manifest" else '"run":{},'
+        target.write_text("{" + prefix + target.read_text()[1:])
+    else:
+        lines = path.read_text().splitlines(keepends=True)
+        if location == "nested_metadata":
+            lines[0] = lines[0].replace(
+                '"algorithm_metadata": {',
+                '"algorithm_metadata": {"fallback_triggered":true,"fallback_triggered":false,',
+                1,
+            )
+        else:
+            prefix = (
+                '"algorithm_metadata":{"fallback_triggered":true},'
+                if location == "metadata"
+                else '"seed":999,'
+            )
+            lines[0] = "{" + prefix + lines[0][1:]
+        path.write_text("".join(lines))
+        payload["raw_artifacts"][0]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        validate_result_provenance_manifest(payload)
+        sidecar.write_text(json.dumps(payload))
+    output = tmp_path / "anchors.json"
+    output.write_bytes(b"prior anchor\n")
+    with pytest.raises(ValueError, match="duplicate JSON key"):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
+    assert output.read_bytes() == b"prior anchor\n"
+
+
 @pytest.mark.parametrize(
     "calibration_archive",
     [
@@ -1439,7 +1481,10 @@ def test_streaming_retains_only_compact_records_and_distinguishes_same_algo_arms
         assert len(row["algorithm_metadata"]["simulation_step_trace"]["steps"]) == 3000
 
 
-@pytest.mark.parametrize("defect", ["unpaired", "stale_sidecar", "missing_sidecar"])
+@pytest.mark.parametrize(
+    "defect",
+    ["unpaired", "stale_sidecar", "missing_sidecar", "duplicate_row_key", "duplicate_sidecar_key"],
+)
 def test_streaming_failure_keeps_originals_and_removes_staged_files(tmp_path, defect):
     entries = []
     for arm in ("a", "b"):
@@ -1456,10 +1501,29 @@ def test_streaming_failure_keeps_originals_and_removes_staged_files(tmp_path, de
         path.write_text(json.dumps(payload))
     elif defect == "missing_sidecar":
         path.unlink()
+    elif defect == "duplicate_sidecar_key":
+        path.write_text('{"run":{},' + path.read_text()[1:])
+    elif defect == "duplicate_row_key":
+        raw_path = Path(entries[-1]["episodes_path"])
+        raw_path.write_text('{"seed":999,' + raw_path.read_text()[1:])
+        payload = json.loads(path.read_text())
+        payload["raw_artifacts"][0]["sha256"] = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+        path.write_text(json.dumps(payload))
     before = {path: path.read_bytes() for path in tmp_path.iterdir()}
-    with pytest.raises(ValueError, match="paired scenario/seed|sidecar"):
+    with pytest.raises(ValueError, match="paired scenario/seed|sidecar|duplicate JSON key"):
         enrich_campaign_v2(
             entries, fixture_spec(), tmp_path / "reports", repo_root=tmp_path, bootstrap_samples=2
         )
     assert all(path.read_bytes() == content for path, content in before.items())
     assert not list(tmp_path.glob(".*.snqi-v2.tmp"))
+
+
+def test_offline_execution_map_rejects_duplicate_planner_key(tmp_path):
+    import argparse
+
+    from scripts.tools.analyze_snqi_contract import _v2_execution_declarations
+
+    path = tmp_path / "execution.json"
+    path.write_text('{"episodes.jsonl":{"key":"arm","algo":"goal","algo":"guarded_ppo"}}')
+    with pytest.raises(ValueError, match="duplicate JSON key: algo"):
+        _v2_execution_declarations(argparse.Namespace(execution_map=path))

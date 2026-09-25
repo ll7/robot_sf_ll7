@@ -110,6 +110,15 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def parse_v2_json(raw: str | bytes) -> Any:
+    """Parse V2 source JSON without discarding duplicate keys at any nesting depth.
+
+    Returns:
+        The decoded JSON value after every object has passed unique-key validation.
+    """
+    return json.loads(raw, object_pairs_hook=_unique_object)
+
+
 @dataclass(frozen=True)
 class SnqiV2Spec:
     """A validated score specification; nested mappings are immutable snapshots."""
@@ -196,8 +205,8 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
         "family": family_path.resolve(),
     }
     raw = {key: path.read_bytes() for key, path in paths.items()}
-    weights_doc = json.loads(raw["weights"], object_pairs_hook=_unique_object)
-    anchors_doc = json.loads(raw["anchors"], object_pairs_hook=_unique_object)
+    weights_doc = parse_v2_json(raw["weights"])
+    anchors_doc = parse_v2_json(raw["anchors"])
     family_doc = yaml.safe_load(raw["family"])
     if weights_doc.get("version") != "SNQI-v2.0" or family_doc != FAMILY:
         raise ValueError("SNQI-v2 unrecognized weights/family version or family contract")

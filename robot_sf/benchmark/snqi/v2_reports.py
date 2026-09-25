@@ -20,14 +20,20 @@ from robot_sf.benchmark.fallback_policy import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.result_provenance import (
-    load_result_provenance_manifest,
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
     write_result_provenance_manifest,
 )
 from robot_sf.benchmark.snqi.bootstrap import bootstrap_stability
 from robot_sf.benchmark.snqi.compute import compute_snqi_v2, normalize_snqi_v2_terms
-from robot_sf.benchmark.snqi.v2_spec import FAMILY, QUALITY_TERMS, TERMS, WEIGHTS, SnqiV2Spec
+from robot_sf.benchmark.snqi.v2_spec import (
+    FAMILY,
+    QUALITY_TERMS,
+    TERMS,
+    WEIGHTS,
+    SnqiV2Spec,
+    parse_v2_json,
+)
 
 CLAIM_BOUNDARY = (
     "SNQI-v2 is a declared benchmark aggregate over simulator quantities. It is not a validated "
@@ -368,7 +374,10 @@ def read_episode_files(paths: Sequence[Path]) -> Iterator[dict[str, Any]]:
             for line_number, line in enumerate(stream, 1):
                 if not line.strip():
                     continue
-                record = json.loads(line)
+                try:
+                    record = parse_v2_json(line)
+                except ValueError as exc:
+                    raise ValueError(f"{path}:{line_number}: {exc}") from exc
                 if not isinstance(record, dict):
                     raise ValueError(f"{path}:{line_number}: expected episode object")
                 seen = True
@@ -456,7 +465,7 @@ def _stage_v2_provenance(
     original_hash: str,
 ) -> None:
     """Rebind a verified producer sidecar with explicit enrichment lineage."""
-    payload = load_result_provenance_manifest(sidecar)
+    payload = parse_v2_json(sidecar.read_text(encoding="utf-8"))
     validate_result_provenance_manifest(payload)
     artifacts = [
         entry for entry in payload["raw_artifacts"] if entry.get("kind") == "episodes_jsonl"

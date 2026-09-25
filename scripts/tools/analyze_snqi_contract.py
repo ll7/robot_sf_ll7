@@ -28,6 +28,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     resolve_weight_mapping,
     sanitize_baseline_stats,
 )
+from robot_sf.benchmark.snqi.v2_spec import parse_v2_json
 from robot_sf.benchmark.utils import load_optional_json
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -247,7 +248,7 @@ def _v2_execution_declarations(args: argparse.Namespace) -> dict[Path, dict[str,
     """
     declarations = {}
     if args.execution_map:
-        document = json.loads(args.execution_map.read_text())
+        document = parse_v2_json(args.execution_map.read_text(encoding="utf-8"))
         if not isinstance(document, dict):
             raise ValueError("SNQI-v2 execution map must be a file-to-planner object")
         for name, planner in document.items():

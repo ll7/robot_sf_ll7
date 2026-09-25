@@ -23,7 +23,6 @@ from robot_sf.benchmark.fallback_policy import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.result_provenance import (
-    load_result_provenance_manifest,
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
 )
@@ -32,6 +31,7 @@ from robot_sf.benchmark.snqi.v2_spec import (
     PP_EQUIV_FORCE,
     SIMULATED_FORCE,
     finite_nonnegative,
+    parse_v2_json,
 )
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
@@ -158,7 +158,9 @@ def freeze_campaign_anchors(
         )
     ]
     snapshots = _snapshot_calibration_files(metadata_paths, campaign_root)
-    manifest, summary, preview = [json.loads(path.read_text()) for path in metadata_paths]
+    manifest, summary, preview = [
+        parse_v2_json(path.read_text(encoding="utf-8")) for path in metadata_paths
+    ]
     planners, canonical_scenarios = _bind_calibration_config(config, manifest, preview)
     input_paths = {
         Path(config.scenario_matrix_path),
@@ -317,7 +319,7 @@ def _load_calibration_custody(
     """
     from robot_sf.benchmark.release_acceptance import _result_provenance_scenarios  # noqa: PLC0415
 
-    payload = load_result_provenance_manifest(manifest_path_for_result_jsonl(path))
+    payload = parse_v2_json(manifest_path_for_result_jsonl(path).read_text(encoding="utf-8"))
     validate_result_provenance_manifest(payload)
     identity = payload["campaign_identity"]
     inputs = payload["inputs"]

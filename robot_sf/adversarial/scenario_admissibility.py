@@ -424,8 +424,24 @@ def _certificate(
             ),
             "requires_effective_input_binding": requires_effective_input_binding,
             "producer_fields_present": _certificate_producer_identity_fields_present(cert),
+            "effective_input_generation_bound": _certificate_effective_input_generation_bound(
+                cert.get("evidence"),
+                effective_input_sha256,
+                requires_effective_input_binding,
+            ),
         },
     }
+    _record_unbound_certificate_generation_identity(
+        assumptions["identity_binding"]["effective_input_generation_bound"], reasons
+    )
+    if _certificate_exclusion_generation_is_unbound(
+        cert,
+        classification,
+        eligibility,
+        assumptions["identity_binding"]["effective_input_generation_bound"],
+        reasons,
+    ):
+        return None, False, assumptions
     if classification == "invalid" and eligibility == "excluded":
         invalidity = _invalid_certificate_category(cert)
         if invalidity is None:
@@ -514,26 +530,94 @@ def _certificate_producer_identity_bound(
             return False
     else:
         reasons.append("scenario_certificate_source_identity_bound_by_adapter")
-    if requires_effective_input_binding:
-        if isinstance(cert_evidence, Mapping) and any(
-            key in cert_evidence
-            for key in ("effective_input_sha256", "effective_input_identity_stable")
+    effective_identity_fields_present = isinstance(cert_evidence, Mapping) and any(
+        key in cert_evidence
+        for key in ("effective_input_sha256", "effective_input_identity_stable")
+    )
+    if effective_identity_fields_present:
+        effective_digest = cert_evidence.get("effective_input_sha256")
+        if (
+            effective_input_sha256 is None
+            or not isinstance(effective_digest, str)
+            or _SHA256.fullmatch(effective_digest) is None
+            or effective_digest.lower() != effective_input_sha256.lower()
+            or cert_evidence.get("effective_input_identity_stable") is not True
         ):
-            effective_digest = cert_evidence.get("effective_input_sha256")
-            if (
-                effective_input_sha256 is None
-                or not isinstance(effective_digest, str)
-                or _SHA256.fullmatch(effective_digest) is None
-                or effective_digest.lower() != effective_input_sha256.lower()
-                or cert_evidence.get("effective_input_identity_stable") is not True
-            ):
-                reasons.append(
-                    "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable"
-                )
-                return False
-        else:
-            reasons.append("scenario_certificate_effective_input_identity_bound_by_adapter")
+            reasons.append(
+                "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable"
+            )
+            return False
+    elif requires_effective_input_binding:
+        reasons.append("scenario_certificate_effective_input_identity_generation_unbound")
     return True
+
+
+def _certificate_exclusion_generation_is_unbound(
+    cert: Mapping[str, Any],
+    classification: str,
+    eligibility: str,
+    generation_bound: bool,
+    reasons: list[str],
+) -> bool:
+    """Refuse legacy exclusion labels that lack producer-time effective-input identity."""
+    exclusion_classes = {"invalid", "geometrically_infeasible", "kinodynamically_infeasible"}
+    if classification not in exclusion_classes or eligibility != "excluded" or generation_bound:
+        return False
+    if classification == "invalid" and _invalid_certificate_category(cert) is None:
+        reasons.append("scenario_certificate_invalidity_unresolved")
+    elif classification in {"geometrically_infeasible", "kinodynamically_infeasible"} and not (
+        _all_routes_confirm_impossibility(cert, classification)
+    ):
+        reasons.append("scenario_certificate_route_coverage_unresolved")
+    return True
+
+
+def _record_unbound_certificate_generation_identity(
+    generation_bound: bool,
+    reasons: list[str],
+) -> None:
+    """Preserve a reason code when current adapter identity cannot attest certificate creation."""
+    if not generation_bound:
+        reasons.append("scenario_certificate_effective_input_identity_generation_unbound")
+
+
+def _certificate_effective_input_generation_bound(
+    cert_evidence: Any,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
+) -> bool:
+    """Require producer-time source/closure identity before a certificate can exclude a case."""
+    if not isinstance(cert_evidence, Mapping):
+        return False
+    if not requires_effective_input_binding:
+        source_digest = cert_evidence.get("source_artifact_sha256")
+        producer_digest = cert_evidence.get("effective_input_sha256")
+        return (
+            isinstance(effective_input_sha256, str)
+            and _SHA256.fullmatch(effective_input_sha256) is not None
+            and (
+                (
+                    isinstance(source_digest, str)
+                    and _SHA256.fullmatch(source_digest) is not None
+                    and source_digest.lower() == effective_input_sha256.lower()
+                )
+                or (
+                    isinstance(producer_digest, str)
+                    and _SHA256.fullmatch(producer_digest) is not None
+                    and producer_digest.lower() == effective_input_sha256.lower()
+                    and cert_evidence.get("effective_input_identity_stable") is True
+                )
+            )
+        )
+    producer_digest = cert_evidence.get("effective_input_sha256")
+    return (
+        isinstance(effective_input_sha256, str)
+        and _SHA256.fullmatch(effective_input_sha256) is not None
+        and isinstance(producer_digest, str)
+        and _SHA256.fullmatch(producer_digest) is not None
+        and producer_digest.lower() == effective_input_sha256.lower()
+        and cert_evidence.get("effective_input_identity_stable") is True
+    )
 
 
 def _certificate_producer_identity_fields_present(cert: Mapping[str, Any]) -> bool:

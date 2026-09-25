@@ -125,6 +125,15 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
+- `issue_9647_gallery_smoke_2026-09-25/`: compact exact-head smoke receipt for the #9647
+  replay-gallery selector, canonical runner, outcome comparison, and renderer using the tracked
+  #1501 `failure_0002` compatibility fixture. One historical collision replay matched at a
+  different source revision; dynamic task feasibility remains unknown, video and map context were
+  unavailable, and no search/discovery or benchmark claim is supported. The generated figures and
+  raw replay streams remain in ignored local `output/`; see the checksummed
+  [receipt](issue_9647_gallery_smoke_2026-09-25/payload/receipt.md) and
+  [machine-readable summary](issue_9647_gallery_smoke_2026-09-25/payload/summary.json).
+
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
   job-13512 bytes are checksum-covered for custody but have conflicting execution lineage and no

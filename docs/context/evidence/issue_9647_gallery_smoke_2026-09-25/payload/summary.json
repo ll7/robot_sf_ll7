@@ -1,0 +1,329 @@
+{
+  "artifact_disposition": {
+    "local_only": "Gallery README, manifests, replay/source JSONL, materialized runner inputs, and figures remain in ignored output/. The tracked receipt records paths, sizes, and SHA-256 hashes; it does not embed or promote these raw/presentation artifacts.",
+    "tracked": [
+      "summary.json",
+      "receipt.md",
+      "evidence_bundle_manifest.json",
+      "checksums.sha256"
+    ]
+  },
+  "attempt_ledger": [
+    {
+      "candidate_disposition": "source_runtime_fallback_or_degraded",
+      "case_manifest_sha256": null,
+      "classification": "prior_smoke_attempt_retained_as_diagnostic_history",
+      "gallery_checkout_clean": true,
+      "gallery_checkout_revision": "fd9503e6f08f487b8afd6fb4ce97c00933544d7f",
+      "gallery_manifest_sha256": "c3bc84814e226330fb63376fb2bccebc41c0f2bdb9cdb05c343f75580f856884",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke",
+      "replay_match": null,
+      "replay_revision": null,
+      "runner_invoked": false,
+      "source_manifest_sha256": "c976211cd8c519b1440f4570fe70974171daedc7b56a8e50351754403c4cf1e3",
+      "verification_status": null
+    },
+    {
+      "candidate_disposition": "selected",
+      "case_manifest_sha256": "aab3410cadad38dae9f138a4e0480bebdfb7f231a9ad47a52c61d905166f9874",
+      "classification": "final_exact_head_smoke",
+      "gallery_checkout_clean": true,
+      "gallery_checkout_revision": "1357ebd4084a5da077e10a5ab9ed74e5a4d9a9e4",
+      "gallery_manifest_sha256": "39ea5340014918d432ef4fc8d35bd207f33ef547fc114ae09cd56e78bfd1edb1",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke_1357ebd",
+      "replay_match": "match",
+      "replay_revision": "1357ebd4084a5da077e10a5ab9ed74e5a4d9a9e4",
+      "runner_invoked": true,
+      "source_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+      "verification_status": "outcome_reproduced_revision_changed"
+    },
+    {
+      "candidate_disposition": "candidate_parameters_invalid",
+      "case_manifest_sha256": null,
+      "classification": "prior_smoke_attempt_retained_as_diagnostic_history",
+      "gallery_checkout_clean": true,
+      "gallery_checkout_revision": "2cbbd0677afc4a12df45cb58513ef19b741aae82",
+      "gallery_manifest_sha256": "5df583ec5b8266d7f62ac283636c89dbb18cc2c5c65d2cc416fd2a7ebdb49efc",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_2cbbd06",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke_2cbbd06",
+      "replay_match": null,
+      "replay_revision": null,
+      "runner_invoked": false,
+      "selection_note": "The historical candidate included candidate_index and spawn_time_s_note under candidate; the selector rejected its parameters and no replay case was produced. The final fixture removed these two unsupported extra fields.",
+      "source_manifest_sha256": "e352daf3e3d49db295e134b429b19a7c87cebedec1cee13b39e881781b2be83e",
+      "verification_status": null
+    },
+    {
+      "candidate_disposition": "candidate_parameters_invalid",
+      "case_manifest_sha256": null,
+      "classification": "prior_smoke_attempt_retained_as_diagnostic_history",
+      "gallery_checkout_clean": false,
+      "gallery_checkout_revision": "fd9503e6f08f487b8afd6fb4ce97c00933544d7f",
+      "gallery_manifest_sha256": "14c8022339151dfac8d294c3878333f8f679be7d1a7f0763283e7cf597a82e58",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_runtime2",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke_runtime2",
+      "replay_match": null,
+      "replay_revision": null,
+      "runner_invoked": false,
+      "source_manifest_sha256": "c976211cd8c519b1440f4570fe70974171daedc7b56a8e50351754403c4cf1e3",
+      "verification_status": null
+    },
+    {
+      "candidate_disposition": "selected",
+      "case_manifest_sha256": "bed13c4eeed6499eec85ae9db192798b4593c2c824424dcf015e6d1c78c6d572",
+      "classification": "prior_smoke_attempt_retained_as_diagnostic_history",
+      "gallery_checkout_clean": false,
+      "gallery_checkout_revision": "fd9503e6f08f487b8afd6fb4ce97c00933544d7f",
+      "gallery_manifest_sha256": "372bf6758419f5e1c4e53af74fc17bb56c2a0483329727e71f7b7c9cc16c8af3",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_runtime3",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke_runtime3",
+      "replay_match": "unavailable",
+      "replay_revision": "fd9503e6f08f487b8afd6fb4ce97c00933544d7f",
+      "runner_invoked": true,
+      "source_manifest_sha256": "266066bf1317e6aef5165b5f1167b205b16dfc1744d7113a942a6ba8e37d9768",
+      "verification_status": "replay_execution_unavailable"
+    },
+    {
+      "candidate_disposition": "selected",
+      "case_manifest_sha256": "59fbe70615c3ea3807a638f9384ceff545399b5fd8268d21c3d1f275a6bd1ba6",
+      "classification": "prior_smoke_attempt_retained_as_diagnostic_history",
+      "gallery_checkout_clean": false,
+      "gallery_checkout_revision": "fd9503e6f08f487b8afd6fb4ce97c00933544d7f",
+      "gallery_manifest_sha256": "98c91676a95bed240497e892f0a9cd000868f643cdbb4e282a256668302c765d",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_runtime4",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke_runtime4",
+      "replay_match": "match",
+      "replay_revision": "fd9503e6f08f487b8afd6fb4ce97c00933544d7f",
+      "runner_invoked": true,
+      "source_manifest_sha256": "266066bf1317e6aef5165b5f1167b205b16dfc1744d7113a942a6ba8e37d9768",
+      "verification_status": "outcome_reproduced_revision_changed"
+    },
+    {
+      "candidate_disposition": "selected",
+      "case_manifest_sha256": "fd2f9375d733f375e1e0815272c63920b028104e9cc586faaf3e67e2ebbdcb25",
+      "classification": "prior_smoke_attempt_retained_as_diagnostic_history",
+      "gallery_checkout_clean": true,
+      "gallery_checkout_revision": "3b768d057ea578a6530a96db9c7bf4e3645f74a0",
+      "gallery_manifest_sha256": "689244c0754caa12a7854d54183724eff936ebd41746fd6e248c3b5314456d47",
+      "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_runtime5",
+      "output_disposition": "ignored_local_output_only",
+      "output_id": "issue9647_historical_compat_smoke_runtime5",
+      "replay_match": "match",
+      "replay_revision": "3b768d057ea578a6530a96db9c7bf4e3645f74a0",
+      "runner_invoked": true,
+      "source_manifest_sha256": "266066bf1317e6aef5165b5f1167b205b16dfc1744d7113a942a6ba8e37d9768",
+      "verification_status": "outcome_reproduced_revision_changed"
+    }
+  ],
+  "claim_boundary": "Diagnostic compatibility-fixture smoke for the replay-gallery CLI, canonical runner, outcome comparison, and renderer. Not a search result, new counterexample discovery, exact-source replay verification, dynamic feasibility proof, benchmark result, or safety claim.",
+  "final_smoke": {
+    "case_id": "case_0000_7e144c8113a9",
+    "checkout_clean": true,
+    "checkout_commit": "1357ebd4084a5da077e10a5ab9ed74e5a4d9a9e4",
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd --top-k 1",
+    "execution": {
+      "dt_seconds": 0.1,
+      "episode_batch_runtime_seconds": 6.12060058908537,
+      "horizon_steps": 100,
+      "planner": "goal",
+      "profile": "baseline-safe",
+      "python_version": "3.13.14",
+      "workers": 1
+    },
+    "feasibility": {
+      "dynamic_task_feasibility": "unknown",
+      "gallery_admissibility": "admissible_by_source_certificate",
+      "qualification": "The source certificate is static-route evidence; it does not establish that the dynamic task is feasible.",
+      "source_static_certificate_classification": "hard_but_solvable"
+    },
+    "local_output_files": [
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "local_gallery_readme",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/README.md",
+        "sha256": "997eb0ee129c1c3a54fd10e3d4d2b7824d42516005380a7bcf73459a79a43c5c",
+        "size_bytes": 776
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "manifest_or_replay_metadata",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/case_manifest.json",
+        "sha256": "aab3410cadad38dae9f138a4e0480bebdfb7f231a9ad47a52c61d905166f9874",
+        "size_bytes": 25889
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "caption_fragment",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/figures/caption_fragment.tex",
+        "sha256": "7cfe9d0bacb9d029713b2f67ef436d2896450b753c0004723bc81534093a5a79",
+        "size_bytes": 184
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "rendered_figure",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/figures/filmstrip.png",
+        "sha256": "5c5c9de16cde795aa5a3c0a2563a8588ef1d07c806b3b31f977479f9488ef31a",
+        "size_bytes": 22369
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "manifest_or_replay_metadata",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/figures/replay_provenance.json",
+        "sha256": "b4cf28698124c4977b80b7fa7e6b11d59b345f32bf4a4329aca0c495993d0f2c",
+        "size_bytes": 2307
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "rendered_figure",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/figures/still_9.png",
+        "sha256": "35bb721b78a722811788127eda8d855c0c66fcab40d926904bf58e87da9a5a1b",
+        "size_bytes": 46143
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "rendered_figure",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/figures/trajectory.png",
+        "sha256": "5c7f02d16e257edf1cda6334bc7176c63f54997a7500a676d9ba38a575c4f314",
+        "size_bytes": 89259
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "materialized_input",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/inputs/assets/0e8bb9e62420-route_overrides.yaml",
+        "sha256": "0e8bb9e6242098a33087ca12916d7096b98e90100e79db829a1675b6c8c89cd7",
+        "size_bytes": 177
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "materialized_input",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/inputs/scenario.yaml",
+        "sha256": "285984548bff8259bc5010da70fd2c53ef59eaad4a9aeb103fd945b8220b2a19",
+        "size_bytes": 1170
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "raw_episode_stream",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/replay/episode_records.jsonl",
+        "sha256": "999180b337b7c86631c9a3ea81c902e3b15f8733530bd5c03990262292a0834c",
+        "size_bytes": 48247
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "manifest_or_replay_metadata",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/replay/episode_records.jsonl.provenance.json",
+        "sha256": "5e7a40805b6d5d9cc9612702518ba3940030163f903ecd2b32e7f8ab92966e81",
+        "size_bytes": 4406
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "manifest_or_replay_metadata",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/replay_comparison.json",
+        "sha256": "81e2dfb6f0ea26efae2e1cf4f47cb02fdd163714cdd23c9841558ed8c738b720",
+        "size_bytes": 18342
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "raw_episode_stream",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/cases/case_0000_7e144c8113a9/source_episode.jsonl",
+        "sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
+        "size_bytes": 24032
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "manifest_or_replay_metadata",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/gallery_manifest.json",
+        "sha256": "39ea5340014918d432ef4fc8d35bd207f33ef547fc114ae09cd56e78bfd1edb1",
+        "size_bytes": 31185
+      },
+      {
+        "disposition": "ignored_local_output_only",
+        "kind": "manifest_or_replay_metadata",
+        "path": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd/source_search_manifest.json",
+        "sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+        "size_bytes": 2984
+      }
+    ],
+    "output_directory": "output/adversarial-replay-gallery/issue9647_historical_compat_smoke_1357ebd",
+    "rendering": {
+      "map_context": "unavailable",
+      "status": "rendered",
+      "video_reason": "canonical_runner_did_not_emit_video_artifact",
+      "video_status": "unavailable"
+    },
+    "replay": {
+      "collision_event": true,
+      "objective": "constraints_first_lexicographic_v1",
+      "objective_replay_value": 4.833333333333333,
+      "objective_source_value": 4.833333333333333,
+      "primary_failure": "collision",
+      "replay_episode_record_sha256": "999180b337b7c86631c9a3ea81c902e3b15f8733530bd5c03990262292a0834c",
+      "replay_match": "match",
+      "revision": "1357ebd4084a5da077e10a5ab9ed74e5a4d9a9e4",
+      "route_complete": false,
+      "source_input_binding": "bound",
+      "timeout_event": false,
+      "verification_status": "outcome_reproduced_revision_changed"
+    },
+    "replay_match_count": 1,
+    "replay_mismatch_count": 0,
+    "replay_unavailable_count": 0,
+    "selected_case_count": 1,
+    "source_candidate_count": 1,
+    "source_case": {
+      "archived_search_revision": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
+      "episode_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+      "origin_case": "failure_0002",
+      "origin_issue": 1501,
+      "replay_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+      "scenario_id": "crossing_ttc_template_adversarial_0008",
+      "seed": 320
+    },
+    "source_fixture_files": [
+      {
+        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json",
+        "sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+        "size_bytes": 2984
+      },
+      {
+        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml",
+        "sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
+        "size_bytes": 1150
+      },
+      {
+        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/route_overrides.yaml",
+        "sha256": "0e8bb9e6242098a33087ca12916d7096b98e90100e79db829a1675b6c8c89cd7",
+        "size_bytes": 177
+      },
+      {
+        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/source_episode.jsonl",
+        "sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
+        "size_bytes": 24032
+      },
+      {
+        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/source_provenance.json",
+        "sha256": "65af70aa2739da46e90d75f2e7c4ed44bf444608219a884420870821c701e241",
+        "size_bytes": 3955
+      }
+    ],
+    "source_identity": {
+      "algorithm_config_hash": "44136fa355b3678a",
+      "effective_scenario_sha256": "e28dcdc58b944d7f64f22fb49379505468825a570c20e242b7ccfc0dacddec9f",
+      "materialized_scenario_sha256": "285984548bff8259bc5010da70fd2c53ef59eaad4a9aeb103fd945b8220b2a19",
+      "route_overrides_sha256": "0e8bb9e6242098a33087ca12916d7096b98e90100e79db829a1675b6c8c89cd7",
+      "source_episode_sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
+      "source_scenario_sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b"
+    },
+    "source_manifest_path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json",
+    "source_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+    "source_search_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9"
+  },
+  "schema_version": "issue_9647_gallery_smoke_receipt.v1"
+}

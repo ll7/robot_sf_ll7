@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +55,9 @@ _SCENARIO_ARTIFACT_SHA256 = hashlib.sha256(_SCENARIO_ARTIFACT.read_bytes()).hexd
 _SCENARIO_EFFECTIVE_INPUT_SHA256 = scenario_input_identity(
     _SCENARIO_ARTIFACT, scenario_id="case-static"
 ).get("effective_input_sha256")
+_EXECUTION_FIXTURE_TEMP = tempfile.TemporaryDirectory(prefix="issue-9651-execution-evidence-")
+_EXECUTION_FIXTURE_ROOT = Path(_EXECUTION_FIXTURE_TEMP.name)
+_EXECUTION_FIXTURE_COUNTER = itertools.count()
 
 
 def classify_scenario_admissibility(case_id: str, **kwargs: Any) -> Any:
@@ -232,12 +237,63 @@ def _execution(
     seed: int = 19,
     replay: bool = False,
 ) -> dict[str, Any]:
+    episode_id = "episode-target"
+    termination_reason = "success" if route_complete else "max_steps"
+    episode_row = {
+        "version": "v1",
+        "episode_id": episode_id,
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "algo": planner_id,
+        "git_hash": "f" * 40,
+        "status": "success" if route_complete else "failure",
+        "metrics": {"collisions": 0, "success": int(route_complete)},
+        "termination_reason": termination_reason,
+        "outcome": {
+            "route_complete": route_complete,
+            "collision_event": False,
+            "timeout_event": not route_complete,
+        },
+        "integrity": {"contradictions": []},
+        "algorithm_metadata": {
+            "status": "ok",
+            "canonical_algorithm": planner_id,
+            "execution_mode": "native",
+        },
+    }
+    fixture_index = next(_EXECUTION_FIXTURE_COUNTER)
+    episode_store_path = _EXECUTION_FIXTURE_ROOT / f"episodes-{fixture_index:04d}.jsonl"
+    episode_store_bytes = (json.dumps(episode_row, sort_keys=True) + "\n").encode("utf-8")
+    episode_store_path.write_bytes(episode_store_bytes)
+    episode_store_sha256 = hashlib.sha256(episode_store_bytes).hexdigest()
+    evidence_ref = episode_store_path.as_posix()
+    if planner_id == "replay" or replay:
+        replay_sidecar_path = _EXECUTION_FIXTURE_ROOT / f"replay-{fixture_index:04d}.json"
+        replay_sidecar_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": episode_id,
+                    "scenario_id": scenario_id,
+                    "seed": seed,
+                    "planner_key": planner_id,
+                    "repo_commit": "f" * 40,
+                    "replay_command": "fixture replay producer",
+                    "determinism_check_status": "pass",
+                    "source_episodes_jsonl_path": episode_store_path.as_posix(),
+                    "source_episodes_jsonl_sha256": episode_store_sha256,
+                    "resimulated": True,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        evidence_ref = replay_sidecar_path.as_posix()
     record = {
         "case_id": case_id,
         "scenario_id": scenario_id,
         "scenario_variant": "original",
         "planner_id": planner_id,
-        "episode_id": "episode-target",
+        "episode_id": episode_id,
         "run_status": "ok",
         "fallback_or_degraded": False,
         "route_complete": route_complete,
@@ -251,11 +307,11 @@ def _execution(
             "not_applicable" if planner_id in {"goal", "social_force", "orca"} else "d" * 64
         ),
         "environment_sha256": "e" * 64,
-        "source_episodes_jsonl_sha256": "a" * 64,
+        "source_episodes_jsonl_sha256": episode_store_sha256,
         "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
         "effective_input_identity_stable": True,
         "source_commit": "f" * 40,
-        "evidence_ref": f"artifacts/{planner_id}.json",
+        "evidence_ref": evidence_ref,
     }
     if planner_id == "replay" or replay:
         record.update(determinism_check_status="pass", resimulated=True)
@@ -1548,6 +1604,65 @@ def test_named_execution_requires_caller_bound_scenario_id() -> None:
     assert "reference_execution_scenario_identity_unbound" in verdict.reason_codes
 
 
+def test_named_execution_nonexistent_evidence_ref_stays_unknown(tmp_path: Path) -> None:
+    run = _execution("reference", route_complete=True)
+    run["evidence_ref"] = (tmp_path / "missing-episodes.jsonl").as_posix()
+
+    verdict = classify_scenario_admissibility(
+        "case-static", reference_execution=run, evidence_root=tmp_path
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_evidence_ref_missing_or_unreadable" in verdict.reason_codes
+    assert verdict.evidence["execution_artifact_bindings"]["reference"]["status"] == "unavailable"
+
+
+def test_named_execution_episode_store_digest_must_match_readable_bytes() -> None:
+    run = _execution("reference", route_complete=True)
+    run["source_episodes_jsonl_sha256"] = "0" * 64
+
+    verdict = classify_scenario_admissibility("case-static", reference_execution=run)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_episode_store_digest_mismatch" in verdict.reason_codes
+    assert verdict.evidence["execution_artifact_bindings"]["reference"]["status"] == "mismatch"
+
+
+def test_named_execution_episode_identity_must_exist_in_store() -> None:
+    run = _execution("reference", route_complete=True)
+    run["episode_id"] = "fabricated-episode"
+
+    verdict = classify_scenario_admissibility("case-static", reference_execution=run)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_episode_identity_missing_or_ambiguous" in verdict.reason_codes
+
+
+def test_named_execution_normalized_outcome_must_match_episode_row() -> None:
+    run = _execution("reference", route_complete=True)
+    run["route_complete"] = False
+
+    verdict = classify_scenario_admissibility("case-static", reference_execution=run)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_episode_outcome_mismatch" in verdict.reason_codes
+
+
+def test_relative_execution_evidence_ref_uses_explicit_root(tmp_path: Path) -> None:
+    run = _execution("reference", route_complete=True)
+    source_path = Path(run["evidence_ref"])
+    target_path = tmp_path / "episodes.jsonl"
+    target_path.write_bytes(source_path.read_bytes())
+    run["evidence_ref"] = target_path.name
+
+    verdict = classify_scenario_admissibility(
+        "case-static", reference_execution=run, evidence_root=tmp_path
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert verdict.evidence["execution_artifact_bindings"]["reference"]["status"] == "valid"
+
+
 def test_reference_success_is_empirical_but_target_failure_alone_is_unknown() -> None:
     reference = classify_scenario_admissibility(
         "case-static",
@@ -1561,6 +1676,7 @@ def test_reference_success_is_empirical_but_target_failure_alone_is_unknown() ->
     )
 
     assert reference.verdict == EMPIRICALLY_FEASIBLE
+    assert reference.evidence["execution_artifact_bindings"]["reference"]["status"] == "valid"
     assert target_only.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert target_only.target_planner_outcome == "route_incomplete"
     assert "target_failure_alone_does_not_prove_infeasibility" in target_only.reason_codes
@@ -1600,6 +1716,8 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
 
     assert verdict.verdict == PLANNER_SPECIFIC_FAILURE
     assert verdict.search_disposition == "retain"
+    assert verdict.evidence["execution_artifact_bindings"]["target"]["status"] == "valid"
+    assert verdict.evidence["execution_artifact_bindings"]["replay"]["status"] == "valid"
     assert "matched_reference_target_failure_reproduced_by_replay" in verdict.reason_codes
     assert absent_replay.verdict == EMPIRICALLY_FEASIBLE
     assert absent_replay.target_planner_outcome == "route_incomplete"
@@ -1607,9 +1725,8 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
     assert "planner_specific_failure_attribution_unconfirmed" in absent_replay.reason_codes
     assert replay_success.verdict == EMPIRICALLY_FEASIBLE
     assert replay_success.target_planner_outcome == "route_incomplete"
-    assert (
-        "planner_specific_failure_replay_did_not_reproduce_failure" in replay_success.reason_codes
-    )
+    assert "planner_specific_failure_replay_source_episode_mismatch" in replay_success.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in replay_success.reason_codes
     assert wrong_planner.verdict == EMPIRICALLY_FEASIBLE
     assert wrong_planner.target_planner_outcome == "route_incomplete"
     assert "planner_specific_failure_replay_wrong_planner" in wrong_planner.reason_codes
@@ -1631,8 +1748,8 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
         ("robot_model_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
         ("simulator_config_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
         ("environment_sha256", "f" * 64, "planner_specific_failure_replay_case_mismatch"),
-        ("source_commit", "e" * 40, "planner_specific_failure_replay_case_mismatch"),
-        ("seed", 20, "planner_specific_failure_replay_case_mismatch"),
+        ("source_commit", "e" * 40, "replay_execution_episode_identity_mismatch"),
+        ("seed", 20, "replay_execution_episode_identity_mismatch"),
         ("horizon_steps", 101, "planner_specific_failure_replay_case_mismatch"),
         (
             "planner_config_sha256",
@@ -1647,12 +1764,12 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
         (
             "episode_id",
             "unrelated-episode",
-            "planner_specific_failure_replay_source_episode_mismatch",
+            "replay_execution_episode_identity_missing_or_ambiguous",
         ),
         (
             "source_episodes_jsonl_sha256",
             "b" * 64,
-            "planner_specific_failure_replay_source_episode_mismatch",
+            "replay_execution_episode_store_digest_mismatch",
         ),
     ],
 )

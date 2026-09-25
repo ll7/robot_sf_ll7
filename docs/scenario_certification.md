@@ -217,10 +217,17 @@ row; named evidence without it remains unknown.
 Execution inputs are normalized records with `case_id`, `scenario_id`, `scenario_variant`,
 `planner_id`, `run_status`, the explicit boolean `fallback_or_degraded`, `route_complete`, `seed`,
 `horizon_steps`, SHA-256 hashes for the scenario, robot model, simulator config, planner config, and
-environment, plus `planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. Target and replay
-records additionally require the source `episode_id` and a valid
-`source_episodes_jsonl_sha256`; callers take these from the target episode store and replay
-provenance sidecar. The fallback
+environment, plus `planner_checkpoint_sha256`, `source_commit`, and `evidence_ref`. Every execution
+record requires its source `episode_id` and a valid `source_episodes_jsonl_sha256`. `evidence_ref`
+resolves to a local artifact: reference and target rows point to the canonical episode JSONL store,
+while replay rows point to the canonical `replay_provenance.json` sidecar. Relative references
+require `evidence_root`; absolute references are accepted when readable. The adapter reads and
+hashes the bytes, validates the selected row against `episode.schema.v1`, requires one matching
+episode ID, and compares its scenario, planner, seed, source revision, runtime status, and
+route-completion outcome with the normalized row. Replay admission also reads the sidecar's source
+episode-store path and binds its digest, episode/scenario/planner/seed/revision, determinism status,
+and resimulation marker. Unreadable, malformed, stale, or conflicting artifacts leave execution
+evidence unknown. The fallback
 boolean must be false; the adapter also applies the canonical runtime fallback/degraded detector to
 the full normalized record, so nested fallback flags, unavailable/fallback/degraded statuses, and
 positive fallback counters cannot establish an outcome. Missing or malformed fallback state stays

@@ -79,3 +79,11 @@ revision, without another search or simulation. The durable packet does not cont
 `episode_records.jsonl` files for the 64 pilot candidates. Candidate statuses and metrics remain in
 the machine-readable summaries, but missing episode bytes prevent complete candidate-level replay
 and independent trace review. This custody gap is an additional limitation on the NO-GO result.
+
+**Archived report-label anomaly:** despite the exact byte/digest match recorded by the reconstruction
+metadata, `source_outputs/comparison.md` is semantically mislabeled: its title names Issue #5326 and
+its method/decision text describes a CPU-synthetic objective comparison. Those statements do not
+describe this #9645 empirical pilot and must not be used as its provenance or result. The archived
+bytes are retained unchanged for custody. Use the corrected empirical rendering at
+`payload/pilot_comparison.md` and the bounded interpretation at `payload/report.md`; the primary
+candidate-level source remains `payload/pilot_comparison.json` and its four search manifests.

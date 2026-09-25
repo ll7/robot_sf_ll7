@@ -151,6 +151,9 @@ class _AdmissibilityContext:
     target_failure_observed: Any
     source_revision: Any
     planner: dict[str, Any]
+    replay_status: Any = None
+    replay_artifact: Any = None
+    require_replay_binding: bool = False
 
 
 def build_frontier_report(
@@ -1420,6 +1423,10 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 errors,
             )
         admissibility_artifact = candidate.get("admissibility_evidence_artifact")
+        if candidate.get("replay_status") == "verified" and admissibility_artifact is None:
+            errors.append(
+                f"{candidate_prefix}.admissibility_evidence_artifact is required for verified replay"
+            )
         if corpus_disposition in {"admitted", "duplicate"}:
             _validate_artifact_role(
                 admissibility_artifact,
@@ -1446,6 +1453,9 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     target_failure_observed=candidate.get("target_failure_observed"),
                     source_revision=data.get("source_revision"),
                     planner=planner,
+                    replay_status=candidate.get("replay_status"),
+                    replay_artifact=candidate.get("replay_artifact"),
+                    require_replay_binding=candidate.get("replay_status") == "verified",
                 ),
                 prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
                 errors=errors,
@@ -1476,6 +1486,9 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     target_failure_observed=candidate.get("target_failure_observed"),
                     source_revision=data.get("source_revision"),
                     planner=planner,
+                    replay_status=candidate.get("replay_status"),
+                    replay_artifact=candidate.get("replay_artifact"),
+                    require_replay_binding=candidate.get("replay_status") == "verified",
                 ),
                 prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
                 errors=errors,
@@ -1640,9 +1653,21 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     verdict=observation.get("admissibility_verdict"),
                     scenario_id=observation.get("scenario_id"),
                     scenario_artifact_sha256=observation.get("scenario_artifact_sha256"),
-                    target_failure_observed=None,
+                    target_failure_observed=(
+                        True
+                        if observation.get("planner_status") in {"unsolved", "mixed"}
+                        else False
+                        if observation.get("planner_status") == "solved"
+                        else None
+                    ),
                     source_revision=data.get("source_revision"),
                     planner=planner,
+                    replay_status=observation.get("replay_status"),
+                    replay_artifact=observation.get("replay_artifact"),
+                    require_replay_binding=(
+                        observation.get("origin_round") == 0
+                        and observation.get("replay_status") == "verified"
+                    ),
                 ),
                 prefix=f"{obs_prefix}.admissibility_evidence_artifact",
                 errors=errors,
@@ -2239,15 +2264,17 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
             prefix,
             errors,
         )
-        target_outcome = source.get("target_planner_outcome")
-        if isinstance(context.target_failure_observed, bool) and target_outcome in {
-            "route_completed",
-            "route_incomplete",
-        }:
-            if (target_outcome == "route_incomplete") is not context.target_failure_observed:
-                errors.append(
-                    f"{prefix}.target_planner_outcome does not match the candidate failure record"
-                )
+    elif context.require_replay_binding:
+        _validate_reported_replay_binding(source, evidence, context, prefix, errors)
+    target_outcome = source.get("target_planner_outcome")
+    if isinstance(context.target_failure_observed, bool) and target_outcome in {
+        "route_completed",
+        "route_incomplete",
+    }:
+        if (target_outcome == "route_incomplete") is not context.target_failure_observed:
+            errors.append(
+                f"{prefix}.target_planner_outcome does not match the candidate failure record"
+            )
 
 
 def _validate_admissibility_record_shape(  # noqa: C901 - report independent schema-field defects.
@@ -2360,6 +2387,17 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
             prefix=f"{prefix}.evidence.{role}_execution",
             errors=errors,
         )
+    if context.require_replay_binding:
+        target = runs["target"]
+        replay = runs["replay"]
+        if not valid_runs["target"] or not valid_runs["replay"]:
+            errors.append(
+                f"{prefix} verified replay requires complete, case-bound target and replay executions"
+            )
+        elif isinstance(target, dict) and isinstance(replay, dict):
+            if not _admissibility_replay_matches_target(replay, target):
+                errors.append(f"{prefix} replay execution does not reproduce its target execution")
+            _validate_replay_artifact_reference(replay, context, prefix, errors)
     target_run = runs["target"]
     target_observation_bound = _validate_target_planner_observation(
         evidence.get("target_planner_observation"),
@@ -2453,9 +2491,76 @@ def _admissibility_replay_matches_target(replay: dict[str, Any], target: dict[st
         and replay.get("planner_checkpoint_sha256") == target.get("planner_checkpoint_sha256")
         and replay.get("episode_id") == target.get("episode_id")
         and replay.get("source_episodes_jsonl_sha256") == target.get("source_episodes_jsonl_sha256")
+        and replay.get("route_complete") == target.get("route_complete")
         and replay.get("determinism_check_status") == "pass"
         and replay.get("resimulated") is True
     )
+
+
+def _validate_reported_replay_binding(
+    source: dict[str, Any],
+    evidence: dict[str, Any],
+    context: _AdmissibilityContext,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Require replay claims outside confirmed-verdict support to bind both executions."""
+    scenario_identity = evidence.get("scenario_artifact_identity")
+    target = evidence.get("target_execution")
+    replay = evidence.get("replay_execution")
+    target_valid = _validate_admissibility_execution(
+        target,
+        role="target",
+        context=context,
+        scenario_identity=scenario_identity,
+        prefix=f"{prefix}.evidence.target_execution",
+        errors=errors,
+    )
+    replay_valid = _validate_admissibility_execution(
+        replay,
+        role="replay",
+        context=context,
+        scenario_identity=scenario_identity,
+        prefix=f"{prefix}.evidence.replay_execution",
+        errors=errors,
+    )
+    if not target_valid or not replay_valid:
+        errors.append(
+            f"{prefix} verified replay requires complete, case-bound target and replay executions"
+        )
+    elif isinstance(target, dict) and isinstance(replay, dict):
+        if not _admissibility_replay_matches_target(replay, target):
+            errors.append(f"{prefix} replay execution does not reproduce its target execution")
+        _validate_replay_artifact_reference(replay, context, prefix, errors)
+    target_outcome = source.get("target_planner_outcome")
+    if (
+        target_valid
+        and isinstance(target, dict)
+        and target_outcome
+        in {
+            "route_completed",
+            "route_incomplete",
+        }
+    ):
+        expected_outcome = "route_completed" if target.get("route_complete") else "route_incomplete"
+        if target_outcome != expected_outcome:
+            errors.append(f"{prefix}.target_planner_outcome conflicts with its target execution")
+
+
+def _validate_replay_artifact_reference(
+    replay: dict[str, Any],
+    context: _AdmissibilityContext,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Tie the validated replay execution to the outer checksummed replay artifact."""
+    artifact = context.replay_artifact
+    if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str):
+        errors.append(f"{prefix}.replay_artifact is required to bind verified replay evidence")
+    elif replay.get("evidence_ref") != artifact["path"]:
+        errors.append(
+            f"{prefix}.evidence.replay_execution.evidence_ref does not match replay_artifact.path"
+        )
 
 
 def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-field defects.

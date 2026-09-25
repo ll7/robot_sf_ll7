@@ -96,8 +96,15 @@ unknown-feasibility case receives follow-up discovery credit only if a persisted
 historical observation has both a verified replay and an unsolved or mixed planner outcome. Otherwise
 its evidence-backed feasibility upgrade is retained in
 `feasibility_upgrades_without_verified_counterexample_case_ids` and is not counted as a verified
-counterexample. A replay artifact used to claim verified replay must declare the `replay` role as well as pass its
-path and digest checks. A stable case ID may be admitted only once; later verified repeats use
+counterexample. A replay artifact used to claim verified replay must declare the `replay` role as
+well as pass its path and digest checks. A candidate or historical (`origin_round=0`) observation
+that claims `replay_status=verified` must include case-bound `target_execution` and
+`replay_execution` records in its #9651 admissibility evidence. The replay must match the target's planner, config,
+checkpoint, episode, source-store digest, and route outcome, pass the determinism check, record a
+simulator resimulation, and set `evidence_ref` to the exact path of the outer checksummed
+`replay_artifact`. Later observations of an admitted discovery reuse that origin candidate's replay
+artifact; their status alone cannot establish a new replay. A stable case ID may be admitted only
+once; later verified repeats use
 `corpus_disposition=duplicate`, remain visible in candidate accounting, and do not count as new
 unique discoveries. Pre-loop historical confirmed cases are included in the known-corpus frontier,
 but not in the current loop's new-discovery count. The unknown-feasibility cumulative count means

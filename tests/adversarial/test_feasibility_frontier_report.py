@@ -146,6 +146,7 @@ def _execution_record(
     route_complete: bool,
     planner_config_sha256: str,
     role: str,
+    evidence_ref: str | None = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "case_id": case_id,
@@ -164,7 +165,7 @@ def _execution_record(
         "planner_checkpoint_sha256": "not_applicable",
         "environment_sha256": "f" * 64,
         "source_commit": _REVISION,
-        "evidence_ref": f"fixture/{role}/{case_id}",
+        "evidence_ref": evidence_ref or f"fixture/{role}/{case_id}",
     }
     if role in {"target", "replay"}:
         record.update(
@@ -184,6 +185,8 @@ def _admissibility_artifact(
     verdict: str,
     planner_config_sha256: str | None = None,
     source_revision: str = _REVISION,
+    replay_artifact_path: str | None = None,
+    target_route_complete: bool = False,
 ) -> dict[str, str]:
     """Write a case-bound #9651 verdict fixture with explicit feasibility support."""
     confirmed = verdict in {"empirically_feasible", "planner_specific_failure"}
@@ -218,13 +221,23 @@ def _admissibility_artifact(
                 case_id=case_id,
                 scenario_id=scenario_id,
                 planner_id="goal",
-                route_complete=False,
+                route_complete=target_route_complete,
                 planner_config_sha256=planner_config_sha256,
                 role="target",
             ),
         )
+        if replay_artifact_path is not None:
+            evidence["replay_execution"] = _execution_record(
+                case_id=case_id,
+                scenario_id=scenario_id,
+                planner_id="goal",
+                route_complete=target_route_complete,
+                planner_config_sha256=planner_config_sha256,
+                role="replay",
+                evidence_ref=replay_artifact_path,
+            )
         reason_codes = ["named_execution_completed_original_case"]
-        target_outcome = "route_incomplete"
+        target_outcome = "route_completed" if target_route_complete else "route_incomplete"
     elif verdict == "planner_specific_failure":
         evidence.update(
             reference_execution=_execution_record(
@@ -235,6 +248,28 @@ def _admissibility_artifact(
                 planner_config_sha256="1" * 64,
                 role="reference",
             ),
+            target_execution=_execution_record(
+                case_id=case_id,
+                scenario_id=scenario_id,
+                planner_id="goal",
+                route_complete=target_route_complete,
+                planner_config_sha256=planner_config_sha256,
+                role="target",
+            ),
+            replay_execution=_execution_record(
+                case_id=case_id,
+                scenario_id=scenario_id,
+                planner_id="goal",
+                route_complete=target_route_complete,
+                planner_config_sha256=planner_config_sha256,
+                role="replay",
+                evidence_ref=replay_artifact_path,
+            ),
+        )
+        reason_codes = ["matched_reference_target_failure_reproduced_by_replay"]
+        target_outcome = "route_completed" if target_route_complete else "route_incomplete"
+    elif replay_artifact_path is not None:
+        evidence.update(
             target_execution=_execution_record(
                 case_id=case_id,
                 scenario_id=scenario_id,
@@ -250,9 +285,10 @@ def _admissibility_artifact(
                 route_complete=False,
                 planner_config_sha256=planner_config_sha256,
                 role="replay",
+                evidence_ref=replay_artifact_path,
             ),
         )
-        reason_codes = ["matched_reference_target_failure_reproduced_by_replay"]
+        reason_codes = ["feasibility_not_demonstrated"]
         target_outcome = "route_incomplete"
     else:
         reason_codes = ["feasibility_not_demonstrated"]
@@ -586,6 +622,11 @@ def _candidate(  # noqa: PLR0913 - fixture helper mirrors the persisted candidat
             case_id=case_id,
             verdict=verdict,
             planner_config_sha256=planner_config_sha256,
+            replay_artifact_path=(
+                replay_artifact.get("path")
+                if replay_status == "verified" and isinstance(replay_artifact, dict)
+                else None
+            ),
         )
     if case_id is not None:
         scenario_id = scenario_id or _scenario_id(case_id)
@@ -617,6 +658,11 @@ def _observation(
     replay_status: str,
 ) -> dict[str, Any]:
     evidence_status = "complete" if planner_status != "unknown" else "unknown"
+    replay_artifact = (
+        _artifact(root, f"round-{round_number}-{case_id}-replay.json", role="replay")
+        if replay_status == "verified"
+        else None
+    )
     corpus_ref = _artifact(
         root,
         f"round-{round_number}-case-status-{hashlib.sha256(case_id.encode()).hexdigest()[:12]}.json",
@@ -638,17 +684,21 @@ def _observation(
             role="falsification-search",
         ),
         "corpus_artifact": corpus_ref,
-        "replay_artifact": (
-            _artifact(root, f"round-{round_number}-{case_id}-replay.json", role="replay")
-            if replay_status == "verified"
-            else None
-        ),
+        "replay_artifact": replay_artifact,
         "admissibility_evidence_artifact": _admissibility_artifact(
             root,
             f"round-{round_number}-{hashlib.sha256(case_id.encode()).hexdigest()[:12]}-admissibility.json",
             case_id=case_id,
             verdict=verdict,
             planner_config_sha256=_CONFIG if round_number == 1 else "c" * 64,
+            target_route_complete=planner_status == "solved",
+            replay_artifact_path=(
+                replay_artifact.get("path")
+                if origin_round == 0
+                and replay_status == "verified"
+                and isinstance(replay_artifact, dict)
+                else None
+            ),
         ),
     }
     planner = {
@@ -758,9 +808,8 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
                 evaluation_status="degraded",
                 verdict="planner_specific_failure",
                 failure=True,
-                replay_status="verified",
+                replay_status="unavailable",
                 disposition="pending",
-                replay_artifact=_artifact(root, "round-2-degraded-replay.json", role="replay"),
             ),
             _candidate(
                 candidate_id="c-mismatch",
@@ -805,6 +854,12 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
                 case_id=candidate["case_id"],
                 verdict=candidate["admissibility_verdict"],
                 planner_config_sha256=_CONFIG if round_number == 1 else "c" * 64,
+                replay_artifact_path=(
+                    candidate["replay_artifact"].get("path")
+                    if candidate.get("replay_status") == "verified"
+                    and isinstance(candidate.get("replay_artifact"), dict)
+                    else None
+                ),
             )
     for observation in observations:
         if observation.get("origin_round") != round_number:
@@ -941,6 +996,7 @@ def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path:
                 "round-2-repeat-case-001-admissibility.json",
                 case_id="case-001",
                 verdict="empirically_feasible",
+                replay_artifact_path=repeat_replay["path"],
             ),
         )
     )
@@ -992,6 +1048,7 @@ def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
                 "round-2-repeat-historical-unknown-admissibility.json",
                 case_id="historical-unknown-duplicate",
                 verdict="empirically_feasible",
+                replay_artifact_path=repeat_replay["path"],
             ),
         )
     )
@@ -1080,6 +1137,8 @@ def test_frontier_report_can_upgrade_historical_unknown_feasibility_once(tmp_pat
         case_id="historical-unknown",
         verdict="empirically_feasible",
         planner_config_sha256="c" * 64,
+        target_route_complete=True,
+        replay_artifact_path=upgraded["replay_artifact"]["path"],
     )
     payload["rounds"][1]["case_observations"].append(upgraded)
 
@@ -1128,6 +1187,7 @@ def test_frontier_report_does_not_count_historical_upgrade_without_verified_fail
         case_id="historical-unknown",
         verdict="empirically_feasible",
         planner_config_sha256="c" * 64,
+        target_route_complete=True,
     )
     payload["rounds"][1]["case_observations"].append(upgraded)
 
@@ -1176,6 +1236,7 @@ def test_frontier_report_credits_historical_upgrade_when_replay_evidence_arrives
         case_id="historical-delayed-replay",
         verdict="empirically_feasible",
         planner_config_sha256="c" * 64,
+        target_route_complete=True,
     )
     payload["rounds"][1]["case_observations"].append(upgraded)
     third = _round(tmp_path, 3)
@@ -1937,6 +1998,36 @@ def test_frontier_report_rejects_route_boolean_without_producer_execution_proven
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_rejects_verified_candidate_without_replay_execution(
+    tmp_path: Path,
+) -> None:
+    """A generic checksummed replay file cannot substitute for replay execution evidence."""
+    payload = _evidence(tmp_path)
+
+    def remove_replay_execution(record: dict[str, Any]) -> None:
+        record["evidence"].pop("replay_execution")
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, remove_replay_execution)
+    with pytest.raises(FrontierReportError, match="verified replay requires complete"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_binds_replay_execution_to_outer_replay_artifact(
+    tmp_path: Path,
+) -> None:
+    """The admissibility replay record must point at the linked checksummed replay artifact."""
+    payload = _evidence(tmp_path)
+
+    def mismatch_replay_reference(record: dict[str, Any]) -> None:
+        record["evidence"]["replay_execution"]["evidence_ref"] = "fixture/unrelated-replay.json"
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, mismatch_replay_reference)
+    with pytest.raises(
+        FrontierReportError, match="evidence_ref does not match replay_artifact.path"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_binds_planner_specific_failure_to_target_and_replay(
     tmp_path: Path,
 ) -> None:
@@ -1951,10 +2042,12 @@ def test_frontier_report_binds_planner_specific_failure_to_target_and_replay(
         "round-1-planner-specific-failure.json",
         case_id="case-001",
         verdict="planner_specific_failure",
+        replay_artifact_path=candidate["replay_artifact"]["path"],
     )
     candidate["admissibility_evidence_artifact"] = reference
     observation["admissibility_evidence_artifact"] = reference
     followup = payload["rounds"][1]["case_observations"][0]
+    followup["planner_status"] = "unsolved"
     followup["admissibility_verdict"] = "planner_specific_failure"
     followup["admissibility_evidence_artifact"] = _admissibility_artifact(
         tmp_path,
@@ -2146,6 +2239,7 @@ def test_frontier_report_requires_evidence_to_strengthen_unknown_feasibility(
             "round-2-case-origin-unknown-feasibility.json",
             case_id="case-origin-unknown",
             verdict="empirically_feasible",
+            target_route_complete=True,
         )
     else:
         later_observation["admissibility_evidence_artifact"] = None
@@ -2236,6 +2330,8 @@ def test_frontier_report_rejects_feasibility_downgrade_after_confirmation(tmp_pa
         case_id="case-origin-unknown",
         verdict="empirically_feasible",
         planner_config_sha256="c" * 64,
+        target_route_complete=True,
+        replay_artifact_path=upgraded["replay_artifact"]["path"],
     )
     second["case_observations"].append(upgraded)
     third = _round(tmp_path, 3)
@@ -2269,6 +2365,8 @@ def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified
             if candidate["corpus_disposition"] == "admitted":
                 candidate["corpus_disposition"] = "pending"
                 candidate["case_id"] = None
+                candidate["replay_status"] = "not_attempted"
+                candidate["replay_artifact"] = None
                 candidate["admissibility_evidence_artifact"] = None
         round_data["case_observations"] = []
         for evaluation in round_data["evaluation_sets"].values():

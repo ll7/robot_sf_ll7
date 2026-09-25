@@ -601,6 +601,38 @@ any integration.
 - Keep worker and review control-plane artifacts outside the worktree. In particular, never commit
   `RESULT.md` or `REVIEW.json`.
 
+### Research completion receipt
+
+When an issue's own criteria permit a research null result, record it in the existing
+`issue_completion_receipt.v1` as `terminal_outcome.schema: research_terminal_outcome.v1` with
+classification `success`, `no_signal`, or `no_change`, a concise summary, and `evidence_artifacts`
+that name declared artifacts captured at the delivered head. Pass the receipt and its
+`issue_completion_receipt_verification.v1` Git result through the existing issue-audit
+`completion_receipts` input. The goal loop consumes the outcome at
+`closure.completion_receipt.terminal_outcome`; this metadata does not waive issue criteria,
+validation, independent review, merged-PR, domain, or scientific gates. A blocked external outcome
+stays with `goal_blocker_receipt.v1` and its current redispatch fence; do not encode a blocker as a
+research null result.
+
+### Bounded repair and resume
+
+- For a substantial implementation, validation, or integration failure, allow at most three
+  materially different repair cycles. Each cycle records its root-cause diagnosis, changed
+  approach, exact head, and focused verification in the active delegation ledger. Count only a
+  changed repair attempt as a new cycle; rerunning the same failed command without a meaningful
+  code or environment change is not a repair.
+- Reuse the latest `goal_blocker_receipt.v1` and compare its fingerprint before dispatch. An
+  unchanged blocker remains `blocked_unchanged` with no new worker; a changed issue, dependency,
+  base/head, or required input returns to the owning admission/evaluation path.
+- Resolve prerequisites through the existing typed dependency packet and `goal_issue_admission.py`
+  check. Dependency drift invalidates only the dependent proof; re-run the smallest affected step.
+- On resume, verify the active ledger's issue, branch/head, dependency and artifact digests. Reuse
+  still-valid completed work and durable research outputs; never rerun a completed expensive
+  experiment only because the orchestration process restarted.
+- After three distinct unsuccessful repairs, preserve the failed attempts and resumable state. Use
+  the blocker receipt only when a named blocker actually prevents progress; ordinary implementation
+  difficulty is not an external blocker.
+
 ## Confidence
 
 Use one confidence level for final reporting:
@@ -612,10 +644,11 @@ Never close an issue with `Low` proof without explicitly marking follow-up work.
 
 ## Anti-Loop and Retry
 
-- Do not rerun identical failed validations more than twice without meaningful code/env change.
-- If a candidate fails the same gate with no new signal, move to `blocked` and record:
+- Follow the three-cycle, materially-different repair cap above; it supersedes a raw retry count.
+- Do not rerun identical failed validations without a meaningful code/environment change.
+- If a candidate still fails after the authorized repairs, record:
   - failing command,
-  - last error,
+  - last error and stable blocker fingerprint when an external input is actually required,
   - next minimal action.
 
 ## Delegation Failure Recovery

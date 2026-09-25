@@ -69,11 +69,16 @@ scenario map and every effective model/checkpoint file, plus a recorded source e
 The materializer does not reconstruct those historical values from files visible in the current
 checkout. Benchmark Release 0.0.2 records neither source runtime-input hashes nor its execution
 environment, so any same-revision replay from that release remains unavailable for exact input
-identity even when current files happen to match the old Git tree. Replay-side maps and configured
-model/checkpoint files must still be regular files in the recorded replay Git tree with matching
-visible bytes; external, ignored, untracked, transformed, missing, registry-only, or otherwise
-unverified model inputs remain unavailable. Predictive checkpoint paths are hashed directly, and
-SA-CADRL TensorFlow checkpoints bind their metadata, index, and every data shard.
+identity even when current files happen to match the old Git tree. Replay-side maps and
+repository-owned configured model/checkpoint files must be regular files in the recorded replay Git
+tree with matching visible bytes. CrowdNav HEIGHT is the explicit external-input exception: its
+effective upstream checkout must be clean and its commit recorded, while the model config and
+resolved checkpoint bytes are hashed directly. This covers both the default `237800.pt` checkpoint
+and explicit `repo_root`, `model_dir`, or `checkpoint_name` settings. Missing checkpoint bytes,
+unrecorded source-side assets, or an unavailable/dirty external checkout remain unavailable for an
+exact identity. Other external, ignored, untracked, transformed, missing, registry-only, or
+otherwise unverified model inputs remain unavailable. Predictive checkpoint paths are hashed
+directly, and SA-CADRL TensorFlow checkpoints bind their metadata, index, and every data shard.
 Nested runtime status values must be recognized available statuses; unknown or malformed values
 remain unavailable. Explicit `unavailable` markers must be booleans, and only literal `false` is
 accepted as available evidence; `true` and malformed values remain unavailable. Each

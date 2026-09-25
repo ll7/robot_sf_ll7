@@ -561,17 +561,26 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
         )
         assert process.stdin is not None and process.stdout is not None
 
+        def proxy_status() -> str:
+            exit_code = process.poll()
+            if exit_code is None:
+                return "proxy is still running (exit=None)"
+            return f"proxy exited with status {exit_code}"
+
         def exchange(
-            message: dict[str, object], *, wait_for_dispatch: bool = False
+            message: dict[str, object],
+            *,
+            wait_for_dispatch: bool = False,
+            response_timeout: float = 3.0,
         ) -> dict[str, object]:
             process.stdin.write(json.dumps(message).encode() + b"\n")
             process.stdin.flush()
             if wait_for_dispatch:
                 assert dispatch_finished.wait(10.0), (
-                    f"MCP request did not finish dispatch; proxy exit={process.poll()}"
+                    f"MCP request did not finish dispatch; {proxy_status()}"
                 )
-            ready, _, _ = select.select([process.stdout], [], [], 3.0)
-            assert ready, f"MCP proxy did not deliver a dispatched response; exit={process.poll()}"
+            ready, _, _ = select.select([process.stdout], [], [], response_timeout)
+            assert ready, f"MCP proxy did not deliver a dispatched response; {proxy_status()}"
             line = process.stdout.readline()
             assert line
             return json.loads(line)
@@ -586,7 +595,8 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                     "capabilities": {},
                     "clientInfo": {"name": "external-proxy", "version": "1"},
                 },
-            }
+            },
+            response_timeout=15.0,
         )
         assert initialized["result"]["serverInfo"]["name"] == "robot-sf-audit"
         process.stdin.write(

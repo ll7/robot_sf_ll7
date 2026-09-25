@@ -228,8 +228,12 @@ def test_archive_transfer_run_rejects_unsafe_and_duplicate_run_ids(tmp_path):
         )
 
 
-def test_archive_transfer_run_requires_resolved_git_commit(tmp_path):
+def test_archive_transfer_run_requires_resolved_git_commit(tmp_path, monkeypatch):
     """Provenance-pinned archival fails before writing when commit lookup fails."""
+    monkeypatch.setattr(
+        "robot_sf.adversarial.transfer_matrix.gather_execution_context",
+        lambda **_: ExecutionContext(commit_sha=None),
+    )
     matrix = _built_matrix(tmp_path, robustness=-1.0, failed=True)
     archive_root = tmp_path / "archive"
 

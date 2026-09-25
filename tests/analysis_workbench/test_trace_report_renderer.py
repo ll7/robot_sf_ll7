@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -64,25 +66,22 @@ def test_trace_report_renderer_writes_markdown_summary_for_minimal_fixture(
     assert "ped_1 @ (1.000, 0.500)" in markdown
 
 
-def test_trace_report_renderer_surfaces_existing_planner_annotations(
-    tmp_path: Path,
-) -> None:
+def test_trace_report_renderer_surfaces_existing_planner_annotations() -> None:
     """Planner annotation fields already present in the trace should be visible."""
 
-    from scripts.tools.render_trace_report import write_trace_report
+    from scripts.tools.render_trace_report import render_trace_report
 
-    payload = load_simulation_trace_export(FIXTURE_PATH).to_dict()
-    payload["frames"][1]["planner"]["annotations"] = {
-        "clearance": 0.42,
-        "note": "fixture near-pass",
-    }
-    trace_path = tmp_path / "annotated_trace.json"
-    output = tmp_path / "report.md"
-    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+    trace = load_simulation_trace_export(FIXTURE_PATH)
+    frames = list(trace.frames)
+    frames[1] = replace(
+        frames[1],
+        planner={
+            **frames[1].planner,
+            "annotations": {"clearance": 0.42, "note": "fixture near-pass"},
+        },
+    )
 
-    write_trace_report(trace_path=trace_path, output=output)
-
-    markdown = output.read_text(encoding="utf-8")
+    markdown = render_trace_report(replace(trace, frames=frames))
     assert "## Notable Annotations" in markdown
     assert "clearance: 0.420" in markdown
     assert "note: fixture near-pass" in markdown
@@ -97,12 +96,15 @@ def test_trace_report_renderer_uses_existing_trace_validation_path(
 
     payload = load_simulation_trace_export(FIXTURE_PATH).to_dict()
     payload["evidence_boundary"] = "benchmark_evidence"
-    trace_path = tmp_path / "invalid_trace.json"
     output = tmp_path / "report.md"
-    trace_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(SimulationTraceExportValidationError, match="/evidence_boundary"):
-        write_trace_report(trace_path=trace_path, output=output)
+    repo_root = Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory(prefix="trace-invalid-", dir=repo_root) as scratch_dir:
+        trace_path = Path(scratch_dir) / "invalid_trace.json"
+        trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(SimulationTraceExportValidationError, match="/evidence_boundary"):
+            write_trace_report(trace_path=trace_path, output=output)
 
     assert not output.exists()
 
@@ -164,22 +166,26 @@ def test_trace_report_renderer_rejects_invalid_annotation_references(
 
     payload = load_trace_annotation_set(ANNOTATION_FIXTURE_PATH).to_dict()
     payload["annotations"][0]["anchor"]["event_ids"] = ["missing-event"]
-    trace_dir = tmp_path / "simulation_trace_export_v1"
-    annotation_dir = tmp_path / "trace_annotation_set_v1"
-    trace_dir.mkdir()
-    annotation_dir.mkdir()
-    trace_copy = trace_dir / ANNOTATED_TRACE_FIXTURE_PATH.name
-    trace_copy.write_text(ANNOTATED_TRACE_FIXTURE_PATH.read_text(encoding="utf-8"))
-    annotation_path = annotation_dir / "bad_annotations.json"
     output = tmp_path / "report.md"
-    annotation_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(TraceAnnotationSetValidationError, match="unknown referenced trace"):
-        write_trace_report(
-            trace_path=trace_copy,
-            annotation_path=annotation_path,
-            output=output,
-        )
+    repo_root = Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory(prefix="trace-invalid-annotation-", dir=repo_root) as scratch_dir:
+        scratch_root = Path(scratch_dir)
+        trace_dir = scratch_root / "simulation_trace_export_v1"
+        annotation_dir = scratch_root / "trace_annotation_set_v1"
+        trace_dir.mkdir()
+        annotation_dir.mkdir()
+        trace_copy = trace_dir / ANNOTATED_TRACE_FIXTURE_PATH.name
+        trace_copy.write_text(ANNOTATED_TRACE_FIXTURE_PATH.read_text(encoding="utf-8"))
+        annotation_path = annotation_dir / "bad_annotations.json"
+        annotation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(TraceAnnotationSetValidationError, match="unknown referenced trace"):
+            write_trace_report(
+                trace_path=trace_copy,
+                annotation_path=annotation_path,
+                output=output,
+            )
 
     assert not output.exists()
 

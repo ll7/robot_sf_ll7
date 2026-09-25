@@ -207,7 +207,10 @@ the route-level reasons. Labels without those checks, empty reasons, or contradi
 impossibility. For the default oracle certifier, the loader records the exact parser-consumed map
 and route-override snapshots; the report's stable-input status requires those records to match the
 declared closure. Map parsing is cached by content digest, so replacing bytes at the same path
-cannot reuse a stale parsed definition.
+cannot reuse a stale parsed definition. The default oracle also requires a scenario row whose
+loader-captured manifest closure matches the current root and included-manifest bytes. A stale row
+or a plain hand-built mapping is blocked and remains unknown; `make_envelope_scenario(...)`
+preserves this parse-time binding while applying its diagnostic radius override.
 
 Planner outcomes remain separate from scenario feasibility. The adapter does not infer a named
 execution from one search evaluation; callers must pass producer-bound reference, target, and replay

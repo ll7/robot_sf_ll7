@@ -796,6 +796,64 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
     return _complete_case(result, case_dir, context.output_dir)
 
 
+def _route_overrides_materialized_binding(
+    selected_route_sha256: Any, materialization: dict[str, Any], *, case_dir: Path
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Bind selected route override bytes to the asset staged for replay."""
+    route_asset = next(
+        (
+            asset
+            for asset in materialization.get("assets", [])
+            if isinstance(asset, dict) and asset.get("field") == "route_overrides_file"
+        ),
+        None,
+    )
+    materialized_route_sha256 = (
+        route_asset.get("source_sha256") if isinstance(route_asset, dict) else None
+    )
+    if selected_route_sha256 is None:
+        if isinstance(route_asset, dict):
+            return "not_replayed_route_overrides_changed_after_selection", {
+                "status": "mismatch",
+                "selected_source_sha256": None,
+                "materialized_source_sha256": materialized_route_sha256,
+            }
+        return None, None
+    if not isinstance(selected_route_sha256, str):
+        return "not_replayed_route_overrides_input_unavailable", {
+            "status": "unavailable",
+            "reason": "selected_route_overrides_digest_invalid",
+            "selected_source_sha256": selected_route_sha256,
+            "materialized_source_sha256": materialized_route_sha256,
+        }
+    if not isinstance(route_asset, dict):
+        return "not_replayed_route_overrides_input_unavailable", {
+            "status": "unavailable",
+            "reason": "materialized_route_overrides_asset_missing",
+            "selected_source_sha256": selected_route_sha256,
+            "materialized_source_sha256": None,
+        }
+    if materialized_route_sha256 != selected_route_sha256:
+        return "not_replayed_route_overrides_changed_after_selection", {
+            "status": "mismatch",
+            "selected_source_sha256": selected_route_sha256,
+            "materialized_source_sha256": materialized_route_sha256,
+        }
+    route_bundle_check = _bundled_input_binding(
+        case_dir=case_dir,
+        field="route_overrides_file",
+        bundle_path=route_asset.get("bundle_path"),
+        expected_sha256=selected_route_sha256,
+    )
+    if route_bundle_check.get("status") != "bound":
+        return "not_replayed_route_overrides_changed_after_selection", {
+            "status": route_bundle_check.get("status"),
+            "reason": route_bundle_check.get("reason") or "bundled_route_overrides_changed",
+            "input": "route_overrides_file",
+        }
+    return None, None
+
+
 def _materialized_selection_binding(  # noqa: C901 - preserve ordered snapshot checks
     selected: dict[str, Any], materialization: dict[str, Any], *, case_dir: Path
 ) -> tuple[str | None, dict[str, Any]]:
@@ -841,6 +899,11 @@ def _materialized_selection_binding(  # noqa: C901 - preserve ordered snapshot c
                 "selected_source_sha256": selected_map_sha256,
                 "materialized_source_sha256": materialized_map_sha256,
             }
+    route_error, route_binding = _route_overrides_materialized_binding(
+        selected.get("route_overrides_sha256"), materialization, case_dir=case_dir
+    )
+    if route_error is not None:
+        return route_error, route_binding or {"status": "unavailable"}
     map_id_snapshot = selected.get("map_id_snapshot")
     if isinstance(map_id_snapshot, dict):
         resolution = materialization.get("map_resolution")

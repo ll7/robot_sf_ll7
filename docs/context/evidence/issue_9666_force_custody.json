@@ -1,0 +1,163 @@
+{
+  "episodes": 384,
+  "unique_identities": 384,
+  "scenarios": 48,
+  "seeds": [
+    101,
+    102
+  ],
+  "planner_counts": {
+    "goal": 96,
+    "orca": 96,
+    "social_force": 96,
+    "hybrid_rule_local_planner": 96
+  },
+  "outcomes": {
+    "success": 210,
+    "collision": 117,
+    "failure": 57
+  },
+  "algorithm_status_ok": 384,
+  "degraded": 0,
+  "integrity_contradictions": 0,
+  "fallback_counts_nonzero": 0,
+  "zero_exposure": 91,
+  "zero_pedestrians": 8,
+  "undefined": {
+    "robot_force_impulse_per_exposed_ped": {
+      "missing": 0,
+      "null": 91
+    },
+    "robot_force_mean_active": {
+      "missing": 0,
+      "null": 91
+    },
+    "robot_force_pp_equiv_impulse_total": {
+      "missing": 4,
+      "null": 0
+    }
+  },
+  "source_commit": "71464357ca89e6578ee593a15167bd1eda612d99",
+  "episode_sources": [
+    {
+      "path": "runs/goal__differential_drive/episodes.jsonl",
+      "sha256": "0286022706405637e2ecc301b8555e852c0151a11b13e544a31cb983ca96ee69"
+    },
+    {
+      "path": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "sha256": "ed9fefe4e87cedd29ea640b9e208936f4e810db93e0d5619b83ce395b2405a1e"
+    },
+    {
+      "path": "runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "55b17081fde3f1bf24e0ba7baaf2befe80b14368107d52853d3611dbb8cc348d"
+    },
+    {
+      "path": "runs/social_force__differential_drive/episodes.jsonl",
+      "sha256": "975b444cb065516067149d79d1d6076c4ddc9e6673498ac14c94352f9a7fd25c"
+    }
+  ],
+  "short_pp_equivalent_rows": [
+    {
+      "arm": "goal__differential_drive",
+      "scenario": "classic_cross_trap_high",
+      "seed": 102,
+      "steps": 1,
+      "impulse": 0.4775616836435781,
+      "exposed": 2.0,
+      "effective_distance_min": 0.6694686227196637,
+      "effective_distance_max": 33.34749556402961,
+      "activation": 20.0,
+      "all_beyond": false,
+      "pairs": 12
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario": "classic_cross_trap_high",
+      "seed": 102,
+      "steps": 1,
+      "impulse": 0.4775616836435781,
+      "exposed": 2.0,
+      "effective_distance_min": 0.6694686227196637,
+      "effective_distance_max": 33.34749556402961,
+      "activation": 20.0,
+      "all_beyond": false,
+      "pairs": 12
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario": "classic_cross_trap_high",
+      "seed": 102,
+      "steps": 1,
+      "impulse": 0.4775616836435781,
+      "exposed": 2.0,
+      "effective_distance_min": 0.6694686227196637,
+      "effective_distance_max": 33.34749556402961,
+      "activation": 20.0,
+      "all_beyond": false,
+      "pairs": 12
+    },
+    {
+      "arm": "hybrid_rule_v3_fast_progress_static_escape__differential_drive",
+      "scenario": "classic_cross_trap_high",
+      "seed": 102,
+      "steps": 1,
+      "impulse": 0.4775616836435781,
+      "exposed": 2.0,
+      "effective_distance_min": 0.6694686227196637,
+      "effective_distance_max": 33.34749556402961,
+      "activation": 20.0,
+      "all_beyond": false,
+      "pairs": 12
+    }
+  ],
+  "job_id": "15754",
+  "scheduler": {
+    "state": "COMPLETED",
+    "exit_code": "0:0",
+    "derived_exit_code": "0:0",
+    "elapsed_s": 316
+  },
+  "producer": {
+    "campaign_exit_code": 0,
+    "sync_exit_code": 0,
+    "manifest_sha256": "77afd03ab71414d456b5e23f72de83606f0a3db22fb49890da38c8e60b5e2df4",
+    "startup_sha256": "06f07fe8effb599015cdfd287ec4c489e65ae83471296b9188429d6299460fa1",
+    "verified_file_count": 60
+  },
+  "config": {
+    "path": "configs/benchmarks/issue_9666_force_validation.yaml",
+    "digest": "a5e629e326da5a26ddf06af20d79ea30ec1e10ff7f9d3d75af53515d58b71c93",
+    "effective_hash": "f96ecf5d754082e0"
+  },
+  "preservation": {
+    "uri": "wandb://ll7/robot_sf/campaign-issue9666_force_probe_71464357c_custody_r2_20260924:v0",
+    "manifest_digest": "sha256:1f86505249d38d53688460629b8bbf1ef7af9abf334db4550870a525dfcb626b",
+    "status": "verified",
+    "method": "remote entry table re-fetched; paths/sizes/MD5 compared; embedded manifest downloaded and re-hashed; not a full remote payload download"
+  },
+  "startup_packet_limitation": {
+    "finding": "startup packet path is config path, but packet_sha256 is command-derived digest, not that file hash",
+    "issue": "private-ops#371",
+    "yaml_binding": "separate canonical guard receipt at c262207ebfd1f30f71373cc25426cd419c23e718 binds canonical and submitted artifact_manifest",
+    "yaml_digest": "cd748b9c0b966e0686d37c043106f2b7a86f5f274583807985ab4e6806ec1c57",
+    "canonical_guard_digest": "b96dbea611e2b19d1dc19cced5631bb15f4557c4cb33d2dda2875dd7cad3c33e",
+    "submission_command_digest": "2c5fa4e20c25c66482fbeae8320272e6557690316782a45715dc60b6704779d0",
+    "original_receipts_modified": false
+  },
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ],
+  "location": "wandb://ll7/robot_sf/campaign-issue9666_force_probe_71464357c_custody_r2_20260924:v0",
+  "serialization_refactor_proof": {
+    "status": "passed",
+    "rows": 384,
+    "baseline_source": "71464357ca89e6578ee593a15167bd1eda612d99",
+    "baseline_metrics_py_digest": "4323a21cd7ae11deb81212840aa33f4bab2efb54271e4e0560a7414241e4f468",
+    "current_metrics_py_digest": "5d4d7246a6b1f0fec1fa0570677832a90936951edb3aeab5a49f65672095fe0a",
+    "comparison": "compact JSON bytes of post_process_metrics applied to each stored metric payload, same key order; not a re-simulation",
+    "concatenated_metric_json_digest": "6984422bf4b8df631ee41da75c16fbccc3f2e264be8645e78bb6d02342be33ae",
+    "synthetic_null_nested_case": "passed",
+    "identity_digest": "75499addbd593a82dfaa97ac0ef1233f6584858102339a9da465c716bcfbc24e"
+  }
+}

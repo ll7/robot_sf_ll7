@@ -55,6 +55,73 @@ SOCIAL_FORCE_GOAL_APPROACH_VERSION_SELECTOR_KEYS = (
     "version",
 )
 
+# Social-force planner versions (issue #9724).  ``grid_cell_sum_v1`` is the
+# historical adapter: one obstacle repulsion per occupied grid cell (so the
+# total scales with grid resolution) and velocity commands capped only by
+# ``max_linear_speed``.  ``resolution_independent_v2`` uses one repulsion per
+# visible obstacle surface patch and speed-limited commands.  The default stays
+# the historical path so frozen campaigns remain reproducible; callers opt in.
+SOCIAL_FORCE_PLANNER_LEGACY_V1 = "grid_cell_sum_v1"
+SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2 = "resolution_independent_v2"
+SOCIAL_FORCE_PLANNER_VERSIONS = frozenset(
+    {
+        SOCIAL_FORCE_PLANNER_LEGACY_V1,
+        SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+    }
+)
+
+
+def resolve_social_force_planner_version(value: Any = None) -> str:
+    """Resolve the social-force planner version selector.
+
+    Returns:
+        str: Canonical planner version; ``None`` or blank selects the legacy path.
+    """
+    if value is None:
+        return SOCIAL_FORCE_PLANNER_LEGACY_V1
+    if not isinstance(value, str):
+        raise TypeError("social-force planner version must be a string or None")
+    resolved = value.strip()
+    if not resolved:
+        return SOCIAL_FORCE_PLANNER_LEGACY_V1
+    if resolved not in SOCIAL_FORCE_PLANNER_VERSIONS:
+        supported = ", ".join(sorted(SOCIAL_FORCE_PLANNER_VERSIONS))
+        raise ValueError(
+            f"unsupported social-force planner version {resolved!r}; expected one of {supported}"
+        )
+    return resolved
+
+
+# Sampling-heuristic versions (issues #9727 and #9746).  ``legacy_v1`` is the
+# historical ``algo=socnav_sampling`` heuristic and stays the default so frozen
+# campaigns replay bit-identically.  ``bounded_v2`` is opt-in through
+# ``configs/algos/socnav_sampling_bounded_v2.yaml``; see
+# ``robot_sf.planner.socnav_sampling_v2`` for what it changes and why.
+SOCNAV_SAMPLING_LEGACY_V1 = "legacy_v1"
+SOCNAV_SAMPLING_BOUNDED_V2 = "bounded_v2"
+SOCNAV_SAMPLING_VERSIONS = frozenset({SOCNAV_SAMPLING_LEGACY_V1, SOCNAV_SAMPLING_BOUNDED_V2})
+
+
+def resolve_socnav_sampling_version(value: Any = None) -> str:
+    """Resolve the sampling-heuristic version selector.
+
+    Returns:
+        str: Canonical version; ``None`` or blank selects ``legacy_v1``.
+    """
+    if value is None:
+        return SOCNAV_SAMPLING_LEGACY_V1
+    if not isinstance(value, str):
+        raise TypeError("socnav sampling version must be a string or None")
+    resolved = value.strip()
+    if not resolved:
+        return SOCNAV_SAMPLING_LEGACY_V1
+    if resolved not in SOCNAV_SAMPLING_VERSIONS:
+        supported = ", ".join(sorted(SOCNAV_SAMPLING_VERSIONS))
+        raise ValueError(
+            f"unsupported socnav sampling version {resolved!r}; expected one of {supported}"
+        )
+    return resolved
+
 
 class _ResolvedSocialForceGoalApproachVersion(str):
     """String-compatible goal-approach version retaining selector provenance."""
@@ -310,9 +377,58 @@ class SocNavPlannerConfig:
     social_force_goal_approach_stop_distance: float = 1.75
     social_force_goal_approach_max_speed: float = 0.75
     social_force_goal_approach_clearance: float = 0.25
+    # Issue #9724: opt-in resolution-independent obstacle term and speed-limited
+    # command mapping.  The v2 parameters are only read when the planner version
+    # is ``resolution_independent_v2``; see ``socnav_social_force`` for the
+    # derivation of the defaults.
+    social_force_planner_version: Any = None
+    social_force_obstacle_v2_strength: float = 5.0
+    social_force_obstacle_v2_length: float = 0.6
+    social_force_obstacle_v2_max_terms: int = 8
+    social_force_obstacle_v2_min_separation_deg: float = 30.0
+    # Issues #9727/#9746: opt-in bounded sampling heuristic.  The fields below are
+    # read only when ``socnav_sampling_version == "bounded_v2"``.
+    socnav_sampling_version: Any = None
+    # Pedestrians whose surface distance (centre distance minus robot and
+    # pedestrian radius) is at most this value keep the full, uncapped legacy
+    # repulsion.  1.6 m equals a 3.0 m centre distance at the release radii
+    # (robot 1.0 m, pedestrian 0.4 m).
+    sampling_near_field_surface_distance: float = 1.6
+    # Cap on the weighted repulsion summed over the remaining (far-field)
+    # pedestrians, relative to the unit goal vector.
+    sampling_max_repulsion_ratio: float = 0.75
+    # Extra clearance added to the robot radius when sweeping the footprint.
+    sampling_footprint_margin: float = 0.1
+    # Candidate headings evaluated around the goal-and-repulsion direction, each at
+    # these fractions of the heading-scaled nominal speed.
+    sampling_heading_candidates: int = 13
+    sampling_speed_fractions: tuple[float, ...] = (1.0, 0.5, 0.25, 0.0)
+    # Cost per unit of speed given up, next to occupancy_weight and
+    # occupancy_angle_weight.
+    sampling_speed_weight: float = 0.5
+    # Rollout horizon for each (heading, speed) sample under the drive limits.
+    sampling_horizon_s: float = 2.0
+    # Steer by path distance to the goal around the bound map (reference behaviour);
+    # falls back to straight-line goal direction when no map geometry is bound.
+    sampling_path_distance: bool = True
+    sampling_path_resolution: float = 0.2
+    sampling_path_lookahead: float = 2.0
+    # Heuristic beyond the reference, opt-in: advance pedestrian discs along their
+    # observed velocity in the sweep.
+    sampling_pedestrian_prediction: bool = False
+    # Enhancement (not part of the reference method), opt-in: bound speed so the
+    # robot can brake to a stop before the nearest surface along the swept path.
+    sampling_braking_envelope: bool = False
+    sampling_braking_margin: float = 0.1
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve versioned force selectors immediately and retain provenance."""
+        if name == "social_force_planner_version":
+            object.__setattr__(self, name, resolve_social_force_planner_version(value))
+            return
+        if name == "socnav_sampling_version":
+            object.__setattr__(self, name, resolve_socnav_sampling_version(value))
+            return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -538,6 +654,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             tuple: (linear_velocity, angular_velocity)
         """
+        if self._sampling_version() == SOCNAV_SAMPLING_BOUNDED_V2:
+            from robot_sf.planner.socnav_sampling_v2 import plan_bounded_v2  # noqa: PLC0415
+
+            return plan_bounded_v2(self, observation)
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = self._as_1d_float(robot_state["position"], pad=2)[:2]
         robot_heading = float(self._as_1d_float(robot_state["heading"], pad=1)[0])
@@ -944,7 +1064,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             implementation_mode = "upstream_socnavbench"
         else:
             implementation_mode = "in_repo_heuristic_baseline"
-        return {
+        payload = {
             "planner_type": "SamplingPlannerAdapter",
             "implementation_mode": implementation_mode,
             "upstream_requested": upstream_requested,
@@ -954,6 +1074,54 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             "fallback_reason": fallback_reason,
             "readiness_status": "fallback" if fallback_triggered else "experimental",
         }
+        version = self._sampling_version()
+        if version != SOCNAV_SAMPLING_LEGACY_V1:
+            payload["socnav_sampling_version"] = version
+            payload["braking_envelope"] = bool(
+                getattr(self.config, "sampling_braking_envelope", False)
+            )
+            payload["pedestrian_prediction"] = bool(
+                getattr(self.config, "sampling_pedestrian_prediction", False)
+            )
+            payload["drive_limits"] = dict(getattr(self, "_sampling_drive_limits", {}) or {})
+        return payload
+
+    def _sampling_version(self) -> str:
+        """Return the resolved sampling-heuristic version (issues #9727/#9746)."""
+        config = getattr(self, "config", None)
+        return resolve_socnav_sampling_version(getattr(config, "socnav_sampling_version", None))
+
+    def bind_env(self, env: Any) -> None:
+        """Record the bound robot's drive limits and, for ``bounded_v2``, map geometry.
+
+        Only stores values; the ``legacy_v1`` path never reads them, so binding does
+        not change historical commands.
+        """
+        config = getattr(env, "env_config", None) or getattr(env, "config", None)
+        robot_config = getattr(config, "robot_config", None)
+        if robot_config is None:
+            return
+        limits: dict[str, float] = {}
+        for key in ("max_linear_speed", "max_linear_decel", "max_linear_accel", "radius"):
+            value = getattr(robot_config, key, None)
+            if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
+                limits[key] = float(value)
+        self._sampling_drive_limits = limits
+        self._sampling_path_fields = {}
+        self._sampling_obstacle_segments = None
+        if self._sampling_version() == SOCNAV_SAMPLING_LEGACY_V1:
+            return
+        simulator = getattr(env, "simulator", None)
+        iter_segments = getattr(simulator, "iter_obstacle_segments", None)
+        segments = None
+        if callable(iter_segments):
+            try:
+                raw = np.asarray(list(iter_segments()), dtype=float).reshape(-1, 4)
+            except (TypeError, ValueError):
+                raw = None
+            if raw is not None and raw.size and np.isfinite(raw).all():
+                segments = raw
+        self._sampling_obstacle_segments = segments
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:

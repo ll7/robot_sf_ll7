@@ -313,6 +313,9 @@ def _ledger_exclusion_reason(ledger: Mapping[str, Any] | None) -> str | None:
     collision = exact.get("collision")
     if not isinstance(collision, bool):
         return "invalid_collision_flag"
+    if exact.get("invalid_run") is True:
+        # Issue #9725: invalid runs (for example spawn overlaps) are not planner collisions.
+        return "invalid_run"
     if collision and not events:
         return "collision_event_records_missing"
     if not collision and events:

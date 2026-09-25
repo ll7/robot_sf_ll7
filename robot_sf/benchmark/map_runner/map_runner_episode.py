@@ -163,6 +163,7 @@ from robot_sf.benchmark.safety.safety_wrapper_runtime import (
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
+from robot_sf.benchmark.spawn_validity import build_spawn_validity
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
     SyntheticActuationProfile,
@@ -205,6 +206,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
+from robot_sf.sim.spawn_validation import reset_spawn_clearance
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
@@ -318,6 +320,7 @@ def _step_collision_events(
     if bool(meta.get("is_pedestrian_collision", False)):
         ped_array = np.asarray(ped_positions, dtype=float).reshape(-1, 2)
         partner_id: str | None = None
+        contact_partner_ids: list[str] = []
         relative_speed = float(np.linalg.norm(robot_velocity))
         # Filter non-finite pedestrian slots (padded/absent pedestrians) before
         # selecting the contact partner: np.argmin over a NaN-containing array
@@ -339,6 +342,11 @@ def _step_collision_events(
                 nearest = int(np.argmin(ped_distances))
             ped_index = int(finite_indices[nearest])
             partner_id = str(ped_index)
+            # Every pedestrian in contact, so a respawn overlap is attributed even when
+            # the respawned pedestrian is not the nearest one (issue #9725).
+            contact_partner_ids = [str(int(finite_indices[i])) for i in contact_candidates] or [
+                partner_id
+            ]
             ped_velocity = np.zeros(2, dtype=float)
             if (
                 previous_ped_positions is not None
@@ -354,6 +362,7 @@ def _step_collision_events(
             {
                 "collision_partner_type": "pedestrian",
                 "collision_partner_id": partner_id,
+                "contact_partner_ids": contact_partner_ids,
                 "collision_time": collision_time,
                 "relative_speed_at_contact": relative_speed,
                 "clearance_series_source": "runtime.step.pedestrian_positions",
@@ -1479,6 +1488,8 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
     hybrid_command_sources: list[str | None] | None = None,
     ped_positions: list[np.ndarray],
     ped_forces: list[np.ndarray],
+    robot_force_samples: list[dict[str, Any]] | None = None,
+    persist_robot_force_samples: bool = False,
     visibility_trace: list[np.ndarray | None],
     track_confidence_trace: list[np.ndarray | None],
     visibility_evidence_statuses: list[str],
@@ -1581,6 +1592,33 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
             episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
         )
+        if robot_force_samples:
+            if len(robot_force_samples) != len(ped_positions):
+                raise ValueError("incomplete robot force sampling")
+            ep.robot_force_samples = robot_force_samples
+            first = robot_force_samples[0]
+            components = first["components"]
+            if components:
+                ep.robot_force_config = {k: v for k, v in components[0].items() if k != "robot_pos"}
+            else:
+                ep.robot_force_config = {
+                    "prf_active": False,
+                    "prf_multiplier": float(config.sim_config.prf_config.force_multiplier),
+                    "prf_activation_m": float(config.sim_config.prf_config.activation_threshold),
+                    "prf_robot_radius_m": ep.robot_radius,
+                    "prf_ped_radius_m": float(first["ped_radius_m"]),
+                }
+            ep.robot_force_config["robot_components"] = [
+                {k: v for k, v in component.items() if k != "robot_pos"} for component in components
+            ]
+            ep.social_force_config = first["social_force_config"]
+            ep.robot_ped_forces = _stack_ped_positions(
+                [
+                    np.asarray(sample["forces"], dtype=float).reshape(-1, 2)
+                    for sample in robot_force_samples
+                ],
+                fill_value=np.nan,
+            )
         metrics_raw = compute_all_metrics(
             ep,
             horizon=horizon_val,
@@ -1590,6 +1628,8 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
         )
+    if persist_robot_force_samples and robot_force_samples:
+        metrics_raw["robot_force_samples"] = robot_force_samples
     _floor_collision_metrics_from_flags(
         metrics_raw,
         collision_seen=collision_seen,
@@ -1806,6 +1846,10 @@ class _EpisodeStepLoopResult:
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
     sampler_capture: dict[str, Any] | None = None
+    robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
+    reset_spawn_clearance: dict[str, Any] | None = None
+    reset_spawn_clearance_error: str | None = None
+    respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -1833,6 +1877,7 @@ class _StepLoopState:
     robot_headings: list[float] = field(default_factory=list)
     ped_positions: list[np.ndarray] = field(default_factory=list)
     ped_forces: list[np.ndarray] = field(default_factory=list)
+    robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
     collision_events: list[dict[str, Any]] = field(default_factory=list)
     visibility_trace: list[np.ndarray | None] = field(default_factory=list)
     track_confidence_trace: list[np.ndarray | None] = field(default_factory=list)
@@ -1862,6 +1907,37 @@ class _StepLoopState:
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
     sampler_capture: dict[str, Any] | None = None
+    reset_spawn_clearance: dict[str, Any] | None = None
+    reset_spawn_clearance_error: str | None = None
+    respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _read_reset_spawn_clearance(simulator: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """Measure reset clearance for the episode record (issue #9725).
+
+    Returns:
+        The clearance block and ``None``, or ``None`` and the error text when the
+        simulator does not expose the robot, pedestrian, and map state it needs.
+        The error is written to ``spawn_validity.reset_clearance_error`` and counted
+        in aggregate metadata, so unmeasured rows stay visible.
+    """
+    try:
+        return reset_spawn_clearance(simulator), None
+    except (AttributeError, TypeError, ValueError, IndexError) as exc:
+        logger.warning("Reset spawn clearance unavailable: {err}", err=exc)
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _read_respawn_overlap_events(simulator: Any) -> list[dict[str, Any]]:
+    """Collect route-end respawns that could not avoid a robot footprint.
+
+    Returns:
+        Respawn-overlap events from every route behavior of the simulator.
+    """
+    events: list[dict[str, Any]] = []
+    for behavior in getattr(simulator, "peds_behaviors", None) or []:
+        events.extend(dict(event) for event in getattr(behavior, "respawn_overlap_events", []))
+    return events
 
 
 def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
@@ -2136,6 +2212,10 @@ def _init_step_loop_state(
     state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
     state.sampler_capture = _read_sampler_capture(env)
+    (
+        state.reset_spawn_clearance,
+        state.reset_spawn_clearance_error,
+    ) = _read_reset_spawn_clearance(env.simulator)
     return state
 
 
@@ -2594,6 +2674,13 @@ def _step_snapshot_and_record(
     state.ped_positions.append(peds)
     if slc.record_forces and forces_arr is not None:
         state.ped_forces.append(forces_arr)
+        component = getattr(env.simulator, "last_robot_ped_forces", None)
+        inputs = getattr(env.simulator, "last_robot_force_inputs", None)
+        if component is not None and inputs:
+            component = np.array(component, dtype=float, copy=True)
+            if component.shape != peds.shape:
+                raise ValueError("recorded robot force shape differs from pedestrian snapshot")
+            state.robot_force_samples.append({**inputs, "forces": component.tolist()})
     heading = _observation_heading(obs, default=state.previous_trace_heading)
     state.robot_headings.append(float(heading))
     (
@@ -2841,11 +2928,24 @@ def _step_build_planner_decision_entry(
     if not slc.record_planner_decision_trace or sim.planner_step_decision is None:
         return
     psd = sim.planner_step_decision
+    guard_decision_raw = psd.get("last_decision")
+    if not isinstance(guard_decision_raw, dict):
+        guard_decision_raw = psd
+    guard_decision = (
+        guard_decision_raw
+        if isinstance(guard_decision_raw, dict)
+        and guard_decision_raw.get("schema_version") == "shield-decision.v1"
+        else None
+    )
     selected_terms = psd.get("selected_terms")
     selected_terms = selected_terms if isinstance(selected_terms, dict) else {}
     progress_windows_raw = psd.get("progress_windows")
     progress_windows = progress_windows_raw if isinstance(progress_windows_raw, dict) else {}
-    selected_command = psd.get("selected_command")
+    selected_command = (
+        guard_decision.get("filtered_action")
+        if guard_decision is not None
+        else psd.get("selected_command")
+    )
     selected_command = selected_command if isinstance(selected_command, list) else []
     rejection_counts = _planner_decision_counter_mapping(
         psd.get("rejection_counts"), field="rejection_counts"
@@ -2859,8 +2959,14 @@ def _step_build_planner_decision_entry(
     distance_to_goal = float(np.linalg.norm(sim.robot_pos - state.goal_vec))
     step_decision: dict[str, Any] = {
         "step": int(step_idx),
-        "selected_source": str(psd.get("selected_source", "unknown")),
-        "planner_mode": str(psd.get("planner_mode", "unknown")),
+        "selected_source": str(
+            guard_decision.get("decision_label", psd.get("selected_source", "unknown"))
+            if guard_decision is not None
+            else psd.get("selected_source", "unknown")
+        ),
+        "planner_mode": str(
+            psd.get("planner_mode", "guarded_ppo" if guard_decision is not None else "unknown")
+        ),
         "selected_command": [
             float(value)
             for value in selected_command[:2]
@@ -2892,6 +2998,29 @@ def _step_build_planner_decision_entry(
         "robot_x_m": float(sim.robot_pos[0]),
         "robot_y_m": float(sim.robot_pos[1]),
     }
+    if guard_decision is not None:
+        proposed_action = guard_decision.get("proposed_action")
+        if isinstance(proposed_action, list) and len(proposed_action) >= 2:
+            step_decision["proposed_command"] = [
+                float(value)
+                for value in proposed_action[:2]
+                if isinstance(value, int | float | np.integer | np.floating)
+            ]
+        step_decision["safety_guard"] = dict(guard_decision)
+        current_intervened = bool(guard_decision.get("intervened", False))
+        previous_guard = (
+            state.planner_decision_trace[-1].get("safety_guard")
+            if state.planner_decision_trace
+            else None
+        )
+        previous_intervened = (
+            bool(previous_guard.get("intervened", False))
+            if isinstance(previous_guard, dict)
+            else False
+        )
+        step_decision["guard_intervened"] = current_intervened
+        step_decision["guard_intervention_start"] = current_intervened and not previous_intervened
+        step_decision["guard_intervention_end"] = previous_intervened and not current_intervened
     _step_planner_decision_topology_keys(step_decision, psd)
     _step_planner_decision_dwa_keys(step_decision, psd)
     state.planner_decision_trace.append(cast("PlannerDecisionTraceEntry", step_decision))
@@ -3177,6 +3306,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         robot_headings=state.robot_headings,
         ped_positions=state.ped_positions,
         ped_forces=state.ped_forces,
+        robot_force_samples=state.robot_force_samples,
         visibility_trace=state.visibility_trace,
         track_confidence_trace=state.track_confidence_trace,
         visibility_evidence_statuses=state.visibility_evidence_statuses,
@@ -3198,6 +3328,9 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
         sampler_capture=state.sampler_capture,
+        reset_spawn_clearance=state.reset_spawn_clearance,
+        reset_spawn_clearance_error=state.reset_spawn_clearance_error,
+        respawn_overlap_events=list(state.respawn_overlap_events),
     )
 
 
@@ -3395,6 +3528,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             args.planner_runtime.policy_fn
         )
         if getattr(env, "simulator", None) is not None:
+            state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
             state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
@@ -4702,6 +4836,16 @@ def _finalize_assembled_record_provenance(  # noqa: PLR0913
     active_observation_level: str,
 ) -> None:
     """Attach provenance and episode-evidence metadata to an assembled record."""
+    # Spawn validity must be on the record before the event ledger is built, so a
+    # reset or respawn overlap marks the ledger ``invalid_run`` (issue #9725).
+    record["spawn_validity"] = build_spawn_validity(
+        loop_result.reset_spawn_clearance,
+        loop_result.respawn_overlap_events,
+        collision_events=loop_result.collision_events,
+        dt_seconds=float(ctx.config.sim_config.time_per_step_in_secs),
+        route_complete=loop_result.reached_goal_step is not None,
+        reset_clearance_error=loop_result.reset_spawn_clearance_error,
+    )
     _finalize_record_provenance(
         record,
         algo_meta=algo_meta,
@@ -5233,6 +5377,8 @@ def run_map_episode(  # noqa: PLR0913
         hybrid_command_sources=loop_result.hybrid_command_sources,
         ped_positions=loop_result.ped_positions,
         ped_forces=loop_result.ped_forces,
+        robot_force_samples=loop_result.robot_force_samples,
+        persist_robot_force_samples=record_simulation_step_trace,
         visibility_trace=loop_result.visibility_trace,
         track_confidence_trace=loop_result.track_confidence_trace,
         visibility_evidence_statuses=loop_result.visibility_evidence_statuses,

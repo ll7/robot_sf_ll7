@@ -10,11 +10,15 @@ from pysocialforce.config import (
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
 )
+from scipy import ndimage
 
 from robot_sf.planner import socnav as _socnav
 from robot_sf.planner.socnav_base import (
     SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
     SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+    SOCIAL_FORCE_PLANNER_LEGACY_V1,
+    SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+    resolve_social_force_planner_version,
 )
 from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
 
@@ -25,11 +29,41 @@ sf_forces = _socnav.sf_forces
 
 SOCIAL_FORCE_GOAL_APPROACH_METADATA_SCHEMA = "social_force_goal_approach_metadata.v1"
 
+# Issue #9724: parameter derivation for the ``resolution_independent_v2``
+# obstacle term (defaults live on ``SocNavPlannerConfig``).
+#
+# The goal ("driving") term is ``(v_des * e_goal - v) / tau``.  With
+# v_des = 1.0 m/s and tau = 0.5 s it is at most v_des / tau = 2 m/s^2 (robot at
+# rest) and about 0 at cruise.  Integrated through the relaxation, a constant
+# interaction force F shifts the steady-state velocity by
+# ``dv = tau * w * F`` with the repulsion weight w = 0.8, i.e. dv = 0.4 * F.
+#
+# The v2 obstacle term is one exponential repulsion per visible obstacle
+# surface patch, ``F(d) = A * exp(-d / B)`` along the outward normal, where d is
+# the SURFACE distance (centre distance to the nearest point of the occupied
+# region minus the robot radius from the observation).  With A = 5 m/s^2 and
+# B = 0.6 m:
+#   d = 0.0 m -> w*F = 4.0 m/s^2 (2x the largest goal force: a robot driving
+#                straight at a wall at v_des is stopped and turned, dv = 2 m/s)
+#   d = 0.5 m -> w*F = 1.74 (dv 0.87 m/s, the same order as v_des)
+#   d = 1.0 m -> w*F = 0.76 (dv 0.38 m/s, still a clear steering bias)
+#   d = 2.0 m -> w*F = 0.14 (dv 0.07 m/s, 7 % of the maximum goal force)
+#   d = 3.0 m -> w*F = 0.03 (negligible)
+#   d = 5.0 m -> w*F = 0.001
+# So the wall term is comparable to the goal term within about 1-2 m of the
+# robot surface and negligible beyond a few metres, independent of how finely
+# the occupancy grid resolves the wall.  (The v1 per-cell sum reached 40-550
+# at the same distances because every occupied cell added its own term.)
+
 
 class SocialForcePlannerAdapter(SamplingPlannerAdapter):
     """Social-force planner adapter using fast-pysf interaction forces."""
 
     _EPS = 1e-6
+    _TURN_HYSTERESIS_RAD = 5.0 * pi / 6.0  # 150 deg
+    _BLOCKED_RELEASE_RAD = pi / 3.0  # 60 deg
+    _BALANCE_FRACTION = 0.1
+    _BALANCE_CREEP_FRACTION = 0.1
 
     def __init__(self, config: SocNavPlannerConfig | None = None) -> None:
         """Initialize the social-force adapter with optional configuration."""
@@ -43,6 +77,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._obstacle_force_runtime_parameters: dict[str, Any] = {}
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters: dict[str, Any] = {}
+        self._last_turn_sign = 0.0
+        self._avoid_side = 0.0
+        self._blocked_latched = False
+        self._target_speed = float("inf")
+        self._filtered_target = None
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
@@ -51,6 +90,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._obstacle_force_runtime_parameters = {}
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters = {}
+        self._last_turn_sign = 0.0
+        self._avoid_side = 0.0
+        self._blocked_latched = False
+        self._target_speed = float("inf")
+        self._filtered_target = None
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -72,6 +116,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         goal_dist = float(np.linalg.norm(to_goal))
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters = {}
+        self._target_velocity = None
         if goal_dist < self.config.goal_tolerance:
             return np.zeros(2, dtype=float)
 
@@ -109,15 +154,31 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         )
 
         total_force = self._clip_force(desired_force + interaction_force)
+        # Steady-state target of the relaxation, v* = v + tau * F: the velocity
+        # the model is relaxing toward.  It does not depend on dt or on the
+        # current velocity, so v2 steers by its direction (issue #9724).
+        target = robot_vel + float(self.config.social_force_tau) * total_force
+        # Low-pass the steering target with time constant tau.  The occupancy
+        # grid is re-rasterised in the ego frame every step, so while the robot
+        # turns in place the obstacle patches (and the small net vector near a
+        # force balance) jump from step to step; unfiltered, the turn direction
+        # flipped every few steps in front of a too-narrow doorway.
+        previous = getattr(self, "_filtered_target", None)
+        if previous is None:
+            self._filtered_target = target
+        else:
+            alpha = dt / (float(self.config.social_force_tau) + dt)
+            self._filtered_target = (1.0 - alpha) * previous + alpha * target
+        self._target_velocity = self._filtered_target
         velocity_world = robot_vel + total_force * dt
         speed = float(np.linalg.norm(velocity_world))
         if speed < self._EPS:
             return np.zeros(2, dtype=float)
-        if speed > self.config.max_linear_speed:
-            velocity_world = (
-                velocity_world / (speed + self._EPS) * float(self.config.max_linear_speed)
-            )
+        speed_limit = self._speed_limit()
+        if speed > speed_limit:
+            velocity_world = velocity_world / (speed + self._EPS) * speed_limit
         if goal_approach is not None:
+            self._target_velocity = None  # steer by the blended approach velocity
             approach_speed = min(
                 float(self.config.social_force_goal_approach_max_speed),
                 float(self.config.max_linear_speed),
@@ -210,15 +271,30 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         desired_vel = self.plan_velocity_world(observation)
         speed = float(np.linalg.norm(desired_vel))
         if speed < self._EPS:
             return 0.0, 0.0
 
-        desired_heading = atan2(desired_vel[1], desired_vel[0])
+        steer_vel = desired_vel
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
+            target = getattr(self, "_target_velocity", None)
+            if target is not None and float(np.linalg.norm(target)) > self._EPS:
+                steer_vel = target
+            self._target_speed = (
+                float(np.linalg.norm(target)) if target is not None else float("inf")
+            )
+        desired_heading = atan2(steer_vel[1], steer_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
+            robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+            to_goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2] - robot_pos
+            goal_ahead = (
+                float(to_goal @ np.array([np.cos(robot_heading), np.sin(robot_heading)])) > 0.0
+            )
+            return self._unicycle_command_v2(speed, heading_error, goal_ahead=goal_ahead)
         angular = float(
             np.clip(
                 self.config.angular_gain * heading_error,
@@ -234,6 +310,112 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             ),
         )
         return linear, angular
+
+    def _unicycle_command_v2(
+        self, speed: float, heading_error: float, *, goal_ahead: bool
+    ) -> tuple[float, float]:
+        """Map a desired world velocity to (v, w) for ``resolution_independent_v2``.
+
+        ``heading_error`` is measured to the low-passed steady-state target
+        ``v* = v + tau * F`` (see ``plan``); ``speed`` is the magnitude of the
+        integrated velocity ``v + F * dt``.
+
+        * Drive only the component of the desired velocity along the current
+          heading (``speed * max(0, cos(error))``), capped at the speed limit.
+          A sideways or backward desired velocity therefore turns the robot in
+          place at the limited turn rate instead of orbiting at speed.
+        * Blocked ahead: when the target points backwards (``|error| > 90
+          deg``) while the current goal lies in front of the robot, an
+          obstacle or pedestrian in front pushes harder than the goal pulls.
+          A unicycle cannot back up, so the robot turns toward the side of the
+          lateral component of the target (sign of ``cross(heading, v*)``)
+          and then drives around the obstacle once the target is in front.
+          Both the state and the side have hysteresis: the state is entered
+          at 90 deg and released when the target is within 60 deg of the
+          heading (or the goal falls behind); the side is kept, also while
+          the target stays behind the robot, until the robot drives at half
+          its speed limit or more.
+        * Force balance: when ``|v*|`` is below 10 % of v_des the goal and
+          interaction forces cancel and the target's direction is noise.  The
+          robot keeps turning in its current direction and creeps forward at
+          10 % of its speed limit (turn radius 0.1 m at the defaults), which
+          moves it off the balance point.
+        * Hysteresis: otherwise, when ``|error| > 150 deg`` keep the previous
+          turn direction, so a target that flips around the robot's back does
+          not reverse the turn every step.
+
+        There is no hold state: no static scene keeps the robot still.  In a
+        true dead end (a doorway narrower than the robot) the robot circles
+        slowly near the force balance without turn-sign flips; before these
+        rules it spun in place with a sign flip nearly every step.
+
+        Timing: the integrated velocity is ``robot_vel + F * dt``, so from rest
+        its magnitude, and how soon a turn produces forward motion, scale with
+        the timestep.  The turn decisions use the target direction and
+        magnitude, which do not depend on dt; the filter has time constant
+        ``tau``.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        max_turn = float(self.config.max_angular_speed)
+        backwards = abs(heading_error) > 0.5 * pi
+        if backwards and goal_ahead:
+            self._blocked_latched = True
+        elif not goal_ahead or abs(heading_error) < self._BLOCKED_RELEASE_RAD:
+            self._blocked_latched = False
+        along_heading = max(0.0, float(np.cos(heading_error)))
+        linear = float(np.clip(speed * along_heading, 0.0, self._speed_limit()))
+        balanced = self._target_speed < self._BALANCE_FRACTION * max(
+            float(self.config.social_force_desired_speed), self._EPS
+        )
+        if balanced:
+            # Goal and interaction forces (nearly) cancel, so the direction of
+            # the tiny net vector is noise.  Keep turning the way the robot
+            # already turns instead of following it: no sign flips, and no
+            # state in which a static scene keeps the robot still.
+            angular = (self._avoid_side or self._last_turn_sign or 1.0) * max_turn
+            # Creep forward slowly (radius v/w = 0.1 m at the defaults) so the
+            # robot leaves the balance point instead of spinning on it.
+            linear = max(linear, self._BALANCE_CREEP_FRACTION * self._speed_limit())
+        elif self._blocked_latched or (backwards and self._avoid_side != 0.0):
+            if self._avoid_side == 0.0:
+                lateral = float(np.sin(heading_error))
+                self._avoid_side = 1.0 if lateral >= 0.0 else -1.0
+            angular = self._avoid_side * max_turn
+        else:
+            angular = float(
+                np.clip(float(self.config.angular_gain) * heading_error, -max_turn, max_turn)
+            )
+            if abs(heading_error) > self._TURN_HYSTERESIS_RAD and self._last_turn_sign != 0.0:
+                angular = self._last_turn_sign * abs(angular)
+        if abs(angular) > self._EPS:
+            self._last_turn_sign = 1.0 if angular > 0.0 else -1.0
+        if not self._blocked_latched and linear >= 0.5 * self._speed_limit():
+            # The robot is driving again: a later blockage may pick a new side.
+            self._avoid_side = 0.0
+        return linear, angular
+
+    def _planner_version(self) -> str:
+        """Return the resolved social-force planner version (issue #9724)."""
+        return resolve_social_force_planner_version(
+            getattr(self.config, "social_force_planner_version", None)
+        )
+
+    def _speed_limit(self) -> float:
+        """Return the translational speed cap for the configured planner version.
+
+        v1 caps only at ``max_linear_speed`` (3 m/s by default), so commands could
+        reach three times the social-force desired speed.  v2 also respects the
+        desired speed ``v_des``, as in the social-force model itself.
+
+        Returns:
+            float: Maximum commanded translational speed in m/s.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_LEGACY_V1:
+            return max_speed
+        return max(0.0, min(max_speed, float(self.config.social_force_desired_speed)))
 
     def _resolve_dt(self, observation: dict) -> float:
         """Return the simulation timestep (fallback to config defaults)."""
@@ -295,7 +477,16 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         # scalar loop swallowed via try/except -> continue) are masked out here:
         # such pairs map to a zero force and are excluded from the reduction.
         pos_diff = (robot_pos[np.newaxis, :] - ped_positions).astype(float)  # (M, 2)
-        vel_diff = (robot_vel[np.newaxis, :] - ped_vel_world).astype(float)  # (M, 2)
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_LEGACY_V1:
+            # Historical sign: ``v_self - v_other``.  The kernel expects
+            # ``v_other - v_self`` (fast-pysf ``social_force`` pairs ``p_i - p_j``
+            # with ``v_j - v_i``), so for an approaching pedestrian the
+            # interaction direction points away from the pedestrian and the
+            # force all but vanishes.  Kept only for trace reproducibility.
+            vel_diff = (robot_vel[np.newaxis, :] - ped_vel_world).astype(float)  # (M, 2)
+        else:
+            # v2 (issue #9724): the kernel's own convention, ``v_j - v_i``.
+            vel_diff = (ped_vel_world - robot_vel[np.newaxis, :]).astype(float)  # (M, 2)
         forces = _pairwise_social_force_kernel(
             pos_diff,
             vel_diff,
@@ -321,6 +512,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             np.ndarray: Combined obstacle repulsion vector.
         """
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
+            return self._compute_obstacle_force_v2(
+                observation, robot_pos, robot_heading, robot_state
+            )
         law_version = resolve_obstacle_force_law(
             getattr(self.config, "social_force_obstacle_law", None)
         )
@@ -368,6 +563,180 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         total = np.sum(force, axis=0)
         self._obstacle_force_applied = self._obstacle_force_enabled()
         return total * obstacle_factor
+
+    def _compute_obstacle_force_v2(
+        self,
+        observation: dict,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        robot_state: dict,
+    ) -> np.ndarray:
+        """Resolution-independent obstacle repulsion (``resolution_independent_v2``).
+
+        One exponential term per visible obstacle surface patch (see
+        ``_visible_obstacle_points``), evaluated at the surface distance between
+        the robot disc and the occupied region.  Parameters and their derivation
+        are documented at the top of this module.
+
+        Returns:
+            np.ndarray: World-frame obstacle force (before the repulsion weight).
+        """
+        points, normals, distances = self._visible_obstacle_points(
+            observation, robot_pos, robot_heading
+        )
+        robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
+        strength = float(self.config.social_force_obstacle_v2_strength)
+        length = max(float(self.config.social_force_obstacle_v2_length), self._EPS)
+        obstacle_factor = float(self.config.social_force_obstacle_factor)
+        self._obstacle_force_runtime_parameters.update(
+            {
+                "robot_radius": robot_radius,
+                "visible_obstacle_terms": int(points.shape[0]),
+            }
+        )
+        if points.shape[0] == 0:
+            return np.zeros(2, dtype=float)
+        surface = np.maximum(distances - robot_radius, 0.0)
+        magnitudes = strength * np.exp(-surface / length)
+        force = np.sum(magnitudes[:, np.newaxis] * normals, axis=0)
+        self._obstacle_force_applied = self._obstacle_force_enabled()
+        # ``social_force_obstacle_factor`` keeps its role as an on/off and
+        # ablation scale; the v2 magnitude lives in ``..._v2_strength``, so the
+        # historical default of 10 is normalised away here.
+        return force * (obstacle_factor / 10.0)
+
+    def _visible_obstacle_points(
+        self, observation: dict, robot_pos: np.ndarray, robot_heading: float
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Select one nearest point per visible obstacle surface patch.
+
+        Every occupied cell is treated as a filled square, and its nearest point
+        to the robot centre is computed exactly, so the occupied region (not the
+        cell count) defines the geometry.  Points are then chosen greedily,
+        nearest first.  After choosing point ``q`` with bearing
+        ``u = (q - robot) / |q - robot|``, the remaining points of the same
+        8-connected occupied region as ``q`` are discarded when they lie on or
+        behind the tangent line through ``q`` (``(p - q) . u >= -(tol +
+        sin(15 deg) * |p - q|)``) or within
+        ``social_force_obstacle_v2_min_separation_deg`` (30 deg) of ``u``.
+        Points of other occupied regions are never discarded.
+
+        ``tol`` is one cell diagonal.  The distance-proportional 15 deg part is
+        needed because on a rasterised oblique wall the nearest staircase
+        corner tilts ``u`` by a few degrees; with a resolution-only slack,
+        walls at 5-15 deg to the grid axes produced two or three terms at every
+        tested resolution (0.05-0.2 m).  It only acts inside one connected
+        region, so it cannot drop a separate nearby obstacle.
+
+        Consequences: a straight wall yields one term (like one fast-pysf
+        segment); a convex obstacle one term; the two walls of a corridor or
+        the legs of an inside corner one term each, so their lateral forces
+        cancel on the centre line.  Every separate obstacle (a post in front
+        of a wall, each column of a row) keeps its own term, as with
+        fast-pysf's per-obstacle sum, up to
+        ``social_force_obstacle_v2_max_terms`` (8) nearest terms; an obstacle
+        hidden behind a nearer one also keeps its (weaker) term.  Merging
+        happens only inside one connected region: surfaces within 15 deg of
+        coplanar, or within 30 deg of bearing, count as one patch.  Note the
+        attached-pillar case: a pillar that touches a wall rasterises into the
+        same connected region, so when it lies within 30 deg of the wall's
+        nearest point (or behind the tangent line there) it merges into that
+        wall term instead of getting its own.  Tested cell sizes: 0.05-0.2 m.  Because
+        selection is discrete, a patch term can appear or disappear as the
+        robot moves; the exponential decay keeps such steps small except at
+        contact range.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray, np.ndarray]: World-frame nearest points,
+            unit normals pointing from the obstacle to the robot, and centre
+            distances (one row per selected term).
+        """
+        empty = (
+            np.zeros((0, 2), dtype=float),
+            np.zeros((0, 2), dtype=float),
+            np.zeros((0,), dtype=float),
+        )
+        payload = self._obstacle_grid_payload(observation)
+        if payload is None:
+            return empty
+        grid, meta, channel_idx, resolution = payload
+        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
+        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
+        self._obstacle_force_runtime_parameters.update(
+            {
+                "grid_resolution": float(resolution),
+                "grid_origin": [float(origin[0]), float(origin[1])],
+                "grid_frame": "ego" if use_ego else "world",
+                "obstacle_channel_index": int(channel_idx),
+            }
+        )
+        mask = np.asarray(grid[channel_idx]) >= float(self.config.social_force_obstacle_threshold)
+        if not np.any(mask):
+            return empty
+        # Interior cells can never be the nearest point of the occupied region.
+        padded = np.pad(mask, 1, constant_values=False)
+        interior = padded[:-2, 1:-1] & padded[2:, 1:-1] & padded[1:-1, :-2] & padded[1:-1, 2:]
+        indices = np.argwhere(mask & ~interior)
+        if indices.size == 0:
+            return empty
+        labels, _count = ndimage.label(mask, structure=np.ones((3, 3), dtype=bool))
+        components = labels[indices[:, 0], indices[:, 1]]
+
+        half = 0.5 * float(resolution)
+        centers = self._grid_cell_centers(indices, origin, resolution)
+        robot_grid = np.zeros(2, dtype=float) if use_ego else np.asarray(robot_pos, dtype=float)
+        nearest = np.clip(robot_grid[np.newaxis, :], centers - half, centers + half)
+        offsets = nearest - robot_grid[np.newaxis, :]
+        dist = np.sqrt(np.einsum("ij,ij->i", offsets, offsets))
+        max_range = float(self.config.social_force_obstacle_range)
+        keep = np.isfinite(dist) & (dist <= max_range)
+        if not np.any(keep):
+            return empty
+        offsets = offsets[keep]
+        dist = dist[keep]
+        components = components[keep]
+        # A robot centre inside an occupied cell has no defined surface normal
+        # from the clamped point; fall back to the cell-centre direction.
+        inside = dist < self._EPS
+        if np.any(inside):
+            center_offsets = centers[keep][inside] - robot_grid[np.newaxis, :]
+            offsets[inside] = center_offsets
+        norms = np.maximum(np.linalg.norm(offsets, axis=1), self._EPS)
+        directions = offsets / norms[:, np.newaxis]
+
+        tolerance = np.sqrt(2.0) * float(resolution)
+        same_surface_slack = float(np.sin(np.deg2rad(15.0)))
+        cos_window = float(
+            np.cos(np.deg2rad(float(self.config.social_force_obstacle_v2_min_separation_deg)))
+        )
+        max_terms = max(int(self.config.social_force_obstacle_v2_max_terms), 0)
+        alive = np.ones(dist.shape[0], dtype=bool)
+        chosen: list[int] = []
+        while np.any(alive) and (max_terms == 0 or len(chosen) < max_terms):
+            candidates = np.flatnonzero(alive)
+            best = int(candidates[np.argmin(dist[candidates])])
+            chosen.append(best)
+            u = directions[best]
+            rel = offsets - offsets[best]
+            rel_norm = np.sqrt(np.einsum("ij,ij->i", rel, rel))
+            same_surface = (components == components[best]) & (
+                (rel @ u >= -(tolerance + same_surface_slack * rel_norm))
+                | (directions @ u >= cos_window)
+            )
+            alive &= ~same_surface
+            alive[best] = False
+
+        sel_offsets = offsets[chosen]
+        sel_dist = dist[chosen]
+        sel_normals = -directions[chosen]
+        if use_ego:
+            cos_h = float(np.cos(robot_heading))
+            sin_h = float(np.sin(robot_heading))
+            rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]], dtype=float)
+            sel_offsets = sel_offsets @ rotation.T
+            sel_normals = sel_normals @ rotation.T
+        points = sel_offsets + np.asarray(robot_pos, dtype=float)[np.newaxis, :]
+        return points, sel_normals, sel_dist
 
     def _obstacle_force_enabled(self) -> bool:
         """Return whether the configured obstacle-force factor can contribute."""
@@ -591,6 +960,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         """Return execution diagnostics."""
         return {
             "planner_type": "SocialForcePlannerAdapter",
+            "planner_version": self._planner_version()
+            if getattr(self, "config", None) is not None
+            else SOCIAL_FORCE_PLANNER_LEGACY_V1,
             "obstacle_force_law": self.obstacle_force_law_metadata(),
             "goal_approach": self.goal_approach_metadata(),
         }
@@ -640,12 +1012,40 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 "radius_scale": float(config.social_force_obstacle_radius_scale),
                 "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
             }
+            planner_version = resolve_social_force_planner_version(
+                getattr(config, "social_force_planner_version", None)
+            )
+            if planner_version != SOCIAL_FORCE_PLANNER_LEGACY_V1:
+                parameters.update(
+                    {
+                        "planner_version": planner_version,
+                        "v2_strength": float(config.social_force_obstacle_v2_strength),
+                        "v2_length": float(config.social_force_obstacle_v2_length),
+                        "v2_max_terms": int(config.social_force_obstacle_v2_max_terms),
+                        "v2_min_separation_deg": float(
+                            config.social_force_obstacle_v2_min_separation_deg
+                        ),
+                    }
+                )
             parameters.update(getattr(self, "_obstacle_force_runtime_parameters", {}))
+        is_v2 = (
+            config is not None
+            and resolve_social_force_planner_version(
+                getattr(config, "social_force_planner_version", None)
+            )
+            != SOCIAL_FORCE_PLANNER_LEGACY_V1
+        )
         return obstacle_force_law_metadata(
             getattr(config, "social_force_obstacle_law", None),
             site="socnav_social_force",
-            geometry_convention="occupancy_cell_centers",
-            radius_convention="cell_derived_radius_plus_robot_radius",
+            geometry_convention=(
+                "occupancy_visible_nearest_points" if is_v2 else "occupancy_cell_centers"
+            ),
+            radius_convention=(
+                "robot_radius_surface_distance"
+                if is_v2
+                else "cell_derived_radius_plus_robot_radius"
+            ),
             enabled=self._obstacle_force_enabled() if config is not None else True,
             applied=bool(getattr(self, "_obstacle_force_applied", False)),
             resolution_mode=getattr(

@@ -280,6 +280,58 @@ def test_typed_global_ba01_signals_drive_band_and_score() -> None:
     assert "ba-01-signals:unavailable" not in ranked.dataset.missingness
 
 
+@pytest.mark.parametrize("global_signal", [False, True], ids=["candidate", "global"])
+def test_queue_snapshots_typed_signal_values_before_persistence(
+    tmp_path: Path, global_signal: bool
+) -> None:
+    candidate = _candidate("typed-signal-snapshot")
+    measured = {"severity": 0.2, "audit": {"samples": ["before"]}}
+    evidence = [{"kind": "trace", "details": {"events": [{"label": "before"}]}}]
+    threshold = {"limits": {"severity": [0.1, 0.5]}}
+    signal = Signal(
+        signal_id="mutable-typed-signal",
+        detector_id="config-integrity",
+        episode_id=candidate.episode_id,
+        measured=measured,
+        evidence=evidence,
+        threshold=threshold,
+    )
+    if global_signal:
+        dataset = QueueDataset((candidate,), signals=(signal,))
+    else:
+        dataset = QueueDataset((QueueCandidate(candidate.episode, signals=(signal,)),))
+    identity_before = dataset.identity
+    dataset_packet_before = dataset.to_dict()
+
+    with AuditStore(tmp_path / "audit") as store:
+        queue = AuditQueue(dataset, store=store, policy=QueuePolicy.fixed())
+        selected = queue.select_next()
+        assert selected is not None
+        selected_packet_before = record_to_dict(selected.packet)
+        stored = store.get(selected.packet.packet_id)
+        assert stored is not None
+        persisted_packet_before = record_to_dict(stored.record)
+        explanation_before = queue.rank_candidates()[0].explanation.to_dict()
+
+        signal.measured["severity"] = 0.95
+        signal.measured["audit"]["samples"].append("caller mutation")
+        signal.evidence[0]["details"]["events"][0]["label"] = "caller mutation"
+        signal.threshold["limits"]["severity"][1] = 10.0
+        measured["audit"]["samples"].append("source mapping mutation")
+        evidence[0]["details"]["events"][0]["label"] = "source mapping mutation"
+        threshold["limits"]["severity"][1] = 20.0
+
+        assert dataset.identity == identity_before
+        assert dataset.to_dict() == dataset_packet_before
+        assert record_to_dict(selected.packet) == selected_packet_before
+        assert queue.rank_candidates()[0].explanation.to_dict() == explanation_before
+        stored_after = store.get(selected.packet.packet_id)
+        assert stored_after is not None
+        assert record_to_dict(stored_after.record) == persisted_packet_before
+        with pytest.raises(TypeError):
+            dataset.signals_for(candidate.episode_id)[0].measured["severity"] = 1.0
+
+
 def test_ba01_raw_report_signal_adapts_to_canonical_episode_ref() -> None:
     fixture = (
         Path(__file__).resolve().parents[1]

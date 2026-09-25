@@ -63,7 +63,7 @@ from robot_sf.benchmark.fidelity_rank_stability import (
     kendall_tau,
     rank_planners,
 )
-from robot_sf.benchmark.seed_variance import _stats_for_vals
+from robot_sf.benchmark.seed_variance import _stats_for_vals, seed_episode_row_is_valid
 
 SCHEMA_VERSION = "issue_3216_headline_ci_rank_stability.v1"
 DEFAULT_ISSUE = 3216
@@ -536,7 +536,8 @@ def _group_campaign_seed_metrics(
         planner = str(row.get("planner_key", "")).strip()
         scenario_id = str(row.get("scenario_id", "")).strip()
         seed = _optional_int(row.get("seed"))
-        if not planner or not scenario_id or seed is None:
+        # Issue #9725: spawn-overlap rows are listed in the CSV but excluded from rates.
+        if not planner or not scenario_id or seed is None or not seed_episode_row_is_valid(row):
             continue
         family = _scenario_family_from_id(scenario_id, known_families)
         for metric, raw_value in _campaign_metric_sources(row).items():

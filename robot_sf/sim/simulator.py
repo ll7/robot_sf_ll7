@@ -73,6 +73,10 @@ from robot_sf.nav.navigation import (
     sample_route,
 )
 from robot_sf.nav.occupancy import circle_collides_any_lines
+from robot_sf.nav.spawn_clearance import (
+    SPAWN_CLEARANCE_MARGIN_M,
+    relocate_overlapping_pedestrians,
+)
 from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForce,
     AdversarialPedForceConfig,
@@ -83,7 +87,11 @@ from robot_sf.ped_npc.ped_behavior import (
     PedestrianBehavior,
     SinglePedestrianBehavior,
 )
-from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
+from robot_sf.ped_npc.ped_population import (
+    PedSpawnConfig,
+    populate_simulation,
+    validate_spawn_footprints,
+)
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.residual_adversary import (
@@ -470,9 +478,16 @@ def _build_pysf_simulation(  # noqa: PLR0913
         ),
         sampler_capture=sampler_capture,
     )
+    max_robot_radius = max((float(robot.config.radius) for robot in robots), default=0.0)
     for behavior in peds_behaviors:
         if isinstance(behavior, SinglePedestrianBehavior):
             behavior.set_robot_pose_provider(robot_pose_provider)
+        elif isinstance(behavior, FollowRouteBehavior) and robots:
+            # Route-end respawns must not teleport a group onto the robot (issue #9725).
+            behavior.set_robot_exclusion(
+                robot_pose_provider,
+                max_robot_radius + float(config.ped_radius) + SPAWN_CLEARANCE_MARGIN_M,
+            )
 
     if include_response_law_multipliers:
         num_peds = pysf_state.pysf_states().shape[0]
@@ -546,6 +561,8 @@ class Simulator:
     peds_have_obstacle_forces: bool
     # Last pedestrian force vectors used to step the simulation (K,2)
     last_ped_forces: np.ndarray = field(init=False, repr=False)
+    last_robot_ped_forces: np.ndarray = field(init=False, repr=False)
+    last_robot_force_inputs: dict = field(init=False, repr=False)
     _initial_pysf_states: np.ndarray = field(init=False, repr=False)
     ped_headings: np.ndarray = field(init=False, repr=False)
     _initial_ped_headings: np.ndarray = field(init=False, repr=False)
@@ -562,6 +579,7 @@ class Simulator:
         init=False, repr=False, default=None
     )
     sampler_capture: SpawnSamplerCapture | None = field(init=False, repr=False, default=None)
+    last_spawn_relocation: Any = field(init=False, repr=False, default=None)
     last_oracle_transition_traces: tuple[OracleTransitionTraceV1, ...] | None = field(
         init=False, repr=False, default=None
     )
@@ -641,6 +659,8 @@ class Simulator:
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
         self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
         self.ped_headings = self._headings_from_current_ped_velocities()
         self._initial_ped_headings = self.ped_headings.copy()
@@ -1567,6 +1587,8 @@ class Simulator:
         if existing_headings is not None:
             self.ped_angular_velocities = np.zeros_like(existing_headings)
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
         self.last_force_computation = None
         self.last_step_diagnostics = None
         self.last_oracle_transition_traces = None
@@ -1650,6 +1672,7 @@ class Simulator:
                     self.map_def,
                     None if self.random_start_pos else i,
                     completion_policy=self.goal_completion_policy,
+                    robot_radius=float(robot.config.radius),
                 )
                 nav.new_route(
                     waypoints[1:],
@@ -1659,6 +1682,121 @@ class Simulator:
                     goal_id=getattr(waypoints, "goal_id", None),
                 )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
+        self._enforce_reset_spawn_clearance()
+
+    def _enforce_reset_spawn_clearance(self) -> None:
+        """Move pedestrians that overlap a robot footprint after the robot start is known.
+
+        Pedestrians are placed at construction, before any robot start is sampled, so a
+        route or crowd pedestrian can start inside the robot footprint (issue #9725).
+        Overlapping rows are moved deterministically to the nearest clear point on the
+        exclusion circle (robot radius + pedestrian radius + margin); no random numbers
+        are drawn, so every other spawn of the seed stays unchanged. The next reset
+        restores the construction-time layout and checks it again.
+        """
+        pysf_state = getattr(self, "pysf_state", None)
+        if pysf_state is None or not hasattr(pysf_state, "ped_positions"):
+            # Pedestrian state is not initialized yet (PedSimulator resets the
+            # ego pedestrian after this call); nothing can overlap.
+            self.last_spawn_relocation = None
+            return
+        ped_positions = np.asarray(self.ped_pos, dtype=float).reshape(-1, 2)
+        if ped_positions.shape[0] == 0 or not self.robots:
+            self.last_spawn_relocation = None
+            return
+        ped_radius = float(self.config.ped_radius)
+        ped_xy = [(float(x), float(y)) for x, y in ped_positions]
+        robots = [
+            ((float(r.pose[0][0]), float(r.pose[0][1])), float(r.config.radius))
+            for r in self.robots
+        ]
+        # The footprint validator (issue #9403) names the rows inside robot radius plus
+        # margin; only those rows are candidates for relocation.
+        overlapping_rows: set[int] = set()
+        for robot_xy, robot_radius in robots:
+            footprint = validate_spawn_footprints(
+                robot_xy, robot_radius + SPAWN_CLEARANCE_MARGIN_M, ped_xy, ped_radius
+            )
+            overlapping_rows.update(footprint.overlapping_rows)
+        if not overlapping_rows:
+            self.last_spawn_relocation = None
+            return
+        report = relocate_overlapping_pedestrians(
+            ped_xy,
+            ped_radius,
+            robots,
+            self.map_def,
+            rows=sorted(overlapping_rows),
+        )
+        self.last_spawn_relocation = report
+        if not report.relocated and not report.unresolved:
+            return
+        states = self.pysf_state.pysf_states()
+        for row, (_old, new_xy) in report.relocated.items():
+            states[row, PYSF_POSITION_SLICE] = new_xy
+        if report.relocated:
+            logger.debug(
+                "Moved {count} pedestrian(s) off the robot start footprint at reset: {rows}",
+                count=len(report.relocated),
+                rows=sorted(report.relocated),
+            )
+        if report.unresolved:
+            logger.warning(
+                "Pedestrian row(s) {rows} still overlap the robot start after reset; no clear "
+                "point was found (issue #9725).",
+                rows=report.unresolved,
+            )
+
+    def _capture_robot_ped_forces(self) -> None:
+        """Copy already evaluated robot components and their pre-integration inputs."""
+        positions = np.array(self.pysf_sim.peds.pos(), dtype=float, copy=True)
+        total = np.zeros_like(positions)
+        components = []
+        for force in self.pysf_sim.forces:
+            if getattr(force, "component_type", None) != "pedestrian_robot":
+                continue
+            values = np.asarray(force.last_forces, dtype=float)
+            if values.ndim == 0 and values == 0:
+                continue
+            if values.shape != total.shape:
+                raise ValueError("robot force component shape differs from pedestrian positions")
+            total += values
+            response = (
+                force.get_ped_response_multipliers() if force.get_ped_response_multipliers else None
+            )
+            components.append(
+                {
+                    "robot_pos": list(force.get_robot_pos()),
+                    "prf_active": True,
+                    "prf_multiplier": float(force.config.force_multiplier),
+                    "prf_activation_m": float(force.config.activation_threshold),
+                    "prf_robot_radius_m": float(force.config.robot_radius),
+                    "prf_ped_radius_m": float(force.peds.agent_radius),
+                    **(
+                        {"response_multipliers": np.asarray(response).tolist()}
+                        if response is not None and len(response) == len(positions)
+                        else {}
+                    ),
+                }
+            )
+        self.last_robot_ped_forces = total
+        social_cfg = self.pysf_sim.config.social_force_config
+        self.last_robot_force_inputs = {
+            "peds_pos": positions.tolist(),
+            "components": components,
+            "ped_radius_m": float(self.pysf_sim.peds.agent_radius),
+            "social_force_config": {
+                key: getattr(social_cfg, key)
+                for key in (
+                    "factor",
+                    "lambda_importance",
+                    "gamma",
+                    "n",
+                    "n_prime",
+                    "activation_threshold",
+                )
+            },
+        }
 
     def step_once(self, actions: list[RobotAction]) -> None:
         """Advance simulation by one timestep.
@@ -1696,6 +1834,7 @@ class Simulator:
         else:
             self.last_force_computation = None
             ped_forces = self.pysf_sim.compute_forces()
+        self._capture_robot_ped_forces()
         ped_forces = self._apply_residual_adversary(ped_forces)
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
@@ -1926,6 +2065,8 @@ class PedSimulator(Simulator):
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
         self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
         self.ped_headings = self._headings_from_current_ped_velocities()
         self._initial_ped_headings = self.ped_headings.copy()
@@ -2016,6 +2157,7 @@ class PedSimulator(Simulator):
                     self.map_def,
                     None if self.random_start_pos else i,
                     completion_policy=self.goal_completion_policy,
+                    robot_radius=float(robot.config.radius),
                 )
                 nav.new_route(
                     waypoints[1:],
@@ -2025,6 +2167,7 @@ class PedSimulator(Simulator):
                     goal_id=getattr(waypoints, "goal_id", None),
                 )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
+        self._enforce_reset_spawn_clearance()
         # Ego_pedestrian reset
         if self.spawn_near_robot:
             robot_spawn = self.robot_pos[0]
@@ -2084,6 +2227,7 @@ class PedSimulator(Simulator):
         else:
             self.last_force_computation = None
             ped_forces = self.pysf_sim.compute_forces()
+        self._capture_robot_ped_forces()
         ped_forces = self._apply_residual_adversary(ped_forces)
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists

@@ -699,6 +699,67 @@ def test_full_release_rejects_effective_component_on_wrong_scenario_or_arm(
     assert sum("planner algorithm aliases do not match" in item for item in result["blockers"]) >= 2
 
 
+@pytest.mark.parametrize("runtime_field", ["planner_runtime", "shield_stats", "top_level"])
+@pytest.mark.parametrize(
+    ("planner_key", "nested_fallback", "expected_status"),
+    [
+        ("planner_00", False, "invalid"),
+        ("planner_11", False, "valid"),
+        ("planner_11", True, "invalid"),
+    ],
+)
+def test_full_release_binds_typed_shield_state_to_declared_arm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_field: str,
+    planner_key: str,
+    nested_fallback: bool,
+    expected_status: str,
+) -> None:
+    """Complete provenance cannot launder unbound or nested-failure shield metadata."""
+    from robot_sf.planner.safety_shield import ShieldDecision
+
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs" / f"{planner_key}__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    state = {
+        "policy": "RiskDWAPlannerAdapter",
+        "action_adaptation": {"mode": "guard_selected_command"},
+    }
+    if nested_fallback:
+        state["events"] = [{"fallback_triggered": True}]
+    decision = ShieldDecision(
+        proposed_action=(1.0, 0.0),
+        filtered_action=(0.0, 0.0),
+        decision_label="fallback_safe",
+        intervention_reason="fallback_command_satisfied_short_horizon_constraints",
+        fallback_controller_state=state,
+        selected_evaluation={"safe": True},
+    )
+    metadata = rows[0]["algorithm_metadata"]
+    if runtime_field == "top_level":
+        rows[0]["planner_runtime"] = {"last_decision": decision.to_metadata()}
+    else:
+        metadata[runtime_field] = {"last_decision": decision.to_metadata()}
+    assert "guard_stats" not in metadata
+    episode_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert result["status"] == expected_status, result["blockers"]
+    assert not any("sidecar raw artifact hash is stale" in item for item in result["blockers"])
+    if expected_status == "invalid":
+        assert any("fallback_controller_state" in item for item in result["blockers"])
+
+
 def test_full_release_rejects_unrecognized_episode_status(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -943,6 +1004,156 @@ def test_full_release_rejects_malformed_guarded_fallback_controller_state(tmp_pa
 
     assert result["status"] == "invalid"
     assert any("fallback_controller_state" in blocker for blocker in result["blockers"])
+
+
+@pytest.mark.parametrize(
+    ("marker", "value", "normalized"),
+    [("fallback", True, "true"), ("fallback_count", 2, "2")],
+)
+def test_full_release_rejects_nested_guarded_fallback_controller_state_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    marker: str,
+    value: object,
+    normalized: str,
+) -> None:
+    """Nested failures in a valid typed shield state remain release blockers."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs" / "planner_11__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"].update(
+        {
+            "guard_stats": {"fallback_safe": 1},
+            "shield_stats": {
+                "last_decision": {
+                    "fallback_controller_state": {
+                        "policy": "RiskDWAPlannerAdapter",
+                        "events": [{marker: value}],
+                    }
+                }
+            },
+        }
+    )
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert result["forbidden_status_counts"][normalized] == 1
+    assert any("fallback_controller_state.events[0]" in blocker for blocker in result["blockers"])
+
+
+def test_guarded_ppo_safe_shield_state_remains_admitted() -> None:
+    """Declared non-intervening shield state remains admissible through acceptance scanning."""
+    payload = {
+        "status": "ok",
+        "algorithm_metadata": {
+            "algorithm": "ppo",
+            "canonical_algorithm": "guarded_ppo",
+            "planner_contract": {"planner_id": "guarded_ppo"},
+            "guard_stats": {"fallback_safe": 1},
+            "shield_stats": {
+                "last_decision": {
+                    "decision_label": "ppo_clear",
+                    "intervened": False,
+                    "fallback_controller_state": {
+                        "policy": "RiskDWAPlannerAdapter",
+                        "prior_available": False,
+                        "action_adaptation": {
+                            "mode": "direct_policy_command",
+                            "residual_clipped": False,
+                        },
+                    },
+                }
+            },
+        },
+    }
+
+    assert _status_markers(payload, "row", expected_algorithm="guarded_ppo") == []
+
+
+@pytest.mark.parametrize(
+    ("metadata_patch", "expected_status", "expected_marker"),
+    [
+        (
+            {"guard_stats": {"stop_best_effort": 0}},
+            "valid",
+            None,
+        ),
+        (
+            {"guard_stats": {"stop_best_effort": 1}},
+            "invalid",
+            ("guard_stats.stop_best_effort", "1"),
+        ),
+        (
+            {"guard_stats": {"stop_best_effort": "1"}},
+            "invalid",
+            ("guard_stats.stop_best_effort", "invalid"),
+        ),
+        (
+            {"shield_stats": {"decision_counts": {"stop_best_effort": 1}}},
+            "invalid",
+            ("shield_stats.decision_counts.stop_best_effort", "1"),
+        ),
+        (
+            {"shield_stats": {"decision_counts": {"stop_best_effort": "1"}}},
+            "invalid",
+            ("shield_stats.decision_counts.stop_best_effort", "invalid"),
+        ),
+        (
+            {"shield_stats": {"last_decision": {"decision_label": "stop_best_effort"}}},
+            "invalid",
+            ("shield_stats.last_decision.decision_label", "stop_best_effort"),
+        ),
+    ],
+)
+def test_full_release_handles_stop_best_effort_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    metadata_patch: dict[str, Any],
+    expected_status: str,
+    expected_marker: tuple[str, str] | None,
+) -> None:
+    """Full release rejects stop-best-effort evidence but admits an explicit zero count."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs" / "planner_11__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"].update(metadata_patch)
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == expected_status, result["blockers"]
+    if expected_marker is None:
+        assert result["blockers"] == []
+    else:
+        marker_path, marker_value = expected_marker
+        assert result["forbidden_status_counts"][marker_value] == 1
+        assert any(marker_path in blocker for blocker in result["blockers"])
 
 
 @pytest.mark.parametrize(

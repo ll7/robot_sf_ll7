@@ -277,7 +277,9 @@ def test_aggregate_analyzer_excludes_foresight_fallback_from_evidence() -> None:
         "excluded_record_count": 1,
         "policy": (
             "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false "
-            "are excluded from benchmark evidence aggregation."
+            "are excluded from benchmark evidence aggregation. Rows with "
+            "spawn_validity.invalid_run=true (invalid_reason=spawn_overlap) are "
+            "excluded as simulator spawn defects."
         ),
     }
 

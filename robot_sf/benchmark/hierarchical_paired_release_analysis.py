@@ -222,7 +222,9 @@ def build_matched_cells_from_ledger_rows(
 
     Each scenario-seed must have exactly one row per planner arm.  Unmatched or
     duplicate rows raise so a partial release cannot silently shrink the
-    denominator.
+    denominator. A pair where either arm is ``exact_events.invalid_run`` (for
+    example a spawn overlap, issue #9725) is dropped as a whole, so the paired
+    outcome never compares a simulator defect with a planner outcome.
 
     Args:
         rows: Typed-ledger successor rows (each an ``EpisodeEventLedger.v2`` mapping).
@@ -274,6 +276,8 @@ def build_matched_cells_from_ledger_rows(
     for scenario_id, seed in common:
         row_a = arm_a[(scenario_id, seed)]
         row_b = arm_b[(scenario_id, seed)]
+        if row_a["exact_events"]["invalid_run"] or row_b["exact_events"]["invalid_run"]:
+            continue
         cells.append(
             MatchedCell(
                 scenario_id=scenario_id,

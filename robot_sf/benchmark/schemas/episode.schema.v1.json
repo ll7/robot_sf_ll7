@@ -432,11 +432,17 @@
                         "exit_codes": {
                             "type": "array",
                             "items": {
-                                "type": ["integer", "null"]
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
                             }
                         },
                         "last_exit_code": {
-                            "type": ["integer", "null"]
+                            "type": [
+                                "integer",
+                                "null"
+                            ]
                         }
                     },
                     "additionalProperties": true
@@ -1037,7 +1043,10 @@
                             "type": "object",
                             "additionalProperties": {
                                 "type": "object",
-                                "required": ["formula", "denominator"],
+                                "required": [
+                                    "formula",
+                                    "denominator"
+                                ],
                                 "properties": {
                                     "formula": {
                                         "type": "string"
@@ -1069,7 +1078,10 @@
                             "type": "object",
                             "additionalProperties": {
                                 "type": "object",
-                                "required": ["status", "reason"],
+                                "required": [
+                                    "status",
+                                    "reason"
+                                ],
                                 "properties": {
                                     "status": {
                                         "type": "string"
@@ -1094,6 +1106,133 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "robot_force_impulse_total": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force impulse total (m/s)."
+                },
+                "robot_force_impulse_per_exposed_ped": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force impulse per exposed ped (m/s)."
+                },
+                "robot_force_peak": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force peak (m/s\u00b2)."
+                },
+                "robot_force_mean_active": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force mean active (m/s\u00b2)."
+                },
+                "robot_force_time_above_ref_s": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force time above ref s (s)."
+                },
+                "robot_force_exposed_ped_count": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force exposed ped count (count)."
+                },
+                "robot_force_pp_equiv_impulse_total": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force impulse total (m/s). Experimental counterfactual."
+                },
+                "robot_force_pp_equiv_impulse_per_exposed_ped": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force impulse per exposed ped (m/s). Experimental counterfactual."
+                },
+                "robot_force_pp_equiv_peak": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force peak (m/s\u00b2). Experimental counterfactual."
+                },
+                "robot_force_pp_equiv_mean_active": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force mean active (m/s\u00b2). Experimental counterfactual."
+                },
+                "robot_force_pp_equiv_time_above_ref_s": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force time above ref s (s). Experimental counterfactual."
+                },
+                "robot_force_pp_equiv_exposed_ped_count": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Robot model force exposed ped count (count). Experimental counterfactual."
+                },
+                "robot_force_metadata": {
+                    "type": "object",
+                    "required": [
+                        "reference_rule",
+                        "reference_m_s2",
+                        "social_force_config",
+                        "prf_active"
+                    ],
+                    "properties": {
+                        "reference_rule": {
+                            "const": "social_force_head_on_contact_relative_speed_1m_s_v1"
+                        },
+                        "reference_m_s2": {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "robot_force_samples": {
+                    "type": "array",
+                    "description": "Pre-integration pedestrian positions, robot component configurations and acceleration vectors per step.",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "peds_pos",
+                            "components",
+                            "forces",
+                            "social_force_config"
+                        ]
+                    }
                 }
             },
             "additionalProperties": {

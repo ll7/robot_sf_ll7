@@ -52,10 +52,19 @@ from robot_sf.benchmark.fidelity_rank_stability import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.radius_sweep_manifest import (
+    EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256,
+    EXPECTED_ARM_CAMPAIGN_CONFIGS,
+    EXPECTED_CAMPAIGN_GIT_COMMIT,
+    EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256,
+    EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID,
+    EXPECTED_GATE1_RECEIPT_SHA256,
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_MATRIX,
     EXPECTED_SCENARIO_NAMES,
     EXPECTED_TOTAL_ROWS,
+    FAMILY_FEASIBILITY_PROVENANCE_SCHEMA,
+    PRODUCTION_RADII,
+    PRODUCTION_RADIUS_KEYS,
 )
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -94,6 +103,7 @@ DEFAULT_RANK_METRICS: tuple[str, ...] = (
     RANK_METRIC_SNQI,
 )
 EXPECTED_RADIUS_ARMS: tuple[float, ...] = (0.5, 0.8, 1.0)
+_RADIUS_TO_CAMPAIGN_ARM_KEY = dict(zip(PRODUCTION_RADII, PRODUCTION_RADIUS_KEYS, strict=True))
 EXPECTED_SCENARIO_CELL_COUNT = 48
 EXPECTED_SEED_ROSTER: tuple[int, ...] = tuple(range(111, 141))
 EXPECTED_PLANNER_ROSTER: tuple[str, ...] = (
@@ -640,6 +650,179 @@ def _family_feasibility_blockers(
     return blockers
 
 
+def _family_feasibility_header_blockers(
+    provenance: Mapping[str, object], *, radius: float, key: str
+) -> list[str]:
+    """Validate family-provenance schema and radius identity.
+
+    Returns:
+        Blocking reasons for an invalid schema or radius.
+    """
+    blockers = []
+    if provenance.get("schema_version") != FAMILY_FEASIBILITY_PROVENANCE_SCHEMA:
+        blockers.append(f"radius_{key}_invalid_family_feasibility_provenance_schema")
+    raw_radius = provenance.get("radius_m")
+    if (
+        isinstance(raw_radius, bool)
+        or not isinstance(raw_radius, int | float)
+        or not math.isfinite(float(raw_radius))
+        or float(raw_radius) != radius
+    ):
+        blockers.append(f"radius_{key}_family_feasibility_provenance_radius_mismatch")
+    return blockers
+
+
+def _family_feasibility_rule_blockers(
+    provenance: Mapping[str, object],
+    *,
+    key: str,
+    expected_definition_id: str | None,
+    expected_authority: str | None,
+) -> tuple[list[str], tuple[str, str, str] | None]:
+    """Validate rule identity and return its comparable normalized identity.
+
+    Returns:
+        Blocking reasons and a normalized rule identity when structurally valid.
+    """
+    blockers = []
+    definition = provenance.get("definition")
+    definition_id = provenance.get("definition_id")
+    authority_sha256 = provenance.get("authority_sha256")
+    if not isinstance(definition, str) or not definition.strip():
+        blockers.append(f"radius_{key}_missing_family_feasibility_definition")
+    if (
+        not isinstance(definition_id, str)
+        or not definition_id.strip()
+        or (expected_definition_id is not None and definition_id != expected_definition_id)
+    ):
+        blockers.append(f"radius_{key}_family_feasibility_definition_id_mismatch")
+    if not _is_hex_digest(authority_sha256, length=64) or (
+        expected_authority is not None and authority_sha256 != expected_authority
+    ):
+        blockers.append(f"radius_{key}_family_feasibility_authority_mismatch")
+    if (
+        isinstance(definition, str)
+        and definition.strip()
+        and isinstance(definition_id, str)
+        and _is_hex_digest(authority_sha256, length=64)
+    ):
+        return blockers, (definition.strip(), definition_id, str(authority_sha256))
+    return blockers, None
+
+
+def _family_feasibility_status_blockers(
+    provenance: Mapping[str, object], family_rows: object, *, key: str
+) -> list[str]:
+    """Verify that the digest binds the exact status map being interpreted.
+
+    Returns:
+        Blocking reasons for absent or mismatched status-map provenance.
+    """
+    families_sha256 = provenance.get("families_sha256")
+    if not isinstance(family_rows, Mapping) or not _is_hex_digest(families_sha256, length=64):
+        return [f"radius_{key}_invalid_family_feasibility_status_binding"]
+    encoded = json.dumps(family_rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if sha256(encoded).hexdigest() != families_sha256:
+        return [f"radius_{key}_family_feasibility_status_digest_mismatch"]
+    return []
+
+
+def _family_feasibility_source_blockers(
+    provenance: Mapping[str, object], source: object, *, key: str
+) -> list[str]:
+    """Require family provenance to identify the same campaign and config as its arm.
+
+    Returns:
+        Blocking reasons for an absent or mismatched campaign source link.
+    """
+    if not isinstance(source, Mapping):
+        return [f"radius_{key}_missing_campaign_provenance_for_family"]
+    blockers = []
+    for family_field, campaign_field in (
+        ("source_campaign_id", "campaign_id"),
+        ("source_campaign_commit", "campaign_commit"),
+        ("source_config_sha256", "config_sha256"),
+    ):
+        if not isinstance(provenance.get(family_field), str) or provenance.get(
+            family_field
+        ) != source.get(campaign_field):
+            blockers.append(f"radius_{key}_family_feasibility_{family_field}_mismatch")
+    return blockers
+
+
+def _family_feasibility_provenance_blockers(
+    sweep_summary: Mapping[str, object], radii: Sequence[float]
+) -> list[str]:
+    """Require exact, source-matched provenance for each family-status map.
+
+    The source rule pins intentionally remain unset until an owner-approved rule
+    artifact and evaluator exist. In that state, syntactically complete or
+    self-declared receipt metadata cannot authorize interpretation.
+
+    Returns:
+        Blocking reasons for absent, malformed, inconsistent, or unapproved provenance.
+    """
+    blockers: list[str] = []
+    expected_definition_id = EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID
+    expected_authority = EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256
+    if (
+        not isinstance(expected_definition_id, str)
+        or not expected_definition_id.strip()
+        or not _is_hex_digest(expected_authority, length=64)
+    ):
+        blockers.append("family_feasibility_rule_identity_unpinned")
+
+    raw_provenance = sweep_summary.get("family_feasibility_provenance")
+    if not isinstance(raw_provenance, Mapping):
+        return [*blockers, "missing_family_feasibility_provenance"]
+    provenance_by_radius = _float_keyed(raw_provenance)
+    blockers.extend(
+        _radius_mapping_blockers(raw_provenance, radii, "family_feasibility_provenance")
+    )
+    families_by_radius = _float_keyed(sweep_summary.get("family_feasibility"))
+    campaign_by_radius = _float_keyed(sweep_summary.get("campaign_provenance"))
+    seen_receipt_digests: set[str] = set()
+    observed_rules: set[tuple[str, str, str]] = set()
+
+    for radius in radii:
+        key = _radius_key(radius)
+        provenance = provenance_by_radius.get(radius)
+        if not isinstance(provenance, Mapping):
+            blockers.append(f"radius_{key}_missing_family_feasibility_provenance")
+            continue
+        blockers.extend(_family_feasibility_header_blockers(provenance, radius=radius, key=key))
+        rule_blockers, rule_identity = _family_feasibility_rule_blockers(
+            provenance,
+            key=key,
+            expected_definition_id=expected_definition_id,
+            expected_authority=expected_authority,
+        )
+        blockers.extend(rule_blockers)
+        if rule_identity is not None:
+            observed_rules.add(rule_identity)
+
+        receipt_sha256 = provenance.get("receipt_sha256")
+        if not _is_hex_digest(receipt_sha256, length=64):
+            blockers.append(f"radius_{key}_invalid_family_feasibility_receipt_sha256")
+        elif receipt_sha256.lower() in seen_receipt_digests:
+            blockers.append(f"radius_{key}_duplicate_family_feasibility_receipt_sha256")
+        else:
+            seen_receipt_digests.add(receipt_sha256.lower())
+
+        blockers.extend(
+            _family_feasibility_status_blockers(provenance, families_by_radius.get(radius), key=key)
+        )
+        blockers.extend(
+            _family_feasibility_source_blockers(provenance, campaign_by_radius.get(radius), key=key)
+        )
+
+    if len(observed_rules) > 1:
+        blockers.append("mixed_family_feasibility_rule_provenance")
+    if len(seen_receipt_digests) != len(radii):
+        blockers.append("incomplete_family_feasibility_receipt_provenance")
+    return blockers
+
+
 def _paired_observation_blockers(
     sweep_summary: Mapping[str, object],
     radii: Sequence[float],
@@ -680,10 +863,50 @@ def _paired_observation_blockers(
     return blockers
 
 
-def _campaign_provenance_blockers(
+def _frozen_arm_config_blockers(
+    radius: float, config_path: object, config_sha256: object
+) -> list[str]:
+    """Validate a summary arm's config path and digest against its frozen arm.
+
+    Returns:
+        Any blockers for this arm's frozen config identity.
+    """
+    arm_key = _RADIUS_TO_CAMPAIGN_ARM_KEY.get(radius)
+    if arm_key is None:
+        return [f"radius_{_radius_key(radius)}_unknown_frozen_arm"]
+    blockers = []
+    if config_path != EXPECTED_ARM_CAMPAIGN_CONFIGS.get(arm_key):
+        blockers.append(f"radius_{_radius_key(radius)}_unfrozen_config_path")
+    if _is_hex_digest(
+        config_sha256, length=64
+    ) and config_sha256 != EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256.get(arm_key):
+        blockers.append(f"radius_{_radius_key(radius)}_unfrozen_config_sha256")
+    return blockers
+
+
+def _campaign_provenance_blockers(  # noqa: C901, PLR0912, PLR0915
     sweep_summary: Mapping[str, object], radii: Sequence[float]
-) -> tuple[list[str], tuple[str, str, str] | None]:
-    """Validate the per-arm Gate 2 commit, config digest, and Gate 1 receipt binding.
+) -> tuple[
+    list[str],
+    tuple[
+        str,
+        dict[float, str],
+        str,
+        dict[float, dict[str, dict[str, str]]],
+        str,
+        str,
+        bool,
+    ]
+    | None,
+]:
+    """Validate frozen arm identity and Gate 2 source-artifact digest bindings.
+
+    The Gate 2 treatment intentionally uses one tracked config per radius arm, so their
+    config digests are expected to differ. Each digest and path must match the frozen
+    manifest value for that radius. All arms must also match the exact frozen campaign
+    commit and Gate 1 receipt digest and carry episode/runner-receipt digests for the
+    exact planner roster. The current composer records custody as unattested and promotion
+    as disallowed; this function does not upgrade that state.
 
     Returns:
         Fail-closed blockers and the shared immutable binding when all arms match.
@@ -693,34 +916,142 @@ def _campaign_provenance_blockers(
         return ["missing_campaign_provenance"], None
     provenance_by_radius = _float_keyed(raw_provenance)
     blockers = _radius_mapping_blockers(raw_provenance, radii, "campaign_provenance")
-    bindings: list[tuple[str, str, str]] = []
+    bindings: list[
+        tuple[
+            float,
+            str,
+            str,
+            str,
+            dict[str, dict[str, str]],
+            str,
+            str,
+            bool,
+        ]
+    ] = []
     for radius in radii:
         arm_provenance = provenance_by_radius.get(radius)
         if not isinstance(arm_provenance, Mapping):
             blockers.append(f"radius_{_radius_key(radius)}_missing_campaign_provenance")
             continue
         campaign_commit = arm_provenance.get("campaign_commit")
+        config_path = arm_provenance.get("config_path")
         config_sha256 = arm_provenance.get("config_sha256")
         canary_receipt_sha256 = arm_provenance.get("gate1_canary_receipt_sha256")
+        source_integrity_status = arm_provenance.get("source_integrity_status")
+        artifact_custody_status = arm_provenance.get("artifact_custody_status")
+        promotion_allowed = arm_provenance.get("promotion_allowed")
+        promotion_blockers = arm_provenance.get("promotion_blockers")
         if not _is_hex_digest(campaign_commit, length=40):
             blockers.append(f"radius_{_radius_key(radius)}_invalid_campaign_commit")
+        elif campaign_commit != EXPECTED_CAMPAIGN_GIT_COMMIT:
+            blockers.append(f"radius_{_radius_key(radius)}_unfrozen_campaign_commit")
         if not _is_hex_digest(config_sha256, length=64):
             blockers.append(f"radius_{_radius_key(radius)}_invalid_config_sha256")
+        blockers.extend(_frozen_arm_config_blockers(radius, config_path, config_sha256))
         if not _is_hex_digest(canary_receipt_sha256, length=64):
             blockers.append(f"radius_{_radius_key(radius)}_invalid_gate1_canary_receipt")
+        elif canary_receipt_sha256 != EXPECTED_GATE1_RECEIPT_SHA256:
+            blockers.append(f"radius_{_radius_key(radius)}_unfrozen_gate1_canary_receipt")
+        if source_integrity_status != "runner_receipt_matched":
+            blockers.append(f"radius_{_radius_key(radius)}_unverified_source_integrity")
+        if artifact_custody_status != "unattested":
+            blockers.append(f"radius_{_radius_key(radius)}_unrecognized_artifact_custody_status")
+        if promotion_allowed is not False:
+            blockers.append(f"radius_{_radius_key(radius)}_invalid_promotion_allowed_state")
+        if promotion_blockers != ["artifact_custody_unattested"]:
+            blockers.append(f"radius_{_radius_key(radius)}_invalid_promotion_blockers")
+
+        raw_artifacts = arm_provenance.get("episode_artifacts")
+        artifact_bindings: dict[str, dict[str, str]] = {}
+        if not isinstance(raw_artifacts, Mapping) or set(raw_artifacts) != set(
+            EXPECTED_PLANNER_ROSTER
+        ):
+            blockers.append(f"radius_{_radius_key(radius)}_invalid_episode_artifact_roster")
+        else:
+            for planner in EXPECTED_PLANNER_ROSTER:
+                raw_entry = raw_artifacts.get(planner)
+                if not isinstance(raw_entry, Mapping):
+                    blockers.append(
+                        f"radius_{_radius_key(radius)}_missing_episode_artifact:{planner}"
+                    )
+                    continue
+                expected_episode_path = f"runs/{planner}__differential_drive/episodes.jsonl"
+                expected_receipt_path = f"{expected_episode_path}.provenance.json"
+                episodes_path = raw_entry.get("episodes_path")
+                receipt_path = raw_entry.get("receipt_path")
+                episodes_sha256 = raw_entry.get("episodes_sha256")
+                receipt_sha256 = raw_entry.get("receipt_sha256")
+                if episodes_path != expected_episode_path:
+                    blockers.append(
+                        f"radius_{_radius_key(radius)}_invalid_episode_artifact_path:{planner}"
+                    )
+                if receipt_path != expected_receipt_path:
+                    blockers.append(
+                        f"radius_{_radius_key(radius)}_invalid_runner_receipt_path:{planner}"
+                    )
+                if not _is_hex_digest(episodes_sha256, length=64):
+                    blockers.append(
+                        f"radius_{_radius_key(radius)}_invalid_episode_artifact_sha256:{planner}"
+                    )
+                if not _is_hex_digest(receipt_sha256, length=64):
+                    blockers.append(
+                        f"radius_{_radius_key(radius)}_invalid_runner_receipt_sha256:{planner}"
+                    )
+                if (
+                    episodes_path == expected_episode_path
+                    and receipt_path == expected_receipt_path
+                    and _is_hex_digest(episodes_sha256, length=64)
+                    and _is_hex_digest(receipt_sha256, length=64)
+                ):
+                    artifact_bindings[planner] = {
+                        "episodes_path": expected_episode_path,
+                        "episodes_sha256": str(episodes_sha256).lower(),
+                        "receipt_path": expected_receipt_path,
+                        "receipt_sha256": str(receipt_sha256).lower(),
+                    }
         if (
             _is_hex_digest(campaign_commit, length=40)
             and _is_hex_digest(config_sha256, length=64)
             and _is_hex_digest(canary_receipt_sha256, length=64)
+            and source_integrity_status == "runner_receipt_matched"
+            and artifact_custody_status == "unattested"
+            and promotion_allowed is False
+            and set(artifact_bindings) == set(EXPECTED_PLANNER_ROSTER)
         ):
-            bindings.append((campaign_commit, config_sha256, canary_receipt_sha256))
+            bindings.append(
+                (
+                    radius,
+                    campaign_commit,
+                    config_sha256,
+                    canary_receipt_sha256,
+                    artifact_bindings,
+                    source_integrity_status,
+                    artifact_custody_status,
+                    promotion_allowed,
+                )
+            )
     if bindings and len(bindings) != len(radii):
         blockers.append("incomplete_campaign_provenance")
-    if len(set(bindings)) > 1:
+    common_bindings = {(commit, canary) for _, commit, _, canary, *_ in bindings}
+    if len(common_bindings) > 1:
         blockers.append("mixed_campaign_provenance")
-    return blockers, bindings[0] if len(bindings) == len(radii) and len(
-        set(bindings)
-    ) == 1 else None
+    if blockers or len(bindings) != len(radii) or len(common_bindings) != 1:
+        return blockers, None
+    campaign_commit, canary_receipt_sha256 = next(iter(common_bindings))
+    config_by_radius = {radius: config for radius, _, config, *_ in bindings}
+    artifacts_by_radius = {radius: artifacts for radius, _, _, _, artifacts, *_ in bindings}
+    source_integrity_status = bindings[0][5]
+    artifact_custody_status = bindings[0][6]
+    promotion_allowed = bindings[0][7]
+    return blockers, (
+        campaign_commit,
+        config_by_radius,
+        canary_receipt_sha256,
+        artifacts_by_radius,
+        source_integrity_status,
+        artifact_custody_status,
+        promotion_allowed,
+    )
 
 
 def _read_json_mapping(path: Path | None) -> Mapping[str, object] | None:
@@ -872,6 +1203,7 @@ def build_missingness_ledger(
     _, table_blockers = _metric_table_blockers(sweep_summary, radii, declared_planners)
     blocking_reasons.extend(table_blockers)
     blocking_reasons.extend(_family_feasibility_blockers(sweep_summary, radii))
+    blocking_reasons.extend(_family_feasibility_provenance_blockers(sweep_summary, radii))
     blocking_reasons.extend(_paired_observation_blockers(sweep_summary, radii, declared_planners))
     provenance_blockers, _ = _campaign_provenance_blockers(sweep_summary, radii)
     blocking_reasons.extend(provenance_blockers)
@@ -2091,9 +2423,13 @@ class EvidenceProvenance:
     planners: tuple[str, ...]
     scenario_cell_count: int
     input_sha256: dict[str, str] = field(default_factory=dict)
+    gate2_source_artifacts: dict[str, dict[str, str]] = field(default_factory=dict)
     gate1_canary_receipt_sha256: str | None = None
     gate1_canary_receipt_verified: bool = False
     campaign_provenance_verified: bool = False
+    source_integrity_status: str = "unverified"
+    artifact_custody_status: str = "unattested"
+    promotion_allowed: bool = False
 
     def to_dict(self) -> dict[str, object]:
         """Return JSON-safe representation.
@@ -2112,9 +2448,16 @@ class EvidenceProvenance:
             "planners": list(self.planners),
             "scenario_cell_count": self.scenario_cell_count,
             "input_sha256": dict(self.input_sha256),
+            "gate2_source_artifacts": {
+                identity: dict(artifact)
+                for identity, artifact in self.gate2_source_artifacts.items()
+            },
             "gate1_canary_receipt_sha256": self.gate1_canary_receipt_sha256,
             "gate1_canary_receipt_verified": self.gate1_canary_receipt_verified,
             "campaign_provenance_verified": self.campaign_provenance_verified,
+            "source_integrity_status": self.source_integrity_status,
+            "artifact_custody_status": self.artifact_custody_status,
+            "promotion_allowed": self.promotion_allowed,
         }
 
 
@@ -2156,11 +2499,36 @@ def build_evidence_provenance(
         summary, _normalized_radii(summary)
     )
     source_campaign_commit = source_config_sha256 = source_canary_receipt_sha256 = None
+    source_integrity_status = "unverified"
+    artifact_custody_status = "unattested"
+    source_promotion_allowed = False
+    gate2_source_artifacts: dict[str, dict[str, str]] = {}
     if source_binding is not None and not provenance_blockers:
-        source_campaign_commit, source_config_sha256, source_canary_receipt_sha256 = source_binding
+        (
+            source_campaign_commit,
+            source_config_by_radius,
+            source_canary_receipt_sha256,
+            artifacts_by_radius,
+            source_integrity_status,
+            artifact_custody_status,
+            source_promotion_allowed,
+        ) = source_binding
+        source_config_sha256 = source_config_by_radius.get(1.0)
+        for radius, artifact_entries in artifacts_by_radius.items():
+            for planner, artifact in artifact_entries.items():
+                radius_label = _radius_key(radius)
+                identity = f"radius_{radius_label}:{planner}"
+                gate2_source_artifacts[identity] = dict(artifact)
+                input_sha256[f"gate2_episode_jsonl:{radius_label}:{planner}"] = artifact[
+                    "episodes_sha256"
+                ]
+                input_sha256[f"gate2_episode_receipt:{radius_label}:{planner}"] = artifact[
+                    "receipt_sha256"
+                ]
     provenance_verified = bool(
         source_binding
         and not provenance_blockers
+        and source_promotion_allowed
         and campaign_commit == source_campaign_commit
         and config_sha256 == source_config_sha256
         and input_sha256.get("gate1_canary_receipt.json") == source_canary_receipt_sha256
@@ -2177,9 +2545,13 @@ def build_evidence_provenance(
         planners=report.planners,
         scenario_cell_count=report.scenario_cell_count,
         input_sha256=input_sha256,
+        gate2_source_artifacts=gate2_source_artifacts,
         gate1_canary_receipt_sha256=source_canary_receipt_sha256,
         gate1_canary_receipt_verified=gate1_receipt_verified,
         campaign_provenance_verified=provenance_verified,
+        source_integrity_status=source_integrity_status,
+        artifact_custody_status=artifact_custody_status,
+        promotion_allowed=source_promotion_allowed,
     )
 
 
@@ -2198,7 +2570,11 @@ def build_analysis_provenance_payload(
         "schema_version": RADIUS_EVIDENCE_BUNDLE_SCHEMA,
         "report_schema_version": RADIUS_RANK_STABILITY_SCHEMA,
         "review_marker": "AI-GENERATED NEEDS-REVIEW",
-        "evidence_status": evidence_tier_for_verdict(report.verdict.verdict),
+        "evidence_status": (
+            evidence_tier_for_verdict(report.verdict.verdict)
+            if provenance.promotion_allowed
+            else "diagnostic-only"
+        ),
         "claim_boundary": " ".join(
             [
                 "Within-simulator radius sensitivity only:",
@@ -2533,6 +2909,11 @@ def write_evidence_bundle(
             raise ValueError("promoted evidence requires a checksum-covered Gate 1 canary receipt")
         if not provenance.gate1_canary_receipt_verified:
             raise ValueError("promoted evidence requires a passing Gate 1 canary receipt")
+        if not provenance.promotion_allowed:
+            raise ValueError(
+                "promoted evidence requires verified matching Gate 2 campaign/config/canary "
+                "provenance and independent durable artifact custody attestation"
+            )
         if not provenance.campaign_provenance_verified:
             raise ValueError(
                 "promoted evidence requires verified matching Gate 2 campaign/config/canary provenance"

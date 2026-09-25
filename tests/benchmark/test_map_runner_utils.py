@@ -77,6 +77,10 @@ from robot_sf.benchmark.map_runner.map_runner_metrics import (
 )
 from robot_sf.benchmark.map_runner.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    _load_base_candidate_config,
+    _scenario_algo_override_runtime,
+)
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.benchmark.utils import _config_hash
@@ -306,6 +310,7 @@ def test_map_runner_execution_boundaries_stay_extracted() -> None:
         map_runner._build_completed_batch_summary.__module__
         == "robot_sf.benchmark.map_runner.map_runner_batch_summary"
     )
+    assert "_scoped_episode_compat_overrides()" in wrapper_source
     assert "_execute_map_episode(" in wrapper_source
     assert "for step_idx in range" not in wrapper_source
 
@@ -492,6 +497,39 @@ def test_resolve_policy_search_candidate_runtime_switches_algo_for_scenario(
         default_algo="hybrid_rule_local_planner",
         algo_config_path=str(candidate_cfg),
         scenario={"name": "francis2023_leave_group"},
+    )
+
+    assert algo == "orca"
+    assert cfg == {"orca_time_horizon": 4.0, "max_linear_speed": 1.15}
+
+
+def test_load_base_candidate_config_preserves_compatibility_helper(tmp_path: Path) -> None:
+    """The compatibility helper shares the same base-plus-params merge semantics."""
+    base_cfg = tmp_path / "base.yaml"
+    base_cfg.write_text("nested:\n  base: true\n  speed: 1.0\n", encoding="utf-8")
+
+    effective = _load_base_candidate_config(
+        {"base_config_path": "base.yaml", "params": {"nested": {"speed": 2.0}}},
+        config_anchor=tmp_path,
+    )
+
+    assert effective == {"nested": {"base": True, "speed": 2.0}}
+
+
+def test_scenario_algo_override_runtime_preserves_compatibility_helper(tmp_path: Path) -> None:
+    """The compatibility helper resolves scenario-specific algorithm/config identity."""
+    override_cfg = tmp_path / "orca.yaml"
+    override_cfg.write_text("orca_time_horizon: 4.0\nmax_linear_speed: 0.9\n", encoding="utf-8")
+
+    algo, cfg = _scenario_algo_override_runtime(
+        {
+            "algo": " ORCA ",
+            "base_config_path": "orca.yaml",
+            "params": {"max_linear_speed": 1.15},
+        },
+        default_algo="hybrid_rule_local_planner",
+        scenario_key="francis2023_leave_group",
+        config_anchor=tmp_path,
     )
 
     assert algo == "orca"
@@ -2880,6 +2918,22 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
     map_def = _minimal_map_def()
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    episode_hook_names = (
+        "_build_env_config",
+        "make_robot_env",
+        "sample_obstacle_points",
+        "compute_shortest_path_length",
+        "compute_all_metrics",
+        "post_process_metrics",
+    )
+    episode_hooks_before = {name: getattr(map_runner_episode, name) for name in episode_hook_names}
+    metric_override_calls: list[None] = []
+
+    def fake_compute_all_metrics(*args: Any, **kwargs: Any) -> dict[str, float]:
+        """Return the map-runner stub metrics while proving the override was used."""
+        del args, kwargs
+        metric_override_calls.append(None)
+        return {"success": 0.0, "collisions": 0.0}
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
@@ -2898,7 +2952,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
-        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+        fake_compute_all_metrics,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
@@ -2917,6 +2971,10 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         algo="goal",
         algo_config_path=None,
         scenario_path=Path("."),
+    )
+    assert metric_override_calls
+    assert all(
+        getattr(map_runner_episode, name) is hook for name, hook in episode_hooks_before.items()
     )
     assert record["scenario_id"] == "s1"
     assert record["metrics"]["success"] == 0.0

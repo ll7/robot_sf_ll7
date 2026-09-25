@@ -350,6 +350,7 @@ def build_replay_from_episode_row(episode_row: EpisodeRow) -> ReplayEpisode | No
                 speed=step_data.get("speed"),
                 ped_positions=step_data.get("ped_positions"),
                 action=step_data.get("action"),
+                pedestrian_ids=step_data.get("pedestrian_ids"),
             )
         elif isinstance(step_data, list | tuple) and len(step_data) >= 4:
             coords = _finite_floats(step_data[0], step_data[1], step_data[2], step_data[3])
@@ -626,16 +627,10 @@ def generate_trajectory(
     ax.plot(robot_x[0], robot_y[0], "go", markersize=12, label="Start")
     ax.plot(robot_x[-1], robot_y[-1], "rs", markersize=12, label="End")
 
-    ped_trajectories: dict[int, list[tuple[float, float]]] = {}
-    for step_idx, step in enumerate(replay_episode.steps):
-        if step.ped_positions:
-            for ped_idx, pos in enumerate(step.ped_positions):
-                if ped_idx not in ped_trajectories:
-                    ped_trajectories[ped_idx] = []
-                ped_trajectories[ped_idx].append(pos)
+    ped_trajectories = _pedestrian_trajectories(replay_episode)
 
     colors = plt.cm.tab10(np.linspace(0, 1, max(len(ped_trajectories), 1)))
-    for ped_idx, (ped_idx_key, traj) in enumerate(ped_trajectories.items()):
+    for ped_idx, traj in enumerate(ped_trajectories.values()):
         if len(traj) > 1:
             ped_x = [p[0] for p in traj]
             ped_y = [p[1] for p in traj]
@@ -646,7 +641,7 @@ def generate_trajectory(
                 color=colors[ped_idx % len(colors)],
                 linewidth=1.5,
                 alpha=0.7,
-                label=f"Pedestrian {ped_idx}",
+                label=f"Pedestrian {ped_idx + 1}",
             )
 
     stamp_text = (
@@ -682,6 +677,31 @@ def generate_trajectory(
         sha256=sha256,
         stamp_text=stamp_text,
     )
+
+
+def _pedestrian_trajectories(
+    replay_episode: ReplayEpisode,
+) -> dict[str, list[tuple[float, float]]]:
+    """Group points only when the replay carries a stable actor identity.
+
+    Legacy replay rows without identities get one-point tracks. That keeps the
+    figure useful for positions while avoiding an unsupported assumption that
+    array slot N represents the same pedestrian across every step.
+
+    Returns:
+        A mapping from stable or step-local pedestrian identity to its positions.
+    """
+    trajectories: dict[str, list[tuple[float, float]]] = {}
+    for step_idx, step in enumerate(replay_episode.steps):
+        for ped_idx, position in enumerate(step.ped_positions or []):
+            pedestrian_id = None
+            if step.pedestrian_ids is not None and ped_idx < len(step.pedestrian_ids):
+                candidate = step.pedestrian_ids[ped_idx]
+                if isinstance(candidate, str) and candidate.strip():
+                    pedestrian_id = candidate.strip()
+            key = pedestrian_id or f"unknown-step-{step_idx}-actor-{ped_idx}"
+            trajectories.setdefault(key, []).append(position)
+    return trajectories
 
 
 def generate_caption_fragment(

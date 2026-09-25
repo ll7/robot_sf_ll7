@@ -256,7 +256,9 @@
       "map_context": "unavailable",
       "status": "rendered",
       "video_reason": "canonical_runner_did_not_emit_video_artifact",
-      "video_status": "unavailable"
+      "video_status": "unavailable",
+      "historical_trajectory_caveat": "trajectory.png connects simulator-slot-0 across occupant reuse; do not interpret as one pedestrian track",
+      "map_context_reason": "classic_crossing.svg was materialized only in the later repair; the archived smoke did not bundle it, and the existing renderer image reader cannot decode SVG overlays"
     },
     "replay": {
       "collision_event": true,
@@ -268,9 +270,10 @@
       "replay_match": "match",
       "revision": "1357ebd4084a5da077e10a5ab9ed74e5a4d9a9e4",
       "route_complete": false,
-      "source_input_binding": "bound",
+      "source_input_binding": "unknown",
       "timeout_event": false,
-      "verification_status": "outcome_reproduced_revision_changed"
+      "verification_status": "outcome_reproduced_revision_changed",
+      "source_input_binding_reason": "pre-repair smoke omitted the resolved map registry bytes; source registry digest was not attested"
     },
     "replay_match_count": 1,
     "replay_mismatch_count": 0,

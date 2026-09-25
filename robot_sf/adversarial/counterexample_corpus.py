@@ -232,10 +232,160 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
             raise CorpusError(
                 f"planner evaluation references absent case {evaluation['case_id']!r}"
             )
+    _validate_search_run_evidence(corpus["search_runs"], corpus_root=root)
     _validate_all_case_admissibility_evidence(
         corpus["cases"], corpus["planner_evaluations"], corpus_root=root
     )
     _validate_historical_candidate_registry(corpus)
+
+
+def _validate_search_run_evidence(
+    search_runs: Sequence[Mapping[str, Any]], *, corpus_root: Path | None
+) -> None:
+    """Verify every persisted search-run artifact receipt against corpus custody."""
+    if not search_runs:
+        return
+    if corpus_root is None:
+        raise CorpusError("corpus_root is required to validate persisted search-run evidence")
+
+    run_ids = [run["run_id"] for run in search_runs]
+    if len(run_ids) != len(set(run_ids)):
+        raise CorpusError("search-run run_id values must be unique")
+
+    root = corpus_root.resolve()
+    known_artifact_digests: dict[str, str] = {}
+    for run in search_runs:
+        _validate_one_search_run_evidence(run, root, known_artifact_digests)
+
+
+def _validate_one_search_run_evidence(
+    run: Mapping[str, Any], root: Path, known_artifact_digests: dict[str, str]
+) -> None:
+    artifacts_in_run: dict[str, tuple[str, str]] = {}
+    for collection in ("source_files", "manifest_files"):
+        _validate_search_run_file_collection(
+            run[collection],
+            collection,
+            root,
+            artifacts_in_run=artifacts_in_run,
+            known_artifact_digests=known_artifact_digests,
+        )
+    _validate_search_run_bundle_receipts(
+        run.get("bundle_receipts", []),
+        root,
+        artifacts_in_run=artifacts_in_run,
+        known_artifact_digests=known_artifact_digests,
+    )
+
+
+def _validate_search_run_file_collection(
+    receipts: Sequence[Mapping[str, Any]],
+    collection: str,
+    root: Path,
+    *,
+    artifacts_in_run: dict[str, tuple[str, str]],
+    known_artifact_digests: dict[str, str],
+) -> None:
+    seen_paths: set[str] = set()
+    for receipt in receipts:
+        relative = receipt.get("path")
+        digest = receipt.get("sha256")
+        if not _safe_bundle_relative_path(relative) or not _is_sha256(digest):
+            raise CorpusError(f"search-run {collection} receipt has an unsafe path or digest")
+        if relative in seen_paths:
+            raise CorpusError(f"search-run {collection} contains duplicate path: {relative}")
+        seen_paths.add(relative)
+        _register_search_run_artifact(
+            relative,
+            digest,
+            collection,
+            artifacts_in_run=artifacts_in_run,
+            known_artifact_digests=known_artifact_digests,
+        )
+        _verify_search_run_artifact(root, relative, digest)
+
+
+def _validate_search_run_bundle_receipts(
+    receipts: Sequence[Mapping[str, Any]],
+    root: Path,
+    *,
+    artifacts_in_run: dict[str, tuple[str, str]],
+    known_artifact_digests: dict[str, str],
+) -> None:
+    bundle_source_paths: set[str] = set()
+    bundle_paths: set[str] = set()
+    for receipt in receipts:
+        source_path = receipt.get("source_path")
+        relative = receipt.get("path")
+        digest = receipt.get("sha256")
+        if (
+            not _safe_bundle_relative_path(source_path)
+            or not _safe_bundle_relative_path(relative)
+            or not _is_sha256(digest)
+        ):
+            raise CorpusError("search-run bundle receipt has an unsafe identity, path, or digest")
+        if source_path in bundle_source_paths:
+            raise CorpusError(
+                f"search-run bundle receipts contain duplicate source identity: {source_path}"
+            )
+        if relative in bundle_paths:
+            raise CorpusError(f"search-run bundle receipts contain duplicate path: {relative}")
+        bundle_source_paths.add(source_path)
+        bundle_paths.add(relative)
+        _register_search_run_artifact(
+            relative,
+            digest,
+            "bundle_receipts",
+            artifacts_in_run=artifacts_in_run,
+            known_artifact_digests=known_artifact_digests,
+        )
+        _verify_search_run_artifact(root, relative, digest)
+
+
+def _register_search_run_artifact(
+    relative: str,
+    digest: str,
+    collection: str,
+    *,
+    artifacts_in_run: dict[str, tuple[str, str]],
+    known_artifact_digests: dict[str, str],
+) -> None:
+    previous = artifacts_in_run.get(relative)
+    if previous is not None:
+        previous_collection, previous_digest = previous
+        intentional_manifest_overlap = {previous_collection, collection} == {
+            "source_files",
+            "manifest_files",
+        } and previous_digest == digest
+        if not intentional_manifest_overlap:
+            reason = "conflicting" if previous_digest != digest else "duplicate"
+            raise CorpusError(f"search-run {reason} artifact receipt identity: {relative}")
+    else:
+        artifacts_in_run[relative] = (collection, digest)
+
+    known_digest = known_artifact_digests.get(relative)
+    if known_digest is not None and known_digest != digest:
+        raise CorpusError(f"search-run artifact receipts conflict on digest: {relative}")
+    known_artifact_digests[relative] = digest
+
+
+def _verify_search_run_artifact(root: Path, relative: str, expected_sha256: str) -> None:
+    """Resolve a stored search receipt inside corpus custody and verify its digest."""
+    try:
+        source = (root / Path(*PurePosixPath(relative).parts)).resolve(strict=True)
+        source.relative_to(root)
+    except ValueError as exc:
+        raise CorpusError(f"search-run artifact path escapes corpus root: {relative}") from exc
+    except (OSError, RuntimeError) as exc:
+        raise CorpusError(f"search-run artifact is missing or unresolvable: {relative}") from exc
+    if not source.is_file():
+        raise CorpusError(f"search-run artifact is missing or not a file: {relative}")
+    try:
+        actual_sha256 = _sha256_file(source)
+    except OSError as exc:
+        raise CorpusError(f"search-run artifact cannot be read: {relative}") from exc
+    if actual_sha256 != expected_sha256:
+        raise CorpusError(f"search-run artifact digest mismatch: {relative}")
 
 
 def _validate_all_case_admissibility_evidence(

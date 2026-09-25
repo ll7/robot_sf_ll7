@@ -55,10 +55,36 @@
           "new_counterexamples_discovered": {"type": "integer", "minimum": 0},
           "new_counterexamples_admitted": {"type": "integer", "minimum": 0},
           "evidence_tier": {"type": "string", "minLength": 1},
-          "source_files": {"type": "array", "items": {"type": "object"}},
-          "manifest_files": {"type": "array", "items": {"type": "object"}},
+          "source_files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "manifest_files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "candidate_count": {"type": "integer", "minimum": 0}
+              },
+              "additionalProperties": false
+            }
+          },
           "bundle_receipts": {
             "type": "array",
+            "minItems": 1,
             "items": {
               "type": "object",
               "required": ["source_path", "path", "sha256"],

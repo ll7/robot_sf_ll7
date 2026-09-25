@@ -1,13 +1,13 @@
 """Tests for the isolated figure-render recurrence guard (issue #6770).
 
-Covers the recurrence contract end-to-end with synthetic fixtures (NOT the real nine commands):
+Covers the recurrence contract end-to-end with synthetic fixtures (NOT the real ten commands):
 success, timeout, missing output, extra output, path escape, input drift, unsafe command,
 negative-control handling, empty-eligible fail-closed, structural validation, the strace
 write-tracker, output redirection, stable registry-order reporting, workflow trigger coverage, and
 portable report provenance.
 
 The real committed registry is also exercised once as a regression smoke (mirrors the CI guard
-command), proving the nine recurrence-eligible entries reproduce under isolation.
+command), proving all ten recurrence-eligible entries reproduce under isolation.
 """
 
 # evidence-writer-exempt: these tests write to pytest tmp_path fixtures (local scratch), not to
@@ -681,14 +681,14 @@ def test_tracked_report_paths_are_repository_relative():
 
 @requires_strace
 def test_real_registry_recurrence_passes(tmp_path):
-    """The nine recurrence-eligible entries reproduce under isolation at the pinned commit."""
+    """All ten recurrence-eligible entries reproduce under isolation at the pinned commit."""
     if not REGISTRY.is_file():
         pytest.skip("committed figure-render registry is absent")
     report, exit_code, _ = _run(tmp_path, REGISTRY)
     assert exit_code == 0, report
-    assert report["eligible_count"] == 9
-    assert report["executed_count"] == 9
-    assert report["passed_count"] == 9
+    assert report["eligible_count"] == 10
+    assert report["executed_count"] == 10
+    assert report["passed_count"] == 10
     assert report["failed_count"] == 0
     statuses = {c["status"] for c in report["commands"]}
     assert statuses == {"passed"}
@@ -714,4 +714,4 @@ def test_cli_runs_against_committed_registry(tmp_path):
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["schema"] == guard.REPORT_SCHEMA
-    assert payload["passed_count"] == 9
+    assert payload["passed_count"] == 10

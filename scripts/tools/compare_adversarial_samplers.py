@@ -25,7 +25,6 @@ from robot_sf.adversarial.config import (
 )
 from robot_sf.adversarial.objectives import constraints_first_outcome_projection
 from robot_sf.adversarial.samplers import build_sampler
-from robot_sf.adversarial.search import run_adversarial_search
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     DEFAULT_CONTRACT_PATH,
@@ -86,6 +85,8 @@ def run_sampler_comparison(
     seeds: Sequence[int] | None = None,
 ) -> list[SamplerComparisonRow]:
     """Run the configured search once per sampler and objective and return compact rows."""
+    from robot_sf.adversarial.search import run_adversarial_search
+
     rows: list[SamplerComparisonRow] = []
     active_objectives = tuple(objective_names or (config.objective,))
     if len(active_objectives) != len(set(active_objectives)):

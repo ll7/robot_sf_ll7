@@ -25,6 +25,8 @@ on:
       - "scripts/benchmark/build_horizon_timestep_ablation_report.py"
       - "scripts/benchmark/build_forecast_calibration_from_cv_comparison.py"
       - "docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/comparison_report.json"
+      - "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json"
+      - "scripts/tools/compare_adversarial_samplers.py"
       - "scripts/benchmark/run_cv_forecast_eval.py"
       - "scripts/validation/validate_forecast_risk_calibration_filter.py"
       - "scripts/benchmark/build_horizon_timestep_denominator_report.py"

@@ -109,7 +109,7 @@ input_provenance:
       path: scripts/tools/compare_adversarial_samplers.py
       # Refreshed after issue #9645 added stored-comparison rendering; the
       # frozen #5303 objective and promotion boundary are unchanged.
-      sha256: 098514f0917b0af864247be7efade6b2696cce77b2bcbba91c024a9679b85071
+      sha256: 19d8debeb92f87c91bfe886f0990d352d03ac1c969343020de50e22e68741f1e
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       # Refreshed after the additive issue #9304 evidence-trace bridge; the

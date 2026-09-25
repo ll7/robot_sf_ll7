@@ -362,6 +362,30 @@ scientific interpretation, benchmark admission, release checks, licensing
 review, or specialized evidence packets. Raw logs remain out of the receipt;
 they may be referenced through digested durable artifacts.
 
+`issue_completion_receipt.v1` also accepts the optional `terminal_outcome`
+object (`research_terminal_outcome.v1`) for a completed research or engineering
+run. Its classification is `success`, `no_signal`, or `no_change`, with a
+concise summary and one or more `evidence_artifacts` paths. Every referenced
+path must name an artifact already declared in the receipt and captured at the
+delivered head; the normal digest, exact Git diff, and post-review drift checks
+still apply. Terminal-outcome evidence paths must resolve to locally verifiable
+files under the verifier's artifact root so its bytes can be compared with the
+declared digest. Receipts without this optional object retain the existing
+generic `artifacts` path behavior, including URI references; a URI cannot
+satisfy `terminal_outcome.evidence_artifacts` unless a future canonical verifier
+can fetch and hash those bytes. Older receipts may omit this object.
+
+The outcome is surfaced by the existing `admit_completion_receipt` consumer
+inside `closure.completion_receipt.terminal_outcome`, so the goal/issue-close
+path can report the recorded result. It is descriptive receipt metadata: all
+existing validation, issue acceptance-criterion, independent-verifier,
+documented-closure, merged-PR, and specialized evidence gates remain in force.
+A `no_signal` or `no_change` outcome cannot make an unmet issue criterion
+complete and cannot promote scientific, benchmark, safety, release, or
+publication claims.
+A `no_signal` result is limited to the recorded scenario space, objective, and finite budget; it
+must not be interpreted as proof that no counterexample exists.
+
 ## Shared plan schema
 
 Implementation admission may consume one canonical `issue_dependency_packet.v1` for exact

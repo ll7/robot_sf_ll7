@@ -266,6 +266,29 @@ def test_spawn_overlap_rows_are_ledger_invalid_and_excluded_from_rates() -> None
     assert summary["_meta"]["evidence_eligibility"]["excluded_record_count"] == 1
 
 
+def test_enforce_reset_spawn_clearance_is_noop_before_pedestrian_state() -> None:
+    """Clearance enforcement is a no-op when pedestrian state does not exist yet.
+
+    ``Simulator`` and ``PedSimulator`` both assign ``pysf_state`` before their first
+    ``reset_state()``, so the guard is defensive: it covers call paths that enforce
+    clearance before ``_build_pysf_simulation`` has run, where the pre-guard code
+    raised ``AttributeError`` from the ``ped_pos`` property. Both branches must report
+    "no relocation" rather than crash, and neither may touch any state.
+    """
+    from types import SimpleNamespace
+
+    from robot_sf.sim.simulator import Simulator
+
+    uninitialized = SimpleNamespace(last_spawn_relocation="sentinel")
+    Simulator._enforce_reset_spawn_clearance(uninitialized)  # type: ignore[arg-type]
+    assert uninitialized.last_spawn_relocation is None
+    assert not hasattr(uninitialized, "pysf_state")
+
+    state_without_positions = SimpleNamespace(last_spawn_relocation="sentinel", pysf_state=object())
+    Simulator._enforce_reset_spawn_clearance(state_without_positions)  # type: ignore[arg-type]
+    assert state_without_positions.last_spawn_relocation is None
+
+
 def test_map_definition_pickles_after_spawn_sampling() -> None:
     """Spawn-clearance caches hold prepared geometries; pickling must drop and rebuild them."""
     import pickle

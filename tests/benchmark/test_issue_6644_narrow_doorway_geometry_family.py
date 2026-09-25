@@ -65,7 +65,13 @@ def _fake_certifier(scenario: dict[str, Any], scenario_path: Path) -> ScenarioCe
 def _fake_episode_runner(
     scenario: dict[str, Any], seed: int, horizon: int | None, algo: str
 ) -> dict[str, Any]:
-    return {"route_complete": True, "steps": 100, "termination_reason": "success"}
+    return {
+        "route_complete": True,
+        "steps": 100,
+        "horizon_steps": horizon,
+        "termination_reason": "success",
+        "fallback_or_degraded": False,
+    }
 
 
 def test_manifest_and_matrix_cover_boundary_and_depth_axes() -> None:

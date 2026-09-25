@@ -37,6 +37,7 @@ _ROW_STATUS_VALUES = {
     "degraded",
     "blocked",
 }
+_ADMISSIBLE_CERTIFICATION_CLASSIFICATIONS = frozenset({"valid", "hard_but_solvable"})
 
 
 def build_search_evidence_packet_gallery(
@@ -65,7 +66,9 @@ def build_search_evidence_packet_gallery(
 
     payload, source_hashes = _read_packet(source)
     _check_source_metadata(payload)
-    accounting = _reconcile_packet(payload, source_root=_source_root(source, root))
+    accounting = _reconcile_packet(
+        payload, source_root=_source_root(source, root), packet_dir=source
+    )
     critical_count = sum(
         row["case_criticality"] == "critical_planner_failure" for row in accounting
     )
@@ -466,9 +469,18 @@ def _read_candidate_csv(content: bytes) -> list[dict[str, str]]:
     return rows
 
 
-def _reconcile_packet(payload: dict[str, Any], *, source_root: Path) -> list[dict[str, Any]]:
+def _reconcile_packet(
+    payload: dict[str, Any], *, source_root: Path, packet_dir: Path
+) -> list[dict[str, Any]]:
     """Cross-check every candidate against its manifest, row-status record and reports."""
     by_sha = _index_source_manifests(payload["source_manifests"])
+    _check_manifest_inventory(
+        payload["run_metadata"],
+        payload["summary"],
+        payload["source_manifests"],
+        packet_dir=packet_dir,
+        source_root=source_root,
+    )
     row_status = payload["row_status"]
     status_rows = row_status.get("rows")
     if not isinstance(status_rows, list):
@@ -540,6 +552,7 @@ def _manifest_summary(entry: dict[str, Any]) -> dict[str, Any]:
 def _index_source_manifests(manifests: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Index valid source manifests by their exact content digest."""
     by_sha: dict[str, dict[str, Any]] = {}
+    run_ids: set[str] = set()
     for entry in manifests:
         manifest = entry["payload"]
         config = manifest.get("config")
@@ -551,10 +564,203 @@ def _index_source_manifests(manifests: list[dict[str, Any]]) -> dict[str, dict[s
         budget = _nonnegative_integer(config.get("budget"), "source manifest budget")
         if len(candidates) > budget:
             raise ValueError(f"source manifest exceeds its declared budget: {entry['path']}")
+        output_dir = config.get("output_dir")
+        if not isinstance(output_dir, str) or not output_dir.strip():
+            raise ValueError(f"source manifest has no output directory: {entry['path']}")
+        output_path = Path(output_dir)
+        if output_path.is_absolute() or ".." in output_path.parts or not output_path.parts:
+            raise ValueError(f"source manifest output directory is unsafe: {entry['path']}")
+        sampler = output_path.name
+        seed = _integer(config.get("seed"), "source manifest seed")
+        if not sampler:
+            raise ValueError(f"source manifest output directory has no sampler: {entry['path']}")
+        run_id = f"{sampler}_{seed}"
+        if run_id in run_ids:
+            raise ValueError(f"duplicate source manifest run identity in packet: {run_id}")
+        run_ids.add(run_id)
+        entry["run_id"] = run_id
+        entry["manifest_path"] = (output_path / "manifest.json").as_posix()
+        entry["source_manifest_path"] = entry["path"]
         if entry["sha256"] in by_sha:
             raise ValueError("duplicate source manifest content in packet")
         by_sha[entry["sha256"]] = entry
     return by_sha
+
+
+def _check_manifest_inventory(
+    run_metadata: dict[str, Any],
+    summary: dict[str, Any],
+    source_manifests: list[dict[str, Any]],
+    *,
+    packet_dir: Path,
+    source_root: Path,
+) -> None:
+    """Bind run metadata and summary run references to every loaded manifest."""
+    expected = {
+        entry["run_id"]: {
+            "path": entry["manifest_path"],
+            "sha256": entry["sha256"].lower(),
+            "source_manifest_path": entry["source_manifest_path"],
+        }
+        for entry in source_manifests
+    }
+    manifest_files = run_metadata.get("manifest_files")
+    if not isinstance(manifest_files, list) or not manifest_files:
+        raise ValueError("run metadata has no source manifest inventory")
+    artifact_paths_declared = any(
+        isinstance(item, dict) and "artifact_path" in item for item in manifest_files
+    )
+    if artifact_paths_declared and any(
+        not isinstance(item, dict) or "artifact_path" not in item for item in manifest_files
+    ):
+        raise ValueError("run metadata manifest inventory has inconsistent artifact paths")
+    observed = _index_manifest_inventory(
+        manifest_files,
+        expected,
+        artifact_paths_declared=artifact_paths_declared,
+        packet_dir=packet_dir,
+        source_root=source_root,
+    )
+    expected_inventory = {
+        run_id: {"path": identity["path"], "sha256": identity["sha256"]}
+        for run_id, identity in expected.items()
+    }
+    if observed != expected_inventory:
+        raise ValueError("run metadata manifest inventory conflicts with loaded source manifests")
+    _check_summary_manifest_inventory(summary, expected)
+
+
+def _index_manifest_inventory(
+    manifest_files: list[Any],
+    expected: dict[str, dict[str, str]],
+    *,
+    artifact_paths_declared: bool,
+    packet_dir: Path,
+    source_root: Path,
+) -> dict[str, dict[str, str]]:
+    """Validate each run-metadata entry and index its runtime identity."""
+    observed: dict[str, dict[str, str]] = {}
+    for item in manifest_files:
+        if not isinstance(item, dict):
+            raise ValueError("run metadata manifest inventory contains a malformed entry")
+        run_id = item.get("run_id")
+        path = item.get("path")
+        digest = item.get("sha256")
+        if (
+            not isinstance(run_id, str)
+            or not run_id
+            or not isinstance(path, str)
+            or not path
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in digest)
+            or run_id in observed
+        ):
+            raise ValueError("run metadata manifest inventory has duplicate or invalid entries")
+        if artifact_paths_declared:
+            artifact_path = item.get("artifact_path")
+            identity = expected.get(run_id, {})
+            if not isinstance(artifact_path, str) or not _source_manifest_artifact_matches(
+                artifact_path,
+                packet_dir=packet_dir,
+                source_root=source_root,
+                manifest_path=identity.get("source_manifest_path", ""),
+                sha256=identity.get("sha256", ""),
+            ):
+                raise ValueError(
+                    f"run metadata source manifest artifact path conflicts for run {run_id}"
+                )
+        observed[run_id] = {"path": path, "sha256": digest.lower()}
+    return observed
+
+
+def _check_summary_manifest_inventory(
+    summary: dict[str, Any], expected: dict[str, dict[str, str]]
+) -> None:
+    """Require each summary run path and digest to name one loaded source manifest."""
+    summary_runs = summary.get("runs")
+    if not isinstance(summary_runs, list):
+        raise ValueError("summary has no per-run manifest identities")
+    summary_by_id = {
+        str(item.get("run_id")): item for item in summary_runs if isinstance(item, dict)
+    }
+    if len(summary_by_id) != len(summary_runs) or set(summary_by_id) != set(expected):
+        raise ValueError("summary run manifest identities do not match loaded source manifests")
+    for run_id, identity in expected.items():
+        run = summary_by_id[run_id]
+        if (
+            run.get("manifest_path") != identity["path"]
+            or str(run.get("manifest_sha256", "")).lower() != identity["sha256"]
+        ):
+            raise ValueError(f"summary manifest path or digest conflicts for run {run_id}")
+
+
+def _source_manifest_artifact_matches(
+    artifact_path: str,
+    *,
+    packet_dir: Path,
+    source_root: Path,
+    manifest_path: str,
+    sha256: str,
+) -> bool:
+    """Require a declared copied-manifest locator to name the exact loaded bytes in-packet."""
+    relative_path = Path(artifact_path)
+    if not _safe_manifest_artifact_path(artifact_path, relative_path) or not manifest_path:
+        return False
+
+    expected_path = packet_dir / manifest_path
+    if not _packet_manifest_file_matches(expected_path, packet_dir, sha256):
+        return False
+    expected_resolved = expected_path.resolve()
+    for base in (source_root, packet_dir):
+        candidate = base / relative_path
+        if _artifact_locator_matches(candidate, base, packet_dir, expected_resolved, sha256):
+            return True
+    return False
+
+
+def _safe_manifest_artifact_path(raw_path: str, path: Path) -> bool:
+    """Reject absolute, traversing, or platform-ambiguous artifact locators."""
+    return (
+        bool(raw_path)
+        and "\\" not in raw_path
+        and not path.is_absolute()
+        and ".." not in path.parts
+    )
+
+
+def _packet_manifest_file_matches(path: Path, packet_dir: Path, sha256: str) -> bool:
+    """Check that the loaded manifest file itself is regular, in-packet, and correctly hashed."""
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        path.resolve().relative_to(packet_dir.resolve())
+    except ValueError:
+        return False
+    return _sha256_file(path) == sha256
+
+
+def _artifact_locator_matches(
+    candidate: Path,
+    base: Path,
+    packet_dir: Path,
+    expected_path: Path,
+    sha256: str,
+) -> bool:
+    """Check a safe locator resolves to the exact source-manifest file and digest."""
+    cursor = base
+    for component in candidate.relative_to(base).parts:
+        cursor = cursor / component
+        if cursor.is_symlink():
+            return False
+    if not candidate.is_file():
+        return False
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(packet_dir.resolve())
+    except ValueError:
+        return False
+    return resolved == expected_path and _sha256_file(candidate) == sha256
 
 
 def _reconcile_candidate_rows(
@@ -686,7 +892,13 @@ def _check_candidate_certificate(
 def _check_candidate_attribution(
     row: dict[str, str], candidate: dict[str, Any], *, run_id: str
 ) -> None:
-    """Compare primary failure and canonical episode outcome fields."""
+    """Compare candidate error, primary failure and canonical episode outcome fields."""
+    source_error = candidate.get("error")
+    if source_error is not None and not isinstance(source_error, str):
+        raise ValueError(f"candidate error is malformed in source manifest: {run_id}")
+    normalized_source_error = source_error or ""
+    if row["error"] != normalized_source_error:
+        raise ValueError(f"candidate error conflicts with source manifest: {run_id}")
     attribution = candidate.get("failure_attribution")
     if not isinstance(attribution, dict) or row["failure_attribution"] != str(
         attribution.get("primary_failure")
@@ -772,6 +984,9 @@ def _check_row_execution_evidence(
 ) -> None:
     """Ensure execution-evidence claims agree across all three packet sources."""
     expected_execution_evidence = row["row_status"] == "successful_evidence"
+    candidate_error = candidate.get("error")
+    if candidate_error not in (None, "") and expected_execution_evidence:
+        raise ValueError(f"failed candidate cannot count as successful evidence: {row_id}")
     csv_execution_evidence = _boolean(
         row["counts_as_execution_success_evidence"], "counts_as_execution_success_evidence"
     )
@@ -785,6 +1000,36 @@ def _check_row_execution_evidence(
     if isinstance(analysis, dict) and status.get("counts_as_success_evidence") is True:
         if analysis.get("eligible") is not True or row["availability_status"] != "available":
             raise ValueError(f"success evidence contradicts candidate eligibility: {row_id}")
+
+
+def _candidate_has_admissible_certification(row: dict[str, str], candidate: dict[str, Any]) -> bool:
+    """Require an explicitly passed, admissible certificate for eligibility accounting."""
+    certification = candidate.get("certification_status")
+    details = certification.get("details") if isinstance(certification, dict) else None
+    certificates = details.get("certificates") if isinstance(details, dict) else None
+    certificate = certificates[0] if isinstance(certificates, list) and certificates else None
+    return (
+        row["certification_status"] == "passed"
+        and isinstance(certification, dict)
+        and certification.get("status") == "passed"
+        and isinstance(certificate, dict)
+        and certificate.get("classification") in _ADMISSIBLE_CERTIFICATION_CLASSIFICATIONS
+        and certificate.get("benchmark_eligibility") == "eligible"
+    )
+
+
+def _collision_accounting(row: dict[str, str], *, row_id: str) -> tuple[bool, int, int]:
+    """Validate that the collision event flag agrees with nonnegative event counts."""
+    collision_event = _boolean(row["collision_event"], "collision_event")
+    total_collision_count = _nonnegative_integer(
+        row["total_collision_count"], "total_collision_count"
+    )
+    ped_collision_count = _nonnegative_integer(row["ped_collision_count"], "ped_collision_count")
+    if ped_collision_count > total_collision_count:
+        raise ValueError(f"pedestrian collision count exceeds total collisions: {row_id}")
+    if collision_event != (total_collision_count > 0):
+        raise ValueError(f"collision counts conflict with collision event: {row_id}")
+    return collision_event, total_collision_count, ped_collision_count
 
 
 def _candidate_accounting(
@@ -805,11 +1050,18 @@ def _candidate_accounting(
     outcome = details.get("outcome", {}) if isinstance(details, dict) else {}
     primary_failure = attribution.get("primary_failure")
     analysis = candidate.get("analysis_eligibility")
+    collision_event, total_collision_count, ped_collision_count = _collision_accounting(
+        row, row_id=row_id
+    )
     eligible = (
         row["benchmark_eligibility"] == "eligible"
         and isinstance(analysis, dict)
         and analysis.get("eligible") is True
+        and analysis.get("certificate_ok") is True
+        and _candidate_has_admissible_certification(row, candidate)
     )
+    candidate_error = candidate.get("error")
+    has_evaluation_error = isinstance(candidate_error, str) and bool(candidate_error)
     execution_evidence = _boolean(
         row["counts_as_execution_success_evidence"], "counts_as_execution_success_evidence"
     )
@@ -825,7 +1077,9 @@ def _candidate_accounting(
         and status.get("counts_as_success_evidence") is True
         and status.get("fallback_or_degraded") is False
         and eligible
-        and not row["error"].strip()
+        and not has_evaluation_error
+        and total_collision_count == 0
+        and ped_collision_count == 0
     )
     explicit_failure = (
         attribution.get("status") == "attributed"
@@ -839,13 +1093,17 @@ def _candidate_accounting(
         and status.get("counts_as_success_evidence") is True
         and status.get("fallback_or_degraded") is False
         and eligible
+        and not has_evaluation_error
         and (
             outcome.get("collision_event") is True
             or outcome.get("timeout_event") is True
             or outcome.get("route_complete") is False
         )
     )
-    if status.get("fallback_or_degraded") is True:
+    if has_evaluation_error or row["row_status"] == "unexpected_failure":
+        criticality = "unknown"
+        execution_outcome = "evaluation_failed"
+    elif status.get("fallback_or_degraded") is True:
         criticality = "unknown"
         execution_outcome = "fallback_or_degraded"
     elif no_failure:
@@ -911,10 +1169,12 @@ def _candidate_accounting(
         "certification_status": row["certification_status"],
         "certification_classification": row["certification_classification"],
         "execution_outcome": execution_outcome,
+        "row_status": row["row_status"],
+        "evaluation_error": candidate_error,
         "scenario_eligibility": "eligible" if eligible else "ineligible_or_unknown",
         "case_criticality": criticality,
         "outcome_metrics": {
-            "collision_event": _boolean(row["collision_event"], "collision_event"),
+            "collision_event": collision_event,
             "route_complete": _boolean(row["route_complete"], "route_complete"),
             "timeout_event": _boolean(row["timeout_event"], "timeout_event"),
             "min_clearance_m": _csv_number(row["min_clearance_m"], "min_clearance_m"),
@@ -922,10 +1182,8 @@ def _candidate_accounting(
                 row["distance_to_human_min_m"], "distance_to_human_min_m"
             ),
             "near_miss_count": _integer(row["near_miss_count"], "near_miss_count"),
-            "total_collision_count": _integer(
-                row["total_collision_count"], "total_collision_count"
-            ),
-            "ped_collision_count": _integer(row["ped_collision_count"], "ped_collision_count"),
+            "total_collision_count": total_collision_count,
+            "ped_collision_count": ped_collision_count,
             "steps": _integer(row["steps"], "steps"),
             "source": "candidate_evaluations.csv; raw episode inputs are not implied",
         },

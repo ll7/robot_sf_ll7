@@ -1,5 +1,9 @@
 """Tests for benchmark publication bundle CLI helper."""
 
+# evidence-writer-exempt: this module writes synthetic and intentionally malformed evidence
+# fixtures under pytest tmp_path, including fake binary payloads; production shared writers would
+# normalize fixture bytes, and no durable repository output is produced by these fixture writes.
+
 from __future__ import annotations
 
 import hashlib

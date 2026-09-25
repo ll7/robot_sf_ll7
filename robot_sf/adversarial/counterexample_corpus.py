@@ -54,6 +54,8 @@ CASE_ADMISSIBILITY_EVIDENCE_SCHEMA_VERSION = "adversarial-case-admissibility-evi
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v1"
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
 ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
+_ISSUE_9645_PILOT_RUN_ID = "issue_9645_bounded_pilot"
+_ISSUE_9645_PILOT_EVIDENCE_ROOT = "evidence/issue_9645_pilot"
 ISSUE_9656_SUMMARY_SCHEMA = "benchmark-hard-case-slice.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
 _ROOT = Path(__file__).resolve().parents[2]
@@ -276,6 +278,103 @@ def _validate_one_search_run_evidence(
         artifacts_in_run=artifacts_in_run,
         known_artifact_digests=known_artifact_digests,
     )
+    if run.get("source_issue") == 9645 or run.get("run_id") == _ISSUE_9645_PILOT_RUN_ID:
+        _validate_issue9645_search_run_record(run, root)
+
+
+def _validate_issue9645_search_run_record(run: Mapping[str, Any], corpus_root: Path) -> None:
+    """Recompute the stored #9645 run summary from its copied, digest-pinned packet."""
+    if (
+        run.get("schema_version") != "adversarial-counterexample-search-run.v1"
+        or run.get("source_issue") != 9645
+        or run.get("run_id") != _ISSUE_9645_PILOT_RUN_ID
+        or run.get("evidence_bundle_root") != _ISSUE_9645_PILOT_EVIDENCE_ROOT
+    ):
+        raise CorpusError("#9645 search-run identity or evidence root differs from its contract")
+
+    payload = corpus_root / _ISSUE_9645_PILOT_EVIDENCE_ROOT
+    try:
+        summary = _read_json_object(payload / "summary.json")
+        metadata = _read_json_object(payload / "run_metadata.json")
+        row_status = _read_json_object(payload / "row_status.json")
+        _validate_pilot_summary(summary, metadata)
+        _validate_pilot_design(metadata)
+
+        # Reuse the packet verifier at corpus validation time. The manifest and checksum
+        # sidecar were copied under packet_receipts/; all accounting payloads are retained
+        # under the evidence root and were independently rehashed above.
+        bundle_receipts = _verify_issue9645_bundle(
+            payload,
+            source_revision=str(metadata.get("experiment_source_commit") or ""),
+            source_file_hashes=metadata.get("source_file_sha256"),
+            required_payload_paths=_pilot_accounting_paths(payload),
+            bundle_root=payload / "packet_receipts",
+        )
+        manifests_by_identity = _verify_pilot_manifests(payload, metadata)
+        _verify_pilot_candidate_rows(payload, row_status)
+
+        # The source metadata names the effective files. Bind those names and digests to
+        # the exact two copied pilot inputs instead of trusting a detached metadata value.
+        expected_inputs = (
+            (
+                "effective_search_space_path",
+                "effective_search_space_sha256",
+                "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+                payload / "inputs/issue_9645_pilot_space.v1.yaml",
+            ),
+            (
+                "scenario_template_path",
+                "scenario_template_sha256",
+                "configs/scenarios/templates/crossing_ttc.yaml",
+                payload / "inputs/crossing_ttc.yaml",
+            ),
+        )
+        for path_key, digest_key, expected_path, copied_path in expected_inputs:
+            if metadata.get(path_key) != expected_path or metadata.get(digest_key) != _sha256_file(
+                copied_path
+            ):
+                raise CorpusError(f"#9645 {path_key} does not bind its copied input")
+
+        expected = _pilot_search_run(
+            summary,
+            metadata,
+            manifests_by_identity,
+            payload,
+            bundle_receipts,
+        )
+    except CorpusError:
+        raise
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, yaml.YAMLError) as exc:
+        raise CorpusError(f"#9645 persisted search-run source packet is invalid: {exc}") from exc
+
+    # The import normalizes packet-local paths to corpus-relative custody paths. Reapply
+    # that transformation to the independently rebuilt record before exact comparison.
+    expected["source_files"] = [
+        {
+            **receipt,
+            "path": (PurePosixPath(_ISSUE_9645_PILOT_EVIDENCE_ROOT) / receipt["path"]).as_posix(),
+        }
+        for receipt in expected["source_files"]
+    ]
+    expected["manifest_files"] = [
+        {
+            **receipt,
+            "path": (PurePosixPath(_ISSUE_9645_PILOT_EVIDENCE_ROOT) / receipt["path"]).as_posix(),
+        }
+        for receipt in expected["manifest_files"]
+    ]
+    expected["bundle_receipts"] = [
+        {
+            **receipt,
+            "path": (PurePosixPath(_ISSUE_9645_PILOT_EVIDENCE_ROOT) / receipt["path"]).as_posix(),
+        }
+        for receipt in expected["bundle_receipts"]
+    ]
+    expected["evidence_bundle_root"] = _ISSUE_9645_PILOT_EVIDENCE_ROOT
+
+    for key, expected_value in expected.items():
+        if run.get(key) != expected_value:
+            raise CorpusError(f"#9645 search-run field {key!r} differs from pinned source evidence")
 
 
 def _validate_search_run_file_collection(
@@ -2834,9 +2933,10 @@ def _verify_issue9645_bundle(
     source_revision: str,
     source_file_hashes: Any,
     required_payload_paths: Sequence[str],
+    bundle_root: Path | None = None,
 ) -> list[dict[str, str]]:
     """Verify the bundle's outer receipt and hashes for every consumed payload file."""
-    bundle_root = payload.parent
+    bundle_root = bundle_root or payload.parent
     manifest_path, checksums_path, files_by_path = _read_issue9645_bundle_inventory(
         bundle_root, source_revision
     )

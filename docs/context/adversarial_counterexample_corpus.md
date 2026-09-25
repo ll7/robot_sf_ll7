@@ -41,7 +41,10 @@ the historical search source snapshots, and the #9645 accounting packet. It
 checks the packet's outer file inventory and checksum sidecar, compares the
 source-hash receipt with run metadata, and verifies each consumed payload file
 before admission. The corpus retains the outer manifest and checksum sidecar
-digests alongside the copied accounting evidence.
+digests alongside the copied accounting evidence. Later corpus validation
+recomputes the stored search-run record from the copied summary, metadata,
+candidate table, row-status receipt, and manifests. This keeps the pilot's
+explicit zero-discovery and zero-admission counts bound to their source packet.
 
 The #1501 original episode and search manifest were not archived. Its two
 regenerated rows and source sidecars have distinct run IDs, matching event and

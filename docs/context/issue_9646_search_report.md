@@ -21,6 +21,42 @@ readiness status, availability status, and eligibility as separate candidate fie
 table distinguishes raw observations from budget-bounded analysis-eligible summaries. It labels
 sampler `optuna` as TPE, matching the existing comparison runner's sampler choice.
 
+When the original manifest paths in the comparison index are no longer available, pass a
+`falsification_manifest_path_map.v1` file with `--manifest-path-map`. The map pins the exact
+comparison bytes and each archived manifest:
+
+```json
+{
+  "schema_version": "falsification_manifest_path_map.v1",
+  "source_comparison_sha256": "<64-character SHA-256 of the comparison file>",
+  "bindings": [
+    {
+      "declared_manifest_path": "/original/run-001/manifest.json",
+      "archived_manifest_path": "docs/context/evidence/run-001/manifest.json",
+      "archived_manifest_sha256": "<64-character SHA-256 of the archived manifest>"
+    }
+  ]
+}
+```
+
+`archived_manifest_path` must be a normalized repository-relative path that resolves inside
+`--repo-root`; absolute paths, traversal, symlink escapes, duplicate keys or targets, stale
+comparison digests, and archived-file hash mismatches fail closed. Each mapped manifest must also
+match the indexed seed, budget, and objective, and its recorded `config.output_dir` must resolve to
+the parent of its original `declared_manifest_path`. The comparison input is read-only: the report
+keeps the declared path, resolved archive path, expected and observed hashes, and path-map
+provenance as separate fields. A supplied map takes precedence for its exact declared path; rows
+without a binding continue through normal path resolution. A binding may include the optional
+`path` alias used by the evidence registry only when it exactly equals `archived_manifest_path`.
+
+```bash
+uv run python scripts/tools/report_falsification_search.py \
+  --comparison /path/to/adversarial-sampler-comparison.json \
+  --manifest-path-map docs/context/evidence/falsification-manifest-path-map.json \
+  --output-dir output/falsification-report \
+  --repo-root .
+```
+
 Budget-limited accounting uses only the first B candidate rows, where B is the comparison-indexed
 budget. A valid candidate count within B is `candidate rows within B - invalid candidates - failed
 evaluations`; scoreless valid evaluations remain valid. Every over-budget row remains in the JSON

@@ -14,7 +14,7 @@ import math
 import re
 import statistics
 from collections import Counter, defaultdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 COMPARISON_SCHEMA = "adversarial-sampler-comparison.v3"
@@ -33,6 +33,8 @@ CRITICAL_FAILURES = frozenset(
 _FAILURE_STATUSES = frozenset({"invalid_candidate", "evaluation_error"})
 _EXECUTION_CONTEXT_SCHEMA = "adversarial_execution_context.v1"
 _FULL_COMMIT_SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
+_FULL_SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
+_MANIFEST_PATH_MAP_SCHEMA = "falsification_manifest_path_map.v1"
 
 
 def _is_full_commit_sha(value: Any) -> bool:
@@ -52,11 +54,168 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _bytes_sha256(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _is_full_sha256(value: Any) -> bool:
+    return isinstance(value, str) and _FULL_SHA256.fullmatch(value) is not None
+
+
 def _load_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"cannot read JSON input {path}: {exc}") from exc
+
+
+def _validate_manifest_path_map_header(payload: Any, comparison_sha256: str) -> list[Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("manifest path map must be a JSON object")
+    required_fields = {"schema_version", "source_comparison_sha256", "bindings"}
+    if set(payload) != required_fields:
+        raise ValueError(
+            "manifest path map fields must be exactly schema_version, "
+            "source_comparison_sha256, and bindings"
+        )
+    if payload.get("schema_version") != _MANIFEST_PATH_MAP_SCHEMA:
+        raise ValueError(f"manifest path map schema must be {_MANIFEST_PATH_MAP_SCHEMA}")
+    source_digest = payload.get("source_comparison_sha256")
+    if not _is_full_sha256(source_digest):
+        raise ValueError("manifest path map source_comparison_sha256 must be a full SHA-256")
+    if source_digest.lower() != comparison_sha256:
+        raise ValueError("manifest path map is not bound to the exact comparison input bytes")
+    bindings = payload.get("bindings")
+    if not isinstance(bindings, list):
+        raise ValueError("manifest path map bindings must be an array")
+    return bindings
+
+
+def _manifest_path_map_binding_fields(
+    binding: Any, index: int, comparison_paths: set[str]
+) -> tuple[str, str, str]:
+    if not isinstance(binding, dict):
+        raise ValueError(f"manifest path map binding {index} must be an object")
+    required = {"declared_manifest_path", "archived_manifest_path", "archived_manifest_sha256"}
+    if not required.issubset(binding) or not set(binding).issubset(required | {"path"}):
+        raise ValueError(
+            f"manifest path map binding {index} fields must include declared_manifest_path, "
+            "archived_manifest_path, and archived_manifest_sha256; optional path must be "
+            "identical to archived_manifest_path"
+        )
+    declared_path = binding.get("declared_manifest_path")
+    if not isinstance(declared_path, str) or not declared_path.strip():
+        raise ValueError(
+            f"manifest path map binding {index} declared_manifest_path must be a nonempty string"
+        )
+    if declared_path not in comparison_paths:
+        raise ValueError(
+            f"manifest path map binding {index} does not match a declared comparison path"
+        )
+    archived_path = binding.get("archived_manifest_path")
+    if not isinstance(archived_path, str) or not archived_path.strip():
+        raise ValueError(
+            f"manifest path map binding {index} archived_manifest_path must be nonempty"
+        )
+    if "path" in binding and binding["path"] != archived_path:
+        raise ValueError(
+            f"manifest path map binding {index} path must equal archived_manifest_path"
+        )
+    expected_sha256 = binding.get("archived_manifest_sha256")
+    if not _is_full_sha256(expected_sha256):
+        raise ValueError(
+            f"manifest path map binding {index} archived_manifest_sha256 must be a full SHA-256"
+        )
+    return declared_path, archived_path, expected_sha256.lower()
+
+
+def _resolve_archived_manifest_path(archived_path: str, index: int, repo_root: Path) -> Path:
+    posix_path = PurePosixPath(archived_path)
+    windows_path = PureWindowsPath(archived_path)
+    unsafe = (
+        "\\" in archived_path
+        or posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or bool(windows_path.drive)
+        or posix_path.as_posix() != archived_path
+        or any(part in {"", ".", ".."} for part in posix_path.parts)
+    )
+    if unsafe:
+        raise ValueError(
+            f"manifest path map binding {index} archived_manifest_path must be a normalized "
+            "repository-relative path without traversal"
+        )
+    root = repo_root.resolve()
+    try:
+        archived_file = root.joinpath(*posix_path.parts).resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(
+            f"manifest path map binding {index} archived file is unavailable: {archived_path}"
+        ) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise ValueError(
+            f"manifest path map binding {index} archived path cannot be resolved safely"
+        ) from exc
+    try:
+        archived_file.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            f"manifest path map binding {index} archived file resolves outside repo_root"
+        ) from exc
+    if not archived_file.is_file():
+        raise ValueError(f"manifest path map binding {index} archived target is not a regular file")
+    return archived_file
+
+
+def _load_manifest_path_map(
+    path: Path,
+    *,
+    comparison_sha256: str,
+    rows: list[dict[str, Any]],
+    repo_root: Path,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Load and verify archived-manifest bindings without changing comparison rows."""
+    try:
+        content = path.read_bytes()
+        payload = json.loads(content.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read manifest path map {path}: {exc}") from exc
+    raw_bindings = _validate_manifest_path_map_header(payload, comparison_sha256)
+    comparison_paths = {row["manifest_path"] for row in rows}
+    bindings: dict[str, dict[str, Any]] = {}
+    seen_archives: set[Path] = set()
+    for index, raw_binding in enumerate(raw_bindings, start=1):
+        declared_path, archived_path, expected_sha256 = _manifest_path_map_binding_fields(
+            raw_binding, index, comparison_paths
+        )
+        if declared_path in bindings:
+            raise ValueError(f"manifest path map has duplicate declared path key: {declared_path}")
+        archived_file = _resolve_archived_manifest_path(archived_path, index, repo_root)
+        if archived_file in seen_archives:
+            raise ValueError(
+                f"manifest path map has duplicate or ambiguous archived target: {archived_path}"
+            )
+        seen_archives.add(archived_file)
+        observed_sha256 = _file_sha256(archived_file)
+        if observed_sha256 != expected_sha256:
+            raise ValueError(
+                f"manifest path map binding {index} archived file SHA-256 does not match"
+            )
+        bindings[declared_path] = {
+            "declared_manifest_path": declared_path,
+            "archived_manifest_path": archived_path,
+            "archived_manifest_sha256": observed_sha256,
+            "path": archived_file,
+        }
+
+    provenance = {
+        "schema_version": _MANIFEST_PATH_MAP_SCHEMA,
+        "path": _portable_path(path.resolve(), repo_root=repo_root),
+        "sha256": _bytes_sha256(content),
+        "source_comparison_sha256": comparison_sha256,
+        "binding_count": len(bindings),
+    }
+    return bindings, provenance
 
 
 def _finite_number(value: Any) -> float | None:
@@ -501,7 +660,47 @@ def _load_manifest_artifact(
     *,
     comparison_path: Path,
     repo_root: Path,
+    path_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if path_binding is not None:
+        path = path_binding["path"]
+        root = repo_root.resolve()
+        try:
+            current_path = path.resolve(strict=True)
+            current_path.relative_to(root)
+            content = current_path.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                f"mapped archived manifest is unavailable or outside repo_root: "
+                f"{path_binding['archived_manifest_path']}"
+            ) from exc
+        observed_sha256 = _bytes_sha256(content)
+        if observed_sha256 != path_binding["archived_manifest_sha256"]:
+            raise ValueError(
+                "mapped archived manifest SHA-256 changed after path-map validation: "
+                f"{path_binding['archived_manifest_path']}"
+            )
+        try:
+            payload = json.loads(content.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"mapped archived manifest is not valid JSON: "
+                f"{path_binding['archived_manifest_path']}"
+            ) from exc
+        if not isinstance(payload, dict) or payload.get("schema_version") != SEARCH_SCHEMA:
+            raise ValueError(
+                f"mapped archived manifest schema must be {SEARCH_SCHEMA}: "
+                f"{path_binding['archived_manifest_path']}"
+            )
+        return {
+            "path": current_path,
+            "payload": payload,
+            "sha256": observed_sha256,
+            "status": "available",
+            "warnings": [],
+            "path_binding": path_binding,
+        }
+
     path = _resolve_path(
         manifest_ref,
         anchors=(repo_root, comparison_path.parent, Path.cwd()),
@@ -515,6 +714,7 @@ def _load_manifest_artifact(
             "sha256": None,
             "status": "missing",
             "warnings": warnings,
+            "path_binding": None,
         }
     try:
         payload = _load_json(path)
@@ -526,6 +726,7 @@ def _load_manifest_artifact(
             "sha256": None,
             "status": "malformed",
             "warnings": warnings,
+            "path_binding": None,
         }
     if not isinstance(payload, dict) or payload.get("schema_version") != SEARCH_SCHEMA:
         warnings.append(f"search manifest schema must be {SEARCH_SCHEMA}")
@@ -535,6 +736,7 @@ def _load_manifest_artifact(
             "sha256": None,
             "status": "malformed",
             "warnings": warnings,
+            "path_binding": None,
         }
     return {
         "path": path,
@@ -542,6 +744,7 @@ def _load_manifest_artifact(
         "sha256": _file_sha256(path),
         "status": "available",
         "warnings": warnings,
+        "path_binding": None,
     }
 
 
@@ -810,6 +1013,47 @@ def _manifest_index_identity(
     return manifest_budget, reasons
 
 
+def _validate_mapped_manifest_identity(
+    manifest: dict[str, Any],
+    row: dict[str, Any],
+    *,
+    declared_manifest_path: str,
+    archived_manifest_path: str,
+) -> None:
+    """Require mapped bytes to identify the original indexed run exactly."""
+    config = manifest.get("config")
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"mapped manifest config is missing or malformed: {archived_manifest_path}"
+        )
+    manifest_budget = _positive_int(config.get("budget"))
+    manifest_seed = _integer(config.get("seed"))
+    manifest_objective = config.get("objective")
+    objective_matches = (
+        isinstance(manifest_objective, str)
+        and manifest_objective.strip() == row["objective"].strip()
+    )
+    if manifest_budget != row["budget"] or manifest_seed != row["seed"] or not objective_matches:
+        raise ValueError(
+            "mapped manifest config identity does not match the indexed row "
+            f"(sampler={row['sampler']!r}, seed={row['seed']!r}, budget={row['budget']!r}, "
+            f"objective={row['objective']!r}): {archived_manifest_path}"
+        )
+
+    output_dir = config.get("output_dir")
+    if not isinstance(output_dir, str) or not output_dir.strip():
+        raise ValueError(
+            f"mapped manifest config output_dir is missing or invalid: {archived_manifest_path}"
+        )
+    declared_parent = Path(declared_manifest_path).parent.resolve(strict=False)
+    recorded_output_dir = Path(output_dir).resolve(strict=False)
+    if recorded_output_dir != declared_parent:
+        raise ValueError(
+            "mapped manifest config output_dir does not match the original declared "
+            f"manifest_path parent: {archived_manifest_path}"
+        )
+
+
 def _manifest_candidates(
     manifest: dict[str, Any] | None,
     artifact: dict[str, Any],
@@ -858,20 +1102,30 @@ def _build_run(
     *,
     comparison_path: Path,
     repo_root: Path,
+    path_binding: dict[str, Any] | None = None,
+    path_map_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     sampler = row["sampler"].strip()
     objective = row["objective"].strip()
     seed = row["seed"]
     indexed_budget = row["budget"]
-    manifest_ref = row["manifest_path"].strip()
+    manifest_ref = row["manifest_path"]
     artifact = _load_manifest_artifact(
         manifest_ref,
         comparison_path=comparison_path,
         repo_root=repo_root,
+        path_binding=path_binding,
     )
     manifest_path = artifact["path"]
     manifest = artifact["payload"]
     warnings = list(artifact["warnings"])
+    if path_binding is not None and isinstance(manifest, dict):
+        _validate_mapped_manifest_identity(
+            manifest,
+            row,
+            declared_manifest_path=manifest_ref,
+            archived_manifest_path=path_binding["archived_manifest_path"],
+        )
     config = manifest.get("config", {}) if isinstance(manifest, dict) else {}
     config = config if isinstance(config, dict) else {}
     manifest_budget, index_identity_reasons = _manifest_index_identity(config, row, warnings)
@@ -930,6 +1184,17 @@ def _build_run(
         {key: value for key, value in item.items() if key != "_raw"}
         for item in derived["evaluations"]
     ]
+    manifest_mapping = (
+        {
+            "method": "archived_manifest_path_map",
+            "declared_manifest_path": manifest_ref,
+            "archived_manifest_path": path_binding["archived_manifest_path"],
+            "archived_manifest_sha256": path_binding["archived_manifest_sha256"],
+            "path_map": path_map_provenance,
+        }
+        if path_binding is not None
+        else None
+    )
     return {
         "run_id": f"{sampler}:{seed}:{indexed_budget}:{objective}:row{row_index}",
         "comparison_row_index": row_index,
@@ -945,6 +1210,7 @@ def _build_run(
         "resolved_manifest_path": _portable_path(manifest_path, repo_root=repo_root)
         if manifest_path is not None
         else None,
+        "manifest_mapping": manifest_mapping,
         "manifest_sha256": artifact["sha256"],
         "artifact_status": artifact["status"],
         "index_identity_valid": not index_identity_reasons and artifact["status"] == "available",
@@ -1267,26 +1533,45 @@ def _aggregate_runs(
 
 
 def build_convergence_report(
-    comparison_path: Path, *, repo_root: Path | None = None
+    comparison_path: Path,
+    *,
+    repo_root: Path | None = None,
+    manifest_path_map_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build the machine-readable report from a v3 comparison index and its search manifests."""
     input_path = comparison_path.resolve()
     root = (repo_root or Path.cwd()).resolve()
-    comparison = _load_json(input_path)
+    try:
+        comparison_bytes = input_path.read_bytes()
+        comparison = json.loads(comparison_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read comparison input {input_path}: {exc}") from exc
     if not isinstance(comparison, dict) or comparison.get("schema_version") != COMPARISON_SCHEMA:
         raise ValueError(f"comparison input schema must be {COMPARISON_SCHEMA}")
     raw_rows = comparison.get("rows")
     if not isinstance(raw_rows, list):
         raise ValueError("comparison input rows must be an array")
-    comparison_digest = _file_sha256(input_path)
+    comparison_digest = _bytes_sha256(comparison_bytes)
+    rows = [_validate_comparison_row(row, index) for index, row in enumerate(raw_rows, start=1)]
+    path_bindings: dict[str, dict[str, Any]] = {}
+    path_map_provenance: dict[str, Any] | None = None
+    if manifest_path_map_path is not None:
+        path_bindings, path_map_provenance = _load_manifest_path_map(
+            manifest_path_map_path.resolve(),
+            comparison_sha256=comparison_digest,
+            rows=rows,
+            repo_root=root,
+        )
     runs = [
         _build_run(
-            _validate_comparison_row(row, index),
+            row,
             index,
             comparison_path=input_path,
             repo_root=root,
+            path_binding=path_bindings.get(row["manifest_path"]),
+            path_map_provenance=path_map_provenance,
         )
-        for index, row in enumerate(raw_rows, start=1)
+        for index, row in enumerate(rows, start=1)
     ]
     aggregates, paired = _aggregate_runs(runs)
     observed_revisions = sorted(
@@ -1336,12 +1621,15 @@ def build_convergence_report(
                 {
                     "run_id": run["run_id"],
                     "path": run["resolved_manifest_path"] or run["manifest_path"],
+                    "declared_path": run["manifest_path"],
+                    "mapping": run["manifest_mapping"],
                     "sha256": run["manifest_sha256"],
                     "status": run["artifact_status"],
                     "config_sha256": run["config_provenance"].get("config_sha256"),
                 }
                 for run in runs
             ],
+            "manifest_path_map": path_map_provenance,
             "source_revision": {
                 "status": global_revision_status,
                 "exact_source_revision": exact_revision,
@@ -1389,6 +1677,7 @@ def _render_status_counts(counts: dict[str, int]) -> str:
 
 def render_markdown(report: dict[str, Any]) -> str:
     """Render a deterministic Markdown report with run-level and paired summaries."""
+    path_map = report["provenance"].get("manifest_path_map")
     lines = [
         "# Falsification search convergence report",
         "",
@@ -1396,6 +1685,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Claim scope: `{report['claim_scope']}`.",
         f"- Comparison input SHA-256: `{report['comparison']['sha256']}`.",
+        (
+            f"- Archived manifest path map: `{path_map['path']}`; SHA-256 `{path_map['sha256']}`; "
+            f"bound comparison SHA-256 `{path_map['source_comparison_sha256']}`."
+            if path_map is not None
+            else "- Archived manifest path map: `not supplied`."
+        ),
         f"- Source revision status: `{report['provenance']['source_revision']['status']}`.",
         f"- Exact source revision: `{report['provenance']['source_revision']['exact_source_revision'] or 'unknown'}`.",
         "",
@@ -1489,10 +1784,24 @@ def render_markdown(report: dict[str, Any]) -> str:
         ["", "## Provenance", "", f"Comparison artifact: `{report['comparison']['path']}`.", ""]
     )
     for entry in report["provenance"]["search_manifests"]:
+        mapping = entry["mapping"]
+        resolved_path = entry["path"]
+        path_description = (
+            f"declared `{entry['declared_path']}`; archived `{mapping['archived_manifest_path']}`"
+            if mapping is not None
+            else f"declared/resolved `{resolved_path}`"
+        )
         lines.append(
-            f"- `{entry['run_id']}`: `{entry['path']}`; SHA-256 `{entry['sha256'] or 'unavailable'}`; "
+            f"- `{entry['run_id']}`: {path_description}; "
+            f"SHA-256 `{entry['sha256'] or 'unavailable'}`; "
             f"config SHA-256 `{entry['config_sha256'] or 'unavailable'}`; status `{entry['status']}`."
         )
+        if mapping is not None:
+            lines.append(
+                f"  Mapping provenance: `{mapping['path_map']['path']}`; path-map SHA-256 "
+                f"`{mapping['path_map']['sha256']}`; archived SHA-256 "
+                f"`{mapping['archived_manifest_sha256']}`."
+            )
     lines.append("")
     return "\n".join(lines)
 

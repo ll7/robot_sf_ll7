@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,46 @@ def _report() -> dict[str, object]:
         FIXTURE_ROOT / "comparison.json",
         repo_root=REPO_ROOT,
     )
+
+
+def _archived_manifest_path_map(
+    tmp_path: Path,
+    *,
+    mutate_manifest: Any | None = None,
+    archived_manifest_path: str = "archive/run-1101.json",
+    declared_path: str | None = None,
+    archived_manifest_sha256: str | None = None,
+) -> tuple[Path, Path, str, str]:
+    comparison_path = tmp_path / "comparison.json"
+    comparison_bytes = (FIXTURE_ROOT / "comparison.json").read_bytes()
+    comparison_path.write_bytes(comparison_bytes)
+    comparison = json.loads(comparison_bytes.decode("utf-8"))
+    original_path = declared_path or comparison["rows"][0]["manifest_path"]
+    source_manifest_path = REPO_ROOT / comparison["rows"][0]["manifest_path"]
+    manifest_bytes = source_manifest_path.read_bytes()
+    if mutate_manifest is not None:
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        mutate_manifest(manifest)
+        manifest_bytes = (json.dumps(manifest, sort_keys=True) + "\n").encode("utf-8")
+    archived_path = tmp_path / archived_manifest_path
+    archived_path.parent.mkdir(parents=True, exist_ok=True)
+    archived_path.write_bytes(manifest_bytes)
+    observed_manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+    binding = {
+        "declared_manifest_path": original_path,
+        "archived_manifest_path": archived_manifest_path,
+        "archived_manifest_sha256": archived_manifest_sha256 or observed_manifest_sha256,
+        # The source bundle also emits this linter alias; it must agree exactly.
+        "path": archived_manifest_path,
+    }
+    path_map = {
+        "schema_version": "falsification_manifest_path_map.v1",
+        "source_comparison_sha256": hashlib.sha256(comparison_bytes).hexdigest(),
+        "bindings": [binding],
+    }
+    path_map_path = tmp_path / "manifest-path-map.json"
+    path_map_path.write_text(json.dumps(path_map, sort_keys=True) + "\n", encoding="utf-8")
+    return comparison_path, path_map_path, original_path, observed_manifest_sha256
 
 
 def _report_with_manifest(
@@ -240,6 +281,208 @@ def test_cli_writes_machine_readable_summary_table_and_figure(
     assert "available: 2, unknown: 2" in markdown
     assert "Not performed; descriptive only" in markdown
     assert (output / "convergence_constraints_first_lexicographic_v1.png").is_file()
+
+
+def test_archived_manifest_path_map_resolves_pinned_bytes_without_rewriting_comparison(
+    tmp_path: Path,
+) -> None:
+    comparison_path, path_map_path, declared_path, manifest_sha256 = _archived_manifest_path_map(
+        tmp_path
+    )
+    comparison_bytes = comparison_path.read_bytes()
+    report = build_convergence_report(
+        comparison_path,
+        repo_root=tmp_path,
+        manifest_path_map_path=path_map_path,
+    )
+    run = next(run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 1101)
+    archive_path = "archive/run-1101.json"
+
+    assert comparison_path.read_bytes() == comparison_bytes
+    assert run["artifact_status"] == "available"
+    assert run["num_candidates"] == 4
+    assert run["manifest_path"] == declared_path
+    assert run["resolved_manifest_path"] == archive_path
+    assert run["manifest_sha256"] == manifest_sha256
+    assert run["manifest_mapping"] == {
+        "method": "archived_manifest_path_map",
+        "declared_manifest_path": declared_path,
+        "archived_manifest_path": archive_path,
+        "archived_manifest_sha256": manifest_sha256,
+        "path_map": report["provenance"]["manifest_path_map"],
+    }
+    manifest_provenance = next(
+        item for item in report["provenance"]["search_manifests"] if item["run_id"] == run["run_id"]
+    )
+    assert manifest_provenance["declared_path"] == declared_path
+    assert manifest_provenance["path"] == archive_path
+    assert manifest_provenance["mapping"] == run["manifest_mapping"]
+
+
+def test_cli_accepts_manifest_path_map_and_reports_its_digest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path
+    )
+    output = tmp_path / "report"
+    exit_code = main(
+        [
+            "--comparison",
+            str(comparison_path),
+            "--manifest-path-map",
+            str(path_map_path),
+            "--output-dir",
+            str(output),
+            "--repo-root",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == 0
+    console = json.loads(capsys.readouterr().out)
+    generated = json.loads((output / "falsification_report.json").read_text(encoding="utf-8"))
+    assert (
+        console["manifest_path_map_sha256"]
+        == generated["provenance"]["manifest_path_map"]["sha256"]
+    )
+    markdown = (output / "falsification_report.md").read_text(encoding="utf-8")
+    assert "declared `tests/fixtures/adversarial/search_report/random_seed_1101/manifest.json`" in (
+        markdown
+    )
+    assert "archived `archive/run-1101.json`" in markdown
+
+
+def test_manifest_path_map_rejects_stale_comparison_digest(tmp_path: Path) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path
+    )
+    comparison_path.write_bytes(comparison_path.read_bytes() + b" ")
+
+    with pytest.raises(ValueError, match="not bound to the exact comparison input bytes"):
+        build_convergence_report(
+            comparison_path,
+            repo_root=tmp_path,
+            manifest_path_map_path=path_map_path,
+        )
+
+
+def test_manifest_path_map_rejects_unsupported_schema(tmp_path: Path) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path
+    )
+    path_map = json.loads(path_map_path.read_text(encoding="utf-8"))
+    path_map["schema_version"] = "falsification_manifest_path_map.v0"
+    path_map_path.write_text(json.dumps(path_map, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest path map schema must"):
+        build_convergence_report(
+            comparison_path,
+            repo_root=tmp_path,
+            manifest_path_map_path=path_map_path,
+        )
+
+
+def test_manifest_path_map_rejects_archived_hash_mismatch(tmp_path: Path) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path, archived_manifest_sha256="0" * 64
+    )
+
+    with pytest.raises(ValueError, match="archived file SHA-256 does not match"):
+        build_convergence_report(
+            comparison_path,
+            repo_root=tmp_path,
+            manifest_path_map_path=path_map_path,
+        )
+
+
+def test_manifest_path_map_rejects_archived_path_escape(tmp_path: Path) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path, archived_manifest_path="../outside.json"
+    )
+
+    with pytest.raises(ValueError, match="repository-relative path without traversal"):
+        build_convergence_report(
+            comparison_path,
+            repo_root=tmp_path,
+            manifest_path_map_path=path_map_path,
+        )
+
+
+def test_manifest_path_map_rejects_symlink_escape(tmp_path: Path) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path
+    )
+    archived_file = tmp_path / "archive/run-1101.json"
+    outside_file = tmp_path.parent / f"{tmp_path.name}-outside.json"
+    outside_file.write_bytes(archived_file.read_bytes())
+    archived_file.unlink()
+    archived_file.symlink_to(outside_file)
+
+    try:
+        with pytest.raises(ValueError, match="resolves outside repo_root"):
+            build_convergence_report(
+                comparison_path,
+                repo_root=tmp_path,
+                manifest_path_map_path=path_map_path,
+            )
+    finally:
+        outside_file.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize("mismatch", ["seed", "output_dir"])
+def test_manifest_path_map_rejects_archived_manifest_identity_mismatch(
+    tmp_path: Path, mismatch: str
+) -> None:
+    def mutate_manifest(manifest: dict[str, Any]) -> None:
+        if mismatch == "seed":
+            manifest["config"]["seed"] = 9999
+        else:
+            manifest["config"]["output_dir"] = str(tmp_path / "different-output")
+
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path, mutate_manifest=mutate_manifest
+    )
+
+    message = (
+        "config identity does not match" if mismatch == "seed" else "output_dir does not match"
+    )
+    with pytest.raises(ValueError, match=message):
+        build_convergence_report(
+            comparison_path,
+            repo_root=tmp_path,
+            manifest_path_map_path=path_map_path,
+        )
+
+
+@pytest.mark.parametrize("duplicate_kind", ["declared_key", "archive_target"])
+def test_manifest_path_map_rejects_duplicate_or_ambiguous_bindings(
+    tmp_path: Path, duplicate_kind: str
+) -> None:
+    comparison_path, path_map_path, _declared_path, _manifest_sha256 = _archived_manifest_path_map(
+        tmp_path
+    )
+    path_map = json.loads(path_map_path.read_text(encoding="utf-8"))
+    duplicate_binding = dict(path_map["bindings"][0])
+    if duplicate_kind == "declared_key":
+        duplicate_binding["archived_manifest_path"] = "archive/second-copy.json"
+        duplicate_binding["path"] = duplicate_binding["archived_manifest_path"]
+        duplicate_path = tmp_path / duplicate_binding["archived_manifest_path"]
+        duplicate_path.write_bytes((tmp_path / "archive/run-1101.json").read_bytes())
+        expected_error = "duplicate declared path key"
+    else:
+        source_comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+        duplicate_binding["declared_manifest_path"] = source_comparison["rows"][1]["manifest_path"]
+        expected_error = "duplicate or ambiguous archived target"
+    path_map["bindings"].append(duplicate_binding)
+    path_map_path.write_text(json.dumps(path_map, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=expected_error):
+        build_convergence_report(
+            comparison_path,
+            repo_root=tmp_path,
+            manifest_path_map_path=path_map_path,
+        )
 
 
 def test_figure_labels_budget_with_no_scored_observations(

@@ -38,13 +38,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=Path.cwd(),
         help="Repository root for resolving manifest and config paths (default: current directory).",
     )
+    parser.add_argument(
+        "--manifest-path-map",
+        type=Path,
+        help=(
+            "Optional falsification_manifest_path_map.v1 JSON input for resolving unavailable "
+            "declared manifest paths to digest-pinned repository-relative archived manifests."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Build the report without running a search or simulator."""
     args = parse_args(argv)
-    report = build_convergence_report(args.comparison, repo_root=args.repo_root)
+    report = build_convergence_report(
+        args.comparison,
+        repo_root=args.repo_root,
+        manifest_path_map_path=args.manifest_path_map,
+    )
     outputs = write_convergence_report(report, args.output_dir)
     print(
         json.dumps(
@@ -52,6 +64,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "schema_version": report["schema_version"],
                 "run_count": len(report["runs"]),
                 "source_revision_status": report["provenance"]["source_revision"]["status"],
+                "manifest_path_map_sha256": (
+                    report["provenance"]["manifest_path_map"]["sha256"]
+                    if report["provenance"]["manifest_path_map"] is not None
+                    else None
+                ),
                 "outputs": outputs,
             },
             sort_keys=True,

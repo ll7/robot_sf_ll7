@@ -25,15 +25,16 @@ The command writes:
   accounting, case status transitions, and checksummed evidence references;
 - `frontier_report.md` — concise round-by-round performance and case tables, including invalid,
   failed, unknown, and replay-unavailable search rows. Its heading is evidence-kind-aware:
-  synthetic fixtures are marked implementation-only, simulator runs use the empirical-frontier
-  heading, and historical artifacts use distinct historical wording;
+  synthetic fixtures are marked implementation-only, caller-declared simulator runs are marked
+  unverified, and historical artifacts use distinct historical wording;
 - `frontier.png` and `frontier.pdf` — eligible complete success fractions by evaluation set and the
   cumulative known counterexample count, per-round solved/unsolved/mixed/unknown/not-observed case
   status, current unknown-feasibility count, and per-round structurally invalid and
   geometric/kinodynamic-impossibility candidate counts;
 - `frontier.provenance.json` — source-artifact digests, the generating checkout's `repo_commit`,
   the evidence `source_revision`, evidence kind, visible figure title, and claim boundary. The
-  evidence kind is printed in the figure so a detached fixture image remains visibly synthetic.
+  figure and its metadata qualify caller-declared simulator runs as unverified, while detached
+  fixture images remain visibly synthetic.
 
 Use a new or empty output directory for each generation. The command refuses to overwrite any of
 its expected report files, preserving prior report bundles.
@@ -173,8 +174,10 @@ from a real completed 2+ round #9653 run, with held-out/regression evidence and 
 links.
 
 The figure sidecar distinguishes `repo_commit` (the checkout that generated the figure) from
-`source_revision` (the revision named by the evidence bundle). Neither field changes the evidence
-claim boundary. The focused fixture contract is exercised in
+`source_revision` (the revision named by the evidence bundle). Neither field authenticates the
+caller-declared `evidence_kind`; simulator-run evidence remains visibly unverified in the figure,
+generated report, and sidecar until independently bound to a trusted producer. Neither revision
+field changes the evidence claim boundary. The focused fixture contract is exercised in
 `tests/adversarial/test_feasibility_frontier_report.py`. The tests create synthetic source artifacts
 in temporary directories, check digests and fail-closed cases, cover repeated known cases and a flat
 campaign with no verified discovery, and render the figure without starting a simulator.

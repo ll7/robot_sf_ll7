@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the fixture-first empirical feasibility-frontier report."""
+"""Build a fixture-first frontier report from declared round evidence."""
 
 from __future__ import annotations
 

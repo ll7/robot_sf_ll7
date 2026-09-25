@@ -1690,18 +1690,41 @@ def test_frontier_markdown_headline_matches_evidence_kind(
 
 
 def test_relabeling_synthetic_fixture_as_simulator_run_does_not_claim_empirical_evidence(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A caller-edited evidence kind cannot turn fixture data into empirical evidence."""
+    """A caller-edited evidence kind cannot claim simulator provenance in any output."""
+    from PIL import Image
+
     evidence = _evidence(tmp_path)
     assert evidence["evidence_kind"] == "synthetic_fixture"
 
     evidence["evidence_kind"] = "simulator_run"
-    report = build_frontier_report(evidence, evidence_root=tmp_path)
-    headline = render_frontier_markdown(report).splitlines()[0]
+    input_path = tmp_path / "relabelled-round-evidence.json"
+    input_path.write_text(json.dumps(evidence), encoding="utf-8")
+    output_dir = tmp_path / "relabelled-report"
+    captured: dict[str, str] = {}
+    save_figure = frontier_module.save_publication_figure
 
-    assert "Declared simulator-run evidence (unverified)" in headline
-    assert "Empirical feasibility frontier" not in headline
+    def capture_figure_title(figure: Any, output_base: Path, **kwargs: Any) -> list[Path]:
+        captured["figure_title"] = figure._suptitle.get_text()
+        return save_figure(figure, output_base, **kwargs)
+
+    monkeypatch.setattr(frontier_module, "save_publication_figure", capture_figure_title)
+    report = write_frontier_report(input_path, output_dir)
+    markdown = (output_dir / "frontier_report.md").read_text(encoding="utf-8")
+    persisted_report = json.loads((output_dir / "frontier_report.json").read_text(encoding="utf-8"))
+    sidecar = json.loads((output_dir / "frontier.provenance.json").read_text(encoding="utf-8"))
+    with Image.open(output_dir / "frontier.png") as figure_image:
+        embedded_provenance = json.loads(figure_image.info["Provenance"])
+
+    assert "Declared simulator-run evidence (unverified)" in markdown.splitlines()[0]
+    assert "Empirical feasibility frontier" not in markdown.splitlines()[0]
+    assert "simulator_run is unverified" in report["claim_boundary"]
+    assert persisted_report["claim_boundary"] == report["claim_boundary"]
+    assert captured["figure_title"].startswith("Declared Simulator Run evidence (unverified)")
+    assert sidecar["figure_title"] == captured["figure_title"]
+    assert sidecar["claim_boundary"] == report["claim_boundary"]
+    assert "simulator_run is unverified" in embedded_provenance["claim_boundary"]
 
 
 def test_frontier_report_rejects_path_escape_and_noncanonical_admissibility(tmp_path: Path) -> None:

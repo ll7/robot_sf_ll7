@@ -339,7 +339,9 @@ def build_frontier_report(
         "scenario_space_id": evidence["scenario_space_id"],
         "round_count": len(round_reports),
         "claim_boundary": (
-            "Summary of declared finite-budget evidence only; synthetic fixtures are "
+            "Summary of declared finite-budget evidence only; evidence_kind is "
+            "caller-declared metadata, and simulator_run is unverified without an "
+            "independently verified producer binding. Synthetic fixtures are "
             "implementation-only. No counterexample found under a budget is not proof of "
             "absence; unknown feasibility is preserved; simulator success is not a claim "
             "of real-world safety or global optimality."
@@ -734,10 +736,12 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
         cases_axis.set_title("Counterexample memory, planner status, and scenario classification")
         cases_axis.grid(axis="y", alpha=0.25)
         cases_axis.legend(frameon=False, loc="best", fontsize=7, ncol=2)
-        figure_title = (
-            f"{report['evidence_kind'].replace('_', ' ').title()} evidence — "
-            "Finite-budget planner–falsifier frontier"
-        )
+        figure_evidence_label = {
+            "synthetic_fixture": "Synthetic Fixture evidence",
+            "simulator_run": "Declared Simulator Run evidence (unverified)",
+            "historical_artifact": "Historical Artifact evidence",
+        }[report["evidence_kind"]]
+        figure_title = f"{figure_evidence_label} — Finite-budget planner–falsifier frontier"
         figure.suptitle(figure_title)
 
         provenance = build_provenance(

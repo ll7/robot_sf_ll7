@@ -1,0 +1,50 @@
+{
+  "schema_version": "evidence_bundle.v1",
+  "created_at_utc": "2026-09-25T12:50:13.717377Z",
+  "bundle_name": "issue_9647_gallery_demo_2026-09-25",
+  "source_root": "issue9647-gallery-demo-source-20260925",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_current_smoke_20260925 --top-k 1",
+  "commit": "7844d08e509e0362bddfb791a71d20672278b4fe",
+  "claim_boundary": "diagnostic_only_not_exact_source_or_feasibility_evidence",
+  "policy": {
+    "large_raw_artifacts": "excluded",
+    "output_tree_mirroring": "forbidden",
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone"
+  },
+  "totals": {
+    "file_count": 5,
+    "total_bytes": 146237
+  },
+  "files": [
+    {
+      "path": "figures/filmstrip.png",
+      "size_bytes": 22959,
+      "sha256": "f10516dc4ee24343a67e5ca4db48a3dde202bf9c7b8b11f385de90283c7a1144",
+      "kind": "plots"
+    },
+    {
+      "path": "figures/still_9.png",
+      "size_bytes": 46585,
+      "sha256": "5b3e5c3a126f6d71c22bd54230940a8b05c6991373fa55dc08e10f1d019e2af1",
+      "kind": "plots"
+    },
+    {
+      "path": "figures/trajectory.png",
+      "size_bytes": 70626,
+      "sha256": "5b7dd746e2b5735519905d6239620104b03613cc80347187fbbb53cb89a2a67b",
+      "kind": "plots"
+    },
+    {
+      "path": "receipt.md",
+      "size_bytes": 2529,
+      "sha256": "a52e5091bd6dd30465c11e82a04ad21029ed34911a473bbb04b20ea58202ea38",
+      "kind": "misc"
+    },
+    {
+      "path": "summary.json",
+      "size_bytes": 3538,
+      "sha256": "818ef62265566dd7a0b3c28656c03dd465f0b6e538364a00fcb43ee8f4c94ba8",
+      "kind": "aggregates"
+    }
+  ]
+}

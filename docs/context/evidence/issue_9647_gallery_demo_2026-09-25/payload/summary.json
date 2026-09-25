@@ -1,0 +1,76 @@
+{
+  "schema_version": "issue_9647_replay_gallery_demo.v1",
+  "created_at_utc": "2026-09-25T12:46:36Z",
+  "claim_boundary": "one historical collision outcome reproduced on a different repository revision; not new search evidence, exact-source replay verification, dynamic-feasibility proof, planner-performance evidence, or real-world safety evidence",
+  "code_revision": "7844d08e509e0362bddfb791a71d20672278b4fe",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_current_smoke_20260925 --top-k 1",
+  "budget": {
+    "search_candidates": 0,
+    "selected_cases": 1,
+    "replayed_episodes": 1,
+    "held_out_episodes": 0
+  },
+  "source": {
+    "issue": 1501,
+    "historical_archive_id": "failure_0002",
+    "fixture_kind": "tracked compatibility fixture, not a persisted search-run manifest",
+    "search_method_label": "optuna",
+    "search_seed": 42,
+    "candidate_budget_label": 32,
+    "scenario_id": "crossing_ttc_template_adversarial_0008",
+    "seed": 320,
+    "source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+    "manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+    "scenario_sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
+    "source_episode_sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
+    "source_input_binding": "unknown: source episode has no map-registry digest"
+  },
+  "result": {
+    "case_id": "case_0000_7e144c8113a9",
+    "planner": "goal",
+    "failure": "collision",
+    "replay_match": "match",
+    "verification_status": "outcome_reproduced_revision_changed",
+    "replay_revision": "7844d08e509e0362bddfb791a71d20672278b4fe",
+    "source_and_replay_identity_match": true,
+    "collision_event_match": true,
+    "objective_match": true,
+    "objective_value": 4.833333333333333,
+    "surface_clearance_min_m": -0.015686402836192603,
+    "critical_frame_step": 9,
+    "step_count": 10,
+    "track_discontinuities_split": 1,
+    "feasibility": {
+      "source_certificate": "passed: hard_but_solvable static route certificate",
+      "dynamic_task_feasibility": "unknown"
+    }
+  },
+  "rendering": {
+    "status": "rendered",
+    "map_overlay": "unavailable: existing image reader cannot decode the SVG map",
+    "video": "unavailable: canonical runner emitted no video artifact",
+    "tracked_figures": [
+      {
+        "path": "figures/trajectory.png",
+        "size_bytes": 69544,
+        "sha256": "5b7dd746e2b5735519905d6239620104b03613cc80347187fbbb53cb89a2a67b"
+      },
+      {
+        "path": "figures/still_9.png",
+        "size_bytes": 46273,
+        "sha256": "5b3e5c3a126f6d71c22bd54230940a8b05c6991373fa55dc08e10f1d019e2af1"
+      },
+      {
+        "path": "figures/filmstrip.png",
+        "size_bytes": 22549,
+        "sha256": "f10516dc4ee24343a67e5ca4db48a3dde202bf9c7b8b11f385de90283c7a1144"
+      }
+    ],
+    "raw_output": "output/adversarial-replay-gallery/issue9647_current_smoke_20260925; ignored local output, not part of this compact bundle"
+  },
+  "raw_artifact_digests": {
+    "gallery_manifest_sha256": "cf054bbb70e8cc3cabe6899f3d2f962dbe6a70d27a4d18c66ce193294ed39225",
+    "case_manifest_sha256": "54e298928249376717959296ed0e49f2c28d6cb9f5521c7796ac37cff4f6d815",
+    "replay_episode_sha256": "3d55c905f0e05a3939bee7d4a16df310d1ef68339806942e98777f57cc2ff1c9"
+  }
+}

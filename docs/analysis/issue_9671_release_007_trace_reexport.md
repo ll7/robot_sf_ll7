@@ -148,15 +148,17 @@ dissertation figures. The four JSONL SHA-256 values are `3b10ae893fe0f7b8f152286
 The five dissertation figure receipts from predecessor job 13334 point to source commit
 `12d0284f9b316a3c9aa22376088e9690414990c9` in this repository. Their recorded
 `trace_series.json` SHA-256 values were recomputed from that commit, and each source's
-episode ID and status agree with its receipt:
+episode ID and status agree with its receipt. Each key below names the receipt at
+`ll7/diss/docs/context/figure_data_receipts/trace-ch7-worked-examples-job13334__<key>.json`;
+the receipt records the exact earlier `trace_series.json` source path.
 
 | Figure trace key | Earlier episode ID / status | Earlier trace SHA-256 | Current diagnostic episode ID / status |
 | --- | --- | --- | --- |
-| groupcross seed 22, goal | `classic_group_crossing_medium--22--605d6793ad25c1f5` / success | `428d327d1370d8ccbd7779d4b0d11f27ddd293260ae808a99db80edb39be3443` | `classic_group_crossing_medium--22--b5435eeb359163c7` / success |
-| groupcross seed 22, social force | `classic_group_crossing_medium--22--6ea3e69c68960055` / failure | `551b7e7be142c254547b9b419f6f5f44fb4c26e998fb8a65b998004ad04bf880` | `classic_group_crossing_medium--22--51ad526a5252f1fc` / failure |
-| head-on seed 23, ORCA | `classic_head_on_corridor_medium--23--475e0eb34a5e8f23` / collision | `81ec22f92658a299241825640832394c54f1222aa152b6e8a2f51755503ab43a` | `classic_head_on_corridor_medium--23--7f9e6c61b772f737` / success |
-| head-on seed 24, ORCA | `classic_head_on_corridor_medium--24--9392c5c14a3d9d6f` / success | `7a5494169b7627dcbe094d1b9a733177bbf5a9cf485db77118aeb921dceba3f9` | `classic_head_on_corridor_medium--24--70b33393d582e71d` / success |
-| head-on seed 24, social force | `classic_head_on_corridor_medium--24--1bea887e93462d65` / failure | `351b3906158273c5e6ab2e8ccd7a9886eeba310314548293ffc88da647682642` | `classic_head_on_corridor_medium--24--96f958a1df409a15` / success |
+| `groupcross_seed22_goal` | `classic_group_crossing_medium--22--605d6793ad25c1f5` / success | `428d327d1370d8ccbd7779d4b0d11f27ddd293260ae808a99db80edb39be3443` | `classic_group_crossing_medium--22--b5435eeb359163c7` / success |
+| `groupcross_seed22_sf` | `classic_group_crossing_medium--22--6ea3e69c68960055` / failure | `551b7e7be142c254547b9b419f6f5f44fb4c26e998fb8a65b998004ad04bf880` | `classic_group_crossing_medium--22--51ad526a5252f1fc` / failure |
+| `headon_seed23_orca` | `classic_head_on_corridor_medium--23--475e0eb34a5e8f23` / collision | `81ec22f92658a299241825640832394c54f1222aa152b6e8a2f51755503ab43a` | `classic_head_on_corridor_medium--23--7f9e6c61b772f737` / success |
+| `headon_seed24_orca` | `classic_head_on_corridor_medium--24--9392c5c14a3d9d6f` / success | `7a5494169b7627dcbe094d1b9a733177bbf5a9cf485db77118aeb921dceba3f9` | `classic_head_on_corridor_medium--24--70b33393d582e71d` / success |
+| `headon_seed24_sf` | `classic_head_on_corridor_medium--24--1bea887e93462d65` / failure | `351b3906158273c5e6ab2e8ccd7a9886eeba310314548293ffc88da647682642` | `classic_head_on_corridor_medium--24--96f958a1df409a15` / success |
 
 The ORCA seed-23 collision and social-force seed-24 failure used by the existing head-on
 figure reading are **not present** in these 0.0.7 diagnostic traces. Figures 7.6 and 7.10–7.11

@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Issue #9667 Social Navigation Quality Index version 2 (SNQI-v2): declared weights,
+safety strata, development-only calibration, mandatory weight-family diagnostics,
+and the boundary against human-comfort or deployment claims:
+[snqi_v2_spec.md](snqi_v2_spec.md).
+
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 

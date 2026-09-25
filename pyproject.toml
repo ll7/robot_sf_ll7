@@ -695,6 +695,7 @@ dev = [
     "mypy>=2.3.0",
     "mutmut",
     "pyrvo2",
+    "hypothesis>=6.168.1",
 ]
 docs = [
     "myst-parser>=4.0.0",

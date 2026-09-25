@@ -4,11 +4,13 @@ Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 
 Issue #9645 bounded falsification pilot: the four native Random/TPE runs completed 64
-distinct candidates but found no critical case and made no best-so-far progress. This is a
-diagnostic-only **NO-GO for scaling #9648 under the tested fixed-seed domain**, not a claim that
-the search cannot find counterexamples. A tracked #1501 collision was regenerated and reproduced
-twice under current source; task feasibility remains unknown without a successful reference
-planner. See the [pilot receipt](evidence/issue_9645_bounded_falsification_2026-09-24/payload/report.md),
+distinct candidates but found no critical case and made no best-so-far progress. The review later
+found severe-intrusion status was missing from all candidates, so the historical v1 composite
+safety scores are not safety-tier evidence. This remains a diagnostic-only **NO-GO for scaling
+#9648 under the tested fixed-seed domain**, not a claim that the search cannot find counterexamples.
+A tracked #1501 collision was regenerated and reproduced twice under current source; task feasibility
+remains unknown without a successful reference planner. See the [objective-coverage addendum](evidence/issue_9645_objective_coverage_review_2026-09-25/),
+[pilot receipt](evidence/issue_9645_bounded_falsification_2026-09-24/payload/report.md),
 [convergence report](evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.md),
 and [machine-readable evidence bundle](evidence/issue_9645_bounded_falsification_2026-09-24/evidence_bundle_manifest.json).
 

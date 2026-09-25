@@ -7667,3 +7667,7 @@ entries:
   status: evidence
   freshness: evidence
   area: adversarial_search
+- path: docs/context/evidence/issue_9645_objective_coverage_review_2026-09-25
+  status: evidence
+  freshness: evidence
+  area: adversarial_search

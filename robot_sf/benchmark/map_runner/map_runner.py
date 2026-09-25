@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
     BaseContext,
@@ -2421,14 +2422,25 @@ def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _sync_episode_compat_overrides() -> None:
-    """Propagate legacy monkeypatchable map-runner hooks into the episode module."""
-    _map_runner_episode_module._build_env_config = _build_env_config
-    _map_runner_episode_module.make_robot_env = make_robot_env
-    _map_runner_episode_module.sample_obstacle_points = sample_obstacle_points
-    _map_runner_episode_module.compute_shortest_path_length = compute_shortest_path_length
-    _map_runner_episode_module.compute_all_metrics = compute_all_metrics
-    _map_runner_episode_module.post_process_metrics = post_process_metrics
+@contextmanager
+def _scoped_episode_compat_overrides() -> Iterator[None]:
+    """Apply legacy map-runner hooks for one episode and restore prior module state."""
+    overrides = {
+        "_build_env_config": _build_env_config,
+        "make_robot_env": make_robot_env,
+        "sample_obstacle_points": sample_obstacle_points,
+        "compute_shortest_path_length": compute_shortest_path_length,
+        "compute_all_metrics": compute_all_metrics,
+        "post_process_metrics": post_process_metrics,
+    }
+    previous = {name: getattr(_map_runner_episode_module, name) for name in overrides}
+    try:
+        for name, value in overrides.items():
+            setattr(_map_runner_episode_module, name, value)
+        yield
+    finally:
+        for name, value in previous.items():
+            setattr(_map_runner_episode_module, name, value)
 
 
 def _run_map_episode(  # noqa: PLR0913
@@ -2469,39 +2481,39 @@ def _run_map_episode(  # noqa: PLR0913
     Returns:
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
-    _sync_episode_compat_overrides()
-    return _execute_map_episode(
-        scenario,
-        seed,
-        horizon=horizon,
-        dt=dt,
-        record_forces=record_forces,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
-        algo=algo,
-        scenario_path=scenario_path,
-        algo_config=algo_config,
-        algo_config_path=algo_config_path,
-        adapter_impact_eval=adapter_impact_eval,
-        experimental_ped_impact=experimental_ped_impact,
-        ped_impact_radius_m=ped_impact_radius_m,
-        ped_impact_window_steps=ped_impact_window_steps,
-        observation_mode=observation_mode,
-        observation_level=observation_level,
-        benchmark_track=benchmark_track,
-        track_schema_version=track_schema_version,
-        observation_noise=observation_noise,
-        tracking_precision=tracking_precision,
-        synthetic_actuation_profile=synthetic_actuation_profile,
-        latency_stress_profile=latency_stress_profile,
-        safety_wrapper=safety_wrapper,
-        paired_wrapper_off_record=paired_wrapper_off_record,
-        cbf_safety_filter=cbf_safety_filter,
-        record_planner_decision_trace=record_planner_decision_trace,
-        record_simulation_step_trace=record_simulation_step_trace,
-        close_policy=close_policy,
-        policy_builder=policy_builder or _build_policy,
-    )
+    with _scoped_episode_compat_overrides():
+        return _execute_map_episode(
+            scenario,
+            seed,
+            horizon=horizon,
+            dt=dt,
+            record_forces=record_forces,
+            snqi_weights=snqi_weights,
+            snqi_baseline=snqi_baseline,
+            algo=algo,
+            scenario_path=scenario_path,
+            algo_config=algo_config,
+            algo_config_path=algo_config_path,
+            adapter_impact_eval=adapter_impact_eval,
+            experimental_ped_impact=experimental_ped_impact,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
+            observation_mode=observation_mode,
+            observation_level=observation_level,
+            benchmark_track=benchmark_track,
+            track_schema_version=track_schema_version,
+            observation_noise=observation_noise,
+            tracking_precision=tracking_precision,
+            synthetic_actuation_profile=synthetic_actuation_profile,
+            latency_stress_profile=latency_stress_profile,
+            safety_wrapper=safety_wrapper,
+            paired_wrapper_off_record=paired_wrapper_off_record,
+            cbf_safety_filter=cbf_safety_filter,
+            record_planner_decision_trace=record_planner_decision_trace,
+            record_simulation_step_trace=record_simulation_step_trace,
+            close_policy=close_policy,
+            policy_builder=policy_builder or _build_policy,
+        )
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:

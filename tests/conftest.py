@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
+    # legacy compatibility; include them in PR changed-line coverage shards.
+    "test_robot_attributable_force.py",
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",

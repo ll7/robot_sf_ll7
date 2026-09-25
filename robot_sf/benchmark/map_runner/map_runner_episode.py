@@ -1479,6 +1479,8 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
     hybrid_command_sources: list[str | None] | None = None,
     ped_positions: list[np.ndarray],
     ped_forces: list[np.ndarray],
+    robot_force_samples: list[dict[str, Any]] | None = None,
+    persist_robot_force_samples: bool = False,
     visibility_trace: list[np.ndarray | None],
     track_confidence_trace: list[np.ndarray | None],
     visibility_evidence_statuses: list[str],
@@ -1581,6 +1583,33 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
             episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
         )
+        if robot_force_samples:
+            if len(robot_force_samples) != len(ped_positions):
+                raise ValueError("incomplete robot force sampling")
+            ep.robot_force_samples = robot_force_samples
+            first = robot_force_samples[0]
+            components = first["components"]
+            if components:
+                ep.robot_force_config = {k: v for k, v in components[0].items() if k != "robot_pos"}
+            else:
+                ep.robot_force_config = {
+                    "prf_active": False,
+                    "prf_multiplier": float(config.sim_config.prf_config.force_multiplier),
+                    "prf_activation_m": float(config.sim_config.prf_config.activation_threshold),
+                    "prf_robot_radius_m": ep.robot_radius,
+                    "prf_ped_radius_m": float(first["ped_radius_m"]),
+                }
+            ep.robot_force_config["robot_components"] = [
+                {k: v for k, v in component.items() if k != "robot_pos"} for component in components
+            ]
+            ep.social_force_config = first["social_force_config"]
+            ep.robot_ped_forces = _stack_ped_positions(
+                [
+                    np.asarray(sample["forces"], dtype=float).reshape(-1, 2)
+                    for sample in robot_force_samples
+                ],
+                fill_value=np.nan,
+            )
         metrics_raw = compute_all_metrics(
             ep,
             horizon=horizon_val,
@@ -1590,6 +1619,8 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
         )
+    if persist_robot_force_samples and robot_force_samples:
+        metrics_raw["robot_force_samples"] = robot_force_samples
     _floor_collision_metrics_from_flags(
         metrics_raw,
         collision_seen=collision_seen,
@@ -1806,6 +1837,7 @@ class _EpisodeStepLoopResult:
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
     sampler_capture: dict[str, Any] | None = None
+    robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -1833,6 +1865,7 @@ class _StepLoopState:
     robot_headings: list[float] = field(default_factory=list)
     ped_positions: list[np.ndarray] = field(default_factory=list)
     ped_forces: list[np.ndarray] = field(default_factory=list)
+    robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
     collision_events: list[dict[str, Any]] = field(default_factory=list)
     visibility_trace: list[np.ndarray | None] = field(default_factory=list)
     track_confidence_trace: list[np.ndarray | None] = field(default_factory=list)
@@ -2594,6 +2627,13 @@ def _step_snapshot_and_record(
     state.ped_positions.append(peds)
     if slc.record_forces and forces_arr is not None:
         state.ped_forces.append(forces_arr)
+        component = getattr(env.simulator, "last_robot_ped_forces", None)
+        inputs = getattr(env.simulator, "last_robot_force_inputs", None)
+        if component is not None and inputs:
+            component = np.array(component, dtype=float, copy=True)
+            if component.shape != peds.shape:
+                raise ValueError("recorded robot force shape differs from pedestrian snapshot")
+            state.robot_force_samples.append({**inputs, "forces": component.tolist()})
     heading = _observation_heading(obs, default=state.previous_trace_heading)
     state.robot_headings.append(float(heading))
     (
@@ -3219,6 +3259,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         robot_headings=state.robot_headings,
         ped_positions=state.ped_positions,
         ped_forces=state.ped_forces,
+        robot_force_samples=state.robot_force_samples,
         visibility_trace=state.visibility_trace,
         track_confidence_trace=state.track_confidence_trace,
         visibility_evidence_statuses=state.visibility_evidence_statuses,
@@ -5275,6 +5316,8 @@ def run_map_episode(  # noqa: PLR0913
         hybrid_command_sources=loop_result.hybrid_command_sources,
         ped_positions=loop_result.ped_positions,
         ped_forces=loop_result.ped_forces,
+        robot_force_samples=loop_result.robot_force_samples,
+        persist_robot_force_samples=record_simulation_step_trace,
         visibility_trace=loop_result.visibility_trace,
         track_confidence_trace=loop_result.track_confidence_trace,
         visibility_evidence_statuses=loop_result.visibility_evidence_statuses,

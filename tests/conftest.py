@@ -416,6 +416,13 @@ _FAST_FILES = {
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
+    # VV-3 bounded metamorphic smoke tests run in the default lane. Their
+    # expanded episode matrices carry explicit slow markers for cluster runs.
+    "test_grid_resolution_invariance.py",
+    "test_mirror_symmetry.py",
+    "test_pedestrian_removal.py",
+    "test_planner_unit_consistency.py",
+    "test_replay_determinism.py",
     # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
     # legacy compatibility; include them in PR changed-line coverage shards.
     "test_robot_attributable_force.py",

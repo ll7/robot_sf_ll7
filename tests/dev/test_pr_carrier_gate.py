@@ -120,6 +120,18 @@ def test_pure_review_carrier_rejects_independent_review_prefixes() -> None:
     assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
 
 
+def test_pure_review_carrier_rejects_legacy_review_prefixes() -> None:
+    """Legacy wording must enforce word boundaries like canonical headings do."""
+    for heading in (
+        "Exact-head self-reviewability",
+        "Inexact-head self-review",
+        "Self-reviewability evidence for this change at exact head",
+    ):
+        comment = _review_comment().replace("Exact-head self-review", heading)
+
+        assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA), heading
+
+
 def test_pure_no_carrier_error_names_recognized_vocabulary() -> None:
     """A rejection names the accepted headings, not a bare no-carrier verdict (issue #9509)."""
     error = _review_carrier_error([], live_head=HEAD_SHA, live_base=BASE_SHA)

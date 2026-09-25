@@ -59,10 +59,10 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 REVIEW_HEADER_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"exact[- ]head\s+self[- ]review", re.IGNORECASE),
+    re.compile(r"\bexact[- ]head\s+self[- ]review\b", re.IGNORECASE),
     re.compile(r"\bexact[- ]head\s+implementation[- ]review\b", re.IGNORECASE),
     re.compile(r"\bexact[- ]head\s+independent[- ]review\b", re.IGNORECASE),
-    re.compile(r"self[- ]review[^\n]{0,40}exact\s+head", re.IGNORECASE),
+    re.compile(r"\bself[- ]review\b[^\n]{0,40}\bexact\s+head\b", re.IGNORECASE),
 )
 
 #: Canonical carrier-heading vocabulary (issue #9509). A review or comment is

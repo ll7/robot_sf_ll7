@@ -301,9 +301,7 @@ def _algorithm_metadata_runtime_marker(
             last_decision = shield_stats.get("last_decision")
             if isinstance(last_decision, Mapping):
                 shield_view["last_decision"] = {
-                    str(key): value
-                    for key, value in last_decision.items()
-                    if key != "fallback_controller_state" or not isinstance(value, Mapping)
+                    str(key): value for key, value in last_decision.items()
                 }
             runtime_view["shield_stats"] = shield_view
     return runtime_fallback_or_degraded_marker(runtime_view)

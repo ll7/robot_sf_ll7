@@ -88,6 +88,13 @@ an outcome reproduction only; video may be recorded as unavailable when the cano
 no video. The output stays in ignored `output/`; retain only a compact checksummed receipt when a
 durable handoff is needed.
 
+The original pre-strict-gate manifest bytes are preserved as
+`tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.pre_strict_gate.json` for
+historical receipts. They contain only compact certificate annotations and fail current canonical
+certificate validation. Use `manifest.json` for current selection; it carries the post-hoc static
+route certificate and remains selectable under the strict gate. The scenario, route overrides,
+resolved map registry and map SVG digests are recorded beside the certificate provenance.
+
 ## Selection and replay checks
 
 The selector requires an analysis-eligible row and a passed `scenario_cert.v1` receipt containing

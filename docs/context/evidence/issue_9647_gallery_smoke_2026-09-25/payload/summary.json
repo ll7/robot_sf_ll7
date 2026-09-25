@@ -291,7 +291,7 @@
     },
     "source_fixture_files": [
       {
-        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json",
+        "path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.pre_strict_gate.json",
         "sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
         "size_bytes": 2984
       },
@@ -324,10 +324,13 @@
       "source_episode_sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
       "source_scenario_sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b"
     },
-    "source_manifest_path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json",
+    "source_manifest_path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.pre_strict_gate.json",
     "source_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
-    "source_search_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9"
+    "source_search_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
+    "current_selection_note": "This receipt predates strict certificate validation. Its original manifest bytes are preserved as manifest.pre_strict_gate.json and are rejected by the current gate; the current manifest.json fixture is separately tested and replayed."
   },
   "schema_version": "issue_9647_gallery_smoke_receipt.v1",
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "location": "Historical output/ products are ignored local files and are not durable; this compact receipt is tracked under payload/.",
+  "superseded_by": "docs/context/evidence/issue_9647_gallery_demo_2026-09-25"
 }

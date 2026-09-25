@@ -1,46 +1,36 @@
 <!-- AI-GENERATED (robot_sf#9647, 2026-09-25) - NEEDS-REVIEW -->
-# #9647 current-head replay gallery demo
+# #9647 strict-certificate replay gallery smoke
 
-This is a one-episode rendering smoke from the refreshed gallery code at
-`7844d08e509e0362bddfb791a71d20672278b4fe`. It uses the tracked #1501 `failure_0002`
-compatibility fixture, not a new #9645 discovery or a persisted search-run manifest.
+This one-case run exercises the documented gallery CLI with the current canonical certificate
+schema and route-aggregation gate. It uses the tracked #1501 `failure_0002` compatibility fixture,
+not a persisted search result or new discovery.
 
-## Reproduction
+- Code revision: `4ad36ecae489eea9e6461932a0b208a58ee27663` (clean at execution).
+- Command: `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_strict_certificate_smoke_4ad36ec --top-k 1`
+- Budget: one historical fixture row represented; one case selected and replayed; no new search
+  candidate or held-out episode.
+- Replay: identity, collision outcome/failure attribution, and the
+  `constraints_first_lexicographic_v1` objective matched. Status is
+  `outcome_reproduced_revision_changed` because the replay code revision differs from the historical
+  episode revision `58e516aa4f69ff3098bf518199f483006589758c`.
+- Source input binding remains **unknown** because the historical episode does not attest the map
+  registry digest. The scenario, route overrides, current map registry, and map bytes used to create
+  the post-hoc certificate have recorded digests in
+  `tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario_certification_provenance.json`.
+- The fixture certificate is a post-hoc canonical static-route result (`hard_but_solvable`),
+  generated at `a468f1960278afb0896145221af105648bb3965f`. It is not an original
+  search-time certificate. Dynamic task feasibility remains **unknown**.
+- Rendering produced trajectory, still, and filmstrip figures. Map overlay is unavailable because
+  the renderer cannot decode the source SVG; video is unavailable because the canonical runner
+  emitted no video artifact. The renderer split one discontinuous actor track.
 
-```bash
-scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_current_smoke_20260925 --top-k 1
-```
+The replay output, raw episode streams, and case manifests remain in ignored local `output/`.
+This receipt records their hashes without promoting those files. This smoke is selector, replay,
+and rendering plumbing evidence only; it does not establish dynamic feasibility, planner
+performance, a new counterexample, or real-world safety.
 
-The run selected one case, used zero search candidates, replayed one episode, and held out zero
-episodes. The source manifest SHA-256 is
-`289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9`; the source episode SHA-256
-is `67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469`.
-
-## Result and interpretation
-
-The `goal` planner replay produced a collision. Source/replay identity, collision event, and the
-`constraints_first_lexicographic_v1` objective matched; the objective value was `4.833333333333333`.
-The current revision differs from the historical source revision `58e516aa4f69ff3098bf518199f483006589758c`,
-so the classification is `outcome_reproduced_revision_changed`, not exact-source replay verification.
-The source episode does not attest its map-registry digest, leaving source-input binding **unknown**.
-
-The source's static route certificate passed as `hard_but_solvable`; dynamic task feasibility remains
-**unknown**. The recorded minimum surface clearance is `-0.015686402836192603 m` at critical frame 9.
-The short trace contains 10 steps, and one discontinuous actor track was split for rendering.
-
-## Figures
-
-The small reviewable figures are included in this bundle. The raw episode stream, case manifests,
-copied inputs, and logs remain in ignored `output/`; their digests are listed in `summary.json`.
-
-![Trajectory view](figures/trajectory.png)
+![Trajectory](figures/trajectory.png)
 
 ![Critical frame](figures/still_9.png)
 
 ![Replay filmstrip](figures/filmstrip.png)
-
-The map overlay is unavailable because the existing image reader cannot decode the SVG map. The
-canonical runner emitted no video artifact. These are historical outcome-reproduction visuals,
-not evidence that the source case is dynamically feasible, that the planner is safe, or that a new
-falsification round discovered this case.
-<!-- AI-GENERATED (robot_sf#9647, 2026-09-25) - NEEDS-REVIEW -->

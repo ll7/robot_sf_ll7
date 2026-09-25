@@ -1,11 +1,14 @@
 {
-  "schema_version": "issue_9647_replay_gallery_demo.v1",
-  "created_at_utc": "2026-09-25T12:46:36Z",
-  "claim_boundary": "one historical collision outcome reproduced on a different repository revision; not new search evidence, exact-source replay verification, dynamic-feasibility proof, planner-performance evidence, or real-world safety evidence",
-  "code_revision": "7844d08e509e0362bddfb791a71d20672278b4fe",
-  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_current_smoke_20260925 --top-k 1",
+  "schema_version": "issue_9647_replay_gallery_demo.v2",
+  "created_at_utc": "2026-09-25T20:14:46Z",
+  "claim_boundary": "one historical collision outcome reproduced at a changed revision; the route certificate was generated post-hoc and is static-only; not new search evidence, exact-source replay verification, dynamic-feasibility proof, planner-performance evidence, or real-world safety evidence",
+  "code_revision": "4ad36ecae489eea9e6461932a0b208a58ee27663",
+  "code_checkout_clean": true,
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_strict_certificate_smoke_4ad36ec --top-k 1",
   "budget": {
-    "search_candidates": 0,
+    "new_search_candidates": 0,
+    "historical_candidate_rows_represented": 1,
+    "declared_search_budget_label": 32,
     "selected_cases": 1,
     "replayed_episodes": 1,
     "held_out_episodes": 0
@@ -13,64 +16,97 @@
   "source": {
     "issue": 1501,
     "historical_archive_id": "failure_0002",
-    "fixture_kind": "tracked compatibility fixture, not a persisted search-run manifest",
-    "search_method_label": "optuna",
-    "search_seed": 42,
-    "candidate_budget_label": 32,
+    "fixture_kind": "tracked compatibility fixture; not a persisted search run or new discovery",
     "scenario_id": "crossing_ttc_template_adversarial_0008",
     "seed": 320,
     "source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
-    "manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
-    "scenario_sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
+    "search_method_label": "optuna",
+    "search_seed_label": 42,
+    "source_manifest_sha256": "8a14cfa9994e0a935c4e7cbeb7514f11641ab1a2eace1897be401c4386e0abac",
+    "source_scenario_sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
     "source_episode_sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
-    "source_input_binding": "unknown: source episode has no map-registry digest"
+    "route_overrides_sha256": "0e8bb9e6242098a33087ca12916d7096b98e90100e79db829a1675b6c8c89cd7",
+    "source_input_binding": {
+      "status": "unknown",
+      "reason": "source_episode_map_registry_digest_missing"
+    },
+    "static_certificate": {
+      "provenance_path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario_certification_provenance.json",
+      "generation_kind": "post_hoc_current_code_static_route_certification",
+      "generated_at_code_revision": "a468f1960278afb0896145221af105648bb3965f",
+      "certificate_sha256_canonical_json": "63e4298bf33a3310a978f6ad2b868eef80ad54478f87a43a242b5869d76828e4",
+      "classification": "hard_but_solvable",
+      "benchmark_eligibility": "eligible",
+      "dynamic_task_feasibility": "unknown",
+      "input_sha256": {
+        "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
+        "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/route_overrides.yaml": "0e8bb9e6242098a33087ca12916d7096b98e90100e79db829a1675b6c8c89cd7",
+        "maps/registry.yaml": "471d863ece35395e09d040610e77e8822f8cdf32a39a5caf88e8b56b1dbdfaad",
+        "maps/svg_maps/classic_crossing.svg": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+        "robot_sf/benchmark/schemas/scenario_cert.v1.json": "1729b781a2a5079891f854315d34879da9ced728026d571f9105c97a0bd08a61",
+        "scripts/tools/certify_scenarios.py": "46f8dedbe90980b515d418b0e655e40b02fbb463a1dbc585243362fed40ebcd6",
+        "robot_sf/scenario_certification/v1.py": "f8f1a24487b9609ed4670d0ef0fe8b71c7983fbfe8e52b11c0a3823971d43941"
+      }
+    }
   },
   "result": {
-    "case_id": "case_0000_7e144c8113a9",
+    "case_id": "case_0000_01595b2ea612",
     "planner": "goal",
     "failure": "collision",
     "replay_match": "match",
     "verification_status": "outcome_reproduced_revision_changed",
-    "replay_revision": "7844d08e509e0362bddfb791a71d20672278b4fe",
+    "replay_revision": "4ad36ecae489eea9e6461932a0b208a58ee27663",
     "source_and_replay_identity_match": true,
-    "collision_event_match": true,
+    "failure_attribution_match": true,
+    "categorical_outcome_match": true,
     "objective_match": true,
+    "objective_name": "constraints_first_lexicographic_v1",
     "objective_value": 4.833333333333333,
+    "objective_absolute_tolerance": 1e-06,
     "surface_clearance_min_m": -0.015686402836192603,
     "critical_frame_step": 9,
     "step_count": 10,
-    "track_discontinuities_split": 1,
-    "feasibility": {
-      "source_certificate": "passed: hard_but_solvable static route certificate",
-      "dynamic_task_feasibility": "unknown"
-    }
+    "track_discontinuity_split_count": 1,
+    "source_certificate_status": "admissible_by_source_certificate",
+    "dynamic_task_feasibility": "unknown",
+    "replay_mismatch_count": 0,
+    "replay_unavailable_count": 0
   },
   "rendering": {
     "status": "rendered",
-    "map_overlay": "unavailable: existing image reader cannot decode the SVG map",
-    "video": "unavailable: canonical runner emitted no video artifact",
-    "tracked_figures": [
+    "map_overlay": {
+      "status": "unavailable",
+      "reason": "existing_renderer_cannot_decode_map_overlay"
+    },
+    "video": "unavailable",
+    "video_reason": "canonical_runner_did_not_emit_video_artifact",
+    "figures": [
       {
-        "path": "figures/trajectory.png",
-        "size_bytes": 69544,
-        "sha256": "5b7dd746e2b5735519905d6239620104b03613cc80347187fbbb53cb89a2a67b"
+        "path": "payload/figures/trajectory.png",
+        "size_bytes": 70004,
+        "sha256": "088b31fa6e4cf5d20e6c39bcc160d12906be7504378aa202d1a29566ab47a5af"
       },
       {
-        "path": "figures/still_9.png",
-        "size_bytes": 46273,
-        "sha256": "5b3e5c3a126f6d71c22bd54230940a8b05c6991373fa55dc08e10f1d019e2af1"
+        "path": "payload/figures/still_9.png",
+        "size_bytes": 46378,
+        "sha256": "b649fb8edbeb44d7951771f0dd3aa19282429c1db8085bd9431a966148499516"
       },
       {
-        "path": "figures/filmstrip.png",
-        "size_bytes": 22549,
-        "sha256": "f10516dc4ee24343a67e5ca4db48a3dde202bf9c7b8b11f385de90283c7a1144"
+        "path": "payload/figures/filmstrip.png",
+        "size_bytes": 22668,
+        "sha256": "ffd54e80fae9a89ce4ce62bd68be1aedb42fee4893c3ca5ca1aac715f3e2bb45"
       }
     ],
-    "raw_output": "output/adversarial-replay-gallery/issue9647_current_smoke_20260925; ignored local output, not part of this compact bundle"
+    "raw_output_disposition": "ignored local output only"
   },
-  "raw_artifact_digests": {
-    "gallery_manifest_sha256": "cf054bbb70e8cc3cabe6899f3d2f962dbe6a70d27a4d18c66ce193294ed39225",
-    "case_manifest_sha256": "54e298928249376717959296ed0e49f2c28d6cb9f5521c7796ac37cff4f6d815",
-    "replay_episode_sha256": "3d55c905f0e05a3939bee7d4a16df310d1ef68339806942e98777f57cc2ff1c9"
-  }
+  "local_artifacts": {
+    "output_directory": "output/adversarial-replay-gallery/issue9647_strict_certificate_smoke_4ad36ec",
+    "gallery_manifest_sha256": "efaae3c714706fa76424ddce53e48bba7994b61c8668312e83f1caf41d3661a7",
+    "case_manifest_sha256": "fcf91840176844118a7423820b92975bb8a6cdb06d74b7ced1b38be1fa52874e",
+    "replay_episode_sha256": "cecedc32d06647ffcb6f8334286ae9778487e2d1a3c1025386a679a349b809e4",
+    "source_episode_sha256": "67bbf65dddbe440bde284564356acb4ab18e95a3869db42b5e367c151768c469",
+    "raw_streams_and_case_manifests": "ignored local output; not copied into this compact bundle"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "location": "Referenced output/ products are ignored local files and are not durable; compact tracked bundle members are stored in payload/."
 }

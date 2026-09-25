@@ -37,6 +37,11 @@ its nested dictionaries and lists for forbidden statuses, true fallback/degraded
 flags, and positive or malformed fallback counters. A non-dictionary value for
 this field is invalid. Other fallback-named counter fields retain strict numeric
 validation. Declared `mixed` command mode remains separate from fallback status.
+The shield's `decision_label` must be a nonempty string. Labels `fallback`,
+`fallback_*`, `uncertainty_fallback_*`, and `stop_best_effort` identify actual
+fallback or degraded decisions and reject benchmark success. Safe guard/prior
+intervention alone is not a fallback marker (`prior_safe`, `prior_residual_safe`,
+`prior_blend_safe`, and `stop_safe`).
 
 - `robot_sf_bench run` must return non-zero for:
   - `fallback`

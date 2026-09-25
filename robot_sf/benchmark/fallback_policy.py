@@ -69,6 +69,8 @@ _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available"
 _RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 _RUNTIME_STATUS_COUNT_CONTAINERS = frozenset({"proposal_status_counts"})
 _RUNTIME_STATUS_COUNT_MARKERS = frozenset({"degraded", "fallback"})
+_RUNTIME_FORBIDDEN_DECISION_LABELS = frozenset({"fallback", "stop_best_effort"})
+_RUNTIME_FORBIDDEN_DECISION_PREFIXES = ("fallback_", "uncertainty_fallback_")
 
 
 def runtime_fallback_or_degraded_marker(  # noqa: C901
@@ -79,7 +81,8 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
     status fields (including the predictive-foresight fallback prefix), explicit
-    boolean markers, and positive fallback counters fail closed.  An empty
+    boolean markers, shield fallback/best-effort labels, and positive fallback
+    counters fail closed. An empty
     ``fallback_reason`` is tolerated only beside an explicit false
     ``fallback_used`` or ``fallback_triggered`` flag. The shield's typed
     ``fallback_controller_state`` dictionary is traversed as diagnostic state,
@@ -107,6 +110,14 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
             for raw_key, item in value.items():
                 key = str(raw_key)
                 item_path = f"{path}.{key}" if path else key
+                if key == "decision_label":
+                    if not isinstance(item, str) or not item.strip():
+                        return item_path, "invalid"
+                    normalized = item.strip().lower().replace("-", "_")
+                    if normalized in _RUNTIME_FORBIDDEN_DECISION_LABELS or normalized.startswith(
+                        _RUNTIME_FORBIDDEN_DECISION_PREFIXES
+                    ):
+                        return item_path, normalized
                 if key in _RUNTIME_STATUS_FIELDS:
                     normalized = str(item).strip().lower().replace("-", "_")
                     if normalized in _RUNTIME_FORBIDDEN_STATUSES or any(

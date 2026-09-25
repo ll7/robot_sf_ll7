@@ -20,7 +20,7 @@ from robot_sf.benchmark.fallback_policy import (
 
 
 @pytest.fixture
-def guarded_runtime() -> dict[str, object]:
+def guarded_runtime(request) -> dict[str, object]:
     """Build the real shield serialization and runner hook for a clear policy command.
 
     Returns:
@@ -30,19 +30,22 @@ def guarded_runtime() -> dict[str, object]:
     from robot_sf.planner.safety_shield import ShieldDecision
 
     action = (2.0, -0.045798975974321365)
+    label = getattr(request, "param", "ppo_clear")
+    intervened = label not in {"ppo_clear", "ppo_safe", "goal_reached"}
+    filtered_action = (0.0, 0.0) if intervened else action
     decision = ShieldDecision(
         proposed_action=action,
-        filtered_action=action,
-        decision_label="ppo_clear",
+        filtered_action=filtered_action,
+        decision_label=label,
         intervention_reason="proposed_action_clear_of_near_field",
-        intervened=False,
+        intervened=intervened,
         fallback_controller_state={
             "policy": "RiskDWAPlannerAdapter",
             "prior_available": False,
             "action_adaptation": {
-                "mode": "direct_policy_command",
+                "mode": "guard_selected_command" if intervened else "direct_policy_command",
                 "raw_policy_action": list(action),
-                "adapted_action": list(action),
+                "adapted_action": list(filtered_action),
                 "residual_clipped": False,
                 "hard_guard_authoritative": True,
             },
@@ -79,6 +82,64 @@ def test_shield_dictionary_does_not_report_policy_fallback(guarded_runtime) -> N
     assert availability.execution_mode == "mixed"
     assert availability.benchmark_success is True
     assert benchmark_run_exit_code(summary) == 0
+
+
+@pytest.mark.parametrize(
+    "guarded_runtime",
+    [
+        "fallback_safe",
+        "fallback_best_effort",
+        "stop_best_effort",
+        "uncertainty_fallback_slow_down",
+        "uncertainty_fallback_configured",
+        "uncertainty_fallback_stop",
+    ],
+    indirect=True,
+)
+def test_shield_fallback_decision_is_not_benchmark_success(guarded_runtime) -> None:
+    """Real serialized fallback decisions must fail availability and CLI exit checks."""
+    label = guarded_runtime["last_decision"]["decision_label"]
+    assert guarded_runtime["last_decision"]["intervened"] is True
+    assert runtime_fallback_or_degraded_marker(guarded_runtime) == (
+        "last_decision.decision_label",
+        label,
+    )
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_metadata_contract": {
+            "planner_kinematics": {"execution_mode": "mixed"},
+            "planner_runtime": guarded_runtime,
+        },
+    }
+    availability = summarize_benchmark_availability(summary)
+    assert availability.availability_status == "failed"
+    assert availability.benchmark_success is False
+    assert f"last_decision.decision_label={label}" in availability.availability_reason
+    assert benchmark_run_exit_code(summary) == 2
+
+
+@pytest.mark.parametrize(
+    "guarded_runtime",
+    ["prior_safe", "prior_residual_safe", "prior_blend_safe", "stop_safe"],
+    indirect=True,
+)
+def test_shield_intervention_alone_is_not_a_fallback_marker(guarded_runtime) -> None:
+    """Declared safe guard/prior decisions do not become fallback by intervention alone."""
+    assert guarded_runtime["last_decision"]["intervened"] is True
+    assert runtime_fallback_or_degraded_marker(guarded_runtime) is None
+
+
+@pytest.mark.parametrize("value", [None, {}, [], 0, False, ""])
+def test_shield_decision_label_rejects_malformed_values(value) -> None:
+    """A declared decision label must be a nonempty string."""
+    assert runtime_fallback_or_degraded_marker({"last_decision": {"decision_label": value}}) == (
+        "last_decision.decision_label",
+        "invalid",
+    )
 
 
 @pytest.mark.parametrize("value", [None, [], "unused", 0, False, 1])

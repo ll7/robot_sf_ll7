@@ -236,6 +236,35 @@ def test_rejects_missing_paired_release_row(tmp_path: Path) -> None:
         _check(archive, traces, tmp_path, [113, 114])
 
 
+def test_accepts_separately_pinned_observer_campaign_id(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    configs, manifests, digests, effective = _bindings(tmp_path, [113])
+    trace = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
+    old_id = checker.CAMPAIGN_ID["headon_group"]
+    new_id = "issue9671-observer-headon-test"
+    campaign = json.loads(manifests["headon_group"].read_text())
+    campaign["campaign_id"] = new_id
+    campaign["invoked_command"] = campaign["invoked_command"].replace(old_id, new_id)
+    manifests["headon_group"].write_text(json.dumps(campaign))
+    producer_path = trace.with_name(trace.name + ".provenance.json")
+    producer = json.loads(producer_path.read_text())
+    producer["run"]["invocation"] = producer["run"]["invocation"].replace(old_id, new_id)
+    producer_path.write_text(json.dumps(producer))
+    report = check(
+        archive,
+        [trace],
+        configs,
+        manifests,
+        expected={("ppo", "classic_doorway_medium", 113)},
+        expected_archive_sha256=None,
+        expected_config_sha256=digests,
+        expected_effective_hash=effective,
+        expected_campaign_ids={**checker.CAMPAIGN_ID, "headon_group": new_id},
+    )
+    assert report["comparison_counts"] == {"match": 1, "mismatch": 0, "no_release_row": 0}
+
+
 def test_rejects_parameter_drift(tmp_path: Path) -> None:
     archive = tmp_path / "release.tar.gz"
     _archive(archive, [_row(113, "collision", trace=False)])

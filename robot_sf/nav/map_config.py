@@ -1133,10 +1133,6 @@ class MapDefinitionPool:
         map_defs is still empty after loading.
         """
 
-        # Keep parser-consumed identities out of the dataclass fields so they do not
-        # leak into serialized simulation configuration.
-        self.source_input_records: list[dict[str, str]] = []
-
         # If map_defs is empty, load the map definitions from the files
         if not self.map_defs:
             self.map_defs = self._load_map_definitions_from_folder(self.maps_folder)

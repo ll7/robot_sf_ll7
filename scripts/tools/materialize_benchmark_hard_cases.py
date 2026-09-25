@@ -518,6 +518,13 @@ def _showcase_tool_snapshot(
             and fallback_snapshot_revision not in candidate_revisions
         ):
             candidate_revisions.append(fallback_snapshot_revision)
+        history_head = _git_head_revision()
+        if history_head is not None:
+            candidate_revisions.extend(
+                revision
+                for revision in _showcase_source_history_revisions(files, history_head)
+                if revision not in candidate_revisions
+            )
         verified_revision = next(
             (
                 candidate_revision
@@ -537,11 +544,48 @@ def _showcase_tool_snapshot(
     }
 
 
+def _git_head_revision() -> str | None:
+    """Return the current commit only when Git can resolve an exact HEAD."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    revision = result.stdout.strip()
+    return revision if result.returncode == 0 and GIT_REVISION_RE.fullmatch(revision) else None
+
+
+def _showcase_source_history_revisions(files: dict[str, str], history_head: str) -> list[str]:
+    """Return commits on current HEAD history that changed one of the selected source files."""
+    if not files or not GIT_REVISION_RE.fullmatch(history_head):
+        return []
+    result = subprocess.run(
+        ["git", "rev-list", history_head, "--", *sorted(files)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    return [line for line in result.stdout.splitlines() if GIT_REVISION_RE.fullmatch(line)]
+
+
 def _showcase_source_files_match(
     files: dict[str, str], raw_files: dict[str, Any], revision: str
 ) -> bool:
     """Verify every source hash against one reachable Git tree."""
     if not GIT_REVISION_RE.fullmatch(revision) or len(files) != len(raw_files):
+        return False
+    ancestry = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", revision, "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if ancestry.returncode != 0:
         return False
     for relative, expected in sorted(files.items()):
         relative_path = PurePosixPath(relative)

@@ -14,6 +14,7 @@ from robot_sf.nav.map_config import DEFAULT_MAPS_FOLDER
 from robot_sf.training.scenario_loader import (
     ScenarioValidationReport,
     load_scenarios_for_validation,
+    scenario_mapping_sha256,
 )
 
 SCENARIO_INPUT_IDENTITY_SCHEMA = "scenario_runtime_input_identity.v1"
@@ -47,6 +48,9 @@ def scenario_input_identity(
     scenarios = _select_scenarios(report.scenarios, scenario_id, root=root)
     if isinstance(scenarios, dict):
         return _with_root_digest(scenarios, root_digest)
+    scenario_row_sha256 = (
+        getattr(scenarios[0], "_scenario_source_row_sha256", None) if len(scenarios) == 1 else None
+    )
     manifest_records = _manifest_records(root, root_digest, report.manifest_sources)
     if isinstance(manifest_records, dict):
         return _with_root_digest(manifest_records, root_digest)
@@ -70,6 +74,7 @@ def scenario_input_identity(
         "source_artifact_sha256": root_digest,
         "effective_input_sha256": effective_digest,
         "requires_effective_input_binding": requires_closure,
+        "scenario_row_sha256": scenario_row_sha256,
         "files": records,
         "reason_code": None,
     }
@@ -138,12 +143,15 @@ def scenario_manifest_records_match(  # noqa: C901 - each identity gap fails clo
 ) -> bool:
     """Require a loaded row's parse-time manifest closure to match current bytes.
 
-    The loader stores absolute manifest paths and the digests of the exact bytes
-    parsed on the returned scenario mapping. This binds an in-memory row to the
-    current expanded manifest closure before the oracle classifies it.
+    The loader stores absolute manifest paths, exact source-byte digests, and a
+    digest of each normalized expanded row on the returned scenario mapping. This
+    binds an in-memory row to both the current expanded manifest closure and the
+    selected parsed row before the oracle classifies it. Controlled envelope probes
+    retain the source-row digest and update only their expected current-row digest.
 
     Returns:
-        ``True`` only when the parse-time and current manifest closures match.
+        ``True`` only when the parse-time and current manifest closures match and
+        the current row has not drifted from its expected parse/probe state.
     """
     binding = getattr(scenario, "_scenario_manifest_sources", None)
     if not isinstance(binding, tuple) or not binding:
@@ -151,6 +159,19 @@ def scenario_manifest_records_match(  # noqa: C901 - each identity gap fails clo
     root_value = identity.get("path")
     files = identity.get("files")
     if not isinstance(root_value, str) or not isinstance(files, list):
+        return False
+    source_row_digest = identity.get("scenario_row_sha256")
+    parsed_source_row_digest = getattr(scenario, "_scenario_source_row_sha256", None)
+    expected_current_row_digest = getattr(scenario, "_scenario_current_row_sha256", None)
+    current_row_digest = scenario_mapping_sha256(scenario)
+    if (
+        not isinstance(source_row_digest, str)
+        or not source_row_digest
+        or parsed_source_row_digest != source_row_digest
+        or not isinstance(expected_current_row_digest, str)
+        or not expected_current_row_digest
+        or current_row_digest != expected_current_row_digest
+    ):
         return False
     try:
         root = Path(root_value).resolve()

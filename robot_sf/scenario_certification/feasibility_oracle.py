@@ -78,6 +78,7 @@ from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
     load_scenarios_for_validation,
+    scenario_mapping_sha256,
 )
 
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
@@ -277,12 +278,24 @@ def make_envelope_scenario(
     """
     if not math.isfinite(float(envelope_radius_m)) or envelope_radius_m <= 0.0:
         raise ValueError("envelope_radius_m must be finite, positive, and non-zero")
+    source_row_digest: str | None = None
+    if isinstance(scenario, _ScenarioSourceMapping):
+        source_row_digest = getattr(scenario, "_scenario_source_row_sha256", None)
+        expected_current_row_digest = getattr(scenario, "_scenario_current_row_sha256", None)
+        if (
+            not isinstance(expected_current_row_digest, str)
+            or not expected_current_row_digest
+            or scenario_mapping_sha256(scenario) != expected_current_row_digest
+        ):
+            raise ValueError("scenario row changed after parse; cannot apply envelope override")
     mutated_values = deepcopy(dict(scenario))
     if isinstance(scenario, _ScenarioSourceMapping):
         mutated = _ScenarioSourceMapping(
             mutated_values,
             source_file=scenario._scenario_source_file,
             manifest_sources=scenario._scenario_manifest_sources,
+            source_row_sha256=source_row_digest,
+            current_row_sha256=getattr(scenario, "_scenario_current_row_sha256", None),
         )
     else:
         mutated = mutated_values
@@ -293,6 +306,8 @@ def make_envelope_scenario(
     metadata["envelope_probe_radius_m"] = float(envelope_radius_m)
     metadata["diagnostic_claim_boundary"] = DIAGNOSTIC_CLAIM_BOUNDARY
     mutated["metadata"] = metadata
+    if isinstance(mutated, _ScenarioSourceMapping):
+        mutated._scenario_current_row_sha256 = scenario_mapping_sha256(mutated)
     return mutated
 
 
@@ -778,6 +793,7 @@ def _geometric_margin(  # noqa: C901 - the evidence gates remain explicit and fa
         runtime_input_identity_stable = (
             identity_before is not None
             and _scenario_input_identity_matches(identity_before, identity_after)
+            and scenario_manifest_records_match(identity_before, scenario)
             and consumed_inputs_match
             and _certificate_matches_scenario_input_identity(certificate, identity_before)
         )
@@ -838,6 +854,11 @@ def _scenario_input_identity_matches(before: Mapping[str, Any], after: Mapping[s
     if before.get("status") != "available" or after.get("status") != "available":
         return False
     if before.get("source_artifact_sha256") != after.get("source_artifact_sha256"):
+        return False
+    before_row_digest = before.get("scenario_row_sha256")
+    if not isinstance(before_row_digest, str) or not before_row_digest:
+        return False
+    if before_row_digest != after.get("scenario_row_sha256"):
         return False
     requires_closure = before.get("requires_effective_input_binding") is True
     if after.get("requires_effective_input_binding") is not requires_closure:

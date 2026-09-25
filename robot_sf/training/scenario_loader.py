@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -98,10 +99,16 @@ class _ScenarioSourceMapping(dict[str, Any]):
         *,
         source_file: Path,
         manifest_sources: tuple[tuple[str, str], ...] | None = None,
+        source_row_sha256: str | None = None,
+        current_row_sha256: str | None = None,
     ) -> None:
         super().__init__(scenario)
         self._scenario_source_file = source_file
         self._scenario_manifest_sources = manifest_sources
+        self._scenario_source_row_sha256 = source_row_sha256
+        self._scenario_current_row_sha256 = (
+            current_row_sha256 if current_row_sha256 is not None else source_row_sha256
+        )
 
 
 @dataclass
@@ -387,9 +394,32 @@ def _bind_scenario_manifest_sources(
                 scenario,
                 source_file=source_file,
                 manifest_sources=binding,
+                source_row_sha256=scenario_mapping_sha256(scenario),
             )
         )
     return bound_scenarios
+
+
+def scenario_mapping_sha256(scenario: Mapping[str, Any]) -> str | None:
+    """Hash one expanded scenario mapping with deterministic JSON encoding.
+
+    The digest binds the normalized row values to the source manifest closure. A value that
+    cannot be represented as finite JSON receives no identity and therefore cannot support
+    oracle classification.
+
+    Returns:
+        SHA-256 hex digest, or ``None`` when the mapping is not canonical finite JSON.
+    """
+    try:
+        canonical = json.dumps(
+            dict(scenario),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _load_scenarios_recursive(

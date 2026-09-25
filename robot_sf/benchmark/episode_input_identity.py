@@ -75,6 +75,36 @@ def capture_episode_input_identity(
     return identity
 
 
+def reconcile_consumed_map_identity(
+    identity: Mapping[str, Any], *, consumed_map_sha256: str | None
+) -> dict[str, Any]:
+    """Reconcile the map bytes parsed for an episode with its captured identity.
+
+    Returns:
+        A copied identity marked unavailable when the parsed map digest is missing
+        or differs from the captured map asset digest.
+    """
+    reconciled = dict(identity)
+    if reconciled.get("status") != "bound":
+        return reconciled
+    captured_map_digests = [
+        asset.get("sha256")
+        for asset in reconciled.get("map_assets", [])
+        if isinstance(asset, Mapping) and asset.get("role") == "map"
+    ]
+    if (
+        len(captured_map_digests) != 1
+        or not isinstance(consumed_map_sha256, str)
+        or captured_map_digests[0] != consumed_map_sha256
+    ):
+        reconciled["status"] = "unavailable"
+        reconciled["reason_codes"] = sorted(
+            set(reconciled.get("reason_codes", []))
+            | {"parsed_map_bytes_differ_from_captured_map_asset"}
+        )
+    return reconciled
+
+
 def _capture_route_digest(
     scenario: Mapping[str, Any], source: Path
 ) -> tuple[str | None, list[str]]:
@@ -147,5 +177,6 @@ def _sha256_file(path: Path) -> str:
 __all__ = [
     "EPISODE_INPUT_IDENTITY_SCHEMA",
     "capture_episode_input_identity",
+    "reconcile_consumed_map_identity",
     "scenario_semantic_sha256",
 ]

@@ -18,6 +18,27 @@ and a separate case directory for each selected candidate. Every input candidate
 manifest accounting, including failed evaluations, missing source files, invalid certificates,
 duplicates, and candidates below the top-K cutoff.
 
+## Lightweight CLI smoke
+
+When a search pilot produces no failure rows, use the one-candidate historical compatibility
+fixture at `tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json` to exercise
+the real runner and renderer. It is adapted from the tracked #1501 `failure_0002` case and the
+#9645 replay; it is not a persisted search run or a new discovery. Run it with a fresh output path:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run python \
+  scripts/tools/materialize_adversarial_replay_gallery.py \
+  tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json \
+  --out output/adversarial-replay-gallery/<smoke-name> --top-k 1
+```
+
+The smoke should select and replay one candidate. Compare the recorded outcome and objective, then
+inspect `gallery_manifest.json`, the case manifest, and `figures/`. The fixture's dynamic task
+feasibility is unknown. A current-code replay at a different source revision is an outcome
+reproduction only; video may be recorded as unavailable when the canonical runner emits no video.
+The output stays in ignored `output/`; retain only a compact checksummed receipt when a durable
+handoff is needed.
+
 ## Selection and replay checks
 
 The selector requires an analysis-eligible row, a `valid` or `hard_but_solvable` certificate, a

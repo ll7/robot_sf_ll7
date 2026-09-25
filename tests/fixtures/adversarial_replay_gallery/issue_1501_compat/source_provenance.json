@@ -1,0 +1,117 @@
+{
+  "schema_version": "benchmark_result_provenance.v1",
+  "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
+  "run": {
+    "run_id": "cbae40d3f33f4f0e870f03ef2866770a",
+    "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+    "python_version": "3.13.14",
+    "invocation": "uv run robot_sf_bench run --matrix docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/scenario.yaml --out output/issue9645-portable-replay/historical_replay_1.jsonl --algo goal --no-video --no-resume --structured-output json --external-log-noise suppress",
+    "benchmark_profile": "baseline-safe",
+    "runner": "map_runner.run_map_batch",
+    "protocol_version": "0.1.0",
+    "execution_context": {
+      "hostname": "auxme-imech039",
+      "schema_version": "benchmark_execution_context.v1",
+      "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+      "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",
+      "python_version": "3.13.14",
+      "thread_env": {
+        "OMP_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null
+      },
+      "numpy_version": "2.4.6",
+      "numba_version": "0.67.0",
+      "execution_context_sha256": "6dc34a26c637cb84a21fd1414db605253bb550465504b5d3da40cf90de4ae244"
+    }
+  },
+  "inputs": {
+    "schema_path": {
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
+      "artifact_status": "available"
+    },
+    "scenario_matrix": {
+      "path": "output/issue9645-historical-replay/failure_0002/bundle/scenario.yaml",
+      "sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
+      "artifact_status": "available"
+    },
+    "algo_config": {
+      "path": null,
+      "sha256": null,
+      "artifact_status": "not_provided"
+    }
+  },
+  "campaign_identity": {
+    "scenario_matrix_hash": "af1732fc48cead21",
+    "input_bundle_sha256": "35ba41366ac290b5e3003206a52c64601f7e056eb3ebceb4dd36c8b5d76ab962",
+    "algorithm": "goal",
+    "config_hash": "d71ba736a8ec0390",
+    "suite_key": "default",
+    "total_jobs": 1,
+    "written": 1
+  },
+  "raw_artifacts": [
+    {
+      "kind": "episodes_jsonl",
+      "path": "output/issue9645-historical-replay/failure_0002/replay.jsonl",
+      "sha256": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
+      "artifact_status": "available"
+    }
+  ],
+  "rows": [
+    {
+      "episode_id": "crossing_ttc_template_adversarial_0008--320--63ceb21a085e0422",
+      "scenario_id": "crossing_ttc_template_adversarial_0008",
+      "seed": 320,
+      "config_hash": "63ceb21a085e0422",
+      "repo_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+      "raw_artifact": "output/issue9645-historical-replay/failure_0002/replay.jsonl",
+      "jsonl_line": 0,
+      "simulator_settings": {
+        "horizon": 100,
+        "dt": 0.1,
+        "record_forces": false,
+        "observation_mode": "goal_state",
+        "observation_level": "oracle_full_state",
+        "observation_noise_hash": "0a5609f0b2b1",
+        "tracking_precision_hash": "d06cee655fee"
+      },
+      "postprocessing": [
+        {
+          "step": "compute_all_metrics",
+          "status": "completed"
+        },
+        {
+          "step": "post_process_metrics",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "derived_artifacts": [],
+  "completeness": {
+    "status": "complete",
+    "required_fields_checked": [
+      "algorithm",
+      "campaign_identity",
+      "completeness",
+      "config_hash",
+      "episode_id",
+      "input_binding_schema_version",
+      "input_bundle_sha256",
+      "inputs",
+      "repo_commit",
+      "repo_commit",
+      "run",
+      "run_id",
+      "runner",
+      "scenario_id",
+      "scenario_matrix_hash",
+      "schema_version",
+      "seed",
+      "total_jobs",
+      "written"
+    ]
+  }
+}

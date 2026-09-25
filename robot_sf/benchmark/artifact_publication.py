@@ -63,6 +63,16 @@ _DEFAULT_ZENODO_METADATA_RELATIVE = Path(
 )
 _BUNDLED_SNQI_WEIGHTS_RELATIVE = Path("release_metadata/snqi/snqi_weights_camera_ready_v3.json")
 _BUNDLED_SNQI_BASELINE_RELATIVE = Path("release_metadata/snqi/snqi_baseline_camera_ready_v3.json")
+_SNQI_V2_ASSETS = {
+    "snqi_v2_weights": ("weights.v2.0.json", "snqi_v2_weights_path", "snqi_v2_weights_sha256"),
+    "snqi_v2_anchors": ("anchors.v2.0.json", "snqi_v2_anchors_path", "snqi_v2_anchors_sha256"),
+    "snqi_v2_family": ("family.v2.0.yaml", "snqi_v2_family_path", "snqi_v2_family_sha256"),
+}
+_SNQI_V2_REQUIRED_REPORTS = tuple(
+    f"reports/{name}.{suffix}"
+    for name in ("snqi_v2_diagnostics", "snqi_v2_family", "robot_force_validation")
+    for suffix in ("json", "md")
+)
 _RELEASE_METADATA_NAMESPACE = "release_metadata"
 _REQUIRED_RELEASE_METADATA_ROLES = (
     "release_manifest",
@@ -81,6 +91,10 @@ _RELEASE_METADATA_PAYLOAD_PATHS = {
     "rights_provenance": "payload/release_metadata/rights_provenance.md",
     "snqi_weights": "payload/release_metadata/snqi/snqi_weights_camera_ready_v3.json",
     "snqi_baseline": "payload/release_metadata/snqi/snqi_baseline_camera_ready_v3.json",
+    **{
+        role: f"payload/release_metadata/snqi_v2/{filename}"
+        for role, (filename, _, _) in _SNQI_V2_ASSETS.items()
+    },
 }
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
@@ -601,6 +615,16 @@ def _build_rights_provenance_statement(
         ", ".join(creator_names) if creator_names else "the authoritative release creators"
     )
     repository_text = repository_url or "the repository URL recorded in the resolved manifest"
+    metric_declarations = resolved_manifest.get("metrics")
+    metric_declarations = metric_declarations if isinstance(metric_declarations, Mapping) else {}
+    snqi_v2_statement = (
+        "- SNQI-v2 boundary: its declared weights, calibration anchors, and robustness family "
+        "are included under `release_metadata/snqi_v2/`. Its force term is a simulator model "
+        "quantity, not measured pedestrian discomfort; the index is advisory and does not "
+        "establish deployment fitness.\n"
+        if any(str(key).startswith("snqi_v2_") for key in metric_declarations)
+        else ""
+    )
 
     return f"""# Benchmark-data release rights and provenance
 
@@ -624,7 +648,7 @@ download can be checked without access to the build workspace.
   for this release and must not be used as a planner-ranking authority. The
   pinned weights and baseline are included under `release_metadata/snqi/` for
   checksum-bound diagnostic recomputation.
-- Rights boundary: this statement does not grant rights to external datasets,
+{snqi_v2_statement}- Rights boundary: this statement does not grant rights to external datasets,
   learned checkpoints, or private operational logs that are not listed in the
   bundle manifest.
 
@@ -633,6 +657,28 @@ the exact contract. Verify both files, the citation metadata, Zenodo metadata,
 this statement, and every checksum before treating the bundle as paper-facing
 evidence.
 """
+
+
+def _resolve_snqi_v2_assets(
+    metrics: Mapping[str, Any], repo_root: Path
+) -> dict[str, tuple[Path, Path]]:
+    """Resolve and checksum-bind every v2 asset when the index is declared.
+
+    Returns:
+        Source and bundle path for each declared v2 asset, or an empty mapping.
+    """
+    if not any(str(key).startswith("snqi_v2_") for key in metrics):
+        return {}
+    files = {}
+    for role, (filename, path_key, sha_key) in _SNQI_V2_ASSETS.items():
+        asset = _resolve_repo_file(metrics.get(path_key), repo_root=repo_root)
+        declared_sha = metrics.get(sha_key)
+        if asset is None or not isinstance(declared_sha, str):
+            raise ValueError(f"Release SNQI-v2 metadata is missing {path_key} or {sha_key}")
+        if _sha256_file(asset) != declared_sha.lower():
+            raise ValueError(f"Release SNQI-v2 metadata checksum mismatch: {role}")
+        files[role] = (asset, Path("release_metadata/snqi_v2") / filename)
+    return files
 
 
 def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
@@ -739,6 +785,9 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
         "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
     }
+    v2_files = _resolve_snqi_v2_assets(metrics, repo_root)
+    files.update(v2_files)
+    source_paths.update({role: _to_repo_relative(asset) for role, (asset, _) in v2_files.items()})
     for role, path in resolved_sources.items():
         if path is not None:
             source_paths[role] = _to_repo_relative(path)
@@ -783,6 +832,18 @@ def _validate_publication_requirements(run_root: Path, selected_files: list[Path
         raise ValueError(
             "Publication bundle missing required preflight artifacts: " + ", ".join(sorted(missing))
         )
+
+
+def _validate_v2_release_reports(
+    release_metadata: _ReleasePublicationMetadata, selected_files: list[Path]
+) -> None:
+    """Require the declared v2 index and force evidence in a release bundle."""
+    if "snqi_v2_weights" not in release_metadata.files:
+        return
+    selected_set = {path.as_posix() for path in selected_files}
+    missing = sorted(set(_SNQI_V2_REQUIRED_REPORTS) - selected_set)
+    if missing:
+        raise ValueError("SNQI-v2 release bundle missing required reports: " + ", ".join(missing))
 
 
 def _validate_bundle_name(bundle_name: str) -> None:
@@ -1433,6 +1494,7 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
     release_metadata = _resolve_release_publication_metadata(run_root)
     if release_metadata is not None:
         _reject_run_local_release_metadata_paths(selected_files)
+        _validate_v2_release_reports(release_metadata, selected_files)
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
     _validate_bundle_name(target_name)
@@ -1557,7 +1619,10 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
                 "local_output": "working-storage-not-citation-target",
             },
             "cold_verification": {
-                "required_inputs": list(_REQUIRED_RELEASE_METADATA_ROLES),
+                "required_inputs": [
+                    *_REQUIRED_RELEASE_METADATA_ROLES,
+                    *(role for role in _SNQI_V2_ASSETS if role in metadata_records),
+                ],
                 "credentials": "not_recorded",
                 "snqi_claim_policy": "advisory_no_ranking",
             },
@@ -2343,6 +2408,288 @@ def _check_snqi_field_consistency(
     return _snqi_build_consistency_result(scan, diagnostics_ordering, rejections, integrity)
 
 
+def _validate_snqi_v2_family_vectors(vectors: list[Any]) -> None:
+    """Reject a sensitivity grid that differs from the versioned family asset."""
+    from robot_sf.benchmark.snqi.v2_reports import family_vectors  # noqa: PLC0415
+
+    for index, (stored, declared) in enumerate(zip(vectors, family_vectors(), strict=True)):
+        if not isinstance(stored, Mapping) or any(
+            stored.get(field) != declared[field] for field in ("name", "kind", "weights")
+        ):
+            raise ValueError(f"weight-family vector {index} differs from the declared grid")
+
+
+def _snqi_v2_report_problem(
+    path: Path, name: str, spec: Any, metrics: Mapping[str, Any]
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """Check a report against bundled assets and source manifest paths.
+
+    Returns:
+        The decoded report and no error, or a located error message.
+    """
+    try:
+        report = _read_json_file(path)
+        provenance = report["provenance"]
+        if report.get("episode_count") is None or not isinstance(provenance, Mapping):
+            raise ValueError("missing episode count or provenance")
+        for role in ("weights", "anchors", "family"):
+            if provenance.get(f"snqi_v2_{role}_sha256") != spec.hashes[role] or provenance.get(
+                f"snqi_v2_{role}_path"
+            ) != metrics.get(f"snqi_v2_{role}_path"):
+                raise ValueError(f"{role} provenance disagrees with bundled specification")
+        if provenance.get("snqi_v2_force_source") != spec.force_source:
+            raise ValueError("force source disagrees with bundled specification")
+        if name == "family" and (
+            report.get("family") != "V2-F"
+            or not isinstance(report.get("vectors"), list)
+            or len(report["vectors"]) != 2013
+            or report.get("stratified_count") != 2011
+        ):
+            raise ValueError("missing declared weight family")
+        if name == "family":
+            _validate_snqi_v2_family_vectors(report["vectors"])
+        if name == "diagnostics" and report.get("family_report") != "snqi_v2_family.json":
+            raise ValueError("paired family report is not named")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        return None, f"SNQI-v2 {name} report is invalid: {exc}"
+    return report, None
+
+
+def _snqi_v2_row_problem(
+    row: Mapping[str, Any], spec: Any, *, expected_algorithm: str
+) -> str | None:
+    """Recompute a row under its independently declared release arm.
+
+    Returns:
+        A mismatch reason, or ``None`` when the stored fields agree.
+    """
+    from robot_sf.benchmark.snqi.v2_reports import score_episode  # noqa: PLC0415
+    from robot_sf.benchmark.snqi.v2_spec import TERMS  # noqa: PLC0415
+
+    recorded = row["metrics"]
+    if row.get("algo") != expected_algorithm:
+        return "episode algorithm disagrees with release manifest arm"
+    expected = score_episode(row, spec, expected_algorithm=expected_algorithm)["metrics"]
+    expected_terms = expected["snqi_v2_terms"]
+    recorded_terms = recorded["snqi_v2_terms"]
+    if not isinstance(recorded_terms, Mapping) or set(recorded_terms) != set(TERMS):
+        return "term set is incomplete"
+    for term in TERMS:
+        value = recorded_terms[term]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or abs(value - expected_terms[term]) > 1e-12
+        ):
+            return f"term {term} differs from recomputation"
+    stored_score = recorded["snqi_v2"]
+    if (
+        isinstance(stored_score, bool)
+        or not isinstance(stored_score, (int, float))
+        or not math.isfinite(stored_score)
+        or abs(stored_score - expected["snqi_v2"]) > 1e-12
+    ):
+        return "score differs from recomputation"
+    return None
+
+
+def _snqi_v2_expected_arm_algorithms(payload_dir: Path, violations: list[str]) -> dict[str, str]:
+    """Bind each run directory to the resolved manifest's planner algorithm.
+
+    Returns:
+        Run-directory names mapped to independently declared algorithms.
+    """
+    try:
+        manifest = _read_json_file(payload_dir / "release" / "release_manifest.resolved.json")
+        planners = manifest["planners"]
+        keys = planners["keys"]
+        identities = planners["config_identities"]
+        kinematics = manifest["kinematics"]["matrix"]
+        if (
+            not isinstance(keys, list)
+            or not keys
+            or not isinstance(identities, list)
+            or not isinstance(kinematics, list)
+            or not kinematics
+            or any(not isinstance(value, str) or not value for value in (*keys, *kinematics))
+            or len(set(keys)) != len(keys)
+            or len(set(kinematics)) != len(kinematics)
+        ):
+            raise ValueError("planner keys or kinematics are malformed")
+        algorithms: dict[str, str] = {}
+        for entry in identities:
+            if not isinstance(entry, Mapping):
+                raise ValueError("planner config identity is malformed")
+            key, algorithm = entry.get("key"), entry.get("algo")
+            if (
+                not isinstance(key, str)
+                or key not in keys
+                or key in algorithms
+                or not isinstance(algorithm, str)
+                or not algorithm
+            ):
+                raise ValueError("planner config identity key or algorithm is invalid")
+            algorithms[key] = algorithm
+        if set(algorithms) != set(keys):
+            raise ValueError("planner config identities do not match the release roster")
+        return {f"{key}__{mode}": algorithms[key] for key in keys for mode in kinematics}
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        violations.append(f"SNQI-v2 release arm declaration is invalid: {exc}")
+        return {}
+
+
+def _snqi_v2_scan_rows(
+    payload_dir: Path, spec: Any, expected_algorithms: Mapping[str, str]
+) -> tuple[int, int, list[str]]:
+    """Count every v2 row mismatch and retain a bounded, located sample.
+
+    Returns:
+        Row count, mismatch count, and a bounded list of located problems.
+    """
+    rows = 0
+    mismatches = 0
+    violations: list[str] = []
+    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        expected_algorithm = expected_algorithms.get(episodes_path.parent.name)
+        if expected_algorithm is None:
+            violations.append(
+                f"SNQI-v2 run has no declared release arm: {episodes_path.parent.name}"
+            )
+            continue
+        try:
+            stream = episodes_path.open(encoding="utf-8")
+        except OSError as exc:
+            violations.append(f"cannot read SNQI-v2 episodes {episodes_path}: {exc}")
+            continue
+        with stream:
+            for line_number, line in enumerate(stream, 1):
+                if not line.strip():
+                    continue
+                rows += 1
+                try:
+                    problem = _snqi_v2_row_problem(
+                        json.loads(line), spec, expected_algorithm=expected_algorithm
+                    )
+                except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                    problem = str(exc)
+                if problem is not None:
+                    mismatches += 1
+                    if mismatches <= 20:
+                        violations.append(f"{episodes_path}:{line_number}: {problem}")
+    return rows, mismatches, violations
+
+
+def _check_snqi_v2_field_consistency(payload_dir: Path) -> dict[str, Any]:
+    """Recompute every declared v2 field from the bundle's three pinned assets.
+
+    Returns:
+        Row counts, bounded mismatch locations, and asset integrity evidence.
+    """
+    declarations: list[str] = []
+    metrics = _read_snqi_v2_manifest_metrics(payload_dir, required=True, violations=declarations)
+    if not any(str(key).startswith("snqi_v2_") for key in metrics):
+        return {"checked": False, "violation_count": 0, "violations": []}
+
+    # The assets are verified against checksums.sha256 and the resolved manifest
+    # elsewhere in this preflight. Never consult checkout assets.
+    from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec  # noqa: PLC0415
+
+    asset_dir = payload_dir / "release_metadata" / "snqi_v2"
+    violations = list(declarations)
+    try:
+        spec = load_snqi_v2_spec(
+            asset_dir / "weights.v2.0.json",
+            asset_dir / "anchors.v2.0.json",
+            asset_dir / "family.v2.0.yaml",
+        )
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        violations.append(f"bundled SNQI-v2 specification is invalid: {exc}")
+        return {
+            "checked": True,
+            "rows": 0,
+            "violation_count": len(violations),
+            "violations": violations,
+        }
+
+    reports: dict[str, Mapping[str, Any]] = {}
+    for name in ("family", "diagnostics"):
+        report, problem = _snqi_v2_report_problem(
+            payload_dir / "reports" / f"snqi_v2_{name}.json", name, spec, metrics
+        )
+        if problem is not None:
+            violations.append(problem)
+        elif report is not None:
+            reports[name] = report
+
+    expected_algorithms = _snqi_v2_expected_arm_algorithms(payload_dir, violations)
+    rows, mismatch_count, row_problems = _snqi_v2_scan_rows(payload_dir, spec, expected_algorithms)
+    other_violation_count = len(violations) + len(row_problems) - min(mismatch_count, 20)
+    violations.extend(row_problems)
+    if not rows:
+        violations.append("declared SNQI-v2 bundle has no episode rows")
+        other_violation_count += 1
+    for name, report in reports.items():
+        if report.get("episode_count") != rows:
+            violations.append(f"SNQI-v2 {name} episode count disagrees with bundled rows")
+            other_violation_count += 1
+    if mismatch_count > 20:
+        violations.append(f"SNQI-v2 mismatch sample omits {mismatch_count - 20} further rows")
+    return {
+        "checked": True,
+        "rows": rows,
+        "mismatch_count": mismatch_count,
+        "violation_count": other_violation_count + mismatch_count,
+        "violations": violations,
+        "integrity": dict(spec.hashes),
+    }
+
+
+def _check_robot_force_report_consistency(payload_dir: Path) -> dict[str, Any]:
+    """Regenerate the v2 force report from cold episode rows and equivalence evidence.
+
+    Returns:
+        Whether the check ran and any deterministic regeneration violations.
+    """
+    violations: list[str] = []
+    metrics = _read_snqi_v2_manifest_metrics(payload_dir, required=True, violations=violations)
+    if not any(str(key).startswith("snqi_v2_") for key in metrics):
+        return {"checked": False, "violations": violations}
+
+    from scripts.analysis.issue_9668_robot_force_validation import (  # noqa: PLC0415
+        _render_markdown,
+        build_report,
+    )
+
+    report_path = payload_dir / "reports" / "robot_force_validation.json"
+    markdown_path = report_path.with_suffix(".md")
+    resolved_path = payload_dir / "release" / "release_manifest.resolved.json"
+    equivalence_path = payload_dir / "reports" / "metric_equivalence.json"
+    try:
+        report = _read_json_file(report_path)
+        resolved = _read_json_file(resolved_path)
+        source = resolved.get("source_sha")
+        if not isinstance(source, str) or not source:
+            raise ValueError("resolved manifest has no source_sha")
+        matrix = resolved.get("matrix")
+        rows = matrix.get("expected_episode_cells") if isinstance(matrix, Mapping) else None
+        if type(rows) is not int or rows <= 0 or report.get("episodes") != rows:
+            raise ValueError("robot-force episode count disagrees with resolved release matrix")
+        expected = build_report(
+            payload_dir,
+            expected_source=source,
+            expected_rows=rows,
+            equivalence_report=equivalence_path,
+        )
+        if report != expected:
+            violations.append("robot-force report differs from cold deterministic regeneration")
+        if markdown_path.read_text(encoding="utf-8") != _render_markdown(expected):
+            violations.append("robot-force markdown differs from cold deterministic regeneration")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        violations.append(f"robot-force report cannot be regenerated from bundled rows: {exc}")
+    return {"checked": True, "violations": violations}
+
+
 def _manifest_checksum_mapping(
     manifest_files: list[object],
     *,
@@ -2437,6 +2784,56 @@ def _preflight_check_channels(
         warnings.append("publication_manifest.json omits publication_channels")
 
 
+def _read_snqi_v2_manifest_metrics(
+    payload_dir: Path, *, required: bool, violations: list[str]
+) -> Mapping[str, Any]:
+    """Read the bundled declaration before deciding which v2 roles are required.
+
+    Returns:
+        Resolved metrics declaration, or an empty mapping for a legacy bundle.
+    """
+    path = payload_dir / "release" / "release_manifest.resolved.json"
+    if not required or not path.is_file():
+        return {}
+    try:
+        raw_metrics = _read_json_file(path).get("metrics")
+    except ValueError as exc:
+        violations.append(f"release metadata manifest is malformed: {exc}")
+        return {}
+    return raw_metrics if isinstance(raw_metrics, Mapping) else {}
+
+
+def _check_snqi_v2_manifest_binding(
+    role: str, actual_sha: str, metrics: Mapping[str, Any], violations: list[str]
+) -> None:
+    """Require the cold payload to match the release manifest's pinned digest."""
+    if role not in _SNQI_V2_ASSETS:
+        return
+    _, path_key, sha_key = _SNQI_V2_ASSETS[role]
+    if not isinstance(metrics.get(path_key), str) or metrics.get(sha_key) != actual_sha:
+        violations.append(f"release metadata role {role!r} disagrees with release manifest")
+
+
+def _publication_manifest_entries_by_path(
+    manifest: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    """Index declared payload files by their canonical bundle-relative path.
+
+    Returns:
+        Manifest file entries keyed by ``payload/``-prefixed paths.
+    """
+    entries: dict[str, Mapping[str, Any]] = {}
+    raw_entries = manifest.get("files")
+    if isinstance(raw_entries, list):
+        for entry in raw_entries:
+            if not isinstance(entry, Mapping):
+                continue
+            path = entry.get("path")
+            if isinstance(path, str) and path.strip():
+                entries.setdefault(f"payload/{path.removeprefix('payload/')}", entry)
+    return entries
+
+
 def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     payload_dir: Path,
     manifest: Mapping[str, Any],
@@ -2457,18 +2854,15 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     if not isinstance(files, Mapping):
         violations.append("publication_manifest.release_metadata.files must be an object")
         return
-    manifest_entries = manifest.get("files")
-    manifest_entries_by_path: dict[str, Mapping[str, Any]] = {}
-    if isinstance(manifest_entries, list):
-        for raw_entry in manifest_entries:
-            if not isinstance(raw_entry, Mapping):
-                continue
-            raw_manifest_path = raw_entry.get("path")
-            if not isinstance(raw_manifest_path, str) or not raw_manifest_path.strip():
-                continue
-            normalized_path = raw_manifest_path.removeprefix("payload/")
-            manifest_entries_by_path.setdefault(f"payload/{normalized_path}", raw_entry)
-    required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
+    manifest_entries_by_path = _publication_manifest_entries_by_path(manifest)
+    resolved_metrics = _read_snqi_v2_manifest_metrics(
+        payload_dir, required=required, violations=violations
+    )
+    v2_declared = any(str(key).startswith("snqi_v2_") for key in resolved_metrics)
+    v2_roles = tuple(_SNQI_V2_ASSETS) if v2_declared else ()
+    required_roles = (*_REQUIRED_RELEASE_METADATA_ROLES, *v2_roles) if required else tuple(files)
+    if required and not v2_declared and any(role in files for role in _SNQI_V2_ASSETS):
+        violations.append("release metadata has SNQI-v2 assets without a manifest declaration")
     for role in required_roles:
         entry = files.get(role)
         if not isinstance(entry, Mapping):
@@ -2505,6 +2899,7 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
         actual_sha = _sha256_file(candidate)
         if not isinstance(declared_sha, str) or declared_sha.lower() != actual_sha:
             violations.append(f"release metadata role {role!r} checksum does not match payload")
+        _check_snqi_v2_manifest_binding(role, actual_sha, resolved_metrics, violations)
 
     if required and manifest_entries_by_path:
         reserved_prefix = f"payload/{_RELEASE_METADATA_NAMESPACE}/"
@@ -2534,6 +2929,8 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
         cold = block.get("cold_verification")
         if not isinstance(cold, Mapping) or cold.get("credentials") != "not_recorded":
             violations.append("release metadata cold-verification credential policy is invalid")
+        elif v2_declared and cold.get("required_inputs") != list(required_roles):
+            violations.append("release metadata cold-verification v2 input inventory is incomplete")
 
 
 def _preflight_check_release_reconciliation(
@@ -2732,6 +3129,10 @@ def verify_publication_bundle_preflight(
     # bundles report checked=False and are unaffected.
     snqi_evidence = _check_snqi_field_consistency(payload_dir)
     violations.extend(snqi_evidence.get("violations", []))
+    snqi_v2_evidence = _check_snqi_v2_field_consistency(payload_dir)
+    violations.extend(snqi_v2_evidence.get("violations", []))
+    robot_force_evidence = _check_robot_force_report_consistency(payload_dir)
+    violations.extend(robot_force_evidence["violations"])
 
     status = "pass" if not violations else "fail"
     report = {
@@ -2747,6 +3148,16 @@ def verify_publication_bundle_preflight(
             "publication_commit": repository_commit,
             "goal_reached_timeout_rows": goal_timeout_rows,
             "snqi_field_consistency": snqi_evidence,
+            **(
+                {"snqi_v2_field_consistency": snqi_v2_evidence}
+                if snqi_v2_evidence["checked"]
+                else {}
+            ),
+            **(
+                {"robot_force_report_consistency": robot_force_evidence}
+                if robot_force_evidence["checked"]
+                else {}
+            ),
         },
     }
     if status == "fail":

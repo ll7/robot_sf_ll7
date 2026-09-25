@@ -250,3 +250,5 @@ class CampaignConfig:
     # changed path after loading.
     source_config_path: Path | None = None
     source_config_sha256: str | None = None
+    # Set only by the explicit pre-DOI runner. Never parsed from campaign YAML.
+    publication_identity_mode: str = "bound"

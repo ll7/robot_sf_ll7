@@ -335,7 +335,7 @@ def test_hypothesis_is_development_only_and_grouped_with_transitive_guards() -> 
     project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
     assert any(
         requirement.startswith("hypothesis>=")
-        for requirement in project["project"]["optional-dependencies"]["dev"]
+        for requirement in project["dependency-groups"]["dev"]
     )
     assert not any(
         requirement.startswith("hypothesis") for requirement in project["project"]["dependencies"]

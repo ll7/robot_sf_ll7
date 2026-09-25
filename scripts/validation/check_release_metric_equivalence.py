@@ -1,0 +1,477 @@
+#!/usr/bin/env python3
+"""Fail closed when a successor campaign changes a predecessor episode metric.
+
+The predecessor is an immutable, SHA-pinned publication archive. The successor is
+an unpacked campaign root containing ``runs/<arm>/episodes.jsonl``. The command
+compares all predecessor metric fields and episode outcomes by arm, scenario, and
+seed; new metric fields in the successor are allowed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import tarfile
+from pathlib import Path
+from typing import Any
+
+SCIENTIFIC_MANIFEST_FIELDS = (
+    "matrix",
+    "scenario",
+    "seed_policy",
+    "planners",
+    "kinematics",
+    "metrics",
+)
+ROBOT_FORCE_UNCONDITIONAL = (
+    "impulse_total",
+    "peak",
+    "time_above_ref_s",
+    "exposed_ped_count",
+)
+ROBOT_FORCE_CONDITIONAL = ("impulse_per_exposed_ped", "mean_active")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _source(row: dict[str, Any]) -> str:
+    provenance = row.get("result_provenance")
+    provenance_sha = provenance.get("repo_commit") if isinstance(provenance, dict) else None
+    git_sha = row.get("git_hash")
+    if provenance_sha and git_sha and provenance_sha != git_sha:
+        raise ValueError("row has conflicting source commits")
+    source = provenance_sha or git_sha
+    if not isinstance(source, str) or len(source) != 40:
+        raise ValueError("row has no full source commit")
+    return source
+
+
+def _key(arm: str, row: dict[str, Any]) -> tuple[str, str, int]:
+    scenario = row.get("scenario_id")
+    seed = row.get("seed")
+    if not isinstance(scenario, str) or not scenario or type(seed) is not int:
+        raise ValueError("row needs scenario_id and integer seed")
+    return arm, scenario, seed
+
+
+def _legacy_view(row: dict[str, Any]) -> dict[str, Any]:
+    metrics = row.get("metrics")
+    if not isinstance(metrics, dict):
+        raise ValueError("row has no metrics object")
+    return {
+        "metrics": metrics,
+        "metric_values": row.get("metric_values"),
+        "outcome": row.get("outcome"),
+        "status": row.get("status"),
+        "steps": row.get("steps"),
+    }
+
+
+def _read_archive(
+    archive: Path, expected_source: str
+) -> dict[tuple[str, str, int], dict[str, Any]]:
+    rows: dict[tuple[str, str, int], dict[str, Any]] = {}
+    with tarfile.open(archive, "r:gz") as handle:
+        members = sorted(
+            (
+                member
+                for member in handle.getmembers()
+                if member.isfile()
+                and "/payload/runs/" in member.name
+                and member.name.endswith("/episodes.jsonl")
+            ),
+            key=lambda member: member.name,
+        )
+        if not members:
+            raise ValueError("archive contains no campaign episode rows")
+        for member in members:
+            arm = Path(member.name).parent.name.removesuffix("__differential_drive")
+            stream = handle.extractfile(member)
+            if stream is None:
+                raise ValueError(f"cannot read {member.name}")
+            for line_number, raw in enumerate(stream, 1):
+                if not raw.strip():
+                    continue
+                row = json.loads(raw)
+                if _source(row) != expected_source:
+                    raise ValueError(f"archive source mismatch at {member.name}:{line_number}")
+                key = _key(arm, row)
+                if key in rows:
+                    raise ValueError(f"duplicate archive identity: {key}")
+                rows[key] = _legacy_view(row)
+    return rows
+
+
+def _read_candidate(root: Path, expected_source: str) -> dict[tuple[str, str, int], dict[str, Any]]:
+    rows: dict[tuple[str, str, int], dict[str, Any]] = {}
+    paths = sorted((root / "runs").glob("*/episodes.jsonl"))
+    if not paths:
+        raise ValueError("candidate contains no runs/*/episodes.jsonl")
+    for path in paths:
+        arm = path.parent.name.removesuffix("__differential_drive")
+        with path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if _source(row) != expected_source:
+                    raise ValueError(f"candidate source mismatch at {path}:{line_number}")
+                key = _key(arm, row)
+                if key in rows:
+                    raise ValueError(f"duplicate candidate identity: {key}")
+                rows[key] = _legacy_view(row)
+    return rows
+
+
+def _read_archive_manifest(archive: Path, expected_source: str) -> dict[str, Any]:
+    with tarfile.open(archive, "r:gz") as handle:
+        members = [
+            member
+            for member in handle.getmembers()
+            if member.isfile()
+            and member.name.endswith("/payload/release/release_manifest.resolved.json")
+        ]
+        if len(members) != 1:
+            raise ValueError("archive must contain exactly one resolved release manifest")
+        stream = handle.extractfile(members[0])
+        if stream is None:
+            raise ValueError("cannot read archive release manifest")
+        payload = json.load(stream)
+    return _validate_manifest(payload, expected_source)
+
+
+def _read_candidate_manifest(root: Path, expected_source: str) -> dict[str, Any]:
+    path = root / "release" / "release_manifest.resolved.json"
+    if not path.is_file():
+        raise ValueError("candidate has no resolved release manifest")
+    return _validate_manifest(json.loads(path.read_text(encoding="utf-8")), expected_source)
+
+
+def _read_scientific_candidate_manifest(  # noqa: C901
+    root: Path, expected_source: str
+) -> dict[str, Any]:
+    """Verify publication-free custody before comparing predecessor science."""
+    path = root / "release" / "scientific_candidate.json"
+    if not path.is_file():
+        raise ValueError("candidate has no scientific_candidate.json")
+    identity = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(identity, dict) or identity.get("schema_version") != (
+        "benchmark-scientific-candidate.v1"
+    ):
+        raise ValueError("scientific candidate schema is invalid")
+    forbidden = {
+        "release_tag",
+        "doi",
+        "version_doi",
+        "concept_doi",
+        "publication",
+        "doi_url",
+        "release_url",
+        "release_asset_url",
+    }
+
+    def reject_publication(value: Any) -> None:
+        if isinstance(value, dict):
+            leaked = forbidden & value.keys()
+            if leaked:
+                raise ValueError(
+                    f"scientific candidate contains publication fields: {sorted(leaked)}"
+                )
+            for item in value.values():
+                reject_publication(item)
+        elif isinstance(value, list):
+            for item in value:
+                reject_publication(item)
+        elif isinstance(value, str) and ("{{" in value or "}}" in value):
+            raise ValueError("scientific candidate contains an unresolved template slot")
+
+    reject_publication(identity)
+    if identity.get("source_sha") != expected_source:
+        raise ValueError("scientific candidate source mismatch")
+    raw = identity.get("raw_episode_sha256")
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError("scientific candidate has no raw episode checksums")
+    observed = {
+        path.relative_to(root).as_posix(): _sha256(path)
+        for path in sorted((root / "runs").glob("*/episodes.jsonl"))
+    }
+    if observed != raw:
+        raise ValueError("scientific candidate raw episode checksums mismatch")
+    return _validate_manifest(identity.get("scientific_manifest"), expected_source)
+
+
+def _validate_manifest(payload: Any, expected_source: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("resolved release manifest must be an object")
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, dict) or provenance.get("source_sha") != expected_source:
+        raise ValueError("resolved release manifest source mismatch")
+    for field in SCIENTIFIC_MANIFEST_FIELDS:
+        if not isinstance(payload.get(field), dict):
+            raise ValueError(f"resolved release manifest has no {field} object")
+    return payload
+
+
+def scientific_manifest_differences(
+    baseline: dict[str, Any], candidate: dict[str, Any]
+) -> list[str]:
+    """Compare the frozen matrix, roster, seeds, and legacy metric assets.
+
+    Exactly the six v2 asset declarations may be added. The separate release
+    identity gate checks the changed campaign-config checksum.
+    """
+    result: list[str] = []
+    for field in SCIENTIFIC_MANIFEST_FIELDS:
+        result.extend(_differences(baseline[field], candidate[field], field, tolerance=0))
+        result.extend(_unexpected_additions(baseline[field], candidate[field], field))
+    return sorted(set(result))
+
+
+def _unexpected_additions(old: Any, new: Any, path: str) -> list[str]:
+    """Reject successor-only scientific keys, except the six declared v2 assets.
+
+    Returns:
+        Paths of added keys that change the predecessor's scientific contract.
+    """
+    if isinstance(old, dict) and isinstance(new, dict):
+        allowed_v2 = {
+            f"snqi_v2_{role}_{field}"
+            for role in ("weights", "anchors", "family")
+            for field in ("path", "sha256")
+        }
+        additions = [
+            f"{path}.{key}"
+            for key in new.keys() - old.keys()
+            if path != "metrics" or key not in allowed_v2
+        ]
+        for key in old.keys() & new.keys():
+            additions.extend(_unexpected_additions(old[key], new[key], f"{path}.{key}"))
+        return additions
+    if isinstance(old, list) and isinstance(new, list) and len(old) == len(new):
+        return [
+            added
+            for index, (left, right) in enumerate(zip(old, new, strict=True))
+            for added in _unexpected_additions(left, right, f"{path}[{index}]")
+        ]
+    return []
+
+
+def _numbers_equal(old: int | float, new: int | float, *, tolerance: float) -> bool:
+    """Compare finite numbers by tolerance and legacy unavailable sentinels by class."""
+    if math.isnan(old) or math.isnan(new):
+        return math.isnan(old) and math.isnan(new)
+    if math.isinf(old) or math.isinf(new):
+        return old == new
+    return abs(old - new) <= tolerance
+
+
+def _differences(old: Any, new: Any, path: str, *, tolerance: float) -> list[str]:
+    if isinstance(old, dict):
+        if not isinstance(new, dict):
+            return [path]
+        result = [f"{path}.{key}" for key in old.keys() - new.keys()]
+        for key in sorted(old.keys() & new.keys()):
+            result.extend(_differences(old[key], new[key], f"{path}.{key}", tolerance=tolerance))
+        return result
+    if isinstance(old, list):
+        if not isinstance(new, list) or len(old) != len(new):
+            return [path]
+        result = []
+        for index, (left, right) in enumerate(zip(old, new, strict=True)):
+            result.extend(_differences(left, right, f"{path}[{index}]", tolerance=tolerance))
+        return result
+    if isinstance(old, bool) or isinstance(new, bool):
+        return [] if type(old) is type(new) and old == new else [path]
+    if isinstance(old, (int, float)) and isinstance(new, (int, float)):
+        # Frozen releases use NaN as an explicit unavailable sentinel in a few
+        # legacy fields. Preserve its class exactly instead of treating NaN == NaN
+        # as a numerical comparison or making a self-comparison fail.
+        return [] if _numbers_equal(old, new, tolerance=tolerance) else [path]
+    return [] if type(old) is type(new) and old == new else [path]
+
+
+def compare(
+    baseline: dict[tuple[str, str, int], dict[str, Any]],
+    candidate: dict[tuple[str, str, int], dict[str, Any]],
+    *,
+    tolerance: float = 1e-12,
+) -> dict[str, Any]:
+    """Return every missing, extra, or changed predecessor field by episode identity."""
+    mismatches: list[dict[str, Any]] = []
+    for key in sorted(baseline.keys() | candidate.keys()):
+        if key not in baseline:
+            paths = ["unexpected_identity"]
+        elif key not in candidate:
+            paths = ["missing_identity"]
+        else:
+            paths = _differences(baseline[key], candidate[key], "episode", tolerance=tolerance)
+        if paths:
+            mismatches.append(
+                {"arm": key[0], "scenario_id": key[1], "seed": key[2], "paths": paths}
+            )
+    return {
+        "status": "pass" if not mismatches else "mismatch",
+        "baseline_rows": len(baseline),
+        "candidate_rows": len(candidate),
+        "paired_rows": len(baseline.keys() & candidate.keys()),
+        "mismatch_episodes": len(mismatches),
+        "mismatches": mismatches,
+        "absolute_tolerance": tolerance,
+    }
+
+
+def _robot_force_block_problems(metrics: dict[str, Any], prefix: str) -> list[str]:
+    """Check finite reductions and declared zero-exposure unavailable values."""
+    problems: list[str] = []
+    count = metrics.get(f"{prefix}_exposed_ped_count")
+    if (
+        type(count) not in (int, float)
+        or not math.isfinite(count)
+        or count < 0
+        or not float(count).is_integer()
+    ):
+        problems.append(f"{prefix}_exposed_ped_count")
+    for suffix in ROBOT_FORCE_UNCONDITIONAL:
+        if suffix == "exposed_ped_count":
+            continue
+        value = metrics.get(f"{prefix}_{suffix}")
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            problems.append(f"{prefix}_{suffix}")
+    for suffix in ROBOT_FORCE_CONDITIONAL:
+        value = metrics.get(f"{prefix}_{suffix}")
+        if count == 0 and value is None:
+            continue
+        if count == 0 or type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            problems.append(f"{prefix}_{suffix}")
+    return problems
+
+
+def _robot_force_row_status(metrics: Any) -> tuple[list[str], bool, bool]:
+    """Classify force fields on one row, including an optional complete pp variant."""
+    if not isinstance(metrics, dict):
+        return ["metrics"], False, False
+    problems = _robot_force_block_problems(metrics, "robot_force")
+    zero_exposure = metrics.get("robot_force_exposed_ped_count") == 0
+    pp_keys = tuple(
+        f"robot_force_pp_equiv_{suffix}"
+        for suffix in (*ROBOT_FORCE_UNCONDITIONAL, *ROBOT_FORCE_CONDITIONAL)
+    )
+    present = [field in metrics for field in pp_keys]
+    if not any(present):
+        return problems, zero_exposure, True
+    if not all(present):
+        return [*problems, "robot_force_pp_equiv_incomplete"], zero_exposure, False
+    problems.extend(_robot_force_block_problems(metrics, "robot_force_pp_equiv"))
+    return problems, zero_exposure, False
+
+
+def scan_robot_force_metrics(root: Path, expected_source: str) -> dict[str, Any]:
+    """Verify release-row force reductions without treating missing exposure as zero."""
+    checked = 0
+    zero_exposure = 0
+    pp_equivalent_absent = 0
+    failed = 0
+    examples: list[dict[str, Any]] = []
+    paths = sorted((root / "runs").glob("*/episodes.jsonl"))
+    if not paths:
+        raise ValueError("candidate contains no runs/*/episodes.jsonl")
+    for path in paths:
+        arm = path.parent.name.removesuffix("__differential_drive")
+        with path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if _source(row) != expected_source:
+                    raise ValueError(f"candidate source mismatch at {path}:{line_number}")
+                key = _key(arm, row)
+                checked += 1
+                problems, zero, pp_absent = _robot_force_row_status(row.get("metrics"))
+                zero_exposure += zero
+                pp_equivalent_absent += pp_absent
+                if problems:
+                    failed += 1
+                    if len(examples) < 100:
+                        examples.append(
+                            {
+                                "arm": key[0],
+                                "scenario_id": key[1],
+                                "seed": key[2],
+                                "fields": sorted(set(problems)),
+                            }
+                        )
+    return {
+        "status": "pass" if failed == 0 else "invalid_robot_force_metrics",
+        "checked_rows": checked,
+        "failed_rows": failed,
+        "zero_exposure_rows": zero_exposure,
+        "pp_equivalent_absent_rows": pp_equivalent_absent,
+        "examples": examples,
+    }
+
+
+def main() -> int:
+    """Verify a pinned archive against one exact-source successor campaign."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--baseline-archive", type=Path, required=True)
+    parser.add_argument("--baseline-sha256", required=True)
+    parser.add_argument("--baseline-source-sha", required=True)
+    parser.add_argument("--candidate-root", type=Path, required=True)
+    parser.add_argument("--candidate-source-sha", required=True)
+    parser.add_argument("--expected-rows", type=int, default=20160)
+    parser.add_argument("--require-robot-force-metrics", action="store_true")
+    parser.add_argument(
+        "--scientific-candidate",
+        action="store_true",
+        help="Read the publication-free, raw-hash-bound candidate identity",
+    )
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    if _sha256(args.baseline_archive) != args.baseline_sha256:
+        raise ValueError("baseline archive SHA-256 mismatch")
+    baseline = _read_archive(args.baseline_archive, args.baseline_source_sha)
+    candidate = _read_candidate(args.candidate_root, args.candidate_source_sha)
+    baseline_manifest = _read_archive_manifest(args.baseline_archive, args.baseline_source_sha)
+    candidate_manifest = (
+        _read_scientific_candidate_manifest(args.candidate_root, args.candidate_source_sha)
+        if args.scientific_candidate
+        else _read_candidate_manifest(args.candidate_root, args.candidate_source_sha)
+    )
+    report = compare(baseline, candidate)
+    manifest_differences = scientific_manifest_differences(baseline_manifest, candidate_manifest)
+    report.update(
+        {
+            "baseline_archive_sha256": args.baseline_sha256,
+            "baseline_source_sha": args.baseline_source_sha,
+            "candidate_source_sha": args.candidate_source_sha,
+            "expected_rows": args.expected_rows,
+            "scientific_manifest_differences": manifest_differences,
+        }
+    )
+    if args.require_robot_force_metrics:
+        force_report = scan_robot_force_metrics(args.candidate_root, args.candidate_source_sha)
+        report["robot_force_metrics"] = force_report
+        if force_report["status"] != "pass":
+            report["status"] = "invalid_robot_force_metrics"
+    if len(baseline) != args.expected_rows or len(candidate) != args.expected_rows:
+        report["status"] = "identity_count_mismatch"
+    if manifest_differences:
+        report["status"] = "scientific_manifest_mismatch"
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(
+        f"{report['status']}: {report['paired_rows']} paired; {report['mismatch_episodes']} mismatches"
+    )
+    return 0 if report["status"] == "pass" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

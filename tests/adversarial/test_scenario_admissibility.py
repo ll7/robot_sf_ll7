@@ -624,6 +624,12 @@ def test_certificate_rejects_only_structural_exclusions() -> None:
             "invalid", eligibility="excluded", route_reason="start_outside_map_bounds"
         ),
     )
+    endpoint_in_obstacle = classify_scenario_admissibility(
+        "case-static",
+        scenario_certificate=_certificate(
+            "invalid", eligibility="excluded", route_reason="start_inside_static_obstacle"
+        ),
+    )
 
     assert structural.verdict == STRUCTURALLY_INVALID
     assert structural.search_disposition == "reject"
@@ -633,7 +639,14 @@ def test_certificate_rejects_only_structural_exclusions() -> None:
     assert kinematic.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert kinematic.search_disposition == "retain"
     assert invalid_geometry.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
-    assert "scenario_certificate_invalidity_unresolved" in invalid_geometry.reason_codes
+    assert "scenario_certificate_route_geometry_not_scenario_wide" in (
+        invalid_geometry.reason_codes
+    )
+    assert endpoint_in_obstacle.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert endpoint_in_obstacle.search_disposition == "retain"
+    assert "scenario_certificate_route_geometry_not_scenario_wide" in (
+        endpoint_in_obstacle.reason_codes
+    )
     assert impossible.assumptions["scenario_certificate"]["settings"] == {"robot_radius_m": 0.4}
 
 
@@ -1423,8 +1436,73 @@ def test_oracle_report_producer_digest_rejects_stale_same_path_report(tmp_path: 
     )
 
 
-def test_legacy_certificate_output_keeps_external_closure_unknown(tmp_path: Path) -> None:
-    """Legacy v1 output stays unknown when closure identity is only adapter-time."""
+def test_generated_certificate_binds_consumed_inputs_before_structural_rejection(
+    tmp_path: Path,
+) -> None:
+    """File certificates bind exact parser-consumed inputs before rejecting structural cases."""
+    scenario_path = tmp_path / "no_applicable_route.yaml"
+    map_path = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "case-no-applicable-route",
+                        "map_file": map_path.as_posix(),
+                        "robot_spawn_id": 999,
+                        "robot_goal_id": 999,
+                        "simulation_config": {"max_episode_steps": 100, "ped_density": 0.0},
+                        "robot_config": {},
+                        "seeds": [19],
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    consumed_inputs: list[dict[str, str]] = []
+    certificate = certificate_to_dict(
+        certify_scenario_file(
+            scenario_path,
+            scenario_id="case-no-applicable-route",
+            runtime_input_records=consumed_inputs,
+        )[0]
+    )
+    identity = scenario_input_identity(scenario_path, scenario_id="case-no-applicable-route")
+
+    assert certificate["schema_version"] == CERT_SCHEMA_VERSION
+    assert certificate["classification"] == "invalid"
+    assert certificate["reasons"] == ["no_applicable_robot_routes"]
+    assert certificate["evidence"]["source_artifact_sha256"] == identity["source_artifact_sha256"]
+    assert certificate["evidence"]["effective_input_sha256"] == identity["effective_input_sha256"]
+    assert certificate["evidence"]["effective_input_identity_stable"] is True
+    assert certificate["evidence"]["runtime_input_identity_stable"] is True
+    assert (
+        runtime_input_records_match(
+            identity,
+            consumed_inputs,
+            scenario_id="case-no-applicable-route",
+        )
+        is True
+    )
+
+    verdict = _classify_scenario_admissibility(
+        "case-no-applicable-route",
+        scenario_artifact_path=scenario_path,
+        scenario_id="case-no-applicable-route",
+        scenario_certificate=certificate,
+    )
+
+    assert verdict.verdict == STRUCTURALLY_INVALID
+    assert verdict.search_disposition == "reject"
+    assert "scenario_certificate_structurally_invalid" in verdict.reason_codes
+
+
+def test_legacy_certificate_without_producer_identity_keeps_external_closure_unknown(
+    tmp_path: Path,
+) -> None:
+    """Legacy v1 certificates without producer identity retain fail-closed behavior."""
     scenario_path = tmp_path / "case_static.yaml"
     map_path = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
     original_bytes = f"""scenarios:
@@ -1443,8 +1521,14 @@ def test_legacy_certificate_output_keeps_external_closure_unknown(tmp_path: Path
         certify_scenario_file(scenario_path, scenario_id="case-static")[0]
     )
     identity = scenario_input_identity(scenario_path, scenario_id="case-static")
-    assert "source_artifact_sha256" not in certificate["evidence"]
-    assert "effective_input_sha256" not in certificate["evidence"]
+    for key in (
+        "source_artifact_sha256",
+        "effective_input_sha256",
+        "effective_input_identity_stable",
+        "runtime_input_identity_stable",
+        "runtime_input_identity_failure_reason",
+    ):
+        certificate["evidence"].pop(key, None)
     verdict = _classify_scenario_admissibility(
         "case-static",
         scenario_artifact_path=scenario_path,
@@ -1465,8 +1549,10 @@ def test_legacy_certificate_output_keeps_external_closure_unknown(tmp_path: Path
     )
 
 
-def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: Path) -> None:
-    """A genuine legacy cert cannot exclude a changed map under the same root manifest."""
+def test_producer_bound_certificate_cannot_reject_after_external_map_changes(
+    tmp_path: Path,
+) -> None:
+    """A producer-bound cert cannot exclude a changed map under the same root manifest."""
     scenario_path = tmp_path / "scenario.yaml"
     map_path = tmp_path / "map.yaml"
     scenario_path.write_text(
@@ -1520,12 +1606,18 @@ def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: P
         }
 
     map_path.write_text(yaml.safe_dump(map_payload(straight_route=False)), encoding="utf-8")
-    legacy_certificate = certificate_to_dict(
+    producer_certificate = certificate_to_dict(
         certify_scenario_file(scenario_path, scenario_id="case-static")[0]
     )
-    assert legacy_certificate["classification"] == "kinodynamically_infeasible"
-    assert legacy_certificate["benchmark_eligibility"] == "excluded"
-    assert "effective_input_sha256" not in legacy_certificate["evidence"]
+    assert producer_certificate["classification"] == "kinodynamically_infeasible"
+    assert producer_certificate["benchmark_eligibility"] == "excluded"
+    assert producer_certificate["evidence"]["effective_input_identity_stable"] is True
+    assert (
+        producer_certificate["evidence"]["effective_input_sha256"]
+        == scenario_input_identity(scenario_path, scenario_id="case-static")[
+            "effective_input_sha256"
+        ]
+    )
     root_manifest_bytes = scenario_path.read_bytes()
 
     map_path.write_text(yaml.safe_dump(map_payload(straight_route=True)), encoding="utf-8")
@@ -1554,7 +1646,7 @@ def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: P
         "case-static",
         scenario_artifact_path=scenario_path,
         scenario_id="case-static",
-        scenario_certificate=legacy_certificate,
+        scenario_certificate=producer_certificate,
     )
 
     assert scenario_path.read_bytes() == root_manifest_bytes
@@ -1570,14 +1662,8 @@ def test_legacy_certificate_cannot_reject_after_external_map_changes(tmp_path: P
     )
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
-    assert "scenario_certificate_effective_input_identity_generation_unbound" in (
+    assert "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable" in (
         verdict.reason_codes
-    )
-    assert (
-        verdict.assumptions["scenario_certificate"]["identity_binding"][
-            "effective_input_generation_bound"
-        ]
-        is False
     )
 
 
@@ -2902,6 +2988,21 @@ def test_not_applicable_checkpoint_provenance_is_limited_to_classical_planners()
     assert classical.verdict == EMPIRICALLY_FEASIBLE
     assert rejected.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "reference_execution_provenance_incomplete" in rejected.reason_codes
+
+
+def test_checkpointed_planner_hash_remains_unknown_without_producer_binding() -> None:
+    """A caller-supplied learned-checkpoint hash is not a producer-bound execution identity."""
+    checkpointed = _execution("ppo", route_complete=True)
+    assert checkpointed["planner_checkpoint_sha256"] != "not_applicable"
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=checkpointed,
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "reference_execution_planner_checkpoint_unbound" in verdict.reason_codes
 
 
 def test_not_applicable_checkpoint_sentinel_rejects_checkpoint_backed_sicnav() -> None:

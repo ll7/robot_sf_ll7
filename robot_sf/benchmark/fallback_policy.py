@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -70,6 +71,10 @@ _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available"
 _RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 _RUNTIME_STATUS_COUNT_CONTAINERS = frozenset({"proposal_status_counts"})
 _RUNTIME_STATUS_COUNT_MARKERS = frozenset({"degraded", "fallback"})
+_RUNTIME_STOP_BEST_EFFORT = "stop_best_effort"
+_DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
+    {"config", "planner_contract", "safety_shield_contract"}
+)
 
 
 def is_verified_guarded_ppo(metadata: Any, *, expected_algorithm: str | None) -> bool:
@@ -102,7 +107,8 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
     status fields (including the predictive-foresight fallback prefix), explicit
-    boolean markers, and positive fallback counters fail closed.  An empty
+    boolean markers, the exact ``stop_best_effort`` shield label, and positive
+    or malformed fallback/stop-best-effort counters fail closed.  An empty
     ``fallback_reason`` is tolerated only beside an explicit false
     ``fallback_used`` or ``fallback_triggered`` flag. The shield's typed
     ``fallback_controller_state`` dictionary is traversed as diagnostic state,
@@ -136,6 +142,10 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
             for raw_key, item in value.items():
                 key = str(raw_key)
                 item_path = f"{path}.{key}" if path else key
+                if key == "decision_label":
+                    normalized = str(item).strip().lower().replace("-", "_")
+                    if normalized == _RUNTIME_STOP_BEST_EFFORT:
+                        return item_path, normalized
                 if key in _RUNTIME_STATUS_FIELDS:
                     normalized = str(item).strip().lower().replace("-", "_")
                     if normalized in _RUNTIME_FORBIDDEN_STATUSES or any(
@@ -170,6 +180,10 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                 elif key == "fallback_controller_state":
                     if not isinstance(item, dict) or not guarded_ppo_identity:
                         return item_path, "invalid"
+                elif key == _RUNTIME_STOP_BEST_EFFORT:
+                    counter_marker = _counter_marker(item, item_path)
+                    if counter_marker is not None:
+                        return counter_marker
                 elif "fallback" in key:
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
@@ -185,6 +199,64 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
         return None
 
     return _visit(payload, "")
+
+
+def _is_valid_native_counter(value: Any) -> bool:
+    """Return whether a guarded telemetry counter has the native integer shape."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def algorithm_metadata_runtime_marker(  # noqa: C901
+    metadata: Mapping[str, Any], *, expected_algorithm: str | None = None
+) -> tuple[str, str] | None:
+    """Scan runtime metadata while honoring the guarded safe-counter exception.
+
+    Guarded PPO's identity-bound ``fallback_safe`` counters are native shield
+    telemetry. Other fallback counters, malformed safe counters, and the
+    exact ``stop_best_effort`` label remain forbidden.
+
+    Returns:
+        The first forbidden runtime marker, if present.
+    """
+    runtime_view: dict[str, Any] = {
+        str(key): value
+        for key, value in metadata.items()
+        if str(key) not in _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS
+    }
+    guarded_ppo_identity = is_verified_guarded_ppo(metadata, expected_algorithm=expected_algorithm)
+    guard_stats = metadata.get("guard_stats")
+    if "guard_stats" in metadata:
+        if not isinstance(guard_stats, Mapping):
+            return "guard_stats", "invalid"
+        guard_view = dict(guard_stats)
+        if "fallback_safe" in guard_view and guarded_ppo_identity:
+            if not _is_valid_native_counter(guard_view["fallback_safe"]):
+                return "guard_stats.fallback_safe", "invalid"
+            del guard_view["fallback_safe"]
+        runtime_view["guard_stats"] = guard_view
+
+    shield_stats = metadata.get("shield_stats")
+    if "shield_stats" in metadata:
+        if not isinstance(shield_stats, Mapping):
+            return "shield_stats", "invalid"
+        shield_view = deepcopy(dict(shield_stats))
+        decision_counts = shield_view.get("decision_counts")
+        if "decision_counts" in shield_view:
+            if not isinstance(decision_counts, Mapping):
+                return "shield_stats.decision_counts", "invalid"
+            decision_view = dict(decision_counts)
+            if "fallback_safe" in decision_view and guarded_ppo_identity:
+                if not _is_valid_native_counter(decision_view["fallback_safe"]):
+                    return "shield_stats.decision_counts.fallback_safe", "invalid"
+                del decision_view["fallback_safe"]
+            shield_view["decision_counts"] = decision_view
+        runtime_view["shield_stats"] = shield_view
+
+    return runtime_fallback_or_degraded_marker(
+        runtime_view,
+        expected_algorithm=expected_algorithm,
+        algorithm_metadata=metadata,
+    )
 
 
 def _int_field(result: dict[str, Any], key: str) -> int:
@@ -766,18 +838,15 @@ def summarize_benchmark_availability(summary: dict[str, Any] | None) -> Benchmar
     written = int(summary.get("written", 0) or 0)
     execution_mode = resolve_execution_mode(summary.get("algorithm_metadata_contract"))
     runtime_contract = summary.get("algorithm_metadata_contract")
-    planner_runtime = (
-        runtime_contract.get("planner_runtime") if isinstance(runtime_contract, dict) else None
-    )
     # This name is emitted from require_algorithm_allowed(algo=ctx.algo), not
     # from planner runtime diagnostics. Missing/malformed readiness cannot bind
     # the shield exception; ordinary summaries without shield state are unchanged.
     readiness = summary.get("algorithm_readiness")
     expected_algorithm = readiness.get("name") if isinstance(readiness, Mapping) else None
-    runtime_marker = runtime_fallback_or_degraded_marker(
-        planner_runtime,
-        expected_algorithm=expected_algorithm,
-        algorithm_metadata=runtime_contract,
+    runtime_marker = (
+        algorithm_metadata_runtime_marker(runtime_contract, expected_algorithm=expected_algorithm)
+        if isinstance(runtime_contract, Mapping)
+        else None
     )
 
     readiness_status = "native"
@@ -791,13 +860,14 @@ def summarize_benchmark_availability(summary: dict[str, Any] | None) -> Benchmar
     reason = _summary_reason(summary, preflight)
     if runtime_marker is not None:
         marker_path, marker_value = runtime_marker
+        reported_marker_path = marker_path.removeprefix("planner_runtime.")
         return BenchmarkAvailability(
             execution_mode=execution_mode,
             readiness_status="fallback" if "fallback" in marker_path else "degraded",
             availability_status="failed",
             benchmark_success=False,
             availability_reason=(
-                f"planner runtime reported forbidden marker {marker_path}={marker_value}"
+                f"planner runtime reported forbidden marker {reported_marker_path}={marker_value}"
             ),
         )
     if preflight_status in {"fallback", "skipped"}:

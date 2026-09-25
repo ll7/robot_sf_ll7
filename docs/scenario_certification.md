@@ -159,12 +159,10 @@ oracle, predicate contract, and named execution/replay records through
 `scenario_artifact_path` with the evidence. The output contract is
 [`scenario_admissibility.v1`](../robot_sf/benchmark/schemas/scenario_admissibility.v1.json),
 and `partition_candidates_by_admissibility(...)` retains cases by verdict for search
-stratification. Single-objective search rejects only explicit `search_disposition: reject` verdicts
-before planner evaluation. QD callers can supply an `admissibility_precheck` to `run_map_elites`;
-explicit exclusions are recorded and skipped before its evaluator, while unknown or missing verdicts
-continue to evaluation. A verdict attached only to a completed QD evaluation prevents archive
-admission but does not save that evaluation. Unknown, failed, or unavailable certification is not
-rejected by this boundary and continues through the existing certification gate.
+stratification. `run_map_elites` accepts an `admissibility_precheck`; it records each verdict next to
+the proposed candidate, skips only explicit exclusions before evaluation, and continues unknown,
+missing, malformed, or unavailable verdicts to the evaluator. This keeps feasibility records
+separate from planner-evaluation results and does not alter the benchmark denominator.
 
 The adapter has five outcomes: `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
@@ -198,18 +196,10 @@ the route-level reasons. Labels without those checks, empty reasons, or contradi
 `admissible_feasibility_unknown`; an unsupported robot model does not establish kinodynamic
 impossibility.
 
-Before planner evaluation, the target outcome is `not_evaluated`. After an evaluation attempt, the
-search updates it to `route_completed`, `route_incomplete`, or `unavailable` and records the episode
-JSONL digest, episode/scenario/planner IDs, seed, source commit, and terminal outcome. A completed or
-incomplete outcome is recorded only when the episode matches the selected candidate and configured
-planner config, its episode integrity and termination fields agree, runtime availability is native
-and clean, and the scenario's manifest/map/route input identity still matches the pre-evaluation
-snapshot. The default evaluator copies the selected planner config bytes to
-`planner_config.snapshot.yaml` in the candidate bundle and runs the benchmark against that snapshot;
-the target observation compares the episode's effective config with the captured selection and
-records its source digest. Missing or inconsistent records remain `unavailable`. This observation
-never changes the feasibility verdict by itself: target failure alone does not establish
-infeasibility or `planner_specific_failure`.
+Planner outcomes remain separate from scenario feasibility. The adapter does not infer a named
+execution from one search evaluation; callers must pass producer-bound reference, target, and replay
+records when those outcomes are available. A target failure alone does not establish infeasibility
+or `planner_specific_failure`.
 
 Whenever a certificate, oracle, reference, target, or replay row is supplied, callers must also pass
 the expected `scenario_id`. The adapter does not infer that binding from a certificate or execution
@@ -287,8 +277,8 @@ Artifact provenance is bound across evidence sources: the certificate `source` a
 `scenario_artifact_path`, and each execution's `scenario_sha256` must equal that digest. When a
 scenario uses included manifests, a map file, or route overrides, certificates, oracle cells, and
 normalized execution records must also carry the matching `effective_input_sha256`; producers must
-record that the referenced bytes stayed stable while evidence was generated. The search checks the
-same input closure again after planner evaluation before recording a target outcome. A
+record that the referenced bytes stayed stable while evidence was generated. The adapter checks each
+named execution's parser-consumed input closure against the candidate's captured resources. A
 certificate's captured `evidence.source_artifact_sha256` must also equal the manifest digest, so
 reusing a certificate after editing the source file at the same path leaves it unbound. A
 missing or unavailable canonical artifact, an unresolvable source reference, or any mismatch

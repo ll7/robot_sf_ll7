@@ -383,6 +383,12 @@ Each episode record is schema-validated against
   the map and route files consumed while building that episode's environment. These records are
   covered by the episode-store digest in result provenance; consumers that need external-resource
   identity must keep older rows without them as unknown.
+* Map-runner episodes include `selected_map_identity` when the producer can bind the realized map
+  ID to exactly one parser-captured map resource. This distinguishes a selected map from the full
+  closure of a default map pool. Admissibility comparisons require matching map ID, digest, and
+  source role across executions; missing, ambiguous, or mismatched selected-map provenance remains
+  unknown. Absolute paths support producer-to-candidate binding but are not compared across
+  checkouts.
 * `algorithm_metadata.baseline_category` (`diagnostic|classical|learning`) and
   `algorithm_metadata.policy_semantics`
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and

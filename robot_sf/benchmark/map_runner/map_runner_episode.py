@@ -53,6 +53,7 @@ from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
+    selected_map_identity_from_runtime_inputs,
 )
 from robot_sf.benchmark.map_runner.map_runner_metrics import (
     floor_collision_metrics_from_flags as _floor_collision_metrics_from_flags,
@@ -203,6 +204,7 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
@@ -5408,7 +5410,7 @@ def run_map_episode(  # noqa: PLR0913
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
     )
-    return _finalize_episode_record(
+    episode_record = _finalize_episode_record(
         ctx=ctx,
         loop_result=loop_result,
         post_loop=post_loop,
@@ -5430,6 +5432,15 @@ def run_map_episode(  # noqa: PLR0913
         record_simulation_step_trace=record_simulation_step_trace,
         paired_wrapper_off_record=paired_wrapper_off_record,
     )
+    realized_map_id = (
+        resolve_map_id(ctx.config, loop_result.map_def) if loop_result.map_def is not None else None
+    )
+    episode_record["selected_map_identity"] = selected_map_identity_from_runtime_inputs(
+        realized_map_id,
+        runtime_input_records or [],
+        scenario_id=ctx.scenario_id,
+    )
+    return episode_record
 
 
 __all__ = ["run_map_episode"]

@@ -1,0 +1,6 @@
+# Social-force planner with the resolution-independent obstacle term and
+# speed-limited commands (issue #9724), plus the terminal goal approach (#9428).
+# The historical planner (grid_cell_sum_v1) remains the default when the
+# selector is absent, so earlier campaigns stay reproducible.
+social_force_goal_approach_version: terminal_goal_v1
+social_force_planner_version: resolution_independent_v2

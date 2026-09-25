@@ -61,10 +61,17 @@ candidate rows supplied; it cannot represent the original run's full candidate r
 
 ## Lightweight CLI smoke
 
-When a search pilot produces no failure rows, use the one-candidate historical compatibility
-fixture at `tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json` to exercise
-the real runner and renderer. It is adapted from the tracked #1501 `failure_0002` case and the
-#9645 replay; it is not a persisted search run or a new discovery. Run it with a fresh output path:
+When a search pilot produces no eligible failure rows, use the one-candidate historical
+compatibility fixture at `tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json`
+to exercise schema-backed candidate selection, the real runner, and renderer. It is adapted from
+the tracked #1501 `failure_0002` case and the #9645 replay; it is not a persisted search run or a
+new discovery. Its complete `scenario_cert.v1` static-route certificate was generated post-hoc
+from the tracked scenario by `scripts/tools/certify_scenarios.py`; the command, code revision,
+input digests, and certificate digest are in
+`tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario_certification_provenance.json`.
+This source-backed static classification lets the fixture pass the current strict selection gate;
+it does not establish dynamic task feasibility, which remains unknown. Run it with a fresh output
+path:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- uv run python \
@@ -73,15 +80,13 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   --out output/adversarial-replay-gallery/<smoke-name> --top-k 1
 ```
 
-The tracked fixture currently carries only a compact historical classification annotation, not a
-complete canonical `scenario_cert.v1` certificate. Under the fail-closed selector it remains in
-candidate accounting and is not replayed or rendered until a source-backed full certificate is
-available. Do not use this legacy fixture to claim a replay/renderer smoke in that state. Once a
-complete certificate is supplied, compare the recorded outcome and objective, then inspect
-`gallery_manifest.json`, the case manifest, and `figures/`. The fixture's dynamic task feasibility
-is unknown. A current-code replay at a different source revision is an outcome reproduction only;
-video may be recorded as unavailable when the canonical runner emits no video. The output stays in
-ignored `output/`; retain only a compact checksummed receipt when a durable handoff is needed.
+The fixture's certificate is a post-hoc static route result, not an original search-time receipt or
+a dynamic-feasibility oracle. The smoke should select and replay one case; compare the recorded
+outcome and objective, then inspect `gallery_manifest.json`, the case manifest, and `figures/`.
+Dynamic task feasibility remains unknown. A current-code replay at a different source revision is
+an outcome reproduction only; video may be recorded as unavailable when the canonical runner emits
+no video. The output stays in ignored `output/`; retain only a compact checksummed receipt when a
+durable handoff is needed.
 
 ## Selection and replay checks
 

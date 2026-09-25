@@ -1741,6 +1741,41 @@ def test_imported_search_receipts_reject_copied_candidate_table_tampering(tmp_pa
     assert corpus["cases"][0]["admissibility"]["verdict"] == "admissible_feasibility_unknown"
 
 
+def test_issue9645_search_run_fields_are_recomputed_from_pinned_packet(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+
+    mutations = {
+        "attempted_candidates": 63,
+        "completed_candidates": 63,
+        "failed_candidates": 1,
+        "invalid_candidates": 1,
+        "new_counterexamples_discovered": 1,
+        "new_counterexamples_admitted": 1,
+        "source_revision": "0" * 40,
+        "objective": {"name": "changed_objective"},
+        "search_space": {"path": "changed.yaml", "sha256": "0" * 64},
+        "sampler_seeds": [9999],
+        "all_objective_values": [1.0],
+        "terminal_decision": "GO",
+        "evidence_tier": "paper_facing",
+    }
+    for field, value in mutations.items():
+        tampered = copy.deepcopy(corpus)
+        tampered["search_runs"][0][field] = value
+        with pytest.raises(CorpusError, match="differs from pinned source evidence"):
+            validate_corpus(tampered, corpus_root=corpus_root)
+
+    # Loading a persisted record must enforce the same source reconciliation as direct
+    # validation; a changed zero count cannot survive after the initial import.
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    persisted = json.loads(corpus_path.read_text(encoding="utf-8"))
+    persisted["search_runs"][0]["new_counterexamples_discovered"] = 1
+    corpus_path.write_text(json.dumps(persisted, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="new_counterexamples_discovered"):
+        load_corpus(corpus_path)
+
+
 def test_search_run_evidence_rejects_missing_paths_and_receipt_conflicts(tmp_path: Path) -> None:
     corpus, _receipt, corpus_root = _import(tmp_path)
     run = corpus["search_runs"][0]

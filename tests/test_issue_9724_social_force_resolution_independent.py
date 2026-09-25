@@ -187,14 +187,17 @@ def test_v2_velocity_respects_desired_speed() -> None:
 
 
 def test_v2_turns_in_place_when_net_force_points_backwards() -> None:
-    """A backward net force turns in place (goal behind) or holds (goal ahead), never orbits."""
+    """A backward net force turns the robot in place (goal ahead or behind), never orbits."""
     config = SocNavPlannerConfig(social_force_planner_version=V2)
     adapter = SocialForcePlannerAdapter(config)
     adapter._compute_social_force = lambda *_args: np.array([-50.0, 0.5])
     linear, angular = adapter.plan(_observation(speed=0.2, goal=(-20.0, 1.0)))
     assert linear == pytest.approx(0.0, abs=1e-9)
     assert abs(angular) == pytest.approx(config.max_angular_speed)
-    assert adapter.plan(_observation(speed=0.2)) == (0.0, 0.0)
+    adapter.reset()
+    ahead_linear, ahead_angular = adapter.plan(_observation(speed=0.2))
+    assert ahead_linear == pytest.approx(0.0, abs=1e-9)
+    assert abs(ahead_angular) == pytest.approx(config.max_angular_speed)
 
 
 def test_v2_pedestrian_repulsion_acts_on_an_approaching_pedestrian() -> None:
@@ -291,15 +294,22 @@ def test_world_force_is_invariant_under_ego_frame_rotation(heading: float) -> No
     assert np.linalg.norm(rotated - reference) <= 0.25 * np.linalg.norm(reference)
 
 
-def test_v2_holds_only_when_pushed_back_with_the_goal_ahead() -> None:
-    """A backward desired velocity holds only while the goal is in front."""
+def test_v2_blocked_ahead_turns_toward_the_lateral_side_and_keeps_it() -> None:
+    """Pushed back with the goal ahead: turn toward the lateral side, keep it, never hold."""
     config = SocNavPlannerConfig(social_force_planner_version=V2)
     adapter = SocialForcePlannerAdapter(config)
-    assert adapter._unicycle_command_v2(0.05, 2.5, goal_ahead=True) == (0.0, 0.0)
-    assert adapter._unicycle_command_v2(0.9, -2.5, goal_ahead=True) == (0.0, 0.0)
-    linear, angular = adapter._unicycle_command_v2(0.05, 2.5, goal_ahead=False)
-    assert linear == 0.0
-    assert angular == pytest.approx(config.max_angular_speed)
+    max_turn = config.max_angular_speed
+    # Desired vector behind-left (error +2.5 rad): turn left.
+    assert adapter._unicycle_command_v2(0.05, 2.5, goal_ahead=True) == (0.0, max_turn)
+    # The vector swings behind-right while still blocked: the side is kept.
+    assert adapter._unicycle_command_v2(0.05, -2.5, goal_ahead=True) == (0.0, max_turn)
+    # The condition clears (vector in front again) and the robot drives at
+    # more than half its speed limit: the normal law decides again.
+    linear, angular = adapter._unicycle_command_v2(1.0, -0.3, goal_ahead=True)
+    assert linear > 0.5
+    assert angular < 0.0
+    # A new blocked episode then picks its side afresh.
+    assert adapter._unicycle_command_v2(0.05, -2.5, goal_ahead=True) == (0.0, -max_turn)
 
 
 def test_v2_turn_direction_has_hysteresis_behind_the_robot() -> None:
@@ -317,7 +327,7 @@ def test_v2_turn_direction_has_hysteresis_behind_the_robot() -> None:
     assert after_reset < 0.0
 
 
-def _closed_loop(dt: float, world_occupied, steps: int, goal=(-10.0, 0.0)):
+def _closed_loop(dt: float, world_occupied, steps: int, goal=(-10.0, 0.0), stop_radius=None):
     """Integrate unicycle commands from rest, heading +x, with a world-fixed scene."""
     adapter = SocialForcePlannerAdapter(SocNavPlannerConfig(social_force_planner_version=V2))
     pos, heading, speed = np.zeros(2), 0.0, 0.0
@@ -340,6 +350,8 @@ def _closed_loop(dt: float, world_occupied, steps: int, goal=(-10.0, 0.0)):
         heading += angular * dt
         pos = pos + linear * dt * np.array([np.cos(heading), np.sin(heading)])
         speed = linear
+        if stop_radius is not None and np.linalg.norm(np.asarray(goal) - pos) < stop_radius:
+            break
     return pos, held
 
 
@@ -456,10 +468,12 @@ def test_release_matrix_bottleneck_low_seed_112_enters_goal_zone() -> None:
 
 @pytest.mark.slow
 def test_narrow_doorway_seed_111_does_not_spin_in_place() -> None:
-    """A blocked robot holds instead of spinning with a turn sign flip every step.
+    """In a dead end the turn direction never flips and the spin is bounded.
 
-    Before the hold/hysteresis rule, 234 of 400 commands were (0, +-max turn)
-    with 55 sign flips and mean curvature about 330.
+    The 1 m-radius robot does not fit through this doorway, so the episode
+    times out.  Before the turn rules, 234 of 400 commands were (0, +-max turn)
+    with 55 sign flips and mean curvature about 330; with them there are no
+    sign flips and the robot creeps around the force balance instead.
     """
     commands: list[tuple[float, float]] = []
     record = _run(RELEASE_MATRIX, "francis2023_narrow_doorway", 111, commands=commands)
@@ -467,5 +481,6 @@ def test_narrow_doorway_seed_111_does_not_spin_in_place() -> None:
     flips = sum(1 for a, b in pairwise(turns) if a * b < 0.0 and abs(a) > 0.5 and abs(b) > 0.5)
     spinning = sum(1 for linear, angular in commands if linear < 0.05 and abs(angular) > 0.9)
     assert flips == 0
-    assert spinning <= 10
-    assert record["metrics"]["curvature_mean"] < 1.0
+    assert spinning <= 150
+    assert record["metrics"]["curvature_mean"] < 50.0
+    assert record["outcome"]["collision_event"] is False

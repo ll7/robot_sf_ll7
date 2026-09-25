@@ -61,6 +61,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
 
     _EPS = 1e-6
     _TURN_HYSTERESIS_RAD = 5.0 * pi / 6.0  # 150 deg
+    _BLOCKED_RELEASE_RAD = pi / 3.0  # 60 deg
+    _BALANCE_FRACTION = 0.1
+    _BALANCE_CREEP_FRACTION = 0.1
 
     def __init__(self, config: SocNavPlannerConfig | None = None) -> None:
         """Initialize the social-force adapter with optional configuration."""
@@ -75,6 +78,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters: dict[str, Any] = {}
         self._last_turn_sign = 0.0
+        self._avoid_side = 0.0
+        self._blocked_latched = False
+        self._target_speed = float("inf")
+        self._filtered_target = None
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
@@ -84,6 +91,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters = {}
         self._last_turn_sign = 0.0
+        self._avoid_side = 0.0
+        self._blocked_latched = False
+        self._target_speed = float("inf")
+        self._filtered_target = None
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -105,6 +116,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         goal_dist = float(np.linalg.norm(to_goal))
         self._goal_approach_applied = False
         self._goal_approach_runtime_parameters = {}
+        self._target_velocity = None
         if goal_dist < self.config.goal_tolerance:
             return np.zeros(2, dtype=float)
 
@@ -142,6 +154,22 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         )
 
         total_force = self._clip_force(desired_force + interaction_force)
+        # Steady-state target of the relaxation, v* = v + tau * F: the velocity
+        # the model is relaxing toward.  It does not depend on dt or on the
+        # current velocity, so v2 steers by its direction (issue #9724).
+        target = robot_vel + float(self.config.social_force_tau) * total_force
+        # Low-pass the steering target with time constant tau.  The occupancy
+        # grid is re-rasterised in the ego frame every step, so while the robot
+        # turns in place the obstacle patches (and the small net vector near a
+        # force balance) jump from step to step; unfiltered, the turn direction
+        # flipped every few steps in front of a too-narrow doorway.
+        previous = getattr(self, "_filtered_target", None)
+        if previous is None:
+            self._filtered_target = target
+        else:
+            alpha = dt / (float(self.config.social_force_tau) + dt)
+            self._filtered_target = (1.0 - alpha) * previous + alpha * target
+        self._target_velocity = self._filtered_target
         velocity_world = robot_vel + total_force * dt
         speed = float(np.linalg.norm(velocity_world))
         if speed < self._EPS:
@@ -150,6 +178,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         if speed > speed_limit:
             velocity_world = velocity_world / (speed + self._EPS) * speed_limit
         if goal_approach is not None:
+            self._target_velocity = None  # steer by the blended approach velocity
             approach_speed = min(
                 float(self.config.social_force_goal_approach_max_speed),
                 float(self.config.max_linear_speed),
@@ -249,7 +278,15 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         if speed < self._EPS:
             return 0.0, 0.0
 
-        desired_heading = atan2(desired_vel[1], desired_vel[0])
+        steer_vel = desired_vel
+        if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
+            target = getattr(self, "_target_velocity", None)
+            if target is not None and float(np.linalg.norm(target)) > self._EPS:
+                steer_vel = target
+            self._target_speed = (
+                float(np.linalg.norm(target)) if target is not None else float("inf")
+            )
+        desired_heading = atan2(steer_vel[1], steer_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
         if self._planner_version() == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2:
             robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
@@ -279,25 +316,44 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
     ) -> tuple[float, float]:
         """Map a desired world velocity to (v, w) for ``resolution_independent_v2``.
 
+        ``heading_error`` is measured to the low-passed steady-state target
+        ``v* = v + tau * F`` (see ``plan``); ``speed`` is the magnitude of the
+        integrated velocity ``v + F * dt``.
+
         * Drive only the component of the desired velocity along the current
           heading (``speed * max(0, cos(error))``), capped at the speed limit.
           A sideways or backward desired velocity therefore turns the robot in
           place at the limited turn rate instead of orbiting at speed.
-        * Hold (``(0, 0)``) when the desired velocity points backwards
-          (``|error| > 90 deg``) while the current goal lies in front of the
-          robot.  A backward desired velocity with the goal ahead means an
-          obstacle or pedestrian in front pushes harder than the goal pulls
-          (for example in front of a doorway the robot does not fit through).
-          A unicycle cannot back up, and turning away from the goal only
-          makes the goal force turn it back: in that force balance the net
-          velocity changed direction from step to step and the robot spun in
-          place with a sign flip every step.  Holding waits for the scene to
-          change instead.  The rule is purely geometric, so it does not depend
-          on the timestep or on force magnitudes, and it can never freeze a
-          robot whose goal is behind it: then the robot always turns.
-        * Hysteresis: when ``|error| > 150 deg`` keep the previous turn
-          direction, so a desired direction that flips around the robot's
-          back does not reverse the turn every step.
+        * Blocked ahead: when the target points backwards (``|error| > 90
+          deg``) while the current goal lies in front of the robot, an
+          obstacle or pedestrian in front pushes harder than the goal pulls.
+          A unicycle cannot back up, so the robot turns toward the side of the
+          lateral component of the target (sign of ``cross(heading, v*)``)
+          and then drives around the obstacle once the target is in front.
+          Both the state and the side have hysteresis: the state is entered
+          at 90 deg and released when the target is within 60 deg of the
+          heading (or the goal falls behind); the side is kept, also while
+          the target stays behind the robot, until the robot drives at half
+          its speed limit or more.
+        * Force balance: when ``|v*|`` is below 10 % of v_des the goal and
+          interaction forces cancel and the target's direction is noise.  The
+          robot keeps turning in its current direction and creeps forward at
+          10 % of its speed limit (turn radius 0.1 m at the defaults), which
+          moves it off the balance point.
+        * Hysteresis: otherwise, when ``|error| > 150 deg`` keep the previous
+          turn direction, so a target that flips around the robot's back does
+          not reverse the turn every step.
+
+        There is no hold state: no static scene keeps the robot still.  In a
+        true dead end (a doorway narrower than the robot) the robot circles
+        slowly near the force balance without turn-sign flips; before these
+        rules it spun in place with a sign flip nearly every step.
+
+        Timing: the integrated velocity is ``robot_vel + F * dt``, so from rest
+        its magnitude, and how soon a turn produces forward motion, scale with
+        the timestep.  The turn decisions use the target direction and
+        magnitude, which do not depend on dt; the filter has time constant
+        ``tau``.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
@@ -305,16 +361,39 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         max_turn = float(self.config.max_angular_speed)
         backwards = abs(heading_error) > 0.5 * pi
         if backwards and goal_ahead:
-            return 0.0, 0.0
-        angular = float(
-            np.clip(float(self.config.angular_gain) * heading_error, -max_turn, max_turn)
-        )
-        if abs(heading_error) > self._TURN_HYSTERESIS_RAD and self._last_turn_sign != 0.0:
-            angular = self._last_turn_sign * abs(angular)
-        if abs(angular) > self._EPS:
-            self._last_turn_sign = 1.0 if angular > 0.0 else -1.0
+            self._blocked_latched = True
+        elif not goal_ahead or abs(heading_error) < self._BLOCKED_RELEASE_RAD:
+            self._blocked_latched = False
         along_heading = max(0.0, float(np.cos(heading_error)))
         linear = float(np.clip(speed * along_heading, 0.0, self._speed_limit()))
+        balanced = self._target_speed < self._BALANCE_FRACTION * max(
+            float(self.config.social_force_desired_speed), self._EPS
+        )
+        if balanced:
+            # Goal and interaction forces (nearly) cancel, so the direction of
+            # the tiny net vector is noise.  Keep turning the way the robot
+            # already turns instead of following it: no sign flips, and no
+            # state in which a static scene keeps the robot still.
+            angular = (self._avoid_side or self._last_turn_sign or 1.0) * max_turn
+            # Creep forward slowly (radius v/w = 0.1 m at the defaults) so the
+            # robot leaves the balance point instead of spinning on it.
+            linear = max(linear, self._BALANCE_CREEP_FRACTION * self._speed_limit())
+        elif self._blocked_latched or (backwards and self._avoid_side != 0.0):
+            if self._avoid_side == 0.0:
+                lateral = float(np.sin(heading_error))
+                self._avoid_side = 1.0 if lateral >= 0.0 else -1.0
+            angular = self._avoid_side * max_turn
+        else:
+            angular = float(
+                np.clip(float(self.config.angular_gain) * heading_error, -max_turn, max_turn)
+            )
+            if abs(heading_error) > self._TURN_HYSTERESIS_RAD and self._last_turn_sign != 0.0:
+                angular = self._last_turn_sign * abs(angular)
+        if abs(angular) > self._EPS:
+            self._last_turn_sign = 1.0 if angular > 0.0 else -1.0
+        if not self._blocked_latched and linear >= 0.5 * self._speed_limit():
+            # The robot is driving again: a later blockage may pick a new side.
+            self._avoid_side = 0.0
         return linear, angular
 
     def _planner_version(self) -> str:

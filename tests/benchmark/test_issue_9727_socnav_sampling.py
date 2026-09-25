@@ -339,6 +339,7 @@ def test_bind_env_edge_cases() -> None:
     diagnostics = adapter.diagnostics()
     assert diagnostics["drive_limits"] == {"radius": 1.0}
     assert diagnostics["braking_envelope"] is False
+    assert diagnostics["pedestrian_prediction"] is False
 
 
 def _wall_with_gap() -> np.ndarray:
@@ -460,7 +461,7 @@ def test_approaching_pedestrian_blocks_earlier_with_prediction() -> None:
 
 def test_social_force_and_sampling_version_selectors_coexist() -> None:
     """One ``__setattr__`` resolves both the #9724 and the #9727/#9746 selectors."""
-    from robot_sf.planner.socnav_base import (  # noqa: PLC0415
+    from robot_sf.planner.socnav_base import (
         SOCIAL_FORCE_PLANNER_LEGACY_V1,
         SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
     )
@@ -479,7 +480,7 @@ def test_social_force_and_sampling_version_selectors_coexist() -> None:
     with pytest.raises(ValueError, match="unsupported socnav sampling version"):
         SocNavPlannerConfig(socnav_sampling_version="bounded_v9")
     # The selectors take effect in their planners.
-    from robot_sf.planner.socnav import SocialForcePlannerAdapter  # noqa: PLC0415
+    from robot_sf.planner.socnav import SocialForcePlannerAdapter
 
     sf = SocialForcePlannerAdapter(config)
     assert sf.diagnostics()["planner_version"] == SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2

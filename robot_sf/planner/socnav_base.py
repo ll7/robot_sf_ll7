@@ -1080,6 +1080,9 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             payload["braking_envelope"] = bool(
                 getattr(self.config, "sampling_braking_envelope", False)
             )
+            payload["pedestrian_prediction"] = bool(
+                getattr(self.config, "sampling_pedestrian_prediction", False)
+            )
             payload["drive_limits"] = dict(getattr(self, "_sampling_drive_limits", {}) or {})
         return payload
 

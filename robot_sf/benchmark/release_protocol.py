@@ -22,6 +22,10 @@ from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready._util import _config_hash_payload
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+    iter_campaign_arm_checkpoint_references,
+)
+from robot_sf.benchmark.checkpoint_staging_receipt import _registry_checkpoint_sha256
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.release_tag_identity import (
@@ -31,7 +35,7 @@ from robot_sf.benchmark.release_tag_identity import (
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
-from robot_sf.models.registry import DEFAULT_REGISTRY_PATH
+from robot_sf.models.registry import DEFAULT_REGISTRY_PATH, get_registry_entry
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
@@ -3220,6 +3224,174 @@ SCIENTIFIC_CANDIDATE_SCHEMA_VERSION = "benchmark-scientific-candidate.v1"
 SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256 = (
     "cd749189831cc6cd940aed695687b52a476f02e0c11f4afeb792e84861ee2774"
 )
+SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256 = (
+    "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
+)
+
+
+def _candidate_frozen_checkpoint_arms(  # noqa: C901, PLR0912, PLR0915
+    cfg: CampaignConfig,
+    frozen_campaign: Mapping[str, Any],
+    staging_receipt: Mapping[str, Any],
+    *,
+    registry_path: Path,
+    observed_campaign: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Require every arm and checkpoint to match the frozen campaign, including runtime digests.
+
+    Returns:
+        Host-path-independent frozen identities for the candidate receipt.
+    """
+    frozen_arms = frozen_campaign.get("planners")
+    roster = [(planner.key, planner.algo) for planner in cfg.planners]
+    if (
+        not isinstance(frozen_arms, list)
+        or len(frozen_arms) != 14
+        or not all(isinstance(arm, Mapping) for arm in frozen_arms)
+    ):
+        raise ValueError("frozen 0.0.7 checkpoint roster is incomplete")
+    if [(arm.get("key"), arm.get("algo")) for arm in frozen_arms] != roster:
+        raise ValueError("frozen 0.0.7 checkpoint roster differs from candidate")
+    observed_arms = None
+    if observed_campaign is not None:
+        observed_arms = observed_campaign.get("planners")
+        if (
+            not isinstance(observed_arms, list)
+            or len(observed_arms) != 14
+            or not all(isinstance(arm, Mapping) for arm in observed_arms)
+        ):
+            raise ValueError("candidate campaign checkpoint roster is incomplete")
+        if [(arm.get("key"), arm.get("algo")) for arm in observed_arms] != roster:
+            raise ValueError("candidate campaign checkpoint roster differs from frozen 0.0.7")
+
+    def reference(record: Mapping[str, Any], label: str) -> tuple[Any, ...]:
+        keys = ("planner_key", "algo", "kind", "value", "implicit")
+        values = tuple(record.get(key) for key in keys)
+        digest = record.get("checkpoint_sha256")
+        if (
+            not all(isinstance(value, str) and value for value in values[:4])
+            or type(values[4]) is not bool
+            or not isinstance(digest, str)
+            or _SHA256_RE.fullmatch(digest.lower()) is None
+        ):
+            raise ValueError(f"{label} checkpoint reference is incomplete")
+        return (*values, digest.lower())
+
+    frozen_refs: list[tuple[Any, ...]] = []
+    projection: list[dict[str, Any]] = []
+    for index, (arm, (key, algo)) in enumerate(zip(frozen_arms, roster, strict=True)):
+        provenance = arm.get("checkpoint_provenance")
+        if not isinstance(provenance, Mapping):
+            raise ValueError(f"frozen 0.0.7 {key} checkpoint provenance is missing")
+        refs = provenance.get("references")
+        runtime = provenance.get("runtime")
+        if not isinstance(refs, list) or not isinstance(runtime, list):
+            raise ValueError(f"frozen 0.0.7 {key} checkpoint references/runtime are missing")
+        arm_refs = []
+        for item in refs:
+            if not isinstance(item, Mapping):
+                raise ValueError(f"frozen 0.0.7 {key} checkpoint reference is malformed")
+            normalized = reference(item, f"frozen 0.0.7 {key}")
+            if normalized[:2] != (key, algo):
+                raise ValueError(f"frozen 0.0.7 {key} checkpoint reference names another arm")
+            arm_refs.append(normalized)
+            frozen_refs.append(normalized)
+            if normalized[2] == "model_id":
+                entry = get_registry_entry(normalized[3], path=registry_path)
+                digest_path = item.get("resolved_path") or entry.get("local_path")
+                if not isinstance(digest_path, str) or not digest_path:
+                    raise ValueError(f"{key} model registry has no checkpoint path")
+                registry_digest = _registry_checkpoint_sha256(entry, Path(digest_path))
+                if registry_digest != normalized[5]:
+                    raise ValueError(f"{key} registry checkpoint differs from frozen 0.0.7")
+        top_digest = provenance.get("checkpoint_sha256")
+        if top_digest is not None and (
+            not isinstance(top_digest, str) or _SHA256_RE.fullmatch(top_digest.lower()) is None
+        ):
+            raise ValueError(f"frozen 0.0.7 {key} top checkpoint digest is invalid")
+        runtime_digests = []
+        for item in runtime:
+            if not isinstance(item, Mapping):
+                raise ValueError(f"frozen 0.0.7 {key} runtime checkpoint is malformed")
+            digest = item.get("checkpoint_sha256")
+            if digest is not None and (
+                not isinstance(digest, str) or _SHA256_RE.fullmatch(digest.lower()) is None
+            ):
+                raise ValueError(f"frozen 0.0.7 {key} runtime checkpoint digest is invalid")
+            runtime_digests.append(
+                (item.get("model_id"), item.get("kinematics"), digest.lower() if digest else None)
+            )
+        projection.append(
+            {
+                "planner_key": key,
+                "algo": algo,
+                "model_id": provenance.get("model_id"),
+                "references": [list(item) for item in arm_refs],
+                "checkpoint_sha256": top_digest.lower() if top_digest else None,
+                "runtime": [list(item) for item in runtime_digests],
+            }
+        )
+        if observed_arms is None:
+            continue
+        observed = observed_arms[index].get("checkpoint_provenance")
+        if not isinstance(observed, Mapping) or observed.get("model_id") != provenance.get(
+            "model_id"
+        ):
+            raise ValueError(f"candidate {key} checkpoint model differs from frozen 0.0.7")
+        observed_refs = observed.get("references")
+        if not isinstance(observed_refs, list) or any(
+            not isinstance(item, Mapping) for item in observed_refs
+        ):
+            raise ValueError(f"candidate {key} checkpoint references are missing")
+        if sorted(reference(item, f"candidate {key}") for item in observed_refs) != sorted(
+            arm_refs
+        ):
+            raise ValueError(f"candidate {key} checkpoint references differ from frozen 0.0.7")
+        if observed.get("checkpoint_sha256") != top_digest:
+            raise ValueError(f"candidate {key} runtime bundle differs from frozen 0.0.7")
+        observed_runtime = observed.get("runtime")
+        if not isinstance(observed_runtime, list) or len(observed_runtime) != len(runtime_digests):
+            raise ValueError(f"candidate {key} runtime checkpoint coverage differs")
+        for current, frozen in zip(observed_runtime, runtime_digests, strict=True):
+            if (
+                not isinstance(current, Mapping)
+                or (
+                    current.get("model_id"),
+                    current.get("kinematics"),
+                )
+                != frozen[:2]
+            ):
+                raise ValueError(f"candidate {key} runtime checkpoint identity differs")
+            current_digest = current.get("checkpoint_sha256")
+            if frozen[2] is not None and current_digest != frozen[2]:
+                raise ValueError(f"candidate {key} runtime checkpoint digest differs")
+            if frozen[2] is None and current_digest is not None and current_digest != top_digest:
+                raise ValueError(
+                    f"candidate {key} runtime checkpoint differs from frozen reference"
+                )
+            if current_digest is not None and (
+                not isinstance(current_digest, str)
+                or _SHA256_RE.fullmatch(current_digest.lower()) is None
+            ):
+                raise ValueError(f"candidate {key} runtime checkpoint digest is invalid")
+    declared_refs = [
+        (
+            item.planner_key,
+            item.algo,
+            item.kind,
+            item.value,
+            item.implicit,
+        )
+        for item in iter_campaign_arm_checkpoint_references(cfg)
+    ]
+    if sorted(item[:5] for item in frozen_refs) != sorted(declared_refs):
+        raise ValueError("candidate checkpoint references differ from frozen 0.0.7")
+    staged = staging_receipt.get("arms")
+    if not isinstance(staged, list) or any(not isinstance(item, Mapping) for item in staged):
+        raise ValueError("candidate checkpoint staging arms are missing")
+    if sorted(reference(item, "staged") for item in staged) != sorted(frozen_refs):
+        raise ValueError("candidate staged checkpoints differ from frozen 0.0.7")
+    return projection
 
 
 def _candidate_scientific_sections(
@@ -3309,10 +3481,12 @@ def _candidate_scientific_sections(
     return sections
 
 
-def build_scientific_candidate_identity(  # noqa: C901
+def build_scientific_candidate_identity(  # noqa: C901, PLR0913
     *,
     cfg: CampaignConfig,
     baseline_manifest: Mapping[str, Any],
+    baseline_campaign_manifest: Mapping[str, Any],
+    baseline_archive_sha256: str,
     source_sha: str,
     checkpoint_receipt: Mapping[str, Any],
     checkpoint_receipt_sha256: str,
@@ -3343,6 +3517,13 @@ def build_scientific_candidate_identity(  # noqa: C901
         raise ValueError("scientific candidate config contains publication coordinates")
     if cfg.source_config_sha256 != SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256:
         raise ValueError("loaded campaign template bytes changed")
+    if baseline_archive_sha256 != SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256:
+        raise ValueError("scientific candidate predecessor archive checksum differs")
+    frozen_git = baseline_campaign_manifest.get("git")
+    if not isinstance(frozen_git, Mapping) or frozen_git.get("commit") != baseline_manifest.get(
+        "source_sha"
+    ):
+        raise ValueError("frozen campaign and release manifest sources differ")
     if checkpoint_receipt.get("submit_safe") is not True:
         raise ValueError("scientific candidate has no submit-safe checkpoint receipt")
     if _SHA256_RE.fullmatch(checkpoint_receipt_sha256) is None:
@@ -3380,12 +3561,27 @@ def build_scientific_candidate_identity(  # noqa: C901
     _require_tracked_input_at_source(
         registry_path, repository_root=root, source_commit=source_sha, label="model registry"
     )
+    observed_campaign = None
+    if campaign_root is not None:
+        observed_campaign = json.loads(
+            (campaign_root.resolve() / "campaign_manifest.json").read_text(encoding="utf-8")
+        )
+        if not isinstance(observed_campaign, dict):
+            raise ValueError("candidate campaign manifest is malformed")
+    frozen_checkpoint_arms = _candidate_frozen_checkpoint_arms(
+        cfg,
+        baseline_campaign_manifest,
+        checkpoint_receipt,
+        registry_path=registry_path,
+        observed_campaign=observed_campaign,
+    )
     science = {**sections, "provenance": {"source_sha": source_sha}}
     identity = {
         "schema_version": SCIENTIFIC_CANDIDATE_SCHEMA_VERSION,
         "source_sha": source_sha,
         "campaign_template_path": _repository_relative_value(config_path, root),
         "campaign_template_sha256": SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256,
+        "baseline_archive_sha256": baseline_archive_sha256,
         "scientific_config_hash_schema": "camera-ready-publication-free.v1",
         "scientific_config_hash": _config_hash(_config_hash_payload(cfg)),
         "scenario_ids": scenario_ids,
@@ -3403,6 +3599,7 @@ def build_scientific_candidate_identity(  # noqa: C901
             }
             for arm in checkpoint_receipt.get("arms", [])
         ],
+        "frozen_checkpoint_arms": frozen_checkpoint_arms,
         "scientific_manifest": science,
     }
     if campaign_root is not None:
@@ -3601,6 +3798,7 @@ __all__ = [
     "RELEASE_MANIFEST_SCHEMA_VERSION_V0_2",
     "RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION",
     "RESOLVED_RELEASE_METADATA_FILENAME",
+    "SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256",
     "SCIENTIFIC_CANDIDATE_SCHEMA_VERSION",
     "SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256",
     "STRESS_SMOKE_EXPECTED_DT",

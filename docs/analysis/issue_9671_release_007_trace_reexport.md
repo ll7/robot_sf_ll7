@@ -112,3 +112,108 @@ fixed-context repeated trace, so Table 8.3 cannot be regenerated from these two 
 The 0.0.7 archive SHA above was rechecked locally. The legacy three-context Table 8.3
 numbers concern the earlier 0.0.3 source and must be re-measured or relabelled before being
 presented as a 0.0.7 result.
+
+## Exact acquired episode roster
+
+These are the episode IDs in the cold-retrieved producer JSONL, not IDs from the earlier
+dissertation figures. The four JSONL SHA-256 values are `3b10ae893fe0f7b8f152286ba6a4db89b7c5b65c09b625061249e7166e37c712`
+(`goal`), `74b9587d799577c3257d7678e78a0a0f0abae5da8778ae4ccae8685ecb384493`
+(`orca`), `9fefa08e3fb9421fc370686e561fd3e9cd9e247511056e699a2fbb68ec1f52a2`
+(`social_force`), and `5a8656df3d458cf491192d5e542ec395d0cd1396f57881fa0c3220ada69460b1`
+(`ppo`). The first three are job 15758; PPO is job 15760. All use differential drive.
+
+| Planner | Scenario | Seed | Episode ID | Status | Release-row comparison |
+| --- | --- | ---: | --- | --- | --- |
+| goal | group crossing medium | 22 | `classic_group_crossing_medium--22--b5435eeb359163c7` | success | no release row |
+| goal | group crossing medium | 23 | `classic_group_crossing_medium--23--16ea4a94ca01f5d5` | success | no release row |
+| goal | group crossing medium | 24 | `classic_group_crossing_medium--24--73e53c253f521197` | success | no release row |
+| goal | head-on corridor medium | 22 | `classic_head_on_corridor_medium--22--9ef3cac5f81f2edb` | success | no release row |
+| goal | head-on corridor medium | 23 | `classic_head_on_corridor_medium--23--78296203ecfacac2` | collision | no release row |
+| goal | head-on corridor medium | 24 | `classic_head_on_corridor_medium--24--0f599e16dc6818b3` | collision | no release row |
+| ORCA | group crossing medium | 22 | `classic_group_crossing_medium--22--49266c16d5b50efb` | success | no release row |
+| ORCA | group crossing medium | 23 | `classic_group_crossing_medium--23--ef6829403c0bd8a6` | success | no release row |
+| ORCA | group crossing medium | 24 | `classic_group_crossing_medium--24--45497ec249e5766d` | success | no release row |
+| ORCA | head-on corridor medium | 22 | `classic_head_on_corridor_medium--22--5fbe02a3b4747433` | success | no release row |
+| ORCA | head-on corridor medium | 23 | `classic_head_on_corridor_medium--23--7f9e6c61b772f737` | success | no release row |
+| ORCA | head-on corridor medium | 24 | `classic_head_on_corridor_medium--24--70b33393d582e71d` | success | no release row |
+| social force | group crossing medium | 22 | `classic_group_crossing_medium--22--51ad526a5252f1fc` | failure | no release row |
+| social force | group crossing medium | 23 | `classic_group_crossing_medium--23--0905ebb6c9ed6a2a` | failure | no release row |
+| social force | group crossing medium | 24 | `classic_group_crossing_medium--24--5d52942c47b9e2a5` | failure | no release row |
+| social force | head-on corridor medium | 22 | `classic_head_on_corridor_medium--22--cdb662017dde72ab` | failure | no release row |
+| social force | head-on corridor medium | 23 | `classic_head_on_corridor_medium--23--411ab8eabb15937e` | failure | no release row |
+| social force | head-on corridor medium | 24 | `classic_head_on_corridor_medium--24--96f958a1df409a15` | success | no release row |
+| PPO | doorway medium | 113 | `classic_doorway_medium--113--0970d6f82f290390` | collision | match |
+| PPO | doorway medium | 114 | `classic_doorway_medium--114--14958fc7b6babde6` | collision | match |
+
+The five dissertation figure receipts from predecessor job 13334 point to source commit
+`12d0284f9b316a3c9aa22376088e9690414990c9` in this repository. Their recorded
+`trace_series.json` SHA-256 values were recomputed from that commit, and each source's
+episode ID and status agree with its receipt:
+
+| Figure trace key | Earlier episode ID / status | Earlier trace SHA-256 | Current diagnostic episode ID / status |
+| --- | --- | --- | --- |
+| groupcross seed 22, goal | `classic_group_crossing_medium--22--605d6793ad25c1f5` / success | `428d327d1370d8ccbd7779d4b0d11f27ddd293260ae808a99db80edb39be3443` | `classic_group_crossing_medium--22--b5435eeb359163c7` / success |
+| groupcross seed 22, social force | `classic_group_crossing_medium--22--6ea3e69c68960055` / failure | `551b7e7be142c254547b9b419f6f5f44fb4c26e998fb8a65b998004ad04bf880` | `classic_group_crossing_medium--22--51ad526a5252f1fc` / failure |
+| head-on seed 23, ORCA | `classic_head_on_corridor_medium--23--475e0eb34a5e8f23` / collision | `81ec22f92658a299241825640832394c54f1222aa152b6e8a2f51755503ab43a` | `classic_head_on_corridor_medium--23--7f9e6c61b772f737` / success |
+| head-on seed 24, ORCA | `classic_head_on_corridor_medium--24--9392c5c14a3d9d6f` / success | `7a5494169b7627dcbe094d1b9a733177bbf5a9cf485db77118aeb921dceba3f9` | `classic_head_on_corridor_medium--24--70b33393d582e71d` / success |
+| head-on seed 24, social force | `classic_head_on_corridor_medium--24--1bea887e93462d65` / failure | `351b3906158273c5e6ab2e8ccd7a9886eeba310314548293ffc88da647682642` | `classic_head_on_corridor_medium--24--96f958a1df409a15` / success |
+
+The ORCA seed-23 collision and social-force seed-24 failure used by the existing head-on
+figure reading are **not present** in these 0.0.7 diagnostic traces. Figures 7.6 and 7.10–7.11
+therefore need a new reading or a different explicitly selected episode before their earlier-run
+labels can be removed. This is a cross-run worked-example change, separate from the **zero**
+paired release-row outcome mismatches. The source of the cross-run change has not been established.
+
+## Proposed passive robot-force sidecar — not yet executed
+
+The frozen `PedRobotForce` already retains each component's `last_forces`, but the frozen
+benchmark writer records only `last_ped_forces`. A frozen-code JSONL record cannot acquire a new
+field without changing code. Post-integration robot/pedestrian positions cannot reproduce the
+force-evaluation input reliably, particularly with optional pedestrian response multipliers.
+The proposed path is a separately SHA-pinned, opt-in **observer overlay**; it leaves every file
+at commit `07f7e8d43084de748915e1b1eb8b2a1603357c6e` and both scientific config bytes
+unchanged, but the executed Python process includes observer code. Its sidecar is a new
+diagnostic artifact, not an original 0.0.7 release field.
+
+1. Stage the observer from a reviewed commit under ignored `output/`, verify its SHA-256, and
+   load it through an explicitly named `sitecustomize` path in the private Slurm packet. Require
+   one in-process worker, matching these configs; write one PID-scoped capture stream and fail
+   if an unregistered worker or relevant second thread executes an episode.
+2. An opt-in `sys.settrace` observer copies the frozen `PedRobotForce.__call__` return value
+   and its already evaluated frame locals (`ped_positions`, `robot_pos`, and `multipliers` if
+   present). It must never call a force kernel, position provider or multiplier callback again.
+   At frozen `Simulator.step_once` line 1699 (or `PedSimulator.step_once` line 2087), after
+   `pysf_sim.compute_forces()` and before `_apply_residual_adversary` or pedestrian integration,
+   select registered objects with `component_type == "pedestrian_robot"` **and**
+   `isinstance(PedRobotForce)`; exclude `adversarial` components. Match exactly one fresh
+   return capture per selected instance, copy its `last_forces` and configuration, and sum the
+   robot components. An active component left at its scalar initial value, a non-finite vector,
+   shape mismatch or changed component roster fails closed; a genuinely inactive component is
+   represented by a declared zero vector.
+3. On each `step_once` return, copy `last_ped_forces` and require one force-evaluation capture
+   with matching pedestrian cardinality. Observe `run_map_episode` call/return at frozen line
+   5075 to bind the ordered samples to its returned `episode_id`, scenario, seed, planner and
+   step count. Require contiguous step indices and exact slot/actor cardinality against
+   `algorithm_metadata.simulation_step_trace.steps`; compare captured total vectors to
+   `planner.ammv.pedestrian_force_vectors`. A failed or ambiguous episode is not admitted.
+4. Keep the runner's raw JSONL and producer manifest unchanged. Emit a separate sidecar with
+   observer SHA, frozen source SHA, diagnostic config SHA/effective hash, campaign ID, PID,
+   episode ID, per-step arrays and SHA-256 of the associated raw JSONL. Producer checksums must
+   cover this sidecar and its observer input. The comparator must bind every sidecar row to one
+   original episode and reject missing, extra, duplicate or mixed samples.
+5. Before any force-enriched bundle is admitted, rerun the same 20 tuples on the same frozen
+   source/config under a **new** Slurm campaign and compare status, step count and every
+   recorded robot/pedestrian state and total-force vector with jobs 15758/15760. Require exact
+   numeric equality; any difference is an observer/context finding, not parity. Recheck the two
+   doorway outcomes against the frozen archive; retain `no_release_row` for the other 18.
+   Preserve new packet/config/observer SHAs, source SHA, job ID, producer checksums, cold
+   retrieval receipt and a separately versioned durable artifact. Do not overwrite either
+   existing campaign or the 0.0.7 release bundle.
+
+This plan needs review and #9667 to merge before a new packet or Slurm submission. The observer
+may change timing or planner behavior despite leaving force results untouched; the parity gate
+detects an observed change but cannot prove absence of every timing effect. If the requirement
+means an uninstrumented 0.0.7 Python process, recording the missing component is impossible;
+the existing 20 source-faithful traces remain the honest deliverable. Table 8.3 still lacks a
+login-node context and a fixed-context repeat; no value is inferred from the predecessor's
+62/78/37 counts.

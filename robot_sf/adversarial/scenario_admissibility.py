@@ -445,7 +445,12 @@ def _certificate(
     if classification == "invalid" and eligibility == "excluded":
         invalidity = _invalid_certificate_category(cert)
         if invalidity is None:
-            reasons.append("scenario_certificate_invalidity_unresolved")
+            reasons.append(_certificate_invalidity_unresolved_reason(cert))
+            return None, True, assumptions
+        if invalidity == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY:
+            # No current scenario_cert.v1 producer emits a scenario-wide proof. A future
+            # route-level endpoint or planner claim must not become global exclusion by itself.
+            reasons.append("scenario_certificate_scenario_wide_impossibility_proof_unavailable")
             return None, True, assumptions
         reasons.append(
             "scenario_certificate_structurally_invalid"
@@ -467,6 +472,26 @@ def _certificate(
         return _CERT_PLAUSIBLE, True, assumptions
     reasons.append("scenario_certificate_requires_more_evidence")
     return None, True, assumptions
+
+
+def _certificate_invalidity_unresolved_reason(cert: Mapping[str, Any]) -> str:
+    """Distinguish route-geometry labels that lack scenario-wide proof from other invalidity."""
+    routes = cert.get("route_certificates")
+    geometry_reasons = {
+        "start_inside_static_obstacle",
+        "goal_inside_static_obstacle",
+        "start_outside_map_bounds",
+        "goal_outside_map_bounds",
+    }
+    if isinstance(routes, Sequence) and not isinstance(routes, (str, bytes)):
+        if any(
+            isinstance(route, Mapping)
+            and isinstance(route.get("reasons"), list)
+            and geometry_reasons.intersection(route["reasons"])
+            for route in routes
+        ):
+            return "scenario_certificate_route_geometry_not_scenario_wide"
+    return "scenario_certificate_invalidity_unresolved"
 
 
 def _certificate_inputs_bound(
@@ -1364,7 +1389,7 @@ def _positive_int(value: Any) -> bool:
 
 
 def _certificate_supports_oracle_exclusion(cert: Any) -> bool:
-    """Require a source certificate that actually proves scenario-wide impossibility."""
+    """Require a producer proof covering scenario-wide geometry or kinematics."""
     if not isinstance(cert, Mapping) or not _route_inventory_complete(cert):
         return False
     classification = cert.get("classification")
@@ -1373,10 +1398,10 @@ def _certificate_supports_oracle_exclusion(cert: Any) -> bool:
         # No current field proves that the complete scenario path space was excluded.
         return False
     if classification == "invalid":
-        return (
-            cert.get("benchmark_eligibility") == "excluded"
-            and _invalid_certificate_category(cert) == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
-        )
+        # The current v1 producer has no scenario-wide impossibility proof contract. Even
+        # matching endpoint-obstacle claims for every route are insufficient: they do not
+        # bind the full runtime spawn/goal support or enumerate alternative completions.
+        return False
     return False
 
 
@@ -1459,9 +1484,25 @@ def _execution(  # noqa: C901,PLR0913 - explicit producer bindings fail closed i
     if evidence_problem is not None:
         reasons.append(evidence_problem)
         return None
+    producer_binding = binding.get("producer_provenance_binding")
+    if not isinstance(producer_binding, Mapping):
+        result_binding = binding.get("target_planner_replay_result_binding")
+        producer_binding = (
+            result_binding.get("producer_provenance_binding")
+            if isinstance(result_binding, Mapping)
+            else None
+        )
     context_status = binding.get("run_context_binding", {}).get("status")
     if context_status != "valid":
         reasons.append(f"{role}_execution_run_context_{context_status or 'unavailable'}")
+    checkpoint_status = (
+        producer_binding.get("planner_checkpoint_status")
+        if isinstance(producer_binding, Mapping)
+        else None
+    )
+    if checkpoint_status is not None and checkpoint_status not in {"not_applicable", "bound"}:
+        reasons.append(f"{role}_execution_planner_checkpoint_unbound")
+        return None
     run_context_binding = binding.get("run_context_binding", {})
     scenario_status = run_context_binding.get("scenario_matrix_binding_status")
     case_identity_status = run_context_binding.get("case_identity_binding_status")
@@ -1487,14 +1528,6 @@ def _execution(  # noqa: C901,PLR0913 - explicit producer bindings fail closed i
         return None
     bound_source = dict(source)
     bound_source["_execution_context_binding_status"] = context_status
-    producer_binding = binding.get("producer_provenance_binding")
-    if not isinstance(producer_binding, Mapping):
-        result_binding = binding.get("target_planner_replay_result_binding")
-        producer_binding = (
-            result_binding.get("producer_provenance_binding")
-            if isinstance(result_binding, Mapping)
-            else None
-        )
     if isinstance(producer_binding, Mapping):
         bound_source["_producer_provenance_binding"] = dict(producer_binding)
     return bound_source

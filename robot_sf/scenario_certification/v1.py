@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
@@ -25,6 +25,11 @@ from robot_sf.planner.classic_global_planner import (
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+    scenario_manifest_records_match,
+)
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -113,9 +118,12 @@ def certify_scenario_file(
     """Certify all scenarios, or one selected scenario, from a scenario manifest.
 
     Returns:
-        List of certificates in manifest order, or a single selected certificate. When
-        ``runtime_input_records`` is supplied, it receives the parser-consumed external
-        map and route-override snapshots without changing the ``scenario_cert.v1`` payload.
+        List of certificates in manifest order, or a single selected certificate. Each
+        file-produced certificate carries optional producer-owned source and effective-input
+        digests in its open ``evidence`` object. The digests are marked stable only when the
+        loaded manifest closure and parser-consumed map/route snapshots match. When
+        ``runtime_input_records`` is supplied, it also receives those parser-consumed snapshots.
+        The optional evidence keys do not change the ``scenario_cert.v1`` schema version.
     """
 
     scenarios = load_scenarios(scenario_path)
@@ -128,21 +136,68 @@ def certify_scenario_file(
         raise ValueError(f"Scenario id '{scenario_id}' not found in {scenario_path}")
     certificates = []
     for scenario in selected:
-        if runtime_input_records is None:
-            certificate = certify_scenario(
-                scenario,
-                scenario_path=scenario_path,
-                settings=settings,
-            )
-        else:
-            certificate = certify_scenario(
-                scenario,
-                scenario_path=scenario_path,
-                settings=settings,
-                runtime_input_records=runtime_input_records,
-            )
+        consumed_runtime_inputs: list[dict[str, str]] = []
+        certificate = certify_scenario(
+            scenario,
+            scenario_path=scenario_path,
+            settings=settings,
+            runtime_input_records=consumed_runtime_inputs,
+        )
+        certificate = _bind_file_certificate_input_identity(
+            certificate,
+            scenario,
+            scenario_path=scenario_path,
+            consumed_runtime_inputs=consumed_runtime_inputs,
+        )
+        if runtime_input_records is not None:
+            runtime_input_records.extend(consumed_runtime_inputs)
         certificates.append(certificate)
     return certificates
+
+
+def _bind_file_certificate_input_identity(
+    certificate: ScenarioCertificate,
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    consumed_runtime_inputs: list[dict[str, str]],
+) -> ScenarioCertificate:
+    """Attach producer-time source/input identities to a file-generated certificate.
+
+    Returns:
+        Certificate with optional v1 evidence fields bound to the manifest closure and the
+        exact map/route snapshots consumed by the certifier. A missing or inconsistent input
+        identity is recorded as unstable, so legacy fail-closed consumers retain the case.
+    """
+    scenario_id = _scenario_id(scenario)
+    identity = scenario_input_identity(scenario_path, scenario_id=scenario_id)
+    manifest_matches = identity.get("status") == "available" and scenario_manifest_records_match(
+        identity, scenario
+    )
+    consumed_inputs_match = manifest_matches and runtime_input_records_match(
+        identity,
+        consumed_runtime_inputs,
+        scenario_id=scenario_id,
+    )
+    stable = bool(consumed_inputs_match)
+    if identity.get("status") != "available":
+        failure_reason = identity.get("reason_code") or "scenario_input_identity_unavailable"
+    elif not manifest_matches:
+        failure_reason = "scenario_manifest_parse_identity_mismatch"
+    elif not consumed_inputs_match:
+        failure_reason = "scenario_runtime_input_snapshots_mismatch"
+    else:
+        failure_reason = None
+
+    evidence = {
+        **certificate.evidence,
+        "source_artifact_sha256": identity.get("source_artifact_sha256"),
+        "effective_input_sha256": identity.get("effective_input_sha256"),
+        "effective_input_identity_stable": stable,
+        "runtime_input_identity_stable": stable,
+        "runtime_input_identity_failure_reason": failure_reason,
+    }
+    return replace(certificate, evidence=evidence)
 
 
 def certify_scenario(

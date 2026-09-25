@@ -26,17 +26,19 @@ Each certificate includes:
 - `benchmark_eligibility`: `eligible`, `stress_only`, or `excluded`.
 - `checks`: deterministic geometry, route, planner, kinodynamic, and dynamic checks.
 - `route_certificates`: per-route evidence for every applicable robot route.
-- `evidence`: optional scenario metadata and scenario-difficulty provenance. The frozen
-  `scenario_cert.v1` producer does not add source or effective-input digest fields. The
-  `scenario_admissibility.v1` adapter computes current source and runtime-input identity before and
-  after classification and verifies the certificate's `source` resolves to the candidate manifest
-  bytes. Producer digest fields are checked when a certificate supplies them; their absence does not
-  change the v1 output, but adapter-time identity does not attest which map/route bytes a legacy
-  certificate used when it was generated. A certificate can support an adapter exclusion only
-  when its producer-time identity matches the current source digest (root-only inputs) or
-  effective-input digest (external runtime closure). Route-local geometric and kinodynamic
-  classifications remain unknown even when bound, because v1 does not prove every possible path
-  is blocked. The runtime
+- `evidence`: optional scenario metadata, scenario-difficulty provenance, and producer input
+  identity. `certify_scenario_file(...)` captures the parser-consumed map/route snapshots and adds
+  `source_artifact_sha256`, `effective_input_sha256`, and
+  `effective_input_identity_stable`. The stable flag is true only when the loaded manifest closure
+  and consumed snapshots match the current identity. These are optional fields inside the open
+  `evidence` object; `scenario_cert.v1` and its required fields are unchanged. Direct
+  `certify_scenario(...)` and `certify_map_definition(...)` calls remain programmatic/unbound unless
+  a future API explicitly binds their source inputs. The adapter checks producer digests against
+  the candidate's current source and effective-input digests. Legacy certificates without
+  producer-time identity still fail closed for exclusion when external runtime inputs are needed;
+  adapter-time identity does not attest which map/route bytes such a certificate used when it was
+  generated. Route-local geometric and kinodynamic classifications remain unknown even when bound,
+  because v1 does not prove every possible path is blocked. The runtime
   identity covers included manifests and the selected scenario's resolved map and route-override
   files, including the resolved `map_id` path and parser selected by its suffix. If a scenario
   omits both `map_file` and `map_id`, the closure includes every SVG loaded into the default
@@ -194,7 +196,13 @@ empty route inventory with the producer's no-route reason, a waypoint count belo
 endpoints, or a non-finite endpoint serialized as null/malformed. Reason labels without matching
 checks remain unknown. The current certificate does not include map bounds, obstacle geometry, or
 enough infrastructure policy data to verify outside-map, obstacle, or infrastructure labels, so
-those invalid certificates remain `admissible_feasibility_unknown`. An oracle exclusion is scoped
+those invalid certificates remain `admissible_feasibility_unknown`. There is currently no producer
+proof for scenario-wide geometric or kinodynamic impossibility. In particular, route endpoints
+reported inside obstacles and a blocked or tight authored path do not establish that every runtime
+spawn/goal choice and every alternative completion is impossible. The v1 output binds the input
+bytes, but does not encode that complete-world proof; the impossibility outcome therefore remains
+unreachable until a producer can bind such a proof to the selected map and complete applicable
+route inventory. An oracle exclusion is scoped
 to its recorded robot envelope; the envelope and certificate assumptions remain attached to the
 verdict. A
 `dynamically_overconstrained` certificate, a blocked or truncated oracle, missing provenance, or
@@ -290,9 +298,10 @@ the full normalized record, so nested fallback flags, unavailable/fallback/degra
 positive fallback counters cannot establish an outcome. Missing or malformed fallback state stays
 unknown. Callers derive this summary from the complete canonical runtime metadata rather than
 guessing from the episode's terminal status. The checkpoint field is either a SHA-256 hash or the
-explicit value `not_applicable` for a known checkpoint-free planner. The current producer manifest
-does not bind learned-checkpoint bytes, so hashed checkpoint inputs remain unknown for planner
-attribution until a producer-owned checkpoint field is available. Only `scenario_variant: original`,
+explicit value `not_applicable` for a known checkpoint-free planner. **Checkpointed planner
+outcomes currently remain unknown:** the current producer manifest does not bind learned-checkpoint
+bytes, so a hash in a caller record cannot establish planner attribution until a producer-owned
+checkpoint field is available. Only `scenario_variant: original`,
 `run_status: ok`, and non-fallback/non-degraded
 records can establish an outcome. Replay records additionally require
 `determinism_check_status: pass` and `resimulated: true`; those fields alone cannot establish a
